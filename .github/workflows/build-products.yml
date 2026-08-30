@@ -166,7 +166,12 @@ jobs:
       #                                       --sitemap-base flag as every other page, the
       #                                       shared-outline byte budget, and the rule that a hub
       #                                       page never advertises an entity the build did not write
-      # (the 35 enumerated above at 2026-08-30, plus tests/test_ci_check_skips.py which gates the
+      #   tests/test_entity_pages.py          the tier-3 entity pages. Listed for the projection
+      #                                       family, not for the templates: station pages now render
+      #                                       their time-series routes from ts_access.json, so this
+      #                                       file asserts over a projection surface and the rule
+      #                                       below requires it here
+      # (the 36 enumerated above at 2026-08-30, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
@@ -242,6 +247,7 @@ jobs:
             tests/test_golden_edi.py \
             tests/test_mini_yaml_parity.py \
             tests/test_index_pages.py \
+            tests/test_entity_pages.py \
             tests/test_half_coordinate_guard.py \
             tests/test_coord_resolution_guard.py \
             tests/test_survey_drop_visibility.py \

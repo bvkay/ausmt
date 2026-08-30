@@ -6224,7 +6224,8 @@ def _main_build(argv=None):
             survey_docs=_survey_metadata_docs, station_docs=_station_docs,
             collections=coll_by_id, bundle_formats=_bundle_formats,
             survey_extent=survey_extent, survey_coll=_survey_coll,
-            bundle_rows=manifest_doc.get("bundles"), ts_access=_ts_access, mtcat=mtcat)
+            bundle_rows=manifest_doc.get("bundles"), ts_access=_ts_access, mtcat=mtcat,
+            build=BUILD_ID)
         print(f"  pages/ -> {_n_pages} entity landing pages (tier 3)")
         base = a.sitemap_base.rstrip("/") + "/"
         from xml.sax.saxutils import escape as _xesc
@@ -6287,10 +6288,13 @@ def _main_build(argv=None):
         # ---- THE reconciliation (this is what the comment above has always promised) ----
         _mismatch = _reconcile_pages_with_sitemap(out, base, locs, _station_docs)
         if _mismatch:
+            # The house convention every other self-check in main() uses: ERROR lines on stderr,
+            # then return 2. An operator running `make rebuild-data` gets a message they can act on
+            # rather than a traceback, and the reconciliation stops being the one gate that fails
+            # differently from the rest.
             for _m in _mismatch:
                 print(f"ERROR: sitemap/pages reconciliation: {_m}", file=sys.stderr)
-            raise RuntimeError("sitemap/pages reconciliation failed: "
-                               + "; ".join(_mismatch[:10]))
+            return 2
         # pages/ is tier 3 and outside the manifest by design, so build_report is the one place the
         # build records that it wrote them. The count is known only now, after emit_pages, so the
         # report written above is re-emitted with the additive key - and re-validated before it is

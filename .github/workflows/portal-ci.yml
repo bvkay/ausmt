@@ -43,6 +43,11 @@ on:
       - ".readthedocs.yaml"
       - "engine/schema/**"
       - "engine/extract/build_portal.py"
+      # tests/test_type_palette_separability.py holds the engine's static-page palette
+      # (_TYPE_COL) equal to portal/src/state.js's TYPE_COL, so the file carrying one half
+      # of that pin is an INPUT to this lane. The engine lane triggers on engine/** alone
+      # and cannot see the portal half, which is why the pin lives here.
+      - "engine/extract/_pages.py"
       # A3: tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
       # pinned copy on CI) over every survey.yaml the form packages, so a validator refresh is an
       # INPUT to this lane and must gate it, exactly as the docs/branding inputs above do.
@@ -59,6 +64,11 @@ on:
       - ".readthedocs.yaml"
       - "engine/schema/**"
       - "engine/extract/build_portal.py"
+      # tests/test_type_palette_separability.py holds the engine's static-page palette
+      # (_TYPE_COL) equal to portal/src/state.js's TYPE_COL, so the file carrying one half
+      # of that pin is an INPUT to this lane. The engine lane triggers on engine/** alone
+      # and cannot see the portal half, which is why the pin lives here.
+      - "engine/extract/_pages.py"
       # A3: tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
       # pinned copy on CI) over every survey.yaml the form packages, so a validator refresh is an
       # INPUT to this lane and must gate it, exactly as the docs/branding inputs above do.

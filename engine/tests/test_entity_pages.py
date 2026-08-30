@@ -46,6 +46,15 @@ def _make_survey(tmp_path, *, blurb="A test survey.", slug="pages-a", name="Page
     return tmp_path / "surveys"
 
 
+def _cite_block(page) -> str:
+    """Just the citation disclosure. A related identifier legitimately renders elsewhere on the page
+    (a download card's archive-release line, the Identifiers and provenance list), so a whole-page
+    search cannot tell "this DOI is on the page" from "this DOI is the citation target"."""
+    m = re.search(r'<details class="cite">.*?</details>', page, re.S)
+    assert m, "the page carries no citation disclosure to read"
+    return m.group(0)
+
+
 def _build(surveys, out, *, sitemap=True, extra=()):
     argv = ["--surveys", str(surveys), "--out", str(out), "--bundle-edi", "--no-validate",
             "--products", str(out / "products")]
@@ -129,7 +138,7 @@ def test_the_build_report_records_the_page_count(tmp_path):
         "a flagless build writes no pages, so it must not claim any"
 
 
-def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch):
+def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     """The reconciliation, RED-proven. build_portal has long CLAIMED that a sitemap URL without a
     page is a hard error, but it only counted the pages and printed the number; nothing compared
     the two, so an advertised 404 could leave the build silently. This drives a synthetic mismatch
@@ -147,14 +156,20 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch):
         return n
 
     monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
-    with pytest.raises(RuntimeError, match="surveys/pages-a"):
-        build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
-                           "--bundle-edi", "--no-validate",
-                           "--products", str(tmp_path / "out" / "products"),
-                           "--sitemap-base", BASE])
+    # The house convention for a self-check the build fails: ERROR lines on stderr, then return 2.
+    # An operator running `make rebuild-data` gets a message rather than a traceback, and the
+    # reconciliation now reads like every other gate in main() (LANE-CONTRACT-PAGE-HIERARCHY.md B8,
+    # which flags the RuntimeError this test used to require as the odd one out).
+    rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
+                            "--bundle-edi", "--no-validate",
+                            "--products", str(tmp_path / "out" / "products"),
+                            "--sitemap-base", BASE])
+    assert rc == 2, f"a sitemap URL without a page must fail the build, got rc={rc}"
+    err = capsys.readouterr().err
+    assert "surveys/pages-a" in err and "reconciliation" in err, err
 
 
-def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch):
+def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch, capsys):
     """The other half of the reconciliation: station pages are deliberately NOT advertised in the
     sitemap, so a missing one cannot be caught by the URL sweep - but /stations/<id> is a published
     URL shape that inbound links use, and a missing page 404s it. FAILS IF a station document
@@ -169,11 +184,12 @@ def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch):
         return n
 
     monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
-    with pytest.raises(RuntimeError, match="station page"):
-        build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
-                           "--bundle-edi", "--no-validate",
-                           "--products", str(tmp_path / "out" / "products"),
-                           "--sitemap-base", BASE])
+    rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
+                            "--bundle-edi", "--no-validate",
+                            "--products", str(tmp_path / "out" / "products"),
+                            "--sitemap-base", BASE])
+    assert rc == 2, f"a station document without its page must fail the build, got rc={rc}"
+    assert "station page" in capsys.readouterr().err
 
 
 def test_the_report_the_build_leaves_behind_is_the_one_it_validated(tmp_path, monkeypatch):
@@ -372,12 +388,20 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert "sample rate" in page and "1,000 Hz" in page
     assert "Dipoles" not in page, "the dipole summary row is retired (the table carries dipoles)"
     assert "instrument PID" not in page, "the survey-level platform PID is retired"
-    # the station table: run columns, PIDs as links, sticky first column
-    for h in ("Deployed", "Recovered", "Rate (Hz)", "Logger", "Bx coil", "Time series"):
-        assert h.replace(" ", "&#8202;") in page.replace("&#8202;", " ") or h in page.replace("&#8202;", " "), h
-    assert "ahbao8tk" in page and "c7ea5dpq" in page, "instrument PIDs must link in the table"
+    # The station table: the five default columns, sticky first column. The run and instrument
+    # columns moved to the station pages in LANE-CONTRACT-PAGE-HIERARCHY.md B5, which could only
+    # follow B4 giving those pages a Runs section; the move is followed fact by fact in
+    # test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations, and the station
+    # page's own rendering is pinned by test_the_station_page_renders_the_runs_its_own_document
+    # _publishes. Restated here rather than deleted, so the survey page's own truth stays asserted.
+    for h in ("Station", "Lat", "Lon", "T max (s)", "Time series"):
+        assert f"<th>{h}</th>" in page, h
+    assert "Deployed" not in page and "Bx coil" not in page, \
+        "deployment and instrument columns live on the station pages now"
+    assert "ahbao8tk" not in page and "c7ea5dpq" not in page, \
+        "instrument PIDs moved to the station pages with the columns that carried them"
     assert "position:sticky" in page, "the station column must pin while the table scrolls"
-    assert "52 m @ 0&#176;" in page, "dipole cells carry length and azimuth"
+    assert "52 m @ 0&#176;" not in page, "the dipole cell moved to the station page"
     # contributors grouped by person (roles merged), publications with DOI link
     assert page.count('href="https://orcid.org/0000-0002-9738-7277"') == 1, \
         "duplicate contributor rows must group into one person row"
@@ -415,6 +439,376 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert ld["measurementTechnique"] == "magnetotellurics"
     assert ld["creator"]["sameAs"] == "https://ror.org/00892tw58"
     assert ld["version"] == "1.2.3"
+
+
+def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
+    """The page hierarchy (design brief 11 to 14 and 41), asserted as ORDER rather than as prose.
+
+    The page used to read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
+    stations: a citation box and an unlabelled abstract held the top of the document and the map was
+    a 240px right rail, so the one thing a reader opens a survey to see arrived below the fold with
+    no section it belonged to. FAILS IF the map stops leading the hero, if the lede is not the
+    blurb's own first sentence, if a named section loses its heading or its anchor, if the sections
+    fall out of the brief's order, or if the machine-readable links drift back out of Identifiers
+    and provenance."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+
+    for anchor, heading in (("about", "About this survey"),
+                            ("data", "Data and downloads"),
+                            ("stations", "Stations"),
+                            ("contributors", "Contributors and organisations"),
+                            ("identifiers", "Identifiers and provenance")):
+        assert f'<h2 id="{anchor}">' in page, f"section {anchor} must carry an h2 with an id anchor"
+        assert heading in page, f"section {anchor} must be named {heading!r}"
+    order = [page.index(f'<h2 id="{a}">')
+             for a in ("about", "data", "stations", "contributors", "identifiers")]
+    assert order == sorted(order), f"sections must follow the brief's sequence, got {order}"
+
+    # geography leads: the hero map is above the About prose and above every optional stat tile
+    hero = page.index('<div class="hero">')
+    assert hero < page.index('<h2 id="about">'), "the hero must open the page, not follow the prose"
+    assert hero < page.index("channels recorded"), \
+        "the fixed metric core sits with the map; the optional tiles follow the hero"
+    assert page.index('aria-label="Survey location in Australia"') < page.index('class="herofacts"'), \
+        "the map column must LEAD the hero grid (the metric rail follows it)"
+
+    # The type badge states the survey's OWN data type beside the title. Asserted as the whole h1,
+    # because a survey page carries several other badges (the download cards' level badges) and a
+    # loop variable leaking into this slot renders a plausible-looking string in the page title.
+    # The separating space is part of that assertion: the gap between the title and the badge was
+    # CSS margin alone, so the h1's text content, its accessible name and a copy-paste of it all
+    # read "Newer Volcanic Province 2019BBMT". The margin stays, because a space before an
+    # inline-block can collapse at a line wrap and the visual gap must not depend on it.
+    types = {json.loads(p.read_text(encoding="utf-8"))["data"]["type"]
+             for p in sorted((out / "products" / "pages-r").glob("*/station.json"))}
+    assert len(types) == 1, types
+    assert (f"<h1>Pages R <span class=\"typebadge\">{next(iter(types))}</span></h1>") in page, \
+        "the h1 carries the title, a separator and the survey's own data type, and nothing else"
+    h1_text = re.sub(r"<[^>]+>", "", re.search(r"<h1>.*?</h1>", page, re.S).group(0))
+    assert f"Pages R {next(iter(types))}" == h1_text, \
+        f"the h1 reads as two words to a screen reader and to a copy-paste: {h1_text!r}"
+
+    # the lede is the blurb's first sentence, and the full abstract still renders under About
+    assert '<p class="lede">A rich test survey.</p>' in page, "the lede is the blurb's first sentence"
+    assert page.index('class="lede"') < hero, "the lede introduces the map, it does not follow it"
+    assert page.count("A rich test survey.") >= 2, \
+        "the full abstract must still render under About this survey"
+
+    # the machine-readable links moved into Identifiers and provenance
+    ident = page.index('<h2 id="identifiers">')
+    assert ident < page.index("Machine-readable survey record"), \
+        "the machine-readable record link belongs under Identifiers and provenance"
+    assert page.index("mtcat 2.0") > ident, "the catalogue schema link moves with it"
+
+    # the reading column stays narrow while main widens on a large screen
+    assert "@media(min-width:" in page and "max-width:1120px" in page, \
+        "main must widen beyond 840px on large screens"
+    assert 'class="lede"' in page and ".lede{" in page and "70ch" in page, \
+        "prose keeps a narrow measure even when main widens"
+
+
+def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
+    """Design brief 15 plus AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md.
+
+    Two defects at once. The Cite-as box held primary visual space near the top of every survey
+    page, and it put the AusMT page URL in the LOCATOR slot unconditionally, which cites the AusMT
+    page as the object even on a survey whose own record carries a persistent identifier for itself.
+    The model is source-led: the locator is the source identifier where one exists, and the AusMT URL
+    is the access route otherwise, stated as a separate acknowledgement rather than smuggled into the
+    citation.
+
+    Scope, and only scope, decides. Model section 7 puts the SURVEY-level citation in
+    survey-metadata.json and the RESOURCE-level identifiers in station.json resources[], and section
+    14 requires the model to PRESERVE that distinction: an identifier naming one product of the
+    survey is not the survey. So only a row that identifies the whole record (`identifies: entire`)
+    can hold the locator; a `level2` row names the published transfer-function product, and
+    promoting it would tell a reader to cite an NCI product under the survey's own authors and
+    publisher. Where two rows claim the same self-identifying scope there is no single answer, and
+    section 13 is explicit that absence is not an assertion, so the locator falls back to the access
+    route rather than letting YAML row order choose a citation target.
+
+    pages-c carries a source DOI on its `identifies: entire` row; pages-d carries none; pages-e
+    carries only a `level2` product DOI; pages-f carries two `entire` rows. FAILS IF the citation is
+    not a disclosure, if a survey with a source identifier still prints the AusMT URL as its
+    locator, if a survey WITHOUT one loses its access route, if a resource-level identifier is
+    promoted into the survey citation, if row order decides an ambiguous case, or if the
+    acknowledgement stops being a separate verbatim line."""
+    surveys = _make_survey(tmp_path, slug="pages-c", name="Pages C")
+    (surveys / "pages-c" / "survey.yaml").write_text(
+        (surveys / "pages-c" / "survey.yaml").read_text(encoding="utf-8")
+        + "creators:\n  - name: Kay, Ben\n    name_type: person\n"
+          "related_identifiers:\n"
+          "  - {identifier: 10.25914/1ncb-xp10, identifier_type: DOI, identifies: entire,"
+          " relation: IsVariantFormOf}\n", encoding="utf-8")
+    _make_survey(tmp_path, slug="pages-d", name="Pages D")
+    (surveys / "pages-d" / "survey.yaml").write_text(
+        (surveys / "pages-d" / "survey.yaml").read_text(encoding="utf-8")
+        + "creators:\n  - name: Kay, Ben\n    name_type: person\n", encoding="utf-8")
+    # pages-e is the shape 8 of the 27 corpus surveys carry: a level2 product DOI and no row for
+    # the record itself.
+    _make_survey(tmp_path, slug="pages-e", name="Pages E")
+    (surveys / "pages-e" / "survey.yaml").write_text(
+        (surveys / "pages-e" / "survey.yaml").read_text(encoding="utf-8")
+        + "creators:\n  - name: Kay, Ben\n    name_type: person\n"
+          "related_identifiers:\n"
+          "  - {identifier: 10.25914/wxkq-hj14, identifier_type: DOI, identifies: level2,"
+          " relation: IsVariantFormOf}\n"
+          "  - {identifier: 10.25914/7vwr-da74, identifier_type: DOI, identifies: raw_packed,"
+          " relation: IsDerivedFrom}\n", encoding="utf-8")
+    # pages-f is the ambiguous shape: two rows claim the whole record, so neither can speak for it.
+    _make_survey(tmp_path, slug="pages-f", name="Pages F")
+    (surveys / "pages-f" / "survey.yaml").write_text(
+        (surveys / "pages-f" / "survey.yaml").read_text(encoding="utf-8")
+        + "creators:\n  - name: Kay, Ben\n    name_type: person\n"
+          "related_identifiers:\n"
+          "  - {identifier: 10.25914/0pt0-qw75, identifier_type: DOI, identifies: entire,"
+          " relation: IsVariantFormOf}\n"
+          "  - {identifier: 10.25914/bnhe-3w04, identifier_type: DOI, identifies: entire,"
+          " relation: IsVariantFormOf}\n", encoding="utf-8")
+    out = _build(surveys, tmp_path / "out")
+    src = (out / "pages" / "surveys" / "pages-c.html").read_text(encoding="utf-8")
+    plain = (out / "pages" / "surveys" / "pages-d.html").read_text(encoding="utf-8")
+    product = (out / "pages" / "surveys" / "pages-e.html").read_text(encoding="utf-8")
+    ambiguous = (out / "pages" / "surveys" / "pages-f.html").read_text(encoding="utf-8")
+
+    for page in (src, plain, product, ambiguous):
+        assert '<details class="cite">' in page, "the citation must become a disclosure"
+        assert "<summary>Cite this survey</summary>" in page, "the disclosure must say what it holds"
+        assert "Cite as:" in page and "Kay, B." in page, "the formatted citation text is unchanged"
+        assert ("Data were accessed through the AusMT national magnetotelluric data portal."
+                in page), "the AusMT acknowledgement is a separate verbatim line"
+        assert page.index('<details class="cite">') < page.index('class="lede"'), \
+            "the citation sits near the title, above the lede and the map"
+
+    assert "<code>https://doi.org/10.25914/1ncb-xp10</code>" in src, \
+        "a survey whose record identifies itself must cite THAT identifier"
+    assert f"<code>{BASE}/surveys/pages-c</code>" not in src, \
+        "the AusMT page URL must not hold the locator slot when a source identifier exists"
+    assert f"<code>{BASE}/surveys/pages-d</code>" in plain, \
+        "with no source identifier the AusMT URL stays as the access route"
+
+    assert "10.25914/wxkq-hj14" not in _cite_block(product), \
+        "a level2 row identifies a PRODUCT of the survey, not the survey: it must never hold the " \
+        "survey-level locator (model section 14)"
+    assert f"<code>{BASE}/surveys/pages-e</code>" in product, \
+        "with no row for the record itself the AusMT URL stays as the access route"
+
+    assert "10.25914/0pt0-qw75" not in _cite_block(ambiguous), \
+        "two rows claiming the whole record leave no single citation target, so YAML row order " \
+        "must not choose one"
+    assert f"<code>{BASE}/surveys/pages-f</code>" in ambiguous, \
+        "an ambiguous record asserts no preferred citation and keeps the access route"
+
+
+def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide():
+    """Design brief 16, and a real collision. _TS_LEVELS gave BOTH level0 and raw_packed the badge
+    L0, so a survey carrying both rendered two panels badged L0 and a station cell reading
+    "L0 3.2 GB &#183; L0 41 KB" with nothing to tell the reader which was which. level1_netcdf, which
+    ts_access.json emits and the SPA's own TS_LEVELS names, had no panel at all.
+
+    FAILS IF a level loses its portal name, if two levels share a badge, or if level1_netcdf goes
+    back to rendering nothing for a register that carries it."""
+    pages = _pages_module()
+    docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
+             "location": {"lat": -30.0, "lon": 137.0},
+             "data": {"type": "BBMT", "period_max_s": 6360.0}}]
+    ts = {"au.s.A1": {"raw_packed": {"bytes": 3242000000, "url_path": "x/A1.zip"},
+                      "level0": {"bytes": 41000, "url_path": "x/A1.dat"},
+                      "level1_mth5": {"bytes": 5e8, "url_path": "y/A1.h5"},
+                      "level1_netcdf": {"bytes": 2e8, "url_path": "z/A1.nc"}}}
+    page = pages.survey_page(slug="s", label="S", sm_doc=None,
+                             smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=docs, bundle_rows=[], ts_access=ts,
+                             base="https://x.example")
+    for name in ("Packed raw", "Level 0", "Level 1 MTH5", "Level 1 NetCDF"):
+        assert f'<span class="lvlname">{name}</span>' in page, f"{name} must render its own panel"
+    badges = re.findall(r'<span class="lvlbadge">([^<]+)</span>', page)
+    assert len(badges) == 4, badges
+    assert len(set(badges)) == len(badges), f"two levels share a badge: {badges}"
+
+
+def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_details(tmp_path):
+    """Design brief 16: the download section is an interface component, not a run of technical text.
+    Every product row gets its own action, and the complete SHA-256 stops competing with format and
+    size for attention.
+
+    The page carried only an 8-character prefix, so the one number a reader needs to verify a
+    download was not on the page at all; the full value is in manifest.json, which this emitter
+    already reads. FAILS IF an action link goes missing, if the truncated prefix comes back as the
+    only checksum on the page, or if a digest on the page is not the manifest's own."""
+    surveys = _make_survey(tmp_path, slug="pages-p", name="Pages P")
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-p.html").read_text(encoding="utf-8")
+    rows = [b for b in json.loads((out / "manifest.json").read_text(encoding="utf-8"))["bundles"]
+            if b["slug"] == "pages-p"]
+    assert rows, "fixture must serve bundles"
+    assert "<summary>Integrity details</summary>" in page, "the checksums need a disclosure"
+    for b in rows:
+        assert b["sha256"] in page, f"the FULL sha256 of {b['url']} must reach the page"
+        assert f"sha256 {b['sha256'][:8]}&#8230;" not in page, \
+            "the truncated prefix is replaced by the whole value, not shown beside it"
+    assert page.count(">Download &#8595;</a>") == len(rows), \
+        "every bundle row carries its own download action"
+
+
+def test_the_station_page_renders_the_runs_its_own_document_publishes(tmp_path):
+    """Design brief 17's precondition. station_page printed five facts and never touched
+    doc["runs"], so every deployment window, dipole geometry, logger and coil PID a station record
+    publishes existed on the SURVEY page's wide table and nowhere else. Simplifying that table
+    before this lands would delete the metadata from served HTML.
+
+    Every fact asserted here is read back out of the station's OWN served station.json, so the page
+    is a VIEW of the public document rather than a second derivation. FAILS IF the runs section, a
+    run's window, its rate, a dipole geometry or an instrument PID goes missing, or if noindex
+    lapses."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    doc = json.loads((out / "products" / "pages-r" / "A1" / "station.json").read_text(encoding="utf-8"))
+    assert doc.get("runs"), "fixture must publish runs"
+    page = (out / "pages" / "stations" / (doc["ausmt_id"] + ".html")).read_text(encoding="utf-8")
+    assert '<meta name="robots" content="noindex">' in page, "station pages stay out of the index"
+    assert '<h2 id="runs">Runs</h2>' in page, "a station with runs must carry a Runs section"
+
+    run = doc["runs"][0]
+    assert run["id"] in page, "the run id is a published fact"
+    for key, label in (("start", "Deployed"), ("end", "Recovered")):
+        assert label in page, f"{label} must render"
+        assert str(run["time_period"][key])[:16].replace("T", " ") in page, \
+            f"the {label} timestamp must come from the served document"
+    assert "1,000 Hz" in page, "the run's nominal sample rate must render"
+    logger_pid = run["data_logger"]["identifiers"][0]["identifier"]
+    assert logger_pid.rsplit("/", 1)[-1] in page, "the logger PID must link from the station page"
+    for ch in run["channels"]:
+        if ch.get("dipole_length_m") is not None:
+            assert f"{ch['dipole_length_m']:g} m" in page, "dipole lengths must render"
+            assert f"{ch['measurement_azimuth_deg']:g}&#176;" in page, "azimuths must render"
+        for pid in ((ch.get("sensor") or {}).get("identifiers") or []):
+            assert pid["identifier"].rsplit("/", 1)[-1] in page, "coil PIDs must link"
+
+    bare = json.loads(sorted((out / "products" / "pages-a").glob("*/station.json"))[0]
+                      .read_text(encoding="utf-8")) if (out / "products" / "pages-a").is_dir() else None
+    assert bare is None or bare.get("runs") or True   # the no-runs leg is the unit test below
+
+
+def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
+    """The presence rule on the richest page in the corpus. A run that declares no end, no serial
+    and no PID must render none of those rows rather than an empty or dashed one, and a station
+    whose document publishes no runs must carry no Runs section at all: absent runs[] means run
+    metadata NOT ASSERTED, never "no runs occurred".
+
+    contact_resistance is a unit_value, whose source text is never discarded after normalisation.
+    Both forms therefore reach the page: the parsed value with its unit, and the source string it
+    was read from.
+
+    The presence guard must test the RENDERED value, not the raw object. A contact_resistance
+    carrying only library defaults (no source text, no parsed value, no unit) is truthy as a dict
+    and renders as nothing, so a guard on the object drew a Contact resistance header with a hyphen
+    in every cell: an empty column asserting a measurement the source never made, which is what the
+    comment above _channel_cells says it does not do. Latent on today's corpus only because
+    _runfacts.unit_value returns None for empty source text and _Doc.channel drops a None, so the
+    key is absent rather than default-filled; a document that carried the defaults through would
+    have rendered the column.
+
+    FAILS IF either unit_value half is dropped, if a defaults-only document grows sections, or if a
+    channel column appears for a key whose every value renders empty."""
+    pages = _pages_module()
+    doc = {"ausmt_id": "au.s.A1", "station": "A1", "survey": "S",
+           "location": {"lat": -30.0, "lon": 137.0},
+           "data": {"type": "BBMT", "period_min_s": 0.01, "period_max_s": 100.0, "n_periods": 20},
+           "runs": [{"id": "A1_001",
+                     "time_period": {"start": "2019-08-20T10:53:03+00:00"},
+                     "sample_rate_hz": 1000.0,
+                     "data_logger": {"manufacturer": "LEMI", "model": "LEMI-423"},
+                     "channels": [
+                         {"component": "ex", "dipole_length_m": 43.0,
+                          "measurement_azimuth_deg": 180.0,
+                          "contact_resistance": {"source_value": "1.82 kilo-ohms",
+                                                 "value": 1820.0, "unit": "ohm"}},
+                         {"component": "hx", "measurement_azimuth_deg": 0.0,
+                          "sensor": {"manufacturer": "LEMI", "model": "LEMI-120",
+                                     "serial_number": "134"}}]}]}
+    page = pages.station_page(
+        doc=doc, survey_slug="s", base="https://x.example",
+        ts_levels={"raw_packed": {"bytes": 9868836788, "url_path": "my80/x/A1 [REMOTE].zip"}})
+    assert "A1_001" in page and "LEMI-423" in page and "LEMI-120" in page
+    assert "1,820 ohm" in page and "1.82 kilo-ohms" in page, \
+        "a unit_value renders the normalised value AND the source text it came from"
+    assert "Deployed" in page and "Recovered" not in page, \
+        "a run with no end declares none; an absent key renders nothing"
+    assert "serial 134" in page, "a serial the document carries renders"
+    assert '<h2 id="time-series">Time series</h2>' in page
+    assert "my80/x/A1 [REMOTE].zip" in page, "the archive path renders as text, verbatim"
+    assert "https://thredds.nci.org.au/thredds/fileServer/" in page, \
+        "the path is relative, so the page must name the host it is relative to"
+    assert "9.9 GB" in page, "the size comes from the register"
+
+    bare = pages.station_page(doc={"ausmt_id": "au.s.A2", "station": "A2", "survey": "S",
+                                   "location": {}, "data": {}},
+                              survey_slug="s", base="https://x.example")
+    assert "Runs" not in bare, "no runs[] means no Runs section, not an empty one"
+    assert "Time series" not in bare, "no register rows means no time-series section"
+    assert "withheld or generalised by the data custodian" in bare, \
+        "the withheld-location line is unchanged"
+
+    # Every channel key present, every value the library default it would arrive as.
+    defaults = pages.station_page(
+        doc={"ausmt_id": "au.s.A3", "station": "A3", "survey": "S",
+             "location": {"lat": -30.0, "lon": 137.0}, "data": {"type": "BBMT"},
+             "runs": [{"id": "A3_001", "channels": [
+                 {"component": "ex",
+                  "contact_resistance": {"source_value": "", "value": None, "unit": None}},
+                 {"component": "ey",
+                  "contact_resistance": {"source_value": "", "value": None, "unit": None}}]}]},
+        survey_slug="s", base="https://x.example")
+    assert "Contact resistance" not in defaults, (
+        "a contact_resistance whose every value is a library default renders nothing, so it must "
+        "draw no column: a header over a hyphen in every cell asserts a measurement the source "
+        "never made")
+    assert "<td>ex</td>" in defaults, \
+        "sensitivity: the channel rows themselves are still rendered, so the column was the choice"
+
+
+def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations(tmp_path):
+    """Design brief 17, and it can only run AFTER the station pages carry the detail (B4).
+
+    The default table was 13 columns wide inside an 840px column, forced to scroll horizontally by
+    an unconditional min-width of 1180px that a 5-column table also paid. The deployment and
+    instrument columns are now behind the station pages that carry them, and this test FOLLOWS the
+    move: every column removed from the survey table is asserted PRESENT on the station page of the
+    station whose row carried it. FAILS IF a default column goes missing, if a moved column comes
+    back, if a moved fact is on neither page, or if the width floor returns."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+    doc = json.loads((out / "products" / "pages-r" / "A1" / "station.json").read_text(encoding="utf-8"))
+    stn = (out / "pages" / "stations" / (doc["ausmt_id"] + ".html")).read_text(encoding="utf-8")
+
+    for h in ("Station", "Lat", "Lon", "T max (s)", "Time series"):
+        assert f"<th>{h}</th>" in page, f"{h} is a default column"
+    for h in ("Deployed", "Recovered", "Rate (Hz)", "Ex", "Ey", "Logger", "Bx coil", "By coil"):
+        assert f"<th>{h}</th>" not in page, f"{h} belongs on the station pages now"
+    stbl = re.search(r"\.stbl\{([^}]*)\}", page).group(1)
+    assert "min-width" not in stbl, \
+        f"a five-column table must not be forced into a horizontal scrollbar: .stbl{{{stbl}}}"
+    assert "position:sticky" in page, "the station column still pins while the table scrolls"
+
+    # the move, followed fact by fact on the station whose survey row used to carry them
+    run = doc["runs"][0]
+    for key in ("start", "end"):
+        assert str(run["time_period"][key])[:16].replace("T", " ") in stn
+    assert f"{run['sample_rate_hz']:,g} Hz" in stn
+    for pid in ([run["data_logger"]["identifiers"][0]["identifier"]]
+                + [r["identifier"] for ch in run["channels"]
+                   for r in ((ch.get("sensor") or {}).get("identifiers") or [])]):
+        tail = pid.rsplit("/", 1)[-1]
+        assert tail in stn, f"{tail} must be on the station page"
+        assert tail not in page, f"{tail} must have left the survey table"
+    for ch in run["channels"]:
+        if ch.get("dipole_length_m") is not None:
+            assert f"{ch['dipole_length_m']:g} m" in stn
+            assert f"{ch['dipole_length_m']:g} m" not in page
 
 
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
@@ -496,8 +890,12 @@ def _pages_module():
 
 
 def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
-    """No placeholder panels (owner ruling): a survey with raw archives gets the L0 panel and
-    per-station sizes; levels the register does not carry render nothing at all."""
+    """No placeholder panels (owner ruling): a survey with raw archives gets the packed-raw card and
+    per-station sizes; levels the register does not carry render nothing at all.
+
+    Level names and badges follow portal/src/state.js TS_LEVELS as of the download-cards commit
+    (LANE-CONTRACT-PAGE-HIERARCHY.md B3), so "Raw time series" is now "Packed raw", "MTH5 time
+    series" is "Level 1 MTH5", and the L0 badge is no longer shared by two levels."""
     pages = _pages_module()
     docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
              "location": {"lat": -30.0, "lon": 137.0},
@@ -508,19 +906,19 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                              smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
                              station_docs=docs, bundle_rows=[], ts_access=ts,
                              base="https://x.example")
-    assert "Raw time series" in page and "1 of 1 stations" in page
-    assert "L0 3.2 GB" in page, "the table cell states the level and the real size"
+    assert "Packed raw" in page and "1 of 1 stations" in page
+    assert "Raw 3.2 GB" in page, "the table cell states the level and the real size"
     # The download panel used to send a reader standing on THIS survey's page to the bare map with
     # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
-    assert 'from the <a href="/#/survey/s">interactive portal</a>' in page, \
-        "the download-script link must keep the survey context"
-    assert "MTH5 time series" not in page, "an absent level must render no panel"
+    assert '<a href="/#/survey/s">Build a download script</a>' in page, \
+        "the download-script action must keep the survey context, not point at the bare map"
+    assert "Level 1 MTH5" not in page, "an absent level must render no panel"
     page2 = pages.survey_page(slug="s", label="S", sm_doc=None,
                               smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
                               station_docs=docs, bundle_rows=[],
                               ts_access={"au.s.A1": {"level1_mth5": {"bytes": 5e8, "url_path": "y"}}},
                               base="https://x.example")
-    assert "MTH5 time series" in page2 and "L1" in page2
+    assert "Level 1 MTH5" in page2 and '<span class="lvlbadge">L1 MTH5</span>' in page2
 
 
 def test_collection_jsonld_rolls_up_member_licence_creators_and_years():
@@ -543,6 +941,136 @@ def test_collection_jsonld_rolls_up_member_licence_creators_and_years():
     assert "license" not in ld2, "mixed member licences must state nothing (never overclaim)"
 
 
+def _collection_call(pages, n_members=2, **over):
+    """One collection_page call with member facts, a register rollup and bundle formats."""
+    members = [(f"Member {i}", f"m{i}") for i in range(n_members)]
+    kw = dict(
+        cid="c", coll={"title": "Test Collection", "n_stations": 400, "type": "programme",
+                       "status": "active",
+                       "description": "A national programme. It spans several states."},
+        member_slugs=members,
+        member_smeta=[{"lic": "CC-BY-4.0", "org": f"Org {i}",
+                       "org_ror": f"https://ror.org/0000000{i}",
+                       "year_start": 2013 + i, "year_end": 2016 + i} for i in range(n_members)],
+        base="https://x.example",
+        member_points={lbl: [(137.0 + i, -30.0 - i)] for i, (lbl, _s) in enumerate(members)},
+        member_facts={s: {"title": lbl, "org": f"Org {i}",
+                          "org_ror": f"https://ror.org/0000000{i}",
+                          "n_stations": 200, "types": {"LPMT": 200}, "years": f"{2013 + i} - 2016",
+                          "period_min_s": 5.0, "period_max_s": 100000.0}
+                      for i, (lbl, s) in enumerate(members)},
+        level_counts={"raw_packed": 180, "level1_mth5": 12},
+        formats=["edi-zip", "mth5"])
+    kw.update(over)
+    return pages.collection_page(**kw)
+
+
+def test_the_collection_page_is_an_exploratory_layer(tmp_path):
+    """Design brief 23 to 31. The static collection page was description, small map, two numbers,
+    a portal link and a bare list of member links: a thin catalogue record, not somewhere a reader
+    can understand a programme.
+
+    The sequence is now what it is, where it is, how large, what data, which surveys, who
+    contributed. FAILS IF a section goes missing or falls out of order, if a chip is asserted the
+    rollup does not carry, if the collection is described as downloadable, or if angular extent
+    comes back as a headline metric."""
+    pages = _pages_module()
+    page = _collection_call(pages, n_members=2)
+    order = []
+    for anchor, heading in (("about", "About"), ("data", "Data available"),
+                            ("surveys", "Member surveys"),
+                            ("organisations", "Participating organisations")):
+        assert f'<h2 id="{anchor}">{heading}</h2>' in page, f"{heading} section missing"
+        order.append(page.index(f'<h2 id="{anchor}">'))
+    assert order == sorted(order), "the sections must follow the brief's narrative order"
+
+    # hero: chips from the rollup only, lede, then the map, then the metrics, all above About
+    assert '<span class="idxchip">programme</span>' in page and \
+           '<span class="idxchip">active</span>' in page, "type and status chips come from the rollup"
+    assert "A national programme." in page, "the lede is the description's first sentence"
+    scatter = page.index("Member stations of")
+    assert scatter < order[0], "the large map is the hero, above About"
+    for label in ("surveys", "stations", "period coverage", "years"):
+        assert f'<div class="clab">{label}</div>' in page, f"headline metric {label} missing"
+    assert "extent" not in page.lower().split('<h2 id="about"')[0], \
+        "angular extent is not a headline metric (the map communicates spatial extent)"
+    assert page.index('class="cstats"') < order[0], "the metrics ride the hero"
+    # The metrics ride BESIDE the map on a wide screen, not under it. Stacked, the 820px map stands
+    # 686px tall and pushed the four headline numbers to y=1020 on a 1280x900 screen: a reader had
+    # to scroll past the whole hero to learn how many surveys and stations the collection holds.
+    # A layout fact cannot be measured from markup, so what is pinned is the structure that carries
+    # it: the metrics live inside the hero container, and the container declares the two-column
+    # grid that puts them in a rail. The survey page's hero already works this way.
+    hero_block = page.split('<div class="collhero">')[1].split("</div>\n<p>")[0]
+    assert 'class="collmap"' in hero_block and 'class="cstats"' in hero_block, \
+        "the map and the headline metrics must share one hero container to sit side by side"
+    assert re.search(r"\.collhero\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(", page), \
+        "the hero must declare a map column and a metric rail beside it"
+    assert re.search(r"@media\(max-width:\d+px\)\{\.collhero\{grid-template-columns:1fr", page), \
+        "the rail must fall under the map on a narrow screen (the responsive collapse must hold)"
+
+    # data available: rolled up from served facts, and never a download claim for the collection
+    assert "180 stations" in page and "Packed raw" in page, \
+        "per-level station counts roll up from the register"
+    assert "EDI archive (zip)" in page and "Survey MTH5 bundle" in page, \
+        "format availability rolls up from the members' own bundle rows"
+    assert "each member survey publishes its own data" in page, \
+        "a collection is a discovery layer and must not read as a downloadable dataset"
+
+    # member surveys as a compact list, and organisations with their RORs
+    assert '<a href="/surveys/m0">Member 0</a>' in page
+    # Ranges read as a SPACED HYPHEN, not as the word "to" (LANE-ADDENDUM-HUB-FEEDBACK.md R1,
+    # which names "5 to 100,000 s" -> "5 - 100,000 s" as its worked example). The no-dash-glyph
+    # assertions elsewhere in this file are untouched: the ban is on en/em dashes, not on hyphens.
+    assert "200 stations" in page and "LPMT" in page and "2013 - 2016" in page
+    assert "5 - 100,000 s" in page, "the member row carries its period band"
+    assert '<a href="https://ror.org/00000000">Org 0</a>' in page, \
+        "participating organisations are ROR-linked where the record carries one"
+
+    # The roll-call is the COLLECTION's roll-call, so it uses the collection's own member label.
+    # The label and the survey document's title usually agree; where they differ the label is what
+    # this collection calls that member, it is what the map legend and every dot title beside it
+    # already say, and it is what the base page linked. Rendering the doc title instead silently
+    # substituted a different wording into one page's roll-call (AusLAMP's "EFTF Phase 1 - Northern
+    # Territory and Queensland" thinned to "EFTF Phase 1") while the legend above kept the label.
+    renamed = _collection_call(pages, n_members=2, member_facts={
+        "m0": {"title": "A shorter document title", "org": "Org 0", "n_stations": 200},
+        "m1": {"title": "Member 1", "org": "Org 1", "n_stations": 200}})
+    assert '<a href="/surveys/m0">Member 0</a>' in renamed, \
+        "the member link carries the collection's own label for that member"
+    assert "A shorter document title" not in renamed, \
+        "the survey document's own title does not replace the collection's wording in the roll-call"
+
+    # presence: a rollup carrying neither type nor status asserts neither
+    plain = _collection_call(pages, coll={"title": "Test Collection", "n_stations": 400,
+                                          "description": "A grouping."})
+    assert '<span class="idxchip">' not in plain, \
+        "a collection declaring no type or status shows no chips"
+
+
+def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
+    """_COLL_PAL has eight entries and cycled, so AusLAMP's fourteen members used six colours twice
+    and the legend could not tell them apart. Design brief 45 also forbids encoding identity by
+    colour alone, and the SPA's own scatter already carries per-dot titles while the static one did
+    not. FAILS IF two members share a colour, or if a dot cannot name its survey."""
+    pages = _pages_module()
+    page = _collection_call(pages, n_members=14,
+                            member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
+                                           for i in range(14)},
+                            member_facts=None, level_counts=None, formats=None)
+    fills = re.findall(r'<circle [^>]*fill="(#[0-9A-Fa-f]{6})"', page)
+    assert len(fills) == 14, fills
+    assert len(set(fills)) == 14, f"fourteen members must get fourteen colours, got {len(set(fills))}"
+    for i in range(14):
+        assert f"<title>Member {i}</title>" in page, f"dot for Member {i} must name its survey"
+    # determinism: the same input renders the same colours, every time
+    assert fills == re.findall(r'<circle [^>]*fill="(#[0-9A-Fa-f]{6})"',
+                               _collection_call(pages, n_members=14,
+                                                member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
+                                                               for i in range(14)},
+                                                member_facts=None, level_counts=None, formats=None))
+
+
 def test_bundle_labels_speak_the_manifest_vocabulary():
     """The manifest spells the survey-MTH5 bundle's format "mth5" (the station-resource vocabulary
     says "survey-mth5"); the label map must carry BOTH, or the page prints the raw key - the exact
@@ -556,7 +1084,13 @@ def test_bundle_labels_speak_the_manifest_vocabulary():
 def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     """The maps pass (owner rulings 2026-08-28): the footprint zoom carries a scale bar, dots
     speak the portal's type palette, a sub-degree survey's minimap draws the ring only, and the
-    collection page carries the member-coloured scatter with its legend."""
+    collection page carries the member-coloured scatter with its legend.
+
+    Two swatch assertions moved with LANE-CONTRACT-PAGE-HIERARCHY.md B7 and are restated, not
+    dropped. BBMT is #3730B8, the value portal/src/state.js measured for LP/BB separability and
+    deutan-safety, in place of the lightened #5B54D6 this test used to lock in. The locator ring is
+    muted rather than coral, because coral is reserved for primary actions and active states; the
+    ring assertion still bites, on the new ink."""
     surveys = _make_rich_survey(tmp_path)
     pkg = surveys / "pages-r"
     y = (pkg / "survey.yaml").read_text(encoding="utf-8")
@@ -565,15 +1099,107 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     out = _build(surveys, tmp_path / "out")
     page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
     assert "km</text>" in page, "the footprint zoom must carry a scale bar"
-    assert "#5B54D6" in page, "dots must speak the type palette (BBMT indigo)"
+    assert "#3730B8" in page, "dots must speak the type palette (BBMT indigo)"
     minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S).group(0)
-    assert "<circle" in minimap and 'stroke="#EF7256"' in minimap
-    assert 'fill="#5B54D6"' not in minimap, \
+    assert "<circle" in minimap and 'stroke="#8FA3B0"' in minimap
+    assert 'fill="#3730B8"' not in minimap, \
         "a sub-degree survey's minimap draws the ring only; the zoom panel owns the dots"
     coll = (out / "pages" / "collections" / "testcoll.html").read_text(encoding="utf-8")
     assert "Member stations of" in coll, "the collection page must carry the member scatter"
     assert "#2E8FA3" in coll, "member colours use the portal collection palette"
     assert "Pages R" in coll
+
+
+def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
+    """Design brief 3, 4 and 45, as measurable properties of the emitted CSS and SVG.
+
+    Four separate debts. The BBMT swatch drifted from the value the portal measured for LP/BB
+    separability and deutan-safety (portal/src/state.js), and the drift was TEST-LOCKED. The minimap
+    centroid ring was coral, which the brief reserves for primary actions and active states, not for
+    decoration on a map. The stylesheet had no focus rule at all while the SPA has one. And several
+    secondary labels sat at .72rem or below, under the 12px floor the SPA states for itself.
+
+    FAILS IF the stale BBMT hex returns, if coral goes back on the ring, if the focus rule goes
+    missing, if any CSS font-size drops below 12px, or if the map annotation's user-unit size drops
+    where it would render under the floor on a narrow screen."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+
+    assert "#3730B8" in page, "BBMT must speak the measured, deutan-safe value"
+    assert "#5B54D6" not in page, "the superseded BBMT hex must be gone from every page surface"
+
+    minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S).group(0)
+    assert "<circle" in minimap, "the locator ring still marks the survey"
+    assert 'stroke="#EF7256"' not in minimap, \
+        "coral is for primary actions and active states, not a decorative ring on a map"
+
+    assert ":focus-visible" in page, "keyboard focus must be visible (the SPA has this, pages did not)"
+
+    # The 12px floor, across BOTH the ways a page states a size, and claiming only what each holds.
+    # The first form of this pin matched `font-size:.NNrem` alone: it could not see a px value, a
+    # leading-zero rem literal, or an SVG presentation attribute, while its message said "no
+    # rendered text under 12px". The CSS leg is exact, because a CSS declaration renders at the size
+    # it names.
+    css = [float(v) * (16 if unit == "rem" else 1)
+           for v, unit in re.findall(r"font-size:\s*(\d*\.?\d+)(rem|px)", page)]
+    assert css, "sensitivity: the stylesheet must declare font sizes for this to check"
+    assert min(css) >= 12, f"no CSS font-size under 12px: smallest is {min(css)}px"
+
+    # The SVG leg is NOT a px floor and must not be written as one. A presentation attribute is in
+    # USER UNITS, so the map scale-bar label renders at `value x (rendered width / 230)`, which the
+    # page's layout decides. Measured on the served build (auslamp-sa-ne-2014, whose station-grid
+    # zoom carries the only such string on any page): the panel renders 364px wide at a 1280px
+    # viewport, 337px at 375px, and 282px at 320px, so at the 9 units it carried the label rendered
+    # 14.3px, 13.2px and 11.0px. The last of those is under the floor. 10 units is the smallest
+    # value that clears it at the narrowest mainstream viewport (12.3px at 320px, 15.8px at 1280px),
+    # and it is a 1.5px change where the map is normally read.
+    attrs = [float(v) for v in re.findall(r'font-size="(\d*\.?\d+)"', page)]
+    # Called directly as well: the zoom panel renders only for a geographically compact survey, so
+    # a fixture that happened not to be compact would make the assertion vacuous rather than true.
+    attrs += [float(v) for v in re.findall(
+        r'font-size="(\d*\.?\d+)"',
+        _pages_module()._footprint_svg([(137.0, -30.0, "BBMT"), (137.4, -30.4, "BBMT")]))]
+    assert attrs, "sensitivity: the map annotation must state a size for this to check"
+    assert min(attrs) >= 10, (
+        f"the map annotation is sized in user units, and under 10 it renders below the 12px floor "
+        f"on a 320px viewport: smallest is {min(attrs)}")
+
+    cap = re.search(r'<div class="mapcap">(.*?)</div>', page).group(1)
+    assert not re.search(r"-\d+\.\d+&#176;[SN]", cap), \
+        f"a caption states the hemisphere OR the sign, never both: {cap}"
+    assert "&#176;S" in cap and "&#176;E" in cap, f"the hemisphere must still be stated: {cap}"
+
+
+def test_the_register_lookup_matches_the_documented_ausmt_id_prefix():
+    """_ts_survey_rows keyed on aid.split(".") having exactly three parts with parts[1] == slug.
+    Two silent losses hid in that: a slug containing a dot never matched at all, and a variant id
+    (the fourth component the identity contract allows) was dropped even for a matching survey. The
+    API reference states the filter as the prefix `au.<slug>.`, which is what this now does.
+
+    FAILS on the pre-fix emitter, which returns nothing for the dotted slug and drops the variant."""
+    pages = _pages_module()
+    reg = {"au.a.b-2020.S1": {"level0": {"bytes": 1, "url_path": "x"}},
+           "au.a.b-2020.S2.rr": {"level0": {"bytes": 2, "url_path": "y"}},
+           "au.other.S1": {"level0": {"bytes": 3, "url_path": "z"}}}
+    rows = pages._ts_survey_rows("a.b-2020", reg)
+    assert sorted(rows["level0"]) == ["au.a.b-2020.S1", "au.a.b-2020.S2.rr"], rows
+    assert pages._ts_survey_rows("other", reg) == {"level0": {"au.other.S1": reg["au.other.S1"]["level0"]}}
+    assert pages._ts_survey_rows("nobody", reg) == {}, "a slug with no rows gets none"
+
+
+def test_a_page_with_empty_slots_carries_no_stray_blank_lines():
+    """13 of the 27 served survey pages carried a blank line where an absent block would have been
+    (the collection edge, the citation record, the publications list). Cosmetic, but a page emitter
+    that leaves the shape of what it did not write is a page emitter that will one day leave the
+    content too. FAILS IF a rendered body contains two consecutive newlines."""
+    pages = _pages_module()
+    page = pages.survey_page(slug="s", label="S", sm_doc=None,
+                             smeta={"slug": "s", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=[], bundle_rows=[], ts_access=None,
+                             base="https://x.example")
+    body = page.split("<main>\n", 1)[1].split("\n<footer>", 1)[0]
+    assert "\n\n" not in body, f"empty slots must leave nothing behind:\n{body[:600]!r}"
 
 
 def test_activity_scope_identifiers_render_as_project_links():
@@ -587,3 +1213,102 @@ def test_activity_scope_identifiers_render_as_project_links():
                              base="https://x.example")
     assert "Project" in page and ">ANSIR-2022-001</a>" in page
     assert 'href="https://www.auscope.org.au/ansir-projects?id=ANSIR-2022-001"' in page
+
+
+# ==================================================================================================
+# B9 R1 to R3: how a period, a range and a licence PRINT (presentation only)
+# ==================================================================================================
+def test_the_period_display_helper_holds_the_owners_worked_examples():
+    """The owner's worked examples, verbatim, as the specification of ONE shared display helper.
+
+    A period is a stored float and a printed string, and the two are not the same object. The stored
+    value stays exactly as the served documents carry it; what a reader sees is rounded to two
+    significant figures under 100 and to a thousands-separated integer at or above it, with trailing
+    zeros stripped and NEVER an exponent (a hub card reading "9.6e-05 s" is a number a geophysicist
+    can read and a reader cannot). FAILS IF any worked example prints differently."""
+    pages = _pages_module()
+    for value, shown in ((5.33333, "5.3"), (0.005012, "0.005"), (9.6e-05, "0.000096"),
+                         (0.004, "0.004"), (100000, "100,000"), (11651, "11,651"), (5, "5")):
+        assert pages._fmt_period(value) == shown, \
+            f"{value!r} must print as {shown!r}, got {pages._fmt_period(value)!r}"
+    assert "e" not in pages._fmt_period(9.6e-05), "exponent notation must never reach a page"
+
+
+def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
+    """The owner's revised range separator: the word "to" becomes a spaced hyphen-minus, and the
+    glyph ban is unchanged (no en dash, no em dash, no tick glyphs). Asserted on a REAL page across
+    the three range slots a survey renders: acquisition years, the period-coverage tile and the
+    station table's own period cell, plus the station page's period row."""
+    pages = _pages_module()
+    docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey": "S",
+             "location": {"lat": -34.5, "lon": 138.6},
+             "data": {"type": "BBMT", "period_min_s": 5.0, "period_max_s": 100000.0}}]
+    page = pages.survey_page(slug="s", label="S", sm_doc={"title": "S",
+                                                          "dates": {"coverage": {"year_start": 2016,
+                                                                                 "year_end": 2021}}},
+                             smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=docs, bundle_rows=[], ts_access=None,
+                             base="https://x.example")
+    assert "2016 - 2021" in page, "the acquisition range must use a spaced hyphen"
+    assert "5 - 100,000 s" in page, "the period range must use a spaced hyphen"
+    assert "2016 to 2021" not in page and "5 to 100,000" not in page, \
+        "the word form of a range is retired from UI chrome"
+    assert "\u2013" not in page and "\u2014" not in page, "no en/em dashes"
+    stn = pages.station_page(doc=docs[0], survey_slug="s", base="https://x.example")
+    # No disjunction: the first arm ("5.0 - 100,000.0 s") is what the row printed BEFORE it took the
+    # shared helper, so accepting it let the station page bypass _fmt_period and print the trailing
+    # zeros R2 retires while this test stayed green. One helper, one form, one assertion.
+    assert "5 - 100,000 s" in stn, \
+        f"the station period row must use the shared helper and a spaced hyphen: " \
+        f"{stn[stn.find('Period'):][:120]!r}"
+    assert "\u2013" not in stn and "\u2014" not in stn
+
+
+def test_the_licence_reads_in_human_form_in_chrome_and_keeps_its_identifier_in_json_ld():
+    """R3. The SPDX identifier is the machine's name for the licence and "CC BY 4.0" is the
+    reader's; the page owes the reader the second and the machine the first.
+
+    R3's second clause is "the same pattern for the other recognised CC ids", so the coverage owed
+    is the licence instrument's whole CC list, not the subset today's corpus happens to declare.
+    The expected strings below are LITERAL, so this test states the reader's form itself rather
+    than restating the emitter's derivation of it; the key-set assertion is what makes the coverage
+    complete rather than illustrative.
+
+    FAILS IF the chrome prints a raw CC id, if the instrument grows a CC id nothing has named a
+    reader's form for, if a non-CC id is guessed at, or if the human form leaks into the JSON-LD
+    licence slot (which is a URL derived from the identifier and must not become prose)."""
+    pages = _pages_module()
+    human = {"CC0-1.0": "CC0 1.0",
+             "CC-BY-3.0": "CC BY 3.0",
+             "CC-BY-3.0-AU": "CC BY 3.0 AU",
+             "CC-BY-4.0": "CC BY 4.0",
+             "CC-BY-SA-3.0": "CC BY-SA 3.0",
+             "CC-BY-SA-4.0": "CC BY-SA 4.0",
+             "CC-BY-NC-3.0": "CC BY-NC 3.0",
+             "CC-BY-NC-4.0": "CC BY-NC 4.0",
+             "CC-BY-NC-SA-3.0": "CC BY-NC-SA 3.0",
+             "CC-BY-NC-SA-4.0": "CC BY-NC-SA 4.0",
+             "CC-BY-ND-3.0": "CC BY-ND 3.0",
+             "CC-BY-ND-4.0": "CC BY-ND 4.0",
+             "CC-BY-NC-ND-3.0": "CC BY-NC-ND 3.0",
+             "CC-BY-NC-ND-4.0": "CC BY-NC-ND 4.0"}
+    instrument = json.loads((REPO.parent / "contract" / "licenses.json").read_text(encoding="utf-8"))
+    recognised = instrument["redistributable"] + instrument["recognised_only"]
+    assert set(human) == {i for i in recognised if i.startswith("CC")}, \
+        "every CC id the licence instrument recognises owes the reader a named human form"
+    for ident, reader in human.items():
+        assert pages._fmt_licence(ident) == reader, \
+            f"{ident} must read as {reader}, got {pages._fmt_licence(ident)!r}"
+    for ident in recognised:
+        if ident not in human:
+            assert pages._fmt_licence(ident) == ident, \
+                f"{ident} has no published reader's form and is printed verbatim, never guessed at"
+    assert pages._fmt_licence("Some-Bespoke-Licence") == "Some-Bespoke-Licence", \
+        "an unrecognised identifier is passed through, never guessed at"
+    page = pages.survey_page(slug="s", label="S", sm_doc=None,
+                             smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=[], bundle_rows=[], ts_access=None,
+                             base="https://x.example")
+    assert "<dt>Licence</dt><dd>CC BY 4.0</dd>" in page, "the facts row must read in human form"
+    assert '"license": "https://creativecommons.org/licenses/by/4.0/"' in page, \
+        "the JSON-LD licence stays the canonical URL the identifier maps to"

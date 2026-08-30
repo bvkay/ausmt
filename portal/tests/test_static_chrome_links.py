@@ -89,3 +89,39 @@ def test_the_404_page_recovers_to_the_surveys_index():
     text = _text("404.html")
     assert 'href="/surveys"' in text, "the 404 recovery link must reach the surveys index"
     assert "#/surveys" not in text, "the dead hash route must be gone"
+
+
+def test_the_spa_header_surveys_and_collections_are_real_links():
+    """LANE-ADDENDUM-HUB-FEEDBACK.md R10, the owner's live review of /surveys.
+
+    The hub pages exist and are served at /surveys and /collections, so the SPA header's own Surveys
+    and Collections controls stop being in-app view switches and become links to them, matching the
+    chrome the three static pages already point that way. Map stays in-app: it IS the application.
+
+    FAILS IF either control is still a <button>, if it points anywhere but its hub, or if Map stops
+    being the in-app control. The two in-app views remain reachable at their #/surveys and
+    #/collections hash routes, pinned separately below."""
+    text = _text("index.html")
+    for nav_id, href in (("navSurveys", "/surveys"), ("navCollections", "/collections")):
+        m = re.search(rf'<a id="{nav_id}"[^>]*href="([^"]+)"', text)
+        assert m, f"index.html: {nav_id} must be a real link now, not a button"
+        assert m.group(1) == href, f"index.html: {nav_id} must point at {href}, got {m.group(1)}"
+        assert f'<button id="{nav_id}"' not in text, f"index.html: {nav_id} is no longer a button"
+    assert re.search(r'<button id="navMap"', text), \
+        "index.html: Map stays the in-app control; it is the application, not a destination"
+
+
+def test_the_spa_keeps_its_in_app_surveys_and_collections_views_on_their_hash_routes():
+    """The other half of R10: making the header controls into links must not RETIRE the in-app
+    views. #/surveys and #/collections are published in the wild and still switch the SPA's own
+    grid views, and the header no longer wires a click handler onto controls that navigate away.
+
+    FAILS IF the hash branches go, or if a click handler is left on a control that is now a link
+    (which would run a view switch the browser is about to navigate away from)."""
+    main = (ROOT / "src" / "main.js").read_text(encoding="utf-8")
+    assert '"#/surveys"' in main and '"#/collections"' in main, \
+        "the plural hash routes must still reach the in-app views"
+    for nav_id in ("navSurveys", "navCollections"):
+        assert f'getElementById("{nav_id}").onclick' not in main, \
+            f"{nav_id} navigates now; a click handler would switch a view the page is leaving"
+    assert 'getElementById("navMap").onclick' in main, "Map keeps its in-app handler"

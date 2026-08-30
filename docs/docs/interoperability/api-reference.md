@@ -300,6 +300,35 @@ survey. The manifest is authoritative for what a build produced, whatever its co
 The schema id carries the version. A minor update may add optional keys; an incompatible change bumps
 the major version and ships as a separate schema file, mirroring the MTCAT policy.
 
+### Time-series routes: ts_access.json
+
+The manifest indexes what AusMT serves. The raw and level-1 time series are held at NCI, so they are
+not in it. `/data/ts_access.json` (and its twin at `/data/products/ts_access.json`, byte-identical) is
+the route detail for those hand-offs, and it makes the same kind of promise the manifest does: not its
+content, its row shape.
+
+```json
+{"au.example-2021.S07": {"raw_packed": {"bytes": 9868836788, "url_path": "my80/.../S07 [REMOTE].zip"},
+                         "level1_mth5": {"bytes": 20360000, "url_path": "my80/.../S07.h5"}}}
+```
+
+Three keys deep: an `ausmt_id`, a level token, then a row. Every row carries `url_path` (string, the
+archive's own path relative to the NCI THREDDS fileServer root
+`https://thredds.nci.org.au/thredds/fileServer/`, verbatim and unencoded), and carries `bytes` (a
+positive integer, the archive's own size) wherever the register states the file's size. Every row the
+current build publishes carries both. Where a register entry records no size the key is absent rather
+than zero, so a missing `bytes` reads as "size not asserted" and never as an empty file. The tokens
+this build can publish today are `raw_packed`, `level0`, `level1_mth5` and `level1_netcdf`, which is a
+snapshot of the current vocabulary rather than a closed set: read it with the additive rule below.
+`level2` never appears, because that tree holds transfer functions rather than time series.
+
+Evolution is additive only. New level tokens and new per-level keys may appear; `url_path` will not
+leave a row, and neither key will change meaning or type. Absence is the negative answer, not an
+unknown one: a station or a level that is not in the document has no verified open route, and every key
+in the document is an `ausmt_id` the same build published in `mtcat.json`. The file is written only
+when at least one station has such a route, so a deployment with none serves no document at all rather
+than an empty one.
+
 ---
 
 ## Fetching data today

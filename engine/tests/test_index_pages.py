@@ -113,8 +113,10 @@ def test_surveys_index_lists_every_survey_with_its_discovery_facts(built):
         assert (built / "pages" / "surveys" / f"{slug}.html").is_file(), \
             f"{slug}: every row link must resolve to an emitted page"
     assert "Test Org" in page and "South Australia" in page
-    assert "stations" in page and "CC-BY-4.0" in page
-    assert re.search(r"[\d,.]+ to [\d,.]+ s", page), "the period range must render"
+    # The licence reads in HUMAN form in chrome and the SPDX identifier stays the machine's name
+    # for it (LANE-ADDENDUM-HUB-FEEDBACK.md R3); ranges take the spaced hyphen (R1).
+    assert "stations" in page and "CC BY 4.0" in page
+    assert re.search(r"[\d,.]+ - [\d,.]+ s", page), "the period range must render"
     # No abstract on the cards: the index is a discovery summary, not a page of miniature records.
     assert "An index fixture survey." not in page, "the survey abstract must not ride the index"
 
@@ -209,7 +211,7 @@ def _synthetic_rows(n_surveys=27, n_stations=2625):
                for k in range(per)]
         rows.append({"slug": f"survey-{i:02d}", "title": f"Synthetic Survey {i:02d}",
                      "org": "Geological Survey of Somewhere", "region": "South Australia",
-                     "n_stations": per, "years": "2013 to 2016",
+                     "n_stations": per, "years": "2013 - 2016",
                      "types": {"LPMT": per}, "period_min_s": 4.0, "period_max_s": 16000.0,
                      "lic": "CC-BY-4.0", "doi": "10.82388/abcdefgh", "points": pts})
     return rows
@@ -366,3 +368,336 @@ def test_collections_index_shares_one_outline_and_stays_inside_the_budget():
     assert page.count("<symbol") == 1, "the outline geometry must be emitted exactly once"
     assert page.count("<use href=") == len(rows), "every card must reference the shared outline"
     assert size < 300_000, f"the collections index must stay under 300 KB, got {size} bytes"
+
+
+def test_the_hub_card_scatter_thins_its_dots_and_keeps_every_member():
+    """The hub card is a SUMMARY of a collection's footprint, and it was drawing one dot per member
+    station: the six-collection synthetic already spends most of a 300 KB budget on 2,610 circles,
+    and the cost scales with station count rather than with card count, so a corpus that grows
+    stations rather than collections walks into the ceiling with nothing between it and the wall.
+
+    The card now grid-decimates above a cap, which keeps the SHAPE of the footprint rather than its
+    first N points, and decimates per member so a card can never silently drop a survey. The
+    collection PAGE is unthinned: it is the large map the design brief asks for, and it carries the
+    legend and the per-dot labels that make each colour readable. FAILS IF the cap stops biting, if
+    a member disappears from a card, or if the page's own scatter starts being thinned."""
+    pages = _pages_module()
+    rows = _synthetic_collections()
+    page = pages.collections_index_page(rows=rows, base=BASE)
+    per_card = [c.count("<circle") for c in page.split('<article class="idxccard">')[1:]]
+    assert len(per_card) == len(rows), per_card
+    for n, row in zip(per_card, rows):
+        full = sum(len(v) for v in row["member_points"].values())
+        assert n < full, f"a card carrying {full} stations must thin, drew {n}"
+        assert n >= len(row["member_labels"]), \
+            f"every member keeps at least one dot: {n} dots for {len(row['member_labels'])} members"
+    assert len(page.encode("utf-8")) < 300_000
+
+    # the collection page itself draws every dot: it is the hero map, not a card
+    full_pts = rows[0]["member_points"]
+    detail = pages.collection_page(cid="coll-0", coll={"title": "Synthetic Collection 0"},
+                                   member_slugs=[(lbl, f"s{i}") for i, lbl
+                                                 in enumerate(rows[0]["member_labels"])],
+                                   member_smeta=[{} for _ in rows[0]["member_labels"]],
+                                   base=BASE, member_points=full_pts)
+    assert detail.count("<circle") == sum(len(v) for v in full_pts.values()), \
+        "the collection page draws the whole footprint"
+
+
+# ==================================================================================================
+# B9 R1 to R3 on the hubs: the same display rules the entity pages answer to
+# ==================================================================================================
+def test_the_hub_cards_print_ranges_licences_and_periods_the_way_the_entity_pages_do():
+    """One display grammar across the whole tier. The hub card is where a reader compares surveys
+    side by side, so a range that reads "5 to 100,000 s" on the card and "5 - 100,000 s" on the page
+    is two answers to one question. FAILS IF the hub keeps the word form of a range, prints the raw
+    SPDX identifier, or lets an exponent reach a card."""
+    pages = _pages_module()
+    row = dict(_one_survey_row(), years="2016 - 2021", period_min_s=9.6e-05, period_max_s=11651.0)
+    page = pages.surveys_index_page(rows=[row], base=BASE)
+    assert "0.000096 - 11,651 s" in page, "the card period band takes the shared display helper"
+    assert "9.6e-05" not in page, "exponent notation must never reach a hub card"
+    assert "2016 - 2021" in page and " to " not in page.split('<div class="idxlist">')[1], \
+        "no range on a card may still read as the word form"
+    assert "CC BY 4.0" in page, "the licence reads in human form on the card"
+    assert "CC-BY-4.0" not in page, "the raw SPDX identifier is the machine's name, not the reader's"
+
+
+# ==================================================================================================
+# B9 R4 to R9: the hub as a place to browse, not a list to read
+# ==================================================================================================
+def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor():
+    """R4, the stretched-link pattern. A card is one destination, so the whole card should behave
+    like one target; but a card full of overlapping links is a screen-reader's nightmare and a
+    button in a row breaks the catalogue -> survey -> data hierarchy the owner set. So the TITLE
+    stays the single real anchor and a ::after on it covers the card.
+
+    FAILS IF the card stops being positioned (the overlay would escape to the page), if the overlay
+    rule is dropped, if a second anchor appears in a surveys-hub card, if a <button> appears in any
+    row, or if the hover affordance goes."""
+    pages = _pages_module()
+    page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    # Scoped to the .idxcard rule itself. An unscoped "position:relative" in css search is satisfied
+    # by the collections card's own rule in the same sheet, so dropping it from THIS card passed:
+    # the title's inset ::after would then resolve against the page instead, covering the whole
+    # document with one anchor and naming the accessibility tree after one survey.
+    card_rule = re.search(r"\.idxcard\{([^}]*)\}", css)
+    assert card_rule and "position:relative" in card_rule.group(1), \
+        f"the card itself must establish the positioning context for the stretched link: {card_rule}"
+    assert ".idxt a::after" in css, "the title anchor must carry the card-covering ::after"
+    assert ".idxcard:hover" in css, "the card must acknowledge the pointer"
+    card = page.split('<article class="idxcard">', 1)[1].split("</article>", 1)[0]
+    assert card.count("<a ") == 1, f"exactly one real anchor per surveys card, got {card.count('<a ')}"
+    assert "<button" not in page, "no buttons in rows, ever: the hierarchy is catalogue, survey, data"
+    assert "&#8594;" in card, "the card reveals a forward arrow for the in-site action (R14)"
+
+
+def test_the_collections_card_keeps_its_explore_link_above_the_stretched_overlay():
+    """The collections card carries a second link to the same place ("Explore collection"). Under a
+    stretched overlay a link that is covered is a link that does not work, so it is lifted above it.
+    FAILS IF the lift is dropped (the visible control would become inert) or the card stops being
+    clickable as a whole."""
+    pages = _pages_module()
+    page = pages.collections_index_page(rows=[_one_collection_row()], base=BASE)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    # Both assertions scoped to their own rule: checking the two tokens independently against the
+    # whole sheet let the lift be replaced by a colour while an unrelated rule supplied the
+    # z-index, and a covered control is a control that does not work.
+    ccard = re.search(r"\.idxccard\{([^}]*)\}", css)
+    assert ccard and "position:relative" in ccard.group(1), \
+        f"the collections card must establish its own positioning context: {ccard}"
+    lift = re.search(r"\.idxccard \.idxact a\{([^}]*)\}", css)
+    assert lift and "position:relative" in lift.group(1) and "z-index" in lift.group(1), \
+        f"the Explore control must be lifted above the card-covering overlay: {lift}"
+    assert "Explore collection" in page
+
+
+def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
+    """R5. The hub's own words, verbatim from the owner's review, between the summary line and the
+    list; and the map action carries the in-site forward arrow (R14 keeps U+2192 for actions that
+    stay on the site and U+2197 for links that leave the page)."""
+    pages = _pages_module()
+    page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
+    assert ("Discover magnetotelluric surveys from across Australia. Browse survey coverage, "
+            "acquisition periods and available data.") in page, "the hub lede must read verbatim"
+    assert page.index('class="idxsum"') < page.index("Discover magnetotelluric") \
+        < page.index('class="idxlist"'), "the lede sits between the summary line and the list"
+    assert "Explore on the map &#8594;" in page, "the map action carries the forward arrow"
+    coll = pages.collections_index_page(rows=[_one_collection_row()], base=BASE)
+    assert "Discover magnetotelluric surveys" not in coll, \
+        "the collections hub keeps its own section-20 lede"
+
+
+def test_the_hub_locator_grows_and_its_container_steps_back():
+    """R6 and R7. The locator map is the card's only picture and was too small to read at a glance;
+    it grows about ten percent. The PANEL around it steps toward the card's own fill so the
+    Australia outline reads as the object rather than as a box on a box. The shared-symbol geometry
+    is untouched, which is what keeps the budget pin honest."""
+    pages = _pages_module()
+    page = pages.surveys_index_page(rows=_synthetic_rows(), base=BASE)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    assert "grid-template-columns:115px 1fr" in css, \
+        "the hub locator column must be 115px (about +10% on the 104px it carried)"
+    assert pages._INDEX_MAP_WIDTH == 230, \
+        "the shared symbol geometry does not move: R6 grows the rendered width, not the viewBox"
+    assert page.count("<symbol") == 1 and len(page.encode("utf-8")) < 300_000, \
+        "the size budget stays green"
+    svg = pages._minimap_svg([], width=230)
+    assert "background:#18213D" in svg, "the map panel steps to the card's own fill"
+    assert "#16242f" not in svg, "the old darker panel shade is gone"
+
+
+def test_the_card_names_its_organisation_more_loudly_than_its_location():
+    """R8. Organisation and location share one line with no labels, so the only thing that can tell
+    a reader which is which is weight: two muted shades, the organisation brighter. FAILS IF the two
+    collapse back to one colour or a label is introduced."""
+    pages = _pages_module()
+    page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    org_line = page.split('<p class="idxorg">', 1)[1].split("</p>", 1)[0]
+    assert '<span class="idxorgn">Test Org</span>' in org_line
+    assert '<span class="idxloc">Tasmania</span>' in org_line
+    assert "Organisation" not in org_line and "Region" not in org_line, "no labels, by ruling"
+    orgn = re.search(r"\.idxorgn\{color:(#[0-9A-Fa-f]{6})", css)
+    loc = re.search(r"\.idxloc\{color:(#[0-9A-Fa-f]{6})", css)
+    assert orgn and loc, f"both shades must be declared; got {orgn} / {loc}"
+    assert orgn.group(1) != loc.group(1), \
+        f"the organisation must not share the location's ink ({orgn.group(1)})"
+    def _lum(hexcol):
+        return sum(int(hexcol[i:i + 2], 16) for i in (1, 3, 5))
+    assert _lum(orgn.group(1)) > _lum(loc.group(1)), \
+        f"the organisation must read BRIGHTER than the location: {orgn.group(1)} vs {loc.group(1)}"
+
+
+def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
+    """R9. The hub is a scanning surface, not a reading surface, so its column widens about ten
+    percent past the 840px prose measure; and it stops near 920px rather than inheriting the entity
+    pages' 1120px wide-screen measure, because a hub card stretched across a desktop is a row, not a
+    card."""
+    pages = _pages_module()
+    for page in (pages.surveys_index_page(rows=[_one_survey_row()], base=BASE),
+                 pages.collections_index_page(rows=[_one_collection_row()], base=BASE)):
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        assert "max-width:920px" in css, "the hub column must widen to 920px"
+        assert css.rindex("max-width:920px") > css.rindex("max-width:1120px"), \
+            "the hub width must be declared after (and so override) the entity pages' wide measure"
+        assert css.count("max-width:920px") == 2, \
+            "the base rule and the wide-screen media query must BOTH be capped at the hub measure"
+
+
+# ==================================================================================================
+# B9 R11 to R14: ONE header and ONE footer, across every page kind
+# ==================================================================================================
+# The page kinds this tier emits, with the tab that must be active, the contextual machine-readable
+# link the footer must resolve to, and whether the header's right status slot carries anything.
+# LANE-ADDENDUM-HUB-FEEDBACK.md R11 to R13. The tokens asserted below are the SPA header's own
+# (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
+# rather than read across, because the engine image ships engine/ and contract/ and cannot see
+# portal/ at all, and a test that reaches out of the image is a test the image cannot run.
+def _kinds(built):
+    aid = sorted(p.stem for p in (built / "pages" / "stations").glob("*.html"))[0]
+    return {
+        "surveys/index.html": ("navSurveys", "Machine-readable catalogue - MTCAT JSON",
+                               "/data/mtcat.json", True),
+        "collections/index.html": ("navCollections", "Machine-readable catalogue - MTCAT JSON",
+                                   "/data/mtcat.json", False),
+        "surveys/idx-a.html": ("navSurveys", "Machine-readable survey metadata - JSON",
+                               "/data/products/idx-a/survey-metadata.json", False),
+        f"stations/{aid}.html": ("navSurveys", "Machine-readable station metadata - JSON",
+                                 None, False),
+        "collections/idxcoll.html": ("navCollections",
+                                     "Collection record in the MTCAT catalogue - JSON",
+                                     "/data/mtcat.json", False),
+    }
+
+
+def test_every_static_page_carries_the_one_global_header(built):
+    """R11. The SPA header's three-part division becomes the site's ONE header: AusMT identity on
+    the left linking the root, the three filled application tabs in the centre with the CURRENT
+    page's tab active, and the two smaller outlined supporting controls beside them. The static
+    pages had no header at all above their crumb line, so a reader who landed on a survey page from
+    a search result had no route to the map, the hubs, About or Contribute.
+
+    FAILS IF a page kind is missing the header, activates the wrong tab (or more than one), points a
+    tab somewhere else, loses a supporting control, or drifts off the SPA's tokens."""
+    for rel, (active, _lbl, _href, _slot) in _kinds(built).items():
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        head = page.split("<header", 1)[1].split("</header>", 1)[0]
+        assert '<a class="wordmark" href="/">AusMT</a>' in head, f"{rel}: no identity linking the root"
+        for nav_id, href in (("navMap", "/"), ("navSurveys", "/surveys"),
+                             ("navCollections", "/collections")):
+            assert re.search(rf'<a id="{nav_id}"[^>]*href="{re.escape(href)}"', head), \
+                f"{rel}: {nav_id} must be a real link to {href}"
+        act = re.findall(r'<a id="(nav\w+)"[^>]*class="active"', head)
+        assert act == [active], f"{rel}: exactly {active} must be active, got {act}"
+        assert '<a class="about" href="/about.html">About</a>' in head, f"{rel}: no About control"
+        assert 'href="/add-survey.html">Contribute a survey' in head, f"{rel}: no Contribute control"
+        assert "<header" in page.split("<main>", 1)[0], f"{rel}: the header must precede <main>"
+        assert '<p class="crumb">' in page, f"{rel}: the crumb line stays beneath the header"
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        for token in ("#EF7256", "#1E2B4F", "#2B3557", "min-width:112px", "min-height:40px"):
+            assert token in css, f"{rel}: the header must carry the SPA's {token} token"
+        # Scoped, because #E8EDF1 appears elsewhere in this sheet and an unscoped search would pass
+        # on the nav tabs' own colour. The SPA's .wordmark declares no colour and so inherits
+        # --text #E8EDF1; the static header carried a plain #fff, which is the page tier's heading
+        # white and one step brighter than the identity it is meant to be the same object as.
+        mark = re.search(r"\.wordmark\{([^}]*)\}", css)
+        assert mark and "color:#E8EDF1" in mark.group(1), \
+            f"{rel}: the identity carries the SPA header's own text token: {mark}"
+
+
+def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(built):
+    """R12. The shell is identical everywhere; what rides in the right slot is not. The Map view
+    keeps its live counter in the SPA; the surveys hub states the static catalogue counts; every
+    other static page shows NOTHING, because a counter that cannot count the page it is on is
+    decoration pretending to be data."""
+    for rel, (_active, _lbl, _href, has_slot) in _kinds(built).items():
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        head = page.split("<header", 1)[1].split("</header>", 1)[0]
+        slot = head.split('class="hzone hright"', 1)[1].split("</div>", 1)[0].lstrip(">")
+        if has_slot:
+            assert "surveys" in slot and "stations" in slot, \
+                f"{rel}: the surveys hub must state its static counts, got {slot!r}"
+            assert re.search(r"<b>\d[\d,]*</b> surveys", slot), \
+                f"{rel}: the counts must read in the SPA's own grammar, got {slot!r}"
+        else:
+            assert slot.strip() == "", f"{rel}: the status slot must be empty, got {slot!r}"
+
+
+def test_the_footer_is_contextual_and_its_machine_link_resolves_per_page_kind(built):
+    """R13. Two rows on every static page. Row 1 left is the machine-readable link FOR THIS PAGE, so
+    a reader on a station page is handed that station's document rather than the whole catalogue;
+    the collection line is deliberately honest, because no per-collection document is served and a
+    footer must not advertise a surface we do not have. Row 1 right is Releases and About. Row 2 is
+    the copyright, the licence note and the build stamp.
+
+    FAILS IF the one-line footer survives anywhere, if a machine link points at the wrong document,
+    if a link's target is not actually served, or if the build identity becomes a link."""
+    for rel, (_active, label, href, _slot) in _kinds(built).items():
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        foot = page.split("\n<footer>", 1)[1].split("</footer>", 1)[0]
+        assert "AusMT - Australia's Magnetotelluric Data Portal - an AuScope service." not in page, \
+            f"{rel}: the one-line footer must be replaced everywhere in pages/"
+        m = re.search(r'<a href="([^"]+)">([^<]*?) &#8599;</a>', foot)
+        assert m, f"{rel}: no machine-readable link carrying the leaves-this-page arrow: {foot!r}"
+        assert m.group(2) == label, f"{rel}: footer link must read {label!r}, got {m.group(2)!r}"
+        if href is not None:
+            assert m.group(1) == href, f"{rel}: footer link must target {href}, got {m.group(1)}"
+        else:
+            assert m.group(1).endswith("/station.json"), \
+                f"{rel}: a station page must offer its OWN station.json, got {m.group(1)}"
+        # /data/* is the served route onto the build's own out dir, so the advertised path is
+        # checked against the tree this same build wrote: a footer link is a promise about a file.
+        assert m.group(1).startswith("/data/"), m.group(1)
+        assert (built / m.group(1)[len("/data/"):]).is_file(), \
+            f"{rel}: the footer advertises {m.group(1)}, which this build did not write"
+        assert '<a href="/releases.html">Releases</a>' in foot and \
+               '<a href="/about.html">About</a>' in foot, f"{rel}: row 1 right must be Releases, About"
+        assert "&#169; 2026 AuScope and AusMT contributors - an AuScope service" in foot
+        assert "Data licences vary by survey; each download carries its licence." in foot
+        stamp = re.search(r'<span class="fbuild">Build ([^<]+)</span>', foot)
+        assert stamp, f"{rel}: row 2 must carry the build identity stamp: {foot!r}"
+        # Scoped to the WHOLE of row 2, not to the stamp's own match. A match bounded by
+        # <span ...>[^<]+</span> can never contain "<a" by construction, so asserting over it
+        # restated the regex rather than the rule and left the one mutation R13 forbids (wrapping
+        # the stamp in an anchor to build_provenance.json, a surface the public-surface audit keeps
+        # de-documented) passing green. R13's rule is that row 2 carries no link at all.
+        rows = foot.split('<div class="frow">')
+        assert len(rows) == 3, f"{rel}: the footer is two rows, got {len(rows) - 1}: {foot!r}"
+        assert "<a" not in rows[2], \
+            f"{rel}: row 2 is the copyright, the licence note and a PRINTED build identity: {rows[2]!r}"
+
+
+def test_the_new_chrome_adds_no_script_and_no_fetched_asset_to_any_page_kind(built):
+    """The tier's determinism posture, re-asserted across EVERY page kind now that all of them grew
+    a header and a footer. The SPA's own header carries an AuScope logo image; a static page cannot,
+    because a served page here must render from itself with no network at build or at render. FAILS
+    IF the header smuggled in a script, an image or an external stylesheet."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
+            f"{rel}: no executable script may appear on a static page"
+        assert "src=" not in page, f"{rel}: no fetched asset may appear on a static page"
+        assert 'rel="stylesheet"' not in page, f"{rel}: styles stay inline"
+        assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
+
+
+def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):
+    """What the narrow-width visual check found. The three tabs carry the SPA's own equal-width
+    floor (min-width:112px, min-height:40px), and three of those plus their gaps and the header's
+    padding come to more than a 375px phone viewport: measured on the built hub at 375px the
+    document scrolled to 468px, so the whole page could be dragged sideways and "Collections" sat
+    off the screen.
+
+    The SPA absorbs this because its body does not scroll; a static page's does. The zones already
+    wrap, so the nav row wraps too and the tabs stack instead of overflowing. FAILS IF the wrap is
+    dropped, or if the zone-level wrap that carries the rest of the header goes."""
+    css = (built / "pages" / "surveys" / "index.html").read_text(
+        encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
+    nav = re.search(r"header\.site nav\{([^}]*)\}", css)
+    assert nav, "the global header must style its own nav row"
+    assert "flex-wrap:wrap" in nav.group(1), \
+        f"three 112px tabs overflow a 375px viewport; the nav row must wrap: {nav.group(1)}"
+    zone = re.search(r"\.hzone\{([^}]*)\}", css)
+    assert zone and "flex-wrap:wrap" in zone.group(1), "the header zones must keep wrapping"
