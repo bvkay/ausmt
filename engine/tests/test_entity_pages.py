@@ -693,7 +693,19 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
 
     contact_resistance is a unit_value, whose source text is never discarded after normalisation.
     Both forms therefore reach the page: the parsed value with its unit, and the source string it
-    was read from. FAILS IF either half is dropped, or if a defaults-only document grows sections."""
+    was read from.
+
+    The presence guard must test the RENDERED value, not the raw object. A contact_resistance
+    carrying only library defaults (no source text, no parsed value, no unit) is truthy as a dict
+    and renders as nothing, so a guard on the object drew a Contact resistance header with a hyphen
+    in every cell: an empty column asserting a measurement the source never made, which is what the
+    comment above _channel_cells says it does not do. Latent on today's corpus only because
+    _runfacts.unit_value returns None for empty source text and _Doc.channel drops a None, so the
+    key is absent rather than default-filled; a document that carried the defaults through would
+    have rendered the column.
+
+    FAILS IF either unit_value half is dropped, if a defaults-only document grows sections, or if a
+    channel column appears for a key whose every value renders empty."""
     pages = _pages_module()
     doc = {"ausmt_id": "au.s.A1", "station": "A1", "survey": "S",
            "location": {"lat": -30.0, "lon": 137.0},
@@ -732,6 +744,23 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
     assert "Time series" not in bare, "no register rows means no time-series section"
     assert "withheld or generalised by the data custodian" in bare, \
         "the withheld-location line is unchanged"
+
+    # Every channel key present, every value the library default it would arrive as.
+    defaults = pages.station_page(
+        doc={"ausmt_id": "au.s.A3", "station": "A3", "survey": "S",
+             "location": {"lat": -30.0, "lon": 137.0}, "data": {"type": "BBMT"},
+             "runs": [{"id": "A3_001", "channels": [
+                 {"component": "ex",
+                  "contact_resistance": {"source_value": "", "value": None, "unit": None}},
+                 {"component": "ey",
+                  "contact_resistance": {"source_value": "", "value": None, "unit": None}}]}]},
+        survey_slug="s", base="https://x.example")
+    assert "Contact resistance" not in defaults, (
+        "a contact_resistance whose every value is a library default renders nothing, so it must "
+        "draw no column: a header over a hyphen in every cell asserts a measurement the source "
+        "never made")
+    assert "<td>ex</td>" in defaults, \
+        "sensitivity: the channel rows themselves are still rendered, so the column was the choice"
 
 
 def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations(tmp_path):

@@ -1056,8 +1056,11 @@ def _instrument_text(inst) -> str:
 
 
 # The channel columns, in render order: (header, reader). A column is emitted only where at least
-# one channel of the run carries it, so a run without electrodes draws no dipole column and a run
-# whose source recorded no contact resistance draws no resistance column full of hyphens.
+# one channel of the run RENDERS it, so a run without electrodes draws no dipole column and a run
+# whose source recorded no contact resistance draws no resistance column full of hyphens. Each guard
+# asks the same reader the column's cells will ask, because a key can be present and still render
+# nothing: a unit_value carrying only library defaults is a truthy dict and an empty string, and a
+# guard on the object would head a column of hyphens over a measurement the source never made.
 def _channel_cells(run):
     channels = [ch for ch in (run.get("channels") or []) if (ch or {}).get("component")]
     if not channels:
@@ -1070,7 +1073,7 @@ def _channel_cells(run):
     if any(ch.get("dipole_length_m") is not None for ch in channels):
         cols.append(("Dipole", lambda ch: (f"{ch['dipole_length_m']:g} m"
                                            if ch.get("dipole_length_m") is not None else "-")))
-    if any(ch.get("contact_resistance") for ch in channels):
+    if any(_unit_value(ch.get("contact_resistance")) for ch in channels):
         cols.append(("Contact resistance",
                      lambda ch: _unit_value(ch.get("contact_resistance")) or "-"))
     if any(_instrument_text(ch.get("sensor")) for ch in channels):
