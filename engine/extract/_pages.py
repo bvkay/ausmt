@@ -293,6 +293,7 @@ def _footprint_svg(points, *, width=230) -> str:
 _CSS = """
   body{margin:0;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
   main{max-width:840px;margin:0 auto;padding:1.6rem 1.25rem 3rem}
+  @media(min-width:1180px){main{max-width:1120px}}
   a{color:#EF7256}
   h1{color:#fff;font-size:1.7rem;margin:.5rem 0 .3rem}
   h2{color:#fff;font-size:1.12rem;margin:1.7rem 0 .5rem}
@@ -304,9 +305,13 @@ _CSS = """
   .cite{background:#18213D;border:1px solid #2B3557;border-radius:6px;padding:.7rem .9rem;font-size:.88rem;margin:1rem 0}
   .cite code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#C9D4E8}
   .embargo{background:#3a2a1a;border:1px solid #7a5a2a;border-radius:6px;padding:.6rem .9rem;margin:.8rem 0;color:#e8d5b5;font-size:.9rem}
-  .hero{display:grid;grid-template-columns:1fr 240px;gap:1.2rem;align-items:start;margin:.8rem 0}
+  .typebadge{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
+  .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
+  .prose{max-width:70ch}
+  .hero{display:grid;grid-template-columns:minmax(0,2fr) minmax(180px,1fr);gap:1.2rem;align-items:start;margin:.8rem 0}
   .hero-maps{display:flex;flex-direction:column;gap:.5rem}
   .hero-maps svg{width:100%;height:auto;display:block}
+  .herofacts{display:flex;flex-direction:column;gap:.55rem}
   .mapcap{font-size:.72rem;color:#8FA3B0;font-family:ui-monospace,Menlo,monospace}
   @media(max-width:640px){.hero{grid-template-columns:1fr}}
   .cstats{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}
@@ -685,7 +690,19 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                    f"yet distributed. Discovery metadata is published now; the data follows when "
                    f"the embargo lifts.</div>")
 
-    # ---- hero: abstract + maps ----
+    # ---- the type badge and the lede ----
+    # The badge states the survey's data type(s) beside the title, from the served station
+    # documents' own type counts; a survey whose documents disclose no type shows no badge.
+    type_str = " / ".join(f"{t}" if len(type_counts) == 1 else f"{t} {n}"
+                          for t, n in sorted(type_counts.items())) if type_counts else ""
+    badge = f'<span class="typebadge">{_e(type_str)}</span>' if type_str else ""
+    # The lede is the blurb's OWN first sentence, never a rewrite: an opening line the reader can
+    # take in before the map, with the full abstract one section down. A blurb whose first sentence
+    # is the whole blurb simply reads twice, which is honest for a one-sentence abstract.
+    lede_text = _first_sentences(blurb, limit=1)
+    lede = f'<p class="lede">{_e(lede_text)}</p>' if lede_text else ""
+
+    # ---- hero: the map leads, the fixed metric core rides beside it ----
     compact = False
     if points:
         lons = [pt[0] for pt in points]
@@ -697,33 +714,33 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         maps.append(_footprint_svg(points))
         cap = (f'<div class="mapcap">{min(lats):.2f}&#176; to {max(lats):.2f}&#176;S &#183; '
                f'{min(lons):.2f}&#176; to {max(lons):.2f}&#176;E</div>')
-    hero = (f'<div class="hero"><div><p style="margin-top:.2rem">{_e(blurb)}</p></div>'
-            f'<div class="hero-maps">{"".join(maps)}{cap}</div></div>'
-            if blurb else
-            f'<div class="hero"><div></div><div class="hero-maps">{"".join(maps)}{cap}</div></div>')
 
-    # ---- stat tiles ----
     def tile(num, lab):
         return f'<div class="cstat"><div class="cnum">{num}</div><div class="clab">{lab}</div></div>'
-    tiles = [tile(n_stations, "stations")]
-    if type_counts:
-        tstr = " / ".join(f"{t}" if len(type_counts) == 1 else f"{t} {n}"
-                          for t, n in sorted(type_counts.items()))
-        tiles.append(tile(_e(tstr), "data type"))
+    # The FIXED core (brief 13): stations, type, acquisition, period. Every survey answers these in
+    # the same four slots and the same order, so the rhythm is predictable across the corpus; each
+    # is still presence-guarded, because a predictable slot is not a licence to invent a value.
+    core = [tile(n_stations, "stations")]
+    if type_str:
+        core.append(tile(_e(type_str), "data type"))
+    if years:
+        core.append(tile(_e(years), "acquired"))
     if pmin is not None and pmax is not None:
-        tiles.append(tile(f"{_fmt_period(pmin)} to {_fmt_period(pmax)} s", "period coverage"))
+        core.append(tile(f"{_fmt_period(pmin)} to {_fmt_period(pmax)} s", "period coverage"))
+    hero = (f'<div class="hero"><div class="hero-maps">{"".join(maps)}{cap}</div>'
+            f'<div class="herofacts">{"".join(core)}</div></div>')
+
+    # ---- the optional secondary metrics, after the hero ----
     # Channels recorded, from the served components: what the survey actually measured. The
     # tipper tile appears only where a tipper exists (a zero count is the channels tile's job).
     channels = "Ex Ey Bx By" + (" Bz" if tipper == n_stations and n_stations else "")
     if 0 < tipper < n_stations:
         channels = "Ex Ey Bx By (+Bz)"
-    tiles.append(tile(_e(channels), "channels recorded"))
+    tiles = [tile(_e(channels), "channels recorded")]
     if tipper:
         tiles.append(tile(f"{tipper} / {n_stations}", "tipper stations"))
     if len(rates) == 1:
         tiles.append(tile(f"{next(iter(rates)):,.0f} Hz", "sample rate"))
-    if years:
-        tiles.append(tile(_e(years), "acquired"))
     if version:
         tiles.append(tile(_e(version), "version"))
     stats = f'<div class="cstats">{"".join(tiles)}</div>'
@@ -775,15 +792,15 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
 
     # ---- contributors / publications ----
     people = _person_rows(smeta.get("contributors"))
-    people_html = (f"<h2>Contributors</h2><div class=\"people\">{''.join(people)}</div>"
-                   if people else "")
+    people_html = f'<div class="people">{"".join(people)}</div>' if people else ""
     pub_rows = []
     for p in pubs:
         doi = _doi_url(p.get("doi"))
         link = f' <a href="{_e(doi)}">{_e(_bare_doi(p.get("doi")) or "")}</a>' if doi else ""
         pub_rows.append(f'<p class="pub">{_e(p.get("a") or "")} ({_e(p.get("y") or "")}). '
                         f'{_e(p.get("t") or "")}. <i>{_e(p.get("j") or "")}.</i>{link}</p>')
-    pubs_html = f"<h2>Publications</h2>{''.join(pub_rows)}" if pub_rows else ""
+    pubs_html = (f'<h2 id="publications">Publications</h2>{"".join(pub_rows)}'
+                 if pub_rows else "")
 
     # ---- the station table ----
     any_runs = any(doc.get("runs") for doc in docs)
@@ -848,21 +865,33 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         rows_html.append("<tr>" + "".join(cells) + "</tr>")
     table = ""
     if rows_html:
-        table = (f"<h2>Stations ({n_stations})</h2>"
+        table = (f'<h2 id="stations">Stations ({n_stations})</h2>'
                  '<div class="scroll"><table class="stbl"><thead><tr>'
                  + "".join(f"<th>{h}</th>" for h in header)
                  + "</tr></thead><tbody>" + "".join(rows_html) + "</tbody></table></div>")
 
+    # ---- the page, in the brief's sequence ----
+    # Hero (geography and the fixed core) first, then the named sections in one fixed order, each
+    # with an id anchor so a reader can be sent to a section rather than to a page. About carries
+    # the FULL abstract; the hero's lede is its first sentence.
+    about = (f'<h2 id="about">About this survey</h2>\n'
+             f'<p class="prose">{_e(blurb)}</p>\n') if blurb else ""
+    downloads = (f'<h2 id="data">Data and downloads</h2>\n{"".join(panels)}\n'
+                 if panels else "")
+    provenance = ""
+    if people_html or facts_html:
+        provenance = (f'<h2 id="contributors">Contributors and organisations</h2>\n'
+                      f"{people_html}\n{facts_html}\n")
     body = (
         f"{crumb}\n"
         f"{nav}\n"
-        f"<h1>{_e(title)}</h1>\n"
+        f"<h1>{_e(title)}{badge}</h1>\n"
         f'<p class="crumb">Magnetotelluric survey &#183; {_e(region)}'
         + (f" &#183; {_e(org)}" if org else "") + "</p>\n"
         f"{coll_line}\n"
-        f"{cite}\n{embargo}\n{hero}\n{stats}\n{facts_html}\n"
-        + (f"<h2>Data &amp; downloads</h2>\n{''.join(panels)}\n" if panels else "")
-        + f"{people_html}\n{pubs_html}\n{table}\n"
+        f"{cite}\n{embargo}\n{lede}\n{hero}\n{stats}\n"
+        + f"{about}{downloads}{table}\n{provenance}{pubs_html}\n"
+        + '<h2 id="identifiers">Identifiers and provenance</h2>\n'
         + f'<p><a href="/data/products/{_e(slug)}/survey-metadata.json">Machine-readable survey record</a>'
         + ' &#183; catalogue schema <a href="/data/mtcat.schema.json">mtcat 2.0</a></p>\n'
     )

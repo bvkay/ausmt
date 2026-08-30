@@ -417,6 +417,58 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert ld["version"] == "1.2.3"
 
 
+def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
+    """The page hierarchy (design brief 11 to 14 and 41), asserted as ORDER rather than as prose.
+
+    The page used to read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
+    stations: a citation box and an unlabelled abstract held the top of the document and the map was
+    a 240px right rail, so the one thing a reader opens a survey to see arrived below the fold with
+    no section it belonged to. FAILS IF the map stops leading the hero, if the lede is not the
+    blurb's own first sentence, if a named section loses its heading or its anchor, if the sections
+    fall out of the brief's order, or if the machine-readable links drift back out of Identifiers
+    and provenance."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+
+    for anchor, heading in (("about", "About this survey"),
+                            ("data", "Data and downloads"),
+                            ("stations", "Stations"),
+                            ("contributors", "Contributors and organisations"),
+                            ("identifiers", "Identifiers and provenance")):
+        assert f'<h2 id="{anchor}">' in page, f"section {anchor} must carry an h2 with an id anchor"
+        assert heading in page, f"section {anchor} must be named {heading!r}"
+    order = [page.index(f'<h2 id="{a}">')
+             for a in ("about", "data", "stations", "contributors", "identifiers")]
+    assert order == sorted(order), f"sections must follow the brief's sequence, got {order}"
+
+    # geography leads: the hero map is above the About prose and above every optional stat tile
+    hero = page.index('<div class="hero">')
+    assert hero < page.index('<h2 id="about">'), "the hero must open the page, not follow the prose"
+    assert hero < page.index("channels recorded"), \
+        "the fixed metric core sits with the map; the optional tiles follow the hero"
+    assert page.index('aria-label="Survey location in Australia"') < page.index('class="herofacts"'), \
+        "the map column must LEAD the hero grid (the metric rail follows it)"
+
+    # the lede is the blurb's first sentence, and the full abstract still renders under About
+    assert '<p class="lede">A rich test survey.</p>' in page, "the lede is the blurb's first sentence"
+    assert page.index('class="lede"') < hero, "the lede introduces the map, it does not follow it"
+    assert page.count("A rich test survey.") >= 2, \
+        "the full abstract must still render under About this survey"
+
+    # the machine-readable links moved into Identifiers and provenance
+    ident = page.index('<h2 id="identifiers">')
+    assert ident < page.index("Machine-readable survey record"), \
+        "the machine-readable record link belongs under Identifiers and provenance"
+    assert page.index("mtcat 2.0") > ident, "the catalogue schema link moves with it"
+
+    # the reading column stays narrow while main widens on a large screen
+    assert "@media(min-width:" in page and "max-width:1120px" in page, \
+        "main must widen beyond 840px on large screens"
+    assert 'class="lede"' in page and ".lede{" in page and "70ch" in page, \
+        "prose keeps a narrow measure even when main widens"
+
+
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
     """The entity link graph, all of it at once. Before this lane a survey page had NO way back to
     the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
