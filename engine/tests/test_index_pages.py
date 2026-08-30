@@ -228,6 +228,15 @@ def test_surveys_index_shares_one_outline_and_stays_inside_the_budget():
     size = len(page.encode("utf-8"))
     assert page.count("<symbol") == 1, "the outline geometry must be emitted exactly once"
     assert page.count("<use href=") == len(rows), "every card must reference the shared outline"
+    # Both reference forms, because a reference that a reader's browser does not understand draws
+    # NOTHING: `href` on <use> is SVG2 (Safari 12+, Chromium, Firefox), `xlink:href` is the SVG 1.1
+    # form every older engine reads. An entity page inlines its geometry and needs neither; a hub
+    # page's whole map layer hangs on this one attribute, and the degraded result is 27 panels of
+    # dots floating with no coastline behind them.
+    assert page.count('xlink:href="#') == len(rows), \
+        "every reference must carry the SVG 1.1 companion attribute as well"
+    assert page.count("xmlns:xlink=") == len(rows), \
+        "an element using xlink: must declare the namespace"
     assert size < 300_000, f"the surveys index must stay under 300 KB, got {size} bytes"
     # Non-vacuous: measure what one card would pay to carry its own copy of the geometry, and
     # require the sharing to be worth real bytes rather than being decorative structure.

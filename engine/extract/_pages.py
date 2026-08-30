@@ -199,8 +199,12 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None,
     ext = au.EXTENT
     height = _minimap_height(width)
     p = _proj(ext)(width, height, 8)
-    outline = (f'<use href="#{_e(outline_ref)}"/>' if outline_ref
+    # Both reference forms: `href` on <use> is SVG2, `xlink:href` is the SVG 1.1 spelling older
+    # engines read. They cost a few hundred bytes across a whole hub page, and without the second
+    # one an engine that predates SVG2 draws the dots with no coastline behind them.
+    outline = (f'<use href="#{_e(outline_ref)}" xlink:href="#{_e(outline_ref)}"/>' if outline_ref
                else _outline_paths(p))
+    xlink_ns = ' xmlns:xlink="http://www.w3.org/1999/xlink"' if outline_ref else ""
     # Dot size: on a compact survey the separate footprint panel carries the structure, so the
     # minimap dots are a location hint under the ring and stay small regardless of count; a
     # state-wide survey has no zoom panel, so its dots ARE the content and scale by density.
@@ -220,7 +224,7 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None,
         mx, my = p(clon, clat)
         marker = (f'<circle cx="{mx}" cy="{my}" r="9" fill="none" stroke="#EF7256" '
                   f'stroke-width="1.4" opacity=".65"/>')
-    return (f'<svg viewBox="0 0 {width} {height}" role="img" '
+    return (f'<svg viewBox="0 0 {width} {height}"{xlink_ns} role="img" '
             f'aria-label="{_e(label)}" '
             f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
             f'{outline}{dots}{marker}</svg>')
