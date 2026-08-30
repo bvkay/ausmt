@@ -526,16 +526,20 @@ def _person_rows(contributors):
 
 
 def _ts_survey_rows(slug, ts_access):
-    """{level key: {aid: row}} for one survey, from the served register."""
+    """{level key: {aid: row}} for one survey, from the served register.
+
+    Membership is the documented ausmt_id prefix test, `au.<slug>.` (the API reference states it as
+    the way to filter by slug), not a split on dots with a component count. The count form dropped
+    every row of a survey whose slug contains a dot, and dropped the variant ids that carry a fourth
+    component, both silently."""
+    prefix = f"au.{slug}."
     out: dict = {}
-    prefix = None
     for aid, levels in (ts_access or {}).items():
-        parts = aid.split(".")
-        if len(parts) == 3 and parts[1] == slug:
-            prefix = True
-            for level, row in (levels or {}).items():
-                out.setdefault(level, {})[aid] = row
-    return out if prefix else out
+        if not str(aid).startswith(prefix):
+            continue
+        for level, row in (levels or {}).items():
+            out.setdefault(level, {})[aid] = row
+    return out
 
 
 def _related_by_identifies(smeta):
@@ -968,21 +972,24 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                  if panels else "")
     provenance = ""
     if people_html or facts_html:
-        provenance = (f'<h2 id="contributors">Contributors and organisations</h2>\n'
-                      f"{people_html}\n{facts_html}\n")
-    body = (
-        f"{crumb}\n"
-        f"{nav}\n"
-        f"<h1>{_e(title)}{badge}</h1>\n"
+        provenance = "\n".join(
+            p for p in ('<h2 id="contributors">Contributors and organisations</h2>',
+                        people_html, facts_html) if p)
+    # Slots that render nothing leave NOTHING behind: joining the non-empty ones means a survey with
+    # no collection, no citation record or no publications does not carry a stray blank line where
+    # that block would have been (13 of the 27 served pages carried one).
+    body = "\n".join(part.rstrip("\n") for part in (
+        crumb,
+        nav,
+        f"<h1>{_e(title)}{badge}</h1>",
         f'<p class="crumb">Magnetotelluric survey &#183; {_e(region)}'
-        + (f" &#183; {_e(org)}" if org else "") + "</p>\n"
-        f"{coll_line}\n"
-        f"{cite}\n{embargo}\n{lede}\n{hero}\n{stats}\n"
-        + f"{about}{downloads}{table}\n{provenance}{pubs_html}\n"
-        + '<h2 id="identifiers">Identifiers and provenance</h2>\n'
-        + f'<p><a href="/data/products/{_e(slug)}/survey-metadata.json">Machine-readable survey record</a>'
-        + ' &#183; catalogue schema <a href="/data/mtcat.schema.json">mtcat 2.0</a></p>\n'
-    )
+        + (f" &#183; {_e(org)}" if org else "") + "</p>",
+        coll_line, cite, embargo, lede, hero, stats,
+        about, downloads, table, provenance, pubs_html,
+        '<h2 id="identifiers">Identifiers and provenance</h2>\n'
+        f'<p><a href="/data/products/{_e(slug)}/survey-metadata.json">Machine-readable survey record</a>'
+        ' &#183; catalogue schema <a href="/data/mtcat.schema.json">mtcat 2.0</a></p>',
+    ) if part) + "\n"
     # The card lives in the DATA volume, which is served under /data/*; the pages/ tree has no
     # bare route of its own (the entity rewrite matches the two-segment shapes only), so this is
     # the one URL at which the rendered card is reachable.

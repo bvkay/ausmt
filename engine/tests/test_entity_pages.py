@@ -129,7 +129,7 @@ def test_the_build_report_records_the_page_count(tmp_path):
         "a flagless build writes no pages, so it must not claim any"
 
 
-def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch):
+def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     """The reconciliation, RED-proven. build_portal has long CLAIMED that a sitemap URL without a
     page is a hard error, but it only counted the pages and printed the number; nothing compared
     the two, so an advertised 404 could leave the build silently. This drives a synthetic mismatch
@@ -147,14 +147,20 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch):
         return n
 
     monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
-    with pytest.raises(RuntimeError, match="surveys/pages-a"):
-        build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
-                           "--bundle-edi", "--no-validate",
-                           "--products", str(tmp_path / "out" / "products"),
-                           "--sitemap-base", BASE])
+    # The house convention for a self-check the build fails: ERROR lines on stderr, then return 2.
+    # An operator running `make rebuild-data` gets a message rather than a traceback, and the
+    # reconciliation now reads like every other gate in main() (LANE-CONTRACT-PAGE-HIERARCHY.md B8,
+    # which flags the RuntimeError this test used to require as the odd one out).
+    rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
+                            "--bundle-edi", "--no-validate",
+                            "--products", str(tmp_path / "out" / "products"),
+                            "--sitemap-base", BASE])
+    assert rc == 2, f"a sitemap URL without a page must fail the build, got rc={rc}"
+    err = capsys.readouterr().err
+    assert "surveys/pages-a" in err and "reconciliation" in err, err
 
 
-def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch):
+def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch, capsys):
     """The other half of the reconciliation: station pages are deliberately NOT advertised in the
     sitemap, so a missing one cannot be caught by the URL sweep - but /stations/<id> is a published
     URL shape that inbound links use, and a missing page 404s it. FAILS IF a station document
@@ -169,11 +175,12 @@ def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch):
         return n
 
     monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
-    with pytest.raises(RuntimeError, match="station page"):
-        build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
-                           "--bundle-edi", "--no-validate",
-                           "--products", str(tmp_path / "out" / "products"),
-                           "--sitemap-base", BASE])
+    rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
+                            "--bundle-edi", "--no-validate",
+                            "--products", str(tmp_path / "out" / "products"),
+                            "--sitemap-base", BASE])
+    assert rc == 2, f"a station document without its page must fail the build, got rc={rc}"
+    assert "station page" in capsys.readouterr().err
 
 
 def test_the_report_the_build_leaves_behind_is_the_one_it_validated(tmp_path, monkeypatch):
@@ -1003,6 +1010,37 @@ def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
     assert not re.search(r"-\d+\.\d+&#176;[SN]", cap), \
         f"a caption states the hemisphere OR the sign, never both: {cap}"
     assert "&#176;S" in cap and "&#176;E" in cap, f"the hemisphere must still be stated: {cap}"
+
+
+def test_the_register_lookup_matches_the_documented_ausmt_id_prefix():
+    """_ts_survey_rows keyed on aid.split(".") having exactly three parts with parts[1] == slug.
+    Two silent losses hid in that: a slug containing a dot never matched at all, and a variant id
+    (the fourth component the identity contract allows) was dropped even for a matching survey. The
+    API reference states the filter as the prefix `au.<slug>.`, which is what this now does.
+
+    FAILS on the pre-fix emitter, which returns nothing for the dotted slug and drops the variant."""
+    pages = _pages_module()
+    reg = {"au.a.b-2020.S1": {"level0": {"bytes": 1, "url_path": "x"}},
+           "au.a.b-2020.S2.rr": {"level0": {"bytes": 2, "url_path": "y"}},
+           "au.other.S1": {"level0": {"bytes": 3, "url_path": "z"}}}
+    rows = pages._ts_survey_rows("a.b-2020", reg)
+    assert sorted(rows["level0"]) == ["au.a.b-2020.S1", "au.a.b-2020.S2.rr"], rows
+    assert pages._ts_survey_rows("other", reg) == {"level0": {"au.other.S1": reg["au.other.S1"]["level0"]}}
+    assert pages._ts_survey_rows("nobody", reg) == {}, "a slug with no rows gets none"
+
+
+def test_a_page_with_empty_slots_carries_no_stray_blank_lines():
+    """13 of the 27 served survey pages carried a blank line where an absent block would have been
+    (the collection edge, the citation record, the publications list). Cosmetic, but a page emitter
+    that leaves the shape of what it did not write is a page emitter that will one day leave the
+    content too. FAILS IF a rendered body contains two consecutive newlines."""
+    pages = _pages_module()
+    page = pages.survey_page(slug="s", label="S", sm_doc=None,
+                             smeta={"slug": "s", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=[], bundle_rows=[], ts_access=None,
+                             base="https://x.example")
+    body = page.split("<main>\n", 1)[1].split("\n<footer>", 1)[0]
+    assert "\n\n" not in body, f"empty slots must leave nothing behind:\n{body[:600]!r}"
 
 
 def test_activity_scope_identifiers_render_as_project_links():
