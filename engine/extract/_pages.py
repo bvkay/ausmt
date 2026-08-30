@@ -33,6 +33,7 @@ import json
 import re
 
 import _au_outline as au
+import _stationcheck as stcheck
 
 _LICENSE_URLS = {
     "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/",
@@ -332,6 +333,7 @@ _CSS = """
   .lvlbadge{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;font-weight:600;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.1rem .45rem;color:#4FC3D9}
   .lvlname{color:#fff;font-weight:600;font-size:.95rem}
   .dtbl{border-collapse:collapse;font-size:.88rem;font-variant-numeric:tabular-nums;width:100%}
+  .dtbl th{text-align:left;color:#8FA3B0;font-weight:600;padding:.24rem .8rem .24rem 0;border-bottom:1px solid #2B3557}
   .dtbl td{padding:.24rem .8rem .24rem 0;border-bottom:1px solid #1E2B4F}
   .dtbl tr:last-child td{border-bottom:none}
   .dtbl td:nth-child(2){font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#8FA3B0}
@@ -341,6 +343,10 @@ _CSS = """
   .integrity{margin:.5rem 0 .1rem;font-size:.82rem}
   .integrity summary{cursor:pointer;color:#8FA3B0}
   .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;color:#8FA3B0;word-break:break-all}
+  .tspath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;color:#8FA3B0;word-break:break-all}
+  .run{border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem;margin:.6rem 0}
+  .run dl{margin:.3rem 0 .6rem}
+  .runid{color:#fff;font-size:.95rem;margin:0}
   .doi{font-size:.8rem;color:#8FA3B0;margin-top:.35rem}
   .doi a{color:#4FC3D9}
   .people{display:flex;flex-direction:column;gap:.35rem;margin:.6rem 0;font-size:.88rem}
@@ -978,7 +984,119 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                   og_image=og_image, base=base)
 
 
-def station_page(*, doc, survey_slug, base) -> str:
+def _unit_value(uv) -> str:
+    """A unit_value rendered in BOTH the forms the document carries.
+
+    The schema keeps `source_value` as "the source text, never discarded after normalisation" and
+    makes `value` optional because "a missing value beats a confidently wrong one". So the page
+    shows the normalised value with its unit where the parse was safe, and the source string it was
+    read from beside it where the two differ; a row carrying only source text shows only that."""
+    uv = uv or {}
+    src = str(uv.get("source_value") or "").strip()
+    value, unit = uv.get("value"), uv.get("unit")
+    if value is None or not unit:
+        return _e(src)
+    shown = f"{value:,g} {unit}"
+    return _e(shown) if shown == src else f"{_e(shown)} ({_e(src)})"
+
+
+def _instrument_text(inst) -> str:
+    """An instrument as the document states it: make and model, the serial where one is asserted,
+    and each PID as a resolvable link. Every part is presence-guarded; an instrument object that
+    carries nothing renders nothing, so a caller can test the return value for emptiness."""
+    inst = inst or {}
+    name = " ".join(b for b in (str(inst.get("manufacturer") or "").strip(),
+                                str(inst.get("model") or "").strip()) if b)
+    out = [_e(name)] if name else []
+    serial = str(inst.get("serial_number") or "").strip()
+    if serial:
+        out.append(f"serial {_e(serial)}")
+    for row in inst.get("identifiers") or []:
+        ident = (row or {}).get("identifier")
+        url = _doi_url(ident)
+        if url:
+            out.append(f'<a class="pidcell" href="{_e(url)}">{_e(_bare_doi(ident) or ident)}</a>')
+    return " &#183; ".join(out)
+
+
+# The channel columns, in render order: (header, reader). A column is emitted only where at least
+# one channel of the run carries it, so a run without electrodes draws no dipole column and a run
+# whose source recorded no contact resistance draws no resistance column full of hyphens.
+def _channel_cells(run):
+    channels = [ch for ch in (run.get("channels") or []) if (ch or {}).get("component")]
+    if not channels:
+        return "", []
+    cols = []
+    if any(ch.get("measurement_azimuth_deg") is not None for ch in channels):
+        cols.append(("Azimuth", lambda ch: (f"{ch['measurement_azimuth_deg']:g}&#176;"
+                                            if ch.get("measurement_azimuth_deg") is not None
+                                            else "-")))
+    if any(ch.get("dipole_length_m") is not None for ch in channels):
+        cols.append(("Dipole", lambda ch: (f"{ch['dipole_length_m']:g} m"
+                                           if ch.get("dipole_length_m") is not None else "-")))
+    if any(ch.get("contact_resistance") for ch in channels):
+        cols.append(("Contact resistance",
+                     lambda ch: _unit_value(ch.get("contact_resistance")) or "-"))
+    if any(_instrument_text(ch.get("sensor")) for ch in channels):
+        cols.append(("Sensor", lambda ch: _instrument_text(ch.get("sensor")) or "-"))
+    head = "<th>Channel</th>" + "".join(f"<th>{h}</th>" for h, _r in cols)
+    rows = ["<tr><td>" + _e(str(ch["component"])) + "</td>"
+            + "".join(f"<td>{read(ch)}</td>" for _h, read in cols) + "</tr>"
+            for ch in channels]
+    return head, rows
+
+
+def _runs_section(doc) -> str:
+    """The station's own runs[], rendered verbatim. An absent runs[] means run metadata NOT
+    ASSERTED (schema wording), never "no runs occurred", so the section is not written at all."""
+    runs = [r for r in (doc.get("runs") or []) if r]
+    if not runs:
+        return ""
+    blocks = []
+    for run in runs:
+        facts = []
+        period = run.get("time_period") or {}
+        for key, label in (("start", "Deployed"), ("end", "Recovered")):
+            when = str(period.get(key) or "")[:16].replace("T", " ")
+            if when:
+                facts.append(f"<dt>{label}</dt><dd>{_e(when)}</dd>")
+        if run.get("sample_rate_hz"):
+            facts.append(f"<dt>Sample rate</dt><dd>{run['sample_rate_hz']:,g} Hz</dd>")
+        logger = _instrument_text(run.get("data_logger"))
+        if logger:
+            facts.append(f"<dt>Logger</dt><dd>{logger}</dd>")
+        head, ch_rows = _channel_cells(run)
+        table = (f'<table class="dtbl"><thead><tr>{head}</tr></thead><tbody>'
+                 + "".join(ch_rows) + "</tbody></table>") if ch_rows else ""
+        rid = str(run.get("id") or "").strip()
+        blocks.append('<div class="run">'
+                      + (f'<h3 class="runid">Run {_e(rid)}</h3>' if rid else "")
+                      + (f"<dl>{''.join(facts)}</dl>" if facts else "")
+                      + table + "</div>")
+    return f'<h2 id="runs">Runs</h2>\n{"".join(blocks)}\n'
+
+
+def _station_ts_section(ts_levels) -> str:
+    """The archive routes this station's register rows opened, from ts_access.json. The path is the
+    archive's own string and is shown as TEXT: AusMT hosts none of these bytes, so the page names
+    the fileServer root the path is relative to rather than pretending to serve it."""
+    rows = []
+    for level_key, _badge, name in _TS_LEVELS:
+        row = (ts_levels or {}).get(level_key)
+        if not row:
+            continue
+        rows.append(f"<tr><td>{_e(name)}</td><td>{_fmt_bytes(row.get('bytes'))}</td>"
+                    f'<td class="tspath">{_e(str(row.get("url_path") or ""))}</td></tr>')
+    if not rows:
+        return ""
+    return ('<h2 id="time-series">Time series</h2>\n'
+            '<p class="prose">Held at NCI, not by AusMT. Each path below is relative to the '
+            f'THREDDS fileServer root <code>{_e(stcheck.TS_ACCESS_PREFIX)}</code>.</p>\n'
+            '<table class="dtbl"><thead><tr><th>Level</th><th>Size</th><th>Path</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table>\n')
+
+
+def station_page(*, doc, survey_slug, base, ts_levels=None) -> str:
     aid = doc["ausmt_id"]
     st = doc.get("station") or aid
     survey = doc.get("survey") or survey_slug
@@ -1004,7 +1122,10 @@ def station_page(*, doc, survey_slug, base) -> str:
         f'<p class="crumb">Magnetotelluric transfer function &#183; {_e(survey)}</p>\n'
         "<dl>\n" + "\n".join(facts) + "\n</dl>\n"
         f'<p><a class="navbtn" href="/#/station/{_e(aid)}">Open in the interactive portal</a></p>\n'
-        f'<p><a href="/data/products/{_e(survey_slug)}/{_e(st)}/station.json">Machine-readable station record</a></p>\n'
+        + _runs_section(doc)
+        + _station_ts_section(ts_levels)
+        + '<h2 id="identifiers">Identifiers and provenance</h2>\n'
+        + f'<p><a href="/data/products/{_e(survey_slug)}/{_e(st)}/station.json">Machine-readable station record</a></p>\n'
     )
     return _shell(title=f"{st} - {survey} - AusMT",
                   description=f"Magnetotelluric station {st} from the {survey} survey: "
@@ -1414,7 +1535,8 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     stdir.mkdir(parents=True, exist_ok=True)
     for doc in station_docs.values():
         (stdir / f"{doc['ausmt_id']}.html").write_text(
-            station_page(doc=doc, survey_slug=doc.get("survey_id"), base=base), encoding="utf-8")
+            station_page(doc=doc, survey_slug=doc.get("survey_id"), base=base,
+                         ts_levels=(ts_access or {}).get(doc["ausmt_id"])), encoding="utf-8")
         n += 1
 
     cdir = out / "pages" / "collections"

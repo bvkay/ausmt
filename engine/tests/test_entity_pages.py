@@ -566,6 +566,94 @@ def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_det
         "every bundle row carries its own download action"
 
 
+def test_the_station_page_renders_the_runs_its_own_document_publishes(tmp_path):
+    """Design brief 17's precondition. station_page printed five facts and never touched
+    doc["runs"], so every deployment window, dipole geometry, logger and coil PID a station record
+    publishes existed on the SURVEY page's wide table and nowhere else. Simplifying that table
+    before this lands would delete the metadata from served HTML.
+
+    Every fact asserted here is read back out of the station's OWN served station.json, so the page
+    is a VIEW of the public document rather than a second derivation. FAILS IF the runs section, a
+    run's window, its rate, a dipole geometry or an instrument PID goes missing, or if noindex
+    lapses."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    doc = json.loads((out / "products" / "pages-r" / "A1" / "station.json").read_text(encoding="utf-8"))
+    assert doc.get("runs"), "fixture must publish runs"
+    page = (out / "pages" / "stations" / (doc["ausmt_id"] + ".html")).read_text(encoding="utf-8")
+    assert '<meta name="robots" content="noindex">' in page, "station pages stay out of the index"
+    assert '<h2 id="runs">Runs</h2>' in page, "a station with runs must carry a Runs section"
+
+    run = doc["runs"][0]
+    assert run["id"] in page, "the run id is a published fact"
+    for key, label in (("start", "Deployed"), ("end", "Recovered")):
+        assert label in page, f"{label} must render"
+        assert str(run["time_period"][key])[:16].replace("T", " ") in page, \
+            f"the {label} timestamp must come from the served document"
+    assert "1,000 Hz" in page, "the run's nominal sample rate must render"
+    logger_pid = run["data_logger"]["identifiers"][0]["identifier"]
+    assert logger_pid.rsplit("/", 1)[-1] in page, "the logger PID must link from the station page"
+    for ch in run["channels"]:
+        if ch.get("dipole_length_m") is not None:
+            assert f"{ch['dipole_length_m']:g} m" in page, "dipole lengths must render"
+            assert f"{ch['measurement_azimuth_deg']:g}&#176;" in page, "azimuths must render"
+        for pid in ((ch.get("sensor") or {}).get("identifiers") or []):
+            assert pid["identifier"].rsplit("/", 1)[-1] in page, "coil PIDs must link"
+
+    bare = json.loads(sorted((out / "products" / "pages-a").glob("*/station.json"))[0]
+                      .read_text(encoding="utf-8")) if (out / "products" / "pages-a").is_dir() else None
+    assert bare is None or bare.get("runs") or True   # the no-runs leg is the unit test below
+
+
+def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
+    """The presence rule on the richest page in the corpus. A run that declares no end, no serial
+    and no PID must render none of those rows rather than an empty or dashed one, and a station
+    whose document publishes no runs must carry no Runs section at all: absent runs[] means run
+    metadata NOT ASSERTED, never "no runs occurred".
+
+    contact_resistance is a unit_value, whose source text is never discarded after normalisation.
+    Both forms therefore reach the page: the parsed value with its unit, and the source string it
+    was read from. FAILS IF either half is dropped, or if a defaults-only document grows sections."""
+    pages = _pages_module()
+    doc = {"ausmt_id": "au.s.A1", "station": "A1", "survey": "S",
+           "location": {"lat": -30.0, "lon": 137.0},
+           "data": {"type": "BBMT", "period_min_s": 0.01, "period_max_s": 100.0, "n_periods": 20},
+           "runs": [{"id": "A1_001",
+                     "time_period": {"start": "2019-08-20T10:53:03+00:00"},
+                     "sample_rate_hz": 1000.0,
+                     "data_logger": {"manufacturer": "LEMI", "model": "LEMI-423"},
+                     "channels": [
+                         {"component": "ex", "dipole_length_m": 43.0,
+                          "measurement_azimuth_deg": 180.0,
+                          "contact_resistance": {"source_value": "1.82 kilo-ohms",
+                                                 "value": 1820.0, "unit": "ohm"}},
+                         {"component": "hx", "measurement_azimuth_deg": 0.0,
+                          "sensor": {"manufacturer": "LEMI", "model": "LEMI-120",
+                                     "serial_number": "134"}}]}]}
+    page = pages.station_page(
+        doc=doc, survey_slug="s", base="https://x.example",
+        ts_levels={"raw_packed": {"bytes": 9868836788, "url_path": "my80/x/A1 [REMOTE].zip"}})
+    assert "A1_001" in page and "LEMI-423" in page and "LEMI-120" in page
+    assert "1,820 ohm" in page and "1.82 kilo-ohms" in page, \
+        "a unit_value renders the normalised value AND the source text it came from"
+    assert "Deployed" in page and "Recovered" not in page, \
+        "a run with no end declares none; an absent key renders nothing"
+    assert "serial 134" in page, "a serial the document carries renders"
+    assert '<h2 id="time-series">Time series</h2>' in page
+    assert "my80/x/A1 [REMOTE].zip" in page, "the archive path renders as text, verbatim"
+    assert "https://thredds.nci.org.au/thredds/fileServer/" in page, \
+        "the path is relative, so the page must name the host it is relative to"
+    assert "9.9 GB" in page, "the size comes from the register"
+
+    bare = pages.station_page(doc={"ausmt_id": "au.s.A2", "station": "A2", "survey": "S",
+                                   "location": {}, "data": {}},
+                              survey_slug="s", base="https://x.example")
+    assert "Runs" not in bare, "no runs[] means no Runs section, not an empty one"
+    assert "Time series" not in bare, "no register rows means no time-series section"
+    assert "withheld or generalised by the data custodian" in bare, \
+        "the withheld-location line is unchanged"
+
+
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
     """The entity link graph, all of it at once. Before this lane a survey page had NO way back to
     the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
