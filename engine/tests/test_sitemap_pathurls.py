@@ -110,10 +110,14 @@ def test_sitemap_advertises_surveys_and_collections_never_stations(tmp_path):
     # One URL per entity + the base + the two hubs + the three static pages, nothing else silently
     # added (the count is the point: this pin is what catches a URL creeping in unreviewed).
     assert len(locs) == 1 + 2 + 2 + 1 + 3, locs
-    # The emitted file's own comment describes tier 1 honestly (redirects into the SPA, prerender
-    # still needed for real per-page indexing), not the retired fragment story.
+    # The emitted file's own comment describes TIER 3 honestly: every path form below is served as
+    # a prerendered page at that exact URL. It said tier 1 (301s into the SPA, prerender still to
+    # come) until the index-pages lane rewrote it, and a comment that outlives its own behaviour is
+    # exactly what this pin is here to stop, so the tier is asserted rather than left to drift.
     xml_text = (out / "sitemap.xml").read_text(encoding="utf-8")
     assert "path-URL contract" in xml_text, "the sitemap's comment must describe the contract"
+    assert "(tier 3)" in xml_text, "the comment must name the tier that is actually serving"
+    assert "tier 1" not in xml_text, "the retired tier-1 narration must not come back"
     assert "#/station/" not in xml_text, "no fragment residue anywhere in the file"
 
 
