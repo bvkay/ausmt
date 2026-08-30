@@ -40,19 +40,31 @@ esac
 # The curl stub answers per-invocation: the path-URL contract leg (recognisable by its pinned
 # /surveys/vulcan-2022 probe path) gets "${PATHURL_OUT}"; the two INDEX-page probes that follow it
 # (bare /surveys and /collections) get "${HUB_OUT}", defaulting per hub to that page's own
-# canonical, so one variable models both a fall-through body and an unreachable edge. The vulcan
-# case is listed FIRST because its path also contains "/surveys". Header text (default: the 301 with
-# the fragment-route Location; `-` not `:-` so an EMPTY value models the unreachable edge); the
-# redirect leg (recognisable by its `%{redirect_url}` format string) gets "${REDIR_OUT}" (default:
-# the correct 301 to the canonical schema URL); every other probe gets the plain "${CURL_CODE}"
-# body. Argv is recorded so a test can pin WHAT was probed (the https:// scheme of the redirect and
-# pathurl legs is itself a load-bearing property).
+# canonical, so one variable models a fall-through body. The vulcan case is listed FIRST because
+# its path also contains "/surveys". Header text (default: the 301 with the fragment-route
+# Location; `-` not `:-` so an EMPTY value models an empty body); the redirect leg (recognisable by
+# its `%{redirect_url}` format string) gets "${REDIR_OUT}" (default: the correct 301 to the
+# canonical schema URL); every other probe gets the plain "${CURL_CODE}" body. Argv is recorded so
+# a test can pin WHAT was probed (the https:// scheme of the redirect and pathurl legs is itself a
+# load-bearing property).
+#
+# STATUS CODE, faithfully: real curl appends `-w '\\n%{http_code}'` to stdout, and writes it even
+# when the transfer never happened (000). The stub therefore appends "${HUB_CODE}" to the hub
+# answers ONLY when the invocation asked for the format string, so a doctor that does not ask sees
+# exactly what it sees today: an empty body and nothing else. That is what makes the redirect
+# regression modellable at all - a 301 answer IS an empty body, and body alone cannot tell it from
+# an unreachable edge.
 _CURL_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "${CURL_ARGV_LOG:-/dev/null}"
+_wants_code=""
+case "$*" in *"%{http_code}"*) _wants_code=yes ;; esac
+_hub_code() {
+  if [ -n "$_wants_code" ]; then printf '\\n%s' "${HUB_CODE-200}"; fi
+}
 case "$*" in
   *"/surveys/vulcan-2022"*) printf '%b' "${PATHURL_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/surveys/vulcan-2022\\">}" ;;
-  *"/surveys"*) printf '%b' "${HUB_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/surveys\\">}" ;;
-  *"/collections"*) printf '%b' "${HUB_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/collections\\">}" ;;
+  *"/surveys"*) printf '%b' "${HUB_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/surveys\\">}"; _hub_code ;;
+  *"/collections"*) printf '%b' "${HUB_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/collections\\">}"; _hub_code ;;
   *AUSMT-DOCTOR-ABSENT*|*"/go/ts/suppressed"*) echo "${TS_MISS_CODE:-404}" ;;
   *"/go/ts/"*) printf '%b' "${TS_OUT-HTTP/1.1 302 Found\\nlocation: https://thredds.nci.org.au/thredds/fileServer/arch/A1.zip\\n}" ;;
   *redirect_url*) printf '%s' "${REDIR_OUT:-301 https://ausmt.auscope.org.au/data/mtcat.schema.json}" ;;
@@ -382,9 +394,26 @@ def test_pathurl_hub_legs_pass_when_the_index_pages_serve(tmp_path):
 
 
 def test_pathurl_hub_leg_fails_when_a_bare_prefix_redirect_comes_back(tmp_path):
-    """An edge that answers a bare prefix with anything but that index page's own canonical (the
-    SPA shell after a reinstated 301, a 404 body, or a build that emitted no index) must FAIL the
-    leg and the run. This is the regression the front-door change is exposed to."""
+    """THE regression this leg exists for, fed as the observable it actually produces.
+
+    A reinstated `@surveys_bare` handle at the front door answers 301 with an EMPTY body (verified
+    against caddy: `redir ... permanent` writes a Location and no bytes). So the probe cannot tell
+    that case from a down edge by body alone - it has to read the status. An empty body plus a 301
+    must FAIL the leg and the run; anything less green-lights the exact edge state the front-door
+    change is exposed to."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf, HUB_OUT="", HUB_CODE="301"), "report")
+    fails = [ln for ln in r.stdout.splitlines() if ln.startswith("FAIL pathurl:")]
+    assert len(fails) == 2, f"both hub probes must FAIL on a bare-prefix 301:\n{r.stdout}"
+    assert all("301" in ln for ln in fails), (
+        f"the FAIL line must name the status it got, so an operator reads the cause:\n{r.stdout}")
+    assert r.returncode != 0
+
+
+def test_pathurl_hub_leg_fails_when_the_shell_answers_with_a_200(tmp_path):
+    """The other fall-through: a 200 that is not the index page (the SPA shell swallowing the path,
+    a 404 body served at 200, or a build that emitted no index) must FAIL on the canonical, exactly
+    as before. The status gate must not have replaced the canonical gate."""
     cf = _caddyfile(tmp_path)
     r = _run(_hash_env(tmp_path, cf, HUB_OUT="<html><body>portal shell</body></html>"), "report")
     fails = [ln for ln in r.stdout.splitlines() if ln.startswith("FAIL pathurl:")]
@@ -393,13 +422,19 @@ def test_pathurl_hub_leg_fails_when_a_bare_prefix_redirect_comes_back(tmp_path):
 
 
 def test_pathurl_hub_legs_skip_cleanly_when_unreachable(tmp_path):
-    """No response from a hub probe: SKIP cleanly with a visible PASS-labelled line and keep the
-    run green, exactly as the entity probe does (the container check owns a down edge)."""
-    cf = _caddyfile(tmp_path)
-    r = _run(_hash_env(tmp_path, cf, HUB_OUT=""), "report")
-    assert r.returncode == 0, f"an unreachable hub probe must not fail the run:\n{r.stdout}"
-    skips = [ln for ln in r.stdout.splitlines() if ln.startswith("PASS pathurl: skipped")]
-    assert len(skips) == 2, f"both hub probes must skip visibly:\n{r.stdout}"
+    """No response at all from a hub probe (curl reports 000, its "the transfer never happened"
+    code): SKIP cleanly with a visible PASS-labelled line and keep the run green, exactly as the
+    entity probe does (the container check owns a down edge). FAILS IF an unreachable edge turns
+    the leg into a FAIL, or if the skip branch is widened back to "empty body" and starts
+    swallowing the 301 above."""
+    for i, code in enumerate(("000", "")):
+        work = tmp_path / f"case{i}"
+        work.mkdir()
+        cf = _caddyfile(work)
+        r = _run(_hash_env(work, cf, HUB_OUT="", HUB_CODE=code), "report")
+        assert r.returncode == 0, f"an unreachable hub probe must not fail the run:\n{r.stdout}"
+        skips = [ln for ln in r.stdout.splitlines() if ln.startswith("PASS pathurl: skipped")]
+        assert len(skips) == 2, f"both hub probes must skip visibly:\n{r.stdout}"
 
 
 def test_pathurl_leg_fails_without_the_canonical(tmp_path):

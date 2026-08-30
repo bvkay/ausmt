@@ -344,17 +344,27 @@ check_pathurl_redirect() {
 	# The two HUB pages. They ride the same pages/ product and the same pass-through, but they are
 	# the only tier-3 documents the front door had to STOP redirecting for: a bare-prefix handle
 	# reinstated here would send both to the SPA root and nothing else on the edge would notice.
-	# Each probe demands that page's OWN canonical, which the portal shell (root canonical) and the
-	# branded 404 (no canonical) both fail, so a fall-through cannot pass as a served hub.
+	# Each probe demands 200 AND that page's OWN canonical, which the portal shell (root canonical)
+	# and the branded 404 (no canonical) both fail, so a fall-through cannot pass as a served hub.
+	#
+	# The STATUS is read separately from the body because the named regression produces no body at
+	# all: `redir ... permanent` answers 301 with zero bytes, so a body-only probe cannot tell a
+	# reinstated bare-prefix handle from an edge that is down, and would skip green over it. curl
+	# writes %{http_code} even when the transfer never happened (000), which is the honest signal
+	# for unreachable.
 	for hub in surveys collections; do
-		hbody="$($CURL -sS --max-time 8 --resolve "$name:443:127.0.0.1" \
-			"https://$name/$hub" 2>/dev/null)"
-		if [ -z "$hbody" ]; then
+		hout="$($CURL -sS --max-time 8 --resolve "$name:443:127.0.0.1" \
+			-w '\n%{http_code}' "https://$name/$hub" 2>/dev/null)"
+		hcode="$(printf '%s\n' "$hout" | tail -n 1)"
+		hbody="$(printf '%s\n' "$hout" | sed '$d')"
+		if [ -z "$hcode" ] || [ "$hcode" = "000" ]; then
 			pass "pathurl: skipped (no response from https://$name/$hub - edge unreachable; see the container check)"
+		elif [ "$hcode" != "200" ]; then
+			fail "pathurl: https://$name/$hub answered $hcode, not 200 - the published hub URL must serve its own page (a 3xx here is a bare-prefix redirect back at the front door, sending the hub to the SPA root)"
 		elif printf '%s' "$hbody" | grep -q "rel=\"canonical\" href=\"https://$name/$hub\""; then
 			pass "pathurl: https://$name/$hub serves the tier-3 index page (canonical at the published URL)"
 		else
-			fail "pathurl: https://$name/$hub did not serve the index page (want its rel=canonical at this exact URL; is a bare-prefix redirect back at the front door, or is the build not emitting pages/$hub/index.html?)"
+			fail "pathurl: https://$name/$hub did not serve the index page (want its rel=canonical at this exact URL; is the build not emitting pages/$hub/index.html?)"
 		fi
 	done
 }

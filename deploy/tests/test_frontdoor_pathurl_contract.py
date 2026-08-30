@@ -240,6 +240,14 @@ def test_doctor_carries_the_pathurl_leg():
     assert 'https://$name/$hub' in leg, "the hub probes must use the published bare paths"
     assert 'rel=\\"canonical\\" href=\\"https://$name/$hub\\"' in leg, \
         "each hub probe must demand that page's own canonical at its exact URL"
+    # The status, read separately from the body: a reinstated bare-prefix handle answers 301 with
+    # NO body, so a body-only probe reads it as an unreachable edge and skips green over the one
+    # regression these probes exist for. The contract asks for 200 + rel=canonical; both halves are
+    # pinned here so neither can be dropped back to the other.
+    assert "%{http_code}" in leg, "the hub probes must read the status, not only the body"
+    assert '"$hcode" != "200"' in leg, "any status but 200 must FAIL the hub leg"
+    assert '"$hcode" = "000"' in leg, (
+        "unreachable must be curl's 000, not an empty body (a 301 body is empty too)")
 
 
 def test_runbook_documents_the_contract_and_the_tiers():
