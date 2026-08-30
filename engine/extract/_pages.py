@@ -60,9 +60,11 @@ _TS_LEVELS = (("raw_packed", "Raw", "Packed raw"),
               ("level1_mth5", "L1 MTH5", "Level 1 MTH5"),
               ("level1_netcdf", "L1 NetCDF", "Level 1 NetCDF"))
 
-# The portal's own data-type palette (portal/src/state.js TYPE_COL), so the page maps and the
-# SPA map speak one colour language. BBMT's indigo is lightened one step for the dark panels.
-_TYPE_COL = {"LPMT": "#2E8FA3", "BBMT": "#5B54D6", "AMT": "#CDA1EC", "GDS": "#C255A0"}
+# The portal's own data-type palette (portal/src/state.js TYPE_COL), byte for byte, so the page maps
+# and the SPA map speak one colour language. BBMT's value is the one the portal MEASURED for LP/BB
+# separability and deutan-safety; the page carried a lightened variant of it, which meant the two
+# surfaces coloured the same survey differently and the one with the measurement behind it lost.
+_TYPE_COL = {"LPMT": "#2E8FA3", "BBMT": "#3730B8", "AMT": "#CDA1EC", "GDS": "#C255A0"}
 _TYPE_FALLBACK = "#4FC3D9"
 
 # The portal collections view's member palette (portal/src/drawer.js COLL_PAL), same order. It has
@@ -163,6 +165,15 @@ def _proj(extent):
     return to
 
 
+def _hemisphere(v, neg, pos) -> str:
+    """A coordinate as a magnitude plus its hemisphere letter, never both a sign and a letter.
+
+    The footprint caption printed the raw signed latitude and then appended the letter, so a
+    Tasmanian survey read "-43.44 degrees S": south stated twice, once as a minus and once as an S,
+    which reads as a typo rather than as a coordinate."""
+    return f"{abs(float(v)):.2f}&#176;{neg if float(v) < 0 else pos}"
+
+
 def _extent_deg(points):
     lons = [pt[0] for pt in points]
     lats = [pt[1] for pt in points]
@@ -245,8 +256,11 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
         clon = sum(pt[0] for pt in points) / len(points)
         clat = sum(pt[1] for pt in points) / len(points)
         mx, my = p(clon, clat)
-        marker = (f'<circle cx="{mx}" cy="{my}" r="9" fill="none" stroke="#EF7256" '
-                  f'stroke-width="1.4" opacity=".65"/>')
+        # Muted, not coral: the ring is a locator hint on a map, and coral is reserved for primary
+        # actions and active states (design brief 3). Same ink as the footprint panel's scale bar,
+        # so the two map annotations read as one layer over the geography.
+        marker = (f'<circle cx="{mx}" cy="{my}" r="9" fill="none" stroke="#8FA3B0" '
+                  f'stroke-width="1.4" opacity=".75"/>')
     return (f'<svg viewBox="0 0 {width} {height}"{xlink_ns} role="img" '
             f'aria-label="{_e(label)}" '
             f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
@@ -317,6 +331,7 @@ _CSS = """
   main{max-width:840px;margin:0 auto;padding:1.6rem 1.25rem 3rem}
   @media(min-width:1180px){main{max-width:1120px}}
   a{color:#EF7256}
+  a:focus-visible,summary:focus-visible{outline:2px solid #EF7256;outline-offset:2px;border-radius:2px}
   h1{color:#fff;font-size:1.7rem;margin:.5rem 0 .3rem}
   h2{color:#fff;font-size:1.12rem;margin:1.7rem 0 .5rem}
   .crumb{font-size:.85rem;opacity:.8}
@@ -330,26 +345,26 @@ _CSS = """
   .cite code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#C9D4E8}
   .citeack{color:#8FA3B0;font-size:.82rem}
   .embargo{background:#3a2a1a;border:1px solid #7a5a2a;border-radius:6px;padding:.6rem .9rem;margin:.8rem 0;color:#e8d5b5;font-size:.9rem}
-  .idxchip{font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
-  .typebadge{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
+  .idxchip{font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
+  .typebadge{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
   .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
   .prose{max-width:70ch}
   .hero{display:grid;grid-template-columns:minmax(0,2fr) minmax(180px,1fr);gap:1.2rem;align-items:start;margin:.8rem 0}
   .hero-maps{display:flex;flex-direction:column;gap:.5rem}
   .hero-maps svg{width:100%;height:auto;display:block}
   .herofacts{display:flex;flex-direction:column;gap:.55rem}
-  .mapcap{font-size:.72rem;color:#8FA3B0;font-family:ui-monospace,Menlo,monospace}
+  .mapcap{font-size:.75rem;color:#8FA3B0;font-family:ui-monospace,Menlo,monospace}
   @media(max-width:640px){.hero{grid-template-columns:1fr}}
   .cstats{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}
   .cstat{background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.55rem .9rem;min-width:96px}
   .cnum{color:#fff;font-size:1.15rem;font-weight:650;font-variant-numeric:tabular-nums}
-  .clab{color:#8FA3B0;font-size:.72rem;text-transform:uppercase;letter-spacing:.07em}
+  .clab{color:#8FA3B0;font-size:.75rem;text-transform:uppercase;letter-spacing:.07em}
   dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;margin:1rem 0}
   dt{color:#8FA3B0}
   dd{margin:0}
   .lvl{border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem;margin:.6rem 0}
   .lvlhead{display:flex;align-items:center;gap:.6rem;margin-bottom:.35rem}
-  .lvlbadge{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;font-weight:600;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.1rem .45rem;color:#4FC3D9}
+  .lvlbadge{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;font-weight:600;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.1rem .45rem;color:#4FC3D9}
   .lvlname{color:#fff;font-weight:600;font-size:.95rem}
   .dtbl{border-collapse:collapse;font-size:.88rem;font-variant-numeric:tabular-nums;width:100%}
   .dtbl th{text-align:left;color:#8FA3B0;font-weight:600;padding:.24rem .8rem .24rem 0;border-bottom:1px solid #2B3557}
@@ -361,8 +376,8 @@ _CSS = """
   .lvlact{margin:.45rem 0 .1rem;font-size:.9rem}
   .integrity{margin:.5rem 0 .1rem;font-size:.82rem}
   .integrity summary{cursor:pointer;color:#8FA3B0}
-  .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;color:#8FA3B0;word-break:break-all}
-  .tspath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;color:#8FA3B0;word-break:break-all}
+  .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#8FA3B0;word-break:break-all}
+  .tspath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#8FA3B0;word-break:break-all}
   .colllegend{font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:.2rem 0 1rem}
   .memlist{display:flex;flex-direction:column;gap:.5rem;margin:.6rem 0 1rem}
   .mem{border-bottom:1px solid #1E2B4F;padding-bottom:.5rem}
@@ -376,8 +391,8 @@ _CSS = """
   .doi a{color:#4FC3D9}
   .people{display:flex;flex-direction:column;gap:.35rem;margin:.6rem 0;font-size:.88rem}
   .person{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem}
-  .orcid{font-family:ui-monospace,Menlo,monospace;font-size:.7rem;color:#4FC3D9}
-  .rolechip{font-size:.68rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
+  .orcid{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;color:#4FC3D9}
+  .rolechip{font-size:.75rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
   .pub{font-size:.88rem;margin:.4rem 0}
   .pub i{color:#8FA3B0}
   .stbl{border-collapse:collapse;width:100%;font-size:.82rem;font-variant-numeric:tabular-nums}
@@ -386,7 +401,7 @@ _CSS = """
   .stbl th:first-child,.stbl td:first-child{position:sticky;left:0;background:#11182D;z-index:2;padding-left:.2rem}
   .stbl th:first-child{z-index:3}
   .stbl td:nth-child(2),.stbl td:nth-child(3),.stbl td:nth-child(4),.stbl td:nth-child(5){font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem}
-  .pidcell,.pidcell a{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;color:#4FC3D9}
+  .pidcell,.pidcell a{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#4FC3D9}
   .ts-y{color:#5BAE6A;font-family:ui-monospace,Menlo,monospace;font-size:.76rem}
   .ts-n{color:#8FA3B0}
   .scroll{max-height:360px;overflow:auto;border:1px solid #2B3557;border-radius:6px;padding:0 .8rem}
@@ -408,7 +423,7 @@ _INDEX_CSS = """
   .idxt a{text-decoration:none}
   .idxorg{color:#8FA3B0;font-size:.82rem;margin:0 0 .3rem}
   .idxfacts{font-size:.82rem;margin:0;font-variant-numeric:tabular-nums}
-  .idxdoi{font-family:ui-monospace,Menlo,monospace;font-size:.68rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#4FC3D9}
+  .idxdoi{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#4FC3D9}
   .idxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem;margin:0 0 1rem}
   .idxccard{background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.9rem 1rem}
   .idxccard svg{width:100%;height:auto;display:block;margin:.5rem 0}
@@ -816,8 +831,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     cap = ""
     if compact:
         maps.append(_footprint_svg(points))
-        cap = (f'<div class="mapcap">{min(lats):.2f}&#176; to {max(lats):.2f}&#176;S &#183; '
-               f'{min(lons):.2f}&#176; to {max(lons):.2f}&#176;E</div>')
+        cap = (f'<div class="mapcap">{_hemisphere(min(lats), "S", "N")} to '
+               f'{_hemisphere(max(lats), "S", "N")} &#183; '
+               f'{_hemisphere(min(lons), "W", "E")} to '
+               f'{_hemisphere(max(lons), "W", "E")}</div>')
 
     def tile(num, lab):
         return f'<div class="cstat"><div class="cnum">{num}</div><div class="clab">{lab}</div></div>'

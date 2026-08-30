@@ -946,7 +946,13 @@ def test_bundle_labels_speak_the_manifest_vocabulary():
 def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     """The maps pass (owner rulings 2026-08-28): the footprint zoom carries a scale bar, dots
     speak the portal's type palette, a sub-degree survey's minimap draws the ring only, and the
-    collection page carries the member-coloured scatter with its legend."""
+    collection page carries the member-coloured scatter with its legend.
+
+    Two swatch assertions moved with LANE-CONTRACT-PAGE-HIERARCHY.md B7 and are restated, not
+    dropped. BBMT is #3730B8, the value portal/src/state.js measured for LP/BB separability and
+    deutan-safety, in place of the lightened #5B54D6 this test used to lock in. The locator ring is
+    muted rather than coral, because coral is reserved for primary actions and active states; the
+    ring assertion still bites, on the new ink."""
     surveys = _make_rich_survey(tmp_path)
     pkg = surveys / "pages-r"
     y = (pkg / "survey.yaml").read_text(encoding="utf-8")
@@ -955,15 +961,48 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     out = _build(surveys, tmp_path / "out")
     page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
     assert "km</text>" in page, "the footprint zoom must carry a scale bar"
-    assert "#5B54D6" in page, "dots must speak the type palette (BBMT indigo)"
+    assert "#3730B8" in page, "dots must speak the type palette (BBMT indigo)"
     minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S).group(0)
-    assert "<circle" in minimap and 'stroke="#EF7256"' in minimap
-    assert 'fill="#5B54D6"' not in minimap, \
+    assert "<circle" in minimap and 'stroke="#8FA3B0"' in minimap
+    assert 'fill="#3730B8"' not in minimap, \
         "a sub-degree survey's minimap draws the ring only; the zoom panel owns the dots"
     coll = (out / "pages" / "collections" / "testcoll.html").read_text(encoding="utf-8")
     assert "Member stations of" in coll, "the collection page must carry the member scatter"
     assert "#2E8FA3" in coll, "member colours use the portal collection palette"
     assert "Pages R" in coll
+
+
+def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
+    """Design brief 3, 4 and 45, as measurable properties of the emitted CSS and SVG.
+
+    Four separate debts. The BBMT swatch drifted from the value the portal measured for LP/BB
+    separability and deutan-safety (portal/src/state.js), and the drift was TEST-LOCKED. The minimap
+    centroid ring was coral, which the brief reserves for primary actions and active states, not for
+    decoration on a map. The stylesheet had no focus rule at all while the SPA has one. And several
+    secondary labels sat at .72rem or below, under the 12px floor the SPA states for itself.
+
+    FAILS IF the stale BBMT hex returns, if coral goes back on the ring, if the focus rule goes
+    missing, or if any CSS font-size drops below 12px."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+
+    assert "#3730B8" in page, "BBMT must speak the measured, deutan-safe value"
+    assert "#5B54D6" not in page, "the superseded BBMT hex must be gone from every page surface"
+
+    minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S).group(0)
+    assert "<circle" in minimap, "the locator ring still marks the survey"
+    assert 'stroke="#EF7256"' not in minimap, \
+        "coral is for primary actions and active states, not a decorative ring on a map"
+
+    assert ":focus-visible" in page, "keyboard focus must be visible (the SPA has this, pages did not)"
+    smallest = sorted(float(v) for v in re.findall(r"font-size:(\.\d+)rem", page))
+    assert smallest[0] >= 0.75, f"no rendered text under 12px: smallest is {smallest[0]}rem"
+
+    cap = re.search(r'<div class="mapcap">(.*?)</div>', page).group(1)
+    assert not re.search(r"-\d+\.\d+&#176;[SN]", cap), \
+        f"a caption states the hemisphere OR the sign, never both: {cap}"
+    assert "&#176;S" in cap and "&#176;E" in cap, f"the hemisphere must still be stated: {cap}"
 
 
 def test_activity_scope_identifiers_render_as_project_links():
