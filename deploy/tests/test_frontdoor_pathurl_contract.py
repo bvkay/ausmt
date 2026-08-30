@@ -66,6 +66,14 @@ _SECTION_CLOSE = "# ---- end path-url contract"
 # (url prefix, fragment route prefix) for the three published shapes.
 _SHAPES = (("surveys", "survey"), ("stations", "station"), ("collections", "collection"))
 
+# The BARE prefixes and what the front door does with each. /surveys and /collections now have
+# real index pages behind them (engine pages/<kind>/index.html, served by the box), so they pass
+# through to the reader like any other portal path. /stations has no index BY RULING: 2,625
+# noindex station pages are deliberately unadvertised and there is nothing to list, so the bare
+# form keeps its 301 to the portal root.
+_BARE_REDIRECTED = ("stations",)
+_BARE_PASSTHROUGH = ("surveys", "collections")
+
 
 # ==================================================================================================
 # Helpers
@@ -163,14 +171,18 @@ def test_pathurl_entity_shapes_pass_through_to_the_reader():
         "the catch-all the entity shapes fall through to must still proxy to the box")
 
 
-def test_pathurl_bare_prefixes_redirect_to_the_portal_root():
-    """A bare /surveys or /surveys/ (and twins) has NO id to map, so it redirects to the portal
-    root (query still preserved), and its handle sits BEFORE the wildcard handle_path so the
-    trailing-slash form matches it first (handles are mutually exclusive in source order). FAILS IF
-    a bare matcher is missing a slash form, targets anything but the root, or sits after the
-    wildcard handle."""
+def test_pathurl_only_the_stations_prefix_redirects_to_the_portal_root():
+    """A bare /stations has nothing to list: station pages are noindex and deliberately
+    unadvertised (2,625 templated documents), so the prefix keeps its 301 to the portal root, both
+    slash forms, query preserved.
+
+    /surveys and /collections are the OPPOSITE case now. They have real index pages, emitted by the
+    engine and served by the box at those exact paths, so their front-door handles are GONE and the
+    paths pass through to the reader like any other portal path. FAILS IF the stations handle loses
+    a slash form or its root target, or if a bare handle reappears for a prefix that now has a
+    page (which would 301 a served, canonical, indexable hub page into the SPA root)."""
     section = _section(_fd_text())
-    for prefix, _frag in _SHAPES:
+    for prefix in _BARE_REDIRECTED:
         m = re.search(rf"@{prefix}_bare path (.+)", section)
         assert m, f"missing @{prefix}_bare matcher"
         assert m.group(1).split() == [f"/{prefix}", f"/{prefix}/"], (
@@ -181,6 +193,9 @@ def test_pathurl_bare_prefixes_redirect_to_the_portal_root():
         redirs = [ln.strip() for ln in h_body.splitlines() if ln.strip().startswith("redir")]
         assert redirs == ["redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs} permanent"], (
             f"the bare /{prefix} form must redirect to the portal root, got {redirs}")
+    for prefix in _BARE_PASSTHROUGH:
+        assert f"@{prefix}_bare" not in section, (
+            f"/{prefix} now serves an index page; its bare-prefix redirect must be gone")
 
 
 def test_pathurl_mechanism_is_handle_path_plus_lazy_maps():
@@ -217,6 +232,14 @@ def test_doctor_carries_the_pathurl_leg():
     leg = src.split("check_pathurl_redirect")[1].split("check_tailscale")[0]
     assert "canonical" in leg, "the pathurl leg must demand the landing page's canonical"
     assert "pathurl: skipped" in src, "an unreachable edge must skip cleanly, not FAIL"
+    # The two HUB pages ride the SAME pages/ product and the same pass-through. They get their own
+    # probes because they are the only tier-3 documents the front door had to STOP redirecting for:
+    # a regressed bare-prefix handle would send them to the SPA root and nothing else would notice.
+    assert 'for hub in surveys collections' in leg, \
+        "the leg must probe both index pages, not only the entity shape"
+    assert 'https://$name/$hub' in leg, "the hub probes must use the published bare paths"
+    assert 'rel=\\"canonical\\" href=\\"https://$name/$hub\\"' in leg, \
+        "each hub probe must demand that page's own canonical at its exact URL"
 
 
 def test_runbook_documents_the_contract_and_the_tiers():
@@ -234,6 +257,9 @@ def test_runbook_documents_the_contract_and_the_tiers():
         "the runbook must state the URL contract held at tier 3 and holds for tier 2")
     assert "301s to the portal root" in rb, "the bare-form behaviour must be stated"
     assert "rel=canonical" in rb, "the doctor's canonical probe must be stated"
+    assert "/surveys" in rb and "/collections" in rb and "index page" in rb, (
+        "the runbook must state that the two bare prefixes now SERVE index pages")
+    assert "/stations" in rb, "the runbook must state which bare prefix still redirects"
 
 
 # ==================================================================================================
@@ -374,18 +400,25 @@ def test_pathurl_query_rides_through_to_the_reader(edge):
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
-def test_pathurl_bare_prefixes_land_on_the_portal_root(edge):
-    """RUNTIME, the no-id rule. A bare prefix (both slash forms, all three kinds) 301s to the
-    portal root, never to a broken empty-fragment URL; a query on the bare form is preserved.
-    FAILS IF any bare form maps to an empty-id fragment or is not a 301."""
+def test_pathurl_bare_stations_lands_on_the_root_and_the_hubs_pass_through(edge):
+    """RUNTIME, the no-id rule as it now stands. A bare /stations (both slash forms) 301s to the
+    portal root, never to a broken empty-fragment URL, with its query preserved. A bare /surveys or
+    /collections passes THROUGH to the reader with the path intact, because the reader serves an
+    index page there. FAILS IF stations stops redirecting, or if a hub path is redirected at the
+    edge (which would make the served index page unreachable from the public name)."""
     port, _log = edge
-    for prefix, _frag in _SHAPES:
+    for prefix in _BARE_REDIRECTED:
         for path in (f"/{prefix}", f"/{prefix}/"):
             st, loc, _ = _get_noredirect(port, path, host="canonical.test")
             assert st == 301, f"{path}: must 301, got {st}"
             assert loc == "https://canonical.test/", f"{path}: must land on the root, got {loc!r}"
-    st, loc, _ = _get_noredirect(port, "/surveys?utm=1", host="canonical.test")
+    st, loc, _ = _get_noredirect(port, "/stations?utm=1", host="canonical.test")
     assert st == 301 and loc == "https://canonical.test/?utm=1", loc
+    for prefix in _BARE_PASSTHROUGH:
+        for path in (f"/{prefix}", f"/{prefix}/", f"/{prefix}?utm=1"):
+            st, loc, body = _get_noredirect(port, path, host="canonical.test")
+            assert st == 200 and loc is None, f"{path}: must pass through, got {st} {loc!r}"
+            assert body == f"STUB {path}", f"{path}: must reach the reader intact, got {body!r}"
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")

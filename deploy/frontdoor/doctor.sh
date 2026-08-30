@@ -341,6 +341,22 @@ check_pathurl_redirect() {
 	else
 		fail "pathurl: https://$name/surveys/$slug did not serve the landing page (want its rel=canonical at this exact URL; is the build emitting pages/ and the box mapping @entityPage?)"
 	fi
+	# The two HUB pages. They ride the same pages/ product and the same pass-through, but they are
+	# the only tier-3 documents the front door had to STOP redirecting for: a bare-prefix handle
+	# reinstated here would send both to the SPA root and nothing else on the edge would notice.
+	# Each probe demands that page's OWN canonical, which the portal shell (root canonical) and the
+	# branded 404 (no canonical) both fail, so a fall-through cannot pass as a served hub.
+	for hub in surveys collections; do
+		hbody="$($CURL -sS --max-time 8 --resolve "$name:443:127.0.0.1" \
+			"https://$name/$hub" 2>/dev/null)"
+		if [ -z "$hbody" ]; then
+			pass "pathurl: skipped (no response from https://$name/$hub - edge unreachable; see the container check)"
+		elif printf '%s' "$hbody" | grep -q "rel=\"canonical\" href=\"https://$name/$hub\""; then
+			pass "pathurl: https://$name/$hub serves the tier-3 index page (canonical at the published URL)"
+		else
+			fail "pathurl: https://$name/$hub did not serve the index page (want its rel=canonical at this exact URL; is a bare-prefix redirect back at the front door, or is the build not emitting pages/$hub/index.html?)"
+		fi
+	done
 }
 
 check_ts_routes() {

@@ -38,7 +38,10 @@ case "$*" in
 esac
 """
 # The curl stub answers per-invocation: the path-URL contract leg (recognisable by its pinned
-# /surveys/vulcan-2022 probe path) gets "${PATHURL_OUT}" header text (default: the correct 301 with
+# /surveys/vulcan-2022 probe path) gets "${PATHURL_OUT}"; the two INDEX-page probes that follow it
+# (bare /surveys and /collections) get "${HUB_OUT}", defaulting per hub to that page's own
+# canonical, so one variable models both a fall-through body and an unreachable edge. The vulcan
+# case is listed FIRST because its path also contains "/surveys". Header text (default: the 301 with
 # the fragment-route Location; `-` not `:-` so an EMPTY value models the unreachable edge); the
 # redirect leg (recognisable by its `%{redirect_url}` format string) gets "${REDIR_OUT}" (default:
 # the correct 301 to the canonical schema URL); every other probe gets the plain "${CURL_CODE}"
@@ -48,6 +51,8 @@ _CURL_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "${CURL_ARGV_LOG:-/dev/null}"
 case "$*" in
   *"/surveys/vulcan-2022"*) printf '%b' "${PATHURL_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/surveys/vulcan-2022\\">}" ;;
+  *"/surveys"*) printf '%b' "${HUB_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/surveys\\">}" ;;
+  *"/collections"*) printf '%b' "${HUB_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/collections\\">}" ;;
   *AUSMT-DOCTOR-ABSENT*|*"/go/ts/suppressed"*) echo "${TS_MISS_CODE:-404}" ;;
   *"/go/ts/"*) printf '%b' "${TS_OUT-HTTP/1.1 302 Found\\nlocation: https://thredds.nci.org.au/thredds/fileServer/arch/A1.zip\\n}" ;;
   *redirect_url*) printf '%s' "${REDIR_OUT:-301 https://ausmt.auscope.org.au/data/mtcat.schema.json}" ;;
@@ -360,6 +365,41 @@ def test_pathurl_leg_passes_on_the_contract_301(tmp_path):
     assert any(ln.startswith("PASS pathurl:") and "landing page" in ln
                for ln in r.stdout.splitlines()), (
         f"the pathurl leg must PASS on the tier-3 landing page:\n{r.stdout}")
+
+
+def test_pathurl_hub_legs_pass_when_the_index_pages_serve(tmp_path):
+    """GREEN side for the two index-page probes: with the edge answering bare /surveys and bare
+    /collections with each page's own canonical, both legs PASS. FAILS IF the leg stops probing
+    them (the front door dropped their bare-prefix redirects for exactly this reason, and nothing
+    else on the edge would notice one coming back)."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf), "report")
+    assert r.returncode == 0, f"all-green should exit 0:\n{r.stdout}"
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("PASS pathurl:")]
+    for hub in ("/surveys", "/collections"):
+        assert any(ln.endswith("(canonical at the published URL)") and f"org.au{hub} " in ln
+                   for ln in lines), f"no PASS line for the {hub} index page:\n{r.stdout}"
+
+
+def test_pathurl_hub_leg_fails_when_a_bare_prefix_redirect_comes_back(tmp_path):
+    """An edge that answers a bare prefix with anything but that index page's own canonical (the
+    SPA shell after a reinstated 301, a 404 body, or a build that emitted no index) must FAIL the
+    leg and the run. This is the regression the front-door change is exposed to."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf, HUB_OUT="<html><body>portal shell</body></html>"), "report")
+    fails = [ln for ln in r.stdout.splitlines() if ln.startswith("FAIL pathurl:")]
+    assert len(fails) == 2, f"both hub probes must FAIL on a shell answer:\n{r.stdout}"
+    assert r.returncode != 0
+
+
+def test_pathurl_hub_legs_skip_cleanly_when_unreachable(tmp_path):
+    """No response from a hub probe: SKIP cleanly with a visible PASS-labelled line and keep the
+    run green, exactly as the entity probe does (the container check owns a down edge)."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf, HUB_OUT=""), "report")
+    assert r.returncode == 0, f"an unreachable hub probe must not fail the run:\n{r.stdout}"
+    skips = [ln for ln in r.stdout.splitlines() if ln.startswith("PASS pathurl: skipped")]
+    assert len(skips) == 2, f"both hub probes must skip visibly:\n{r.stdout}"
 
 
 def test_pathurl_leg_fails_without_the_canonical(tmp_path):

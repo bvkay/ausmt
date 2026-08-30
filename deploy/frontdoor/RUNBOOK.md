@@ -427,6 +427,8 @@ Path-shaped URLs are the PUBLISHED CONTRACT for the portal's three entity kinds:
 /surveys/<slug>        -> the portal with that survey's view open
 /stations/<ausmt_id>   -> the portal with that station's drawer open
 /collections/<id>      -> the portal with that collection page open
+/surveys               -> the surveys index page (every published survey)
+/collections           -> the collections index page
 ```
 
 Pre-DOI is the cheapest moment to fix URL shape forever: the shape is what gets published (emails,
@@ -440,11 +442,18 @@ inherited), and the box reader serves them at the exact published shapes. The fr
 the deep entity forms THROUGH to the reader like any portal path - a crawler receives indexable
 HTML with a canonical at this exact URL and a schema.org Dataset block, and a human receives the
 landing page with its interactive-portal deep link. **No published URL changed** when this tier
-replaced tier 1's redirects, exactly as the contract promised. A bare `/surveys` or `/surveys/`
-(and the station/collection twins) has no entity to serve and still 301s to the portal root with
-its query preserved; a legacy-name (`ausmt.au`) deep link takes one host 301 (path and query
-preserved) and then the canonical host serves the page. The entity id rides byte-for-byte to the
-reader (never decoded or re-encoded); an unknown id 404s from the reader honestly.
+replaced tier 1's redirects, exactly as the contract promised.
+
+**The bare prefixes split.** `/surveys` and `/collections` now SERVE a prerendered **index page**
+from the same `pages/` product, so both pass through the front door to the reader exactly as an
+entity shape does, and both carry their own rel=canonical at the bare URL. A bare `/stations` (and
+its trailing-slash twin) still **301s to the portal root** with its query preserved: station pages
+are noindex and deliberately unadvertised, so there is nothing to list and never will be. If a
+`/surveys` or `/collections` bare redirect ever reappears at the edge, two canonical indexable hub
+pages become unreachable from the public name; the doctor's pathurl leg probes both for that
+reason. A legacy-name (`ausmt.au`) deep link takes one host 301 (path and query preserved) and
+then the canonical host serves the page. The entity id rides byte-for-byte to the reader (never
+decoded or re-encoded); an unknown id 404s from the reader honestly.
 
 **URL canonicalisation is answered BOX-SIDE, in one hop.** Nothing on the site emits a
 trailing-slash entity URL, but inbound links carry one constantly, and the reader's entity matcher
