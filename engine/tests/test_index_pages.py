@@ -366,3 +366,37 @@ def test_collections_index_shares_one_outline_and_stays_inside_the_budget():
     assert page.count("<symbol") == 1, "the outline geometry must be emitted exactly once"
     assert page.count("<use href=") == len(rows), "every card must reference the shared outline"
     assert size < 300_000, f"the collections index must stay under 300 KB, got {size} bytes"
+
+
+def test_the_hub_card_scatter_thins_its_dots_and_keeps_every_member():
+    """The hub card is a SUMMARY of a collection's footprint, and it was drawing one dot per member
+    station: the six-collection synthetic already spends most of a 300 KB budget on 2,610 circles,
+    and the cost scales with station count rather than with card count, so a corpus that grows
+    stations rather than collections walks into the ceiling with nothing between it and the wall.
+
+    The card now grid-decimates above a cap, which keeps the SHAPE of the footprint rather than its
+    first N points, and decimates per member so a card can never silently drop a survey. The
+    collection PAGE is unthinned: it is the large map the design brief asks for, and it carries the
+    legend and the per-dot labels that make each colour readable. FAILS IF the cap stops biting, if
+    a member disappears from a card, or if the page's own scatter starts being thinned."""
+    pages = _pages_module()
+    rows = _synthetic_collections()
+    page = pages.collections_index_page(rows=rows, base=BASE)
+    per_card = [c.count("<circle") for c in page.split('<article class="idxccard">')[1:]]
+    assert len(per_card) == len(rows), per_card
+    for n, row in zip(per_card, rows):
+        full = sum(len(v) for v in row["member_points"].values())
+        assert n < full, f"a card carrying {full} stations must thin, drew {n}"
+        assert n >= len(row["member_labels"]), \
+            f"every member keeps at least one dot: {n} dots for {len(row['member_labels'])} members"
+    assert len(page.encode("utf-8")) < 300_000
+
+    # the collection page itself draws every dot: it is the hero map, not a card
+    full_pts = rows[0]["member_points"]
+    detail = pages.collection_page(cid="coll-0", coll={"title": "Synthetic Collection 0"},
+                                   member_slugs=[(lbl, f"s{i}") for i, lbl
+                                                 in enumerate(rows[0]["member_labels"])],
+                                   member_smeta=[{} for _ in rows[0]["member_labels"]],
+                                   base=BASE, member_points=full_pts)
+    assert detail.count("<circle") == sum(len(v) for v in full_pts.values()), \
+        "the collection page draws the whole footprint"

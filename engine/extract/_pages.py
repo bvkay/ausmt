@@ -28,8 +28,10 @@ the spawn workers' build_portal without extra weight.
 """
 from __future__ import annotations
 
+import colorsys
 import html
 import json
+import math
 import re
 
 import _au_outline as au
@@ -63,8 +65,15 @@ _TS_LEVELS = (("raw_packed", "Raw", "Packed raw"),
 _TYPE_COL = {"LPMT": "#2E8FA3", "BBMT": "#5B54D6", "AMT": "#CDA1EC", "GDS": "#C255A0"}
 _TYPE_FALLBACK = "#4FC3D9"
 
-# The portal collections view's member palette (portal/src/drawer.js COLL_PAL), same order.
+# The portal collections view's member palette (portal/src/drawer.js COLL_PAL), same order. It has
+# eight entries and used to CYCLE, so a collection with more members than that gave two surveys the
+# same colour and its legend could not disambiguate them (AusLAMP: 14 members, 8 colours, 6 reused).
 _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
+
+# Dots per hub CARD before the footprint is thinned. The card is a summary; the collection page
+# draws the whole footprint. Sized so six corpus-scale collections stay well inside the hub's
+# asserted 300 KB budget with room for the cards' own text.
+_CARD_DOT_CAP = 320
 
 
 _ROLE_LABELS = {"ProjectLeader": "Project Leader", "ProjectMember": "Project Member",
@@ -192,7 +201,7 @@ def au_outline_defs(width):
             f"</svg>"), ref
 
 
-def _minimap_svg(points, *, width=230, compact=False, colours=None,
+def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=False,
                  label="Survey location in Australia", outline_ref=None) -> str:
     """The location minimap: the shared schematic outline with this survey's stations, dots
     coloured by data type in the portal's own palette (or by `colours`, the collection page's
@@ -219,8 +228,18 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None,
             if colours is not None:
                 return colours.get(pt[2], _TYPE_FALLBACK)
             return _TYPE_COL.get(pt[2], _TYPE_FALLBACK)
-        dots = "".join(f'<circle cx="{p(pt[0], pt[1])[0]}" cy="{p(pt[0], pt[1])[1]}" r="{r}" '
-                       f'fill="{col(pt)}" fill-opacity=".9"/>' for pt in points)
+
+        def dot(pt):
+            x, y = p(pt[0], pt[1])
+            head = (f'<circle cx="{x}" cy="{y}" r="{r}" fill="{col(pt)}" fill-opacity=".9"')
+            # A dot whose colour encodes WHICH member survey it belongs to must also say so in
+            # text: colour alone is not an identifier (design brief 45), and the SPA's own scatter
+            # has carried these titles all along. Type-coloured dots need none; the type is a
+            # category the legend and the tiles already name.
+            if labelled:
+                return f"{head}><title>{_e(pt[2])}</title></circle>"
+            return f"{head}/>"
+        dots = "".join(dot(pt) for pt in points)
     marker = ""
     if points and len(points) < 400:
         clon = sum(pt[0] for pt in points) / len(points)
@@ -238,7 +257,6 @@ def _footprint_svg(points, *, width=230) -> str:
     """The station-grid zoom for a compact survey, aspect-fit to the survey's own bbox, dots in
     the type palette, with a SCALE BAR so 9 km and 900 km never look alike (a bare dot field
     carries no sense of size; the bar is computed from the bbox at the survey's own latitude)."""
-    import math
     lons = [pt[0] for pt in points]
     lats = [pt[1] for pt in points]
     lo0, lo1, la0, la1 = min(lons), max(lons), min(lats), max(lats)
@@ -312,6 +330,7 @@ _CSS = """
   .cite code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#C9D4E8}
   .citeack{color:#8FA3B0;font-size:.82rem}
   .embargo{background:#3a2a1a;border:1px solid #7a5a2a;border-radius:6px;padding:.6rem .9rem;margin:.8rem 0;color:#e8d5b5;font-size:.9rem}
+  .idxchip{font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
   .typebadge{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
   .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
   .prose{max-width:70ch}
@@ -344,6 +363,12 @@ _CSS = """
   .integrity summary{cursor:pointer;color:#8FA3B0}
   .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;color:#8FA3B0;word-break:break-all}
   .tspath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;color:#8FA3B0;word-break:break-all}
+  .colllegend{font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:.2rem 0 1rem}
+  .memlist{display:flex;flex-direction:column;gap:.5rem;margin:.6rem 0 1rem}
+  .mem{border-bottom:1px solid #1E2B4F;padding-bottom:.5rem}
+  .mem:last-child{border-bottom:none}
+  .memt{margin:0 0 .1rem;font-size:.98rem;font-weight:650}
+  .memfacts{margin:0;font-size:.84rem;color:#8FA3B0;font-variant-numeric:tabular-nums}
   .run{border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem;margin:.6rem 0}
   .run dl{margin:.3rem 0 .6rem}
   .runid{color:#fff;font-size:.95rem;margin:0}
@@ -387,7 +412,6 @@ _INDEX_CSS = """
   .idxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem;margin:0 0 1rem}
   .idxccard{background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.9rem 1rem}
   .idxccard svg{width:100%;height:auto;display:block;margin:.5rem 0}
-  .idxchip{font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
   .idxdesc{font-size:.85rem;margin:.4rem 0 .5rem}
   @media(max-width:640px){.idxcard{grid-template-columns:1fr}}
 """
@@ -1100,41 +1124,95 @@ def station_page(*, doc, survey_slug, base, ts_levels=None) -> str:
                   canonical=url, body=body, noindex=True, base=base)
 
 
+def _member_colours(n):
+    """`n` distinct colours, deterministic in MEMBER ORDER and with no randomness anywhere.
+
+    The portal's eight-entry palette leads while it can, so the two surfaces agree on the common
+    case. Past eight it stops cycling (which gave two surveys one colour and made the legend
+    useless) and the whole set becomes an evenly spaced hue ramp instead: hue i/n so the widest
+    gap possible for this many members, and lightness alternating between two bands so that two
+    neighbouring hues still separate on the dark ground. Same members in the same order, same
+    colours, every build."""
+    if n <= len(_COLL_PAL):
+        return list(_COLL_PAL[:n])
+    out = []
+    for i in range(n):
+        r, g, b = colorsys.hls_to_rgb(i / n, 0.62 if i % 2 == 0 else 0.46, 0.58)
+        out.append("#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255)))
+    return out
+
+
+def _grid_decimate(points, cap):
+    """At most `cap` points, keeping the SHAPE of the footprint rather than its first `cap` rows.
+
+    Points are snapped to a grid and the first point in each cell wins, so a dense traverse thins
+    to a line and a regional array thins to an array. The grid is coarsened until the kept count
+    fits, which always terminates because a 1x1 grid keeps one point. Deterministic in input
+    order."""
+    if not cap or len(points) <= cap:
+        return list(points)
+    lons = [pt[0] for pt in points]
+    lats = [pt[1] for pt in points]
+    lo0, la0 = min(lons), min(lats)
+    dlo = max(max(lons) - lo0, 1e-9)
+    dla = max(max(lats) - la0, 1e-9)
+    n = max(1, int(math.sqrt(cap)))
+    while True:
+        seen, out = set(), []
+        for pt in points:
+            key = (min(n - 1, int((pt[0] - lo0) / dlo * n)),
+                   min(n - 1, int((pt[1] - la0) / dla * n)))
+            if key not in seen:
+                seen.add(key)
+                out.append(pt)
+        if len(out) <= cap or n == 1:
+            return out[:cap]
+        n = max(1, n - max(1, n // 8))
+
+
 def _collection_scatter(member_labels, member_points, title, *, width=560, legend=True,
-                        outline_ref=None) -> str:
+                        outline_ref=None, max_dots=None) -> str:
     """The member-coloured footprint the portal collections view draws (collScatter), as static
-    SVG: dots coloured per member survey in the same palette, with a compact legend. `legend=False`
-    is the index card's form, where the card is a summary and the roll-call belongs on the
-    collection page itself."""
+    SVG: dots coloured per member survey, each carrying its survey's name as a `<title>`, with a
+    compact legend. `legend=False` plus `max_dots` is the hub card's form, where the card is a
+    summary: the footprint is thinned PER MEMBER so no survey can silently vanish from a card, and
+    the roll-call belongs on the collection page itself."""
     if not member_points:
         return ""
+    present = [lbl for lbl in member_labels if member_points.get(lbl)]
+    palette = _member_colours(len(present))
+    share = max(1, max_dots // len(present)) if (max_dots and present) else None
     colours, pts, legend_rows = {}, [], []
-    for i, lbl in enumerate(member_labels):
-        if not member_points.get(lbl):
-            continue
-        colour = _COLL_PAL[i % len(_COLL_PAL)]
+    for i, lbl in enumerate(present):
+        colour = palette[i]
         colours[lbl] = colour
-        pts += [(lon, lat, lbl) for lon, lat in member_points[lbl]]
+        kept = _grid_decimate(member_points[lbl], share)
+        pts += [(lon, lat, lbl) for lon, lat in kept]
         legend_rows.append(f'<span style="white-space:nowrap"><span style="display:inline-block;'
                            f'width:.6em;height:.6em;border-radius:50%;background:{colour}"></span> '
                            f'{_e(lbl)}</span>')
     if not pts:
         return ""
-    svg = _minimap_svg(pts, width=width, colours=colours, outline_ref=outline_ref,
+    svg = _minimap_svg(pts, width=width, colours=colours, outline_ref=outline_ref, labelled=True,
                        label=f"Member stations of {title} over Australia")
     if not legend:
         return svg
     return (f'<figure style="margin:1rem 0 .4rem">{svg}</figure>'
-            f'<p style="font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;'
-            f'gap:.4rem .9rem;margin:.2rem 0 1rem">{"".join(legend_rows)}</p>')
+            f'<p class="colllegend">{"".join(legend_rows)}</p>')
 
 
-def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None) -> str:
+def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
+                    member_facts=None, level_counts=None, formats=None) -> str:
+    """The collection page as an EXPLORATORY layer (design brief 23 to 31), not a catalogue record.
+
+    `member_facts` ({slug: row}), `level_counts` ({level: n stations}) and `formats` are rollups the
+    emitter computes from the SAME served documents the member survey pages render from. All three
+    are optional: a caller that supplies none gets the hero, the map and the member list, and the
+    sections those rollups would have filled are simply not written.
+    """
     title = (coll or {}).get("title") or cid
     desc = (coll or {}).get("description") or f"{title}: a collection of magnetotelluric surveys on AusMT."
     url = f"{base}/collections/{cid}"
-    members = "\n".join(
-        f'<li><a href="/surveys/{_e(s)}">{_e(lbl)}</a></li>' for lbl, s in member_slugs)
     ld = {"@context": "https://schema.org", "@type": "Dataset",
           "name": title, "description": desc, "url": url,
           "identifier": url,
@@ -1162,16 +1240,104 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     if y0:
         ld["temporalCoverage"] = f"{min(y0)}/{max(y1)}" if y1 else f"{min(y0)}/.."
     scatter = _collection_scatter([lbl for lbl, _s in member_slugs], member_points, title)
+
+    # ---- hero: what it is, where it is, how large it is ----
+    # Chips state the rollup's OWN type and status and nothing else: a discovery layer never
+    # asserts a taxonomy its record does not carry.
+    chips = "".join(f'<span class="idxchip">{_e(str(v))}</span> '
+                    for v in ((coll or {}).get("type"), (coll or {}).get("status")) if v)
+    lede_text = _first_sentences(desc, limit=1)
+    lede = f'<p class="lede">{_e(lede_text)}</p>' if lede_text else ""
+
+    facts = list((member_facts or {}).values())
+
+    def tile(num, lab):
+        return f'<div class="cstat"><div class="cnum">{num}</div><div class="clab">{lab}</div></div>'
+    # Headline metrics the brief asks for: how many surveys, how many stations, what band, what
+    # years. NOT the angular extent it calls unhelpful, because the map above says it better.
+    tiles = [tile(len(member_slugs), "surveys")]
+    n_stations = int((coll or {}).get("n_stations") or 0)
+    if n_stations:
+        tiles.append(tile(f"{n_stations:,}", "stations"))
+    pmins = [f["period_min_s"] for f in facts if f.get("period_min_s") is not None]
+    pmaxs = [f["period_max_s"] for f in facts if f.get("period_max_s") is not None]
+    if pmins and pmaxs:
+        tiles.append(tile(f"{_fmt_period(min(pmins))} to {_fmt_period(max(pmaxs))} s",
+                          "period coverage"))
+    ystart = [m.get("year_start") for m in member_smeta if (m or {}).get("year_start")]
+    yend = [m.get("year_end") for m in member_smeta if (m or {}).get("year_end")]
+    if ystart:
+        span = (f"{min(ystart)}" if yend and min(ystart) == max(yend)
+                else f"{min(ystart)} to {max(yend)}" if yend else f"{min(ystart)}")
+        tiles.append(tile(_e(span), "years"))
+    stats = f'<div class="cstats">{"".join(tiles)}</div>'
+
+    # ---- data available: rolled up from served facts only ----
+    avail = []
+    fmt_names = [_BUNDLE_LABELS.get(f, (f, ""))[0] for f in (formats or [])]
+    if fmt_names:
+        avail.append(f"<dt>Transfer functions</dt><dd>{' &#183; '.join(_e(n) for n in fmt_names)}"
+                     "</dd>")
+    for level_key, _badge, name in _TS_LEVELS:
+        n = (level_counts or {}).get(level_key)
+        if n:
+            avail.append(f"<dt>{_e(name)}</dt><dd>{n:,} stations</dd>")
+    data_section = ""
+    if avail:
+        data_section = (
+            '<h2 id="data">Data available</h2>\n'
+            '<p class="prose">A collection groups surveys for discovery; each member survey '
+            "publishes its own data under its own licence, and the rows below say what exists "
+            f"across the {len(member_slugs)} members rather than offering the collection as one "
+            "download.</p>\n"
+            f"<dl>{''.join(avail)}</dl>\n")
+
+    # ---- member surveys, the brief's compact list ----
+    rows = []
+    for lbl, slug in member_slugs:
+        row = (member_facts or {}).get(slug) or {}
+        types = row.get("types") or {}
+        bits = [_e(str(row.get("org") or "")),
+                _plural(int(row["n_stations"]), "station") if row.get("n_stations") else "",
+                _e(" / ".join(str(t) for t in sorted(types))) if types else "",
+                _e(str(row.get("years") or "")),
+                (f"{_fmt_period(row['period_min_s'])} to {_fmt_period(row['period_max_s'])} s"
+                 if row.get("period_min_s") is not None and row.get("period_max_s") is not None
+                 else "")]
+        facts_line = _facts_line(bits)
+        rows.append(f'<div class="mem"><p class="memt">'
+                    f'<a href="/surveys/{_e(slug)}">{_e(row.get("title") or lbl)}</a></p>'
+                    + (f'<p class="memfacts">{facts_line}</p>' if facts_line else "")
+                    + "</div>")
+    members_section = (f'<h2 id="surveys">Member surveys</h2>\n<div class="memlist">'
+                       f'{"".join(rows)}</div>\n') if rows else ""
+
+    # ---- participating organisations: names the members declare, ROR-linked, no logos ----
+    org_bits, seen_orgs = [], set()
+    for lbl, slug in member_slugs:
+        row = (member_facts or {}).get(slug) or {}
+        name = str(row.get("org") or "").strip()
+        if not name or name in seen_orgs:
+            continue
+        seen_orgs.add(name)
+        ror = str(row.get("org_ror") or "").strip()
+        org_bits.append(f'<a href="{_e(ror)}">{_e(name)}</a>' if ror else _e(name))
+    orgs_section = (f'<h2 id="organisations">Participating organisations</h2>\n'
+                    f'<p class="prose">{" &#183; ".join(org_bits)}</p>\n') if org_bits else ""
+
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / <a href="/collections">collections</a> / '
         f"{_e(title)}</p>\n"
         f"<h1>{_e(title)}</h1>\n"
-        f"<p>{_e(desc)}</p>\n"
+        + (f"<p>{chips}</p>\n" if chips else "")
+        + f"{lede}\n"
         + scatter
-        + f"<dl><dt>Surveys</dt><dd>{len(member_slugs)}</dd>"
-        f"<dt>Stations</dt><dd>{int((coll or {}).get('n_stations') or 0)}</dd></dl>\n"
-        f'<p><a class="navbtn" href="/#/collection/{_e(cid)}">Open in the interactive portal</a></p>\n'
-        "<h2>Member surveys</h2>\n<ul>\n" + members + "\n</ul>\n"
+        + f"{stats}\n"
+        + f'<p><a class="navbtn" href="/#/collection/{_e(cid)}">Open in the interactive portal</a></p>\n'
+        + f'<h2 id="about">About</h2>\n<p class="prose">{_e(desc)}</p>\n'
+        + data_section
+        + members_section
+        + orgs_section
     )
     return _shell(title=f"{title} - magnetotelluric data - AusMT",
                   description=desc if len(desc) <= 160 else desc[:157] + "...",
@@ -1281,7 +1447,7 @@ def collections_index_page(*, rows, base) -> str:
                         for v in (r.get("type"), r.get("status")) if v)
         scatter = _collection_scatter(r.get("member_labels") or [], r.get("member_points") or {},
                                       title, width=_COLL_INDEX_MAP_WIDTH, legend=False,
-                                      outline_ref=ref)
+                                      outline_ref=ref, max_dots=_CARD_DOT_CAP)
         blurb = _first_sentences(r.get("description"))
         chip_row = f"<p>{chips}</p>" if chips else ""
         desc_row = f'<p class="idxdesc">{_e(blurb)}</p>' if blurb else ""
@@ -1458,6 +1624,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             "slug": slug,
             "title": ((survey_docs.get(slug) or {}).get("title")) or label,
             "org": _drow.get("organisation") or smeta.get("org"),
+            "org_ror": smeta.get("org_ror"),
             "region": smeta.get("region") or "Australia",
             "n_stations": _drow.get("n_stations") if _drow.get("n_stations") is not None
             else len(docs),
@@ -1509,6 +1676,9 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     cdir = out / "pages" / "collections"
     cdir.mkdir(parents=True, exist_ok=True)
     coll_index_rows = []
+    # The collection page's rollups come from the SAME rows the surveys hub was built from, so a
+    # fact can never differ between a collection page and the survey page it names.
+    facts_by_slug = {r["slug"]: r for r in index_rows}
     for cid in sorted(collections or {}):
         members = [(lbl, slug_by_label.get(lbl, lbl))
                    for lbl in sorted(surveys_meta) if (survey_coll or {}).get(lbl) == cid]
@@ -1516,10 +1686,25 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
         member_points = {lbl: [(pt[0], pt[1]) for pt in
                                 _station_points(docs_by_survey.get(s, []))]
                          for lbl, s in members}
+        # What the members between them publish, counted over the served register and the served
+        # manifest rows. Nothing here is a claim about the collection: it is a count of member data.
+        level_counts: dict = {}
+        member_formats = set()
+        for _lbl, s in members:
+            for row in bundles_by_slug.get(s) or []:
+                if (row or {}).get("format"):
+                    member_formats.add(row["format"])
+            for doc in docs_by_survey.get(s, []):
+                for level in (ts_access or {}).get(doc.get("ausmt_id")) or {}:
+                    level_counts[level] = level_counts.get(level, 0) + 1
         (cdir / f"{cid}.html").write_text(
             collection_page(cid=cid, coll=collections[cid], member_slugs=members,
                             member_smeta=member_smeta, base=base,
-                            member_points=member_points),
+                            member_points=member_points,
+                            member_facts={s: facts_by_slug[s] for _lbl, s in members
+                                          if s in facts_by_slug},
+                            level_counts=level_counts,
+                            formats=sorted(member_formats)),
             encoding="utf-8")
         n += 1
         coll = collections[cid] or {}

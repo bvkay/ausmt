@@ -833,6 +833,106 @@ def test_collection_jsonld_rolls_up_member_licence_creators_and_years():
     assert "license" not in ld2, "mixed member licences must state nothing (never overclaim)"
 
 
+def _collection_call(pages, n_members=2, **over):
+    """One collection_page call with member facts, a register rollup and bundle formats."""
+    members = [(f"Member {i}", f"m{i}") for i in range(n_members)]
+    kw = dict(
+        cid="c", coll={"title": "Test Collection", "n_stations": 400, "type": "programme",
+                       "status": "active",
+                       "description": "A national programme. It spans several states."},
+        member_slugs=members,
+        member_smeta=[{"lic": "CC-BY-4.0", "org": f"Org {i}",
+                       "org_ror": f"https://ror.org/0000000{i}",
+                       "year_start": 2013 + i, "year_end": 2016 + i} for i in range(n_members)],
+        base="https://x.example",
+        member_points={lbl: [(137.0 + i, -30.0 - i)] for i, (lbl, _s) in enumerate(members)},
+        member_facts={s: {"title": lbl, "org": f"Org {i}",
+                          "org_ror": f"https://ror.org/0000000{i}",
+                          "n_stations": 200, "types": {"LPMT": 200}, "years": f"{2013 + i} to 2016",
+                          "period_min_s": 5.0, "period_max_s": 100000.0}
+                      for i, (lbl, s) in enumerate(members)},
+        level_counts={"raw_packed": 180, "level1_mth5": 12},
+        formats=["edi-zip", "mth5"])
+    kw.update(over)
+    return pages.collection_page(**kw)
+
+
+def test_the_collection_page_is_an_exploratory_layer(tmp_path):
+    """Design brief 23 to 31. The static collection page was description, small map, two numbers,
+    a portal link and a bare list of member links: a thin catalogue record, not somewhere a reader
+    can understand a programme.
+
+    The sequence is now what it is, where it is, how large, what data, which surveys, who
+    contributed. FAILS IF a section goes missing or falls out of order, if a chip is asserted the
+    rollup does not carry, if the collection is described as downloadable, or if angular extent
+    comes back as a headline metric."""
+    pages = _pages_module()
+    page = _collection_call(pages, n_members=2)
+    order = []
+    for anchor, heading in (("about", "About"), ("data", "Data available"),
+                            ("surveys", "Member surveys"),
+                            ("organisations", "Participating organisations")):
+        assert f'<h2 id="{anchor}">{heading}</h2>' in page, f"{heading} section missing"
+        order.append(page.index(f'<h2 id="{anchor}">'))
+    assert order == sorted(order), "the sections must follow the brief's narrative order"
+
+    # hero: chips from the rollup only, lede, then the map, then the metrics, all above About
+    assert '<span class="idxchip">programme</span>' in page and \
+           '<span class="idxchip">active</span>' in page, "type and status chips come from the rollup"
+    assert "A national programme." in page, "the lede is the description's first sentence"
+    scatter = page.index("Member stations of")
+    assert scatter < order[0], "the large map is the hero, above About"
+    for label in ("surveys", "stations", "period coverage", "years"):
+        assert f'<div class="clab">{label}</div>' in page, f"headline metric {label} missing"
+    assert "extent" not in page.lower().split('<h2 id="about"')[0], \
+        "angular extent is not a headline metric (the map communicates spatial extent)"
+    assert page.index('class="cstats"') < order[0], "the metrics ride the hero"
+
+    # data available: rolled up from served facts, and never a download claim for the collection
+    assert "180 stations" in page and "Packed raw" in page, \
+        "per-level station counts roll up from the register"
+    assert "EDI archive (zip)" in page and "Survey MTH5 bundle" in page, \
+        "format availability rolls up from the members' own bundle rows"
+    assert "each member survey publishes its own data" in page, \
+        "a collection is a discovery layer and must not read as a downloadable dataset"
+
+    # member surveys as a compact list, and organisations with their RORs
+    assert '<a href="/surveys/m0">Member 0</a>' in page
+    assert "200 stations" in page and "LPMT" in page and "2013 to 2016" in page
+    assert "5 to 100,000 s" in page, "the member row carries its period band"
+    assert '<a href="https://ror.org/00000000">Org 0</a>' in page, \
+        "participating organisations are ROR-linked where the record carries one"
+
+    # presence: a rollup carrying neither type nor status asserts neither
+    plain = _collection_call(pages, coll={"title": "Test Collection", "n_stations": 400,
+                                          "description": "A grouping."})
+    assert '<span class="idxchip">' not in plain, \
+        "a collection declaring no type or status shows no chips"
+
+
+def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
+    """_COLL_PAL has eight entries and cycled, so AusLAMP's fourteen members used six colours twice
+    and the legend could not tell them apart. Design brief 45 also forbids encoding identity by
+    colour alone, and the SPA's own scatter already carries per-dot titles while the static one did
+    not. FAILS IF two members share a colour, or if a dot cannot name its survey."""
+    pages = _pages_module()
+    page = _collection_call(pages, n_members=14,
+                            member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
+                                           for i in range(14)},
+                            member_facts=None, level_counts=None, formats=None)
+    fills = re.findall(r'<circle [^>]*fill="(#[0-9A-Fa-f]{6})"', page)
+    assert len(fills) == 14, fills
+    assert len(set(fills)) == 14, f"fourteen members must get fourteen colours, got {len(set(fills))}"
+    for i in range(14):
+        assert f"<title>Member {i}</title>" in page, f"dot for Member {i} must name its survey"
+    # determinism: the same input renders the same colours, every time
+    assert fills == re.findall(r'<circle [^>]*fill="(#[0-9A-Fa-f]{6})"',
+                               _collection_call(pages, n_members=14,
+                                                member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
+                                                               for i in range(14)},
+                                                member_facts=None, level_counts=None, formats=None))
+
+
 def test_bundle_labels_speak_the_manifest_vocabulary():
     """The manifest spells the survey-MTH5 bundle's format "mth5" (the station-resource vocabulary
     says "survey-mth5"); the label map must carry BOTH, or the page prints the raw key - the exact
