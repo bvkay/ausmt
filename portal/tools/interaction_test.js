@@ -1082,6 +1082,43 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   win.location.hash = "#/survey/does-not-exist"; A.routeFromHash();
   ok(!doc.getElementById("drawer").classList.contains("open"), "unknown survey slug must not open the drawer");
 
+  // F1b. THE PLURAL ROUTES: #/surveys and #/collections (index-pages lane). Every entity page's
+  //      back-navigation and the 404 page's own recovery link pointed at #/surveys, and
+  //      routeFromHash matched none of its three branches for it: the hash fell through and the
+  //      reader stayed on whatever view was showing, which on a cold load is the Map. Those links
+  //      now target the served /surveys and /collections index pages, but the hash form is out in
+  //      the wild in published HTML, so the routes must land where their names promise.
+  A.setView("map");
+  win.location.hash = "#/surveys"; A.routeFromHash();
+  ok(A.curView() === "surveys", "#/surveys must land on the Surveys view, got: " + A.curView());
+  win.location.hash = "#/collections"; A.routeFromHash();
+  ok(A.curView() === "collections", "#/collections must land on the Collections view, got: " + A.curView());
+  // The singular entity routes share a prefix with the plural ones, so prove neither swallows the other.
+  A.setView("map");
+  win.location.hash = "#/survey/alpha"; A.routeFromHash();
+  ok(doc.getElementById("drawer").classList.contains("open"),
+    "the plural route must not shadow #/survey/<slug>");
+  A.closeDrawer();
+
+  // F1c. THE SURVEY ROUTE FRAMES THE MAP. The entity page's button is labelled "View all stations on
+  //      the main map" and targets this route, but openSurvey never called setView or fitBounds and
+  //      routeFromHash's setView("map") was on the STATION branch only: the reader got a drawer over
+  //      whatever view was showing, with the map at its default national extent. The route now
+  //      delivers the framing its label promises, through focusSurvey - the same seam the drawer's
+  //      own "View on map" control uses, so the Option-A dim comes with it (F3 pins that behaviour).
+  A.setView("surveys");
+  const _fbBeforeRoute = mapCalls.filter(c => c.fn === "fitBounds").length;
+  win.location.hash = "#/survey/alpha"; A.routeFromHash();
+  ok(A.curView() === "map", "#/survey/<slug> must frame the MAP, got: " + A.curView());
+  ok(doc.getElementById("drawer").classList.contains("open"),
+    "#/survey/<slug> must still open the survey drawer");
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbBeforeRoute + 1,
+    "#/survey/<slug> must fit the survey's own extent exactly once, got "
+      + (mapCalls.filter(c => c.fn === "fitBounds").length - _fbBeforeRoute));
+  ok(A.dimFocus() === "Alpha Survey",
+    "#/survey/<slug> must apply the Option-A focus dim, got: " + JSON.stringify(A.dimFocus()));
+  A.closeDrawer();
+
   // F2. SURVEY-DRAWER HASH CLEANUP (survey-drawer lane, ruling 5). closeDrawer() cleared ONLY
   //     "#/station..." - a survey opened by the #/survey/<slug> route left that hash in the address bar
   //     after the drawer shut, so the URL claimed a survey was open when nothing was, Back/reload
