@@ -4513,6 +4513,10 @@ def _validate_products(mtcat_doc, manifest_doc, build_report_doc=None):
     (empty = OK). jsonschema is optional: absent => [] + a note. A missing/broken schema file is
     noted, not fatal: only an actual schema VIOLATION fails.
 
+    A doc passed as None is OUT OF SCOPE for that call, not empty: the sitemap block re-checks the
+    build_report it re-emits with the page count, and re-serialising the whole catalogue to say so
+    would repeat work the first call already did.
+
     Each document is validated through _jdump + json.loads first, i.e. against THE BYTES THAT SHIP, not
     against the in-memory object. The two are not the same object graph: _jdump's default= hook ISO-
     formats a date/datetime/time an unquoted survey.yaml scalar carried into SMETA (attribution.
@@ -4527,9 +4531,8 @@ def _validate_products(mtcat_doc, manifest_doc, build_report_doc=None):
         print("note: jsonschema not installed — product schema self-check skipped", file=sys.stderr)
         return []
     errs = []
-    _docs = [("mtcat", mtcat_doc), ("manifest", manifest_doc)]
-    if build_report_doc is not None:
-        _docs.append(("build_report", build_report_doc))
+    _docs = [(n, d) for n, d in (("mtcat", mtcat_doc), ("manifest", manifest_doc),
+                                 ("build_report", build_report_doc)) if d is not None]
     for name, doc in _docs:
         schema_path = HERE.parent / "schema" / f"{name}.schema.json"
         try:
@@ -6290,8 +6293,17 @@ def _main_build(argv=None):
                                + "; ".join(_mismatch[:10]))
         # pages/ is tier 3 and outside the manifest by design, so build_report is the one place the
         # build records that it wrote them. The count is known only now, after emit_pages, so the
-        # report written above is re-emitted with the additive key.
+        # report written above is re-emitted with the additive key - and re-validated before it is
+        # written, because the self-check above ran on the pages-less object and the file that
+        # actually ships is this one. Only the report is in scope here: the catalogue and manifest
+        # have not changed since their own check.
         build_report["pages"] = _n_pages
+        _rerrs = _validate_products(None, None, build_report)
+        if _rerrs:
+            for _e in _rerrs:
+                print(f"ERROR: build_report self-check failed after the page count: {_e}",
+                      file=sys.stderr)
+            return 2
         (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
 
     # ---- optional feed.xml (S3: Atom feed of surveys, newest release/date first) ----

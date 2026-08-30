@@ -171,6 +171,26 @@ def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch):
                            "--sitemap-base", BASE])
 
 
+def test_the_report_the_build_leaves_behind_is_the_one_it_validated(tmp_path, monkeypatch):
+    """build_report.json is written TWICE on a --sitemap-base build: once before the sitemap block,
+    and once again after emit_pages with the page count added. The schema self-check ran on the
+    first, pages-less object, so the file actually left on disk was never validated inside the
+    build at all - the one artefact the build's own gate did not cover was the one it shipped.
+
+    Driven by an emitter that reports its page count as a string: the report then violates its own
+    schema ("pages": {"type": "integer"}) in exactly the write the check could not see. FAILS on
+    the pre-fix engine, which completes rc=0 and leaves the non-conforming file on disk."""
+    surveys = _make_survey(tmp_path)
+    real = build_portal.pages.emit_pages
+    monkeypatch.setattr(build_portal.pages, "emit_pages",
+                        lambda out, base, **kw: str(real(out, base, **kw)))
+    out = tmp_path / "out"
+    rc = build_portal.main(["--surveys", str(surveys), "--out", str(out), "--bundle-edi",
+                            "--no-validate", "--products", str(out / "products"),
+                            "--sitemap-base", BASE])
+    assert rc == 2, f"a non-conforming build_report must fail the build, got rc={rc}"
+
+
 def test_the_engine_image_layout_is_not_read_as_a_portal_checkout(tmp_path, monkeypatch):
     """The PRODUCTION build ships no portal, and the static-page leg must know it.
 
