@@ -352,6 +352,22 @@ def mask_impedance_sci_row(sci_row):
             for c in sci.SCI_COLUMNS]
 
 
+def derived_rendition_withheld(r):
+    """True when AusMT must NOT build a DERIVED rendition of this station from its source file.
+
+    The served EMTF XML and both MTH5 tiers are rebuilt by RE-READING the source EDI, so they never
+    see the masked record and the mask's own tf/sci nulling does not reach them. station.json labels
+    both renditions provenance_role 'derived', which is exactly the surface the channels_recorded
+    mask governs: a survey that declares no electric field has no impedance to publish in any AusMT
+    product, whatever format it is written in. The custodian's EDI keeps its bytes and is still
+    served; this is one home for the predicate all three emitters filter on, so a fourth rendition
+    inherits it rather than re-deciding it.
+
+    The per-station coordinate byte-gate is a SEPARATE, additional filter with its own home in
+    _coord_access; both are applied, neither subsumes the other."""
+    return bool(r.get("impedance_masked"))
+
+
 # C6/C34-D2: license_instrument_text now lives in the stdlib-only leaf `_license_text` (imported near
 # the top of this module) so the bundle LICENSE.txt and the gw-runner's intake LICENSE.md share ONE
 # implementation and can never drift. The output is unchanged (byte-identical, pinned by the license
@@ -2316,6 +2332,10 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         # so the cached parse stays survey-independent and a hit and a miss mask identically. What
         # the custodian released is still served byte for byte; the mask governs what AusMT DERIVES.
         if mask_impedance and "Z" in (r.get("components") or []):
+            # Rides the FINAL record (never the C18 cache entry, which is survey-independent) so the
+            # emitters that re-read the SOURCE file can be filtered on it. station.json and the
+            # catalogue row are assembled from named keys, so this one gains no published surface.
+            r["impedance_masked"] = True
             r["components"] = [c for c in r["components"] if c != "Z"]
             r["type"] = mtm.classify(r.get("period_min_s"), False, "T" in r["components"])
             if isinstance(tf, list):
@@ -2442,7 +2462,13 @@ def process_mth5(h5_paths, survey_label, org, slug, report=None):
     Different input format, identical downstream: records_and_components yields (record, periods,
     components) that feed the very same tf_from_components / science_from_components used for EDI, so
     catalogues, derived products and diagnostics are identical where equivalent information exists.
-    AusMT reads only transfer-function products + metadata from MTH5 — never raw time series."""
+    AusMT reads only transfer-function products + metadata from MTH5 - never raw time series.
+
+    LIMITATION: the channels_recorded declaration masks (tipper and impedance) are EDI-only. They
+    are wired into process_edis alone, so a survey submitted as MTH5 would ignore its own
+    declaration. Inert for every package the corpus and the GDS staging carry, all of which are
+    EDI; lifting the declaration read to the survey loop is what would let all three ingest paths
+    inherit it."""
     if not m5.available():
         sys.exit("ERROR: MTH5 input requested but mth5/mt_metadata are not installed "
                  "(pip install mth5 mt_metadata).")
@@ -2569,7 +2595,10 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
 
     NOT cached (like the MTH5 input path): the C18 cache stores the EDI parse and the EDI-sourced
     served XML, and the XML path's served bytes include a normalize()-generated EDI that the cache
-    does not carry. See _emit_served_xml's derived_edi_dir."""
+    does not carry. See _emit_served_xml's derived_edi_dir.
+
+    LIMITATION: the channels_recorded declaration masks are EDI-only, exactly as for process_mth5
+    above, and for the same reason: they are wired into process_edis alone."""
     if not mtm.available():
         sys.exit("ERROR: the mt_metadata stack is required for the build "
                  "(pip install -r environments/requirements-mtmetadata-lock.txt).")
@@ -3735,6 +3764,12 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
         # r.get("variant") rides along (fix round 2): a variant record inherits its BASE id's policy.
         if not coordacc.coordinates_served(
                 coordacc.station_policy(coord_default, coord_overrides, r.get("id"), r.get("variant"))):
+            continue
+        # The impedance mask, same shape and the same reason (see derived_rendition_withheld):
+        # normalize() re-reads the SOURCE EDI and never sees the masked record, so an unfiltered
+        # pass republished the fabricated impedance verbatim. Skipping HERE keeps it out of out/xml,
+        # the xml zip and the manifest, all three of which derive from `written`.
+        if derived_rendition_withheld(r):
             continue
         xml_target = Path(xmldir) / f"{r['id']}.xml"
         # The XML content AND filename are a function of the FINAL (post-_disambiguate) station id —
@@ -5451,7 +5486,8 @@ def _main_build(argv=None):
                 h5_written = emit_station_mth5(
                     [(_p, _r) for (_p, _r) in stations
                      if coordacc.coordinates_served(coordacc.station_policy(
-                         _coord_default, _coord_overrides, _r.get("id"), _r.get("variant")))],
+                         _coord_default, _coord_overrides, _r.get("id"), _r.get("variant")))
+                     and not derived_rendition_withheld(_r)],
                     slug, label, out / "h5" / slug, smeta=meta)
         # C18b (A3): one per-survey instrumentation line (the delta of this survey's cache activity vs
         # the snapshot at the top of the iteration). digest=<first12> ties the log to the sidecar so an
@@ -5702,9 +5738,12 @@ def _main_build(argv=None):
                 # correctly null (the leak-sweep's HDF5 leg pins this). Filter to the byte-gated
                 # exact-only set (the same per-station predicate as the EDI copy loop above): the
                 # non-exact contribution is WITHHELD from the bundle — never rewritten (D3 posture).
+                # ...and by derived_rendition_withheld, for the same re-read reason one format
+                # over: an impedance-masked station contributes no TF to the bundle either.
                 _h5_stations = [(p, r) for (p, r) in stations
                                 if coordacc.coordinates_served(coordacc.station_policy(
-                                    _coord_default, _coord_overrides, r.get("id"), r.get("variant")))]
+                                    _coord_default, _coord_overrides, r.get("id"), r.get("variant")))
+                                and not derived_rendition_withheld(r)]
                 if _MTH5_POOL is not None:
                     # Pool build: submit the bundle write and move on, so it overlaps the NEXT
                     # survey's station fan-out. An EMPTY row is reserved here so the manifest keeps
@@ -5819,8 +5858,10 @@ def _main_build(argv=None):
             _survey_warnings.append(
                 f"impedance masked survey-wide by the channels_recorded declaration (no electric "
                 f"field recorded) for {len(_z_decl_masked)} station(s): the derived resistivity, "
-                f"phase, phase-tensor, error and quality products are withheld and the source "
-                f"files are still served byte for byte")
+                f"phase, phase-tensor, error and quality products are withheld, and so are the "
+                f"EMTF XML and MTH5 renditions, which are rebuilt from the source file and would "
+                f"republish the impedance verbatim; the source files are still served byte for "
+                f"byte")
         _sheet_orphans = sorted(set(_survey_run_sheet) - _sheet_rows_consumed)
         if _sheet_orphans:
             _run_notes.append(

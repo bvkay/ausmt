@@ -62,12 +62,19 @@ def _survey(tmp_path, slug, source, channels=None, name="Mask Fixture"):
     return pkg
 
 
-def _build(tmp_path):
+def _build(tmp_path, extra=()):
     out = tmp_path / "out"
     rc = build_portal.main(["--surveys", str(tmp_path / "surveys"), "--out", str(out),
-                            "--no-validate", "--products", str(out / "products")])
+                            "--no-validate", "--products", str(out / "products"), *extra])
     assert rc == 0
     return out
+
+
+# The flag set that turns on every AusMT-DERIVED rendition of a station: the served EMTF XML (and
+# the survey zip built from it), the tier-1 per-station MTH5 and the tier-2 survey MTH5 bundle.
+# deploy/Makefile runs the production build with these, so a mask proven only under the default
+# flags is proven over a strict subset of what ships.
+_DERIVED_RENDITIONS = ("--bundle-edi", "--survey-h5", "--station-h5")
 
 
 def _rows(out):
@@ -313,3 +320,60 @@ def test_an_undeclared_placeholder_still_gets_the_convention_verdict(tmp_path):
                      .read_text(encoding="utf-8"))
     assert doc["frame"]["convention_check"]["verdict"] == "warn_yx", doc["frame"]["convention_check"]
     assert doc["frame"]["convention_check"]["phs_yx_median_deg"] == 45.0
+
+
+# ---------------------------------------------------------------------------------------------
+# 6. the AusMT-DERIVED renditions: the served EMTF XML and both MTH5 tiers.
+# ---------------------------------------------------------------------------------------------
+
+def test_the_mask_withholds_the_derived_xml_and_mth5_renditions(tmp_path):
+    """The renditions the mask did not reach. Both emitters RE-READ the source EDI rather than the
+    masked record, so against the pre-fix build a masked station republished the fabricated
+    Z = 1+1i verbatim in out/xml (Zxy blocks), in its per-station MTH5 and in the survey MTH5
+    bundle - all three labelled provenance_role 'derived' in station.json, which is exactly what the
+    mask governs. The served EDI keeps the custodian's bytes; the AusMT-derived renditions do not
+    ship at all."""
+    _survey(tmp_path, "masked", PLACEHOLDER, channels=["Bx", "By", "Bz"])
+    out = _build(tmp_path, extra=_DERIVED_RENDITIONS)
+    assert not sorted((out / "xml" / "masked").glob("*.xml")), "the derived EMTF XML shipped"
+    assert not sorted((out / "h5" / "masked").rglob("*.h5")), "the per-station MTH5 shipped"
+    assert not (out / "bundles" / "masked-tf.h5").exists(), "the survey MTH5 bundle shipped"
+    # the xml zip is built from the written set, so it goes with the last XML in the survey
+    assert not (out / "bundles" / "masked-xml.zip").exists(), "the xml zip shipped"
+    # the custodian's own bytes are untouched and still served
+    served = out / "edi" / "masked" / PLACEHOLDER.name
+    assert served.exists() and served.read_bytes() == PLACEHOLDER.read_bytes()
+
+    manifest = json.loads((out / "products" / "manifest.json").read_text(encoding="utf-8"))
+    kinds = {b["kind"] for b in manifest["bundles"] if b.get("survey") == "masked"}
+    assert "mth5" not in kinds and "xml-zip" not in kinds, kinds
+    assert not [f for f in manifest["files"]
+                if str(f.get("path", "")).endswith((".xml", ".h5"))
+                and "masked" in str(f.get("path", ""))], "a masked rendition reached the manifest"
+
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    assert any("EMTF XML and MTH5 renditions" in w
+               for w in report["surveys"]["masked"]["warnings"]), \
+        report["surveys"]["masked"]["warnings"]
+
+
+def test_an_undeclared_placeholder_still_gets_its_derived_renditions(tmp_path):
+    """The negative control for the withholding: without the declaration the same fixture ships the
+    XML and both MTH5 tiers exactly as it always has, so the withholding cannot be a regression in
+    the emitters."""
+    _survey(tmp_path, "undeclared", PLACEHOLDER)
+    out = _build(tmp_path, extra=_DERIVED_RENDITIONS)
+    xml = sorted((out / "xml" / "undeclared").glob("*.xml"))
+    assert xml and "Zxy" in xml[0].read_text(encoding="utf-8"), xml
+    assert sorted((out / "h5" / "undeclared").glob("*.h5"))
+    assert (out / "bundles" / "undeclared-tf.h5").exists()
+
+
+def test_a_real_impedance_survey_keeps_its_renditions_under_a_full_declaration(tmp_path):
+    """The mask is a declaration mechanism, so a survey that declares Ex/Ey keeps every rendition of
+    its real impedance. This is the control that stops the withholding drifting into an impedance
+    filter."""
+    _survey(tmp_path, "real-z", REAL_Z, channels=["Ex", "Ey", "Bx", "By"], name="Real Z")
+    out = _build(tmp_path, extra=_DERIVED_RENDITIONS)
+    assert sorted((out / "xml" / "real-z").glob("*.xml"))
+    assert (out / "bundles" / "real-z-tf.h5").exists()
