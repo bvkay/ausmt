@@ -20,13 +20,15 @@
 #     on the add-survey page block).
 #   - index.html's map (portal/src/map.js) loads tiles from basemaps.cartocdn.com — allow-listed in
 #     the default/index CSP img-src.
-#   - the header AuScope logo <a href="https://www.auscope.org.au"> (about.html and add-survey.html;
-#     also releases.html) is a NAVIGATION link, not a resource load: CSP does not govern <a href>
-#     targets; the logo image itself is vendored (portal/vendor/auscope-icon-white.png, img-src
-#     'self'). index.html no longer carries it: the brand-assets lane replaced the SPA header's
-#     AuScope symbol with the AusMT mark (vendor/brand/ausmt-mark.svg, also img-src 'self'), so
+#   - the header AuScope logo <a href="https://www.auscope.org.au"> survives on ABOUT.HTML ALONE.
+#     It is a NAVIGATION link, not a resource load: CSP does not govern <a href> targets; the logo
+#     image itself is vendored (portal/vendor/auscope-icon-white.png, img-src 'self'). The
+#     brand-assets lane made the AusMT mark (vendor/brand/ausmt-mark.svg, also img-src 'self') the
+#     header identity on index.html, releases.html, add-survey.html and brand.html, and the anchor
+#     left with the symbol on each. about.html's header is carved out pending an owner ruling.
 #     index.html's only remaining auscope.org.au string is the JSON-LD publisher URL, which is
-#     metadata and loads nothing. brand.html's only http string is its own rel=canonical.
+#     metadata and loads nothing; brand.html's and releases.html's only http strings are their own
+#     rel=canonical. Nothing in this changes a CSP rule: one fewer outbound anchor, no new load.
 # All other assets (leaflet, leaflet.draw, markercluster, jszip) are vendored under portal/vendor/
 # and served from 'self' -- portal/tests/test_no_cdn_references.py (part of the surveys/portal
 # pytest gate, not this image build) already guards the cdnjs.cloudflare.com supply-chain case and
