@@ -58,7 +58,13 @@ from _au_outline import COAST, EXTENT  # noqa: E402  (sibling engine module, std
 # looking at them: a coarser lattice (19 x 16) loses Tasmania to a single sub-pixel dot, and finer ones
 # (26 x 22 and up) turn the 16 px favicon into an unreadable smear because no dot is a whole pixel any
 # more. At 21 x 18 the silhouette keeps Cape York, the Gulf of Carpentaria notch, the Top End and the
-# flat Bight coast at 16 px, and Tasmania survives as two dots.
+# Bight coast at 16 px, and Tasmania survives as three dots.
+#
+# The pitch was tuned against the HAND-SIMPLIFIED outline this file used to rasterise. On the derived
+# Natural Earth coastline it still holds - the mark gained a dot in the Kimberley, a deeper Gulf
+# notch and a third Tasmanian dot - but the lattice is now the coarser of the two inputs: the
+# coastline resolves the Bight concavity and the taper of Cape York, and a 2 degree cell throws both
+# away. Changing the pitch is a BRAND decision for the owner, not a consequence of this lane.
 GRID_COLS = 21
 GRID_ROWS = 18
 
@@ -211,18 +217,32 @@ def radius_ratio(size_px):
     return RADIUS_ABOVE
 
 
+# What each COAST ring is called in brand.json. The first two are addressed by NAME downstream (the
+# brand pin checks Tasmania survives the rasterisation as its own cluster); the rest are islands and
+# share one label, because the mark is a silhouette and does not need to name them individually.
+RING_LABELS = ("mainland", "tasmania")
+
+
+def _ring_label(k):
+    return RING_LABELS[k] if k < len(RING_LABELS) else "island"
+
+
 def dot_lattice():
-    """[(col, row, ring)] for every lattice cell whose centre falls on land, in reading order."""
+    """[(col, row, ring)] for every lattice cell whose centre falls on land, in reading order.
+
+    EVERY ring is tested, not just the first two: the coastline carries islands as well as the
+    mainland and Tasmania, and a ring the rasteriser skipped would be land the mark silently left
+    out. The first ring to claim a cell wins, which only matters for rings that overlap - none do."""
     w, e, s, n = EXTENT["w"], EXTENT["e"], EXTENT["s"], EXTENT["n"]
     dots = []
     for j in range(GRID_ROWS):
         lat = n - (j + 0.5) * (n - s) / GRID_ROWS
         for i in range(GRID_COLS):
             lon = w + (i + 0.5) * (e - w) / GRID_COLS
-            if _inside(COAST[0], lon, lat):
-                dots.append((i, j, "mainland"))
-            elif _inside(COAST[1], lon, lat):
-                dots.append((i, j, "tasmania"))
+            for k, ring in enumerate(COAST):
+                if _inside(ring, lon, lat):
+                    dots.append((i, j, _ring_label(k)))
+                    break
     return dots
 
 

@@ -257,11 +257,12 @@ def test_surveys_index_shares_one_outline_and_stays_inside_the_budget():
     """The shared-geometry technique and the page budget, both asserted as NUMBERS against a
     full-corpus-sized synthetic (27 surveys, 2,625 stations).
 
-    Honest accounting: the schematic outline costs about 1.8 KB per card and the station dots
-    dominate the document, so sharing the geometry buys tens of kilobytes rather than an order of
-    magnitude. It is still the difference between a hub page with headroom and one that grows into
-    its ceiling as the corpus does. FAILS IF the outline stops being shared, the saving collapses,
-    or the page passes the 300 KB budget."""
+    Honest accounting: the derived Natural Earth outline costs about 5.6 KB per card, so sharing it
+    across 27 cards saves around 145 KB on a page whose ceiling is 300 KB. That saving is what makes
+    the technique load-bearing rather than tidy: carrying the geometry per card would put this page
+    through its budget on its own. It was a much closer thing under the hand-simplified outline this
+    replaced, which cost 1.6 KB per card and cleared the saving floor below by under 2 KB. FAILS IF
+    the outline stops being shared, the saving collapses, or the page passes the 300 KB budget."""
     pages = _pages_module()
     rows = _synthetic_rows()
     page = pages.surveys_index_page(rows=rows, base=BASE)

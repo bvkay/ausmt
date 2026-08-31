@@ -10,8 +10,10 @@ that file. These pins hold that arrangement:
   * the dot lattice in brand.json is REDERIVED here from the engine's own coastline truth
     (engine/extract/_au_outline.py, the same COAST rings and EXTENT the survey minimap draws), so the
     committed geometry cannot drift from the outline it claims to come from. This is the non-vacuity
-    that matters: a hand-typed dots[] would fail even if it looked plausible.
-  * Tasmania survives the rasterisation. It is two dots at this pitch, which is exactly the count a
+    that matters: a hand-typed dots[] would fail even if it looked plausible. EVERY ring is
+    rasterised, not the first two: the coastline carries islands as well as the mainland and
+    Tasmania, and a ring this pin skipped would be land the mark could omit without failing.
+  * Tasmania survives the rasterisation. It is three dots at this pitch, close enough to the count a
     coarser lattice would round away, and an Australia without Tasmania is a defect the owner would
     see before anyone else.
   * the palette is FOUR declared hex stops with their derivation recorded, and every dot colour is the
@@ -74,7 +76,7 @@ def test_the_dot_lattice_is_the_engine_coastline_rasterised():
         lat = n - (j + 0.5) * (n - s) / rows
         for i in range(cols):
             lon = w + (i + 0.5) * (e - w) / cols
-            if _inside(COAST[0], lon, lat) or _inside(COAST[1], lon, lat):
+            if any(_inside(ring, lon, lat) for ring in COAST):
                 want.add((i, j))
     got = {(d["col"], d["row"]) for d in geom["dots"]}
     assert got == want, (
@@ -85,10 +87,14 @@ def test_the_dot_lattice_is_the_engine_coastline_rasterised():
 
 def test_tasmania_survives_the_rasterisation():
     """FAILS IF the lattice coarsens until Tasmania rounds away. The brief names Tasmania explicitly;
-    at this pitch it is two dots, so any loss of resolution deletes it entirely rather than shrinking it."""
+    at this pitch it is three dots, so any loss of resolution shrinks it towards nothing rather than
+    merely coarsening it.
+
+    The mainland comparison spans every NON-Tasmanian ring, so an island ring cannot sit below
+    Tasmania unnoticed: the dots below the continent must be Tasmania and nothing else."""
     tas = [d for d in _doc()["geometry"]["dots"] if d["ring"] == "tasmania"]
     assert len(tas) >= 2, f"Tasmania must survive as its own dot cluster, got {len(tas)}"
-    mainland_rows = max(d["row"] for d in _doc()["geometry"]["dots"] if d["ring"] == "mainland")
+    mainland_rows = max(d["row"] for d in _doc()["geometry"]["dots"] if d["ring"] != "tasmania")
     assert min(d["row"] for d in tas) > mainland_rows, "Tasmania must sit clear of the mainland rows"
 
 

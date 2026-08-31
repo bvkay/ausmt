@@ -83,7 +83,7 @@
       "mark": 32,
       "favicon": 16
     },
-    "dot_count": 180,
+    "dot_count": 181,
     "dots": [
       {
         "col": 10,
@@ -100,6 +100,13 @@
         "hex": "#DF4699"
       },
       {
+        "col": 7,
+        "row": 2,
+        "ring": "mainland",
+        "t": 0.315789,
+        "hex": "#8547D0"
+      },
+      {
         "col": 9,
         "row": 2,
         "ring": "mainland",
@@ -168,13 +175,6 @@
         "ring": "mainland",
         "t": 0.526316,
         "hex": "#B345B8"
-      },
-      {
-        "col": 12,
-        "row": 3,
-        "ring": "mainland",
-        "t": 0.578947,
-        "hex": "#BE45B1"
       },
       {
         "col": 15,
@@ -273,6 +273,13 @@
         "ring": "mainland",
         "t": 0.789474,
         "hex": "#E74A8E"
+      },
+      {
+        "col": 4,
+        "row": 5,
+        "ring": "mainland",
+        "t": 0.157895,
+        "hex": "#5F4DD6"
       },
       {
         "col": 5,
@@ -611,13 +618,6 @@
         "hex": "#F35872"
       },
       {
-        "col": 19,
-        "row": 7,
-        "ring": "mainland",
-        "t": 0.947368,
-        "hex": "#F95F63"
-      },
-      {
         "col": 1,
         "row": 8,
         "ring": "mainland",
@@ -749,6 +749,13 @@
         "ring": "mainland",
         "t": 0.947368,
         "hex": "#F95F63"
+      },
+      {
+        "col": 20,
+        "row": 8,
+        "ring": "island",
+        "t": 1.0,
+        "hex": "#FF6655"
       },
       {
         "col": 1,
@@ -1290,13 +1297,6 @@
         "hex": "#F35872"
       },
       {
-        "col": 19,
-        "row": 13,
-        "ring": "mainland",
-        "t": 0.947368,
-        "hex": "#F95F63"
-      },
-      {
         "col": 14,
         "row": 14,
         "ring": "mainland",
@@ -1330,6 +1330,13 @@
         "ring": "mainland",
         "t": 0.894737,
         "hex": "#F35872"
+      },
+      {
+        "col": 16,
+        "row": 16,
+        "ring": "tasmania",
+        "t": 0.789474,
+        "hex": "#E74A8E"
       },
       {
         "col": 17,
