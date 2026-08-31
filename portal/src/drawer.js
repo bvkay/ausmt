@@ -207,7 +207,11 @@ function sourcesListHtml(m){const srcs=(m&&m.sources)||[];
     const cust=esc((s.custodian||"unknown custodian").toString().trim());
     const idv=(s.identifier||"").toString().trim();
     const ident=idv?" · "+pidLink(idv):"";
-    const slic=esc(licCanon(s.licence)||"licence not stated");
+    // Owner R3: this row is CHROME, not a data slot, and it sits on the same drawer as the licence /
+    // access row, so it takes the human form. licCanon still does the canonicalisation (aliases, case);
+    // licHuman only decides how the canonical id is READ. The SPDX identifier stays untouched wherever a
+    // machine reads it: the exports, the GeoJSON properties and the citation builder.
+    const slic=esc(licHuman(licCanon(s.licence))||"licence not stated");
     const stmt=(s.statement||"").toString().trim();
     const attr=stmt?esc(stmt):esc(sourceAttr(s));
     return `<div class="srcitem"><div class="srct">${title}</div><div class="srcm">${cust}${ident} · <span class="prov">${slic}</span></div>${attr?`<div class="srca">${attr}</div>`:""}</div>`;

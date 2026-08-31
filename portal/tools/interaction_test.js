@@ -3545,8 +3545,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   drwN.classList.remove("open");
   win.location.hash = "#/survey/alpha"; A.routeFromHash();
   ok(/GSSA \(2020\)\. Alpha survey\./.test(drwN.textContent), "W3b: the survey detail must render the attribution statement");
-  ok(/Source datasets/.test(drwN.textContent) && /Alpha raw archive/.test(drwN.textContent) && /CC-BY-3\.0-AU/.test(drwN.textContent),
-    "W3b: the survey detail must render the 'Source datasets' list (title + canonical licence)");
+  // C1/R3 moves the licence half of this pin from the SPDX identifier to the reader's form: the row is
+  // chrome. The canonicalisation is unchanged (licCanon still resolves aliases and case); what moved is
+  // only how the canonical id is READ. Two assertions where there was one, so the pin is not weakened.
+  ok(/Source datasets/.test(drwN.textContent) && /Alpha raw archive/.test(drwN.textContent) && /CC BY 3\.0 AU/.test(drwN.textContent),
+    "W3b + C1/R3: the survey detail must render the 'Source datasets' list (title + licence in the reader's form)");
+  ok(!/CC-BY-3\.0-AU/.test(drwN.textContent),
+    "C1/R3: the Source datasets row must not print the SPDX identifier as chrome");
   // Cite EXPLICIT fallback: Beta has no cite block -> the drawer must SAY so, never silently self-attribute.
   drwN.classList.remove("open");
   win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
@@ -3992,6 +3997,19 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C1/R2: the survey drawer's period coverage must read '0.01 - 1,000 s', got: " +
     JSON.stringify((c1sv.match(/period coverage.{0,40}/) || [""])[0]));
   ok(c1sv.indexOf("CC BY 4.0") >= 0, "C1/R3: the survey drawer's licence row must read the human form");
+  // (d2) THE SURVEY DRAWER'S "Source datasets" ROWS. A third-party release carries its upstream licence
+  // in sources[] (the GSSA and Roxby Downs shape), and that row is READER CHROME sitting on the SAME
+  // drawer as the licence/access row pinned above, so a drawer could print both forms of one identifier
+  // at once. The fixture declares no sources[], which is why nothing here saw the slot before.
+  A.setSMETA("Alpha Survey", { lic: "CC-BY-4.0",
+    sources: [{ title: "GSSA legacy release", custodian: "GSSA", licence: "CC-BY-4.0" }] });
+  A.openSurvey("Alpha Survey");
+  const c1src = (doc.querySelector("#drawer .srcitem .srcm") || { textContent: "" }).textContent;
+  ok(c1src.indexOf("CC BY 4.0") >= 0,
+    "C1/R3: a source dataset's licence is chrome and must read the human form, got: " + JSON.stringify(c1src));
+  ok(c1src.indexOf("CC-BY-4.0") < 0,
+    "C1/R3: the SPDX identifier must not appear in the Source datasets row, got: " + JSON.stringify(c1src));
+  A.setSMETA("Alpha Survey", { sources: null });
   // (e) THE COLLECTION DETAIL: the rollup stat and the per-member table row.
   win.location.hash = "#/collection/auslamp"; A.routeFromHash();
   const c1coll = doc.getElementById("collectionview").textContent;
