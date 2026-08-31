@@ -321,6 +321,37 @@ def withhold_sci_row(sci_row):
             for c in sci.SCI_COLUMNS]
 
 
+# The impedance-derived tf.json columns, named rather than indexed so a reorder of
+# contract/columns.json moves them in lockstep with the emitters (the sci-row projection's
+# self-following discipline). Everything the impedance gives: the two apparent resistivities, the
+# two phases, the four phase-tensor invariants (computed from Z via ep.pt_params) and the four
+# errors propagated from the impedance error. `periods` and the five tipper columns are not derived
+# from Z and survive the mask.
+_TF_IMPEDANCE_COLUMNS = ("rho_xy", "rho_yx", "phs_xy", "phs_yx_adj",
+                         "pt_min", "pt_max", "pt_az", "pt_beta",
+                         "rho_xy_err", "rho_yx_err", "phs_xy_err", "phs_yx_err")
+_TF_IMPEDANCE_INDEXES = tuple(tfmod.TF_COLUMNS.index(_c) for _c in _TF_IMPEDANCE_COLUMNS)
+
+# The science fields the impedance mask nulls: _SCI_WITHHELD_SCIENCE minus `decades`. Decades is the
+# span of the PERIOD axis and owes nothing to the impedance, so a tipper-only station keeps it; the
+# access gate nulls it because that gate withholds the period curves as well, which this one does
+# not. rr/sw/alg are processing metadata and are kept for the same reason they are kept there.
+_SCI_IMPEDANCE_DERIVED = {c: v for c, v in _SCI_WITHHELD_SCIENCE.items() if c != "decades"}
+
+
+def mask_impedance_sci_row(sci_row):
+    """The sci.json row for a station whose impedance the survey's channel declaration masks: every
+    impedance-derived diagnostic nulled per _SCI_IMPEDANCE_DERIVED, everything else preserved
+    verbatim. This is the half of the mask the tipper twin has no equivalent for and the reason the
+    mask is not a symmetric one-liner: _edi_science back-derives rho/phase FROM Z when the source
+    carries no RHO/PHS blocks, so a fabricated flat impedance otherwise publishes a smooth power-law
+    resistivity, a flat phase and a non-zero quality score. Same by-name build and SCI_COLUMNS
+    projection as withhold_sci_row."""
+    _sc = {n: i for i, n in enumerate(sci.SCI_COLUMNS)}
+    return [(_SCI_IMPEDANCE_DERIVED[c] if c in _SCI_IMPEDANCE_DERIVED else sci_row[_sc[c]])
+            for c in sci.SCI_COLUMNS]
+
+
 # C6/C34-D2: license_instrument_text now lives in the stdlib-only leaf `_license_text` (imported near
 # the top of this module) so the bundle LICENSE.txt and the gw-runner's intake LICENSE.md share ONE
 # implementation and can never drift. The output is unchanged (byte-identical, pinned by the license
@@ -2162,7 +2193,7 @@ def _parse_one_edi(p):
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                  cache=None, survey_digest="", report=None, station_ids=None,
-                 mask_tipper=False):
+                 mask_tipper=False, mask_impedance=False):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
     mt_metadata is the SOLE engine (the dependency-free regex extractor + _spectra were retired in
@@ -2248,6 +2279,28 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                         tf[_ti] = [None] * len(tf[_ti])
             if report is not None:
                 report.setdefault("tipper_masked_by_declaration", []).append(
+                    str(r.get("id") or p.stem))
+        # The same declaration, read for the horizontal ELECTRIC pair: a survey that states its
+        # recorded channels without Ex/Ey measured no electric field, so any impedance in the
+        # released files was fabricated by a conversion and every product AusMT derives from it is
+        # an invention. Not the tipper mask's mirror image, in two ways. It nulls TWELVE tf columns
+        # rather than five (rho, phase, the phase tensor and the propagated errors all come from Z),
+        # and it nulls the impedance-derived SCIENCE row too, because _edi_science back-derives
+        # rho/phase from Z when the source carries no RHO/PHS blocks - so an unmasked placeholder
+        # publishes a smooth power law, a flat phase and a quality score computed on an invention.
+        # Applied at the same seam and for the same reason as the tipper mask: after the C18 cache,
+        # so the cached parse stays survey-independent and a hit and a miss mask identically. What
+        # the custodian released is still served byte for byte; the mask governs what AusMT DERIVES.
+        if mask_impedance and "Z" in (r.get("components") or []):
+            r["components"] = [c for c in r["components"] if c != "Z"]
+            r["type"] = mtm.classify(r.get("period_min_s"), False, "T" in r["components"])
+            if isinstance(tf, list):
+                for _zi in _TF_IMPEDANCE_INDEXES:
+                    if _zi < len(tf) and tf[_zi]:
+                        tf[_zi] = [None] * len(tf[_zi])
+            srow = mask_impedance_sci_row(srow)
+            if report is not None:
+                report.setdefault("impedance_masked_by_declaration", []).append(
                     str(r.get("id") or p.stem))
         # Emit the deferred per-EDI diagnostics identically whether parsed from source or cache.
         if r.get("tipper_masked"):
@@ -5160,10 +5213,14 @@ def _main_build(argv=None):
             _declared_channels = {str(c).strip().lower().replace("b", "h", 1) if str(c).strip().lower().startswith("b") else str(c).strip().lower()
                                   for c in ((meta or {}).get("channels_recorded") or [])}
             _mask_tipper = bool(_declared_channels) and not ({"hz"} & _declared_channels)
+            # The electric half of the same declaration. Either horizontal electric channel is
+            # enough to make an impedance possible, so the mask asks for BOTH to be absent.
+            _mask_impedance = bool(_declared_channels) and not ({"ex", "ey"} & _declared_channels)
             stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
                                                        report=_gate_report, station_ids=_station_ids,
-                                                       mask_tipper=_mask_tipper) \
+                                                       mask_tipper=_mask_tipper,
+                                                       mask_impedance=_mask_impedance) \
                 if _edi_in else ([], [], [])
             if _xml_in:
                 # OWNER PRECEDENCE RULING (2026-08-03): EDI wins per station. The exclusion set is the
@@ -5715,6 +5772,13 @@ def _main_build(argv=None):
             _survey_warnings.append(
                 f"tipper masked survey-wide by the channels_recorded declaration (no vertical "
                 f"coil recorded) for {len(_decl_masked)} station(s)")
+        _z_decl_masked = list(_gate_report.get("impedance_masked_by_declaration", []))
+        if _z_decl_masked:
+            _survey_warnings.append(
+                f"impedance masked survey-wide by the channels_recorded declaration (no electric "
+                f"field recorded) for {len(_z_decl_masked)} station(s): the derived resistivity, "
+                f"phase, phase-tensor, error and quality products are withheld and the source "
+                f"files are still served byte for byte")
         _sheet_orphans = sorted(set(_survey_run_sheet) - _sheet_rows_consumed)
         if _sheet_orphans:
             _run_notes.append(

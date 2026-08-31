@@ -1,0 +1,88 @@
+ >HEAD
+
+   DATAID="MASKZ2"
+   ACQBY="AusMT test fixture"
+   PROSPECT="Impedance block length fixture"
+   LOC="Fixture"
+   LAT=-18.443
+   LONG=127.665
+   ELEV=  0.00
+
+ >INFO   MAXLINES=1000
+
+   MINTED FIXTURE - NOT CUSTODIAN DATA. The defect it carries was measured on
+   the seventeen files of halls-creek-2000 in the AusMT GDS staging at
+   GDS/_staging/surveys - reference shape
+   halls-creek-2000/transfer_functions/edi/ALD40.edi - where the fabricated
+   impedance blocks declare the section's NFREQ but carry fewer values than
+   that. mt_metadata fails the whole file on the resulting broadcast refusal
+   and the station is lost with its real tipper. No byte is copied from a
+   staged file: the identity is invented and the tipper values are minted for
+   this test. Here the section declares six frequencies and the four ZYY
+   blocks carry four values.
+
+ >=DEFINEMEAS
+
+   MAXCHAN=5
+   MAXRUN=999
+   MAXMEAS=99999
+   UNITS=M
+   REFTYPE=CART
+   REFLAT=-18.443
+   REFLONG=127.665
+   REFELEV=  0.00
+
+ >HMEAS ID= 1001.001 CHTYPE=HX X =  .000000  Y =  .000000  AZM =  .000000
+ >HMEAS ID= 1002.001 CHTYPE=HY X =  .000000  Y =  .000000  AZM=  90.0000
+ >HMEAS ID= 1003.001 CHTYPE=HZ X =  .000000  Y =  .000000  AZM=  .000000
+
+ >=MTSECT
+  SECTID=MASKZ2
+   NFREQ=    6
+   HX = 1001.001
+   HY = 1002.001
+   HZ = 1003.001
+
+ >!****FREQUENCIES****!
+ >FREQ NFREQ=  6  ORDER=INC //  6
+    0.16276E-04    0.20345E-04    0.24414E-04    0.32552E-04    0.40690E-04    0.48828E-04
+ >!****IMPEDANCES****!
+ >ZXXR //  6
+0 0 0 0 0 0
+ >ZXXI //  6
+0 0 0 0 0 0
+ >ZXX.VAR //  6
+0 0 0 0 0 0
+ >ZXYR //  6
+1 1 1 1 1 1
+ >ZXYI //  6
+1 1 1 1 1 1
+ >ZXY.VAR //  6
+1 1 1 1 1 1
+ >ZYXR //  6
+1 1 1 1 1 1
+ >ZYXI //  6
+1 1 1 1 1 1
+ >ZYX.VAR //  6
+1 1 1 1 1 1
+ >ZYYR //  6
+0 0 0 0
+ >ZYYI //  6
+0 0 0 0
+ >ZYY.VAR //  6
+0 0 0 0
+ >!****TIPPER PARAMETERS****!
+ >TXR.EXP ROT=0.0 //  6
+    0.63956E-01    0.11577E+00    0.14710E+00    0.81407E-01    0.57683E-01    0.25813E-01
+ >TXI.EXP ROT=0.0 //  6
+   -0.21400E-01   -0.34200E-01   -0.41100E-01   -0.29700E-01   -0.18300E-01   -0.11900E-01
+ >TXVAR.EXP ROT=0.0 //  6
+    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01
+ >TYR.EXP ROT=0.0 //  6
+    0.11400E+00    0.92000E-01    0.71000E-01    0.48000E-01    0.31000E-01    0.19000E-01
+ >TYI.EXP ROT=0.0 //  6
+    0.83000E-01    0.71000E-01    0.62000E-01    0.44000E-01    0.29000E-01    0.17000E-01
+ >TYVAR.EXP ROT=0.0 //  6
+    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01
+
+ >END

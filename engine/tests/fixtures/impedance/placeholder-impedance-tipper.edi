@@ -1,0 +1,91 @@
+ >HEAD
+
+   DATAID="MASKZ1"
+   ACQBY="AusMT test fixture"
+   PROSPECT="Impedance mask fixture"
+   LOC="Fixture"
+   LAT=-41.73
+   LONG=147.72
+   ELEV=  0.00
+
+ >INFO   MAXLINES=1000
+
+   MINTED FIXTURE - NOT CUSTODIAN DATA. The block layout and the fabricated
+   impedance constants reproduce the shape of the 2002 FORTRAN conversion
+   output held in the AusMT GDS staging at GDS/_staging/surveys - measured on
+   tamar-tasmania-1980s/transfer_functions/edi/AVO.edi whose own banner reads
+   "BOGUS IMPEDANCES ONLY FOR WINGLINK". No byte is copied from a staged file:
+   the header identity is invented and the tipper values below are minted for
+   this test. The point of the fixture is the impedance: ZXY and ZYX are the
+   constant 1+1i that a survey declaring no electric channels cannot have
+   measured.
+
+ >=DEFINEMEAS
+
+   MAXCHAN=7
+   MAXRUN=999
+   MAXMEAS=99999
+   UNITS=M
+   REFTYPE=CART
+   REFLAT=-41.73:0:0
+   REFLONG=147.72:0:0
+   REFELEV=  0.00
+
+ >HMEAS ID= 1001.001 CHTYPE=HX X = 0.  Y = 0.  AZM = 0.
+ >HMEAS ID= 1002.001 CHTYPE=HY X = 0.  Y = 0.  AZM= 90.
+ >HMEAS ID= 1003.001 CHTYPE=HZ X = 0.  Y = 0.  AZM= 0.
+ >EMEAS ID= 1004.001 CHTYPE=EX X = -100.  Y = 0. X2 = 100.  Y2 = 0.
+ >EMEAS ID= 1005.001 CHTYPE=EY X = 0.  Y = -100. X2 = 0.  Y2 = 100.
+
+ >=MTSECT
+  SECTID= MASKZ1
+   NFREQ=    6
+   HX = 1001.001
+   HY = 1002.001
+   HZ = 1003.001
+   EX = 1004.001
+   EY = 1005.001
+
+ >!****FREQUENCIES****!
+ >FREQ NFREQ= 6  ORDER=DEC // 6
+    0.16667E-02    0.83333E-03    0.41667E-03    0.26042E-03    0.13021E-03    0.65104E-04
+ >!****BOGUS IMPEDANCES ONLY FOR WINGLINK****!
+ >ZXXR // 6
+    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00
+ >ZXXI // 6
+    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00
+ >ZXX.VAR // 6
+    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00
+ >ZXYR // 6
+    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01
+ >ZXYI // 6
+    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01
+ >ZXY.VAR // 6
+    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00
+ >ZYXR // 6
+    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01
+ >ZYXI // 6
+    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01    0.10000E+01
+ >ZYX.VAR // 6
+    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00
+ >ZYYR // 6
+    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00
+ >ZYYI // 6
+    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00    0.20000E+00
+ >ZYY.VAR // 6
+    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00    0.10000E+00
+ >!****TIPPER PARAMETERS****!
+ >TXR.EXP ROT=0.0 // 6
+    0.21400E+00    0.28800E+00    0.36100E+00    0.44700E+00    0.52300E+00    0.61900E+00
+ >TXI.EXP ROT=0.0 // 6
+   -0.61000E-01   -0.94000E-01   -0.12700E+00   -0.15100E+00   -0.17300E+00   -0.11200E+00
+ >TXVAR.EXP ROT=0.0 // 6
+    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01
+ >TYR.EXP ROT=0.0 // 6
+    0.13100E+00    0.42000E-01   -0.31000E-01   -0.87000E-01   -0.10400E+00   -0.11900E+00
+ >TYI.EXP ROT=0.0 // 6
+    0.19600E+00    0.16400E+00    0.13300E+00    0.10100E+00    0.88000E-01    0.79000E-01
+ >TYVAR.EXP ROT=0.0 // 6
+    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01
+
+ >END
