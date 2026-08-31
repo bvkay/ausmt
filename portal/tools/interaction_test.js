@@ -3092,8 +3092,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(_gridCss.maxWidth === "1500px",
     "C3: .cardgrid must cap at 1500px so the grid never outruns the discovery bar above it, got maxWidth=" +
     JSON.stringify(_gridCss.maxWidth));
-  ok(/minmax\(\s*360px\s*,\s*1fr\s*\)/.test(_gridCss.gridTemplateColumns),
-    "C3: .cardgrid must lay out on a 360px minimum column so the cap yields four across, got " +
+  ok(/minmax\(\s*min\(\s*360px\s*,\s*100%\s*\)\s*,\s*1fr\s*\)/.test(_gridCss.gridTemplateColumns),
+    "C3: .cardgrid must lay out on a 360px minimum column so the cap yields four across, and that floor " +
+    "must be min(360px,100%) - a bare 360px cannot shrink, so a 375px phone scrolled sideways. Got " +
     JSON.stringify(_gridCss.gridTemplateColumns));
   // The cap is only coherent if it MATCHES the bar's; a grid capped at some other width would still be
   // a grid that does not line up with its controls.
