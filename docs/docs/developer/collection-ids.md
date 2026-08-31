@@ -36,3 +36,4 @@ The de-facto registry; add a row when a curator confirms a new programme id.
 | id | title | type |
 |---|---|---|
 | `auslamp` | AusLAMP | programme |
+| `australia-legacy-gds` | Australia legacy GDS | programme |
