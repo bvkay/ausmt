@@ -73,15 +73,17 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
-  /* UX3 item 4: three-zone header. Left = brand, centre = nav + page links (genuinely centred via the
-     flex:1 side zones), right = counts (the machine-readable MTCAT link now lives in the footer, UX7a A5).
-     Each zone is its own flex row so it
-     wraps sanely; the whole header still flex-wraps at narrow widths (see the 760px block). */
+  /* UX3 item 4: three-zone header. Left = brand, centre = nav + page links, right = counts (the
+     machine-readable MTCAT link now lives in the footer, UX7a A5). The side zones take equal
+     ZERO-basis shares (flex:1 1 0 + min-width:0, tests/test_header_geometry_parity.py): an auto
+     basis grew each side with its own content and shoved the "centred" tabs to a different x per
+     view/page. Each zone is its own flex row so it wraps sanely; the whole header still
+     flex-wraps at narrow widths (see the 760px block). */
   header{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
-  .hleft{flex:1 1 auto}
+  .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
-  .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
+  .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
   /* AuScope icon (white variant, vendored) replaces the old copper-square ::before as the header mark */
   .logolink{display:flex;align-items:center;flex:none}
@@ -91,7 +93,11 @@
      clearly bordered box with a ≥40px click target; the ACTIVE view is a filled copper box with dark
      text (#16110b on --copper = 6.44:1, AA). Inactive buttons read as buttons (bordered, panel fill,
      full-strength text), not muted links. */
-  nav{display:flex;gap:6px}
+  /* The container's wrap mode is a geometry input of the tabs themselves: nowrap and wrap hand
+     zero-basis flex children different resolved widths, so the static header and this one must
+     agree on it (tests/test_header_geometry_parity.py pins the whole rule pairwise). Wrap also
+     lets the tabs stack instead of clipping when the centre zone runs out of room. */
+  nav{display:flex;gap:6px;flex-wrap:wrap}
   nav button{flex:1;min-width:112px;min-height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
   nav button:hover{border-color:var(--copper)}
   nav button.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
@@ -446,20 +452,27 @@
   .colltable tbody tr:hover{background:var(--panel)}
   .colltable td a{color:var(--copper);text-decoration:none;font-weight:500}.colltable td a:hover{text-decoration:underline}
   .colltable .csub{font-size:12px;color:var(--muted);margin-top:1px}
-  /* Wide screens flow to five columns (owner ruling); the uncapped width lets auto-fill
-     decide, and the 300px floor keeps three-up on a typical laptop. */
-  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  /* FOUR across at the cap AND at a plain 1500px viewport (owner ruling; this overturns the five-up
+     note that used to sit here). Two things are load-bearing. The 352px floor sits low enough that
+     a plain 1500px viewport packs four columns (grid content 1460px after the view's 20px padding:
+     4*352 + 3*14 gap = 1450 <= 1460; the old 360px floor needed 1482 and stepped down to three;
+     the boundary is a 1490px viewport), and the 1500px cap is the SAME cap .discovery and .collfeature-grid already carry:
+     .cardgrid was the one uncapped grid on the view, so on a 2560px screen the cards ran far wider
+     than the controls that filter them. Under the cap the floor yields exactly four and never a
+     fifth (1816), at any width; four-across is the ceiling by ruling.
+     The floor is min(352px,100%), not a bare 352px: a bare minimum cannot shrink, so on a 375px
+     phone the single column plus the page's own 20px padding would overflow the viewport and the
+     page would scroll sideways. Below 352px of container the track takes the container instead. */
+  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(352px,100%),1fr));gap:14px;max-width:1500px}
   .surveymeta{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
   .surveymeta a{color:var(--copper);text-decoration:none}
   .surveymeta .pidline{font-family:var(--mono);word-break:break-all}
   .emptynote{color:var(--muted);font-size:13px;padding:30px 4px}
   .scard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column}
-  .scard .desc{display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
   .scard .cardbtns{margin-top:auto;padding-top:10px}
   .scard h3{font-size:18px;margin-bottom:2px}.scard .cust{font-size:12px;color:var(--muted)}
   .scard .stats{font-family:var(--mono);font-size:12px;margin:10px 0;line-height:1.7}.scard .stats b{color:var(--copper)}
   .mixbar{display:flex;height:7px;border-radius:3px;overflow:hidden;margin:8px 0}
-  .scard .desc{font-size:12px;color:var(--muted);line-height:1.5;margin:8px 0;font-style:italic}
   .scard .cite{font-size:12px;line-height:1.5;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}.scard .cite a{color:var(--copper)}
   /* UX6 Wave B (B2): "not recorded"/absence markers use neutral --muted, not amber --part — absence is
      ordinary, amber is reserved for genuine attention. Size raised to the 12px floor (was 10px). */
@@ -582,17 +595,14 @@
   .tourbtns .tourprimary:hover{border-color:var(--copper)}
 
   /* --- S3: year range / downloadable-only / go-to-place / recently-added --- */
-  .yearrange{display:flex;align-items:center;gap:8px}
-  .yearrange input{width:0;flex:1;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
-  .yearrange span{color:var(--muted)}
   .fieldnote{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}
-  .recentlist{list-style:none;display:flex;flex-direction:column;gap:6px}
-  .recentlist li{font-size:12.5px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
-  .recentlist a{color:var(--text);text-decoration:none}
-  .recentlist a:hover{color:var(--copper);text-decoration:underline}
-  .recentlist .ra-date{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
-  #recentStrip{margin-bottom:16px}
-  #recentStrip h2{margin-bottom:8px}
+  /* C4 (brief 9, Option A): ONE wrapping line, capped with the grid and the discovery bar so all three
+     line up. The old form was a heading over a column of rows, which on a wide screen was a large sparse
+     block of empty space between the reader and the catalogue. */
+  #recentStrip{max-width:1500px;margin:0 0 16px;font-size:12.5px;line-height:1.9;color:var(--muted)}
+  #recentStrip .ra-label{color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-size:12px}
+  #recentStrip a{color:var(--text);text-decoration:none}
+  #recentStrip a:hover{color:var(--copper);text-decoration:underline}
 
   /* ===== UX6 Wave D — map page + sidebar structure ============================================== */
   /* D2: Browse / Select-&-export mode panes. Wrapping the rail sections in two containers costs them
@@ -692,6 +702,14 @@
   .disc-search:focus{outline:none;border-color:var(--copper)}
   .disc-facets{display:flex;flex-wrap:wrap;gap:6px}
   .disc-spacer{flex:1 1 auto;min-width:0}
+  /* C6: the year range promoted out of the rail. Sized for a bar rather than a column - the two
+     year boxes are four digits wide, not full-width fields. */
+  .disc-years{font-size:12.5px;color:var(--muted)}
+  .disc-years-in{display:flex;align-items:center;gap:6px}
+  .disc-years-in span{color:var(--muted)}
+  .disc-years-in input{width:5.5em;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:12.5px}
+  .disc-years-in input:focus{outline:none;border-color:var(--copper)}
+  .disc-yearnote{flex-basis:100%;margin-top:0}
   .facet{font-size:12px;padding:5px 10px;border-radius:14px;border:1px solid var(--line);background:var(--panel-2);
     color:var(--muted);cursor:pointer}
   .facet:hover{border-color:var(--copper);color:var(--text)}
@@ -770,7 +788,11 @@
   <div class="hzone hright">
     <!-- UX7a (A5): the MTCAT machine-readable link moved to the footer (bottom-left). The header's right
          zone now carries only the live counts. -->
-    <div class="counts" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</div>
+    <!-- C5 (owner R12): one SHELL, a contextual SLOT. .counts is the same element in the same place on
+         every view; #countSlot's content is what changes, and filters.js updateCounts() owns it. The
+         markup here is the MAP form (the three station counts and the ids the app paints), which is
+         both the boot state and the form the slot is rebuilt into whenever the map is showing. -->
+    <div class="counts" id="headerCounts"><span id="countSlot" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</span></div>
   </div>
 </header>
 
@@ -815,21 +837,12 @@
          The Download block prices the scope; this control only decides what the map shows. -->
     <select id="availSel" aria-label="Data available">
       <option value="">Any</option>
-      <option value="tf">Transfer functions downloadable here</option>
       <option value="raw_packed">Packed raw time series</option>
       <option value="level0">Level 0 time series</option>
       <option value="level1_mth5">Level 1 MTH5</option>
       <option value="level1_netcdf">Level 1 NetCDF</option>
     </select>
     <div class="fieldnote">Selecting a level keeps the stations whose files are ready to fetch.</div>
-    <h2 id="yearRangeHead" title="Filters on each survey's declared acquisition year(s)">Year range</h2>
-    <div class="yearrange">
-      <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
-      <span>–</span>
-      <input type="number" id="yearTo" aria-label="To year" inputmode="numeric">
-    </div>
-
-    <div class="fieldnote">Filters on each survey's declared year(s); surveys with no declared date are hidden once a year is set.</div>
     </details>
   </section>
   <div class="collgroup" id="collGroup" data-views="both"></div>
@@ -901,13 +914,13 @@
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
   <div id="map"></div>
-  <div id="surveysview"><div id="recentStrip" class="hidden"></div>
+  <div id="surveysview">
     <!-- Discovery controls: a surveys-view search (name/org/region/blurb; cleanup wave B, replaces the
          rail #find here), sort, live result count, facet chips (Open licence + data-type BBMT/LPMT/AMT/GDS),
          a compact/list toggle and clear-filters. Wired in drawer.js; state lives there. There is
          deliberately NO sort or facet for the automated completeness/smoothness check (never a ranking). -->
     <div class="discovery" id="discoveryControls">
-      <input type="text" id="surveySearch" class="disc-search" placeholder="Search surveys…" aria-label="Search surveys by name, organisation, region or description" autocomplete="off">
+      <input type="text" id="surveySearch" class="disc-search" placeholder="Search surveys, organisations or locations..." aria-label="Search surveys by name, organisation, region or description" autocomplete="off">
       <label class="disc-sort">Sort
         <select id="sortSel">
           <option value="name">Name</option>
@@ -918,13 +931,33 @@
       </label>
       <span class="disc-count" id="surveyCount" role="status" aria-live="polite"></span>
       <div class="disc-facets" id="facetChips" aria-label="Filter surveys"></div>
+      <!-- C6: the year range, promoted out of the map rail. Same ids, same inputs, so the predicate
+           (filters.js passesYearRange) reads them exactly as it always did; what changed is that they
+           are now on the view where choosing a survey happens. applyYearRangeHints fills the
+           placeholders, the min/max attrs and the corpus-range suffix on #yearRangeHead. -->
+      <span class="disc-years" id="yearRangeHead">Year range</span>
+      <div class="disc-years-in">
+        <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
+        <span>-</span>
+        <input type="number" id="yearTo" aria-label="To year" inputmode="numeric">
+      </div>
       <span class="disc-spacer"></span>
       <div class="seg disc-layout" id="layoutSeg" role="group" aria-label="Card layout">
         <button type="button" data-layout="cards" class="on">Cards</button>
         <button type="button" data-layout="compact">Compact</button>
       </div>
       <button type="button" id="clearFilters" class="disc-clear">Clear filters</button>
+      <!-- The year filter's own rule, restored as visible copy where the rail used to carry it. A set
+           year hides every undated survey, which is a SILENT exclusion; a title attribute states it only
+           to a reader with a mouse. Last child of the bar and full-width, so it wraps onto its own line
+           without breaking the controls' row (and #recentStrip stays the bar's next sibling). -->
+      <div class="fieldnote disc-yearnote" id="yearRangeNote">Filters on each survey's declared acquisition year(s); surveys with no declared date are hidden once a year is set.</div>
     </div>
+    <!-- C4 (brief 9, Option A): the recently-added strip is one wrapping line and sits BELOW the
+         discovery controls, so the controls open the view and the strip reads as a shortcut into the
+         grid rather than a preamble to it. main.js renderRecentlyAdded fills it; the 30-day
+         build-window rule that decides WHAT it lists is untouched. -->
+    <div id="recentStrip" class="hidden"></div>
     <div class="cardgrid" id="cardGrid"></div></div>
   <div id="collectionsview"><div class="cardgrid" id="collectionsGrid"></div></div>
   <div id="collectionview"></div>

@@ -207,7 +207,11 @@ function sourcesListHtml(m){const srcs=(m&&m.sources)||[];
     const cust=esc((s.custodian||"unknown custodian").toString().trim());
     const idv=(s.identifier||"").toString().trim();
     const ident=idv?" · "+pidLink(idv):"";
-    const slic=esc(licCanon(s.licence)||"licence not stated");
+    // Owner R3: this row is CHROME, not a data slot, and it sits on the same drawer as the licence /
+    // access row, so it takes the human form. licCanon still does the canonicalisation (aliases, case);
+    // licHuman only decides how the canonical id is READ. The SPDX identifier stays untouched wherever a
+    // machine reads it: the exports, the GeoJSON properties and the citation builder.
+    const slic=esc(licHuman(licCanon(s.licence))||"licence not stated");
     const stmt=(s.statement||"").toString().trim();
     const attr=stmt?esc(stmt):esc(sourceAttr(s));
     return `<div class="srcitem"><div class="srct">${title}</div><div class="srcm">${cust}${ident} · <span class="prov">${slic}</span></div>${attr?`<div class="srca">${attr}</div>`:""}</div>`;
@@ -594,7 +598,7 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
       `<span id="lineage-fwb" data-ausmt="${escAttr(s.ausmt_id)}">${_fw?esc(_fw.writer):"loading…"}</span>`]);
   }
   nodes.push(
-   ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"–"}`],
+   ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"-"}`],
    ["Distributed formats",esc(distributedFormatsText(s,m))],
    ["Publication (interpretation)",publicationCell(m)]
   );
@@ -741,7 +745,7 @@ function screeningIndicators(d){
   ];
 }
 function _indGlyph(st){return st==="green"?"✔":st==="amber"?"◐":st==="red"?"✗":"◌";}
-function _indWord(st){return st==="green"?"Green":st==="amber"?"Amber":st==="red"?"Red":"–";}
+function _indWord(st){return st==="green"?"Green":st==="amber"?"Amber":st==="red"?"Red":"-";}
 function screeningIndicatorList(inds){
   return `<ul class="indlist">`+inds.map(it=>{
     const cls=it.state==="green"?"ok":it.state==="amber"?"part":it.state==="red"?"no":"na";
@@ -762,7 +766,7 @@ function stationSummaryDetails(s,m,sc){
   // the ausmt_id, and the collection title (row omitted entirely when the survey is in no collection).
   const stationRows=[["coordinates",coordCellHtml(s)]];
   if(s.site_name&&s.site_name!==s.id)stationRows.push(["site name",esc(s.site_name)]);
-  stationRows.push(["data type",esc(s.type||"–")]);   // no long-form gloss exists in the corpus yet; show the code
+  stationRows.push(["data type",esc(s.type||"-")]);   // no long-form gloss exists in the corpus yet; show the code
   stationRows.push(["ausmt_id",esc(s.ausmt_id)]);
   if(m.collection&&m.collection.id)stationRows.push(["collection",esc(m.collection.title||m.collection.id)]);
   // Survey-drawer lane, amendment 2 (owner, the ONE scoped exception to "station drawers untouched"): the
@@ -777,8 +781,8 @@ function stationSummaryDetails(s,m,sc){
   // ("not recorded", "not stated in EDI") are claims about the source EDI. Those two wait.
   const sciGate=hydrGate("sci","processing details");
   const tf=_ssGroup("Transfer function",[
-    ["periods",`${fmtP(s.pmin)}–${fmtP(s.pmax)} s`],
-    ["components",(esc(s.comps.split("").join(" + "))||"–")],
+    ["periods",`${fmtRange(fmtPeriod(s.pmin),fmtPeriod(s.pmax))} s`],
+    ["components",(esc(s.comps.split("").join(" + "))||"-")],
     ["tipper",s.comps.includes("T")?"yes":"no"],
     ["remote reference",sciGate||(sc[SC.rr]?"yes":"not recorded")]]);
   // R4: the "Data checks" group (the TF error row) is REMOVED per owner ruling — reversibly commented per
@@ -812,7 +816,7 @@ function openStation(i,opts){
   const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
   if(!rehydrate)location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
   const azs=[],azPers=[];if(t[T.pt_az])t[T.pt_az].forEach((a,k)=>{if(a!=null&&t[T.pt_beta][k]!=null&&Math.abs(t[T.pt_beta][k])<5){azs.push(((a%180)+180)%180);const _pk=t[T.periods]&&t[T.periods][k];if(_pk!=null)azPers.push(_pk);}});
-  const _perTxt=azPers.length?` over ${fmtP(Math.min(...azPers))}–${fmtP(Math.max(...azPers))}s`:"";
+  const _perTxt=azPers.length?` over ${fmtRange(fmtPeriod(Math.min(...azPers)),fmtPeriod(Math.max(...azPers)))} s`:"";
   // Per-period 3-D screening threshold echoed from the build's own provenance (never hard-coded); when
   // build_provenance.json isn't loaded the degree figure is simply omitted rather than fabricated.
   const _bp=(typeof PROV!=="undefined"&&PROV&&PROV.parameters&&PROV.parameters.dimensionality)||{};const _betaThr=_bp.beta_per_period_deg;
@@ -834,10 +838,12 @@ function openStation(i,opts){
   // ---- UX6 Wave C: sticky header (identity + chips + primary actions) + tab strip -------------------
   const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}${TYPE_INK[s.type]?";color:"+TYPE_INK[s.type]:""}">${esc(s.type)}</span>`;
   const collChip=(m.collection&&m.collection.id)?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"";
-  // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if neither.
-  const yearTxt=m.dates?esc(m.dates):(m.year_start?esc(String(m.year_start))+(m.year_end&&m.year_end!==m.year_start?"–"+esc(String(m.year_end)):""):"");
+  // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if
+  // neither. This was a verbatim second copy of acqYearText, which is how the station chip could have
+  // kept an en-dash range while the card moved to the spaced hyphen; it now calls the one helper.
+  const yearTxt=acqYearText(m);
   const yearChip=yearTxt?`<span class="hchip">${yearTxt}</span>`:"";
-  const licBadge=badge(m.lic||"licence ?",licBadgeState(m.lic));
+  const licBadge=badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic));
   // UX8 (X4, owner ruling): Response is the default tab and Overview is gone (its facts fold into the
   // Response tab's "Station summary" collapsible). Four tabs active (Screening is commented out pending design review); Response first.
   // HIDDEN pending design review (owner 2026-07-22): screening surface not public-ready — restore by uncommenting the ["screening","Screening"] entry.
@@ -933,7 +939,7 @@ function openStation(i,opts){
     // rendered VERBATIM (no client-side re-rounding) with a "position generalised" badge driven by the
     // engine's coord_policy marker (A1). coordCellHtml encapsulates all three; hasPosition is the shared predicate.
     `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
-    `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"}</td></tr>`+
+    `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"-"}</td></tr>`+
     `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`;
   // X8: the Metadata & API box collapses to a single small "API" expander at the tab's foot.
   // api-docs lane: the section used to advertise a "Read API (planned)" over three paths under an /api
@@ -1071,20 +1077,10 @@ async function downloadUrl(url,filename){
   catch(e){toast("Download works when served over HTTP next to the data files; can't fetch over file://.");}}
 function copyTxt(t){navigator.clipboard?.writeText(t).then(()=>toast("Copied.")).catch(()=>toast("Copy failed; select manually."));}
 
-// UX3 item 6: the survey card description comes from the survey.yaml abstract, which the engine already
-// carries into SMETA as m.blurb (build_portal.py). Render the escaped abstract when present and non-empty;
-// otherwise an HONEST muted single line — no fabricated marketing copy (the old hardcoded placeholder
-// implied content that wasn't there). esc() makes a hostile abstract (e.g. <img onerror=…>) render inert.
-function cardDesc(m){
-  const blurb=(m&&typeof m.blurb==="string")?m.blurb.trim():"";
-  return blurb
-    ? `<div class="desc">${esc(blurb)}</div>`
-    : `<div class="desc desc-empty">No survey description provided; add an <code>abstract</code> to survey.yaml.</div>`;
-}
 // UX6 Wave E: a survey's declared acquisition window as display text — the dates string when present,
 // else the year_start(-end) range; "" when neither is declared (caller omits the field). Shared by the
 // slim survey card and the compact list row so both read the same value.
-function acqYearText(m){return m.dates?esc(m.dates):(m.year_start?esc(String(m.year_start))+(m.year_end&&m.year_end!==m.year_start?"–"+esc(String(m.year_end)):""):"");}
+function acqYearText(m){return m.dates?esc(m.dates):(m.year_start?(m.year_end&&m.year_end!==m.year_start?fmtRange(esc(String(m.year_start)),esc(String(m.year_end))):esc(String(m.year_start))):"");}
 // UX6 Wave E (E1): SLIM survey card. Field set is deliberately reduced to: title · organisation ·
 // collection chip · acquisition year · station count · data-type mixbar · period range · licence + DOI
 // badges · short description · two actions (View survey, Download). The heavier blocks that used to live
@@ -1101,9 +1097,8 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}</div>`+
    surveyLocator(ss)+
    `<div class="mixbar">${mixbar}</div>`+
-   `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtP(pmin)}–${fmtP(pmax)}s</b></div>`+
-   `<div class="badges">${badge(m.lic||"licence ?",licBadgeState(m.lic))}${badge("DOI",hasDatasetDoi(m)?"ok":"no")}</div>`+
-   cardDesc(m)+
+   `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))} s</b></div>`+
+   `<div class="badges">${badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic))}${badge("DOI",hasDatasetDoi(m)?"ok":"no")}</div>`+
    `<div class="cardbtns"><a class="primary" href="/surveys/${escAttr(m.slug||sv)}">View survey →</a><button data-act="select" data-survey="${escAttr(sv)}">Download</button></div></div>`;}
 // Per-survey card locator (owner ruling 2026-08-28): the SAME fixed-Australia treatment as the
 // collection scatter, one survey's stations only, dots coloured by DATA TYPE with the portal's own
@@ -1381,7 +1376,9 @@ function pubsHtml(m){const ps=(m.pubs||[]);
 // faceting by the automated completeness/smoothness check — the screen must never become a ranking, so
 // none of the sort modes or facets below reference s.q / the check.
 let _sortMode="name",_cardLayout="cards";
-const _facets={lic:false};                          // presence facets (currently just "Open licence")
+// C6: presence facets. "dl" (Downloadable here) was promoted out of the map rail, where it lived as
+// the Data available dropdown's "tf" option and so could not be asked at all on the Surveys view.
+const _facets={lic:false,dl:false};
 const _typeFacets=new Set();                        // selected data-type chips, OR-combined within the group
 const _TYPE_ORDER=["BBMT","LPMT","AMT","GDS"];      // canonical chip order; only corpus-present types render
 function _stationCount(sv){return ST.filter(s=>s.survey===sv).length;}
@@ -1392,11 +1389,27 @@ function _presentTypes(){const have=new Set(ST.map(s=>s.type));return _TYPE_ORDE
 function _yearKey(m){return m.year_start!=null?m.year_start:(m.year_end!=null?m.year_end:-Infinity);}
 function surveyPassesFacets(sv){const m=SMETA[sv]||{};
   if(_facets.lic&&!licIsOpen(m.lic))return false;   // "Open licence": an openly-licensed (redistributable) id per the canon tables
+  // C6 "Downloadable here": the SAME s.ediAvail predicate the map applies per station, asked of a survey
+  // - it passes when ANY of its stations carries a transfer function this portal may serve.
+  if(_facets.dl&&!ST.some(s=>s.survey===sv&&s.ediAvail))return false;
+  // C6 year range: the survey-level reading of passesYearRange's semantics. An undated survey passes
+  // while both inputs are empty and fails as soon as either is set, because a reader who typed a year is
+  // asking for DATED data and including undated surveys would misrepresent the range as covering them.
+  if(!_surveyPassesYears(m))return false;
   if(_typeFacets.size){                             // type chips: a survey passes if ANY of its stations' type is selected
     const types=_surveyTypeSet(sv);let any=false;
     _typeFacets.forEach(t=>{if(types.has(t))any=true;});
     if(!any)return false;}
   return true;}
+// C6: the promoted facets gate the MAP's own predicates too (filters.js passesCore), and _facets is
+// this module's state, so it is read through one named accessor rather than reached into.
+function surveyFacetOn(k){return !!_facets[k];}
+// The survey-level reading of ONE rule, which lives in filters.js (passesYearWindow) and used to live
+// here as a second verbatim copy. Only the field names differ between the two surfaces, so only the field
+// names belong here. Guarded like the other cross-module calls: a harness that loads drawer.js without
+// filters.js has no filter UI either, which is the same no-op the rule itself returns.
+function _surveyPassesYears(m){
+  return (typeof passesYearWindow==="function")?passesYearWindow(m.year_start,m.year_end):true;}
 function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
   if(_sortMode==="stations")arr.sort((a,b)=>_stationCount(b)-_stationCount(a)||a.localeCompare(b));
   else if(_sortMode==="year")arr.sort((a,b)=>_yearKey(m(b))-_yearKey(m(a))||a.localeCompare(b));       // newest first
@@ -1409,17 +1422,18 @@ function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
 // Compact/list layout row (E3): a single line — title, org, acquisition year, station count, licence badge.
 function surveyRow(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};const yearTxt=acqYearText(m);
   return `<div class="srow"><button class="srow-title" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</button>`+
-    `<span class="srow-org">${esc(m.org||"–")}</span>`+
-    `<span class="srow-year">${yearTxt||"–"}</span>`+
+    `<span class="srow-org">${esc(m.org||"-")}</span>`+
+    `<span class="srow-year">${yearTxt||"-"}</span>`+
     `<span class="srow-stn">${ss.length} station${ss.length===1?"":"s"}</span>`+
-    `<span class="srow-lic">${badge(m.lic||"licence ?",licBadgeState(m.lic))}</span></div>`;}
+    `<span class="srow-lic">${badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic))}</span></div>`;}
 function renderDiscovery(n){
   const cnt=document.getElementById("surveyCount");
   if(cnt)cnt.textContent=n+" survey"+(n===1?"":"s");
   const fc=document.getElementById("facetChips");
   if(!fc)return;
   // "Open licence" (presence) + one chip per corpus-present data type (BBMT/LPMT/AMT/GDS), multi-select.
-  const chips=[`<button type="button" class="facet${_facets.lic?" on":""}" data-facet="lic" aria-pressed="${_facets.lic?"true":"false"}">Open licence</button>`];
+  const chips=[`<button type="button" class="facet${_facets.lic?" on":""}" data-facet="lic" aria-pressed="${_facets.lic?"true":"false"}">Open licence</button>`,
+    `<button type="button" class="facet${_facets.dl?" on":""}" data-facet="dl" aria-pressed="${_facets.dl?"true":"false"}" title="Surveys whose transfer functions this portal may serve directly">Downloadable here</button>`];
   _presentTypes().forEach(t=>{const on=_typeFacets.has(t);
     chips.push(`<button type="button" class="facet${on?" on":""}" data-type-facet="${escAttr(t)}" aria-pressed="${on?"true":"false"}">${esc(t)}</button>`);});
   fc.innerHTML=chips.join("");}
@@ -1443,7 +1457,11 @@ function clearDiscoveryFilters(){
   _typeFacets.clear();
   const s=document.getElementById("surveySearch");
   if(s&&s.value)s.value="";
-  renderCards();
+  // C6: the promoted year inputs are this bar's filters now, so Clear filters owes them a reset. Before
+  // the promotion they were the rail's, and a year left in them survived every "Clear filters" click.
+  ["yearFrom","yearTo"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+  // refresh() re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
+  if(typeof refresh==="function")refresh();else renderCards();
   if(typeof updateCounts==="function")updateCounts();}
 // Ruling 2: "View on map" from the survey drawer header. It used to CHECK ONLY this survey in the rail tree
 // and refresh(), which removed every other survey from the map: the reader lost all context for where the
@@ -1531,9 +1549,9 @@ function surveySummary(ss,m){
     if(sc[SC.rr]!=null){ rrKnown++; if(sc[SC.rr]) rr++; }
     if(s.pmin!=null) pmin=Math.min(pmin,s.pmin);
     if(s.pmax!=null) pmax=Math.max(pmax,s.pmax); });
-  const types=Object.keys(typeCount).sort().map(t=>`${t} ${typeCount[t]}`).join(" · ")||"–";
+  const types=Object.keys(typeCount).sort().map(t=>`${t} ${typeCount[t]}`).join(" · ")||"-";
   const software=m.software||Object.keys(swCount).sort((a,b)=>swCount[b]-swCount[a])[0]||"not recorded";
-  const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"–";
+  const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"-";
   // Embargoed surveys append the embargo date to the access cell ("embargoed until 2027-02-01"); any other
   // access state (or an embargo with no date) renders the bare level as before.
   const _acc=m.access||"open";
@@ -1541,22 +1559,22 @@ function surveySummary(ss,m){
   return `<div class="sechead">Survey summary <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(10-second view)</span></div><table class="meta">`+
     `<tr><td>stations</td><td>${ss.length}</td></tr>`+
     `<tr><td>data types</td><td>${esc(types)}</td></tr>`+
-    `<tr><td>period coverage</td><td>${isFinite(pmin)?fmtP(pmin)+" – "+fmtP(pmax)+" s":"–"}</td></tr>`+
+    `<tr><td>period coverage</td><td>${isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"-"}</td></tr>`+
     `<tr><td>tipper availability</td><td>${tipper} / ${ss.length} stations</td></tr>`+
     `<tr><td>remote reference</td><td>${sciGate||(rrKnown?`${rr} / ${rrKnown} stations`:"not recorded")}</td></tr>`+
     `<tr><td>instrumentation</td><td>${esc(m.instrument_model||"not recorded in source metadata")}</td></tr>`+
     `<tr><td>processing software</td><td>${sciGate||esc(software)}</td></tr>`+
-    `<tr><td>acquisition</td><td>${esc(m.dates||"–")}</td></tr>`+
+    `<tr><td>acquisition</td><td>${esc(m.dates||"-")}</td></tr>`+
     `<tr><td>collection</td><td>${coll}</td></tr>`+
-    `<tr><td>licence / access</td><td>${esc(m.lic||"?")} · ${_accTxt}</td></tr>`+
-    `<tr><td>version</td><td>${esc(m.version||"–")}</td></tr>`+
+    `<tr><td>licence / access</td><td>${esc(licHuman(m.lic)||"?")} · ${_accTxt}</td></tr>`+
+    `<tr><td>version</td><td>${esc(m.version||"-")}</td></tr>`+
     `</table>`;
 }
 // Release notes: shown only when a survey provides them (optional; no requirement for existing surveys).
 function releaseNotesHtml(m){
   const rn=m.release_notes;
   if(!Array.isArray(rn)||!rn.length) return "";
-  const rows=rn.map(e=>`<tr><td>${esc(e.version||"–")}</td><td>${esc(e.date||"")}${e.date&&e.note?": ":""}${esc(e.note||"")}</td></tr>`).join("");
+  const rows=rn.map(e=>`<tr><td>${esc(e.version||"-")}</td><td>${esc(e.date||"")}${e.date&&e.note?": ":""}${esc(e.note||"")}</td></tr>`).join("");
   return `<div class="sechead">Release notes</div><table class="meta">${rows}</table>`;
 }
 // Pre-built per-survey download bundles from the manifest (EDI zip + EMTF-XML zip always when served;
@@ -1739,7 +1757,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
        ?`<div class="prod dis"><span class="pdot" style="background:var(--part)"></span><div>Dataset DOI<small>reserved (not yet active)</small></div></div>`
        :`<div class="prod" data-act="doi" data-doi="${escAttr(m.doi)}"><span class="pdot" style="background:var(--ok)"></span><div>Dataset DOI<small>source archive</small></div></div>`):"")+
    `</div>`+
-   `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"–"}</div>`+
+   `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"-"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
    // Ruling 4: the collapsed identifiers rollup becomes the always-open DATA-LEVEL tile grid. The
    // Organisation ROR row is gone with it (owner) - the custodian's ROR still reaches the reader as the
@@ -1794,7 +1812,6 @@ function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&C
 // render. The projection is a plain equirectangular fit of the fixed AU box, so the outline and the dots
 // stay registered; the canvas aspect matches the box to avoid squashing.
 const AU_EXTENT={w:112,e:154,so:-44,no:-9};
-const COLL_PAL=["#2E8FA3","#EF7256","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
 // Fluid (viewBox + width:100%) so it scales inside its container; `maxW` optionally raises the max-width
 // cap (the detail-page hero gives it more room than a list card). W stays the viewBox coordinate space so
 // the geometry is identical regardless of rendered size. Both call sites pass just `ss` or `(ss,maxW)`.
@@ -1812,8 +1829,16 @@ function collScatter(ss,maxW){
     const borders=(AU_OUTLINE.borders||[]).map(r=>`<path d="M${pts(r)}" fill="none" stroke="#3a5266" stroke-width=".8" stroke-dasharray="3 3"/>`).join("");
     outline=`<g class="au-outline">${coast}${borders}</g>`;
   }
-  const members=[...new Set(ss.map(s=>s.survey))].sort();
-  const col=sv=>COLL_PAL[members.indexOf(sv)%COLL_PAL.length];
+  // The members that PLOT, which is the engine's `present` list (_pages.py _collection_scatter assigns
+  // colours over the members that have positioned stations) expressed with the SPA's own predicate. A
+  // wholly coordinate-withheld member is a live corpus state under C42; counting it here gave this ramp a
+  // different n from the page's and moved every later member's colour one step along it.
+  const members=[...new Set(ss.filter(hasPosition).map(s=>s.survey))].sort();
+  // C7: the SAME ramp the static collection page lays (state.js memberColours, twin of the engine's
+  // _member_colours). The old modulo handed the ninth member the first member's colour, so a
+  // ten-survey collection drew two surveys in one colour and its legend stopped meaning anything.
+  const _memberCols=memberColours(members.length);
+  const col=sv=>_memberCols[members.indexOf(sv)];
   const dots=ss.filter(hasPosition).map(s=>{const p=proj(s.lon,s.lat);
     return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${col(s.survey)}" fill-opacity=".9"><title>${esc(s.id)} · ${esc(s.survey)}</title></circle>`;}).join("");
   const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${cap}px;background:#16242f;border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
@@ -1828,14 +1853,14 @@ function openCollectionPage(cid){
   let pmin=Infinity,pmax=-Infinity,tip=0;
   ss.forEach(s=>{ if(s.pmin!=null)pmin=Math.min(pmin,s.pmin); if(s.pmax!=null)pmax=Math.max(pmax,s.pmax);
     if((s.comps||"").indexOf("T")>=0)tip++; });
-  const ext=c.bbox?`${(c.bbox.east-c.bbox.west).toFixed(1)}° × ${(c.bbox.north-c.bbox.south).toFixed(1)}°`:"–";
+  const ext=c.bbox?`${(c.bbox.east-c.bbox.west).toFixed(1)}° × ${(c.bbox.north-c.bbox.south).toFixed(1)}°`:"-";
   const stat=(lab,val)=>`<div class="cstat"><div class="cnum">${val}</div><div class="clab">${esc(lab)}</div></div>`;
   const rows=members.map(sv=>{const sub=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
     const tc={};sub.forEach(s=>{if(s.type)tc[s.type]=(tc[s.type]||0)+1;});
     const pmn=Math.min(...sub.map(s=>s.pmin).filter(v=>v!=null)),pmx=Math.max(...sub.map(s=>s.pmax).filter(v=>v!=null));
-    const types=Object.keys(tc).sort().map(t=>`${esc(t)} ${tc[t]}`).join(" · ")||"–";
-    return `<tr><td><a href="#" data-act="story" data-survey="${escAttr(sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"–")}</div></td>`+
-      `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtP(pmn)+"–"+fmtP(pmx)+"s":"–"}</td></tr>`;
+    const types=Object.keys(tc).sort().map(t=>`${esc(t)} ${tc[t]}`).join(" · ")||"-";
+    return `<tr><td><a href="#" data-act="story" data-survey="${escAttr(sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"-")}</div></td>`+
+      `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtRange(fmtPeriod(pmn),fmtPeriod(pmx))+" s":"-"}</td></tr>`;
   }).join("");
   const v=document.getElementById("collectionview");
   // Cleanup wave (E): a two-column HERO on wide screens; the abstract (+ the type/status/counts subline)
@@ -1854,7 +1879,7 @@ function openCollectionPage(cid){
      (ss.length?`<div class="collhero-aside">${collScatter(ss,720)}</div>`:"")+
    `</div>`+
    `<div class="cstats">`+stat("surveys",c.n_surveys)+stat("stations",c.n_stations)+
-     stat("period coverage",isFinite(pmin)?fmtP(pmin)+"–"+fmtP(pmax)+"s":"–")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
+     stat("period coverage",isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"-")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
    `<div class="csechead">Member surveys (${members.length})</div>`+
    `<table class="colltable"><thead><tr><th>Survey</th><th>Stations</th><th>Data&nbsp;types</th><th>Period&nbsp;range</th></tr></thead><tbody>${rows}</tbody></table>`;
   document.getElementById("map").style.display="none";
@@ -1869,6 +1894,9 @@ function openCollectionPage(cid){
   const _nc=document.getElementById("navCollections");if(_nc)_nc.classList.add("active");
   closeDrawer();
   v.style.display="block";v.scrollTop=0;curView="collection";
+  // C5: this is the one view switch that does NOT go through setView, so it owes the header counter the
+  // repaint setView would have given it - otherwise the slot keeps whatever the previous view left there.
+  if(typeof updateCounts==="function")updateCounts();
 }
 function dispatchProd(d){
   if(d.prod==="edi")fetchEdi(d.file,d.avail==="1",d.survey);
@@ -1948,7 +1976,9 @@ document.addEventListener("click",e=>{
   const fc=document.getElementById("facetChips");
   if(fc&&fc.addEventListener)fc.addEventListener("click",e=>{
     const lf=e.target.closest&&e.target.closest("[data-facet]");
-    if(lf){const k=lf.dataset.facet;if(k in _facets){_facets[k]=!_facets[k];renderCards();}return;}
+    // C6: "dl" gates passesCore as well as the catalogue, so a full refresh - the map has to follow it.
+    if(lf){const k=lf.dataset.facet;if(k in _facets){_facets[k]=!_facets[k];
+      if(k==="dl"&&typeof refresh==="function")refresh();else renderCards();}return;}
     const tf=e.target.closest&&e.target.closest("[data-type-facet]");
     if(tf){const t=tf.dataset.typeFacet;if(_typeFacets.has(t))_typeFacets.delete(t);else _typeFacets.add(t);renderCards();}});
 })();

@@ -349,10 +349,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "treeSetCollapsed,treeIsCollapsed,treeCollapsedKeys:()=>[..._treeCollapsed]," +
   "setType:(id,ty)=>{const s=ST.find(x=>x.id===id);if(s)s.type=ty;}," +
   "setSlug:(id,sl)=>{const s=ST.find(x=>x.id===id);if(s)s.slug=sl;}," +
-  // UX3 item 6/7 hooks: poke a survey's blurb (abstract) and read the rendered surveyCard/surveySummary
-  // HTML so the driver can assert the card description + XSS-inertness + fallback, and the removal of the
-  // dimensionality displays (while skew/strike stay). cardDesc exposed for a direct pure-function check.
-  "cardDesc,setBlurb:(sv,b)=>{SMETA[sv]=SMETA[sv]||{};if(b===null)delete SMETA[sv].blurb;else SMETA[sv].blurb=b;}," +
+  // UX3 item 7 hook: poke a survey's blurb (abstract) and read the rendered surveyCard/surveySummary
+  // HTML, so the driver can assert where the abstract renders (C2: the drawer story view, no longer the
+  // card) and the removal of the dimensionality displays (while skew/strike stay).
+  "setBlurb:(sv,b)=>{SMETA[sv]=SMETA[sv]||{};if(b===null)delete SMETA[sv].blurb;else SMETA[sv].blurb=b;}," +
   "cardHtml:(sv)=>surveyCard(sv),summaryHtml:(sv)=>surveySummary(ST.filter(s=>s.survey===sv),SMETA[sv]||{})," +
   // C22 citation-honesty hooks: the citation ASSEMBLY helpers (drawer.js apa/bibtex/ris + exports.js
   // citeLine) and the constants the #dlCite pack feeds them — exposed so section T can assert on the
@@ -362,7 +362,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "apa,bibtex,ris,AUSMT_SELF,NCI_CITE,TS_COLLECTION,citeLine:(c,d)=>citeLine(c,d),smeta:(sv)=>SMETA[sv]," +
   // UX6 Wave E hooks: collScatter (E6 footprint — driven with a stubbed AU_OUTLINE), renderCollections
   // (E5 landing), and openStationById (E7 focus — lets the driver control the invoking element before open).
-  "collScatter,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
+  "collScatter,memberColours,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
   // UX8 (X5/X7) + C46-W3b PURE helpers, exposed so the field->indicator/star mappings are unit-testable
   // (jsdom can't run real geometry): screeningIndicators(d) maps scalar inputs to the five indicator
   // states; maturityModel(m,sc) is the star model; licBadgeState/licIsOpen/attributionText are the W3b
@@ -1696,38 +1696,91 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // buildState()'s applyYearRangeHints() — min year_start / max year_end across SMETA, here 2010/2019 —
   // but must stay EMPTY on load (a value would immediately exclude Gamma under the filter semantics).
   const yearFrom = doc.getElementById("yearFrom"), yearTo = doc.getElementById("yearTo");
-  ok(yearFrom && yearTo, "#yearFrom/#yearTo inputs missing from the filter rail");
+  ok(yearFrom && yearTo, "#yearFrom/#yearTo inputs are missing");
+  // C6: the year range is a DISCOVERY filter and now lives in the discovery bar, its one home. The
+  // predicate below is unchanged, which is the point of moving the control rather than rewriting it
+  // (contract section 1, C6: "the rail's year-range and downloadable-only filters are PROMOTED into the
+  // discovery bar ... same behaviour, one home; the rail copies are removed").
+  ok(doc.getElementById("discoveryControls").contains(yearFrom) && doc.getElementById("discoveryControls").contains(yearTo),
+    "C6: the year-range inputs must live in the discovery bar");
+  ok(!doc.getElementById("filterPane").contains(yearFrom),
+    "C6: the rail copy of the year-range filter must be removed, not duplicated");
   ok(yearFrom.value === "" && yearTo.value === "", "year-range inputs must stay empty on load, got: " + JSON.stringify([yearFrom.value, yearTo.value]));
   ok(yearFrom.placeholder === "2010", "yearFrom placeholder should hint the corpus min (2010), got: " + yearFrom.placeholder);
   ok(yearTo.placeholder === "2019", "yearTo placeholder should hint the corpus max (2019), got: " + yearTo.placeholder);
   ok(yearFrom.min === "2010" && yearFrom.max === "2019", "yearFrom min/max attrs should be the corpus range, got: " + JSON.stringify([yearFrom.min, yearFrom.max]));
   const yearHead = doc.getElementById("yearRangeHead");
-  ok(yearHead && yearHead.textContent === "Year range (2010–2019)", "Year range label should append the corpus range, got: " + (yearHead && yearHead.textContent));
+  // C1 (owner R2): the corpus-range suffix takes the SPACED HYPHEN, like every other rendered range.
+  ok(yearHead && yearHead.textContent === "Year range (2010 - 2019)", "Year range label should append the corpus range with a spaced hyphen, got: " + (yearHead && yearHead.textContent));
+  // C6 (fix round): the promotion must not cost the control what the rail copy gave it. A <label> with
+  // no `for` and no wrapped control labels NOTHING - it only claims to - and the two inputs carry their
+  // own aria-labels, so the honest markup is a plain element.
+  const _lblFor = yearHead.tagName === "LABEL" ? yearHead.getAttribute("for") : null;
+  ok(yearHead.tagName !== "LABEL" ||
+     (_lblFor && doc.getElementById(_lblFor)) || yearHead.contains(yearFrom) || yearHead.contains(yearTo),
+    "C6: #yearRangeHead is a <label> with no `for` and no wrapped control, so it labels nothing; " +
+    "use a plain element or give it a real association. tagName=" + yearHead.tagName +
+    " for=" + JSON.stringify(_lblFor));
+  // ...and the rule this filter runs on must be READABLE. A set year hides every undated survey, which
+  // is a silent exclusion; the rail said so in visible copy, and the promotion left it only in a title
+  // attribute, which is unreachable by keyboard and on touch.
+  const yearNote = doc.getElementById("yearRangeNote");
+  ok(yearNote && /surveys with no declared date are hidden once a year is set/.test(yearNote.textContent),
+    "C6: the undated-survey rule must be visible copy beside the control, not a title attribute; got " +
+    JSON.stringify(yearNote && yearNote.textContent));
+  ok(yearNote && doc.getElementById("discoveryControls").contains(yearNote),
+    "C6: the year-range note belongs in the discovery bar, beside the control it explains");
   yearFrom.value = "2015"; fire(yearFrom, "input");
   ok(A.visSurveys().includes("Beta Survey"), "year filter wrongly excluded Beta Survey (within range)");
   ok(!A.visSurveys().includes("Alpha Survey"), "year filter did not exclude Alpha Survey (ended before 2015)");
   ok(!A.visSurveys().includes("Gamma Survey"), "year filter did not exclude the undated Gamma Survey once a year was set");
   ok(!A.visSurveys().includes("Delta Survey"), "year filter did not exclude the undated Delta Survey once a year was set");
   ok(A.visIds().length === 1, "expected exactly 1 visible station (B1) after the year filter, got " + A.visIds().length);
+  // ONE year window, read twice. The map filters STATIONS (filters.js passesYearRange) and the survey
+  // grid filters SURVEYS (drawer.js _surveyPassesYears); the two lived as verbatim copies of one rule in
+  // two files, which is the shape C1 removed from acqYearText and the reason an en dash could survive in
+  // one copy after the other moved. This pin holds the two readings together whatever the rule becomes.
+  A.setView("surveys"); A.renderCards();
+  const _gridSv = [...new Set([...doc.querySelectorAll("#cardGrid .scard [data-survey]")]
+    .map(b => b.dataset.survey))].sort();
+  ok(JSON.stringify(_gridSv) === JSON.stringify([...A.visSurveys()].sort()),
+    "C6: the survey grid and the map must read one year window the same way; grid " +
+    JSON.stringify(_gridSv) + " map " + JSON.stringify([...A.visSurveys()].sort()));
+  A.setView("map");
   yearFrom.value = ""; fire(yearFrom, "input");
   ok(A.visIds().length === 5, "clearing the year filter did not restore all 5 stations");
 
-  // K. AVAILABILITY > TRANSFER FUNCTIONS (R2, was the standalone "Downloadable here" checkbox): the
-  // capability is KEPT and the s.ediAvail PREDICATE is unchanged, which matters beyond this filter -
-  // the selection exports read the same flag for their three-way not-included honesty. Beta's B1 and
-  // embargoed Delta's D1 have edi_available=0; the rest =1.
+  // K. DOWNLOADABLE HERE (was the standalone tickbox, then the Data available dropdown's "tf" option,
+  // now a discovery chip): the capability is KEPT and the s.ediAvail PREDICATE is unchanged, which
+  // matters beyond this filter - the selection exports read the same flag for their three-way
+  // not-included honesty. Beta's B1 and embargoed Delta's D1 have edi_available=0; the rest =1.
+  // C6 (contract section 1) promoted the control into the discovery bar: it is a question about what a
+  // reader can take away, which is a DISCOVERY question, and it belongs beside the licence and type
+  // chips that ask the same kind of thing. The rail's "tf" option goes with it; the level chooser, which
+  // is about the NCI time-series index and not about this predicate, stays where it is.
   ok(!doc.getElementById("dlOnly") && !doc.getElementById("tfAvail"),
-    "the standalone tickbox controls are replaced by the Data available dropdown");
+    "the standalone tickbox controls are gone");
   const availSel = doc.getElementById("availSel");
   ok(availSel, "#availSel (Data available) missing from the Browse pane");
   ok(doc.getElementById("browseMode").contains(availSel),
-    "D1 (Lane B): the Data available filter is a VIEWING control and lives in Browse, beside data type");
-  availSel.value = "tf"; fire(availSel, "change");
-  ok(!A.visIds().includes("B1"), "Data available > TF did not exclude the non-downloadable station B1");
-  ok(!A.visIds().includes("D1"), "Data available > TF did not exclude the embargoed (non-downloadable) station D1");
-  ok(A.visIds().length === 3, "expected 3 visible stations with the TF option, got " + A.visIds().length);
-  availSel.value = ""; fire(availSel, "change");
-  ok(A.visIds().length === 5, "clearing Data available did not restore all 5 stations");
+    "D1 (Lane B): the time-series level filter is a VIEWING control and lives in Browse, beside data type");
+  ok([...availSel.options].every(o => o.value !== "tf"),
+    "C6: the rail copy of the downloadable-only filter must be removed from #availSel");
+  const dlChip = () => doc.getElementById("facetChips").querySelector('[data-facet="dl"]');
+  A.setView("surveys");
+  ok(dlChip(), "C6: a 'Downloadable here' chip must render in the discovery bar");
+  dlChip().click();
+  ok(!A.visIds().includes("B1"), "C6: the Downloadable here chip did not exclude the non-downloadable station B1");
+  ok(!A.visIds().includes("D1"), "C6: the Downloadable here chip did not exclude the embargoed (non-downloadable) station D1");
+  ok(A.visIds().length === 3, "C6: expected 3 visible stations with Downloadable here on, got " + A.visIds().length);
+  // ...and it narrows the CATALOGUE too, which the rail control could never do: the rail is hidden on
+  // the Surveys view, so until this moved there was no way to ask the question about survey cards.
+  ok(doc.querySelectorAll("#cardGrid .scard").length === 2,
+    "C6: the chip must narrow the card grid to the two surveys with downloadable transfer functions, got " +
+    doc.querySelectorAll("#cardGrid .scard").length);
+  dlChip().click();
+  ok(A.visIds().length === 5, "C6: clearing the Downloadable here chip did not restore all 5 stations");
+  A.setView("map");
 
   // K2. AVAILABILITY > TIME SERIES, the per-level chooser (R3/D7/D8), driven over a REAL index. The
   // fixture ships no ts_access.json, so the index is set directly here: A1 and A2 publish routes, B1
@@ -2100,8 +2153,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the accordion summary must read Advanced search");
   const _browse = doc.getElementById("browseMode");
   ok(_browse.contains(_adv), "Advanced search lives in the Browse pane");
-  ok(["find", "availSel", "yearFrom"].every(id => _adv.contains(doc.getElementById(id))),
-    "Advanced search must hold Find, Data available and the year range");
+  // C6: the year range left this accordion for the discovery bar (its rail copy is removed), so what
+  // Advanced search still holds is Find and the time-series level chooser.
+  ok(["find", "availSel"].every(id => _adv.contains(doc.getElementById(id))),
+    "Advanced search must hold Find and Data available");
+  ok(!_adv.contains(doc.getElementById("yearFrom")),
+    "C6: the year range must no longer be in the rail's Advanced search accordion");
   ok(!doc.getElementById("qSeg"), "the Min-TF-diagnostic group stays retired");
   ok(!doc.getElementById("colorSeg"), "colour-by is retired (owner D4) and must not render");
   ok(!doc.getElementById("pLo") && !doc.getElementById("pHi"),
@@ -2120,10 +2177,36 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!recents.some(e => e.sv === "Alpha Survey"), "recentlyAdded() must EXCLUDE Alpha (2012-05-01, outside the 30-day window)");
   ok(!recents.some(e => e.sv === "Gamma Survey" || e.sv === "Delta Survey"), "recentlyAdded() must omit the undated Gamma/Delta surveys");
   const recentStrip = doc.getElementById("recentStrip");
-  ok(recentStrip && /Recently added/.test(recentStrip.innerHTML), "#recentStrip did not render a 'Recently added' heading");
+  ok(recentStrip && /Recently added/.test(recentStrip.innerHTML), "#recentStrip did not render a 'Recently added' label");
   ok(recentStrip.innerHTML.indexOf("#/survey/" + recents[0].slug) >= 0,
     "#recentStrip did not link the recent survey by its #/survey/<slug> route");
   ok(!recentStrip.classList.contains("hidden"), "#recentStrip must be shown when the window has a survey");
+  // C4 (brief 9, Option A): the strip is a CONCISE HORIZONTAL LINE, not a block. It was a heading over a
+  // column of rows in a full-width container, which on a wide screen was a large sparse box of mostly
+  // empty space sitting between the reader and the catalogue. Option A is one wrapping line:
+  // "Recently added: Vulcan 2022 (interpunct) AusLAMP Queensland Phase 3". Pins moved with the markup per
+  // contract section 1, C4 ("section N pins move with the markup"); the WINDOW LOGIC above is untouched
+  // and its pins are unchanged, which is the point - this commit may only change how the strip reads.
+  ok(recentStrip.querySelector("h2") === null,
+    "C4: the strip must not open with a block heading; the label is inline (brief 9 Option A)");
+  ok(recentStrip.querySelector("ul, li") === null,
+    "C4: the strip must not render a vertical list; Option A is one wrapping line");
+  ok(/Recently added:/.test(recentStrip.textContent),
+    "C4: the inline label reads 'Recently added:', got " + JSON.stringify(recentStrip.textContent));
+  ok(recentStrip.querySelectorAll("a").length === recents.length,
+    "C4: the strip must link every survey in the window, got " + recentStrip.querySelectorAll("a").length +
+    " links for " + recents.length + " entries");
+  // The date is what makes an entry "recent", so it may not simply be dropped: it rides the link as its
+  // title, reachable without spending a second line on it.
+  ok((recentStrip.querySelector("a").getAttribute("title") || "").indexOf(recents[0].date) >= 0,
+    "C4: a strip link must carry its date, got title=" +
+    JSON.stringify(recentStrip.querySelector("a").getAttribute("title")));
+  // POSITION (contract C4): the strip sits directly BELOW the discovery controls, so the controls are
+  // the first thing on the view and the strip reads as a shortcut into the grid rather than a preamble.
+  const _dc = doc.getElementById("discoveryControls");
+  ok(_dc && _dc.nextElementSibling === recentStrip,
+    "C4: #recentStrip must sit directly below the discovery controls, got " +
+    JSON.stringify(_dc && _dc.nextElementSibling && _dc.nextElementSibling.id));
   // The map-rail recently-added section is GONE (deleted, not merely hidden): the leak was that section
   // un-hiding on every view. Neither the element nor its old wrapper must exist.
   ok(doc.getElementById("recentSide") == null && doc.getElementById("recentSideSection") == null,
@@ -2229,38 +2312,41 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // un-scoped tree (the restore hook puts the tree back); mirrors the section-CC tree reset below.
   A.setSidebarMode("browse");
 
-  // R. CARD DESCRIPTION FROM survey.yaml (UX feedback round 3, item 6): the survey card's .desc renders
-  // the escaped survey.yaml abstract (m.blurb) when present; a hostile abstract must render INERT; and an
-  // absent/blank abstract yields the honest muted fallback line — NOT fabricated marketing copy.
-  // (a) the OLD hardcoded placeholder is gone from every rendered card.
-  A.setBlurb("Alpha Survey", null);                      // ensure a known "absent" starting state
-  ok(A.cardHtml("Alpha Survey").indexOf("scraped from the EDIs automatically") < 0,
-    "the old hardcoded card-description placeholder must be gone");
-  // (b) a normal abstract renders as the description text.
+  // R. THE ABSTRACT LIVES IN THE RECORD, NOT ON THE CARD (C2, brief 4/6). The survey.yaml abstract used
+  // to render as a 12px muted italic block on every card, which made a grid of cards a wall of prose and
+  // pushed the facts a reader scans for below the fold. It is REMOVED from the card and stays where a
+  // reader who has chosen a survey meets it: the drawer story view here, and the static survey page,
+  // which the engine suite pins separately (engine/tests/test_entity_pages.py, "the survey blurb prose
+  // must render"). Pins moved from the card to the drawer per contract section 1, C2: "the abstract
+  // remains in the drawer story view and on the survey page (assert both still render it)".
+  // (a) the CARD carries no description block at all - not the abstract, not a fallback line.
   A.setBlurb("Alpha Survey", "A regional MT survey across the Gawler Craton.");
-  let cardA = A.cardHtml("Alpha Survey");
-  ok(cardA.indexOf("A regional MT survey across the Gawler Craton.") >= 0,
-    "card .desc did not render the survey.yaml abstract (m.blurb)");
-  // (c) HOSTILE-BLURB XSS: an abstract carrying an <img onerror=…> must be escaped to inert text — no live
-  //     tag, no raw onerror attribute in the rendered HTML. Assert against the actual jsdom-parsed card.
+  const cardWithBlurb = A.cardHtml("Alpha Survey");
+  ok(cardWithBlurb.indexOf('class="desc') < 0,
+    "C2: the card must carry no .desc block, got: " +
+    JSON.stringify((cardWithBlurb.match(/.{0,40}class="desc.{0,60}/) || [""])[0]));
+  ok(cardWithBlurb.indexOf("A regional MT survey across the Gawler Craton.") < 0,
+    "C2: the abstract must not render on the card");
+  ok(cardWithBlurb.indexOf("No survey description provided") < 0,
+    "C2: the card's absent-abstract fallback line goes with the block it belonged to");
+  ok(typeof A.cardDesc === "undefined",
+    "C2: cardDesc had exactly one call site (the card) and must not be left behind as dead code");
+  // (b) the DRAWER STORY VIEW still renders the abstract, which is the surface the card handed it to.
+  A.openSurvey("Alpha Survey");
+  ok(doc.getElementById("drawer").textContent.indexOf("A regional MT survey across the Gawler Craton.") >= 0,
+    "C2: the survey drawer must still render the survey.yaml abstract");
+  // (c) HOSTILE-BLURB XSS, moved to the surface that now renders it: an abstract carrying an
+  //     <img onerror=...> must be escaped to inert text - no live tag, no live handler, literal text kept.
   const XSS = "<img src=x onerror=\"window.__pwned=1\">pwn";
   A.setBlurb("Alpha Survey", XSS);
-  const holder = doc.createElement("div");
-  holder.innerHTML = A.cardHtml("Alpha Survey");
-  const desc = holder.querySelector(".desc");
-  ok(desc, "card has no .desc element for the hostile-blurb check");
-  ok(desc.querySelector("img") === null, "hostile blurb produced a LIVE <img> element (XSS not neutralised)");
-  ok(desc.innerHTML.indexOf("onerror") < 0 || desc.querySelector("[onerror]") === null,
-    "hostile blurb left a live onerror handler");
-  ok(desc.textContent.indexOf("pwn") >= 0, "escaped hostile blurb should still show its literal text");
+  A.openSurvey("Alpha Survey");
+  const drwX = doc.getElementById("drawer");
+  ok(drwX.querySelector("img[src='x']") === null, "hostile blurb produced a LIVE <img> element (XSS not neutralised)");
+  ok(drwX.querySelector("[onerror]") === null, "hostile blurb left a live onerror handler");
+  ok(drwX.textContent.indexOf("pwn") >= 0, "escaped hostile blurb should still show its literal text");
   ok(win.__pwned === undefined, "hostile blurb executed script (window.__pwned was set)");
-  // (d) absent/blank abstract -> honest muted fallback line (mentions the survey.yaml `abstract` field).
-  A.setBlurb("Alpha Survey", "   ");                     // whitespace-only counts as absent (trim())
-  ok(A.cardHtml("Alpha Survey").indexOf("No survey description provided") >= 0,
-    "blank abstract did not fall back to the honest 'No survey description provided' line");
   A.setBlurb("Alpha Survey", null);
-  ok(A.cardDesc({}).indexOf("No survey description provided") >= 0, "cardDesc({}) should return the fallback line");
-  ok(A.cardDesc({ blurb: "hi" }).indexOf("hi") >= 0, "cardDesc should render a present blurb");
+  doc.getElementById("drawer").classList.remove("open");
 
   // S. DIMENSIONALITY HIDDEN FROM SCREENING DISPLAYS (UX feedback round 3, item 7): removed from the
   // station-drawer screening grid (7a), the survey-card stats line (7b) and the survey-story table (7c) —
@@ -2902,8 +2988,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(legend.classList.contains("expanded") !== wasExpanded, "D6: the legend toggle did not flip the expanded state");
 
   // ===== UX6 WAVE E ==============================================================================
-  // BB. E1 SLIM SURVEY CARD. The card field set is reduced; the heavy blocks moved to the survey DETAIL.
+  // BB. THE WORKSPACE CARD. The card field set is reduced; the heavy blocks moved to the survey DETAIL.
   // Each pin states what it fails on. (Alpha's blurb was reset to null in section R.)
+  // C2 (contract section 1: "Update the BB card-shape pins to the new field set"): the abstract block
+  // leaves the field set. What stays is what a reader SCANS - identity, where, how much, under what
+  // licence - plus BOTH actions: the no-buttons rule is a HUB rule, and this is the working view, where
+  // Download is the whole point of the grid feeding the download builder.
   doc.getElementById("drawer").classList.remove("open");
   const cardA1 = A.cardHtml("Alpha Survey");
   // present: title, org, collection chip, acquisition year, station count, mixbar, period range, badges, two actions.
@@ -2912,7 +3002,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cardA1.indexOf("mixbar") >= 0, "E1: slim card must keep the data-type mixbar");
   ok(/2<\/b> stations/.test(cardA1), "E1: slim card must show the station count");
   ok(cardA1.indexOf("periods") >= 0, "E1: slim card must show the period range");
-  ok(cardA1.indexOf("acquired") >= 0 && /2010\D+2012/.test(cardA1), "E1: slim card must show the acquisition year (2010–2012)");
+  ok(cardA1.indexOf("acquired") >= 0 && /2010\D+2012/.test(cardA1), "E1: slim card must show the acquisition year, 2010 to 2012 (the range joiner is the spaced hyphen; the en dash, U+2013, is purged from portal source)");
   ok(/DOI/.test(cardA1) && cardA1.indexOf("licence ?") >= 0, "E1: slim card must keep the licence + DOI badges");
   // absent (moved to detail): identifiers rollup, APA cite block, spatial extent, coord-QC stats,
   // per-format availability matrix (EDI/time-series/MTH5 badges), the completeness/smoothness check.
@@ -2926,6 +3016,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cardA1.indexOf("coord QC") < 0, "E1: the coordinate-QC flag stat must NOT be on the slim card");
   ok(cardA1.indexOf("time series") < 0 && cardA1.indexOf("MTH5") < 0, "E1: the per-format availability matrix must NOT be on the slim card");
   ok(cardA1.indexOf("completeness/smoothness") < 0, "E1: the completeness/smoothness check must NOT be on the slim card (it stays in the detail)");
+  // C2: the abstract block joins that absent list, and BOTH actions stay present (asserted above).
+  ok(cardA1.indexOf('class="desc') < 0, "C2: the abstract block must NOT be on the workspace card");
+  ok((cardA1.match(/data-act="select"/g) || []).length === 1 && (cardA1.match(/View survey/g) || []).length === 1,
+    "C2: the workspace card keeps EXACTLY its two actions, one View survey and one Download");
   // the removed renderers are NOT deleted from the codebase — they still render in the survey detail
   // (identifiersHtml + apa are exercised by section P above and the E2 rollup below).
 
@@ -2992,9 +3086,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   searchInput.value = "ORGX"; fire(searchInput, "input");   // Alpha's org, matched case-insensitively
   ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey",
     "E3: the search must match the ORG field case-insensitively (ORGX -> Alpha/OrgX), got: " + JSON.stringify(surveyOrder()));
-  // the header #nVis stays coherent on the Surveys view; the search handler re-runs updateCounts().
-  ok(doc.getElementById("nVis").textContent === "1 survey",
-    "E3: the header #nVis count must track the search on the Surveys view (1 survey), got: " + JSON.stringify(doc.getElementById("nVis").textContent));
+  // The header counter stays coherent on the Surveys view; the search handler re-runs updateCounts().
+  // C5 moved this pin off #nVis: on the Surveys view the slot is the WORKSPACE LINE, not the map's
+  // three station counts (contract section 1, C5).
+  ok(doc.getElementById("countSlot").textContent === "1 of 4 surveys shown",
+    "E3/C5: the header workspace line must track the search on the Surveys view, got: " + JSON.stringify(doc.getElementById("countSlot").textContent));
   // (h) CLEAR resets the type facets AND clears the search (count back to 4).
   clearFilters.click();
   ok(surveyCount.textContent === "4 surveys" && searchInput.value === "",
@@ -3011,6 +3107,149 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cardGridEl.querySelector(".srow .srow-lic .badge") != null, "E3: a compact row must carry the licence badge");
   layoutSeg.querySelector('[data-layout="cards"]').click();
   ok(cardGridEl.className === "cardgrid" && cardGridEl.querySelectorAll(".scard").length === 4, "E3: toggling back to Cards did not restore the card grid");
+
+  // C3. FOUR ACROSS, AND THE GRID STOPS WHERE THE BAR STOPS (owner ruling; overturns the five-up note
+  // that used to sit at the .cardgrid rule). Two defects in one declaration. The 300px floor let a wide
+  // screen pack in five and then six columns of cards too narrow to read; and .cardgrid was the ONLY
+  // uncapped grid on the view - .discovery and .collfeature-grid already cap at 1500px - so at 2560px
+  // the cards ran a metre wider than the controls that filter them, and the bar no longer looked like it
+  // belonged to the grid. A 352px floor under a 1500px cap yields exactly four columns at the cap
+  // (4*352 + 3*14 gap = 1450 <= 1500; a fifth would need 1816) and never more, at any width; the
+  // floor sits low enough that a 1500px viewport (grid content 1460px after the view's 20px padding)
+  // fits four as well, not just the capped ultrawide case. Four-across is the ceiling by ruling: a
+  // fifth column on ultrawides would need its own ruling, not a lower floor here.
+  // E3 above pins class names only; jsdom resolves declared class CSS through getComputedStyle with no
+  // layout engine, so the cap and the floor are pinned as the CSS contract they are.
+  const _gridCss = win.getComputedStyle(cardGridEl);
+  ok(_gridCss.maxWidth === "1500px",
+    "C3: .cardgrid must cap at 1500px so the grid never outruns the discovery bar above it, got maxWidth=" +
+    JSON.stringify(_gridCss.maxWidth));
+  ok(/minmax\(\s*min\(\s*352px\s*,\s*100%\s*\)\s*,\s*1fr\s*\)/.test(_gridCss.gridTemplateColumns),
+    "C3: .cardgrid must lay out on a 352px minimum column so a 1500px viewport and the 1500px cap both " +
+    "yield four across, and that floor must be min(352px,100%) - a bare minimum cannot shrink, so a " +
+    "375px phone would scroll sideways. Got " +
+    JSON.stringify(_gridCss.gridTemplateColumns));
+  // The cap is only coherent if it MATCHES the bar's; a grid capped at some other width would still be
+  // a grid that does not line up with its controls.
+  ok(win.getComputedStyle(doc.getElementById("discoveryControls")).maxWidth === _gridCss.maxWidth,
+    "C3: the card grid and the discovery bar must share one cap, got bar=" +
+    JSON.stringify(win.getComputedStyle(doc.getElementById("discoveryControls")).maxWidth) +
+    " grid=" + JSON.stringify(_gridCss.maxWidth));
+
+  // C5. THE CONTEXTUAL COUNTER (owner R12, the SPA half). The header counter read
+  // "N shown / M selected / T total" on EVERY view, and only on the map was that a description of what
+  // the reader was looking at. On the Surveys view it counted stations while the screen showed survey
+  // cards; on the Collections views it counted something not on screen at all. The SHELL is identical
+  // everywhere - same element, same place, same type - and only the SLOT's content changes; where
+  // nothing true can be said about what is on screen, it says nothing.
+  const slot = doc.getElementById("countSlot");
+  ok(slot, "C5: the header counter needs a slot element (#countSlot) whose content is per-view");
+  const shell = doc.getElementById("headerCounts");
+  ok(shell && shell.classList.contains("counts") && shell.contains(slot),
+    "C5: the shell (.counts) must be the same element on every view, with the slot inside it");
+  // (a) MAP: unchanged - the three station counts, with the ids the rest of the app paints.
+  A.setView("map");
+  ok(/^5 shown · 0 selected · 5 total$/.test(slot.textContent.trim()),
+    "C5: the map view keeps the three station counts, got " + JSON.stringify(slot.textContent));
+  ok(doc.getElementById("nVis") && doc.getElementById("nSel") && doc.getElementById("nTot"),
+    "C5: the map form must keep the nVis/nSel/nTot ids");
+  // (b) SURVEYS: the workspace line, driven by the LIVE filter and selection state. With nothing
+  //     selected the selected clause is HIDDEN rather than reading a truthful-but-noisy "0 selected".
+  A.setView("surveys");
+  ok(slot.textContent === "4 of 4 surveys shown",
+    "C5: the workspace line must read 'N of 4 surveys shown' with no selection, got " + JSON.stringify(slot.textContent));
+  ok(doc.getElementById("nVis") == null,
+    "C5: the map's station counts must not linger on the Surveys view under a survey-shaped label");
+  // ...the FILTER half: narrow the catalogue and the first number follows it.
+  const c5search = doc.getElementById("surveySearch");
+  c5search.value = "beta"; fire(c5search, "input");
+  ok(slot.textContent === "1 of 4 surveys shown",
+    "C5: the workspace line's first number is the LIVE filtered count, got " + JSON.stringify(slot.textContent));
+  c5search.value = ""; fire(c5search, "input");
+  // ...the SELECTION half: it is stations that get selected and downloaded, so the second clause counts
+  //    stations, appears when there is a selection, and takes the singular at one.
+  A.setSelected(["A1", "A2"]);
+  ok(slot.textContent === "4 of 4 surveys shown · 2 stations selected",
+    "C5: a live selection must show as a stations-selected clause, got " + JSON.stringify(slot.textContent));
+  A.setSelected(["A1"]);
+  ok(slot.textContent === "4 of 4 surveys shown · 1 station selected",
+    "C5: the selected clause must take the singular at one, got " + JSON.stringify(slot.textContent));
+  A.setSelected([]);
+  ok(slot.textContent === "4 of 4 surveys shown",
+    "C5: clearing the selection must hide the clause, not print a zero, got " + JSON.stringify(slot.textContent));
+  // (c) COLLECTIONS and the collection DETAIL: the slot is EMPTY. Neither view is a filtered set of
+  //     anything the counter can honestly describe, and a stale station count is worse than none.
+  A.setView("collections");
+  ok(slot.textContent.trim() === "",
+    "C5: the Collections view must leave the counter slot empty, got " + JSON.stringify(slot.textContent));
+  ok(shell.classList.contains("counts"),
+    "C5: the shell stays in place on Collections - only the slot's content changes");
+  win.location.hash = "#/collection/auslamp"; A.routeFromHash();
+  ok(slot.textContent.trim() === "",
+    "C5: the collection detail must leave the counter slot empty, got " + JSON.stringify(slot.textContent));
+  win.location.hash = ""; A.setView("surveys");
+  // (d) THE NUMBER FORMAT, at a count the fixture cannot reach. Contract section 1, C5: the counter
+  // "renders on the MAP view as today", and today is origin/main's raw `nv.textContent=visible.length`.
+  // The workspace line is NEW copy and takes the thousands separator the rest of the workspace uses.
+  // With five fixture stations "5" formats identically either way, so BOTH forms were invisible to the
+  // suite and the map's could widen without anything noticing. A fresh window carrying 1,200 stations is
+  // the smallest thing that can see the difference. Rows are cloned POSITIONALLY (contract/columns.json:
+  // id, survey, lat, lon, ..., ausmt_id at 12); tf.json and sci.json are dropped rather than left at
+  // five rows, so the synthetic corpus is a clean phase-1-only boot like the two failure windows above.
+  const _bigCat = _cat.slice();
+  for (let i = _cat.length; i < 1200; i++) {
+    const r = _cat[0].slice();
+    r[0] = "Z" + i; r[2] = -30 - (i % 40) * 0.1; r[3] = 130 + (i % 40) * 0.1; r[12] = "au.alpha.Z" + i;
+    _bigCat.push(r);
+  }
+  const _bigMap = Object.assign({}, DATAMAP, { "data/catalogue.json": _bigCat });
+  delete _bigMap["data/tf.json"]; delete _bigMap["data/sci.json"];
+  const bigWin = await bootFreshWindow(_bigMap);
+  const bigA = bigWin.__api, bigSlot = bigWin.document.getElementById("countSlot");
+  ok(bigA.nST() === 1200, "C5: the 1,200-station window did not build; got " + bigA.nST() + " stations");
+  bigA.setView("map");
+  ok(/^1200 shown · 0 selected · 1200 total$/.test(bigSlot.textContent.trim()),
+    "C5: the map counter renders as today - plain integers, no separator - got " +
+    JSON.stringify(bigSlot.textContent.trim()));
+  bigA.setView("surveys");
+  bigA.setSelected(_bigCat.slice(0, 1018).map(r => r[0]));
+  ok(/ · 1,018 stations selected$/.test(bigSlot.textContent),
+    "C5: the workspace line's station count takes the en-AU thousands separator, got " +
+    JSON.stringify(bigSlot.textContent));
+
+  // C6. THE DISCOVERY BAR AS THE PRIMARY FILTER SURFACE (brief 10). Two gaps, one cause: the year-range
+  // and downloadable-only filters lived in the map rail, and the rail is HIDDEN on the Surveys view, so
+  // on the view that is entirely about choosing a survey neither question could be asked at all. They
+  // are promoted here, beside the licence and type chips that ask the same kind of question, and the
+  // rail copies are removed so there is one home and no chance of two controls disagreeing.
+  const c6search = doc.getElementById("surveySearch");
+  ok(c6search.placeholder === "Search surveys, organisations or locations...",
+    "C6: the search placeholder must name what is actually searchable (brief 10), got " +
+    JSON.stringify(c6search.placeholder));
+  // (a) the promoted YEAR RANGE filters the CATALOGUE, which the rail copy could never do. Alpha
+  //     [2010,2012], Beta [2018,2019], Gamma and Delta undated. From 2015: only Beta survives, and the
+  //     undated pair drop out because a reader who typed a year is asking for DATED data.
+  const c6from = doc.getElementById("yearFrom");
+  c6from.value = "2015"; fire(c6from, "input");
+  ok(doc.getElementById("surveyCount").textContent === "1 survey",
+    "C6: the promoted year range must narrow the card grid, got " + JSON.stringify(doc.getElementById("surveyCount").textContent));
+  ok(doc.querySelector("#cardGrid .scard [data-survey]").dataset.survey === "Beta Survey",
+    "C6: the surviving card must be Beta (2018-2019), the only survey inside the range");
+  // (b) CLEAR FILTERS resets the promoted controls too. Before C6 it reset only the chips and the search
+  //     box, so a year typed into the bar survived a "Clear filters" click and silently kept filtering.
+  doc.getElementById("clearFilters").click();
+  ok(c6from.value === "" && doc.getElementById("yearTo").value === "",
+    "C6: Clear filters must reset the promoted year inputs, got " + JSON.stringify([c6from.value, doc.getElementById("yearTo").value]));
+  ok(doc.getElementById("surveyCount").textContent === "4 surveys",
+    "C6: Clear filters must restore the full catalogue, got " + JSON.stringify(doc.getElementById("surveyCount").textContent));
+  const c6dl = doc.getElementById("facetChips").querySelector('[data-facet="dl"]');
+  c6dl.click();
+  ok(doc.getElementById("surveyCount").textContent === "2 surveys", "C6: setup, the Downloadable here chip must narrow to 2");
+  doc.getElementById("clearFilters").click();
+  ok(!doc.getElementById("facetChips").querySelector('[data-facet="dl"]').classList.contains("on"),
+    "C6: Clear filters must reset the promoted Downloadable here chip");
+  ok(doc.getElementById("surveyCount").textContent === "4 surveys",
+    "C6: Clear filters must restore the full catalogue after the chip, got " + JSON.stringify(doc.getElementById("surveyCount").textContent));
 
   // DD/GG. E2 IDENTIFIERS ROLLUP + E4 DETAIL SECTION ORDER (survey detail).
   const drwE = doc.getElementById("drawer");
@@ -3158,6 +3397,52 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(svgOutline.indexOf("au-outline") >= 0 && svgOutline.indexOf("au-outline") < svgOutline.indexOf("<circle"),
     "E6: the outline group must be drawn before (beneath) the station dots");
   delete win.AU_OUTLINE;
+  // C7. THE SCATTER TAKES THE SHARED RAMP. The parity of the colour RULE itself against the engine's
+  // _member_colours is held by tests/collection_colours.test.js; this is the half that test cannot see -
+  // that collScatter is actually the caller. Nine synthetic members, one station each, is the first
+  // count past the eight-entry palette, which is exactly where the old modulo cycling handed the ninth
+  // survey the first survey's colour and the legend stopped telling a reader which dots were which.
+  const nineMembers = [];
+  for (let i = 0; i < 9; i++)
+    nineMembers.push({ id: "S" + i, survey: "Survey " + String.fromCharCode(65 + i), lat: -30 - i, lon: 130 + i, type: "LPMT" });
+  const svgNine = A.collScatter(nineMembers);
+  const nineFills = (svgNine.match(/<circle[^>]*fill="(#[0-9A-F]{6})"/g) || [])
+    .map(t => (t.match(/fill="(#[0-9A-F]{6})"/) || [])[1]);
+  ok(nineFills.length === 9, "C7: expected 9 member dots in the synthetic scatter, got " + nineFills.length);
+  ok(new Set(nineFills).size === 9,
+    "C7: nine members must get nine DISTINCT colours (the old palette cycled and repeated), got " +
+    new Set(nineFills).size + " distinct: " + JSON.stringify(nineFills));
+  // ...and they must be the SAME nine the pages compute, in member order, so one survey is never two
+  // colours across the two surfaces.
+  ok(JSON.stringify(nineFills) === JSON.stringify(A.memberColours(9)),
+    "C7: the scatter must colour from the shared ramp, got " + JSON.stringify(nineFills) +
+    " want " + JSON.stringify(A.memberColours(9)));
+  // The legend swatches must agree with the dots; a legend keyed off a second colour rule is worse than
+  // no legend at all.
+  const nineLegend = (svgNine.match(/csl-dot" style="background:(#[0-9A-F]{6})"/g) || [])
+    .map(t => (t.match(/background:(#[0-9A-F]{6})/) || [])[1]);
+  ok(JSON.stringify(nineLegend) === JSON.stringify(nineFills),
+    "C7: the legend swatches must be the dots' own colours, got " + JSON.stringify(nineLegend));
+  // ...and a member the PAGE leaves out must not shift the ramp here. _collection_scatter assigns colours
+  // over `present` - the members that HAVE positioned stations - so a wholly coordinate-withheld member
+  // (C42 is a live corpus state, and hasPosition already keeps such a station off every map surface) is
+  // not counted there. Counting it here gave the SPA a different n and moved every later member one step
+  // along the ramp, which is the divergence C7 exists to remove.
+  const withheldMix = [
+    { id: "P1", survey: "Sv A", lat: -30, lon: 136, type: "LPMT" },
+    { id: "P2", survey: "Sv B", lat: null, lon: null, type: "LPMT" },
+    { id: "P3", survey: "Sv C", lat: -32, lon: 138, type: "LPMT" },
+  ];
+  const svgMix = A.collScatter(withheldMix);
+  const mixFills = (svgMix.match(/<circle[^>]*fill="(#[0-9A-F]{6})"/g) || [])
+    .map(t => (t.match(/fill="(#[0-9A-F]{6})"/) || [])[1]);
+  ok(JSON.stringify(mixFills) === JSON.stringify(A.memberColours(2)),
+    "C7: a position-less member must not enter the colour assignment; the two plotted members take " +
+    JSON.stringify(A.memberColours(2)) + ", got " + JSON.stringify(mixFills));
+  const mixLegend = (svgMix.match(/csl-dot" style="background:(#[0-9A-F]{6})"/g) || [])
+    .map(t => (t.match(/background:(#[0-9A-F]{6})/) || [])[1]);
+  ok(JSON.stringify(mixLegend) === JSON.stringify(mixFills),
+    "C7: the legend must list the members that plot, in the dots' own colours, got " + JSON.stringify(mixLegend));
 
   // FF. E6 'View all stations on main map' — from the collection page, switch to map + fitBounds (spy on map).
   win.location.hash = "#/collection/auslamp"; A.routeFromHash();
@@ -3341,8 +3626,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   drwN.classList.remove("open");
   win.location.hash = "#/survey/alpha"; A.routeFromHash();
   ok(/GSSA \(2020\)\. Alpha survey\./.test(drwN.textContent), "W3b: the survey detail must render the attribution statement");
-  ok(/Source datasets/.test(drwN.textContent) && /Alpha raw archive/.test(drwN.textContent) && /CC-BY-3\.0-AU/.test(drwN.textContent),
-    "W3b: the survey detail must render the 'Source datasets' list (title + canonical licence)");
+  // C1/R3 moves the licence half of this pin from the SPDX identifier to the reader's form: the row is
+  // chrome. The canonicalisation is unchanged (licCanon still resolves aliases and case); what moved is
+  // only how the canonical id is READ. Two assertions where there was one, so the pin is not weakened.
+  ok(/Source datasets/.test(drwN.textContent) && /Alpha raw archive/.test(drwN.textContent) && /CC BY 3\.0 AU/.test(drwN.textContent),
+    "W3b + C1/R3: the survey detail must render the 'Source datasets' list (title + licence in the reader's form)");
+  ok(!/CC-BY-3\.0-AU/.test(drwN.textContent),
+    "C1/R3: the Source datasets row must not print the SPDX identifier as chrome");
   // Cite EXPLICIT fallback: Beta has no cite block -> the drawer must SAY so, never silently self-attribute.
   drwN.classList.remove("open");
   win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
@@ -3751,6 +4041,87 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify((_emSweep.match(/.{0,30}—.{0,30}/) || [""])[0]));
   doc.getElementById("drawer").classList.remove("open");
 
+  // C1. DISPLAY GRAMMAR: the workspace prints a period, a range and a licence the way the entity pages
+  // do (owner rulings R1/R2/R3). The helpers' own parity with the engine's Python leaf is held by
+  // tests/display_grammar.test.js; THIS section pins that the rendered slots actually use them, which is
+  // the half a pure-function test cannot see. Fixture values: Alpha is 2010-2012 with periods
+  // 0.01 - 1000 s, so the pins below are exact strings, not patterns.
+  //
+  // (a) THE CARD. The old form ran "0.010" and "1,000s" together with an en dash (U+2013, quoted here
+  // by name because the glyph itself is purged from portal source): the dash, a trailing zero the
+  // two-significant-figure rule strips, and no space before the unit.
+  A.setSMETA("Alpha Survey", { lic: "CC-BY-4.0" });
+  const c1card = A.cardHtml("Alpha Survey");
+  ok(c1card.indexOf("0.01 - 1,000 s") >= 0,
+    "C1/R1+R2: the card period range must read '0.01 - 1,000 s', got: " +
+    JSON.stringify((c1card.match(/periods[^<]*<b>[^<]*<\/b>/) || [""])[0]));
+  ok(c1card.indexOf("0.010") < 0, "C1/R1: the card must not print a trailing zero the significant-figure rule strips");
+  ok(c1card.indexOf("2010 - 2012") >= 0,
+    "C1/R2: the card acquisition range must take the spaced hyphen, got: " +
+    JSON.stringify((c1card.match(/acquired[^<]*<b>[^<]*<\/b>/) || [""])[0]));
+  // (b) LICENCE CHROME reads human; the SPDX identifier is the machine's name and is NOT what chrome shows.
+  ok(c1card.indexOf("CC BY 4.0") >= 0, "C1/R3: the card licence badge must read the human form 'CC BY 4.0'");
+  ok(c1card.indexOf("CC-BY-4.0") < 0, "C1/R3: the SPDX identifier must not appear in card chrome");
+  // ...while every MACHINE slot keeps the identifier untouched. This is the pin that stops R3 from being
+  // "read nicer" at the cost of an export a reference manager or a GIS reads as a different licence.
+  const c1gj = A.geoFC([A.station("A1")]);
+  ok(c1gj.features[0].properties.license === "CC-BY-4.0",
+    "C1/R3: the GeoJSON export must keep the SPDX identifier, got: " + JSON.stringify(c1gj.features[0].properties.license));
+  // (c) THE STATION DRAWER's Transfer-function period row, and (d) the SURVEY drawer's period coverage.
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  const c1stn = doc.getElementById("drawer").textContent;
+  ok(c1stn.indexOf("0.01 - 1,000 s") >= 0,
+    "C1/R2: the station drawer's periods row must read '0.01 - 1,000 s', got: " +
+    JSON.stringify((c1stn.match(/periods.{0,40}/) || [""])[0]));
+  A.openSurvey("Alpha Survey");
+  const c1sv = doc.getElementById("drawer").textContent;
+  ok(c1sv.indexOf("0.01 - 1,000 s") >= 0,
+    "C1/R2: the survey drawer's period coverage must read '0.01 - 1,000 s', got: " +
+    JSON.stringify((c1sv.match(/period coverage.{0,40}/) || [""])[0]));
+  ok(c1sv.indexOf("CC BY 4.0") >= 0, "C1/R3: the survey drawer's licence row must read the human form");
+  // H6 (owner ruling: U+2013 leaves portal source). An ABSENT table value renders the plain
+  // hyphen-minus placeholder, reader-visibly. Alpha's SMETA carries no version, so the survey
+  // summary's version row IS the placeholder; and the whole rendered drawer must be free of the
+  // en dash (spelt by escape here, since the glyph itself is purged from portal source).
+  const c1svHtml = doc.getElementById("drawer").innerHTML;
+  ok(c1svHtml.indexOf("<td>version</td><td>-</td>") >= 0,
+    "H6: an absent survey-table value must render the plain hyphen-minus placeholder, got: " +
+    JSON.stringify((c1svHtml.match(/<td>version<\/td><td>[^<]*<\/td>/) || [""])[0]));
+  ok(c1svHtml.indexOf("\u2013") < 0,
+    "H6: the rendered survey drawer must not carry an en dash (U+2013) anywhere");
+  // (d2) THE SURVEY DRAWER'S "Source datasets" ROWS. A third-party release carries its upstream licence
+  // in sources[] (the GSSA and Roxby Downs shape), and that row is READER CHROME sitting on the SAME
+  // drawer as the licence/access row pinned above, so a drawer could print both forms of one identifier
+  // at once. The fixture declares no sources[], which is why nothing here saw the slot before.
+  A.setSMETA("Alpha Survey", { lic: "CC-BY-4.0",
+    sources: [{ title: "GSSA legacy release", custodian: "GSSA", licence: "CC-BY-4.0" }] });
+  A.openSurvey("Alpha Survey");
+  const c1src = (doc.querySelector("#drawer .srcitem .srcm") || { textContent: "" }).textContent;
+  ok(c1src.indexOf("CC BY 4.0") >= 0,
+    "C1/R3: a source dataset's licence is chrome and must read the human form, got: " + JSON.stringify(c1src));
+  ok(c1src.indexOf("CC-BY-4.0") < 0,
+    "C1/R3: the SPDX identifier must not appear in the Source datasets row, got: " + JSON.stringify(c1src));
+  A.setSMETA("Alpha Survey", { sources: null });
+  // (e) THE COLLECTION DETAIL: the rollup stat and the per-member table row.
+  win.location.hash = "#/collection/auslamp"; A.routeFromHash();
+  const c1coll = doc.getElementById("collectionview").textContent;
+  ok(c1coll.indexOf("0.01 - 1,000 s") >= 0,
+    "C1/R2: the collection detail's period slots must take the spaced hyphen, got: " +
+    JSON.stringify((c1coll.match(/period coverage.{0,40}/) || [""])[0]));
+  // (f) THE SWEEP that catches a range slot this list forgot: NO rendered text anywhere may join two
+  // digits with an en or em dash. Deliberately narrower than a whole-glyph ban - the SPA keeps its en
+  // dash for prose and for absent-value markers (F1 4.7); only a NUMERIC RANGE is converted.
+  win.location.hash = ""; A.routeFromHash();
+  A.setView("surveys"); A.renderCards();
+  A.openSurvey("Alpha Survey");
+  const c1sweep = (doc.body.textContent || "") + doc.getElementById("drawer").textContent;
+  ok(!/\d\s*[\u2013\u2014]\s*\d/.test(c1sweep),
+    "C1/R2: a numeric range still renders with a dash glyph: " +
+    JSON.stringify((c1sweep.match(/.{0,30}\d\s*[\u2013\u2014]\s*\d.{0,30}/) || [""])[0]));
+  A.setSMETA("Alpha Survey", { lic: null });
+  doc.getElementById("drawer").classList.remove("open");
+  A.setView("map");
+
   // QQ. DRAWER SCRIM (cleanup wave D): a dim backdrop behind the drawer on the Surveys / Collections views
   // (NEVER the map view, where the drawer sits side-by-side with the map). Clicking it closes the drawer.
   const scrim = doc.getElementById("drawerScrim");
@@ -3826,8 +4197,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   selectCtl().click();
   ok(treeChecked().length === 1, "StageB: re-scope setup failed, got " + JSON.stringify(treeChecked()));
   A.setView("surveys");
-  ok(doc.getElementById("surveyCount").textContent === "4 surveys" && doc.getElementById("nVis").textContent === "4 surveys",
-    "StageB COHERENCE: #surveyCount and #nVis must both read '4 surveys' regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("nVis").textContent]));
+  // C5: the header slot is the workspace line on this view, so the coherence pin reads it there.
+  ok(doc.getElementById("surveyCount").textContent === "4 surveys" && /^4 of 4 surveys shown/.test(doc.getElementById("countSlot").textContent),
+    "StageB COHERENCE: #surveyCount and the header workspace line must both count 4 surveys regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("countSlot").textContent]));
   ok(treeChecked().length === 4, "StageB RESTORE (view switch): navigating off the map must restore the scoped tree, got " + JSON.stringify(treeChecked()));
   A.setView("map"); A.setSidebarMode("browse");
 

@@ -17,16 +17,22 @@ let findActive=-1;   // UX6 Wave F (F3): index of the keyboard-highlighted Find 
 // (survey declares no dates) PASS when both inputs are empty (no filter in effect) but FAIL as soon
 // as either is set — a modeller who typed a year range is asking for DATED data, so silently
 // including undated stations would misrepresent the range as covering them.
-function passesYearRange(s){
+// The rule itself, over a record's OWN two years. It is read on two surfaces - the map filters stations
+// (passesYearRange below) and the survey grid filters surveys (drawer.js _surveyPassesYears) - and it
+// lived as two verbatim copies in two files, differing only in the field names each surface spells its
+// years with. That is the shape a rule drifts in: one copy gets corrected and the other does not. One
+// definition, two callers, and the harness pins the two readings against each other.
+function passesYearWindow(yearLo,yearHi){
   const fromEl=document.getElementById("yearFrom"),toEl=document.getElementById("yearTo");
   if(!fromEl||!toEl)return true;                      // filter UI not present (e.g. a bare fixture) -> no-op
   const from=fromEl.value.trim()?+fromEl.value:null,to=toEl.value.trim()?+toEl.value:null;
   if(from==null&&to==null)return true;
-  if(s.yearStart==null&&s.yearEnd==null)return false;  // undated station, but a range WAS requested
-  const lo=s.yearStart??s.yearEnd,hi=s.yearEnd??s.yearStart;
+  if(yearLo==null&&yearHi==null)return false;         // undated record, but a range WAS requested
+  const lo=yearLo??yearHi,hi=yearHi??yearLo;
   if(from!=null&&hi<from)return false;
   if(to!=null&&lo>to)return false;
   return true;}
+function passesYearRange(s){return passesYearWindow(s.yearStart,s.yearEnd);}
 function passesCore(s){
   if(![...document.querySelectorAll("#typeBoxes input:checked")].map(c=>c.value).includes(s.type))return false;
   const svs=[...tree.querySelectorAll('input[value]:checked')].map(c=>c.value);
@@ -43,20 +49,22 @@ function passesCore(s){
   // screening rule is a curation decision, not a rail-layout one.
   if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
   if(!passesYearRange(s))return false;
-  // Data available (Lane B, D1): ONE single-select viewing filter in Browse. "tf" is the s.ediAvail
-  // licence predicate (the retired tickbox's, the same flag the selection exports read for their
-  // not-included honesty). A level token filters on ts_access.json membership and is INERT until the
-  // index has landed: a route that has not arrived is not a missing one, and filtering on it would
-  // empty the map over data the portal does not have. paintAvailSelect disables the level options
-  // across the same window (belt and braces), and TSACC_READY re-runs refresh() so a choice made
-  // early still takes effect. Membership in the index IS the access decision (R5): nothing here
-  // re-derives availability, and no filter state can surface a station the build gated out.
+  // C6: "Downloadable here" is the s.ediAvail licence predicate (the retired tickbox's, then the Data
+  // available dropdown's "tf" option, the same flag the selection exports read for their not-included
+  // honesty). The CONTROL was promoted to the discovery bar and the predicate stayed exactly here, so
+  // the map filters on it as it always did; only where a reader sets it has changed.
+  if(typeof surveyFacetOn==="function"&&surveyFacetOn("dl")&&!s.ediAvail)return false;
+  // Data available (Lane B, D1): the single-select TIME-SERIES level chooser in Browse. A level token
+  // filters on ts_access.json membership and is INERT until the index has landed: a route that has not
+  // arrived is not a missing one, and filtering on it would empty the map over data the portal does not
+  // have. paintAvailSelect disables the level options across the same window (belt and braces), and
+  // TSACC_READY re-runs refresh() so a choice made early still takes effect. Membership in the index IS
+  // the access decision (R5): nothing here re-derives availability, and no filter state can surface a
+  // station the build gated out.
   const av=document.getElementById("availSel");
-  if(av&&av.value){
-    if(av.value==="tf"){if(!s.ediAvail)return false;}
-    else if(typeof tsAccessKnown==="function"&&tsAccessKnown()){
-      const lv=tsRoutesFor(s.ausmt_id);
-      if(!lv||!lv[av.value])return false;}}
+  if(av&&av.value&&typeof tsAccessKnown==="function"&&tsAccessKnown()){
+    const lv=tsRoutesFor(s.ausmt_id);
+    if(!lv||!lv[av.value])return false;}
   return true;}
 function passes(s){if(!passesCore(s))return false;
   const q=document.getElementById("find").value.trim().toLowerCase();
@@ -113,14 +121,35 @@ function inShapes(s){if(!hasPosition(s))return false;
   const rings=layer.getLatLngs();const ring=Array.isArray(rings[0])?rings[0]:rings;let inn=false;
   for(let a=0,b=ring.length-1;a<ring.length;b=a++){const yi=ring[a].lat,xi=ring[a].lng,yj=ring[b].lat,xj=ring[b].lng;
     if(((yi>s.lat)!==(yj>s.lat))&&(s.lon<(xj-xi)*(s.lat-yi)/(yj-yi)+xi))inn=!inn;}if(inn)inside=true;});return inside;}
-function updateCounts(){const nv=document.getElementById("nVis");
+// C5 (owner R12, the SPA half). The header counter is ONE shell with a CONTEXTUAL slot. It used to read
+// "N shown / M selected / T total" on every view, and only on the map was that a description of what the
+// reader was looking at: on the Surveys view it counted stations while the screen showed survey cards,
+// and on the Collections views it counted something not on screen at all. The shell never moves; only
+// this slot's content changes, and where nothing true can be said about what is on screen it says
+// nothing rather than leaving a stale number standing.
+function _countN(x){return Number(x).toLocaleString("en-AU");}
+function updateCounts(){
+  const slot=document.getElementById("countSlot");
+  if(!slot)return;
+  if(curView==="collections"||curView==="collection"){slot.removeAttribute("title");slot.innerHTML="";return;}
   if(curView==="surveys"){
-    // Stage B: the Surveys header count mirrors the discovery-filtered catalogue (#surveyCount) - the
-    // search box AND the discovery facets - never the map rail's tree / type / period / year / selection.
+    // The WORKSPACE LINE. Its first number mirrors the discovery-filtered catalogue (#surveyCount) - the
+    // search box AND the discovery facets - never the map rail's tree / type / period / year. Its second
+    // counts STATIONS, because stations are what a selection holds and what the download builder takes.
+    // With nothing selected the clause is hidden: "0 stations selected" is true and is noise.
     const _fac=(typeof surveyPassesFacets==="function")?surveyPassesFacets:(()=>true);
-    const shown=surveys.filter(surveyVisible).filter(_fac).length;nv.textContent=shown+" survey"+(shown===1?"":"s");}
-  else nv.textContent=visible.length;
-  document.getElementById("nTot").textContent=ST.length;}
+    const shown=surveys.filter(surveyVisible).filter(_fac).length,sel=selected.size;
+    slot.title="surveys passing the current search and filters · stations selected for download";
+    slot.innerHTML=`<b>${_countN(shown)}</b> of ${_countN(surveys.length)} survey${surveys.length===1?"":"s"} shown`+
+      (sel?` · <b>${_countN(sel)}</b> station${sel===1?"":"s"} selected`:"");
+    return;}
+  // MAP: the three station counts, rebuilt into the form index.html ships (ids included, since other
+  // surfaces paint them by id). C5 says this view renders AS TODAY, so the three numbers stay plain
+  // integers, exactly as origin/main wrote them; _countN belongs to the workspace line, which is new
+  // copy. The counts pin drives a 1,200-station window, because at the fixture's five the two formats
+  // are the same string.
+  slot.title="stations passing the current filters · stations selected · total stations in the catalogue";
+  slot.innerHTML=`<b id="nVis">${visible.length}</b> shown · <b id="nSel">${selected.size}</b> selected · <span id="nTot">${ST.length}</span> total`;}
 function refresh(){visible=ST.filter(passes);
   // ONE call paints the visible set into the map's single dot container; map.js owns the layer and this
   // stays the caller it always was. Nothing collapses, so a filter change is the only thing that can alter
@@ -130,7 +159,10 @@ function refresh(){visible=ST.filter(passes);
   if(hasShapes())selected=new Set(visible.filter(inShapes).map(s=>s.i));else selected=new Set([...selected].filter(i=>visible.some(s=>s.i===i)));
   if(curView==="surveys")renderCards();
   updateCounts();updateSel();}
-function updateSel(){document.getElementById("nSel").textContent=selected.size;document.getElementById("selBig").textContent=selected.size;
+function updateSel(){document.getElementById("selBig").textContent=selected.size;
+  // C5: the selection is half the workspace line, so a selection change repaints the header slot. The
+  // map form's #nSel is rebuilt by the same call, which is why it is no longer set directly here.
+  updateCounts();
   // Lane B: downloads follow the SCOPE (scopeStations), so the metadata buttons enable whenever the
   // scope is non-empty - with nothing selected they act on the filtered corpus, and the scope line
   // says so. Guarded per element: a renamed button must not abort every later line of this function
@@ -298,7 +330,10 @@ function paintAvailSelect(){
   const ix=(typeof TSACC!=="undefined"&&TSACC)||{};
   const empty=known&&!Object.keys(ix).length;
   [...av.querySelectorAll("option")].forEach(o=>{
-    if(o.value===""||o.value==="tf")return;
+    // "" is the Any option, which rides the catalogue and is live from first paint. The "tf" option this
+    // also used to skip was DELETED from #availSel by C6 (the capability is a discovery chip now), so no
+    // option can reach that branch any more; the harness pin asserts #availSel carries no "tf" value.
+    if(o.value==="")return;
     o.disabled=!known||empty;
     o.title=known?(empty?"Availability by level: "+TS_NONE_HINT:""):TS_PENDING_HINT;});
 }

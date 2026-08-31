@@ -79,7 +79,7 @@ function applyYearRangeHints(){
   const dated=lo!=null&&hi!=null;
   if(fromEl){fromEl.placeholder=dated?String(lo):"from";if(dated)fromEl.min=lo,fromEl.max=hi;}
   if(toEl){toEl.placeholder=dated?String(hi):"to";if(dated)toEl.min=lo,toEl.max=hi;}
-  if(head)head.textContent="Year range"+(dated?` (${lo}–${hi})`:"");   // suffix hidden when no survey is dated
+  if(head)head.textContent="Year range"+(dated?` (${fmtRange(lo,hi)})`:"");   // suffix hidden when no survey is dated
 }
 // ---- "Recently added" (S3) --------------------------------------------------------------------
 // LOCKSTEP RULE (keep identical to the engine's _survey_latest_date at
@@ -125,11 +125,15 @@ function recentlyAdded(limit){
   out.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.sv<b.sv?1:-1));
   return out.slice(0,limit||3);
 }
+// Brief 9, Option A: ONE concise horizontal line, wrapping - "Recently added: Vulcan 2022 (interpunct)
+// AusLAMP Queensland Phase 3" - not a heading over a column of rows. The old block form left a large
+// sparse box of mostly empty space between the reader and the catalogue, which is precisely what the
+// brief says not to keep just because the information exists. The date is what makes an entry recent, so
+// it is not dropped: it rides each link as its title rather than spending a second line.
 function recentlyAddedHtml(entries){
   if(!entries.length)return"";
-  const items=entries.map(e=>`<li><a href="#/survey/${encodeURIComponent(e.slug)}">${esc(e.sv)}</a>`+
-    `<span class="ra-date">${esc(e.date)}</span></li>`).join("");
-  return `<ul class="recentlist">${items}</ul>`;
+  const items=entries.map(e=>`<a href="#/survey/${encodeURIComponent(e.slug)}" title="${escAttr("Latest release "+e.date)}">${esc(e.sv)}</a>`).join(" · ");
+  return `<span class="ra-label">Recently added:</span> ${items}`;
 }
 // ONE surface only (the surveys-view #recentStrip). The map-rail #recentSideSection/#recentSide was
 // deleted: rendering it here un-hid its section on EVERY view whenever any survey was dated (the
@@ -138,7 +142,7 @@ function recentlyAddedHtml(entries){
 function renderRecentlyAdded(){
   const entries=recentlyAdded(3);
   const strip=document.getElementById("recentStrip");
-  if(strip){strip.innerHTML=entries.length?`<h2>Recently added</h2>${recentlyAddedHtml(entries)}`:"";
+  if(strip){strip.innerHTML=recentlyAddedHtml(entries);
     strip.classList.toggle("hidden",!entries.length);}
 }
 function setView(v){

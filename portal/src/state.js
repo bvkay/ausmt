@@ -119,7 +119,103 @@ const TS_LEVELS=[
 const AUSMT_SELF={au:"AusMT contributors",yr:"2026",ti:"AusMT: curated station metadata, quality and provenance for Australian magnetotelluric transfer functions",ve:(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.version)||"",pb:"AusMT"};
 const NCI_CITE={au:"AuScope; NCI Australia",yr:"",ti:"NCI-AuScope Magnetotelluric Collection — packed raw, Level 1 and Level 2 time series",ve:"",pb:"NCI Australia"};
 
-const fmtP=p=>p>=1000?Math.round(p).toLocaleString("en-AU"):p>=1?(+p.toFixed(1)).toString():p.toPrecision(2);
+// ---- display grammar: one period, one range and one licence, printed one way ------------------
+// These three are JS TWINS of the engine's reference implementations (engine/extract/_pages.py:
+// _fmt_period, _range, _cc_human/_fmt_licence). A reader meets the same values on a static entity
+// page and in the workspace, so the two surfaces owe each other the same output; the parity is held
+// by tests/display_grammar.test.js against the worked examples the engine suite pins the Python leaf
+// against. Change one side and the other must move with it.
+
+// Round `v` to `d` decimals the way Python's format() does. The reason this is not a bare toFixed:
+// the two runtimes break an EXACT .5 tie differently - Python to the even neighbour, JS away from
+// zero - so a 1.25 s period read "1.3" in the workspace and "1.2" on the survey page. A tie is
+// exactly a decimal expansion that terminates in a 5 one place past the target, which is detectable
+// on the expansion itself; every other value toFixed already rounds correctly.
+function _fixedHalfEven(v,d){
+  const wide=Math.abs(v).toFixed(Math.min(100,d+20));
+  if(new RegExp("\\.\\d{"+d+"}50*$").test(wide)){
+    const cut=wide.slice(0,wide.indexOf(".")+(d?d+1:0));                 // truncated toward zero
+    const mag=((cut.charCodeAt(cut.length-1)-48)%2===0)?Number(cut):Number(cut)+Math.pow(10,-d);
+    return (v<0?-mag:mag).toFixed(d);}
+  return v.toFixed(d);}
+// A period in seconds as a READER sees it; the stored value never changes. Under 100: two
+// significant figures, trailing zeros stripped. At or above 100: a thousands-separated integer.
+// Never exponent notation, whatever the magnitude - "9.6e-05 s" is a number a processing log can
+// carry and a survey card cannot. The unit belongs to the caller's slot, not to this string.
+function fmtPeriod(v){
+  if(v===null||v===undefined||v==="")return "-";
+  const n=Number(v);
+  if(!isFinite(n))return "-";
+  if(n===0)return "0";
+  if(Math.abs(n)>=100)return Number(_fixedHalfEven(n,0)).toLocaleString("en-AU");
+  // Two significant figures without ever reaching for an exponent: the decimal place count comes
+  // from the magnitude, so 0.005012 rounds at the fourth place and 9.6e-05 at the sixth.
+  const out=_fixedHalfEven(n,Math.max(0,1-Math.floor(Math.log10(Math.abs(n)))));
+  return out.indexOf(".")>=0?out.replace(/0+$/,"").replace(/\.$/,""):out;}
+// The range separator, one place. Owner ruling R2: a numeric range in UI chrome reads as a SPACED
+// HYPHEN-MINUS rather than an en dash or the word "to". Curator prose is not chrome and keeps its
+// own glyph freedoms.
+function fmtRange(lo,hi){return lo+" - "+hi;}
+// ---- collection member colours: the same ramp the static collection pages lay ------------------
+// A collection is drawn twice, as the static page's scatter and as the SPA's collScatter, and a reader
+// moving between them is entitled to find the same survey the same colour. This is the JS twin of
+// engine/extract/_pages.py _member_colours; tests/collection_colours.test.js holds the two to the same
+// lists. The palette leads while it can, so the common case matches exactly.
+const COLL_PAL=["#2E8FA3","#EF7256","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
+// Python's colorsys.hls_to_rgb, mirrored constant for constant: the ramp's hex values have to come out
+// byte-identical to the engine's, so this cannot be an approximation of the same idea.
+const _HLS_T3=1/3,_HLS_S6=1/6,_HLS_T23=2/3;
+function _hlsChannel(m1,m2,hue){
+  hue=hue-Math.floor(hue);
+  if(hue<_HLS_S6)return m1+(m2-m1)*hue*6;
+  if(hue<0.5)return m2;
+  if(hue<_HLS_T23)return m1+(m2-m1)*(_HLS_T23-hue)*6;
+  return m1;}
+function _hlsHex(h,l,s){
+  const m2=(l<=0.5)?l*(1+s):l+s-(l*s),m1=2*l-m2;
+  return "#"+[_hlsChannel(m1,m2,h+_HLS_T3),_hlsChannel(m1,m2,h),_hlsChannel(m1,m2,h-_HLS_T3)]
+    .map(v=>Math.round(v*255).toString(16).toUpperCase().padStart(2,"0")).join("");}
+// `n` distinct colours, deterministic in MEMBER ORDER and with no randomness anywhere. Past the
+// palette's eight the set stops CYCLING - which gave two surveys one colour and made the legend
+// useless - and becomes an evenly spaced hue ramp instead: hue i/n for the widest gap possible at this
+// many members, with lightness alternating between two bands so neighbouring hues still separate on the
+// dark ground.
+function memberColours(n){
+  if(n<=COLL_PAL.length)return COLL_PAL.slice(0,n);
+  const out=[];
+  for(let i=0;i<n;i++)out.push(_hlsHex(i/n,i%2===0?0.62:0.46,0.58));
+  return out;}
+
+// The human form of a Creative Commons identifier, DERIVED from the identifier's own grammar rather
+// than from a hand-kept map: the prefix, the clause letters (which keep their internal hyphens:
+// BY-NC-SA), the version, and a jurisdiction port where one exists. A map covering only today's
+// corpus goes wrong silently - a 3.0, -AU, NC or ND id added to the instrument would print
+// "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on the next, and display_grammar.test.js walks
+// contract.js's own tables to prove no recognised id is missing a form.
+// The DERIVATION runs over the identifiers the INSTRUMENT recognises, which is the engine's domain
+// exactly: _pages.py builds _LICENCE_DISPLAY from redistributable + recognised_only and _fmt_licence
+// echoes anything else. An id outside those tables is echoed here for the same reason - the SPA
+// saying "CC BY 2.0" where the survey page says "CC-BY-2.0" is one identifier read two ways across
+// two surfaces, and the badge beside it already tells the reader this licence is not recognised.
+// Non-CC ids (PUBLIC DOMAIN, ODBL-1.0, ALL RIGHTS RESERVED...) have no published reader's form and
+// are printed verbatim too, because guessing one would be inventing metadata.
+// The SPDX identifier itself stays untouched in exports, data slots and citation output.
+const _CC_ID=/^(CC0|CC)(?:-([A-Z]+(?:-[A-Z]+)*))?-(\d+\.\d+)(?:-([A-Z]{2,3}))?$/;
+// Read at CALL time, not load time, and memoised only once the table is actually there: state.js is
+// loaded on its own by more than one harness, and a module-level read of contract.js's LICENSES turns
+// that into a ReferenceError at boot.
+let _licKnown=null;
+function _licKnownIds(){
+  if(_licKnown&&_licKnown.length)return _licKnown;
+  const L=(typeof LICENSES!=="undefined"&&LICENSES)||{};
+  _licKnown=(L.redistributable||[]).concat(L.recognised_only||[]);
+  return _licKnown;}
+function licHuman(lic){
+  const v=String(lic==null?"":lic).trim();
+  if(_licKnownIds().indexOf(v)<0)return v;
+  const m=_CC_ID.exec(v);
+  return m?m.slice(1).filter(Boolean).join(" "):v;}
+
 function clamp(x){return Math.max(0,Math.min(1,x));}
 function lerp(a,b,t){const pa=[1,3,5].map(i=>parseInt(a.substr(i,2),16)),pb=[1,3,5].map(i=>parseInt(b.substr(i,2),16));
   return "#"+pa.map((v,k)=>Math.round(v+(pb[k]-v)*t).toString(16).padStart(2,"0")).join("");}

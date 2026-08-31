@@ -481,11 +481,12 @@ _CSS = """
   .ts-n{color:#8FA3B0}
   .scroll{max-height:360px;overflow:auto;border:1px solid #2B3557;border-radius:6px;padding:0 .8rem}
   ul{padding-left:1.2rem}
-  header.site{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid #2B3557;flex-wrap:wrap}
+  header.site{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid #2B3557;flex-wrap:wrap;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+  header.site,header.site *{box-sizing:border-box}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
-  .hleft{flex:1 1 auto}
+  .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
-  .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
+  .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:#E8EDF1;text-decoration:none}
   .tagline{color:#8FA3B0;font-size:12.5px}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -536,6 +537,7 @@ _INDEX_CSS = """
   .idxorgn{color:#B4C2CC}
   .idxloc{color:#8FA3B0}
   .idxfacts{font-size:.82rem;margin:0;font-variant-numeric:tabular-nums}
+  .sep{padding:0 .4em}
   .idxdoi{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#4FC3D9}
   .idxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem;margin:0 0 1rem}
   .idxccard{position:relative;background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.9rem 1rem}
@@ -1653,6 +1655,16 @@ def _facts_line(bits) -> str:
     return " &#183; ".join(b for b in bits if b)
 
 
+# The hub CARDS give each interpunct its air as CSS padding on a span (.sep, _INDEX_CSS), never as
+# literal whitespace: text copied off a card must keep reading "1 station &#183; LPMT" with single
+# spaces. Page-level summary lines and the entity pages keep the bare join above.
+_CARD_SEP = ' <span class="sep">&#183;</span> '
+
+
+def _card_facts_line(bits) -> str:
+    return _CARD_SEP.join(b for b in bits if b)
+
+
 def surveys_index_page(*, rows, base, build=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
@@ -1675,7 +1687,7 @@ def surveys_index_page(*, rows, base, build=None) -> str:
         pmin, pmax = r.get("period_min_s"), r.get("period_max_s")
         period = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
                   if pmin is not None and pmax is not None else "")
-        facts = _facts_line([
+        facts = _card_facts_line([
             _e(_plural(int(r.get("n_stations") or 0), "station")),
             _e(type_bit), _e(str(r.get("years") or "")), _e(period), _e(_fmt_licence(r.get("lic"))),
             '<span class="idxdoi">DOI</span>' if r.get("doi") else ""])
@@ -1684,7 +1696,7 @@ def surveys_index_page(*, rows, base, build=None) -> str:
         # Organisation and location, one unlabelled line: the only thing that can say which is
         # which is ink. Two muted shades, the organisation the brighter of the two, because "who
         # collected this" is the coarser filter a reader applies first.
-        org_line = _facts_line([
+        org_line = _card_facts_line([
             f'<span class="idxorgn">{_e(str(r.get("org") or ""))}</span>' if r.get("org") else "",
             f'<span class="idxloc">{_e(str(r.get("region") or ""))}</span>' if r.get("region")
             else ""])
@@ -1741,8 +1753,8 @@ def collections_index_page(*, rows, base, build=None) -> str:
         blurb = _first_sentences(r.get("description"))
         chip_row = f"<p>{chips}</p>" if chips else ""
         desc_row = f'<p class="idxdesc">{_e(blurb)}</p>' if blurb else ""
-        counts = _facts_line([_e(_plural(int(r.get("n_surveys") or 0), "survey")),
-                              _e(_plural(int(r.get("n_stations") or 0), "station"))])
+        counts = _card_facts_line([_e(_plural(int(r.get("n_surveys") or 0), "survey")),
+                                   _e(_plural(int(r.get("n_stations") or 0), "station"))])
         cards.append(
             '<article class="idxccard">'
             f'<h2 class="idxt"><a href="/collections/{_e(cid)}">{_e(title)}</a></h2>'

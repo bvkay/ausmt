@@ -17,6 +17,7 @@ alongside the naive per-card cost that shows the sharing is load-bearing. The co
 its own budget test for the same ceiling: its cost scales with member STATION count rather than
 card count, so it is asserted against six collections at corpus scale before that data arrives.
 """
+import html
 import re
 import sys
 from pathlib import Path
@@ -701,3 +702,72 @@ def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built
         f"three 112px tabs overflow a 375px viewport; the nav row must wrap: {nav.group(1)}"
     zone = re.search(r"\.hzone\{([^}]*)\}", css)
     assert zone and "flex-wrap:wrap" in zone.group(1), "the header zones must keep wrapping"
+
+
+# ==================================================================================================
+# Hub card fact spacing: the widened gap is CSS, never text
+# ==================================================================================================
+# The padded separator the hub CARDS carry, exactly as emitted: one plain space each side of a
+# span whose horizontal padding supplies the visible gap. Text copied off a card must keep
+# reading single-spaced, which is why the gap may never be literal whitespace.
+CARD_SEP = '<span class="sep">&#183;</span>'
+
+# Every card fact line both hubs render: /surveys cards carry the org/location line (.idxorg) and
+# the stats line (.idxfacts); /collections cards carry their counts line (.idxfacts).
+_CARD_LINE = re.compile(r'<p class="(?:idxfacts|idxorg)">(.*?)</p>')
+
+
+def test_hub_card_fact_separators_are_padded_spans(built):
+    """The interpunct separators on the hub cards' fact lines render inside a padded span, so the
+    gap between segments widens visibly without a byte of literal whitespace being added. FAILS IF
+    a card fact line joins on the bare interpunct again, if the span loses the single plain space
+    on each side, or if the padding rule leaves the hub sheet."""
+    for rel in ("surveys/index.html", "collections/index.html"):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        assert ".sep{padding:0 .4em}" in css, \
+            f"{rel}: the separator padding rule must ride the hub sheet"
+        lines = _CARD_LINE.findall(page)
+        assert lines, f"{rel}: no card fact lines found"
+        seen = 0
+        for line in lines:
+            n = line.count("&#183;")
+            assert line.count(f" {CARD_SEP} ") == n, (
+                f"{rel}: every card interpunct must be the padded span with exactly one plain "
+                f"space each side, got {line!r}")
+            seen += n
+        assert seen, f"{rel}: at least one card separator must render, or this pin is vacuous"
+
+
+def test_hub_card_fact_lines_copy_single_spaced(built):
+    """The other half of the same rule: the widened gap must be invisible to selection. Text copied
+    off a card reads "1 station &#183; LPMT &#183; ..." with SINGLE spaces, exactly as it did
+    before the gap widened. FAILS IF the markup smuggles a double space, a tab or a no-break space
+    into any card line's text content, or if the stats line's copied text drifts at all."""
+    for rel in ("surveys/index.html", "collections/index.html"):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        for line in _CARD_LINE.findall(page):
+            text = html.unescape(re.sub(r"<[^>]+>", "", line))
+            assert "  " not in text and "\t" not in text and "\u00a0" not in text, (
+                f"{rel}: copied card text must stay single-spaced, got {text!r}")
+    pages = _pages_module()
+    sv = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
+    facts = re.search(r'<p class="idxfacts">(.*?)</p>', sv).group(1)
+    assert html.unescape(re.sub(r"<[^>]+>", "", facts)) == \
+        "1 station · LPMT · 2019 · 4 - 16,000 s · CC BY 4.0"
+
+
+def test_the_separator_span_stays_on_the_hub_cards_alone(built):
+    """The padded span is a CARD affordance. The page-level summary line, the header's counts
+    slot, the entity pages' own fact lines and the footer all keep the bare single-spaced join.
+    FAILS IF the span leaks into any of them."""
+    sv = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
+    summary = re.search(r'<p class="idxsum">(.*?)</p>', sv).group(1)
+    assert " &#183; " in summary and 'class="sep"' not in summary, (
+        f"the catalogue summary keeps the bare join, got {summary!r}")
+    head = sv.split("<header", 1)[1].split("</header>", 1)[0]
+    assert 'class="sep"' not in head, "the header counts slot keeps the bare join"
+    for rel in ("surveys/idx-a.html", "collections/idxcoll.html"):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        assert 'class="sep"' not in page, f"{rel}: entity pages keep their current spacing"
+        assert "&#183;" in page, f"{rel}: the bare interpunct grammar itself must survive"
