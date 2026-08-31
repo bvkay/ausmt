@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brand and assets - AusMT</title>
+<meta name="description" content="AusMT logos, the standalone mark and the presentation artwork, with the terms for using them.">
+<link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">
+<!-- The one true URL for this page. It is substantive, linked from About and advertised in
+     sitemap.xml, so it must say which address it is served at. -->
+<link rel="canonical" href="https://ausmt.auscope.org.au/brand.html">
+<style>
+  /* Treatment D+ palette, the same tokens index.html, about.html, add-survey.html and releases.html
+     declare. Copied rather than shared because the portal ships as classic static pages with no
+     template step, which is the same bargain every other page here makes. */
+  :root{
+    --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
+    --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    /* The two backgrounds the variants are DRAWN FOR, taken from contract/brand.json. A preview on
+       the wrong one is how a reader concludes the file is broken; a pin holds these to the
+       generator's own declared values. */
+    --preview-dark:#07162F;
+    --preview-light:#FFFFFF;
+  }
+  *{box-sizing:border-box}
+  body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6}
+  a{color:var(--copper)}
+  /* Uniform chrome: the three-zone header with the C9 zero-basis sides, so the tab group sits at the
+     same x here as on every other surface. */
+  header{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
+  .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+  .hleft{flex:1 1 0;min-width:0}
+  .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
+  .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
+  .brandmark{height:30px;width:30px;display:block;flex:none}
+  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
+  .tagline{color:var(--muted);font-size:12.5px}
+  nav{display:flex;gap:6px;flex-wrap:wrap}
+  nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;
+    padding:0 16px;border-radius:5px;text-decoration:none}
+  nav a:hover{border-color:var(--copper)}
+  .about,.contribute{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px;white-space:nowrap}
+  .about:hover,.contribute:hover{border-color:var(--copper)}
+  .counts{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .counts b{color:var(--text)}
+  @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
+
+  main{max-width:900px;margin:0 auto;padding:30px 20px 80px}
+  h1{font-size:1.8rem;margin:.2rem 0 .4rem}
+  h2{font-size:1.15rem;margin:2.2rem 0 .3rem}
+  .sub{color:var(--muted);max-width:66ch;margin:.2rem 0 1.4rem}
+  .prose{max-width:66ch}
+  .usage{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--copper);
+    border-radius:8px;padding:.9rem 1.1rem;margin:1.2rem 0 0;max-width:66ch}
+
+  /* One preview per variant: the artwork on the ground it was drawn for, its name, and the two
+     downloads. The panel is the only thing that changes between the dark and light rows. */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:1rem;margin:.9rem 0 0}
+  .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel{margin:0;padding:22px 20px;display:flex;align-items:center;justify-content:center;min-height:130px}
+  .panel.dark{background:var(--preview-dark)}
+  .panel.light{background:var(--preview-light)}
+  .panel img{max-width:100%;height:auto;display:block}
+  .panel.square img{width:104px;height:104px}
+  .meta{display:flex;flex-wrap:wrap;gap:.4rem .9rem;align-items:baseline;justify-content:space-between;
+    padding:.6rem .9rem;border-top:1px solid var(--line)}
+  .name{font-size:.92rem;font-weight:600}
+  .on{color:var(--muted);font-size:.8rem;font-family:var(--mono)}
+  .dl{font-size:.85rem;white-space:nowrap}
+  .dl a{text-decoration:none;border-bottom:1px solid transparent}
+  .dl a:hover{border-bottom-color:var(--copper)}
+
+  .swatches{display:flex;flex-wrap:wrap;gap:.7rem;list-style:none;padding:0;margin:.9rem 0 0}
+  .swatch{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.55rem .7rem;
+    display:flex;align-items:center;gap:.55rem;font-size:.85rem}
+  .swatch::before{content:"";width:26px;height:26px;border-radius:6px;background:var(--swatch);flex:none}
+  .swatch code{font-family:var(--mono);font-size:.8rem;color:var(--text)}
+  .swatch span{color:var(--muted);font-size:.78rem}
+
+  .hero{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:.9rem 0 0}
+  .hero img{width:100%;height:auto;display:block}
+
+  footer{border-top:1px solid var(--line);margin-top:3rem;padding:14px 20px;color:var(--muted);
+    font-size:12.5px;display:flex;flex-wrap:wrap;gap:.4rem 1rem;justify-content:space-between}
+  .ver{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
+  .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none}
+  .apilink:hover{color:var(--copper)}
+</style>
+</head>
+<body>
+<header>
+  <div class="hzone hleft">
+    <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
+    <div class="wordmark">AusMT</div>
+    <div class="tagline">Australia's Magnetotelluric Data Portal</div>
+  </div>
+  <div class="hzone hcenter">
+    <nav>
+      <a id="navMap" href="/">Map</a>
+      <a id="navSurveys" href="/surveys">Surveys</a>
+      <a id="navCollections" href="/collections">Collections</a>
+    </nav>
+    <a class="about" href="about.html">About</a>
+    <a class="contribute" href="add-survey.html">Contribute a survey &rarr;</a>
+  </div>
+  <div class="hzone hright">
+    <!-- The corpus-totals block the other static pages carry, filled by the same corpus-stats.js from
+         the same served catalogue. It ships hidden and appears only once the documents resolve, so an
+         unpublished deployment shows nothing rather than a fabricated total. -->
+    <div class="counts corpus" id="corpusCounts" hidden
+         title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations &middot;
+      <b id="corpusSurveys"></b> surveys</div>
+  </div>
+</header>
+<main>
+  <h1>Brand and assets</h1>
+  <p class="sub">The AusMT logos, the standalone mark and the presentation artwork, ready to drop into
+  a talk, a paper or a poster.</p>
+
+  <p class="usage">AusMT logos and graphics are available for use in presentations, publications and
+  other material referring to AusMT. Use the dark-background version on dark colours and the
+  light-background version on light colours. Please retain the proportions, colours and clear space of
+  the AusMT mark.</p>
+
+  <h2>Logo</h2>
+  <p class="prose">The mark beside the wordmark. Use this wherever AusMT is being identified and the
+  space is a horizontal strip: a slide footer, a header, a partner row.</p>
+  <div class="grid">
+    <div class="item">
+      <figure class="panel dark"><img src="vendor/brand/ausmt-logo-dark.svg" alt="AusMT logo, for dark backgrounds" width="440"></figure>
+      <div class="meta"><span class="name">Logo <span class="on">on dark</span></span>
+        <span class="dl"><a href="vendor/brand/ausmt-logo-dark.svg" download>SVG</a> &middot;
+          <a href="vendor/brand/ausmt-logo-dark.png" download>PNG</a></span></div>
+    </div>
+    <div class="item">
+      <figure class="panel light"><img src="vendor/brand/ausmt-logo-light.svg" alt="AusMT logo, for light backgrounds" width="440"></figure>
+      <div class="meta"><span class="name">Logo <span class="on">on light</span></span>
+        <span class="dl"><a href="vendor/brand/ausmt-logo-light.svg" download>SVG</a> &middot;
+          <a href="vendor/brand/ausmt-logo-light.png" download>PNG</a></span></div>
+    </div>
+  </div>
+
+  <h2>Logo with tagline</h2>
+  <p class="prose">The same lockup with the descriptive line, for the first slide, a title page or
+  anywhere AusMT is being introduced rather than credited.</p>
+  <div class="grid">
+    <div class="item">
+      <figure class="panel dark"><img src="vendor/brand/ausmt-logo-dark-extended.svg" alt="AusMT logo with tagline, for dark backgrounds" width="440"></figure>
+      <div class="meta"><span class="name">Logo with tagline <span class="on">on dark</span></span>
+        <span class="dl"><a href="vendor/brand/ausmt-logo-dark-extended.svg" download>SVG</a> &middot;
+          <a href="vendor/brand/ausmt-logo-dark-extended.png" download>PNG</a></span></div>
+    </div>
+    <div class="item">
+      <figure class="panel light"><img src="vendor/brand/ausmt-logo-light-extended.svg" alt="AusMT logo with tagline, for light backgrounds" width="440"></figure>
+      <div class="meta"><span class="name">Logo with tagline <span class="on">on light</span></span>
+        <span class="dl"><a href="vendor/brand/ausmt-logo-light-extended.svg" download>SVG</a> &middot;
+          <a href="vendor/brand/ausmt-logo-light-extended.png" download>PNG</a></span></div>
+    </div>
+  </div>
+
+  <h2>Mark</h2>
+  <p class="prose">The symbol on its own, for a favicon, an avatar, an app tile or anywhere the
+  wordmark would be unreadable. It is the same artwork on either background, so the two previews below
+  are one file shown twice.</p>
+  <div class="grid">
+    <div class="item">
+      <figure class="panel dark square"><img src="vendor/brand/ausmt-mark.svg" alt="The AusMT mark" width="104" height="104"></figure>
+      <div class="meta"><span class="name">Mark <span class="on">on dark</span></span>
+        <span class="dl"><a href="vendor/brand/ausmt-mark.svg" download>SVG</a> &middot;
+          <a href="vendor/brand/ausmt-mark.png" download>PNG</a></span></div>
+    </div>
+    <div class="item">
+      <figure class="panel light square"><img src="vendor/brand/ausmt-mark.svg" alt="The AusMT mark" width="104" height="104"></figure>
+      <div class="meta"><span class="name">Mark <span class="on">on light</span></span>
+        <span class="dl"><a href="vendor/brand/ausmt-mark.svg" download>SVG</a> &middot;
+          <a href="vendor/brand/ausmt-mark.png" download>PNG</a></span></div>
+    </div>
+  </div>
+
+  <h2>Colours</h2>
+  <p class="prose">Four stops, running cool in the west to warm in the east across the mark. Every dot
+  takes its colour from where it sits, so the palette and the geometry are one decision.</p>
+  <ul class="swatches">
+    <li class="swatch" style="--swatch:#3953DC">
+      <code>#3953DC</code><span>blue</span></li>
+    <li class="swatch" style="--swatch:#9444CE">
+      <code>#9444CE</code><span>purple</span></li>
+    <li class="swatch" style="--swatch:#E44696">
+      <code>#E44696</code><span>pink</span></li>
+    <li class="swatch" style="--swatch:#FF6655">
+      <code>#FF6655</code><span>coral</span></li>
+  </ul>
+
+  <section id="artwork">
+    <h2>Presentation artwork</h2>
+    <p class="prose">The full pixelated Australia. This is the hero graphic, not a logo: use it as a
+    title slide, a poster panel or a link preview, at a size where the individual stations read. Where
+    AusMT needs to be identified rather than illustrated, use the logo above.</p>
+    <div class="hero"><img src="vendor/social-card.png" alt="The AusMT presentation artwork: Australia rendered as a field of coloured dots beside the AusMT wordmark" width="1200" height="630" loading="lazy"></div>
+    <p class="dl" style="margin-top:.6rem"><a href="vendor/social-card.png" download>Download the artwork (PNG, 1200 x 630)</a></p>
+  </section>
+
+  <h2>Using them well</h2>
+  <ul class="prose">
+    <li>Prefer the SVG. It stays sharp at any size and in print; the PNG is there for tools that will
+      not take a vector.</li>
+    <li>Keep clear space around the mark: at least a quarter of the mark's height on every side, with
+      nothing else inside it.</li>
+    <li>Do not recolour, outline, rotate or stretch the mark, and do not rebuild it from the artwork.
+      The two are different graphics with different jobs.</li>
+    <li>AusMT is an AuScope service. Where that relationship needs stating, state it in words rather
+      than by placing another organisation's logo inside the AusMT lockup.</li>
+  </ul>
+</main>
+<footer>
+  <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a>
+  <span>&copy; 2026 AuScope and the AusMT contributors &middot; The portal software is Apache-2.0;
+    survey data remains licensed by its custodians.</span>
+  <span class="ver" data-ver-chip></span>
+</footer>
+<script src="config.js"></script>
+<script src="version.js"></script>
+<!-- Separate files, not inline blocks: the deployed CSP for every page except add-survey.html is
+     script-src 'self' with no 'unsafe-inline' (deploy/docker/caddy/Caddyfile, @strictPages), which a
+     new page picks up automatically because that matcher is a `not path /add-survey.html`. -->
+<script src="corpus-stats.js"></script>
+</body>
+</html>

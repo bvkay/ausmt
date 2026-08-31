@@ -595,7 +595,9 @@ def build_feed_xml(surveys_meta: dict, base_url: str = None):
 
 # The static portal documents the sitemap advertises beside the generated pages. They are
 # substantive, indexable and linked from the root, and were previously in no sitemap at all.
-_SITEMAP_STATIC_PAGES = ("about.html", "releases.html", "add-survey.html")
+# brand.html joins them with the brand-assets lane: it is where anyone outside the project gets a
+# usable AusMT logo file, with the usage terms beside it, and it is linked from About.
+_SITEMAP_STATIC_PAGES = ("about.html", "releases.html", "add-survey.html", "brand.html")
 
 
 def _portal_dir():
