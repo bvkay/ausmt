@@ -1404,16 +1404,12 @@ function surveyPassesFacets(sv){const m=SMETA[sv]||{};
 // C6: the promoted facets gate the MAP's own predicates too (filters.js passesCore), and _facets is
 // this module's state, so it is read through one named accessor rather than reached into.
 function surveyFacetOn(k){return !!_facets[k];}
+// The survey-level reading of ONE rule, which lives in filters.js (passesYearWindow) and used to live
+// here as a second verbatim copy. Only the field names differ between the two surfaces, so only the field
+// names belong here. Guarded like the other cross-module calls: a harness that loads drawer.js without
+// filters.js has no filter UI either, which is the same no-op the rule itself returns.
 function _surveyPassesYears(m){
-  const fromEl=document.getElementById("yearFrom"),toEl=document.getElementById("yearTo");
-  if(!fromEl||!toEl)return true;                    // filter UI not present (a bare fixture) -> no-op
-  const from=fromEl.value.trim()?+fromEl.value:null,to=toEl.value.trim()?+toEl.value:null;
-  if(from==null&&to==null)return true;
-  if(m.year_start==null&&m.year_end==null)return false;
-  const lo=m.year_start??m.year_end,hi=m.year_end??m.year_start;
-  if(from!=null&&hi<from)return false;
-  if(to!=null&&lo>to)return false;
-  return true;}
+  return (typeof passesYearWindow==="function")?passesYearWindow(m.year_start,m.year_end):true;}
 function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
   if(_sortMode==="stations")arr.sort((a,b)=>_stationCount(b)-_stationCount(a)||a.localeCompare(b));
   else if(_sortMode==="year")arr.sort((a,b)=>_yearKey(m(b))-_yearKey(m(a))||a.localeCompare(b));       // newest first

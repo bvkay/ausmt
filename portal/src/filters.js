@@ -17,16 +17,22 @@ let findActive=-1;   // UX6 Wave F (F3): index of the keyboard-highlighted Find 
 // (survey declares no dates) PASS when both inputs are empty (no filter in effect) but FAIL as soon
 // as either is set — a modeller who typed a year range is asking for DATED data, so silently
 // including undated stations would misrepresent the range as covering them.
-function passesYearRange(s){
+// The rule itself, over a record's OWN two years. It is read on two surfaces - the map filters stations
+// (passesYearRange below) and the survey grid filters surveys (drawer.js _surveyPassesYears) - and it
+// lived as two verbatim copies in two files, differing only in the field names each surface spells its
+// years with. That is the shape a rule drifts in: one copy gets corrected and the other does not. One
+// definition, two callers, and the harness pins the two readings against each other.
+function passesYearWindow(yearLo,yearHi){
   const fromEl=document.getElementById("yearFrom"),toEl=document.getElementById("yearTo");
   if(!fromEl||!toEl)return true;                      // filter UI not present (e.g. a bare fixture) -> no-op
   const from=fromEl.value.trim()?+fromEl.value:null,to=toEl.value.trim()?+toEl.value:null;
   if(from==null&&to==null)return true;
-  if(s.yearStart==null&&s.yearEnd==null)return false;  // undated station, but a range WAS requested
-  const lo=s.yearStart??s.yearEnd,hi=s.yearEnd??s.yearStart;
+  if(yearLo==null&&yearHi==null)return false;         // undated record, but a range WAS requested
+  const lo=yearLo??yearHi,hi=yearHi??yearLo;
   if(from!=null&&hi<from)return false;
   if(to!=null&&lo>to)return false;
   return true;}
+function passesYearRange(s){return passesYearWindow(s.yearStart,s.yearEnd);}
 function passesCore(s){
   if(![...document.querySelectorAll("#typeBoxes input:checked")].map(c=>c.value).includes(s.type))return false;
   const svs=[...tree.querySelectorAll('input[value]:checked')].map(c=>c.value);

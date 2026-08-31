@@ -1736,6 +1736,17 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!A.visSurveys().includes("Gamma Survey"), "year filter did not exclude the undated Gamma Survey once a year was set");
   ok(!A.visSurveys().includes("Delta Survey"), "year filter did not exclude the undated Delta Survey once a year was set");
   ok(A.visIds().length === 1, "expected exactly 1 visible station (B1) after the year filter, got " + A.visIds().length);
+  // ONE year window, read twice. The map filters STATIONS (filters.js passesYearRange) and the survey
+  // grid filters SURVEYS (drawer.js _surveyPassesYears); the two lived as verbatim copies of one rule in
+  // two files, which is the shape C1 removed from acqYearText and the reason an en dash could survive in
+  // one copy after the other moved. This pin holds the two readings together whatever the rule becomes.
+  A.setView("surveys"); A.renderCards();
+  const _gridSv = [...new Set([...doc.querySelectorAll("#cardGrid .scard [data-survey]")]
+    .map(b => b.dataset.survey))].sort();
+  ok(JSON.stringify(_gridSv) === JSON.stringify([...A.visSurveys()].sort()),
+    "C6: the survey grid and the map must read one year window the same way; grid " +
+    JSON.stringify(_gridSv) + " map " + JSON.stringify([...A.visSurveys()].sort()));
+  A.setView("map");
   yearFrom.value = ""; fire(yearFrom, "input");
   ok(A.visIds().length === 5, "clearing the year filter did not restore all 5 stations");
 
