@@ -1073,16 +1073,6 @@ async function downloadUrl(url,filename){
   catch(e){toast("Download works when served over HTTP next to the data files; can't fetch over file://.");}}
 function copyTxt(t){navigator.clipboard?.writeText(t).then(()=>toast("Copied.")).catch(()=>toast("Copy failed; select manually."));}
 
-// UX3 item 6: the survey card description comes from the survey.yaml abstract, which the engine already
-// carries into SMETA as m.blurb (build_portal.py). Render the escaped abstract when present and non-empty;
-// otherwise an HONEST muted single line — no fabricated marketing copy (the old hardcoded placeholder
-// implied content that wasn't there). esc() makes a hostile abstract (e.g. <img onerror=…>) render inert.
-function cardDesc(m){
-  const blurb=(m&&typeof m.blurb==="string")?m.blurb.trim():"";
-  return blurb
-    ? `<div class="desc">${esc(blurb)}</div>`
-    : `<div class="desc desc-empty">No survey description provided; add an <code>abstract</code> to survey.yaml.</div>`;
-}
 // UX6 Wave E: a survey's declared acquisition window as display text — the dates string when present,
 // else the year_start(-end) range; "" when neither is declared (caller omits the field). Shared by the
 // slim survey card and the compact list row so both read the same value.
@@ -1105,7 +1095,6 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
    `<div class="mixbar">${mixbar}</div>`+
    `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))} s</b></div>`+
    `<div class="badges">${badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic))}${badge("DOI",hasDatasetDoi(m)?"ok":"no")}</div>`+
-   cardDesc(m)+
    `<div class="cardbtns"><a class="primary" href="/surveys/${escAttr(m.slug||sv)}">View survey →</a><button data-act="select" data-survey="${escAttr(sv)}">Download</button></div></div>`;}
 // Per-survey card locator (owner ruling 2026-08-28): the SAME fixed-Australia treatment as the
 // collection scatter, one survey's stations only, dots coloured by DATA TYPE with the portal's own

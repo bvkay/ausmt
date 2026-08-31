@@ -349,10 +349,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "treeSetCollapsed,treeIsCollapsed,treeCollapsedKeys:()=>[..._treeCollapsed]," +
   "setType:(id,ty)=>{const s=ST.find(x=>x.id===id);if(s)s.type=ty;}," +
   "setSlug:(id,sl)=>{const s=ST.find(x=>x.id===id);if(s)s.slug=sl;}," +
-  // UX3 item 6/7 hooks: poke a survey's blurb (abstract) and read the rendered surveyCard/surveySummary
-  // HTML so the driver can assert the card description + XSS-inertness + fallback, and the removal of the
-  // dimensionality displays (while skew/strike stay). cardDesc exposed for a direct pure-function check.
-  "cardDesc,setBlurb:(sv,b)=>{SMETA[sv]=SMETA[sv]||{};if(b===null)delete SMETA[sv].blurb;else SMETA[sv].blurb=b;}," +
+  // UX3 item 7 hook: poke a survey's blurb (abstract) and read the rendered surveyCard/surveySummary
+  // HTML, so the driver can assert where the abstract renders (C2: the drawer story view, no longer the
+  // card) and the removal of the dimensionality displays (while skew/strike stay).
+  "setBlurb:(sv,b)=>{SMETA[sv]=SMETA[sv]||{};if(b===null)delete SMETA[sv].blurb;else SMETA[sv].blurb=b;}," +
   "cardHtml:(sv)=>surveyCard(sv),summaryHtml:(sv)=>surveySummary(ST.filter(s=>s.survey===sv),SMETA[sv]||{})," +
   // C22 citation-honesty hooks: the citation ASSEMBLY helpers (drawer.js apa/bibtex/ris + exports.js
   // citeLine) and the constants the #dlCite pack feeds them — exposed so section T can assert on the
@@ -2230,38 +2230,41 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // un-scoped tree (the restore hook puts the tree back); mirrors the section-CC tree reset below.
   A.setSidebarMode("browse");
 
-  // R. CARD DESCRIPTION FROM survey.yaml (UX feedback round 3, item 6): the survey card's .desc renders
-  // the escaped survey.yaml abstract (m.blurb) when present; a hostile abstract must render INERT; and an
-  // absent/blank abstract yields the honest muted fallback line — NOT fabricated marketing copy.
-  // (a) the OLD hardcoded placeholder is gone from every rendered card.
-  A.setBlurb("Alpha Survey", null);                      // ensure a known "absent" starting state
-  ok(A.cardHtml("Alpha Survey").indexOf("scraped from the EDIs automatically") < 0,
-    "the old hardcoded card-description placeholder must be gone");
-  // (b) a normal abstract renders as the description text.
+  // R. THE ABSTRACT LIVES IN THE RECORD, NOT ON THE CARD (C2, brief 4/6). The survey.yaml abstract used
+  // to render as a 12px muted italic block on every card, which made a grid of cards a wall of prose and
+  // pushed the facts a reader scans for below the fold. It is REMOVED from the card and stays where a
+  // reader who has chosen a survey meets it: the drawer story view here, and the static survey page,
+  // which the engine suite pins separately (engine/tests/test_entity_pages.py, "the survey blurb prose
+  // must render"). Pins moved from the card to the drawer per contract section 1, C2: "the abstract
+  // remains in the drawer story view and on the survey page (assert both still render it)".
+  // (a) the CARD carries no description block at all - not the abstract, not a fallback line.
   A.setBlurb("Alpha Survey", "A regional MT survey across the Gawler Craton.");
-  let cardA = A.cardHtml("Alpha Survey");
-  ok(cardA.indexOf("A regional MT survey across the Gawler Craton.") >= 0,
-    "card .desc did not render the survey.yaml abstract (m.blurb)");
-  // (c) HOSTILE-BLURB XSS: an abstract carrying an <img onerror=…> must be escaped to inert text — no live
-  //     tag, no raw onerror attribute in the rendered HTML. Assert against the actual jsdom-parsed card.
+  const cardWithBlurb = A.cardHtml("Alpha Survey");
+  ok(cardWithBlurb.indexOf('class="desc') < 0,
+    "C2: the card must carry no .desc block, got: " +
+    JSON.stringify((cardWithBlurb.match(/.{0,40}class="desc.{0,60}/) || [""])[0]));
+  ok(cardWithBlurb.indexOf("A regional MT survey across the Gawler Craton.") < 0,
+    "C2: the abstract must not render on the card");
+  ok(cardWithBlurb.indexOf("No survey description provided") < 0,
+    "C2: the card's absent-abstract fallback line goes with the block it belonged to");
+  ok(typeof A.cardDesc === "undefined",
+    "C2: cardDesc had exactly one call site (the card) and must not be left behind as dead code");
+  // (b) the DRAWER STORY VIEW still renders the abstract, which is the surface the card handed it to.
+  A.openSurvey("Alpha Survey");
+  ok(doc.getElementById("drawer").textContent.indexOf("A regional MT survey across the Gawler Craton.") >= 0,
+    "C2: the survey drawer must still render the survey.yaml abstract");
+  // (c) HOSTILE-BLURB XSS, moved to the surface that now renders it: an abstract carrying an
+  //     <img onerror=...> must be escaped to inert text - no live tag, no live handler, literal text kept.
   const XSS = "<img src=x onerror=\"window.__pwned=1\">pwn";
   A.setBlurb("Alpha Survey", XSS);
-  const holder = doc.createElement("div");
-  holder.innerHTML = A.cardHtml("Alpha Survey");
-  const desc = holder.querySelector(".desc");
-  ok(desc, "card has no .desc element for the hostile-blurb check");
-  ok(desc.querySelector("img") === null, "hostile blurb produced a LIVE <img> element (XSS not neutralised)");
-  ok(desc.innerHTML.indexOf("onerror") < 0 || desc.querySelector("[onerror]") === null,
-    "hostile blurb left a live onerror handler");
-  ok(desc.textContent.indexOf("pwn") >= 0, "escaped hostile blurb should still show its literal text");
+  A.openSurvey("Alpha Survey");
+  const drwX = doc.getElementById("drawer");
+  ok(drwX.querySelector("img[src='x']") === null, "hostile blurb produced a LIVE <img> element (XSS not neutralised)");
+  ok(drwX.querySelector("[onerror]") === null, "hostile blurb left a live onerror handler");
+  ok(drwX.textContent.indexOf("pwn") >= 0, "escaped hostile blurb should still show its literal text");
   ok(win.__pwned === undefined, "hostile blurb executed script (window.__pwned was set)");
-  // (d) absent/blank abstract -> honest muted fallback line (mentions the survey.yaml `abstract` field).
-  A.setBlurb("Alpha Survey", "   ");                     // whitespace-only counts as absent (trim())
-  ok(A.cardHtml("Alpha Survey").indexOf("No survey description provided") >= 0,
-    "blank abstract did not fall back to the honest 'No survey description provided' line");
   A.setBlurb("Alpha Survey", null);
-  ok(A.cardDesc({}).indexOf("No survey description provided") >= 0, "cardDesc({}) should return the fallback line");
-  ok(A.cardDesc({ blurb: "hi" }).indexOf("hi") >= 0, "cardDesc should render a present blurb");
+  doc.getElementById("drawer").classList.remove("open");
 
   // S. DIMENSIONALITY HIDDEN FROM SCREENING DISPLAYS (UX feedback round 3, item 7): removed from the
   // station-drawer screening grid (7a), the survey-card stats line (7b) and the survey-story table (7c) —
@@ -2903,8 +2906,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(legend.classList.contains("expanded") !== wasExpanded, "D6: the legend toggle did not flip the expanded state");
 
   // ===== UX6 WAVE E ==============================================================================
-  // BB. E1 SLIM SURVEY CARD. The card field set is reduced; the heavy blocks moved to the survey DETAIL.
+  // BB. THE WORKSPACE CARD. The card field set is reduced; the heavy blocks moved to the survey DETAIL.
   // Each pin states what it fails on. (Alpha's blurb was reset to null in section R.)
+  // C2 (contract section 1: "Update the BB card-shape pins to the new field set"): the abstract block
+  // leaves the field set. What stays is what a reader SCANS - identity, where, how much, under what
+  // licence - plus BOTH actions: the no-buttons rule is a HUB rule, and this is the working view, where
+  // Download is the whole point of the grid feeding the download builder.
   doc.getElementById("drawer").classList.remove("open");
   const cardA1 = A.cardHtml("Alpha Survey");
   // present: title, org, collection chip, acquisition year, station count, mixbar, period range, badges, two actions.
@@ -2927,6 +2934,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cardA1.indexOf("coord QC") < 0, "E1: the coordinate-QC flag stat must NOT be on the slim card");
   ok(cardA1.indexOf("time series") < 0 && cardA1.indexOf("MTH5") < 0, "E1: the per-format availability matrix must NOT be on the slim card");
   ok(cardA1.indexOf("completeness/smoothness") < 0, "E1: the completeness/smoothness check must NOT be on the slim card (it stays in the detail)");
+  // C2: the abstract block joins that absent list, and BOTH actions stay present (asserted above).
+  ok(cardA1.indexOf('class="desc') < 0, "C2: the abstract block must NOT be on the workspace card");
+  ok((cardA1.match(/data-act="select"/g) || []).length === 1 && (cardA1.match(/View survey/g) || []).length === 1,
+    "C2: the workspace card keeps EXACTLY its two actions, one View survey and one Download");
   // the removed renderers are NOT deleted from the codebase — they still render in the survey detail
   // (identifiersHtml + apa are exercised by section P above and the E2 rollup below).
 
