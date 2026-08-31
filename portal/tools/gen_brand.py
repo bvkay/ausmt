@@ -453,12 +453,18 @@ def png_logo(dark, extended, width=PNG_LOGO_WIDTH):
     for cx, cy, r, hexc in mark_dots(mx * scale, my * scale, ms * scale, round(ms * width / lay["width"])):
         d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=hexc)
     ws = lay["wordmark_size"] * scale
-    font = ImageFont.truetype(str(FONT_FILE), round(ws))
+    # BASIC layout is pinned, not defaulted: Pillow picks Raqm when its wheel bundles libraqm and
+    # Basic when it does not, and the two shape text differently, so the same call produced
+    # different bytes on a developer's macOS wheel and on CI's manylinux one. Every Pillow build
+    # has Basic, so pinning it is what makes the committed exports reproducible and the drift
+    # gate meaningful.
+    font = ImageFont.truetype(str(FONT_FILE), round(ws), layout_engine=ImageFont.Layout.BASIC)
     _draw_tracked(d, lay["text_x"] * scale, lay["baseline"] * scale, "AusMT", font,
                   WORDMARK_INK["on_dark" if dark else "on_light"], LETTER_SPACING_EM * ws)
     if extended:
         ts = lay["tagline_size"] * scale
-        tfont = ImageFont.truetype(str(FONT_FILE), round(ts))
+        tfont = ImageFont.truetype(str(FONT_FILE), round(ts),
+                                   layout_engine=ImageFont.Layout.BASIC)
         _draw_tracked(d, lay["text_x"] * scale, lay["tagline_baseline"] * scale, TAGLINE, tfont,
                       TAGLINE_INK["on_dark" if dark else "on_light"], 0.0)
     return im.resize((width, height), Image.LANCZOS) if ss > 1 else im
