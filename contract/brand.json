@@ -33,6 +33,10 @@
     "wordmark_ink": {
       "on_dark": "#FFFFFF",
       "on_light": "#11182D"
+    },
+    "tagline_ink": {
+      "on_dark": "#C9D4E8",
+      "on_light": "#646979"
     }
   },
   "geometry": {
@@ -76,7 +80,7 @@
       "above": 0.44
     },
     "svg_nominal_size_px": {
-      "mark": 48,
+      "mark": 32,
       "favicon": 16
     },
     "dot_count": 180,
@@ -1345,22 +1349,84 @@
   },
   "proportions": {
     "mark_height": 1.0,
-    "gap_mark_to_wordmark": 0.3,
+    "gap_mark_to_wordmark": 0.24,
     "wordmark_font_size": 0.62,
-    "tagline_font_size": 0.2,
+    "tagline_font_size": 0.15,
     "tagline_baseline_gap": 0.34,
-    "clear_space": 0.25
+    "clear_space": 0.2,
+    "mark_units": 1000
   },
   "typography": {
     "note": "The web and SVG wordmark renders in the site's own system UI stack, so the logo and the portal header agree in the viewer's fonts. The raster exports cannot depend on the viewer's fonts, so they are drawn with a bundled face that serves only as a deterministic rendering substitute.",
     "web_font_stack": "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif",
     "web_font_weight": 800,
     "letter_spacing_em": -0.02,
+    "wordmark_advance_em": 3.429,
+    "tagline_advance_em": 18.889,
+    "cap_height_em": 0.728,
+    "descender_em": 0.242,
     "raster_substitute": {
       "family": "Inter",
       "style": "Bold",
       "is_the_ausmt_typeface": false,
       "note": "A deterministic rendering substitute for the PNG pipeline only. AusMT has no proprietary typeface and this face must never be presented as one. It is bundled under portal/tools/brand_font/ with its SIL OFL text and provenance, is never served, and is never loaded as a web font."
     }
-  }
+  },
+  "outputs": [
+    {
+      "path": "contract/brand.json",
+      "kind": "json",
+      "variant": "source of truth"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-logo-dark.svg",
+      "kind": "svg",
+      "variant": "logo, dark background"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-logo-dark.png",
+      "kind": "png",
+      "variant": "logo, dark background"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-logo-light.svg",
+      "kind": "svg",
+      "variant": "logo, light background"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-logo-light.png",
+      "kind": "png",
+      "variant": "logo, light background"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-logo-dark-extended.svg",
+      "kind": "svg",
+      "variant": "logo with tagline, dark background"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-logo-dark-extended.png",
+      "kind": "png",
+      "variant": "logo with tagline, dark background"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-logo-light-extended.svg",
+      "kind": "svg",
+      "variant": "logo with tagline, light background"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-logo-light-extended.png",
+      "kind": "png",
+      "variant": "logo with tagline, light background"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-mark.svg",
+      "kind": "svg",
+      "variant": "standalone mark"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-mark.png",
+      "kind": "png",
+      "variant": "standalone mark"
+    }
+  ]
 }

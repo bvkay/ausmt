@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compute the canonical AusMT mark once, and write it to contract/brand.json.
+"""Compute the canonical AusMT mark once, and render every brand export from it.
 
     python3 tools/gen_brand.py            # (re)write the generated brand artefacts
     python3 tools/gen_brand.py --check    # CI drift gate: exit 1 if anything is stale
@@ -18,8 +18,17 @@ palette and the colour mapping are computed here, written to contract/brand.json
 rendering of that file. --check regenerates everything and fails on any difference, the same gate
 tools/gen_config.py runs over config.js, so a hand-edited asset cannot survive a pull request.
 
+SVG VERSUS PNG. The SVGs are real vector circles and text elements: they scale, they print, and their
+wordmark renders in the READER's own system UI stack, which is what the owner ruled for anything a
+browser draws. The PNGs are for slide decks and documents, where a viewer's fonts are not available and
+the bytes must be identical everywhere; they are rendered from the SAME lattice with a bundled face,
+never by rasterising the SVGs (a converted SVG would bake in whatever fonts the converter happened to
+have). Both formats are transparent, so a variant is a choice of INK rather than a choice of card.
+
 DETERMINISM. No timestamps, no locale-dependent formatting, no randomness, no network. Two runs produce
-identical output. contract/brand.json is compared byte for byte.
+identical output. Text artefacts are compared byte for byte; PNGs are compared as decoded pixels, which
+is the invariant that actually matters (a committed export must show exactly what the tool draws) and
+which does not go red when a PNG encoder or its zlib is upgraded under CI.
 """
 import argparse
 import json
@@ -29,7 +38,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent        # portal/
 REPO = ROOT.parent                                   # the ausmt monorepo root
 BRAND_JSON = REPO / "contract" / "brand.json"
+BRAND_DIR = ROOT / "vendor" / "brand"
 FONT_DIR = ROOT / "tools" / "brand_font"
+FONT_FILE = FONT_DIR / "Inter-Bold.ttf"
 
 # The coastline single source. Same sys.path-then-import sibling pattern gen_config.py uses to reach
 # the contract package: this is a TOOL running from the checkout, never the engine image, so the module
@@ -38,8 +49,8 @@ sys.path.insert(0, str(REPO / "engine" / "extract"))
 from _au_outline import COAST, EXTENT  # noqa: E402  (sibling engine module, stdlib-only)
 
 # ==================================================================================================
-# THE DECLARED CONSTANTS. Everything below this line is the source of truth; everything after it is
-# derivation. A change here is a brand change and must be regenerated and reviewed as one.
+# THE DECLARED CONSTANTS. Everything above the derivation banner is the source of truth; everything
+# below it is derivation. A change here is a brand change and must be regenerated and reviewed as one.
 # ==================================================================================================
 
 # The lattice. The engine's drawing EXTENT (112E to 154E, 44S to 9S) divided into this many cells.
@@ -71,8 +82,16 @@ PALETTE_DERIVATION = (
 )
 # Where each stop sits on the ramp. Coral is given the narrow far-east band it occupies in the artwork
 # rather than a quarter of the mark, which is what an evenly spaced four-stop ramp would hand it.
+#
+# The intended backgrounds for the two variants. Dark is the artwork's own field colour; light is plain
+# white. These are what the brand page previews the variants against, NOT a plate baked into any export.
 BACKGROUNDS = {"dark": "#07162F", "light": "#FFFFFF"}
+# Wordmark ink per variant. On dark it is white. On light it is the portal's own deepest surface colour
+# (--ink, #11182D), so the light lockup is drawn in the same navy the site is built from.
 WORDMARK_INK = {"on_dark": "#FFFFFF", "on_light": "#11182D"}
+# Tagline ink. On dark it is the established artwork's own secondary text colour. On light it is the
+# dark wordmark ink at 65 per cent over white, which is the same optical step down.
+TAGLINE_INK = {"on_dark": "#C9D4E8", "on_light": "#646979"}
 
 # The colour of a dot is a pure function of its POSITION: t runs 0 at the western-most column to 1 at
 # the eastern-most, and the ramp is evaluated at t. Left cool, right warm, per the owner's guidance.
@@ -88,10 +107,13 @@ RADIUS_ABOVE = 0.44
 # The frame margin around the mark's own bounding box, as a fraction of the square it is fitted into.
 MARK_PAD = 0.02
 # An SVG cannot know the size it will be drawn at, so each SVG declares the band it is generated FOR.
-# The mark's smallest routine use is the 30 px header lockup, so it takes the 64 px band (0.46), which
-# still leaves visible gaps between dots at presentation size. The favicon's whole job is the browser
-# tab, so it takes the 16 px band and renders as a solid silhouette wherever it is drawn larger.
-SVG_NOMINAL_PX = {"mark": 48, "favicon": 16}
+# The mark's smallest routine use is the 30 px header lockup, and the five bands were rendered in a
+# real browser at 30 px in the header and again at 120 and 200 px: at 0.46 and 0.44 the 30 px mark is
+# noticeably airy, at 0.62 the large render bloats into a solid blob, and 0.50 (the 32 px band) is the
+# one that closes the silhouette in the header while still reading as separate dots at presentation
+# size. The favicon's whole job is the browser tab, so it takes the 16 px band and simply renders as a
+# solid silhouette wherever it is drawn larger, which is what a favicon should do.
+SVG_NOMINAL_PX = {"mark": 32, "favicon": 16}
 
 # TYPOGRAPHY (owner ruling). The web and SVG wordmark render in the SITE's system UI stack, character
 # for character the same stack and weight as the portal header wordmark, so the logo and the header
@@ -110,18 +132,35 @@ WEB_FONT_WEIGHT = 800
 # 22px, which is -0.023em). The tested value is the declared one; nothing here is a value that was
 # assumed rather than looked at.
 LETTER_SPACING_EM = -0.02
+# Layout metrics, measured once from the bundled face and declared so the SVG canvas can be sized
+# without a font engine. A viewer whose system stack measures the wordmark slightly wider or narrower
+# than this simply sits a little closer to, or further from, the right clear-space edge; the clear
+# space is a quarter of the mark height, which absorbs the difference.
+WORDMARK_ADVANCE_EM = 3.429      # "AusMT" at the declared tracking
+TAGLINE_ADVANCE_EM = 18.889      # the tagline at default tracking
+CAP_HEIGHT_EM = 0.728            # cap height, for optically centring the text block on the mark
+DESCENDER_EM = 0.242
 
 # LOCKUP PROPORTIONS, in units of the mark's height M. One geometry for both backgrounds and both
 # lockup widths; the extended variants add the tagline line and nothing else.
+MARK_UNITS = 1000                # M, in SVG user units: the whole coordinate system is M-relative
 PROPORTIONS = {
     "mark_height": 1.0,
-    "gap_mark_to_wordmark": 0.30,
+    "gap_mark_to_wordmark": 0.24,
     "wordmark_font_size": 0.62,
-    "tagline_font_size": 0.20,
+    "tagline_font_size": 0.15,
     "tagline_baseline_gap": 0.34,
-    "clear_space": 0.25,
+    "clear_space": 0.20,
 }
 TAGLINE = "Australia's Magnetotelluric Data Portal"
+
+# Export sizes. Presentation resolution for the logos, a square mark for reuse at any size.
+PNG_LOGO_WIDTH = 2400
+PNG_MARK_SIZE = 1024
+# Rendering is supersampled and then resampled down, which is what gives the dots and the wordmark
+# clean edges at every size. The factor is capped so the working canvas stays a sane size.
+SUPERSAMPLE_TARGET = 6000
+SUPERSAMPLE_MAX = 8
 
 
 # ==================================================================================================
@@ -206,6 +245,185 @@ def geometry():
     }
 
 
+GEOM = geometry()
+
+
+def mark_dots(x0, y0, side, size_px):
+    """[(cx, cy, r, hex)] placing the mark inside the square (x0, y0, side), fitted and centred.
+
+    `size_px` is the size the mark will actually be SEEN at, which is what selects the radius band."""
+    bb = GEOM["bbox"]
+    w = bb["col_max"] - bb["col_min"] + 1
+    h = bb["row_max"] - bb["row_min"] + 1
+    pitch = side * (1 - 2 * MARK_PAD) / max(w, h)
+    ox = x0 + (side - w * pitch) / 2
+    oy = y0 + (side - h * pitch) / 2
+    r = pitch * radius_ratio(size_px)
+    return [(ox + (d["col"] - bb["col_min"] + 0.5) * pitch,
+             oy + (d["row"] - bb["row_min"] + 0.5) * pitch, r, d["hex"]) for d in GEOM["dots"]]
+
+
+def lockup(extended):
+    """The horizontal lockup's geometry in M-relative user units: canvas, mark box, text baselines."""
+    m = MARK_UNITS
+    cs = PROPORTIONS["clear_space"] * m
+    gap = PROPORTIONS["gap_mark_to_wordmark"] * m
+    ws = PROPORTIONS["wordmark_font_size"] * m
+    ts = PROPORTIONS["tagline_font_size"] * m
+    tgap = PROPORTIONS["tagline_baseline_gap"] * m
+    cap = ws * CAP_HEIGHT_EM
+    text_x = cs + m + gap
+    wm_w = ws * WORDMARK_ADVANCE_EM
+    if extended:
+        # Centre the WHOLE text block (wordmark cap top to tagline descender) on the mark, not the
+        # wordmark alone: otherwise adding the tagline visibly drags the lockup off balance.
+        below = tgap + ts * DESCENDER_EM
+        baseline = cs + m / 2 + (cap - below) / 2
+        text_w = max(wm_w, ts * TAGLINE_ADVANCE_EM)
+    else:
+        baseline = cs + m / 2 + cap / 2
+        text_w = wm_w
+    return {"width": text_x + text_w + cs, "height": m + 2 * cs,
+            "mark": (cs, cs, m), "text_x": text_x, "baseline": baseline,
+            "wordmark_size": ws, "tagline_size": ts,
+            "tagline_baseline": baseline + tgap if extended else None}
+
+
+# ==================================================================================================
+# SVG emission
+# ==================================================================================================
+
+def _n(v):
+    """A number with no trailing zeros and no locale, so the emitted bytes are stable."""
+    return f"{round(v, 2):g}"
+
+
+def _svg_mark_group(x0, y0, size_px):
+    """The mark as ONE reusable block: always drawn in its own 0..MARK_UNITS box and placed by a
+    translate, so the dot markup is character-identical in every export and a variant cannot acquire a
+    geometry of its own. The standalone mark carries the same wrapper with a zero translate rather than
+    a special-cased shorter form, for exactly that reason.
+
+    One group per lattice column. Grouping by colour keeps the emitted file small and makes the
+    one-colour-per-column mapping visible in the markup itself."""
+    cols = {}
+    for cx, cy, r, hexc in mark_dots(0, 0, MARK_UNITS, size_px):
+        cols.setdefault(hexc, []).append((cx, cy, r))
+    body = "\n".join(
+        '    <g fill="%s">%s</g>' % (hexc, "".join(
+            f'<circle cx="{_n(cx)}" cy="{_n(cy)}" r="{_n(r)}"/>' for cx, cy, r in cols[hexc]))
+        for hexc in sorted(cols, key=lambda h: min(c[0] for c in cols[h])))
+    return f'  <g transform="translate({_n(x0)},{_n(y0)})">\n{body}\n  </g>\n'
+
+
+def _svg_open(width, height, label):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {_n(width)} {_n(height)}" '
+            f'width="{_n(width)}" height="{_n(height)}" role="img" aria-label="{label}">\n')
+
+
+def _svg_text(x, y, size, ink, spacing, body):
+    sp = f' letter-spacing="{spacing}em"' if spacing is not None else ""
+    return (f'  <text x="{_n(x)}" y="{_n(y)}" font-family="{WEB_FONT_STACK}" '
+            f'font-weight="{WEB_FONT_WEIGHT}" font-size="{_n(size)}"{sp} '
+            f'fill="{ink}">{body}</text>\n')
+
+
+_SVG_NOTE = ("<!-- GENERATED by portal/tools/gen_brand.py from contract/brand.json. Do not edit by "
+             "hand: gen_brand.py --check fails on drift. The wordmark deliberately declares the "
+             "site's own system UI stack, so it renders in the reader's fonts and matches the portal "
+             "header. Transparent ground: the dark and light variants differ in ink, not in card. -->\n")
+
+
+def svg_mark():
+    side = MARK_UNITS
+    return (_svg_open(side, side, "AusMT") + _SVG_NOTE
+            + _svg_mark_group(0, 0, SVG_NOMINAL_PX["mark"]) + "</svg>\n")
+
+
+def svg_logo(dark, extended):
+    lay = lockup(extended)
+    mx, my, _ms = lay["mark"]
+    ink = WORDMARK_INK["on_dark" if dark else "on_light"]
+    body = (_svg_open(lay["width"], lay["height"], "AusMT") + _SVG_NOTE
+            + _svg_mark_group(mx, my, SVG_NOMINAL_PX["mark"])
+            + _svg_text(lay["text_x"], lay["baseline"], lay["wordmark_size"], ink,
+                        LETTER_SPACING_EM, "AusMT"))
+    if extended:
+        body += _svg_text(lay["text_x"], lay["tagline_baseline"], lay["tagline_size"],
+                          TAGLINE_INK["on_dark" if dark else "on_light"], None, TAGLINE)
+    return body + "</svg>\n"
+
+
+# ==================================================================================================
+# PNG emission (the bundled face renders the wordmark; never a rasterised SVG)
+# ==================================================================================================
+
+def _pillow():
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ModuleNotFoundError:
+        sys.exit("ERROR: gen_brand.py requires Pillow to render the PNG exports (pip install Pillow). "
+                 "It is a declared engine dependency and is installed in CI.")
+    return Image, ImageDraw, ImageFont
+
+
+def _supersample(longest):
+    return max(1, min(SUPERSAMPLE_MAX, SUPERSAMPLE_TARGET // max(1, longest)))
+
+
+def _draw_tracked(draw, x, y, text, font, fill, tracking_px):
+    """The wordmark, glyph by glyph with an explicit advance. Pillow would otherwise hand the whole
+    string to the font engine, whose kerning-pair handling is a property of the build rather than of
+    this repository; drawing the advances ourselves makes the spacing a declared constant."""
+    for i, ch in enumerate(text):
+        draw.text((x, y), ch, font=font, fill=fill, anchor="ls")
+        if i + 1 < len(text):
+            adv = draw.textlength(text[i:i + 2], font=font) - draw.textlength(text[i + 1], font=font)
+        else:
+            adv = draw.textlength(ch, font=font)
+        x += adv + tracking_px
+
+
+def png_mark(size):
+    """The standalone mark, square and transparent, at `size` pixels."""
+    Image, ImageDraw, _ = _pillow()
+    ss = _supersample(size)
+    side = size * ss
+    im = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for cx, cy, r, hexc in mark_dots(0, 0, side, size):
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=hexc)
+    return im.resize((size, size), Image.LANCZOS) if ss > 1 else im
+
+
+def png_logo(dark, extended, width=PNG_LOGO_WIDTH):
+    Image, ImageDraw, ImageFont = _pillow()
+    lay = lockup(extended)
+    height = round(width * lay["height"] / lay["width"])
+    ss = _supersample(width)
+    scale = width * ss / lay["width"]
+    im = Image.new("RGBA", (width * ss, height * ss), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    mx, my, ms = lay["mark"]
+    # The radius band follows the size the MARK is actually seen at in this export, not the canvas.
+    for cx, cy, r, hexc in mark_dots(mx * scale, my * scale, ms * scale, round(ms * width / lay["width"])):
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=hexc)
+    ws = lay["wordmark_size"] * scale
+    font = ImageFont.truetype(str(FONT_FILE), round(ws))
+    _draw_tracked(d, lay["text_x"] * scale, lay["baseline"] * scale, "AusMT", font,
+                  WORDMARK_INK["on_dark" if dark else "on_light"], LETTER_SPACING_EM * ws)
+    if extended:
+        ts = lay["tagline_size"] * scale
+        tfont = ImageFont.truetype(str(FONT_FILE), round(ts))
+        _draw_tracked(d, lay["text_x"] * scale, lay["tagline_baseline"] * scale, TAGLINE, tfont,
+                      TAGLINE_INK["on_dark" if dark else "on_light"], 0.0)
+    return im.resize((width, height), Image.LANCZOS) if ss > 1 else im
+
+
+# ==================================================================================================
+# The artefact set
+# ==================================================================================================
+
 def document():
     """contract/brand.json: the whole declared truth, in one file, for every consumer."""
     return {
@@ -221,9 +439,10 @@ def document():
             "derivation": PALETTE_DERIVATION,
             "backgrounds": dict(BACKGROUNDS),
             "wordmark_ink": dict(WORDMARK_INK),
+            "tagline_ink": dict(TAGLINE_INK),
         },
-        "geometry": geometry(),
-        "proportions": dict(PROPORTIONS),
+        "geometry": GEOM,
+        "proportions": dict(PROPORTIONS, mark_units=MARK_UNITS),
         "typography": {
             "note": ("The web and SVG wordmark renders in the site's own system UI stack, so the logo "
                      "and the portal header agree in the viewer's fonts. The raster exports cannot "
@@ -232,6 +451,10 @@ def document():
             "web_font_stack": WEB_FONT_STACK,
             "web_font_weight": WEB_FONT_WEIGHT,
             "letter_spacing_em": LETTER_SPACING_EM,
+            "wordmark_advance_em": WORDMARK_ADVANCE_EM,
+            "tagline_advance_em": TAGLINE_ADVANCE_EM,
+            "cap_height_em": CAP_HEIGHT_EM,
+            "descender_em": DESCENDER_EM,
             "raster_substitute": {
                 "family": "Inter",
                 "style": "Bold",
@@ -242,20 +465,49 @@ def document():
                          "is never served, and is never loaded as a web font."),
             },
         },
+        "outputs": [{"path": p, "kind": k, "variant": v} for p, k, v in _OUTPUT_INDEX],
     }
 
 
-# ==================================================================================================
-# Emission
-# ==================================================================================================
-
-def render_json(doc):
-    return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+_OUTPUT_INDEX = (
+    ("contract/brand.json", "json", "source of truth"),
+    ("portal/vendor/brand/ausmt-logo-dark.svg", "svg", "logo, dark background"),
+    ("portal/vendor/brand/ausmt-logo-dark.png", "png", "logo, dark background"),
+    ("portal/vendor/brand/ausmt-logo-light.svg", "svg", "logo, light background"),
+    ("portal/vendor/brand/ausmt-logo-light.png", "png", "logo, light background"),
+    ("portal/vendor/brand/ausmt-logo-dark-extended.svg", "svg", "logo with tagline, dark background"),
+    ("portal/vendor/brand/ausmt-logo-dark-extended.png", "png", "logo with tagline, dark background"),
+    ("portal/vendor/brand/ausmt-logo-light-extended.svg", "svg", "logo with tagline, light background"),
+    ("portal/vendor/brand/ausmt-logo-light-extended.png", "png", "logo with tagline, light background"),
+    ("portal/vendor/brand/ausmt-mark.svg", "svg", "standalone mark"),
+    ("portal/vendor/brand/ausmt-mark.png", "png", "standalone mark"),
+)
 
 
 def artefacts():
-    """[(path, bytes)] for everything this tool owns. --check compares, the write mode writes."""
-    return [(BRAND_JSON, render_json(document()).encode("utf-8"))]
+    """[(path, kind, payload)] for everything this tool owns.
+
+    kind "bytes" compares byte for byte; kind "image" compares decoded pixels, size and mode, which is
+    the invariant that matters for a raster and which survives a PNG encoder upgrade under CI."""
+    items = [(BRAND_JSON, "bytes", (json.dumps(document(), indent=2, ensure_ascii=False) + "\n")
+              .encode("utf-8"))]
+    for dark in (True, False):
+        for extended in (False, True):
+            stem = f"ausmt-logo-{'dark' if dark else 'light'}{'-extended' if extended else ''}"
+            items.append((BRAND_DIR / f"{stem}.svg", "bytes", svg_logo(dark, extended).encode("utf-8")))
+            items.append((BRAND_DIR / f"{stem}.png", "image", png_logo(dark, extended)))
+    items.append((BRAND_DIR / "ausmt-mark.svg", "bytes", svg_mark().encode("utf-8")))
+    items.append((BRAND_DIR / "ausmt-mark.png", "image", png_mark(PNG_MARK_SIZE)))
+    return items
+
+
+def _image_matches(path, want):
+    Image, _, _ = _pillow()
+    if not path.is_file():
+        return False
+    with Image.open(path) as committed:
+        have = committed.convert("RGBA")
+    return have.size == want.size and have.tobytes() == want.convert("RGBA").tobytes()
 
 
 def main(argv=None):
@@ -266,19 +518,25 @@ def main(argv=None):
     a = p.parse_args(argv)
     items = artefacts()
     if a.check:
-        stale = [path for path, want in items
-                 if (path.read_bytes() if path.is_file() else None) != want]
+        stale = []
+        for path, kind, want in items:
+            fresh = (path.read_bytes() if path.is_file() else None) == want if kind == "bytes" \
+                else _image_matches(path, want)
+            if not fresh:
+                stale.append(path)
         if stale:
             print("BRAND DRIFT: regenerate with `python3 portal/tools/gen_brand.py`. Stale: "
                   + ", ".join(str(s.relative_to(REPO)) for s in stale), file=sys.stderr)
             return 1
         print(f"brand: {len(items)} generated artefact(s) in sync with tools/gen_brand.py")
         return 0
-    for path, data in items:
+    for path, kind, data in items:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-    print(f"wrote {len(items)} artefact(s); {document()['geometry']['dot_count']} dots "
-          f"on a {GRID_COLS}x{GRID_ROWS} lattice")
+        if kind == "bytes":
+            path.write_bytes(data)
+        else:
+            data.save(path, "PNG")
+    print(f"wrote {len(items)} artefact(s); {GEOM['dot_count']} dots on a {GRID_COLS}x{GRID_ROWS} lattice")
     return 0
 
 

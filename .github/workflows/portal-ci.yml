@@ -97,8 +97,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      # Pillow renders the brand PNG exports and is read by the export pins; pinned to the engine
+      # lock's value like the other two, for the same reason.
       - name: Tooling
-        run: pip install "PyYAML==6.0.3" "pytest==8.2.0"   # pinned to the engine lock's values so a float can't turn the gate red
+        run: pip install "PyYAML==6.0.3" "pytest==8.2.0" "pillow==12.2.0"   # pinned to the engine lock's values so a float can't turn the gate red
 
       # The portal reads the column contract via contract.js (generated from contract/columns.json).
       # Fail if it has drifted from the source (stdlib-only).
