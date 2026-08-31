@@ -111,19 +111,37 @@ def _rule_body(text, pattern, where):
     return re.sub(r"\s*\n\s*", "", bodies[0])
 
 
-def test_the_two_navs_carry_identical_container_rules():
-    """The nav CONTAINER rule, character-identical across the surfaces. FAILS IF the wrap modes
-    (or the gap, or the display) drift apart: a nowrap container and a wrap container hand
-    zero-basis flex children different resolved widths, which is exactly the 47.5px tab-group
-    offset the C9 review measured between the SPA and the pages at 1280px."""
-    spa = _rule_body(INDEX.read_text(encoding="utf-8"), r"(?m)^\s*nav\{([^}]*)\}",
-                     "portal/index.html")
-    pages = _rule_body(PAGES_PY.read_text(encoding="utf-8"),
-                       r"header\.site nav\{([^}]*)\}", "engine/extract/_pages.py")
-    assert spa == pages, (
-        "the nav container rules have drifted between the two headers:\n"
-        f"  portal/index.html          {spa!r}\n"
-        f"  engine/extract/_pages.py   {pages!r}")
+def _nav_container(text, where):
+    """The nav CONTAINER rule body, on either surface's spelling of the selector. Anchored on the
+    brace so that `nav a{` can never answer for `nav{`."""
+    sel = (r"(?m)^\s*header\.site nav\{([^}]*)\}" if where.endswith(".py")
+           else r"(?m)^\s*nav\{([^}]*)\}")
+    return _rule_body(text, sel, where)
+
+
+def test_every_chrome_surface_carries_one_nav_container_rule():
+    """The nav CONTAINER rule, character-identical on EVERY surface wearing the chrome. FAILS IF
+    the wrap modes (or the gap, or the display) drift apart: a nowrap container and a wrap
+    container hand the same three min-width:112px tabs different row counts and different resolved
+    widths, which is exactly the 47.5px tab-group offset the C9 review measured between the SPA and
+    the pages at 1280px.
+
+    It compares all five surfaces rather than the SPA-and-pages pair this pin started as, because
+    the pair is precisely what let the defect through: releases.html and about.html each keep their
+    OWN hand-maintained copy of the chrome, no pin ever read either one's nav rule, and both sat on
+    a bare `display:flex;gap:6px`. With no flex-wrap the three 112px tabs cannot stack, so at 375px
+    those two rendered a 174px header where the SPA, the generated pages and brand.html rendered
+    220px, and the nav overran its own zone by 9px (right edge 366 against a 357px content edge)."""
+    prints = [(where, _nav_container(text, where)) for where, text in _chrome_surfaces()]
+    assert len(prints) >= 2, (
+        "fewer than two chrome surfaces were discovered; the glob or the zone marker has moved "
+        "and this pin would be comparing a surface against itself")
+    reference_where, reference = prints[0]
+    for where, body in prints[1:]:
+        assert body == reference, (
+            "the nav container rule has drifted between two surfaces:\n"
+            f"  {reference_where:<28} {reference!r}\n"
+            f"  {where:<28} {body!r}")
 
 
 def test_every_tab_box_shares_every_geometry_input():
@@ -180,6 +198,93 @@ def test_the_two_headers_measure_text_in_one_font_stack():
         f"  engine/extract/_pages.py header.site {m.group(1)!r}")
 
 
+# --------------------------------------------------------------------------- the identity mark
+#
+# Brand-assets lane E3: the header identity is the AusMT mark on EVERY surface, replacing the
+# AuScope-derived symbol the SPA carried alone. The relationship with AuScope stays explicit in
+# footer and About content; it is no longer embedded in the lockup.
+#
+# The mark is a fixed 30 x 30 box, which is why it can join the zero-basis .hleft zone without
+# moving the centre tabs: a flex:1 1 0 side hands its leftover space out evenly whatever it holds,
+# so a wider identity block changes the SIDE's content, never the centre group's x. The pins above
+# hold that geometry; these hold the identity itself, pairwise, for the same reason the zone rules
+# are held pairwise - an edit to one surface must not leave the other on a different mark.
+MARK_SRC = "/vendor/brand/ausmt-mark.svg"
+MARK_RULE = ".brandmark{height:30px;width:30px;display:block;flex:none}"
+
+
+def test_both_headers_carry_the_same_ausmt_mark():
+    """FAILS IF either surface loses the mark, points at a different file, or drifts to a different
+    sizing rule. Same-origin only: an http, https, protocol-relative or data src fails here, which is
+    the half of the pages' old zero-src rule that was ever load-bearing."""
+    for where, path in SURFACES:
+        text = path.read_text(encoding="utf-8")
+        assert f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">' in text, (
+            f"{where}: the header identity must be the AusMT mark at {MARK_SRC}")
+        assert MARK_RULE in text, f"{where}: the mark must carry the shared sizing rule {MARK_RULE!r}"
+        for scheme in ("http://", "https://", '"//', "data:"):
+            assert f'<img class="brandmark" src="{scheme}' not in text, (
+                f"{where}: the identity mark is same-origin only; {scheme!r} is never a mark src")
+
+
+def test_the_mark_the_two_headers_name_is_a_real_committed_asset():
+    """FAILS IF the header points at a file the portal does not ship. Both surfaces are served from
+    the same origin by the portal image, so one missing file is a broken mark on every page of the
+    site at once."""
+    asset = ROOT / MARK_SRC.lstrip("/")
+    assert asset.is_file(), f"the header names {MARK_SRC}, which the portal does not ship"
+    assert "<circle" in asset.read_text(encoding="utf-8"), \
+        f"{MARK_SRC} must be the generated vector mark, not a placeholder"
+
+
+# EVERY surface, not just the pair above. The two pins above compare the SPA against the pages
+# sheet, which is where the zone geometry can drift; they cannot see releases.html or
+# add-survey.html, each of which carries its OWN copy of the chrome. Those two kept the AuScope
+# symbol after the SPA and the 2,655 generated pages had switched, so a reader following the
+# header's own "Contribute a survey" link watched the site's identity change under them.
+#
+# about.html is the ONE carve-out, by name: its header is a separate pending owner ruling and this
+# lane does not touch it. 404.html is a bare error document with no header at all.
+MARK_IMG = f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">'
+MARK_EXEMPT = {"about.html"}
+
+
+def _chrome_pages():
+    """Every portal document that ships the site chrome, by name."""
+    return [p for p in sorted(ROOT.glob("*.html")) if "<header>" in p.read_text(encoding="utf-8")]
+
+
+def test_every_static_chrome_page_carries_the_ausmt_mark():
+    """FAILS IF a portal page that wears the chrome shows anything but the AusMT mark as its
+    identity, and equally if a NEW page appears wearing the chrome without one. Discovered from the
+    filesystem rather than from a list, so adding a page cannot quietly add a sixth identity."""
+    seen = []
+    for page in _chrome_pages():
+        if page.name in MARK_EXEMPT:
+            continue
+        seen.append(page.name)
+        text = page.read_text(encoding="utf-8")
+        assert MARK_IMG in text, (
+            f"portal/{page.name}: the header identity must be the AusMT mark at {MARK_SRC}")
+        assert MARK_RULE in text, (
+            f"portal/{page.name}: the mark must carry the shared sizing rule {MARK_RULE!r}")
+        assert "auscope-icon-white.png" not in text, (
+            f"portal/{page.name}: the AuScope symbol is no longer this site's header identity; the "
+            "relationship stays in footer and About content, in words")
+    assert seen, "no chrome page was discovered; the glob or the header marker has moved"
+
+
+def test_the_auscope_symbol_survives_on_exactly_one_page_and_it_is_the_carved_out_one():
+    """The carve-out is a DECISION, so it is pinned as one. FAILS IF about.html quietly loses the
+    AuScope symbol before the owner has ruled on its header, and equally if a second page picks it
+    back up. Either way the owner's pending ruling would have been pre-empted by a drift."""
+    holders = [p.name for p in sorted(ROOT.glob("*.html"))
+               if "auscope-icon-white.png" in p.read_text(encoding="utf-8")]
+    assert holders == sorted(MARK_EXEMPT), (
+        f"exactly {sorted(MARK_EXEMPT)} may still carry the AuScope symbol as a header identity "
+        f"pending the owner's ruling on that header, got {holders}")
+
+
 def test_the_narrow_width_stacking_still_wins_under_760px():
     """The wrap behaviour the zero-basis rule must not cost. FAILS IF either surface loses the
     760px full-width stacking override, or if it stops coming AFTER the zone rules (the selectors
@@ -196,3 +301,90 @@ def test_the_narrow_width_stacking_still_wins_under_760px():
         assert stack > 0, (
             f"{where}: the full-width stacking override must live inside the 760px block that "
             f"follows the zone rules; without it three 112px tabs drag a 375px page sideways")
+
+
+# --------------------------------------------------------------------------- the header's HEIGHT
+#
+# EVERY pin above measures the header HORIZONTALLY: the tab group's x, the zone widths, the tab box's
+# own width, the font stack the labels are measured in. A header can therefore change shape
+# VERTICALLY and pass all of them at once, which is exactly what the 30px identity mark did. The mark
+# pushed the identity block past the width of its own zone, the tagline dropped onto a second line,
+# and the generated pages' header grew from 57.00px to 82.47px at 1280px while nothing horizontal
+# moved by a single pixel. Measured in Chrome at a device scale factor of 1.
+#
+# THE HEIGHT FORMULA. The header is a wrapping flex row of three zones, so
+#
+#     header  = padding-block + border-bottom + max(zone heights)
+#
+# and once the identity block wraps, that zone's own height is
+#
+#     hleft   = line-box(wordmark) + row-gap + line-box(tagline)
+#
+# Every term on the right is a declared constant except the two line boxes, and a line box is
+# font-size x line-height. The font sizes are declared, and identical on every surface. The
+# LINE-HEIGHT was not declared at all: the header inherited it from whatever the host document had
+# set on body, and the documents carrying this header set three different things. The SPA leaves body
+# at normal; the static pages' sheet sets font:16px/1.55; releases, about and brand set
+# line-height:1.6. So one header rule rendered three different heights at 1280px:
+#
+#     portal/index.html          74.00px   line-height normal
+#     engine/extract/_pages.py   82.47px   1.55, inherited from body
+#     portal/brand.html          84.19px   1.6, inherited from body
+#
+# A global component must not take its vertical rhythm from the prose of whichever page it is dropped
+# into. The header declares its own, and line-height is pinned on every surface that wears the chrome
+# because it is the one term of the formula a host document can change from the outside.
+HEADER_LINE_HEIGHT = "line-height:normal"
+
+
+def _chrome_surfaces():
+    """Every surface carrying the three-zone header, by the path a failure message should name: the
+    static pages' sheet, plus every portal document that declares the zones. Discovered from the
+    filesystem rather than from a list, so a new page wearing the chrome is pinned the day it
+    appears rather than the day someone remembers to add it here."""
+    out = [("engine/extract/_pages.py", PAGES_PY.read_text(encoding="utf-8"))]
+    for page in sorted(ROOT.glob("*.html")):
+        text = page.read_text(encoding="utf-8")
+        if ".hzone{" in text:
+            out.append((f"portal/{page.name}", text))
+    return out
+
+
+def _header_rule(text, where):
+    """The header's own rule body, on either surface's spelling of the selector."""
+    return _rule_body(text, r"(?m)^\s*header(?:\.site)?\{([^}]*)\}", where)
+
+
+def test_every_chrome_surface_declares_the_headers_own_line_height():
+    """The header's vertical rhythm belongs to the header. FAILS IF any surface leaves line-height
+    to be inherited from its host document's body: the identity block's two line boxes are
+    font-size x line-height, so an inherited 1.55 or 1.6 renders the SAME header 8.47px or 10.19px
+    taller than the SPA's the moment that block wraps. Different heights on different pages is a
+    different header on different pages, and the standing ruling is one header on every surface."""
+    surfaces = _chrome_surfaces()
+    assert len(surfaces) >= 2, "no chrome surfaces were discovered; the glob or the zone marker moved"
+    for where, text in surfaces:
+        body = _header_rule(text, where)
+        assert HEADER_LINE_HEIGHT in body, (
+            f"{where}: the header rule must declare {HEADER_LINE_HEIGHT!r}, so that the host "
+            f"document's body prose line-height cannot change the header's height; got {body!r}")
+
+
+def test_every_chrome_surface_carries_the_same_zone_geometry():
+    """The zone rules, character-identical on EVERY surface wearing the chrome, not just across the
+    pair above. The pair covers the SPA and the generated pages, which is where the geometry was
+    ruled; releases.html and about.html each carry their OWN copy of the chrome, and both kept the
+    auto-basis sides the C9 ruling replaced. An auto basis sizes each side zone from its own content,
+    so on those two pages the identity block set the width of its own zone and shoved the tab group
+    out to x=525.63 and x=525.27 at 1280px, while the SPA, the generated pages and brand.html all
+    sat at x=350.83. A reader following the header's own Releases or About link watched the nav jump
+    roughly 175px sideways and jump back on the way out. FAILS IF any surface's zone rules drift from
+    the SPA's in any way at all."""
+    reference = _zone_rules(INDEX.read_text(encoding="utf-8"), "portal/index.html")
+    for where, text in _chrome_surfaces():
+        rules = _zone_rules(text, where)
+        for zone in ZONES:
+            assert rules[zone] == reference[zone], (
+                f".{zone} has drifted from the ruled zone geometry:\n"
+                f"  portal/index.html            {reference[zone]!r}\n"
+                f"  {where:<28} {rules[zone]!r}")

@@ -142,14 +142,47 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
     assert not (bare / "pages").exists(), "no --sitemap-base must mean no pages tree at all"
 
 
-def test_index_pages_carry_no_script_and_no_external_asset(built):
-    """FAILS IF an index page grows a script, a stylesheet link, an image or any other fetched
-    asset. The entity pages' determinism posture (stdlib-only build, everything inline, no network
-    at build or at render) is inherited, not re-litigated: a served page must render from itself."""
+# The ONE fetched asset a page in this tier may carry, restated (not weakened) per
+# LANE-CONTRACT-BRAND-ASSETS.md E3. The rule was "no src at all", which was the right rule while the
+# pages had no identity mark: it kept out build-time reads, inlined copies and every external fetch.
+# The AusMT mark makes one exception worth stating precisely rather than loosening the rule to
+# "images are fine": ONE same-origin file, served by the portal image, cached once for the whole site.
+# The alternative was inlining 180 circles into 2,655 documents. What stays forbidden is everything
+# the old rule was actually protecting: no http, no https, no protocol-relative and no data URI may
+# ever appear as a src, and no OTHER path may either. The list is exact, so a second asset fails here.
+ALLOWED_PAGE_SRCS = ["/vendor/brand/ausmt-mark.svg"]
+
+# RESTATED, WHICH MEANS THE SAME SURFACE. The old rule was `"src=" not in page`: a raw substring
+# test, blind to nothing. An allow-list parsed from double-quoted attributes alone would be NARROWER
+# than the rule it restates, because `src='https://...'` and `src=https://...` would both slip past
+# it while failing the old one. So the restatement keeps both halves: the COUNT of the substring is
+# held to the allow-list's length (the old rule's exact reach), and the attributes are parsed in
+# every quoting form HTML permits and compared to the list itself.
+_SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
+
+
+def _page_srcs(page, rel):
+    """Every src on the page, in every quoting form, with the raw-substring count held too."""
+    raw = page.count("src=")
+    assert raw == len(ALLOWED_PAGE_SRCS), (
+        f"{rel}: the tier allows exactly {len(ALLOWED_PAGE_SRCS)} src attribute(s) and the page "
+        f"carries {raw}; the old rule counted the substring itself and this one still does")
+    return [m.group(1).strip("\"'") for m in _SRC_ATTR.finditer(page)]
+
+
+def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
+    """FAILS IF an index page grows a script, a stylesheet link, or any fetched asset beyond the one
+    allow-listed identity mark. The entity pages' determinism posture (stdlib-only build, everything
+    else inline, no network at build) is inherited, not re-litigated; the mark is the single named
+    exception and it is same-origin."""
     for rel in ("surveys/index.html", "collections/index.html"):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert "<script" not in page, f"{rel}: no script may appear on an index page"
-        assert "src=" not in page, f"{rel}: no fetched asset may appear on an index page"
+        srcs = _page_srcs(page, rel)
+        assert srcs == ALLOWED_PAGE_SRCS, \
+            f"{rel}: the only fetched asset may be {ALLOWED_PAGE_SRCS}, got {srcs}"
+        assert '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT"' in page, \
+            f"{rel}: the header must carry the AusMT mark as the site identity"
         assert "rel=\"stylesheet\"" not in page, f"{rel}: styles stay inline"
         assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
 
@@ -670,18 +703,55 @@ def test_the_footer_is_contextual_and_its_machine_link_resolves_per_page_kind(bu
             f"{rel}: row 2 is the copyright, the licence note and a PRINTED build identity: {rows[2]!r}"
 
 
-def test_the_new_chrome_adds_no_script_and_no_fetched_asset_to_any_page_kind(built):
-    """The tier's determinism posture, re-asserted across EVERY page kind now that all of them grew
-    a header and a footer. The SPA's own header carries an AuScope logo image; a static page cannot,
-    because a served page here must render from itself with no network at build or at render. FAILS
-    IF the header smuggled in a script, an image or an external stylesheet."""
+def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
+    """The tier's determinism posture, re-asserted across EVERY page kind, with the one exception this
+    lane names. The pages share the site's identity mark with the SPA, as ONE same-origin file the
+    portal image serves and the browser caches once; every other asset stays inline and no build-time
+    read or external fetch is introduced. FAILS IF the header smuggles in a script, an external
+    stylesheet, or any src beyond the allow-list: an http, https, protocol-relative or data src
+    fails on the same line, in every quoting form, and so does an extra src of any kind."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
             f"{rel}: no executable script may appear on a static page"
-        assert "src=" not in page, f"{rel}: no fetched asset may appear on a static page"
+        srcs = _page_srcs(page, rel)
+        assert srcs == ALLOWED_PAGE_SRCS, \
+            f"{rel}: the only fetched asset may be {ALLOWED_PAGE_SRCS}, got {srcs}"
         assert 'rel="stylesheet"' not in page, f"{rel}: styles stay inline"
         assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
+
+
+def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
+    """Brand-assets lane E4. This tier shipped no icon link at all, so every entity page asked for
+    /favicon.ico and got a 404 on every visit. FAILS IF a page kind loses either link, or if either
+    href stops being a same-origin portal path (an absolute URL here would be an external fetch on
+    2,655 documents, which is exactly what this tier forbids)."""
+    for rel in _kinds(built):
+        head = (built / "pages" / rel).read_text(encoding="utf-8").split("</head>", 1)[0]
+        assert '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">' in head, \
+            f"{rel}: no favicon link, so the page 404s /favicon.ico on every visit"
+        assert '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">' in head, \
+            f"{rel}: no apple-touch-icon, so a home-screen shortcut renders a page screenshot"
+        hrefs = re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', head)
+        assert all(h.startswith("/vendor/") for h in hrefs), \
+            f"{rel}: icon links must be same-origin portal paths, got {hrefs}"
+
+
+def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
+    """The identity swap itself (E3). Every surface of the site now opens with the same mark: the SPA
+    header and every generated page. FAILS IF a page kind renders the wordmark without the mark, or
+    puts the mark anywhere but the header's left identity zone, or sizes it off the shared rule."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        head = page.split("<header", 1)[1].split("</header>", 1)[0]
+        assert ('<div class="hzone hleft">'
+                '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" '
+                'width="30" height="30">'
+                '<a class="wordmark" href="/">AusMT</a>') in head, \
+            f"{rel}: the mark must open the header's identity zone, beside the wordmark: {head[:300]!r}"
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        assert ".brandmark{height:30px;width:30px;display:block;flex:none}" in css, \
+            f"{rel}: the mark must carry the shared sizing rule the SPA header uses"
 
 
 def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):

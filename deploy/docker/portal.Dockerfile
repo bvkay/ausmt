@@ -5,7 +5,7 @@
 #
 # ZERO-CDN CLAIM (verified by grep against the committed tree, not assumed — re-run this grep if
 # portal/*.html changes and this comment starts to drift):
-#   grep -n "http" portal/index.html portal/about.html portal/add-survey.html
+#   grep -n "http" portal/index.html portal/about.html portal/add-survey.html portal/brand.html
 # results, and why each is fine to serve behind the CSP in deploy/docker/caddy/Caddyfile:
 #   - The one `<script src="https://YOUR-PLAUSIBLE-HOST/...">` line (index.html + add-survey.html)
 #     sits INSIDE an HTML comment (<!-- ... -->) — analytics is off by default and there is no live
@@ -20,9 +20,15 @@
 #     on the add-survey page block).
 #   - index.html's map (portal/src/map.js) loads tiles from basemaps.cartocdn.com — allow-listed in
 #     the default/index CSP img-src.
-#   - the header AuScope logo <a href="https://www.auscope.org.au"> (all three pages) is a NAVIGATION
-#     link, not a resource load — CSP does not govern <a href> targets; the logo image itself is
-#     vendored (portal/vendor/auscope-icon-white.png, img-src 'self').
+#   - the header AuScope logo <a href="https://www.auscope.org.au"> survives on ABOUT.HTML ALONE.
+#     It is a NAVIGATION link, not a resource load: CSP does not govern <a href> targets; the logo
+#     image itself is vendored (portal/vendor/auscope-icon-white.png, img-src 'self'). The
+#     brand-assets lane made the AusMT mark (vendor/brand/ausmt-mark.svg, also img-src 'self') the
+#     header identity on index.html, releases.html, add-survey.html and brand.html, and the anchor
+#     left with the symbol on each. about.html's header is carved out pending an owner ruling.
+#     index.html's only remaining auscope.org.au string is the JSON-LD publisher URL, which is
+#     metadata and loads nothing; brand.html's and releases.html's only http strings are their own
+#     rel=canonical. Nothing in this changes a CSP rule: one fewer outbound anchor, no new load.
 # All other assets (leaflet, leaflet.draw, markercluster, jszip) are vendored under portal/vendor/
 # and served from 'self' -- portal/tests/test_no_cdn_references.py (part of the surveys/portal
 # pytest gate, not this image build) already guards the cdnjs.cloudflare.com supply-chain case and

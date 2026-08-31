@@ -15,6 +15,11 @@
 portal/node_modules
 portal/tests
 
+# The brand generator's bundled face (SIL OFL) renders the PNG exports offline and is never a web
+# font: no served page references it. Keeping it out of the portal image makes that literal rather
+# than merely true by convention, and saves shipping 400 KB no browser will ever ask for.
+portal/tools/brand_font
+
 # NOTE: deploy/docker/** is intentionally NOT ignored here — portal.Dockerfile's
 # `COPY deploy/docker/caddy/Caddyfile ...` needs it present in the build context (the context is
 # the repo root, per both Dockerfiles' header comments). Only the dev-noise paths above are excluded.

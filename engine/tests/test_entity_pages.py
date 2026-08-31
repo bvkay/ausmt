@@ -115,7 +115,10 @@ def test_the_sitemap_advertises_the_hubs_and_the_static_pages(tmp_path):
     surveys = _make_rich_survey(tmp_path)
     out = _build(surveys, tmp_path / "out")
     sitemap = (out / "sitemap.xml").read_text(encoding="utf-8").replace("\n", "")
-    for rel in ("surveys", "collections", "about.html", "releases.html", "add-survey.html"):
+    # brand.html joins the list with the brand-assets lane: it is a substantive page, linked from
+    # About, and it is where anyone outside the project gets a usable logo file.
+    for rel in ("surveys", "collections", "about.html", "releases.html", "add-survey.html",
+                "brand.html"):
         u = f"{BASE}/{rel}"
         row = re.search(rf"<url><loc>{re.escape(u)}</loc>(.*?)</url>", sitemap)
         assert row, f"the sitemap must advertise {u}"
