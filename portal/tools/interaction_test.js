@@ -1696,7 +1696,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // buildState()'s applyYearRangeHints() — min year_start / max year_end across SMETA, here 2010/2019 —
   // but must stay EMPTY on load (a value would immediately exclude Gamma under the filter semantics).
   const yearFrom = doc.getElementById("yearFrom"), yearTo = doc.getElementById("yearTo");
-  ok(yearFrom && yearTo, "#yearFrom/#yearTo inputs missing from the filter rail");
+  ok(yearFrom && yearTo, "#yearFrom/#yearTo inputs are missing");
+  // C6: the year range is a DISCOVERY filter and now lives in the discovery bar, its one home. The
+  // predicate below is unchanged, which is the point of moving the control rather than rewriting it
+  // (contract section 1, C6: "the rail's year-range and downloadable-only filters are PROMOTED into the
+  // discovery bar ... same behaviour, one home; the rail copies are removed").
+  ok(doc.getElementById("discoveryControls").contains(yearFrom) && doc.getElementById("discoveryControls").contains(yearTo),
+    "C6: the year-range inputs must live in the discovery bar");
+  ok(!doc.getElementById("filterPane").contains(yearFrom),
+    "C6: the rail copy of the year-range filter must be removed, not duplicated");
   ok(yearFrom.value === "" && yearTo.value === "", "year-range inputs must stay empty on load, got: " + JSON.stringify([yearFrom.value, yearTo.value]));
   ok(yearFrom.placeholder === "2010", "yearFrom placeholder should hint the corpus min (2010), got: " + yearFrom.placeholder);
   ok(yearTo.placeholder === "2019", "yearTo placeholder should hint the corpus max (2019), got: " + yearTo.placeholder);
@@ -1713,22 +1721,37 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   yearFrom.value = ""; fire(yearFrom, "input");
   ok(A.visIds().length === 5, "clearing the year filter did not restore all 5 stations");
 
-  // K. AVAILABILITY > TRANSFER FUNCTIONS (R2, was the standalone "Downloadable here" checkbox): the
-  // capability is KEPT and the s.ediAvail PREDICATE is unchanged, which matters beyond this filter -
-  // the selection exports read the same flag for their three-way not-included honesty. Beta's B1 and
-  // embargoed Delta's D1 have edi_available=0; the rest =1.
+  // K. DOWNLOADABLE HERE (was the standalone tickbox, then the Data available dropdown's "tf" option,
+  // now a discovery chip): the capability is KEPT and the s.ediAvail PREDICATE is unchanged, which
+  // matters beyond this filter - the selection exports read the same flag for their three-way
+  // not-included honesty. Beta's B1 and embargoed Delta's D1 have edi_available=0; the rest =1.
+  // C6 (contract section 1) promoted the control into the discovery bar: it is a question about what a
+  // reader can take away, which is a DISCOVERY question, and it belongs beside the licence and type
+  // chips that ask the same kind of thing. The rail's "tf" option goes with it; the level chooser, which
+  // is about the NCI time-series index and not about this predicate, stays where it is.
   ok(!doc.getElementById("dlOnly") && !doc.getElementById("tfAvail"),
-    "the standalone tickbox controls are replaced by the Data available dropdown");
+    "the standalone tickbox controls are gone");
   const availSel = doc.getElementById("availSel");
   ok(availSel, "#availSel (Data available) missing from the Browse pane");
   ok(doc.getElementById("browseMode").contains(availSel),
-    "D1 (Lane B): the Data available filter is a VIEWING control and lives in Browse, beside data type");
-  availSel.value = "tf"; fire(availSel, "change");
-  ok(!A.visIds().includes("B1"), "Data available > TF did not exclude the non-downloadable station B1");
-  ok(!A.visIds().includes("D1"), "Data available > TF did not exclude the embargoed (non-downloadable) station D1");
-  ok(A.visIds().length === 3, "expected 3 visible stations with the TF option, got " + A.visIds().length);
-  availSel.value = ""; fire(availSel, "change");
-  ok(A.visIds().length === 5, "clearing Data available did not restore all 5 stations");
+    "D1 (Lane B): the time-series level filter is a VIEWING control and lives in Browse, beside data type");
+  ok([...availSel.options].every(o => o.value !== "tf"),
+    "C6: the rail copy of the downloadable-only filter must be removed from #availSel");
+  const dlChip = () => doc.getElementById("facetChips").querySelector('[data-facet="dl"]');
+  A.setView("surveys");
+  ok(dlChip(), "C6: a 'Downloadable here' chip must render in the discovery bar");
+  dlChip().click();
+  ok(!A.visIds().includes("B1"), "C6: the Downloadable here chip did not exclude the non-downloadable station B1");
+  ok(!A.visIds().includes("D1"), "C6: the Downloadable here chip did not exclude the embargoed (non-downloadable) station D1");
+  ok(A.visIds().length === 3, "C6: expected 3 visible stations with Downloadable here on, got " + A.visIds().length);
+  // ...and it narrows the CATALOGUE too, which the rail control could never do: the rail is hidden on
+  // the Surveys view, so until this moved there was no way to ask the question about survey cards.
+  ok(doc.querySelectorAll("#cardGrid .scard").length === 2,
+    "C6: the chip must narrow the card grid to the two surveys with downloadable transfer functions, got " +
+    doc.querySelectorAll("#cardGrid .scard").length);
+  dlChip().click();
+  ok(A.visIds().length === 5, "C6: clearing the Downloadable here chip did not restore all 5 stations");
+  A.setView("map");
 
   // K2. AVAILABILITY > TIME SERIES, the per-level chooser (R3/D7/D8), driven over a REAL index. The
   // fixture ships no ts_access.json, so the index is set directly here: A1 and A2 publish routes, B1
@@ -2101,8 +2124,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the accordion summary must read Advanced search");
   const _browse = doc.getElementById("browseMode");
   ok(_browse.contains(_adv), "Advanced search lives in the Browse pane");
-  ok(["find", "availSel", "yearFrom"].every(id => _adv.contains(doc.getElementById(id))),
-    "Advanced search must hold Find, Data available and the year range");
+  // C6: the year range left this accordion for the discovery bar (its rail copy is removed), so what
+  // Advanced search still holds is Find and the time-series level chooser.
+  ok(["find", "availSel"].every(id => _adv.contains(doc.getElementById(id))),
+    "Advanced search must hold Find and Data available");
+  ok(!_adv.contains(doc.getElementById("yearFrom")),
+    "C6: the year range must no longer be in the rail's Advanced search accordion");
   ok(!doc.getElementById("qSeg"), "the Min-TF-diagnostic group stays retired");
   ok(!doc.getElementById("colorSeg"), "colour-by is retired (owner D4) and must not render");
   ok(!doc.getElementById("pLo") && !doc.getElementById("pHi"),
@@ -3127,6 +3154,40 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(slot.textContent.trim() === "",
     "C5: the collection detail must leave the counter slot empty, got " + JSON.stringify(slot.textContent));
   win.location.hash = ""; A.setView("surveys");
+
+  // C6. THE DISCOVERY BAR AS THE PRIMARY FILTER SURFACE (brief 10). Two gaps, one cause: the year-range
+  // and downloadable-only filters lived in the map rail, and the rail is HIDDEN on the Surveys view, so
+  // on the view that is entirely about choosing a survey neither question could be asked at all. They
+  // are promoted here, beside the licence and type chips that ask the same kind of question, and the
+  // rail copies are removed so there is one home and no chance of two controls disagreeing.
+  const c6search = doc.getElementById("surveySearch");
+  ok(c6search.placeholder === "Search surveys, organisations or locations...",
+    "C6: the search placeholder must name what is actually searchable (brief 10), got " +
+    JSON.stringify(c6search.placeholder));
+  // (a) the promoted YEAR RANGE filters the CATALOGUE, which the rail copy could never do. Alpha
+  //     [2010,2012], Beta [2018,2019], Gamma and Delta undated. From 2015: only Beta survives, and the
+  //     undated pair drop out because a reader who typed a year is asking for DATED data.
+  const c6from = doc.getElementById("yearFrom");
+  c6from.value = "2015"; fire(c6from, "input");
+  ok(doc.getElementById("surveyCount").textContent === "1 survey",
+    "C6: the promoted year range must narrow the card grid, got " + JSON.stringify(doc.getElementById("surveyCount").textContent));
+  ok(doc.querySelector("#cardGrid .scard [data-survey]").dataset.survey === "Beta Survey",
+    "C6: the surviving card must be Beta (2018-2019), the only survey inside the range");
+  // (b) CLEAR FILTERS resets the promoted controls too. Before C6 it reset only the chips and the search
+  //     box, so a year typed into the bar survived a "Clear filters" click and silently kept filtering.
+  doc.getElementById("clearFilters").click();
+  ok(c6from.value === "" && doc.getElementById("yearTo").value === "",
+    "C6: Clear filters must reset the promoted year inputs, got " + JSON.stringify([c6from.value, doc.getElementById("yearTo").value]));
+  ok(doc.getElementById("surveyCount").textContent === "4 surveys",
+    "C6: Clear filters must restore the full catalogue, got " + JSON.stringify(doc.getElementById("surveyCount").textContent));
+  const c6dl = doc.getElementById("facetChips").querySelector('[data-facet="dl"]');
+  c6dl.click();
+  ok(doc.getElementById("surveyCount").textContent === "2 surveys", "C6: setup, the Downloadable here chip must narrow to 2");
+  doc.getElementById("clearFilters").click();
+  ok(!doc.getElementById("facetChips").querySelector('[data-facet="dl"]').classList.contains("on"),
+    "C6: Clear filters must reset the promoted Downloadable here chip");
+  ok(doc.getElementById("surveyCount").textContent === "4 surveys",
+    "C6: Clear filters must restore the full catalogue after the chip, got " + JSON.stringify(doc.getElementById("surveyCount").textContent));
 
   // DD/GG. E2 IDENTIFIERS ROLLUP + E4 DETAIL SECTION ORDER (survey detail).
   const drwE = doc.getElementById("drawer");

@@ -1372,7 +1372,9 @@ function pubsHtml(m){const ps=(m.pubs||[]);
 // faceting by the automated completeness/smoothness check — the screen must never become a ranking, so
 // none of the sort modes or facets below reference s.q / the check.
 let _sortMode="name",_cardLayout="cards";
-const _facets={lic:false};                          // presence facets (currently just "Open licence")
+// C6: presence facets. "dl" (Downloadable here) was promoted out of the map rail, where it lived as
+// the Data available dropdown's "tf" option and so could not be asked at all on the Surveys view.
+const _facets={lic:false,dl:false};
 const _typeFacets=new Set();                        // selected data-type chips, OR-combined within the group
 const _TYPE_ORDER=["BBMT","LPMT","AMT","GDS"];      // canonical chip order; only corpus-present types render
 function _stationCount(sv){return ST.filter(s=>s.survey===sv).length;}
@@ -1383,10 +1385,30 @@ function _presentTypes(){const have=new Set(ST.map(s=>s.type));return _TYPE_ORDE
 function _yearKey(m){return m.year_start!=null?m.year_start:(m.year_end!=null?m.year_end:-Infinity);}
 function surveyPassesFacets(sv){const m=SMETA[sv]||{};
   if(_facets.lic&&!licIsOpen(m.lic))return false;   // "Open licence": an openly-licensed (redistributable) id per the canon tables
+  // C6 "Downloadable here": the SAME s.ediAvail predicate the map applies per station, asked of a survey
+  // - it passes when ANY of its stations carries a transfer function this portal may serve.
+  if(_facets.dl&&!ST.some(s=>s.survey===sv&&s.ediAvail))return false;
+  // C6 year range: the survey-level reading of passesYearRange's semantics. An undated survey passes
+  // while both inputs are empty and fails as soon as either is set, because a reader who typed a year is
+  // asking for DATED data and including undated surveys would misrepresent the range as covering them.
+  if(!_surveyPassesYears(m))return false;
   if(_typeFacets.size){                             // type chips: a survey passes if ANY of its stations' type is selected
     const types=_surveyTypeSet(sv);let any=false;
     _typeFacets.forEach(t=>{if(types.has(t))any=true;});
     if(!any)return false;}
+  return true;}
+// C6: the promoted facets gate the MAP's own predicates too (filters.js passesCore), and _facets is
+// this module's state, so it is read through one named accessor rather than reached into.
+function surveyFacetOn(k){return !!_facets[k];}
+function _surveyPassesYears(m){
+  const fromEl=document.getElementById("yearFrom"),toEl=document.getElementById("yearTo");
+  if(!fromEl||!toEl)return true;                    // filter UI not present (a bare fixture) -> no-op
+  const from=fromEl.value.trim()?+fromEl.value:null,to=toEl.value.trim()?+toEl.value:null;
+  if(from==null&&to==null)return true;
+  if(m.year_start==null&&m.year_end==null)return false;
+  const lo=m.year_start??m.year_end,hi=m.year_end??m.year_start;
+  if(from!=null&&hi<from)return false;
+  if(to!=null&&lo>to)return false;
   return true;}
 function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
   if(_sortMode==="stations")arr.sort((a,b)=>_stationCount(b)-_stationCount(a)||a.localeCompare(b));
@@ -1410,7 +1432,8 @@ function renderDiscovery(n){
   const fc=document.getElementById("facetChips");
   if(!fc)return;
   // "Open licence" (presence) + one chip per corpus-present data type (BBMT/LPMT/AMT/GDS), multi-select.
-  const chips=[`<button type="button" class="facet${_facets.lic?" on":""}" data-facet="lic" aria-pressed="${_facets.lic?"true":"false"}">Open licence</button>`];
+  const chips=[`<button type="button" class="facet${_facets.lic?" on":""}" data-facet="lic" aria-pressed="${_facets.lic?"true":"false"}">Open licence</button>`,
+    `<button type="button" class="facet${_facets.dl?" on":""}" data-facet="dl" aria-pressed="${_facets.dl?"true":"false"}" title="Surveys whose transfer functions this portal may serve directly">Downloadable here</button>`];
   _presentTypes().forEach(t=>{const on=_typeFacets.has(t);
     chips.push(`<button type="button" class="facet${on?" on":""}" data-type-facet="${escAttr(t)}" aria-pressed="${on?"true":"false"}">${esc(t)}</button>`);});
   fc.innerHTML=chips.join("");}
@@ -1434,7 +1457,11 @@ function clearDiscoveryFilters(){
   _typeFacets.clear();
   const s=document.getElementById("surveySearch");
   if(s&&s.value)s.value="";
-  renderCards();
+  // C6: the promoted year inputs are this bar's filters now, so Clear filters owes them a reset. Before
+  // the promotion they were the rail's, and a year left in them survived every "Clear filters" click.
+  ["yearFrom","yearTo"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+  // refresh() re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
+  if(typeof refresh==="function")refresh();else renderCards();
   if(typeof updateCounts==="function")updateCounts();}
 // Ruling 2: "View on map" from the survey drawer header. It used to CHECK ONLY this survey in the rail tree
 // and refresh(), which removed every other survey from the map: the reader lost all context for where the
@@ -1942,7 +1969,9 @@ document.addEventListener("click",e=>{
   const fc=document.getElementById("facetChips");
   if(fc&&fc.addEventListener)fc.addEventListener("click",e=>{
     const lf=e.target.closest&&e.target.closest("[data-facet]");
-    if(lf){const k=lf.dataset.facet;if(k in _facets){_facets[k]=!_facets[k];renderCards();}return;}
+    // C6: "dl" gates passesCore as well as the catalogue, so a full refresh - the map has to follow it.
+    if(lf){const k=lf.dataset.facet;if(k in _facets){_facets[k]=!_facets[k];
+      if(k==="dl"&&typeof refresh==="function")refresh();else renderCards();}return;}
     const tf=e.target.closest&&e.target.closest("[data-type-facet]");
     if(tf){const t=tf.dataset.typeFacet;if(_typeFacets.has(t))_typeFacets.delete(t);else _typeFacets.add(t);renderCards();}});
 })();

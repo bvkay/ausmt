@@ -584,9 +584,6 @@
   .tourbtns .tourprimary:hover{border-color:var(--copper)}
 
   /* --- S3: year range / downloadable-only / go-to-place / recently-added --- */
-  .yearrange{display:flex;align-items:center;gap:8px}
-  .yearrange input{width:0;flex:1;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
-  .yearrange span{color:var(--muted)}
   .fieldnote{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}
   /* C4 (brief 9, Option A): ONE wrapping line, capped with the grid and the discovery bar so all three
      line up. The old form was a heading over a column of rows, which on a wide screen was a large sparse
@@ -694,6 +691,13 @@
   .disc-search:focus{outline:none;border-color:var(--copper)}
   .disc-facets{display:flex;flex-wrap:wrap;gap:6px}
   .disc-spacer{flex:1 1 auto;min-width:0}
+  /* C6: the year range promoted out of the rail. Sized for a bar rather than a column - the two
+     year boxes are four digits wide, not full-width fields. */
+  .disc-years{font-size:12.5px;color:var(--muted)}
+  .disc-years-in{display:flex;align-items:center;gap:6px}
+  .disc-years-in span{color:var(--muted)}
+  .disc-years-in input{width:5.5em;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:12.5px}
+  .disc-years-in input:focus{outline:none;border-color:var(--copper)}
   .facet{font-size:12px;padding:5px 10px;border-radius:14px;border:1px solid var(--line);background:var(--panel-2);
     color:var(--muted);cursor:pointer}
   .facet:hover{border-color:var(--copper);color:var(--text)}
@@ -821,21 +825,12 @@
          The Download block prices the scope; this control only decides what the map shows. -->
     <select id="availSel" aria-label="Data available">
       <option value="">Any</option>
-      <option value="tf">Transfer functions downloadable here</option>
       <option value="raw_packed">Packed raw time series</option>
       <option value="level0">Level 0 time series</option>
       <option value="level1_mth5">Level 1 MTH5</option>
       <option value="level1_netcdf">Level 1 NetCDF</option>
     </select>
     <div class="fieldnote">Selecting a level keeps the stations whose files are ready to fetch.</div>
-    <h2 id="yearRangeHead" title="Filters on each survey's declared acquisition year(s)">Year range</h2>
-    <div class="yearrange">
-      <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
-      <span>-</span>
-      <input type="number" id="yearTo" aria-label="To year" inputmode="numeric">
-    </div>
-
-    <div class="fieldnote">Filters on each survey's declared year(s); surveys with no declared date are hidden once a year is set.</div>
     </details>
   </section>
   <div class="collgroup" id="collGroup" data-views="both"></div>
@@ -913,7 +908,7 @@
          a compact/list toggle and clear-filters. Wired in drawer.js; state lives there. There is
          deliberately NO sort or facet for the automated completeness/smoothness check (never a ranking). -->
     <div class="discovery" id="discoveryControls">
-      <input type="text" id="surveySearch" class="disc-search" placeholder="Search surveys…" aria-label="Search surveys by name, organisation, region or description" autocomplete="off">
+      <input type="text" id="surveySearch" class="disc-search" placeholder="Search surveys, organisations or locations..." aria-label="Search surveys by name, organisation, region or description" autocomplete="off">
       <label class="disc-sort">Sort
         <select id="sortSel">
           <option value="name">Name</option>
@@ -924,6 +919,16 @@
       </label>
       <span class="disc-count" id="surveyCount" role="status" aria-live="polite"></span>
       <div class="disc-facets" id="facetChips" aria-label="Filter surveys"></div>
+      <!-- C6: the year range, promoted out of the map rail. Same ids, same inputs, so the predicate
+           (filters.js passesYearRange) reads them exactly as it always did; what changed is that they
+           are now on the view where choosing a survey happens. applyYearRangeHints fills the
+           placeholders, the min/max attrs and the corpus-range suffix on #yearRangeHead. -->
+      <label class="disc-years" id="yearRangeHead" title="Filters on each survey&#39;s declared acquisition year(s); surveys with no declared date are hidden once a year is set">Year range</label>
+      <div class="disc-years-in">
+        <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
+        <span>-</span>
+        <input type="number" id="yearTo" aria-label="To year" inputmode="numeric">
+      </div>
       <span class="disc-spacer"></span>
       <div class="seg disc-layout" id="layoutSeg" role="group" aria-label="Card layout">
         <button type="button" data-layout="cards" class="on">Cards</button>

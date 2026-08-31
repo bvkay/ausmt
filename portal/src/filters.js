@@ -43,20 +43,22 @@ function passesCore(s){
   // screening rule is a curation decision, not a rail-layout one.
   if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
   if(!passesYearRange(s))return false;
-  // Data available (Lane B, D1): ONE single-select viewing filter in Browse. "tf" is the s.ediAvail
-  // licence predicate (the retired tickbox's, the same flag the selection exports read for their
-  // not-included honesty). A level token filters on ts_access.json membership and is INERT until the
-  // index has landed: a route that has not arrived is not a missing one, and filtering on it would
-  // empty the map over data the portal does not have. paintAvailSelect disables the level options
-  // across the same window (belt and braces), and TSACC_READY re-runs refresh() so a choice made
-  // early still takes effect. Membership in the index IS the access decision (R5): nothing here
-  // re-derives availability, and no filter state can surface a station the build gated out.
+  // C6: "Downloadable here" is the s.ediAvail licence predicate (the retired tickbox's, then the Data
+  // available dropdown's "tf" option, the same flag the selection exports read for their not-included
+  // honesty). The CONTROL was promoted to the discovery bar and the predicate stayed exactly here, so
+  // the map filters on it as it always did; only where a reader sets it has changed.
+  if(typeof surveyFacetOn==="function"&&surveyFacetOn("dl")&&!s.ediAvail)return false;
+  // Data available (Lane B, D1): the single-select TIME-SERIES level chooser in Browse. A level token
+  // filters on ts_access.json membership and is INERT until the index has landed: a route that has not
+  // arrived is not a missing one, and filtering on it would empty the map over data the portal does not
+  // have. paintAvailSelect disables the level options across the same window (belt and braces), and
+  // TSACC_READY re-runs refresh() so a choice made early still takes effect. Membership in the index IS
+  // the access decision (R5): nothing here re-derives availability, and no filter state can surface a
+  // station the build gated out.
   const av=document.getElementById("availSel");
-  if(av&&av.value){
-    if(av.value==="tf"){if(!s.ediAvail)return false;}
-    else if(typeof tsAccessKnown==="function"&&tsAccessKnown()){
-      const lv=tsRoutesFor(s.ausmt_id);
-      if(!lv||!lv[av.value])return false;}}
+  if(av&&av.value&&typeof tsAccessKnown==="function"&&tsAccessKnown()){
+    const lv=tsRoutesFor(s.ausmt_id);
+    if(!lv||!lv[av.value])return false;}
   return true;}
 function passes(s){if(!passesCore(s))return false;
   const q=document.getElementById("find").value.trim().toLowerCase();
