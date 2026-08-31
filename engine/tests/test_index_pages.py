@@ -152,6 +152,23 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # ever appear as a src, and no OTHER path may either. The list is exact, so a second asset fails here.
 ALLOWED_PAGE_SRCS = ["/vendor/brand/ausmt-mark.svg"]
 
+# RESTATED, WHICH MEANS THE SAME SURFACE. The old rule was `"src=" not in page`: a raw substring
+# test, blind to nothing. An allow-list parsed from double-quoted attributes alone would be NARROWER
+# than the rule it restates, because `src='https://...'` and `src=https://...` would both slip past
+# it while failing the old one. So the restatement keeps both halves: the COUNT of the substring is
+# held to the allow-list's length (the old rule's exact reach), and the attributes are parsed in
+# every quoting form HTML permits and compared to the list itself.
+_SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
+
+
+def _page_srcs(page, rel):
+    """Every src on the page, in every quoting form, with the raw-substring count held too."""
+    raw = page.count("src=")
+    assert raw == len(ALLOWED_PAGE_SRCS), (
+        f"{rel}: the tier allows exactly {len(ALLOWED_PAGE_SRCS)} src attribute(s) and the page "
+        f"carries {raw}; the old rule counted the substring itself and this one still does")
+    return [m.group(1).strip("\"'") for m in _SRC_ATTR.finditer(page)]
+
 
 def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
     """FAILS IF an index page grows a script, a stylesheet link, or any fetched asset beyond the one
@@ -161,7 +178,7 @@ def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
     for rel in ("surveys/index.html", "collections/index.html"):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert "<script" not in page, f"{rel}: no script may appear on an index page"
-        srcs = re.findall(r'src="([^"]*)"', page)
+        srcs = _page_srcs(page, rel)
         assert srcs == ALLOWED_PAGE_SRCS, \
             f"{rel}: the only fetched asset may be {ALLOWED_PAGE_SRCS}, got {srcs}"
         assert '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT"' in page, \
@@ -691,12 +708,13 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
     lane names. The pages share the site's identity mark with the SPA, as ONE same-origin file the
     portal image serves and the browser caches once; every other asset stays inline and no build-time
     read or external fetch is introduced. FAILS IF the header smuggles in a script, an external
-    stylesheet, or any src beyond the allow-list (an http, https or data src fails on the same line)."""
+    stylesheet, or any src beyond the allow-list: an http, https, protocol-relative or data src
+    fails on the same line, in every quoting form, and so does an extra src of any kind."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
             f"{rel}: no executable script may appear on a static page"
-        srcs = re.findall(r'src="([^"]*)"', page)
+        srcs = _page_srcs(page, rel)
         assert srcs == ALLOWED_PAGE_SRCS, \
             f"{rel}: the only fetched asset may be {ALLOWED_PAGE_SRCS}, got {srcs}"
         assert 'rel="stylesheet"' not in page, f"{rel}: styles stay inline"
