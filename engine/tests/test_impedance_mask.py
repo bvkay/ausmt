@@ -277,3 +277,39 @@ def test_the_rescued_station_builds_and_the_declaration_masks_what_is_left(tmp_p
     rows = entry["source_parse_fallbacks"]
     assert rows and rows[0]["file"] == BROKEN_Z.name, rows
     assert "impedance data blocks" in rows[0]["defect"], rows[0]
+
+
+# ---------------------------------------------------------------------------------------------
+# 5. what else the fabricated impedance reaches: the sign-convention verdict.
+# ---------------------------------------------------------------------------------------------
+
+def test_the_mask_withholds_the_convention_verdict_computed_from_the_fabrication(tmp_path):
+    """The sign-convention quadrant check reads the impedance and nothing else, so under the mask
+    its verdict IS the withheld phase, restated in degrees. Against the pre-fix build, station.json
+    published frame.convention_check = {"verdict": "warn_yx", "phs_xy_median_deg": 45.0,
+    "phs_yx_median_deg": 45.0} for the very station whose build_report line says the phase is
+    withheld, and the survey warning read that flat 45 degrees as a possible 3D/distortion effect.
+    After: the verdict is null and the note is gone, in station.json, in the frame array and in the
+    warnings."""
+    _survey(tmp_path, "masked", PLACEHOLDER, channels=["Bx", "By", "Bz"])
+    out = _build(tmp_path)
+    doc = json.loads((out / "products" / "masked" / "MASKZ1" / "station.json")
+                     .read_text(encoding="utf-8"))
+    assert doc["frame"] is not None, "the measured frame facts are not impedance-derived and stay"
+    assert doc["frame"]["convention_check"] is None, doc["frame"]["convention_check"]
+
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    entry = report["surveys"]["masked"]
+    assert not any(w.startswith("convention:") for w in entry["warnings"]), entry["warnings"]
+    assert not any("convention:" in n for e in entry["frame"] for n in [e["note"]]), entry["frame"]
+
+
+def test_an_undeclared_placeholder_still_gets_the_convention_verdict(tmp_path):
+    """The other half of the pin: the withholding is the DECLARATION's doing, not a blanket removal.
+    With no channels_recorded the same fixture keeps the warn_yx verdict it has always had."""
+    _survey(tmp_path, "undeclared", PLACEHOLDER)
+    out = _build(tmp_path)
+    doc = json.loads((out / "products" / "undeclared" / "MASKZ1" / "station.json")
+                     .read_text(encoding="utf-8"))
+    assert doc["frame"]["convention_check"]["verdict"] == "warn_yx", doc["frame"]["convention_check"]
+    assert doc["frame"]["convention_check"]["phs_yx_median_deg"] == 45.0

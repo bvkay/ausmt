@@ -2170,6 +2170,12 @@ def _parse_one_edi(p):
     # BOTH off-diagonal medians coherently out of quadrant -> FAIL (a pure convention flip: the
     # station is skipped, never served under the wrong e^{±iωt} sense). ONE out -> honesty WARN
     # (3D/distortion does that legitimately). Too little data -> explicit insufficient note.
+    # CONSTRAINT: this runs inside the survey-independent (C18-cached) parse, so it cannot see a
+    # channels_recorded declaration. A survey that declares no electric channels therefore reaches
+    # the impedance mask only if its fabricated Z passes this gate; a fabrication that trips the
+    # FAIL verdict drops the station before the mask can withhold the verdict that dropped it.
+    # Moving the gate past the mask means moving it out of the cached parse, which changes the
+    # cache product; the masked callers' `warn`/`insufficient` verdicts are handled at the mask.
     _ck = conv.convention_check(comp)
     if _ck["verdict"] == "fail":
         return {"skip": {"station": r["id"], "gate": "sign-convention", "reason": _ck["detail"]}}
@@ -2317,6 +2323,18 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                     if _zi < len(tf) and tf[_zi]:
                         tf[_zi] = [None] * len(tf[_zi])
             srow = mask_impedance_sci_row(srow)
+            # Gate 2's sign-convention verdict reads the impedance and nothing else, so under the
+            # mask it IS the withheld phase restated in degrees: a fabricated flat Z publishes
+            # phs_xy/phs_yx medians of 45.0 into station.json's frame block and a survey warning
+            # that reads that flat 45 as a possible 3D/distortion effect, in the same report whose
+            # next line says the phase is withheld. Null the verdict and drop its note. Done here,
+            # on the parse product rather than inside the parse, for the same reason as the rest of
+            # the mask: the C18 cache entry stays survey-independent. The measured frame facts
+            # (declared rotation, frame served) owe the impedance nothing and stay.
+            if isinstance(parsed.get("frame"), dict):
+                parsed["frame"]["convention_check"] = None
+            parsed["frame_notes"] = [_n for _n in (parsed.get("frame_notes") or [])
+                                     if not _n.startswith("convention: ")]
             if report is not None:
                 report.setdefault("impedance_masked_by_declaration", []).append(
                     str(r.get("id") or p.stem))
