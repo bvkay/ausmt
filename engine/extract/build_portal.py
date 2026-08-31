@@ -2250,7 +2250,23 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             try:
                 parsed = _parse_one_edi(p)
             except Exception as e:  # noqa: BLE001
+                # A file the reader cannot read at all is a DROPPED STATION, and it is recorded as
+                # one. Every neighbouring drop path here (the convention-gate skip, the
+                # no-coordinates skip, the MTH5 read failure) writes a structured record; this one
+                # printed to stderr and continued, so a station could vanish from the corpus with
+                # nothing in build_report.json to name it. Two ledgers, for two different questions:
+                # `stations_dropped` answers "which stations are not here", alongside every other
+                # drop; `source_parse_failures` answers "which FILE, and what did the reader say" -
+                # the honest twin of source_parse_fallbacks, which records the files a normalised
+                # reparse rescued. Also raised as a counted survey warning below.
                 print(f"  PARSE FAIL {p.name}: {e}", file=sys.stderr)
+                if report is not None:
+                    _why = f"source file unreadable by mt_metadata: {type(e).__name__}: {e}"
+                    report.setdefault("stations_dropped", []).append(
+                        {"station": p.stem, "reason": _why})
+                    report.setdefault("parse_failures", []).append(
+                        {"station": p.stem, "file": p.name,
+                         "error": f"{type(e).__name__}: {e}"})
                 continue
             if _ck:
                 cache.put_json(_ck, parsed)   # populate for the next warm build
@@ -5751,6 +5767,13 @@ def _main_build(argv=None):
         # same discipline as xml_failures and the integrity gate. These stations parsed only from a
         # normalised TEMPORARY copy, so a curator should know the custodian's file trips a reader
         # defect -- while the bytes AusMT serves for them are still the custodian's, unmodified.
+        _parse_failure_rows = list(_gate_report.get("parse_failures", []))
+        if _parse_failure_rows:
+            _survey_warnings.append(
+                f"mt_metadata could not read {len(_parse_failure_rows)} source file(s) at all and "
+                f"no normalised reparse rescued them; each is a DROPPED station "
+                f"[{', '.join(_row['file'] for _row in _parse_failure_rows[:8])}"
+                f"{', ...' if len(_parse_failure_rows) > 8 else ''}]")
         _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
         if _parse_fallback_rows:
             # Compact defect clause: the row carries the full reason; the counted warning names the
@@ -5800,9 +5823,14 @@ def _main_build(argv=None):
                 f"bytes at all")
         build_report_surveys[slug] = {
             "stations_built": len(stations),
-            # C25: convention-gate skips are STRUCTURED drops ({station, reason}); the legacy
-            # unusable-EDI print+continue path still records nothing here (per the original brief).
+            # STRUCTURED drops ({station, reason}): the C25 convention-gate skips, the stations with
+            # no recoverable coordinates or periods, and - since the GDS readers lane - the source
+            # files mt_metadata could not read at all, which until then dropped silently.
             "stations_dropped": list(_gate_report.get("stations_dropped", [])),
+            # Per-station record of the source files the reader could not read AND could not rescue
+            # from a normalised copy: the file, and what the reader said about it. The negative twin
+            # of source_parse_fallbacks below (empty for every survey whose files all read).
+            "source_parse_failures": _parse_failure_rows,
             "tipper_masked": list(_gate_report.get("tipper_masked", [])),
             "warnings": list(_survey_warnings),
             # Per-station EMTF-XML emission failures (empty when every served station's XML emitted).
