@@ -1812,7 +1812,6 @@ function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&C
 // render. The projection is a plain equirectangular fit of the fixed AU box, so the outline and the dots
 // stay registered; the canvas aspect matches the box to avoid squashing.
 const AU_EXTENT={w:112,e:154,so:-44,no:-9};
-const COLL_PAL=["#2E8FA3","#EF7256","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
 // Fluid (viewBox + width:100%) so it scales inside its container; `maxW` optionally raises the max-width
 // cap (the detail-page hero gives it more room than a list card). W stays the viewBox coordinate space so
 // the geometry is identical regardless of rendered size. Both call sites pass just `ss` or `(ss,maxW)`.
@@ -1831,7 +1830,11 @@ function collScatter(ss,maxW){
     outline=`<g class="au-outline">${coast}${borders}</g>`;
   }
   const members=[...new Set(ss.map(s=>s.survey))].sort();
-  const col=sv=>COLL_PAL[members.indexOf(sv)%COLL_PAL.length];
+  // C7: the SAME ramp the static collection page lays (state.js memberColours, twin of the engine's
+  // _member_colours). The old modulo handed the ninth member the first member's colour, so a
+  // ten-survey collection drew two surveys in one colour and its legend stopped meaning anything.
+  const _memberCols=memberColours(members.length);
+  const col=sv=>_memberCols[members.indexOf(sv)];
   const dots=ss.filter(hasPosition).map(s=>{const p=proj(s.lon,s.lat);
     return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${col(s.survey)}" fill-opacity=".9"><title>${esc(s.id)} · ${esc(s.survey)}</title></circle>`;}).join("");
   const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${cap}px;background:#16242f;border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;

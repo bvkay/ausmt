@@ -362,7 +362,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "apa,bibtex,ris,AUSMT_SELF,NCI_CITE,TS_COLLECTION,citeLine:(c,d)=>citeLine(c,d),smeta:(sv)=>SMETA[sv]," +
   // UX6 Wave E hooks: collScatter (E6 footprint — driven with a stubbed AU_OUTLINE), renderCollections
   // (E5 landing), and openStationById (E7 focus — lets the driver control the invoking element before open).
-  "collScatter,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
+  "collScatter,memberColours,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
   // UX8 (X5/X7) + C46-W3b PURE helpers, exposed so the field->indicator/star mappings are unit-testable
   // (jsdom can't run real geometry): screeningIndicators(d) maps scalar inputs to the five indicator
   // states; maturityModel(m,sc) is the star model; licBadgeState/licIsOpen/attributionText are the W3b
@@ -3335,6 +3335,32 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(svgOutline.indexOf("au-outline") >= 0 && svgOutline.indexOf("au-outline") < svgOutline.indexOf("<circle"),
     "E6: the outline group must be drawn before (beneath) the station dots");
   delete win.AU_OUTLINE;
+  // C7. THE SCATTER TAKES THE SHARED RAMP. The parity of the colour RULE itself against the engine's
+  // _member_colours is held by tests/collection_colours.test.js; this is the half that test cannot see -
+  // that collScatter is actually the caller. Nine synthetic members, one station each, is the first
+  // count past the eight-entry palette, which is exactly where the old modulo cycling handed the ninth
+  // survey the first survey's colour and the legend stopped telling a reader which dots were which.
+  const nineMembers = [];
+  for (let i = 0; i < 9; i++)
+    nineMembers.push({ id: "S" + i, survey: "Survey " + String.fromCharCode(65 + i), lat: -30 - i, lon: 130 + i, type: "LPMT" });
+  const svgNine = A.collScatter(nineMembers);
+  const nineFills = (svgNine.match(/<circle[^>]*fill="(#[0-9A-F]{6})"/g) || [])
+    .map(t => (t.match(/fill="(#[0-9A-F]{6})"/) || [])[1]);
+  ok(nineFills.length === 9, "C7: expected 9 member dots in the synthetic scatter, got " + nineFills.length);
+  ok(new Set(nineFills).size === 9,
+    "C7: nine members must get nine DISTINCT colours (the old palette cycled and repeated), got " +
+    new Set(nineFills).size + " distinct: " + JSON.stringify(nineFills));
+  // ...and they must be the SAME nine the pages compute, in member order, so one survey is never two
+  // colours across the two surfaces.
+  ok(JSON.stringify(nineFills) === JSON.stringify(A.memberColours(9)),
+    "C7: the scatter must colour from the shared ramp, got " + JSON.stringify(nineFills) +
+    " want " + JSON.stringify(A.memberColours(9)));
+  // The legend swatches must agree with the dots; a legend keyed off a second colour rule is worse than
+  // no legend at all.
+  const nineLegend = (svgNine.match(/csl-dot" style="background:(#[0-9A-F]{6})"/g) || [])
+    .map(t => (t.match(/background:(#[0-9A-F]{6})/) || [])[1]);
+  ok(JSON.stringify(nineLegend) === JSON.stringify(nineFills),
+    "C7: the legend swatches must be the dots' own colours, got " + JSON.stringify(nineLegend));
 
   // FF. E6 'View all stations on main map' — from the collection page, switch to map + fitBounds (spy on map).
   win.location.hash = "#/collection/auslamp"; A.routeFromHash();

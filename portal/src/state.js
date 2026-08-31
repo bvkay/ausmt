@@ -156,6 +156,36 @@ function fmtPeriod(v){
 // HYPHEN-MINUS rather than an en dash or the word "to". Curator prose is not chrome and keeps its
 // own glyph freedoms.
 function fmtRange(lo,hi){return lo+" - "+hi;}
+// ---- collection member colours: the same ramp the static collection pages lay ------------------
+// A collection is drawn twice, as the static page's scatter and as the SPA's collScatter, and a reader
+// moving between them is entitled to find the same survey the same colour. This is the JS twin of
+// engine/extract/_pages.py _member_colours; tests/collection_colours.test.js holds the two to the same
+// lists. The palette leads while it can, so the common case matches exactly.
+const COLL_PAL=["#2E8FA3","#EF7256","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
+// Python's colorsys.hls_to_rgb, mirrored constant for constant: the ramp's hex values have to come out
+// byte-identical to the engine's, so this cannot be an approximation of the same idea.
+const _HLS_T3=1/3,_HLS_S6=1/6,_HLS_T23=2/3;
+function _hlsChannel(m1,m2,hue){
+  hue=hue-Math.floor(hue);
+  if(hue<_HLS_S6)return m1+(m2-m1)*hue*6;
+  if(hue<0.5)return m2;
+  if(hue<_HLS_T23)return m1+(m2-m1)*(_HLS_T23-hue)*6;
+  return m1;}
+function _hlsHex(h,l,s){
+  const m2=(l<=0.5)?l*(1+s):l+s-(l*s),m1=2*l-m2;
+  return "#"+[_hlsChannel(m1,m2,h+_HLS_T3),_hlsChannel(m1,m2,h),_hlsChannel(m1,m2,h-_HLS_T3)]
+    .map(v=>Math.round(v*255).toString(16).toUpperCase().padStart(2,"0")).join("");}
+// `n` distinct colours, deterministic in MEMBER ORDER and with no randomness anywhere. Past the
+// palette's eight the set stops CYCLING - which gave two surveys one colour and made the legend
+// useless - and becomes an evenly spaced hue ramp instead: hue i/n for the widest gap possible at this
+// many members, with lightness alternating between two bands so neighbouring hues still separate on the
+// dark ground.
+function memberColours(n){
+  if(n<=COLL_PAL.length)return COLL_PAL.slice(0,n);
+  const out=[];
+  for(let i=0;i<n;i++)out.push(_hlsHex(i/n,i%2===0?0.62:0.46,0.58));
+  return out;}
+
 // The human form of a Creative Commons identifier, DERIVED from the identifier's own grammar so the
 // display cannot fall behind the allow-list: the prefix, the clause letters (which keep their
 // internal hyphens: BY-NC-SA), the version, and a jurisdiction port where one exists. A hand-kept
