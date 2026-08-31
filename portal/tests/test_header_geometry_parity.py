@@ -219,6 +219,54 @@ def test_the_mark_the_two_headers_name_is_a_real_committed_asset():
         f"{MARK_SRC} must be the generated vector mark, not a placeholder"
 
 
+# EVERY surface, not just the pair above. The two pins above compare the SPA against the pages
+# sheet, which is where the zone geometry can drift; they cannot see releases.html or
+# add-survey.html, each of which carries its OWN copy of the chrome. Those two kept the AuScope
+# symbol after the SPA and the 2,655 generated pages had switched, so a reader following the
+# header's own "Contribute a survey" link watched the site's identity change under them.
+#
+# about.html is the ONE carve-out, by name: its header is a separate pending owner ruling and this
+# lane does not touch it. 404.html is a bare error document with no header at all.
+MARK_IMG = f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">'
+MARK_EXEMPT = {"about.html"}
+
+
+def _chrome_pages():
+    """Every portal document that ships the site chrome, by name."""
+    return [p for p in sorted(ROOT.glob("*.html")) if "<header>" in p.read_text(encoding="utf-8")]
+
+
+def test_every_static_chrome_page_carries_the_ausmt_mark():
+    """FAILS IF a portal page that wears the chrome shows anything but the AusMT mark as its
+    identity, and equally if a NEW page appears wearing the chrome without one. Discovered from the
+    filesystem rather than from a list, so adding a page cannot quietly add a sixth identity."""
+    seen = []
+    for page in _chrome_pages():
+        if page.name in MARK_EXEMPT:
+            continue
+        seen.append(page.name)
+        text = page.read_text(encoding="utf-8")
+        assert MARK_IMG in text, (
+            f"portal/{page.name}: the header identity must be the AusMT mark at {MARK_SRC}")
+        assert MARK_RULE in text, (
+            f"portal/{page.name}: the mark must carry the shared sizing rule {MARK_RULE!r}")
+        assert "auscope-icon-white.png" not in text, (
+            f"portal/{page.name}: the AuScope symbol is no longer this site's header identity; the "
+            "relationship stays in footer and About content, in words")
+    assert seen, "no chrome page was discovered; the glob or the header marker has moved"
+
+
+def test_the_auscope_symbol_survives_on_exactly_one_page_and_it_is_the_carved_out_one():
+    """The carve-out is a DECISION, so it is pinned as one. FAILS IF about.html quietly loses the
+    AuScope symbol before the owner has ruled on its header, and equally if a second page picks it
+    back up. Either way the owner's pending ruling would have been pre-empted by a drift."""
+    holders = [p.name for p in sorted(ROOT.glob("*.html"))
+               if "auscope-icon-white.png" in p.read_text(encoding="utf-8")]
+    assert holders == sorted(MARK_EXEMPT), (
+        f"exactly {sorted(MARK_EXEMPT)} may still carry the AuScope symbol as a header identity "
+        f"pending the owner's ruling on that header, got {holders}")
+
+
 def test_the_narrow_width_stacking_still_wins_under_760px():
     """The wrap behaviour the zero-basis rule must not cost. FAILS IF either surface loses the
     760px full-width stacking override, or if it stops coming AFTER the zone rules (the selectors
