@@ -138,6 +138,20 @@ def test_no_generated_asset_text_carries_an_en_or_em_dash(name):
         assert glyph not in text, f"{name}: no {label} may reach an export"
 
 
+def test_every_svg_parses_as_well_formed_xml():
+    """FAILS IF an export is not well-formed XML. This is not pedantry: a browser decodes an SVG
+    served as an image with a strict XML parser and shows a BROKEN IMAGE on any error, silently, with
+    a 200 in the network panel and correct content type. The defect that put this pin here was a
+    double hyphen inside the generated header comment, which XML forbids inside a comment; every
+    export parsed fine to the eye, served fine, and rendered as alt text in the page header."""
+    import xml.etree.ElementTree as ET
+    for name in SVGS:
+        try:
+            ET.fromstring(_svg(name))
+        except ET.ParseError as exc:
+            raise AssertionError(f"{name}: not well-formed XML, so a browser will not render it: {exc}")
+
+
 def test_the_pngs_are_transparent_and_the_declared_sizes():
     """FAILS IF a PNG loses its alpha channel, gains an opaque background, or drifts off the declared
     export sizes. These are rendered from brand.json's geometry, not by rasterising the SVGs, so the

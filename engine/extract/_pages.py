@@ -487,6 +487,7 @@ _CSS = """
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
+  .brandmark{height:30px;width:30px;display:block;flex:none}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:#E8EDF1;text-decoration:none}
   .tagline{color:#8FA3B0;font-size:12.5px}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -566,13 +567,27 @@ def _site_header(active="", status="") -> str:
     around it, and the owner kept that distinction and their wording. The right zone is the status
     slot, which is CONTEXTUAL (see the callers) while the shell around it is identical.
 
-    No logo image: the SPA header carries one, and a page in this tier renders from itself with no
-    fetched asset of any kind. The wordmark carries the identity instead."""
+    THE ONE FETCHED ASSET (brand-assets lane E3). The identity zone opens with the AusMT mark, the
+    same file and the same markup the SPA header carries, so a reader arriving on a survey page from a
+    search result meets the site's own identity rather than a wordmark alone. It is a SAME-ORIGIN path
+    served by the portal image beside these pages: not a build-time read, not an external fetch, and
+    not 180 circles inlined into 2,655 documents. Everything else on the page stays inline, and the
+    src allow-list in engine/tests/test_index_pages.py names this one path and nothing else. A version
+    skew between the portal image and the pages tree shows as a one-deploy-old logo, which is the
+    acceptable failure mode for a logo and for nothing else in this tier.
+
+    The mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the wider identity block
+    cannot move the centre tab group (tests/test_header_geometry_parity.py, C9)."""
     tabs = "".join(
         f'<a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>"
         for i, lbl, h in _NAV_TABS)
     return ('<header class="site">\n'
-            '<div class="hzone hleft"><a class="wordmark" href="/">AusMT</a>'
+            # One unbroken literal on purpose: portal/tests/test_header_geometry_parity.py holds this
+            # markup character-identical against portal/index.html's own, and it reads this file's
+            # SOURCE (the pages sheet cannot be imported without the engine's path set up).
+            '<div class="hzone hleft">'
+            '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">'
+            '<a class="wordmark" href="/">AusMT</a>'
             '<span class="tagline">Australia\'s Magnetotelluric Data Portal</span></div>\n'
             f'<div class="hzone hcenter"><nav>{tabs}</nav>'
             '<a class="about" href="/about.html">About</a>'

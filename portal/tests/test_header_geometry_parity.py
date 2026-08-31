@@ -180,6 +180,45 @@ def test_the_two_headers_measure_text_in_one_font_stack():
         f"  engine/extract/_pages.py header.site {m.group(1)!r}")
 
 
+# --------------------------------------------------------------------------- the identity mark
+#
+# Brand-assets lane E3: the header identity is the AusMT mark on EVERY surface, replacing the
+# AuScope-derived symbol the SPA carried alone. The relationship with AuScope stays explicit in
+# footer and About content; it is no longer embedded in the lockup.
+#
+# The mark is a fixed 30 x 30 box, which is why it can join the zero-basis .hleft zone without
+# moving the centre tabs: a flex:1 1 0 side hands its leftover space out evenly whatever it holds,
+# so a wider identity block changes the SIDE's content, never the centre group's x. The pins above
+# hold that geometry; these hold the identity itself, pairwise, for the same reason the zone rules
+# are held pairwise - an edit to one surface must not leave the other on a different mark.
+MARK_SRC = "/vendor/brand/ausmt-mark.svg"
+MARK_RULE = ".brandmark{height:30px;width:30px;display:block;flex:none}"
+
+
+def test_both_headers_carry_the_same_ausmt_mark():
+    """FAILS IF either surface loses the mark, points at a different file, or drifts to a different
+    sizing rule. Same-origin only: an http, https, protocol-relative or data src fails here, which is
+    the half of the pages' old zero-src rule that was ever load-bearing."""
+    for where, path in SURFACES:
+        text = path.read_text(encoding="utf-8")
+        assert f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">' in text, (
+            f"{where}: the header identity must be the AusMT mark at {MARK_SRC}")
+        assert MARK_RULE in text, f"{where}: the mark must carry the shared sizing rule {MARK_RULE!r}"
+        for scheme in ("http://", "https://", '"//', "data:"):
+            assert f'<img class="brandmark" src="{scheme}' not in text, (
+                f"{where}: the identity mark is same-origin only; {scheme!r} is never a mark src")
+
+
+def test_the_mark_the_two_headers_name_is_a_real_committed_asset():
+    """FAILS IF the header points at a file the portal does not ship. Both surfaces are served from
+    the same origin by the portal image, so one missing file is a broken mark on every page of the
+    site at once."""
+    asset = ROOT / MARK_SRC.lstrip("/")
+    assert asset.is_file(), f"the header names {MARK_SRC}, which the portal does not ship"
+    assert "<circle" in asset.read_text(encoding="utf-8"), \
+        f"{MARK_SRC} must be the generated vector mark, not a placeholder"
+
+
 def test_the_narrow_width_stacking_still_wins_under_760px():
     """The wrap behaviour the zero-basis rule must not cost. FAILS IF either surface loses the
     760px full-width stacking override, or if it stops coming AFTER the zone rules (the selectors
