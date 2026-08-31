@@ -657,6 +657,13 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f"<title>{_e(title)}</title>\n"
         f'<meta name="description" content="{_e(description)}">\n'
         f'<link rel="canonical" href="{_e(canonical)}">\n'
+        # ICON LINKS (brand-assets lane E4). This tier shipped none, so every one of the entity pages
+        # asked the server for /favicon.ico on every visit and got a 404. Both are same-origin portal
+        # paths served beside these pages, and both are absolute because a page served at
+        # /surveys/<slug> cannot resolve a relative vendor path. The favicon is transparent, so the one
+        # file serves a light and a dark browser chrome.
+        '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
+        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">\n'
         f"{og}"
         f"{ld}"
         f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n"

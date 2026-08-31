@@ -703,6 +703,22 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
         assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
 
 
+def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
+    """Brand-assets lane E4. This tier shipped no icon link at all, so every entity page asked for
+    /favicon.ico and got a 404 on every visit. FAILS IF a page kind loses either link, or if either
+    href stops being a same-origin portal path (an absolute URL here would be an external fetch on
+    2,655 documents, which is exactly what this tier forbids)."""
+    for rel in _kinds(built):
+        head = (built / "pages" / rel).read_text(encoding="utf-8").split("</head>", 1)[0]
+        assert '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">' in head, \
+            f"{rel}: no favicon link, so the page 404s /favicon.ico on every visit"
+        assert '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">' in head, \
+            f"{rel}: no apple-touch-icon, so a home-screen shortcut renders a page screenshot"
+        hrefs = re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', head)
+        assert all(h.startswith("/vendor/") for h in hrefs), \
+            f"{rel}: icon links must be same-origin portal paths, got {hrefs}"
+
+
 def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
     """The identity swap itself (E3). Every surface of the site now opens with the same mark: the SPA
     header and every generated page. FAILS IF a page kind renders the wordmark without the mark, or

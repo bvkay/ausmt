@@ -62,11 +62,11 @@
       "bands": [
         {
           "max_px": 16,
-          "ratio": 0.62
+          "ratio": 0.78
         },
         {
           "max_px": 24,
-          "ratio": 0.54
+          "ratio": 0.6
         },
         {
           "max_px": 32,
@@ -1427,6 +1427,26 @@
       "path": "portal/vendor/brand/ausmt-mark.png",
       "kind": "png",
       "variant": "standalone mark"
+    },
+    {
+      "path": "portal/vendor/favicon.svg",
+      "kind": "svg",
+      "variant": "browser tab icon"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-icon-180.png",
+      "kind": "png",
+      "variant": "apple-touch-icon"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-icon-192.png",
+      "kind": "png",
+      "variant": "app icon"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-icon-512.png",
+      "kind": "png",
+      "variant": "app icon"
     }
   ]
 }

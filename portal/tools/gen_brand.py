@@ -102,7 +102,15 @@ T_PRECISION = 6
 # about 32 px a 0.44 dot is under a pixel across and the silhouette dissolves into a haze, so the dots
 # are enlarged until they close into a solid outline. That is the favicon sheet's rule, and it is why
 # the 16 px favicon still reads as Australia without a second geometry existing anywhere.
-RADIUS_BANDS = ((16, 0.62), (24, 0.54), (32, 0.50), (64, 0.46))
+#
+# THE 16 PX BAND WAS SET BY LOOKING AT A REAL RASTERISER, NOT A PREVIEW. A supersampled Pillow render
+# flattered it: 0.62 looked solid there and washed out in headless Chrome at device-scale-factor 1,
+# because at 16 px the lattice pitch is 0.77 px and a 0.62 dot is 0.95 px across, so every dot lands
+# under one device pixel and the whole mark renders as translucent haze. Candidates 0.62, 0.70, 0.78
+# and 0.86 were rendered at 1x on a white tab, a dark tab and the portal navy: 0.78 is the first that
+# closes into a solid silhouette with Cape York, the Top End and Tasmania still legible, and 0.86 is
+# already fat enough to fill in the Gulf of Carpentaria and the Bight. Hence 0.78.
+RADIUS_BANDS = ((16, 0.78), (24, 0.60), (32, 0.50), (64, 0.46))
 RADIUS_ABOVE = 0.44
 # The frame margin around the mark's own bounding box, as a fraction of the square it is fitted into.
 MARK_PAD = 0.02
@@ -344,6 +352,17 @@ def svg_mark():
             + _svg_mark_group(0, 0, SVG_NOMINAL_PX["mark"]) + "</svg>\n")
 
 
+def svg_favicon():
+    """The browser-tab mark. Same lattice, same colour mapping, the 16 px radius band.
+
+    It keeps the filename vendor/favicon.svg the placeholder had, so no link tag on any page had to
+    move. Transparent, so one file serves a light and a dark browser chrome; the concept sheet's tile
+    variants are context previews of that same file, not separate assets."""
+    side = MARK_UNITS
+    return (_svg_open(side, side, "AusMT") + _SVG_NOTE
+            + _svg_mark_group(0, 0, SVG_NOMINAL_PX["favicon"]) + "</svg>\n")
+
+
 def svg_logo(dark, extended):
     lay = lockup(extended)
     mx, my, _ms = lay["mark"]
@@ -485,7 +504,16 @@ _OUTPUT_INDEX = (
     ("portal/vendor/brand/ausmt-logo-light-extended.png", "png", "logo with tagline, light background"),
     ("portal/vendor/brand/ausmt-mark.svg", "svg", "standalone mark"),
     ("portal/vendor/brand/ausmt-mark.png", "png", "standalone mark"),
+    ("portal/vendor/favicon.svg", "svg", "browser tab icon"),
+    ("portal/vendor/brand/ausmt-icon-180.png", "png", "apple-touch-icon"),
+    ("portal/vendor/brand/ausmt-icon-192.png", "png", "app icon"),
+    ("portal/vendor/brand/ausmt-icon-512.png", "png", "app icon"),
 )
+
+# The app-icon sizes. 180 is the apple-touch-icon a home-screen shortcut uses; 192 and 512 are the
+# conventional pair a web manifest would name. No manifest ships this lane (architect default): an
+# installable PWA is its own decision, and these two exist so that decision costs no regeneration.
+APP_ICON_SIZES = (180, 192, 512)
 
 
 def artefacts():
@@ -502,6 +530,9 @@ def artefacts():
             items.append((BRAND_DIR / f"{stem}.png", "image", png_logo(dark, extended)))
     items.append((BRAND_DIR / "ausmt-mark.svg", "bytes", svg_mark().encode("utf-8")))
     items.append((BRAND_DIR / "ausmt-mark.png", "image", png_mark(PNG_MARK_SIZE)))
+    items.append((ROOT / "vendor" / "favicon.svg", "bytes", svg_favicon().encode("utf-8")))
+    for size in APP_ICON_SIZES:
+        items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", png_mark(size)))
     return items
 
 

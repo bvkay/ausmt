@@ -15,6 +15,9 @@
 <script defer data-domain="YOUR-DOMAIN" src="https://YOUR-PLAUSIBLE-HOST/js/script.js"></script> -->
 <script src="src/analytics-shim.js"></script><!-- external (not inline); the app script element below stays this page's single intentional inline block (CSP allows inline here only). NOTE: never write a literal script OPEN TAG inside a comment on this page, tests/add_survey_logic.test.js extracts inline blocks by regex and would treat it as real. -->
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
+<!-- Home-screen shortcut icon (brand-assets lane E4). Without it iOS renders a screenshot of
+     the page instead of the mark. Same lattice as the favicon, rendered at 180px. -->
+<link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">
 <!-- The one true URL for this page. It is substantive, indexable, linked from the root and
      now advertised in sitemap.xml, so it must say which address it is served at (index.html
      has carried its own canonical since the head-hygiene lane; these three had none). -->
