@@ -1,0 +1,57 @@
+>HEAD
+
+  DATAID="SP2"
+  ACQBY="AusMT test fixture"
+  PROSPECT="Two period control fixture"
+  LOC="Fixture"
+  LAT=-37.316700
+  LONG=143.000000
+  EMPTY=1.0E+32
+
+>INFO   MAXLINES=1000
+
+  MINTED FIXTURE - NOT CUSTODIAN DATA. The NEGATIVE CONTROL for its
+  single-period twin in this directory: the same station shape with two
+  periods instead of one. It reads on the shipped reader and must keep reading
+  identically, taking no fallback, once the single-period path exists. Values
+  are minted for this test.
+
+>=DEFINEMEAS
+
+  MAXCHAN=3
+  MAXRUN=999
+  MAXMEAS=99999
+  UNITS=M
+  REFTYPE=CART
+  REFLAT=-37.316700
+  REFLONG=143.000000
+
+ >HMEAS ID= 1001.001 CHTYPE=HX X =  .000000  Y =  .000000  AZM=   0.0000
+ >HMEAS ID= 1002.001 CHTYPE=HY X =  .000000  Y =  .000000  AZM=  90.0000
+ >HMEAS ID= 1003.001 CHTYPE=HZ X =  .000000  Y =  .000000  AZM=  .000000
+
+>=MTSECT
+  SECTID=SP2
+  NFREQ=    2
+  HX = 1001.001
+  HY = 1002.001
+  HZ = 1003.001
+
+ >!****FREQUENCIES****!
+ >FREQ NFREQ=   2  ORDER=DEC //    2
+    0.41667E-03    0.20833E-03
+ >!****TIPPER PARAMETERS****!
+ >TXR.EXP ROT=0.0 //    2
+    0.48000E+00    0.55000E+00
+ >TXI.EXP ROT=0.0 //    2
+    0.11000E+00    0.14000E+00
+ >TXVAR.EXP ROT=0.0 //    2
+    0.90000E-01    0.90000E-01
+ >TYR.EXP ROT=0.0 //    2
+    -0.90000E-01    -0.12000E+00
+ >TYI.EXP ROT=0.0 //    2
+    0.70000E-01    0.90000E-01
+ >TYVAR.EXP ROT=0.0 //    2
+    0.90000E-01    0.90000E-01
+
+>END

@@ -216,47 +216,215 @@ def _recover_plain_tipper(p: Path, tf):
     return tf2, PLAIN_TIPPER_LABELS
 
 
+Z_BLOCK_LENGTH_MISMATCH = (
+    "the >Z impedance data blocks carry fewer values than the section's declared NFREQ, so "
+    "mt_metadata could not build the impedance tensor and the whole file failed to read; reparsed "
+    "from a temporary copy with the impedance blocks removed, so everything else the file carries "
+    "(coordinates, periods, tipper) survives (the source file is untouched and is what is served)"
+)
+
+# The impedance DATA-block labels mt_metadata reads, verbatim from edi.EDI._z_labels: the four
+# tensor elements x (real, imaginary, variance). `>ZROT` is a rotation-angle block, not impedance
+# data, and is deliberately absent -- the vocabulary is the reader's own, not a `>Z` prefix sweep.
+_Z_DATA_LABELS = (b">ZXXR", b">ZXXI", b">ZXX.VAR", b">ZXYR", b">ZXYI", b">ZXY.VAR",
+                  b">ZYXR", b">ZYXI", b">ZYX.VAR", b">ZYYR", b">ZYYI", b">ZYY.VAR")
+
+# The observable signature: numpy's broadcast refusal, raised where _read_mt fills the impedance
+# tensor from the parsed data dict (edi.py:414 in the pinned reader). Deliberately narrow -- an
+# unrelated read failure raises a different error, and a file whose impedance blocks are the right
+# length never reaches here at all because it parses.
+_Z_BLOCK_MISMATCH_RE = re.compile(
+    r"could not broadcast input array from shape \(\d+,?\) into shape \(\d+,?\)")
+
+
+def _is_z_block_length_defect(exc: BaseException) -> bool:
+    """True only for the impedance-block length defect above: numpy's broadcast refusal raised
+    inside mt_metadata's own `_read_mt`. Both halves are required -- the message alone could come
+    from anywhere in the stack, and the frame alone would also catch the tipper fill, which this
+    normalisation does not touch and must never be asked to rescue."""
+    if not isinstance(exc, ValueError) or not _Z_BLOCK_MISMATCH_RE.search(str(exc)):
+        return False
+    tb = exc.__traceback__
+    while tb is not None:
+        if tb.tb_frame.f_code.co_name == "_read_mt":
+            return True
+        tb = tb.tb_next
+    return False
+
+
+def _is_z_data_label(stripped: bytes) -> bool:
+    """True when a section line opens one of the twelve impedance data blocks. The label must be
+    followed by whitespace, a comment or the line end, so a longer label that merely starts with one
+    of these tokens is not matched."""
+    upper = stripped.upper()
+    for label in _Z_DATA_LABELS:
+        if upper.startswith(label) and upper[len(label):len(label) + 1] in (b"", b" ", b"\t", b"/"):
+            return True
+    return False
+
+
+def strip_impedance_blocks(raw: bytes) -> bytes:
+    """Return `raw` with the twelve >Z impedance DATA blocks (each label line and the value lines
+    that follow it, up to the next section) removed, and every other byte exactly as it was.
+
+    Operates on BYTES and never re-encodes. A block ends where mt_metadata's own section scan ends
+    it -- at the next line whose stripped form starts with `>` -- so the region removed is exactly
+    the region the reader would have read. Section banners (`>!****IMPEDANCES****!`) start with `>`
+    and are kept: they label nothing once the blocks are gone, but leaving them keeps the change set
+    to the blocks themselves. Returns the ORIGINAL object when there is nothing to remove, which is
+    what lets the caller refuse to retry a file that does not actually carry the shape."""
+    out: list[bytes] = []
+    dropping = False
+    changed = False
+    for line in raw.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith(b">"):
+            dropping = _is_z_data_label(stripped)
+            if dropping:
+                changed = True
+                continue
+            out.append(line)
+            continue
+        if dropping:
+            continue
+        out.append(line)
+    return b"".join(out) if changed else raw
+
+
+SINGLE_PERIOD_ORDERING_DEFECT = (
+    "mt_metadata's descending-frequency assertion indexes the SECOND frequency unconditionally, so "
+    "an EDI declaring a single period raises IndexError before the transfer function is built; "
+    "reparsed with that assertion neutralised for this one read (a lone frequency is already "
+    "ordered, so nothing is reordered and no multi-period file's ordering can change)"
+)
+
+# The third guard for the single-period defect, the counterpart of "normalisation changes bytes":
+# the file must actually DECLARE one frequency. `NFREQ= 10` and `NFREQ=  30` do not match (the word
+# boundary after the 1 fails), so only a genuine single-frequency section reaches the retry.
+_NFREQ_ONE_RE = re.compile(rb"NFREQ\s*=\s*0*1\b", re.IGNORECASE)
+
+
+def _is_single_period_defect(exc: BaseException) -> bool:
+    """True only for mt_metadata's single-period ordering defect: an IndexError raised INSIDE
+    `edi.EDI._assert_descending_frequency`. Identified by the raising FRAME rather than by the
+    message, because the message is numpy's own ('index 1 is out of bounds ...') and names nothing
+    specific to this defect; the frame is what makes the trigger unambiguous."""
+    if not isinstance(exc, IndexError):
+        return False
+    tb = exc.__traceback__
+    while tb is not None:
+        if tb.tb_frame.f_code.co_name == "_assert_descending_frequency":
+            return True
+        tb = tb.tb_next
+    return False
+
+
 def _read_once(path: Path):
     tf = TF()
     tf.read(str(path))
     return tf
 
 
+def _reparse_from_normalised_copy(p: Path, exc: BaseException, fixed: bytes, reason: str):
+    """(TF, reason): the shared body of every byte-normalising fallback. `fixed` is the conditioned
+    bytes the caller's normaliser produced; the caller has already checked that they differ from the
+    source. The copy lives in a TemporaryDirectory destroyed before this returns, is never returned
+    to a caller and never reaches the served tree or the sha256 integrity gate (both of which take
+    the ORIGINAL path). If the retry fails, the ORIGINAL exception is re-raised, so a file broken
+    for any other reason still fails exactly as it does today, with its own error."""
+    with tempfile.TemporaryDirectory(prefix="ausmt-edi-parse-") as scratch_dir:
+        scratch = Path(scratch_dir) / p.name
+        scratch.write_bytes(fixed)
+        try:
+            tf = _read_once(scratch)
+        except Exception:  # noqa: BLE001
+            raise exc from None      # report the ORIGINAL failure, never the retry's
+    # mt_metadata records the path it read in TF.fn. Point it back at the custodian's file: a TF
+    # carrying the (now deleted) scratch path would hand any downstream consumer a location
+    # outside the citable record. NOT guarded -- a failure to scrub is a leak and must be loud.
+    tf.fn = p
+    tf, _treason = _recover_plain_tipper(p, tf)
+    return tf, (reason + " + " + _treason) if _treason else reason
+
+
+def _reparse_without_frequency_ordering(p: Path, exc: BaseException):
+    """(TF, reason): the single-period fallback. Unlike its two siblings this one conditions the
+    READER, not a copy of the bytes, because no byte of a one-period EDI is wrong -- the file is
+    correct and the assertion that reads it is not. The neutralisation is therefore the narrowest
+    possible statement of that: `_assert_descending_frequency` is wrapped so that it delegates to
+    the shipped implementation for every frequency array longer than one and returns without
+    touching anything for a lone frequency, which is already ordered. It is installed for THIS read
+    and removed in a finally, and it is reached only after a normal read has already failed with the
+    defect's own frame in its traceback, so no file that parses today can take this path.
+
+    CONSTRAINT, stated because a class attribute is process-wide while installed: the EDI parse loop
+    is serial in-process (the build's only pool spawns separate processes for MTH5 bundles), so no
+    concurrent read can observe the wrapper. A threaded parser would need this narrowed further."""
+    try:
+        from mt_metadata.transfer_functions.io.edi.edi import EDI  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        raise exc from None
+    shipped = getattr(EDI, "_assert_descending_frequency", None)
+    if shipped is None:      # the reader no longer carries the method: nothing to neutralise
+        raise exc from None
+
+    def _order_only_when_there_is_an_order(self):
+        freq = getattr(self, "frequency", None)
+        if freq is not None and getattr(freq, "size", 0) > 1:
+            return shipped(self)
+        return None
+
+    EDI._assert_descending_frequency = _order_only_when_there_is_an_order
+    try:
+        tf = _read_once(p)
+    except Exception:  # noqa: BLE001
+        raise exc from None      # report the ORIGINAL failure, never the retry's
+    finally:
+        EDI._assert_descending_frequency = shipped
+    tf, _treason = _recover_plain_tipper(p, tf)
+    return tf, (SINGLE_PERIOD_ORDERING_DEFECT + " + " + _treason) if _treason \
+        else SINGLE_PERIOD_ORDERING_DEFECT
+
+
 def _read_with_fallback(path: Path):
-    """(TF, fallback_reason_or_None). Normal read first; on a failure ATTRIBUTABLE TO the >INFO
-    delimiter defect, retry ONCE against a normalised temporary copy, then return the parse.
+    """(TF, fallback_reason_or_None). Normal read first; on a failure ATTRIBUTABLE TO one of the
+    three recognised reader defects, retry ONCE for that defect alone, then return the parse.
 
     Narrow by construction, in four independent ways, so no unrelated failure is ever swallowed:
-      * only for `.edi` inputs (>INFO is an EDI construct);
-      * only when the raised error carries the defect's signature (_is_info_delimiter_defect);
-      * only when normalisation actually CHANGES the bytes, i.e. the file really carries it;
+      * only for `.edi` inputs (every one of these is an EDI construct);
+      * only when the raised error carries that defect's signature (the three predicates below);
+      * only when the conditioning actually CHANGES something -- the bytes for the two normalising
+        fallbacks, and for the single-period one a file that really declares NFREQ=1;
       * and if the retry itself fails, the ORIGINAL exception is re-raised, so a file broken for any
         other reason still fails exactly as it does today, with its own error.
+
+    The three are mutually exclusive by error type and raising frame (a pydantic scalar-parsing
+    failure, numpy's broadcast refusal inside _read_mt, an IndexError inside the ordering
+    assertion), so the order they are tried in cannot change any outcome.
     """
     p = Path(path)
     try:
         return _recover_plain_tipper(p, _read_once(p))
-    except Exception as exc:  # noqa: BLE001  (re-raised unless it is precisely this defect)
-        if p.suffix.lower() != ".edi" or not _is_info_delimiter_defect(exc):
+    except Exception as exc:  # noqa: BLE001  (re-raised unless it is precisely one of these defects)
+        if p.suffix.lower() != ".edi":
             raise
-        raw = p.read_bytes()
-        fixed = normalise_info_json_delimiters(raw)
-        if fixed == raw:
-            raise
-        with tempfile.TemporaryDirectory(prefix="ausmt-edi-parse-") as scratch_dir:
-            scratch = Path(scratch_dir) / p.name
-            scratch.write_bytes(fixed)
-            try:
-                tf = _read_once(scratch)
-            except Exception:  # noqa: BLE001
-                raise exc from None      # report the ORIGINAL failure, never the retry's
-        # mt_metadata records the path it read in TF.fn. Point it back at the custodian's file: a TF
-        # carrying the (now deleted) scratch path would hand any downstream consumer a location
-        # outside the citable record. NOT guarded -- a failure to scrub is a leak and must be loud.
-        tf.fn = p
-        tf, _treason = _recover_plain_tipper(p, tf)
-        return tf, (INFO_JSON_DELIMITER_DEFECT + " + " + _treason) if _treason \
-            else INFO_JSON_DELIMITER_DEFECT
+        if _is_info_delimiter_defect(exc):
+            raw = p.read_bytes()
+            fixed = normalise_info_json_delimiters(raw)
+            if fixed == raw:
+                raise
+            return _reparse_from_normalised_copy(p, exc, fixed, INFO_JSON_DELIMITER_DEFECT)
+        if _is_z_block_length_defect(exc):
+            raw = p.read_bytes()
+            fixed = strip_impedance_blocks(raw)
+            if fixed == raw:
+                raise
+            return _reparse_from_normalised_copy(p, exc, fixed, Z_BLOCK_LENGTH_MISMATCH)
+        if _is_single_period_defect(exc):
+            if not _NFREQ_ONE_RE.search(p.read_bytes()):
+                raise
+            return _reparse_without_frequency_ordering(p, exc)
+        raise
 
 
 def _read(path: Path):

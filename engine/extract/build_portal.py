@@ -321,6 +321,61 @@ def withhold_sci_row(sci_row):
             for c in sci.SCI_COLUMNS]
 
 
+# The impedance-derived tf.json columns, named rather than indexed so a reorder of
+# contract/columns.json moves them in lockstep with the emitters (the sci-row projection's
+# self-following discipline). Everything the impedance gives: the two apparent resistivities, the
+# two phases, the four phase-tensor invariants (computed from Z via ep.pt_params) and the four
+# errors propagated from the impedance error. `periods` and the five tipper columns are not derived
+# from Z and survive the mask.
+_TF_IMPEDANCE_COLUMNS = ("rho_xy", "rho_yx", "phs_xy", "phs_yx_adj",
+                         "pt_min", "pt_max", "pt_az", "pt_beta",
+                         "rho_xy_err", "rho_yx_err", "phs_xy_err", "phs_yx_err")
+_TF_IMPEDANCE_INDEXES = tuple(tfmod.TF_COLUMNS.index(_c) for _c in _TF_IMPEDANCE_COLUMNS)
+
+# The science fields the impedance mask nulls: _SCI_WITHHELD_SCIENCE minus `decades`. Decades is the
+# span of the PERIOD axis and owes nothing to the impedance, so a tipper-only station keeps it; the
+# access gate nulls it because that gate withholds the period curves as well, which this one does
+# not. rr/sw/alg are processing metadata and are kept for the same reason they are kept there.
+_SCI_IMPEDANCE_DERIVED = {c: v for c, v in _SCI_WITHHELD_SCIENCE.items() if c != "decades"}
+
+
+def mask_impedance_sci_row(sci_row):
+    """The sci.json row for a station whose impedance the survey's channel declaration masks: every
+    impedance-derived diagnostic nulled per _SCI_IMPEDANCE_DERIVED, everything else preserved
+    verbatim. This is the half of the mask the tipper twin has no equivalent for and the reason the
+    mask is not a symmetric one-liner: _edi_science back-derives rho/phase FROM Z when the source
+    carries no RHO/PHS blocks, so a fabricated flat impedance otherwise publishes a smooth power-law
+    resistivity, a flat phase and a non-zero quality score. Same by-name build and SCI_COLUMNS
+    projection as withhold_sci_row."""
+    _sc = {n: i for i, n in enumerate(sci.SCI_COLUMNS)}
+    return [(_SCI_IMPEDANCE_DERIVED[c] if c in _SCI_IMPEDANCE_DERIVED else sci_row[_sc[c]])
+            for c in sci.SCI_COLUMNS]
+
+
+def derived_rendition_withheld(r):
+    """True when AusMT must NOT build a DERIVED rendition of this station from its source file.
+
+    The served EMTF XML and both MTH5 tiers are rebuilt by RE-READING the source EDI, so they never
+    see the masked record and the mask's own tf/sci nulling does not reach them. station.json labels
+    both renditions provenance_role 'derived', which is exactly the surface the channels_recorded
+    mask governs: a survey that declares no electric field has no impedance to publish in any AusMT
+    product, whatever format it is written in. The custodian's EDI keeps its bytes and is still
+    served; this is one home for the predicate all three emitters filter on, so a fourth rendition
+    inherits it rather than re-deciding it.
+
+    The per-station coordinate byte-gate is a SEPARATE, additional filter with its own home in
+    _coord_access; both are applied, neither subsumes the other.
+
+    NOT the tipper mask, and that is a stated gap awaiting an owner ruling rather than an oversight.
+    The shipped tipper mask has the same shape and leaks the same way (a masked tipper is republished
+    in the served XML and both MTH5 tiers), but withholding those renditions would delete downloads
+    that are already published for two live surveys, so it is an owner decision, not a fix this seam
+    can make on its own. When it is ruled, it is one more clause here and a flag stamped at the
+    tipper-mask seam, exactly as the impedance half does.
+    """
+    return bool(r.get("impedance_masked"))
+
+
 # C6/C34-D2: license_instrument_text now lives in the stdlib-only leaf `_license_text` (imported near
 # the top of this module) so the bundle LICENSE.txt and the gw-runner's intake LICENSE.md share ONE
 # implementation and can never drift. The output is unchanged (byte-identical, pinned by the license
@@ -2139,6 +2194,12 @@ def _parse_one_edi(p):
     # BOTH off-diagonal medians coherently out of quadrant -> FAIL (a pure convention flip: the
     # station is skipped, never served under the wrong e^{±iωt} sense). ONE out -> honesty WARN
     # (3D/distortion does that legitimately). Too little data -> explicit insufficient note.
+    # CONSTRAINT: this runs inside the survey-independent (C18-cached) parse, so it cannot see a
+    # channels_recorded declaration. A survey that declares no electric channels therefore reaches
+    # the impedance mask only if its fabricated Z passes this gate; a fabrication that trips the
+    # FAIL verdict drops the station before the mask can withhold the verdict that dropped it.
+    # Moving the gate past the mask means moving it out of the cached parse, which changes the
+    # cache product; the masked callers' `warn`/`insufficient` verdicts are handled at the mask.
     _ck = conv.convention_check(comp)
     if _ck["verdict"] == "fail":
         return {"skip": {"station": r["id"], "gate": "sign-convention", "reason": _ck["detail"]}}
@@ -2162,7 +2223,7 @@ def _parse_one_edi(p):
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                  cache=None, survey_digest="", report=None, station_ids=None,
-                 mask_tipper=False):
+                 mask_tipper=False, mask_impedance=False):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
     mt_metadata is the SOLE engine (the dependency-free regex extractor + _spectra were retired in
@@ -2219,7 +2280,25 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             try:
                 parsed = _parse_one_edi(p)
             except Exception as e:  # noqa: BLE001
+                # A file the reader cannot read at all is a DROPPED STATION, and it is recorded as
+                # one. Every neighbouring drop path here (the convention-gate skip, the
+                # no-coordinates skip, the MTH5 read failure) writes a structured record; this one
+                # printed to stderr and continued, so a station could vanish from the corpus with
+                # nothing in build_report.json to name it. Two ledgers, for two different questions:
+                # `stations_dropped` answers "which stations are not here", alongside every other
+                # drop; `source_parse_failures` answers "which FILE, and what did the reader say" -
+                # the honest twin of source_parse_fallbacks, which records the files a normalised
+                # reparse rescued. The stations_dropped row is what raises the survey warning, via
+                # the per-drop echo every drop already goes through, so one lost station is counted
+                # once however many ledgers name it.
                 print(f"  PARSE FAIL {p.name}: {e}", file=sys.stderr)
+                if report is not None:
+                    _why = f"source file unreadable by mt_metadata: {type(e).__name__}: {e}"
+                    report.setdefault("stations_dropped", []).append(
+                        {"station": p.stem, "reason": _why})
+                    report.setdefault("parse_failures", []).append(
+                        {"station": p.stem, "file": p.name,
+                         "error": f"{type(e).__name__}: {e}"})
                 continue
             if _ck:
                 cache.put_json(_ck, parsed)   # populate for the next warm build
@@ -2248,6 +2327,44 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                         tf[_ti] = [None] * len(tf[_ti])
             if report is not None:
                 report.setdefault("tipper_masked_by_declaration", []).append(
+                    str(r.get("id") or p.stem))
+        # The same declaration, read for the horizontal ELECTRIC pair: a survey that states its
+        # recorded channels without Ex/Ey measured no electric field, so any impedance in the
+        # released files was fabricated by a conversion and every product AusMT derives from it is
+        # an invention. Not the tipper mask's mirror image, in two ways. It nulls TWELVE tf columns
+        # rather than five (rho, phase, the phase tensor and the propagated errors all come from Z),
+        # and it nulls the impedance-derived SCIENCE row too, because _edi_science back-derives
+        # rho/phase from Z when the source carries no RHO/PHS blocks - so an unmasked placeholder
+        # publishes a smooth power law, a flat phase and a quality score computed on an invention.
+        # Applied at the same seam and for the same reason as the tipper mask: after the C18 cache,
+        # so the cached parse stays survey-independent and a hit and a miss mask identically. What
+        # the custodian released is still served byte for byte; the mask governs what AusMT DERIVES.
+        if mask_impedance and "Z" in (r.get("components") or []):
+            # Rides the FINAL record (never the C18 cache entry, which is survey-independent) so the
+            # emitters that re-read the SOURCE file can be filtered on it. station.json and the
+            # catalogue row are assembled from named keys, so this one gains no published surface.
+            r["impedance_masked"] = True
+            r["components"] = [c for c in r["components"] if c != "Z"]
+            r["type"] = mtm.classify(r.get("period_min_s"), False, "T" in r["components"])
+            if isinstance(tf, list):
+                for _zi in _TF_IMPEDANCE_INDEXES:
+                    if _zi < len(tf) and tf[_zi]:
+                        tf[_zi] = [None] * len(tf[_zi])
+            srow = mask_impedance_sci_row(srow)
+            # Gate 2's sign-convention verdict reads the impedance and nothing else, so under the
+            # mask it IS the withheld phase restated in degrees: a fabricated flat Z publishes
+            # phs_xy/phs_yx medians of 45.0 into station.json's frame block and a survey warning
+            # that reads that flat 45 as a possible 3D/distortion effect, in the same report whose
+            # next line says the phase is withheld. Null the verdict and drop its note. Done here,
+            # on the parse product rather than inside the parse, for the same reason as the rest of
+            # the mask: the C18 cache entry stays survey-independent. The measured frame facts
+            # (declared rotation, frame served) owe the impedance nothing and stay.
+            if isinstance(parsed.get("frame"), dict):
+                parsed["frame"]["convention_check"] = None
+            parsed["frame_notes"] = [_n for _n in (parsed.get("frame_notes") or [])
+                                     if not _n.startswith("convention: ")]
+            if report is not None:
+                report.setdefault("impedance_masked_by_declaration", []).append(
                     str(r.get("id") or p.stem))
         # Emit the deferred per-EDI diagnostics identically whether parsed from source or cache.
         if r.get("tipper_masked"):
@@ -2353,7 +2470,13 @@ def process_mth5(h5_paths, survey_label, org, slug, report=None):
     Different input format, identical downstream: records_and_components yields (record, periods,
     components) that feed the very same tf_from_components / science_from_components used for EDI, so
     catalogues, derived products and diagnostics are identical where equivalent information exists.
-    AusMT reads only transfer-function products + metadata from MTH5 — never raw time series."""
+    AusMT reads only transfer-function products + metadata from MTH5 - never raw time series.
+
+    LIMITATION: the channels_recorded declaration masks (tipper and impedance) are EDI-only. They
+    are wired into process_edis alone, so a survey submitted as MTH5 would ignore its own
+    declaration. Inert for every package the corpus and the GDS staging carry, all of which are
+    EDI; lifting the declaration read to the survey loop is what would let all three ingest paths
+    inherit it."""
     if not m5.available():
         sys.exit("ERROR: MTH5 input requested but mth5/mt_metadata are not installed "
                  "(pip install mth5 mt_metadata).")
@@ -2480,7 +2603,10 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
 
     NOT cached (like the MTH5 input path): the C18 cache stores the EDI parse and the EDI-sourced
     served XML, and the XML path's served bytes include a normalize()-generated EDI that the cache
-    does not carry. See _emit_served_xml's derived_edi_dir."""
+    does not carry. See _emit_served_xml's derived_edi_dir.
+
+    LIMITATION: the channels_recorded declaration masks are EDI-only, exactly as for process_mth5
+    above, and for the same reason: they are wired into process_edis alone."""
     if not mtm.available():
         sys.exit("ERROR: the mt_metadata stack is required for the build "
                  "(pip install -r environments/requirements-mtmetadata-lock.txt).")
@@ -3646,6 +3772,12 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
         # r.get("variant") rides along (fix round 2): a variant record inherits its BASE id's policy.
         if not coordacc.coordinates_served(
                 coordacc.station_policy(coord_default, coord_overrides, r.get("id"), r.get("variant"))):
+            continue
+        # The impedance mask, same shape and the same reason (see derived_rendition_withheld):
+        # normalize() re-reads the SOURCE EDI and never sees the masked record, so an unfiltered
+        # pass republished the fabricated impedance verbatim. Skipping HERE keeps it out of out/xml,
+        # the xml zip and the manifest, all three of which derive from `written`.
+        if derived_rendition_withheld(r):
             continue
         xml_target = Path(xmldir) / f"{r['id']}.xml"
         # The XML content AND filename are a function of the FINAL (post-_disambiguate) station id —
@@ -5160,10 +5292,14 @@ def _main_build(argv=None):
             _declared_channels = {str(c).strip().lower().replace("b", "h", 1) if str(c).strip().lower().startswith("b") else str(c).strip().lower()
                                   for c in ((meta or {}).get("channels_recorded") or [])}
             _mask_tipper = bool(_declared_channels) and not ({"hz"} & _declared_channels)
+            # The electric half of the same declaration. Either horizontal electric channel is
+            # enough to make an impedance possible, so the mask asks for BOTH to be absent.
+            _mask_impedance = bool(_declared_channels) and not ({"ex", "ey"} & _declared_channels)
             stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
                                                        report=_gate_report, station_ids=_station_ids,
-                                                       mask_tipper=_mask_tipper) \
+                                                       mask_tipper=_mask_tipper,
+                                                       mask_impedance=_mask_impedance) \
                 if _edi_in else ([], [], [])
             if _xml_in:
                 # OWNER PRECEDENCE RULING (2026-08-03): EDI wins per station. The exclusion set is the
@@ -5178,7 +5314,12 @@ def _main_build(argv=None):
                 tf_rows += _xt
                 sci_rows += _xsci
         for _d in _gate_report.get("stations_dropped", []):
-            _survey_warnings.append(f"station {_d['station']} SKIPPED by convention gate: {_d['reason']}")
+            # One warning is one line: this string is echoed into the build log and read as a row by
+            # the curator page. A reader's exception is not one line - pydantic answers a bad field
+            # with a header, the field, the message and a docs URL - so collapse its whitespace here.
+            # Nothing is lost: source_parse_failures carries the reader's full error verbatim.
+            _reason = " ".join(str(_d["reason"]).split())
+            _survey_warnings.append(f"station {_d['station']} SKIPPED by convention gate: {_reason}")
         if not stations:
             n_in = len(inputs)
             print(f"  WARNING: survey '{label}' produced 0 stations from {n_in} input file(s) and "
@@ -5358,7 +5499,8 @@ def _main_build(argv=None):
                 h5_written = emit_station_mth5(
                     [(_p, _r) for (_p, _r) in stations
                      if coordacc.coordinates_served(coordacc.station_policy(
-                         _coord_default, _coord_overrides, _r.get("id"), _r.get("variant")))],
+                         _coord_default, _coord_overrides, _r.get("id"), _r.get("variant")))
+                     and not derived_rendition_withheld(_r)],
                     slug, label, out / "h5" / slug, smeta=meta)
         # C18b (A3): one per-survey instrumentation line (the delta of this survey's cache activity vs
         # the snapshot at the top of the iteration). digest=<first12> ties the log to the sidecar so an
@@ -5609,9 +5751,12 @@ def _main_build(argv=None):
                 # correctly null (the leak-sweep's HDF5 leg pins this). Filter to the byte-gated
                 # exact-only set (the same per-station predicate as the EDI copy loop above): the
                 # non-exact contribution is WITHHELD from the bundle — never rewritten (D3 posture).
+                # ...and by derived_rendition_withheld, for the same re-read reason one format
+                # over: an impedance-masked station contributes no TF to the bundle either.
                 _h5_stations = [(p, r) for (p, r) in stations
                                 if coordacc.coordinates_served(coordacc.station_policy(
-                                    _coord_default, _coord_overrides, r.get("id"), r.get("variant")))]
+                                    _coord_default, _coord_overrides, r.get("id"), r.get("variant")))
+                                and not derived_rendition_withheld(r)]
                 if _MTH5_POOL is not None:
                     # Pool build: submit the bundle write and move on, so it overlaps the NEXT
                     # survey's station fan-out. An EMPTY row is reserved here so the manifest keeps
@@ -5694,6 +5839,12 @@ def _main_build(argv=None):
         # same discipline as xml_failures and the integrity gate. These stations parsed only from a
         # normalised TEMPORARY copy, so a curator should know the custodian's file trips a reader
         # defect -- while the bytes AusMT serves for them are still the custodian's, unmodified.
+        # NO separate counted warning for these: the per-drop echo above already raises one warning
+        # per stations_dropped row, and a parse failure now writes such a row. A second warning here
+        # counted one lost station twice (measured on the current corpus: 68 warnings became 70 for
+        # ONE newly-recorded drop). The typed rows below carry the file and the reader's own error,
+        # which is what the echo cannot say.
+        _parse_failure_rows = list(_gate_report.get("parse_failures", []))
         _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
         if _parse_fallback_rows:
             # Compact defect clause: the row carries the full reason; the counted warning names the
@@ -5715,6 +5866,15 @@ def _main_build(argv=None):
             _survey_warnings.append(
                 f"tipper masked survey-wide by the channels_recorded declaration (no vertical "
                 f"coil recorded) for {len(_decl_masked)} station(s)")
+        _z_decl_masked = list(_gate_report.get("impedance_masked_by_declaration", []))
+        if _z_decl_masked:
+            _survey_warnings.append(
+                f"impedance masked survey-wide by the channels_recorded declaration (no electric "
+                f"field recorded) for {len(_z_decl_masked)} station(s): the derived resistivity, "
+                f"phase, phase-tensor, error and quality products are withheld, and so are the "
+                f"EMTF XML and MTH5 renditions, which are rebuilt from the source file and would "
+                f"republish the impedance verbatim; the source files are still served byte for "
+                f"byte")
         _sheet_orphans = sorted(set(_survey_run_sheet) - _sheet_rows_consumed)
         if _sheet_orphans:
             _run_notes.append(
@@ -5736,9 +5896,14 @@ def _main_build(argv=None):
                 f"bytes at all")
         build_report_surveys[slug] = {
             "stations_built": len(stations),
-            # C25: convention-gate skips are STRUCTURED drops ({station, reason}); the legacy
-            # unusable-EDI print+continue path still records nothing here (per the original brief).
+            # STRUCTURED drops ({station, reason}): the C25 convention-gate skips, the stations with
+            # no recoverable coordinates or periods, and - since the GDS readers lane - the source
+            # files mt_metadata could not read at all, which until then dropped silently.
             "stations_dropped": list(_gate_report.get("stations_dropped", [])),
+            # Per-station record of the source files the reader could not read AND could not rescue
+            # from a normalised copy: the file, and what the reader said about it. The negative twin
+            # of source_parse_fallbacks below (empty for every survey whose files all read).
+            "source_parse_failures": _parse_failure_rows,
             "tipper_masked": list(_gate_report.get("tipper_masked", [])),
             "warnings": list(_survey_warnings),
             # Per-station EMTF-XML emission failures (empty when every served station's XML emitted).

@@ -1,0 +1,61 @@
+>HEAD
+
+  DATAID="SP1"
+  ACQBY="AusMT test fixture"
+  PROSPECT="Single period fixture"
+  LOC="Fixture"
+  LAT=-37.316700
+  LONG=143.000000
+  EMPTY=1.0E+32
+
+>INFO   MAXLINES=1000
+
+  MINTED FIXTURE - NOT CUSTODIAN DATA. The shape it carries was measured on
+  the seventy-eight NFREQ=1 files in the AusMT GDS staging at
+  GDS/_staging/surveys - reference shape
+  southeast-australia-1971/transfer_functions/edi/Ararat.edi - which are
+  themselves AusMT-minted digitisations of published array tables where one
+  period is all the source printed. A single-period EDI is well formed. The
+  reader is not: its descending-frequency assertion indexes the second
+  frequency unconditionally. No byte is copied from a staged file: the
+  identity is invented and the values are minted for this test.
+
+>=DEFINEMEAS
+
+  MAXCHAN=3
+  MAXRUN=999
+  MAXMEAS=99999
+  UNITS=M
+  REFTYPE=CART
+  REFLAT=-37.316700
+  REFLONG=143.000000
+
+ >HMEAS ID= 1001.001 CHTYPE=HX X =  .000000  Y =  .000000  AZM=   0.0000
+ >HMEAS ID= 1002.001 CHTYPE=HY X =  .000000  Y =  .000000  AZM=  90.0000
+ >HMEAS ID= 1003.001 CHTYPE=HZ X =  .000000  Y =  .000000  AZM=  .000000
+
+>=MTSECT
+  SECTID=SP1
+  NFREQ=    1
+  HX = 1001.001
+  HY = 1002.001
+  HZ = 1003.001
+
+ >!****FREQUENCIES****!
+ >FREQ NFREQ=   1  ORDER=DEC //    1
+    0.20833E-03
+ >!****TIPPER PARAMETERS****!
+ >TXR.EXP ROT=0.0 //    1
+    0.55000E+00
+ >TXI.EXP ROT=0.0 //    1
+    0.14000E+00
+ >TXVAR.EXP ROT=0.0 //    1
+    0.90000E-01
+ >TYR.EXP ROT=0.0 //    1
+   -0.12000E+00
+ >TYI.EXP ROT=0.0 //    1
+    0.90000E-01
+ >TYVAR.EXP ROT=0.0 //    1
+    0.90000E-01
+
+>END
