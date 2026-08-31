@@ -446,9 +446,13 @@
   .colltable tbody tr:hover{background:var(--panel)}
   .colltable td a{color:var(--copper);text-decoration:none;font-weight:500}.colltable td a:hover{text-decoration:underline}
   .colltable .csub{font-size:12px;color:var(--muted);margin-top:1px}
-  /* Wide screens flow to five columns (owner ruling); the uncapped width lets auto-fill
-     decide, and the 300px floor keeps three-up on a typical laptop. */
-  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  /* FOUR across at the cap (owner ruling; this overturns the five-up note that used to sit here).
+     Two things are load-bearing. The 360px floor is what a card needs to stay readable, and the
+     1500px cap is the SAME cap .discovery and .collfeature-grid already carry: .cardgrid was the one
+     uncapped grid on the view, so on a 2560px screen the cards ran far wider than the controls that
+     filter them. Under the cap the floor yields exactly four (4*360 + 3*14 gap = 1482) and never a
+     fifth (1856), at any width. */
+  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;max-width:1500px}
   .surveymeta{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
   .surveymeta a{color:var(--copper);text-decoration:none}
   .surveymeta .pidline{font-family:var(--mono);word-break:break-all}

@@ -3024,6 +3024,29 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   layoutSeg.querySelector('[data-layout="cards"]').click();
   ok(cardGridEl.className === "cardgrid" && cardGridEl.querySelectorAll(".scard").length === 4, "E3: toggling back to Cards did not restore the card grid");
 
+  // C3. FOUR ACROSS, AND THE GRID STOPS WHERE THE BAR STOPS (owner ruling; overturns the five-up note
+  // that used to sit at the .cardgrid rule). Two defects in one declaration. The 300px floor let a wide
+  // screen pack in five and then six columns of cards too narrow to read; and .cardgrid was the ONLY
+  // uncapped grid on the view - .discovery and .collfeature-grid already cap at 1500px - so at 2560px
+  // the cards ran a metre wider than the controls that filter them, and the bar no longer looked like it
+  // belonged to the grid. A 360px floor under a 1500px cap yields exactly four columns at the cap
+  // (4*360 + 3*14 gap = 1482 <= 1500; a fifth would need 1856) and never more, at any width.
+  // E3 above pins class names only; jsdom resolves declared class CSS through getComputedStyle with no
+  // layout engine, so the cap and the floor are pinned as the CSS contract they are.
+  const _gridCss = win.getComputedStyle(cardGridEl);
+  ok(_gridCss.maxWidth === "1500px",
+    "C3: .cardgrid must cap at 1500px so the grid never outruns the discovery bar above it, got maxWidth=" +
+    JSON.stringify(_gridCss.maxWidth));
+  ok(/minmax\(\s*360px\s*,\s*1fr\s*\)/.test(_gridCss.gridTemplateColumns),
+    "C3: .cardgrid must lay out on a 360px minimum column so the cap yields four across, got " +
+    JSON.stringify(_gridCss.gridTemplateColumns));
+  // The cap is only coherent if it MATCHES the bar's; a grid capped at some other width would still be
+  // a grid that does not line up with its controls.
+  ok(win.getComputedStyle(doc.getElementById("discoveryControls")).maxWidth === _gridCss.maxWidth,
+    "C3: the card grid and the discovery bar must share one cap, got bar=" +
+    JSON.stringify(win.getComputedStyle(doc.getElementById("discoveryControls")).maxWidth) +
+    " grid=" + JSON.stringify(_gridCss.maxWidth));
+
   // DD/GG. E2 IDENTIFIERS ROLLUP + E4 DETAIL SECTION ORDER (survey detail).
   const drwE = doc.getElementById("drawer");
   drwE.classList.remove("open");
