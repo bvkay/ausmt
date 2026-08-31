@@ -483,9 +483,9 @@ _CSS = """
   ul{padding-left:1.2rem}
   header.site{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid #2B3557;flex-wrap:wrap}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
-  .hleft{flex:1 1 auto}
+  .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
-  .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
+  .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:#E8EDF1;text-decoration:none}
   .tagline{color:#8FA3B0;font-size:12.5px}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}

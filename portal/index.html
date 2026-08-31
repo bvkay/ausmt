@@ -73,15 +73,17 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
-  /* UX3 item 4: three-zone header. Left = brand, centre = nav + page links (genuinely centred via the
-     flex:1 side zones), right = counts (the machine-readable MTCAT link now lives in the footer, UX7a A5).
-     Each zone is its own flex row so it
-     wraps sanely; the whole header still flex-wraps at narrow widths (see the 760px block). */
+  /* UX3 item 4: three-zone header. Left = brand, centre = nav + page links, right = counts (the
+     machine-readable MTCAT link now lives in the footer, UX7a A5). The side zones take equal
+     ZERO-basis shares (flex:1 1 0 + min-width:0, tests/test_header_geometry_parity.py): an auto
+     basis grew each side with its own content and shoved the "centred" tabs to a different x per
+     view/page. Each zone is its own flex row so it wraps sanely; the whole header still
+     flex-wraps at narrow widths (see the 760px block). */
   header{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
-  .hleft{flex:1 1 auto}
+  .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
-  .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
+  .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
   /* AuScope icon (white variant, vendored) replaces the old copper-square ::before as the header mark */
   .logolink{display:flex;align-items:center;flex:none}
