@@ -598,7 +598,7 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
       `<span id="lineage-fwb" data-ausmt="${escAttr(s.ausmt_id)}">${_fw?esc(_fw.writer):"loading…"}</span>`]);
   }
   nodes.push(
-   ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"–"}`],
+   ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"-"}`],
    ["Distributed formats",esc(distributedFormatsText(s,m))],
    ["Publication (interpretation)",publicationCell(m)]
   );
@@ -745,7 +745,7 @@ function screeningIndicators(d){
   ];
 }
 function _indGlyph(st){return st==="green"?"✔":st==="amber"?"◐":st==="red"?"✗":"◌";}
-function _indWord(st){return st==="green"?"Green":st==="amber"?"Amber":st==="red"?"Red":"–";}
+function _indWord(st){return st==="green"?"Green":st==="amber"?"Amber":st==="red"?"Red":"-";}
 function screeningIndicatorList(inds){
   return `<ul class="indlist">`+inds.map(it=>{
     const cls=it.state==="green"?"ok":it.state==="amber"?"part":it.state==="red"?"no":"na";
@@ -766,7 +766,7 @@ function stationSummaryDetails(s,m,sc){
   // the ausmt_id, and the collection title (row omitted entirely when the survey is in no collection).
   const stationRows=[["coordinates",coordCellHtml(s)]];
   if(s.site_name&&s.site_name!==s.id)stationRows.push(["site name",esc(s.site_name)]);
-  stationRows.push(["data type",esc(s.type||"–")]);   // no long-form gloss exists in the corpus yet; show the code
+  stationRows.push(["data type",esc(s.type||"-")]);   // no long-form gloss exists in the corpus yet; show the code
   stationRows.push(["ausmt_id",esc(s.ausmt_id)]);
   if(m.collection&&m.collection.id)stationRows.push(["collection",esc(m.collection.title||m.collection.id)]);
   // Survey-drawer lane, amendment 2 (owner, the ONE scoped exception to "station drawers untouched"): the
@@ -782,7 +782,7 @@ function stationSummaryDetails(s,m,sc){
   const sciGate=hydrGate("sci","processing details");
   const tf=_ssGroup("Transfer function",[
     ["periods",`${fmtRange(fmtPeriod(s.pmin),fmtPeriod(s.pmax))} s`],
-    ["components",(esc(s.comps.split("").join(" + "))||"–")],
+    ["components",(esc(s.comps.split("").join(" + "))||"-")],
     ["tipper",s.comps.includes("T")?"yes":"no"],
     ["remote reference",sciGate||(sc[SC.rr]?"yes":"not recorded")]]);
   // R4: the "Data checks" group (the TF error row) is REMOVED per owner ruling — reversibly commented per
@@ -939,7 +939,7 @@ function openStation(i,opts){
     // rendered VERBATIM (no client-side re-rounding) with a "position generalised" badge driven by the
     // engine's coord_policy marker (A1). coordCellHtml encapsulates all three; hasPosition is the shared predicate.
     `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
-    `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"}</td></tr>`+
+    `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"-"}</td></tr>`+
     `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`;
   // X8: the Metadata & API box collapses to a single small "API" expander at the tab's foot.
   // api-docs lane: the section used to advertise a "Read API (planned)" over three paths under an /api
@@ -1422,8 +1422,8 @@ function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
 // Compact/list layout row (E3): a single line — title, org, acquisition year, station count, licence badge.
 function surveyRow(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};const yearTxt=acqYearText(m);
   return `<div class="srow"><button class="srow-title" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</button>`+
-    `<span class="srow-org">${esc(m.org||"–")}</span>`+
-    `<span class="srow-year">${yearTxt||"–"}</span>`+
+    `<span class="srow-org">${esc(m.org||"-")}</span>`+
+    `<span class="srow-year">${yearTxt||"-"}</span>`+
     `<span class="srow-stn">${ss.length} station${ss.length===1?"":"s"}</span>`+
     `<span class="srow-lic">${badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic))}</span></div>`;}
 function renderDiscovery(n){
@@ -1549,9 +1549,9 @@ function surveySummary(ss,m){
     if(sc[SC.rr]!=null){ rrKnown++; if(sc[SC.rr]) rr++; }
     if(s.pmin!=null) pmin=Math.min(pmin,s.pmin);
     if(s.pmax!=null) pmax=Math.max(pmax,s.pmax); });
-  const types=Object.keys(typeCount).sort().map(t=>`${t} ${typeCount[t]}`).join(" · ")||"–";
+  const types=Object.keys(typeCount).sort().map(t=>`${t} ${typeCount[t]}`).join(" · ")||"-";
   const software=m.software||Object.keys(swCount).sort((a,b)=>swCount[b]-swCount[a])[0]||"not recorded";
-  const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"–";
+  const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"-";
   // Embargoed surveys append the embargo date to the access cell ("embargoed until 2027-02-01"); any other
   // access state (or an embargo with no date) renders the bare level as before.
   const _acc=m.access||"open";
@@ -1559,22 +1559,22 @@ function surveySummary(ss,m){
   return `<div class="sechead">Survey summary <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(10-second view)</span></div><table class="meta">`+
     `<tr><td>stations</td><td>${ss.length}</td></tr>`+
     `<tr><td>data types</td><td>${esc(types)}</td></tr>`+
-    `<tr><td>period coverage</td><td>${isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"–"}</td></tr>`+
+    `<tr><td>period coverage</td><td>${isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"-"}</td></tr>`+
     `<tr><td>tipper availability</td><td>${tipper} / ${ss.length} stations</td></tr>`+
     `<tr><td>remote reference</td><td>${sciGate||(rrKnown?`${rr} / ${rrKnown} stations`:"not recorded")}</td></tr>`+
     `<tr><td>instrumentation</td><td>${esc(m.instrument_model||"not recorded in source metadata")}</td></tr>`+
     `<tr><td>processing software</td><td>${sciGate||esc(software)}</td></tr>`+
-    `<tr><td>acquisition</td><td>${esc(m.dates||"–")}</td></tr>`+
+    `<tr><td>acquisition</td><td>${esc(m.dates||"-")}</td></tr>`+
     `<tr><td>collection</td><td>${coll}</td></tr>`+
     `<tr><td>licence / access</td><td>${esc(licHuman(m.lic)||"?")} · ${_accTxt}</td></tr>`+
-    `<tr><td>version</td><td>${esc(m.version||"–")}</td></tr>`+
+    `<tr><td>version</td><td>${esc(m.version||"-")}</td></tr>`+
     `</table>`;
 }
 // Release notes: shown only when a survey provides them (optional; no requirement for existing surveys).
 function releaseNotesHtml(m){
   const rn=m.release_notes;
   if(!Array.isArray(rn)||!rn.length) return "";
-  const rows=rn.map(e=>`<tr><td>${esc(e.version||"–")}</td><td>${esc(e.date||"")}${e.date&&e.note?": ":""}${esc(e.note||"")}</td></tr>`).join("");
+  const rows=rn.map(e=>`<tr><td>${esc(e.version||"-")}</td><td>${esc(e.date||"")}${e.date&&e.note?": ":""}${esc(e.note||"")}</td></tr>`).join("");
   return `<div class="sechead">Release notes</div><table class="meta">${rows}</table>`;
 }
 // Pre-built per-survey download bundles from the manifest (EDI zip + EMTF-XML zip always when served;
@@ -1757,7 +1757,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
        ?`<div class="prod dis"><span class="pdot" style="background:var(--part)"></span><div>Dataset DOI<small>reserved (not yet active)</small></div></div>`
        :`<div class="prod" data-act="doi" data-doi="${escAttr(m.doi)}"><span class="pdot" style="background:var(--ok)"></span><div>Dataset DOI<small>source archive</small></div></div>`):"")+
    `</div>`+
-   `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"–"}</div>`+
+   `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"-"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
    // Ruling 4: the collapsed identifiers rollup becomes the always-open DATA-LEVEL tile grid. The
    // Organisation ROR row is gone with it (owner) - the custodian's ROR still reaches the reader as the
@@ -1853,14 +1853,14 @@ function openCollectionPage(cid){
   let pmin=Infinity,pmax=-Infinity,tip=0;
   ss.forEach(s=>{ if(s.pmin!=null)pmin=Math.min(pmin,s.pmin); if(s.pmax!=null)pmax=Math.max(pmax,s.pmax);
     if((s.comps||"").indexOf("T")>=0)tip++; });
-  const ext=c.bbox?`${(c.bbox.east-c.bbox.west).toFixed(1)}° × ${(c.bbox.north-c.bbox.south).toFixed(1)}°`:"–";
+  const ext=c.bbox?`${(c.bbox.east-c.bbox.west).toFixed(1)}° × ${(c.bbox.north-c.bbox.south).toFixed(1)}°`:"-";
   const stat=(lab,val)=>`<div class="cstat"><div class="cnum">${val}</div><div class="clab">${esc(lab)}</div></div>`;
   const rows=members.map(sv=>{const sub=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
     const tc={};sub.forEach(s=>{if(s.type)tc[s.type]=(tc[s.type]||0)+1;});
     const pmn=Math.min(...sub.map(s=>s.pmin).filter(v=>v!=null)),pmx=Math.max(...sub.map(s=>s.pmax).filter(v=>v!=null));
-    const types=Object.keys(tc).sort().map(t=>`${esc(t)} ${tc[t]}`).join(" · ")||"–";
-    return `<tr><td><a href="#" data-act="story" data-survey="${escAttr(sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"–")}</div></td>`+
-      `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtRange(fmtPeriod(pmn),fmtPeriod(pmx))+" s":"–"}</td></tr>`;
+    const types=Object.keys(tc).sort().map(t=>`${esc(t)} ${tc[t]}`).join(" · ")||"-";
+    return `<tr><td><a href="#" data-act="story" data-survey="${escAttr(sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"-")}</div></td>`+
+      `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtRange(fmtPeriod(pmn),fmtPeriod(pmx))+" s":"-"}</td></tr>`;
   }).join("");
   const v=document.getElementById("collectionview");
   // Cleanup wave (E): a two-column HERO on wide screens; the abstract (+ the type/status/counts subline)
@@ -1879,7 +1879,7 @@ function openCollectionPage(cid){
      (ss.length?`<div class="collhero-aside">${collScatter(ss,720)}</div>`:"")+
    `</div>`+
    `<div class="cstats">`+stat("surveys",c.n_surveys)+stat("stations",c.n_stations)+
-     stat("period coverage",isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"–")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
+     stat("period coverage",isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"-")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
    `<div class="csechead">Member surveys (${members.length})</div>`+
    `<table class="colltable"><thead><tr><th>Survey</th><th>Stations</th><th>Data&nbsp;types</th><th>Period&nbsp;range</th></tr></thead><tbody>${rows}</tbody></table>`;
   document.getElementById("map").style.display="none";

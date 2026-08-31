@@ -3002,7 +3002,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cardA1.indexOf("mixbar") >= 0, "E1: slim card must keep the data-type mixbar");
   ok(/2<\/b> stations/.test(cardA1), "E1: slim card must show the station count");
   ok(cardA1.indexOf("periods") >= 0, "E1: slim card must show the period range");
-  ok(cardA1.indexOf("acquired") >= 0 && /2010\D+2012/.test(cardA1), "E1: slim card must show the acquisition year (2010–2012)");
+  ok(cardA1.indexOf("acquired") >= 0 && /2010\D+2012/.test(cardA1), "E1: slim card must show the acquisition year, 2010 to 2012 (the range joiner is the spaced hyphen; the en dash, U+2013, is purged from portal source)");
   ok(/DOI/.test(cardA1) && cardA1.indexOf("licence ?") >= 0, "E1: slim card must keep the licence + DOI badges");
   // absent (moved to detail): identifiers rollup, APA cite block, spatial extent, coord-QC stats,
   // per-format availability matrix (EDI/time-series/MTH5 badges), the completeness/smoothness check.
@@ -4047,8 +4047,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // the half a pure-function test cannot see. Fixture values: Alpha is 2010-2012 with periods
   // 0.01 - 1000 s, so the pins below are exact strings, not patterns.
   //
-  // (a) THE CARD. The old form was "0.010–1,000s": an en dash, a trailing zero the two-significant-figure
-  // rule strips, and no space before the unit.
+  // (a) THE CARD. The old form ran "0.010" and "1,000s" together with an en dash (U+2013, quoted here
+  // by name because the glyph itself is purged from portal source): the dash, a trailing zero the
+  // two-significant-figure rule strips, and no space before the unit.
   A.setSMETA("Alpha Survey", { lic: "CC-BY-4.0" });
   const c1card = A.cardHtml("Alpha Survey");
   ok(c1card.indexOf("0.01 - 1,000 s") >= 0,
@@ -4078,6 +4079,16 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C1/R2: the survey drawer's period coverage must read '0.01 - 1,000 s', got: " +
     JSON.stringify((c1sv.match(/period coverage.{0,40}/) || [""])[0]));
   ok(c1sv.indexOf("CC BY 4.0") >= 0, "C1/R3: the survey drawer's licence row must read the human form");
+  // H6 (owner ruling: U+2013 leaves portal source). An ABSENT table value renders the plain
+  // hyphen-minus placeholder, reader-visibly. Alpha's SMETA carries no version, so the survey
+  // summary's version row IS the placeholder; and the whole rendered drawer must be free of the
+  // en dash (spelt by escape here, since the glyph itself is purged from portal source).
+  const c1svHtml = doc.getElementById("drawer").innerHTML;
+  ok(c1svHtml.indexOf("<td>version</td><td>-</td>") >= 0,
+    "H6: an absent survey-table value must render the plain hyphen-minus placeholder, got: " +
+    JSON.stringify((c1svHtml.match(/<td>version<\/td><td>[^<]*<\/td>/) || [""])[0]));
+  ok(c1svHtml.indexOf("\u2013") < 0,
+    "H6: the rendered survey drawer must not carry an en dash (U+2013) anywhere");
   // (d2) THE SURVEY DRAWER'S "Source datasets" ROWS. A third-party release carries its upstream licence
   // in sources[] (the GSSA and Roxby Downs shape), and that row is READER CHROME sitting on the SAME
   // drawer as the licence/access row pinned above, so a drawer could print both forms of one identifier
