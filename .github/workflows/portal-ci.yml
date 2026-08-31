@@ -108,6 +108,13 @@ jobs:
       - name: config.js in sync with portal.config.yaml
         run: python tools/gen_config.py --check
 
+      # The brand artefacts are generated the same way config.js is: one declared truth in
+      # tools/gen_brand.py, written to contract/brand.json and the committed exports under
+      # vendor/brand/. Same drift gate, same lane, same reason - a hand-edited logo or a stale
+      # regeneration must fail the pull request that introduces it, not the next one.
+      - name: Brand artefacts in sync with tools/gen_brand.py
+        run: python tools/gen_brand.py --check
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -120,10 +127,14 @@ jobs:
       # have been a next-PR backstop there. This lane already triggers on portal/** and runs the suite,
       # so the lint belongs beside it. Same ruff pin and same engine config as the other two lanes
       # (build-products.yml, gateway-ci.yml): engine/pyproject.toml [tool.ruff] is the single lint policy.
-      - name: Lint the guard tests (ruff)
+      # ...and tools/ alongside them, for the same reason one step further on: build-products.yml's
+      # ruff step reaches ../portal/tools, but that lane triggers on engine/** and a named handful of
+      # portal files, so a PR touching only tools/gen_brand.py would be linted by nobody. This lane
+      # triggers on portal/** and already installs ruff, so the generators belong in its sweep.
+      - name: Lint the guard tests and the generators (ruff)
         run: |
           python -m pip install ruff==0.15.17
-          python -m ruff check --config ../engine/pyproject.toml tests
+          python -m ruff check --config ../engine/pyproject.toml tests tools
 
       - name: Headless portal smoke + interaction tests
         run: pytest -q tests
