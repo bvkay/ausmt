@@ -291,6 +291,34 @@ def strip_impedance_blocks(raw: bytes) -> bytes:
     return b"".join(out) if changed else raw
 
 
+SINGLE_PERIOD_ORDERING_DEFECT = (
+    "mt_metadata's descending-frequency assertion indexes the SECOND frequency unconditionally, so "
+    "an EDI declaring a single period raises IndexError before the transfer function is built; "
+    "reparsed with that assertion neutralised for this one read (a lone frequency is already "
+    "ordered, so nothing is reordered and no multi-period file's ordering can change)"
+)
+
+# The third guard for the single-period defect, the counterpart of "normalisation changes bytes":
+# the file must actually DECLARE one frequency. `NFREQ= 10` and `NFREQ=  30` do not match (the word
+# boundary after the 1 fails), so only a genuine single-frequency section reaches the retry.
+_NFREQ_ONE_RE = re.compile(rb"NFREQ\s*=\s*0*1\b", re.IGNORECASE)
+
+
+def _is_single_period_defect(exc: BaseException) -> bool:
+    """True only for mt_metadata's single-period ordering defect: an IndexError raised INSIDE
+    `edi.EDI._assert_descending_frequency`. Identified by the raising FRAME rather than by the
+    message, because the message is numpy's own ('index 1 is out of bounds ...') and names nothing
+    specific to this defect; the frame is what makes the trigger unambiguous."""
+    if not isinstance(exc, IndexError):
+        return False
+    tb = exc.__traceback__
+    while tb is not None:
+        if tb.tb_frame.f_code.co_name == "_assert_descending_frequency":
+            return True
+        tb = tb.tb_next
+    return False
+
+
 def _read_once(path: Path):
     tf = TF()
     tf.read(str(path))
@@ -319,20 +347,60 @@ def _reparse_from_normalised_copy(p: Path, exc: BaseException, fixed: bytes, rea
     return tf, (reason + " + " + _treason) if _treason else reason
 
 
+def _reparse_without_frequency_ordering(p: Path, exc: BaseException):
+    """(TF, reason): the single-period fallback. Unlike its two siblings this one conditions the
+    READER, not a copy of the bytes, because no byte of a one-period EDI is wrong -- the file is
+    correct and the assertion that reads it is not. The neutralisation is therefore the narrowest
+    possible statement of that: `_assert_descending_frequency` is wrapped so that it delegates to
+    the shipped implementation for every frequency array longer than one and returns without
+    touching anything for a lone frequency, which is already ordered. It is installed for THIS read
+    and removed in a finally, and it is reached only after a normal read has already failed with the
+    defect's own frame in its traceback, so no file that parses today can take this path.
+
+    CONSTRAINT, stated because a class attribute is process-wide while installed: the EDI parse loop
+    is serial in-process (the build's only pool spawns separate processes for MTH5 bundles), so no
+    concurrent read can observe the wrapper. A threaded parser would need this narrowed further."""
+    try:
+        from mt_metadata.transfer_functions.io.edi.edi import EDI  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        raise exc from None
+    shipped = getattr(EDI, "_assert_descending_frequency", None)
+    if shipped is None:      # the reader no longer carries the method: nothing to neutralise
+        raise exc from None
+
+    def _order_only_when_there_is_an_order(self):
+        freq = getattr(self, "frequency", None)
+        if freq is not None and getattr(freq, "size", 0) > 1:
+            return shipped(self)
+        return None
+
+    EDI._assert_descending_frequency = _order_only_when_there_is_an_order
+    try:
+        tf = _read_once(p)
+    except Exception:  # noqa: BLE001
+        raise exc from None      # report the ORIGINAL failure, never the retry's
+    finally:
+        EDI._assert_descending_frequency = shipped
+    tf, _treason = _recover_plain_tipper(p, tf)
+    return tf, (SINGLE_PERIOD_ORDERING_DEFECT + " + " + _treason) if _treason \
+        else SINGLE_PERIOD_ORDERING_DEFECT
+
+
 def _read_with_fallback(path: Path):
     """(TF, fallback_reason_or_None). Normal read first; on a failure ATTRIBUTABLE TO one of the
-    two recognised reader defects, retry ONCE for that defect alone, then return the parse.
+    three recognised reader defects, retry ONCE for that defect alone, then return the parse.
 
     Narrow by construction, in four independent ways, so no unrelated failure is ever swallowed:
       * only for `.edi` inputs (every one of these is an EDI construct);
-      * only when the raised error carries that defect's signature (the two predicates below);
-      * only when normalisation actually CHANGES the bytes, i.e. the file really carries it;
+      * only when the raised error carries that defect's signature (the three predicates below);
+      * only when the conditioning actually CHANGES something -- the bytes for the two normalising
+        fallbacks, and for the single-period one a file that really declares NFREQ=1;
       * and if the retry itself fails, the ORIGINAL exception is re-raised, so a file broken for any
         other reason still fails exactly as it does today, with its own error.
 
-    The two are mutually exclusive by error type and raising frame (a pydantic scalar-parsing
-    failure, numpy's broadcast refusal inside _read_mt), so the order they are tried in cannot
-    change any outcome.
+    The three are mutually exclusive by error type and raising frame (a pydantic scalar-parsing
+    failure, numpy's broadcast refusal inside _read_mt, an IndexError inside the ordering
+    assertion), so the order they are tried in cannot change any outcome.
     """
     p = Path(path)
     try:
@@ -352,6 +420,10 @@ def _read_with_fallback(path: Path):
             if fixed == raw:
                 raise
             return _reparse_from_normalised_copy(p, exc, fixed, Z_BLOCK_LENGTH_MISMATCH)
+        if _is_single_period_defect(exc):
+            if not _NFREQ_ONE_RE.search(p.read_bytes()):
+                raise
+            return _reparse_without_frequency_ordering(p, exc)
         raise
 
 
