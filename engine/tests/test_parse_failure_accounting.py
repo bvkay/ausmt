@@ -128,3 +128,38 @@ def test_the_report_still_validates_against_its_own_schema(tmp_path):
     items = SCHEMA["definitions"]["survey"]["properties"]["source_parse_failures"]["items"]
     assert items["required"] == ["station", "file", "error"]
     assert items["additionalProperties"] is False
+
+
+# An .edi whose DEFINEMEAS declares an impossible reference latitude: mt_metadata's model refuses it
+# with a pydantic ValidationError, whose text is FOUR lines (a header, the field, the message and a
+# docs URL). Minted, never custodian bytes; it reproduces the shape of the staged files whose
+# out-of-range REFLAT the reader declines.
+MULTILINE_ERROR = (b">HEAD\n  DATAID=\"BADREF\"\n  LAT=-30.0\n  LONG=136.0\n"
+                   b">=DEFINEMEAS\n  REFLAT=-999.0\n  REFLONG=136.0\n>END\n")
+
+
+def test_the_survey_warning_for_an_unreadable_file_is_one_line(tmp_path):
+    """A survey warning is a log line and a curator-page row, so it must be one line. The reader's
+    exception is not: pydantic answers an out-of-range REFLAT with four lines including a docs URL,
+    and the raw text was being pasted into the warning intact. source_parse_failures carries the
+    full untruncated error, so the echo loses nothing by collapsing its whitespace."""
+    pkg = tmp_path / "surveys" / "badref"
+    edir = pkg / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    (pkg / "survey.yaml").write_text(
+        "schema_version: \"0.1\"\nname: Bad Ref\nslug: badref\ncountry: Australia\n"
+        "organisation: Test Org\naccess: open\nlicense: CC-BY-4.0\n"
+        "abstract: Multi-line reader error fixture survey.\n", encoding="utf-8")
+    (edir / "badref.edi").write_bytes(MULTILINE_ERROR)
+    (edir / REAL.name).write_bytes(REAL.read_bytes())
+    entry = _build(tmp_path, slug="badref")
+
+    named = [w for w in entry["warnings"] if "unreadable by mt_metadata" in w]
+    assert len(named) == 1, entry["warnings"]
+    assert "\n" not in named[0], named[0]
+    assert all("\n" not in w for w in entry["warnings"]), entry["warnings"]
+    assert "ValidationError" in named[0], named[0]
+
+    rows = [f for f in entry["source_parse_failures"] if f["file"] == "badref.edi"]
+    assert len(rows) == 1, entry["source_parse_failures"]
+    assert "\n" in rows[0]["error"], "the structured ledger keeps the reader's full error verbatim"

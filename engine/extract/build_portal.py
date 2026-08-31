@@ -5306,7 +5306,12 @@ def _main_build(argv=None):
                 tf_rows += _xt
                 sci_rows += _xsci
         for _d in _gate_report.get("stations_dropped", []):
-            _survey_warnings.append(f"station {_d['station']} SKIPPED by convention gate: {_d['reason']}")
+            # One warning is one line: this string is echoed into the build log and read as a row by
+            # the curator page. A reader's exception is not one line - pydantic answers a bad field
+            # with a header, the field, the message and a docs URL - so collapse its whitespace here.
+            # Nothing is lost: source_parse_failures carries the reader's full error verbatim.
+            _reason = " ".join(str(_d["reason"]).split())
+            _survey_warnings.append(f"station {_d['station']} SKIPPED by convention gate: {_reason}")
         if not stations:
             n_in = len(inputs)
             print(f"  WARNING: survey '{label}' produced 0 stations from {n_in} input file(s) and "
