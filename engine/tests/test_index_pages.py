@@ -107,7 +107,9 @@ def test_surveys_index_lists_every_survey_with_its_discovery_facts(built):
     assert "<h1>Surveys</h1>" in page
     assert re.search(r"2 surveys &#183; \d+ stations", page), \
         "the catalogue summary must state surveys and stations, interpunct-separated"
-    assert 'href="/"' in page and "Explore on the map" in page, "the map link must be present"
+    assert "Explore on the map" not in page, (
+        "the map action was removed (owner 2026-08-31): the global header's Map tab covers it, "
+        "so the hub must not restate it")
     for slug, title in (("idx-a", "Index A"), ("idx-b", "Index B")):
         assert f'<a href="/surveys/{slug}">{title}</a>' in page, \
             f"{slug}: the title must be the link to its survey page"
@@ -517,7 +519,9 @@ def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
             "acquisition periods and available data.") in page, "the hub lede must read verbatim"
     assert page.index('class="idxsum"') < page.index("Discover magnetotelluric") \
         < page.index('class="idxlist"'), "the lede sits between the summary line and the list"
-    assert "Explore on the map &#8594;" in page, "the map action carries the forward arrow"
+    assert '<p class="idxact">' not in page.split('class="idxlist"')[0], (
+        "no action paragraph survives above the list: the map action is gone and nothing "
+        "replaced it (the .idxact CSS stays: the collection cards still use it)")
     coll = pages.collections_index_page(rows=[_one_collection_row()], base=BASE)
     assert "Discover magnetotelluric surveys" not in coll, \
         "the collections hub keeps its own section-20 lede"
@@ -690,8 +694,9 @@ def test_the_footer_is_contextual_and_its_machine_link_resolves_per_page_kind(bu
                '<a href="/about.html">About</a>' in foot, f"{rel}: row 1 right must be Releases, About"
         assert "&#169; 2026 AuScope and AusMT contributors - an AuScope service" in foot
         assert "Data licences vary by survey; each download carries its licence." in foot
-        stamp = re.search(r'<span class="fbuild">Build ([^<]+)</span>', foot)
-        assert stamp, f"{rel}: row 2 must carry the build identity stamp: {foot!r}"
+        assert "fbuild" not in foot and "Build " not in foot, (
+            f"{rel}: the build identity stamp was removed from the footer (owner 2026-08-31); "
+            f"build_provenance.json still carries it: {foot!r}")
         # Scoped to the WHOLE of row 2, not to the stamp's own match. A match bounded by
         # <span ...>[^<]+</span> can never contain "<a" by construction, so asserting over it
         # restated the regex rather than the rule and left the one mutation R13 forbids (wrapping
