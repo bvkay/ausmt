@@ -111,19 +111,37 @@ def _rule_body(text, pattern, where):
     return re.sub(r"\s*\n\s*", "", bodies[0])
 
 
-def test_the_two_navs_carry_identical_container_rules():
-    """The nav CONTAINER rule, character-identical across the surfaces. FAILS IF the wrap modes
-    (or the gap, or the display) drift apart: a nowrap container and a wrap container hand
-    zero-basis flex children different resolved widths, which is exactly the 47.5px tab-group
-    offset the C9 review measured between the SPA and the pages at 1280px."""
-    spa = _rule_body(INDEX.read_text(encoding="utf-8"), r"(?m)^\s*nav\{([^}]*)\}",
-                     "portal/index.html")
-    pages = _rule_body(PAGES_PY.read_text(encoding="utf-8"),
-                       r"header\.site nav\{([^}]*)\}", "engine/extract/_pages.py")
-    assert spa == pages, (
-        "the nav container rules have drifted between the two headers:\n"
-        f"  portal/index.html          {spa!r}\n"
-        f"  engine/extract/_pages.py   {pages!r}")
+def _nav_container(text, where):
+    """The nav CONTAINER rule body, on either surface's spelling of the selector. Anchored on the
+    brace so that `nav a{` can never answer for `nav{`."""
+    sel = (r"(?m)^\s*header\.site nav\{([^}]*)\}" if where.endswith(".py")
+           else r"(?m)^\s*nav\{([^}]*)\}")
+    return _rule_body(text, sel, where)
+
+
+def test_every_chrome_surface_carries_one_nav_container_rule():
+    """The nav CONTAINER rule, character-identical on EVERY surface wearing the chrome. FAILS IF
+    the wrap modes (or the gap, or the display) drift apart: a nowrap container and a wrap
+    container hand the same three min-width:112px tabs different row counts and different resolved
+    widths, which is exactly the 47.5px tab-group offset the C9 review measured between the SPA and
+    the pages at 1280px.
+
+    It compares all five surfaces rather than the SPA-and-pages pair this pin started as, because
+    the pair is precisely what let the defect through: releases.html and about.html each keep their
+    OWN hand-maintained copy of the chrome, no pin ever read either one's nav rule, and both sat on
+    a bare `display:flex;gap:6px`. With no flex-wrap the three 112px tabs cannot stack, so at 375px
+    those two rendered a 174px header where the SPA, the generated pages and brand.html rendered
+    220px, and the nav overran its own zone by 9px (right edge 366 against a 357px content edge)."""
+    prints = [(where, _nav_container(text, where)) for where, text in _chrome_surfaces()]
+    assert len(prints) >= 2, (
+        "fewer than two chrome surfaces were discovered; the glob or the zone marker has moved "
+        "and this pin would be comparing a surface against itself")
+    reference_where, reference = prints[0]
+    for where, body in prints[1:]:
+        assert body == reference, (
+            "the nav container rule has drifted between two surfaces:\n"
+            f"  {reference_where:<28} {reference!r}\n"
+            f"  {where:<28} {body!r}")
 
 
 def test_every_tab_box_shares_every_geometry_input():

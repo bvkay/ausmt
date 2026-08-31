@@ -42,7 +42,10 @@
      generated pages (engine/extract/_pages.py). */
   .brandmark{height:30px;width:30px;display:block;flex:none}
   .tagline{color:var(--muted);font-size:12.5px}
-  nav{display:flex;gap:6px}
+  /* flex-wrap is a term of the header's HEIGHT, not a detail of the nav: the three tabs hold a
+     112px floor each, so on a narrow viewport a nowrap container keeps them on one row and
+     overruns the zone instead of stacking. Character-identical to the other four surfaces. */
+  nav{display:flex;gap:6px;flex-wrap:wrap}
   nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;
     background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;
     padding:0 16px;border-radius:5px;text-decoration:none;cursor:pointer}

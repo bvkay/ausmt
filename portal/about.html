@@ -40,7 +40,10 @@
   .logolink{display:flex;align-items:center;flex:none}
   .auscope-logo{height:30px;width:auto;display:block}
   .tagline{color:var(--muted);font-size:12.5px}
-  nav{display:flex;gap:6px}
+  /* flex-wrap is a term of the header's HEIGHT, not a detail of the nav: the three tabs hold a
+     112px floor each, so on a narrow viewport a nowrap container keeps them on one row and
+     overruns the zone instead of stacking. Character-identical to the other four surfaces. */
+  nav{display:flex;gap:6px;flex-wrap:wrap}
   /* Centre-zone nav items are links on this static page (index uses <button>s that switch app views).
      They match index's UX6 Wave B (B4) nav buttons: equal-width bordered boxes, ≥40px targets, and a
      copper-filled active state (#16110b on --copper = 6.44:1). None of Map/Surveys/Collections is the
