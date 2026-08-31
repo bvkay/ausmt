@@ -772,7 +772,11 @@
   <div class="hzone hright">
     <!-- UX7a (A5): the MTCAT machine-readable link moved to the footer (bottom-left). The header's right
          zone now carries only the live counts. -->
-    <div class="counts" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</div>
+    <!-- C5 (owner R12): one SHELL, a contextual SLOT. .counts is the same element in the same place on
+         every view; #countSlot's content is what changes, and filters.js updateCounts() owns it. The
+         markup here is the MAP form (the three station counts and the ids the app paints), which is
+         both the boot state and the form the slot is rebuilt into whenever the map is showing. -->
+    <div class="counts" id="headerCounts"><span id="countSlot" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</span></div>
   </div>
 </header>
 

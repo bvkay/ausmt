@@ -113,14 +113,32 @@ function inShapes(s){if(!hasPosition(s))return false;
   const rings=layer.getLatLngs();const ring=Array.isArray(rings[0])?rings[0]:rings;let inn=false;
   for(let a=0,b=ring.length-1;a<ring.length;b=a++){const yi=ring[a].lat,xi=ring[a].lng,yj=ring[b].lat,xj=ring[b].lng;
     if(((yi>s.lat)!==(yj>s.lat))&&(s.lon<(xj-xi)*(s.lat-yi)/(yj-yi)+xi))inn=!inn;}if(inn)inside=true;});return inside;}
-function updateCounts(){const nv=document.getElementById("nVis");
+// C5 (owner R12, the SPA half). The header counter is ONE shell with a CONTEXTUAL slot. It used to read
+// "N shown / M selected / T total" on every view, and only on the map was that a description of what the
+// reader was looking at: on the Surveys view it counted stations while the screen showed survey cards,
+// and on the Collections views it counted something not on screen at all. The shell never moves; only
+// this slot's content changes, and where nothing true can be said about what is on screen it says
+// nothing rather than leaving a stale number standing.
+function _countN(x){return Number(x).toLocaleString("en-AU");}
+function updateCounts(){
+  const slot=document.getElementById("countSlot");
+  if(!slot)return;
+  if(curView==="collections"||curView==="collection"){slot.removeAttribute("title");slot.innerHTML="";return;}
   if(curView==="surveys"){
-    // Stage B: the Surveys header count mirrors the discovery-filtered catalogue (#surveyCount) - the
-    // search box AND the discovery facets - never the map rail's tree / type / period / year / selection.
+    // The WORKSPACE LINE. Its first number mirrors the discovery-filtered catalogue (#surveyCount) - the
+    // search box AND the discovery facets - never the map rail's tree / type / period / year. Its second
+    // counts STATIONS, because stations are what a selection holds and what the download builder takes.
+    // With nothing selected the clause is hidden: "0 stations selected" is true and is noise.
     const _fac=(typeof surveyPassesFacets==="function")?surveyPassesFacets:(()=>true);
-    const shown=surveys.filter(surveyVisible).filter(_fac).length;nv.textContent=shown+" survey"+(shown===1?"":"s");}
-  else nv.textContent=visible.length;
-  document.getElementById("nTot").textContent=ST.length;}
+    const shown=surveys.filter(surveyVisible).filter(_fac).length,sel=selected.size;
+    slot.title="surveys passing the current search and filters · stations selected for download";
+    slot.innerHTML=`<b>${_countN(shown)}</b> of ${_countN(surveys.length)} survey${surveys.length===1?"":"s"} shown`+
+      (sel?` · <b>${_countN(sel)}</b> station${sel===1?"":"s"} selected`:"");
+    return;}
+  // MAP: the three station counts, rebuilt into the form index.html ships (ids included, since other
+  // surfaces paint them by id).
+  slot.title="stations passing the current filters · stations selected · total stations in the catalogue";
+  slot.innerHTML=`<b id="nVis">${_countN(visible.length)}</b> shown · <b id="nSel">${_countN(selected.size)}</b> selected · <span id="nTot">${_countN(ST.length)}</span> total`;}
 function refresh(){visible=ST.filter(passes);
   // ONE call paints the visible set into the map's single dot container; map.js owns the layer and this
   // stays the caller it always was. Nothing collapses, so a filter change is the only thing that can alter
@@ -130,7 +148,10 @@ function refresh(){visible=ST.filter(passes);
   if(hasShapes())selected=new Set(visible.filter(inShapes).map(s=>s.i));else selected=new Set([...selected].filter(i=>visible.some(s=>s.i===i)));
   if(curView==="surveys")renderCards();
   updateCounts();updateSel();}
-function updateSel(){document.getElementById("nSel").textContent=selected.size;document.getElementById("selBig").textContent=selected.size;
+function updateSel(){document.getElementById("selBig").textContent=selected.size;
+  // C5: the selection is half the workspace line, so a selection change repaints the header slot. The
+  // map form's #nSel is rebuilt by the same call, which is why it is no longer set directly here.
+  updateCounts();
   // Lane B: downloads follow the SCOPE (scopeStations), so the metadata buttons enable whenever the
   // scope is non-empty - with nothing selected they act on the filtered corpus, and the scope line
   // says so. Guarded per element: a renamed button must not abort every later line of this function

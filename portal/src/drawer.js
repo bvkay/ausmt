@@ -1860,6 +1860,9 @@ function openCollectionPage(cid){
   const _nc=document.getElementById("navCollections");if(_nc)_nc.classList.add("active");
   closeDrawer();
   v.style.display="block";v.scrollTop=0;curView="collection";
+  // C5: this is the one view switch that does NOT go through setView, so it owes the header counter the
+  // repaint setView would have given it - otherwise the slot keeps whatever the previous view left there.
+  if(typeof updateCounts==="function")updateCounts();
 }
 function dispatchProd(d){
   if(d.prod==="edi")fetchEdi(d.file,d.avail==="1",d.survey);

@@ -3030,9 +3030,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   searchInput.value = "ORGX"; fire(searchInput, "input");   // Alpha's org, matched case-insensitively
   ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey",
     "E3: the search must match the ORG field case-insensitively (ORGX -> Alpha/OrgX), got: " + JSON.stringify(surveyOrder()));
-  // the header #nVis stays coherent on the Surveys view; the search handler re-runs updateCounts().
-  ok(doc.getElementById("nVis").textContent === "1 survey",
-    "E3: the header #nVis count must track the search on the Surveys view (1 survey), got: " + JSON.stringify(doc.getElementById("nVis").textContent));
+  // The header counter stays coherent on the Surveys view; the search handler re-runs updateCounts().
+  // C5 moved this pin off #nVis: on the Surveys view the slot is the WORKSPACE LINE, not the map's
+  // three station counts (contract section 1, C5).
+  ok(doc.getElementById("countSlot").textContent === "1 of 4 surveys shown",
+    "E3/C5: the header workspace line must track the search on the Surveys view, got: " + JSON.stringify(doc.getElementById("countSlot").textContent));
   // (h) CLEAR resets the type facets AND clears the search (count back to 4).
   clearFilters.click();
   ok(surveyCount.textContent === "4 surveys" && searchInput.value === "",
@@ -3072,6 +3074,59 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C3: the card grid and the discovery bar must share one cap, got bar=" +
     JSON.stringify(win.getComputedStyle(doc.getElementById("discoveryControls")).maxWidth) +
     " grid=" + JSON.stringify(_gridCss.maxWidth));
+
+  // C5. THE CONTEXTUAL COUNTER (owner R12, the SPA half). The header counter read
+  // "N shown / M selected / T total" on EVERY view, and only on the map was that a description of what
+  // the reader was looking at. On the Surveys view it counted stations while the screen showed survey
+  // cards; on the Collections views it counted something not on screen at all. The SHELL is identical
+  // everywhere - same element, same place, same type - and only the SLOT's content changes; where
+  // nothing true can be said about what is on screen, it says nothing.
+  const slot = doc.getElementById("countSlot");
+  ok(slot, "C5: the header counter needs a slot element (#countSlot) whose content is per-view");
+  const shell = doc.getElementById("headerCounts");
+  ok(shell && shell.classList.contains("counts") && shell.contains(slot),
+    "C5: the shell (.counts) must be the same element on every view, with the slot inside it");
+  // (a) MAP: unchanged - the three station counts, with the ids the rest of the app paints.
+  A.setView("map");
+  ok(/^5 shown · 0 selected · 5 total$/.test(slot.textContent.trim()),
+    "C5: the map view keeps the three station counts, got " + JSON.stringify(slot.textContent));
+  ok(doc.getElementById("nVis") && doc.getElementById("nSel") && doc.getElementById("nTot"),
+    "C5: the map form must keep the nVis/nSel/nTot ids");
+  // (b) SURVEYS: the workspace line, driven by the LIVE filter and selection state. With nothing
+  //     selected the selected clause is HIDDEN rather than reading a truthful-but-noisy "0 selected".
+  A.setView("surveys");
+  ok(slot.textContent === "4 of 4 surveys shown",
+    "C5: the workspace line must read 'N of 4 surveys shown' with no selection, got " + JSON.stringify(slot.textContent));
+  ok(doc.getElementById("nVis") == null,
+    "C5: the map's station counts must not linger on the Surveys view under a survey-shaped label");
+  // ...the FILTER half: narrow the catalogue and the first number follows it.
+  const c5search = doc.getElementById("surveySearch");
+  c5search.value = "beta"; fire(c5search, "input");
+  ok(slot.textContent === "1 of 4 surveys shown",
+    "C5: the workspace line's first number is the LIVE filtered count, got " + JSON.stringify(slot.textContent));
+  c5search.value = ""; fire(c5search, "input");
+  // ...the SELECTION half: it is stations that get selected and downloaded, so the second clause counts
+  //    stations, appears when there is a selection, and takes the singular at one.
+  A.setSelected(["A1", "A2"]);
+  ok(slot.textContent === "4 of 4 surveys shown · 2 stations selected",
+    "C5: a live selection must show as a stations-selected clause, got " + JSON.stringify(slot.textContent));
+  A.setSelected(["A1"]);
+  ok(slot.textContent === "4 of 4 surveys shown · 1 station selected",
+    "C5: the selected clause must take the singular at one, got " + JSON.stringify(slot.textContent));
+  A.setSelected([]);
+  ok(slot.textContent === "4 of 4 surveys shown",
+    "C5: clearing the selection must hide the clause, not print a zero, got " + JSON.stringify(slot.textContent));
+  // (c) COLLECTIONS and the collection DETAIL: the slot is EMPTY. Neither view is a filtered set of
+  //     anything the counter can honestly describe, and a stale station count is worse than none.
+  A.setView("collections");
+  ok(slot.textContent.trim() === "",
+    "C5: the Collections view must leave the counter slot empty, got " + JSON.stringify(slot.textContent));
+  ok(shell.classList.contains("counts"),
+    "C5: the shell stays in place on Collections - only the slot's content changes");
+  win.location.hash = "#/collection/auslamp"; A.routeFromHash();
+  ok(slot.textContent.trim() === "",
+    "C5: the collection detail must leave the counter slot empty, got " + JSON.stringify(slot.textContent));
+  win.location.hash = ""; A.setView("surveys");
 
   // DD/GG. E2 IDENTIFIERS ROLLUP + E4 DETAIL SECTION ORDER (survey detail).
   const drwE = doc.getElementById("drawer");
@@ -3944,8 +3999,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   selectCtl().click();
   ok(treeChecked().length === 1, "StageB: re-scope setup failed, got " + JSON.stringify(treeChecked()));
   A.setView("surveys");
-  ok(doc.getElementById("surveyCount").textContent === "4 surveys" && doc.getElementById("nVis").textContent === "4 surveys",
-    "StageB COHERENCE: #surveyCount and #nVis must both read '4 surveys' regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("nVis").textContent]));
+  // C5: the header slot is the workspace line on this view, so the coherence pin reads it there.
+  ok(doc.getElementById("surveyCount").textContent === "4 surveys" && /^4 of 4 surveys shown/.test(doc.getElementById("countSlot").textContent),
+    "StageB COHERENCE: #surveyCount and the header workspace line must both count 4 surveys regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("countSlot").textContent]));
   ok(treeChecked().length === 4, "StageB RESTORE (view switch): navigating off the map must restore the scoped tree, got " + JSON.stringify(treeChecked()));
   A.setView("map"); A.setSidebarMode("browse");
 
