@@ -103,14 +103,18 @@ def test_the_stylesheet_gives_the_last_two_lines_their_own_line():
 
 
 def test_the_mark_is_the_portals_own_asset_byte_for_byte():
+    """The docs sidebar's AuScope symbol is a COPY of the portal's vendored file, so the two must not
+    drift. It is no longer the mark the portal HEADER carries: the brand-assets lane made the AusMT
+    dot mark the site identity everywhere except about.html and this sidebar, both of which are
+    waiting on the same owner ruling."""
     assert DOCS_MARK.exists(), (
         "docs/docs/img/auscope-icon-white.png is the only brand asset the built site can reference; "
         "mkdocs copies docs/docs/, not portal/vendor/")
     assert PORTAL_MARK.exists(), "portal/vendor/auscope-icon-white.png is the source of that copy"
     digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()  # noqa: E731
     assert digest(DOCS_MARK) == digest(PORTAL_MARK), (
-        "the docs copy of the AuScope mark has drifted from the portal's vendored copy; the header "
-        "and the docs sidebar must carry the same mark")
+        "the docs copy of the AuScope symbol has drifted from the portal's vendored copy; the two "
+        "copies of that one file must stay identical")
 
 
 def test_the_mobile_bar_shows_the_wordmark_without_the_third_line():
