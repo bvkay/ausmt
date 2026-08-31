@@ -4,10 +4,11 @@ The owner's favicon concept sheet asks for the AusMT mark in the browser tab, re
 Australia at 16 px. That is one requirement with two halves:
 
   * ONE GEOMETRY. The favicon is not a second drawing. It is the same 180 dot lattice as the header
-    mark and the logo lockups, differing only in the declared radius band: 0.62 of the pitch at 16 px
-    against 0.44 at presentation size. The dots close into a solid silhouette at tab size, which is
-    what a favicon should do, and dissolve into a haze if they do not. The pin rederives the favicon's
-    circle count and its radius from contract/brand.json rather than trusting the file.
+    mark and the logo lockups, differing only in the declared radius band: the 16 px band against the
+    presentation ratio (0.78 and 0.44 as brand.json declares them today). The dots close into a solid
+    silhouette at tab size, which is what a favicon should do, and dissolve into a haze if they do
+    not. The pin rederives the favicon's circle count and its radius from contract/brand.json rather
+    than trusting the file OR this sentence, so the band can move without stranding the test.
   * EVERY SURFACE LINKS IT. Before this lane the generated entity pages shipped no icon link at all,
     so all 2,655 of them asked the server for /favicon.ico and got a 404 on every visit. They link the
     same file the static pages do, from the same origin.

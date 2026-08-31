@@ -98,6 +98,22 @@ def test_the_palette_on_the_page_is_brand_jsons_palette():
         assert fill == label, f"a swatch shows {fill} and labels it {label}"
 
 
+def test_the_clear_space_the_page_states_is_the_declared_one():
+    """The page told readers a rule the shipped lockups do not follow: it said a quarter of the mark
+    height while PROPORTIONS declares 0.20, tightened during E2 and left stranded here. It was also
+    the only number on the page not held against brand.json, which is exactly the drifting second
+    source of truth the palette pin exists to prevent.
+
+    FAILS IF the stated clear space stops being brand.json's clear_space. The lockup files are drawn
+    with it, so a reader following the page's number would leave less room than the file already
+    reserves."""
+    cs = json.loads(BRAND_JSON.read_text(encoding="utf-8"))["proportions"]["clear_space"]
+    flat = re.sub(r"\s+", " ", _text())
+    assert f"at least {cs:.0%} of the mark's height" in flat, (
+        f"brand.html must state the declared clear space ({cs:.0%} of the mark height); a second "
+        "number here is a second source of truth")
+
+
 def test_the_full_artwork_is_offered_separately_from_the_mark():
     """The relationship doctrine, on the one page a reader chooses a file. FAILS IF the pixelated
     artwork is not offered, or is presented as a logo rather than as the presentation hero graphic."""

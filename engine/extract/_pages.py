@@ -572,9 +572,16 @@ def _site_header(active="", status="") -> str:
     search result meets the site's own identity rather than a wordmark alone. It is a SAME-ORIGIN path
     served by the portal image beside these pages: not a build-time read, not an external fetch, and
     not 180 circles inlined into 2,655 documents. Everything else on the page stays inline, and the
-    src allow-list in engine/tests/test_index_pages.py names this one path and nothing else. A version
-    skew between the portal image and the pages tree shows as a one-deploy-old logo, which is the
-    acceptable failure mode for a logo and for nothing else in this tier.
+    src allow-list in engine/tests/test_index_pages.py names this one path and nothing else.
+
+    VERSION SKEW, STATED HONESTLY FOR THE FIRST DEPLOY. /vendor/* is served from the portal image and
+    the pages tree from the data volume, so the two can be a deploy apart. Once both carry the mark
+    that shows as a one-deploy-old logo, which is the acceptable failure mode for a logo and for
+    nothing else in this tier. On the FIRST deploy it is worse than that, because the file is new: a
+    pages tree rebuilt from this commit against a portal image that predates it asks for a mark the
+    image does not serve, and every page renders the alt text instead. So the portal image and the
+    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg answering
+    200 image/svg+xml is the check before the pages tree is swapped.
 
     The mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the wider identity block
     cannot move the centre tab group (tests/test_header_geometry_parity.py, C9)."""

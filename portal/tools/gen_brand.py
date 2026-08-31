@@ -141,9 +141,10 @@ WEB_FONT_WEIGHT = 800
 # assumed rather than looked at.
 LETTER_SPACING_EM = -0.02
 # Layout metrics, measured once from the bundled face and declared so the SVG canvas can be sized
-# without a font engine. A viewer whose system stack measures the wordmark slightly wider or narrower
-# than this simply sits a little closer to, or further from, the right clear-space edge; the clear
-# space is a quarter of the mark height, which absorbs the difference.
+# without a font engine. A viewer whose system stack measures the WORDMARK wider or narrower than
+# this sits a little closer to, or further from, the right clear-space edge, and the clear space
+# absorbs it: measured in a real browser at the SVG's own sizes, the widest common fallback (Verdana)
+# draws the wordmark 113 user units over the declared advance against 200 units of clear space.
 WORDMARK_ADVANCE_EM = 3.429      # "AusMT" at the declared tracking
 TAGLINE_ADVANCE_EM = 18.889      # the tagline at default tracking
 CAP_HEIGHT_EM = 0.728            # cap height, for optically centring the text block on the mark
@@ -537,12 +538,20 @@ def artefacts():
 
 
 def _image_matches(path, want):
+    """Size, mode and decoded pixels, in that order.
+
+    MODE IS COMPARED BEFORE THE CONVERSION, not after it: normalising both sides to RGBA and then
+    comparing would discard the mode entirely, and a committed export re-saved as a palette image
+    whose palette happens to decode to identical RGBA pixels would pass a gate that claims to hold
+    the mode. What the browser is served is the file's own mode, so that is what is held."""
     Image, _, _ = _pillow()
     if not path.is_file():
         return False
     with Image.open(path) as committed:
+        mode, size = committed.mode, committed.size
         have = committed.convert("RGBA")
-    return have.size == want.size and have.tobytes() == want.convert("RGBA").tobytes()
+    return (size == want.size and mode == want.mode
+            and have.tobytes() == want.convert("RGBA").tobytes())
 
 
 def main(argv=None):
