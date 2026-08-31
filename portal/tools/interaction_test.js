@@ -3173,6 +3173,34 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(slot.textContent.trim() === "",
     "C5: the collection detail must leave the counter slot empty, got " + JSON.stringify(slot.textContent));
   win.location.hash = ""; A.setView("surveys");
+  // (d) THE NUMBER FORMAT, at a count the fixture cannot reach. Contract section 1, C5: the counter
+  // "renders on the MAP view as today", and today is origin/main's raw `nv.textContent=visible.length`.
+  // The workspace line is NEW copy and takes the thousands separator the rest of the workspace uses.
+  // With five fixture stations "5" formats identically either way, so BOTH forms were invisible to the
+  // suite and the map's could widen without anything noticing. A fresh window carrying 1,200 stations is
+  // the smallest thing that can see the difference. Rows are cloned POSITIONALLY (contract/columns.json:
+  // id, survey, lat, lon, ..., ausmt_id at 12); tf.json and sci.json are dropped rather than left at
+  // five rows, so the synthetic corpus is a clean phase-1-only boot like the two failure windows above.
+  const _bigCat = _cat.slice();
+  for (let i = _cat.length; i < 1200; i++) {
+    const r = _cat[0].slice();
+    r[0] = "Z" + i; r[2] = -30 - (i % 40) * 0.1; r[3] = 130 + (i % 40) * 0.1; r[12] = "au.alpha.Z" + i;
+    _bigCat.push(r);
+  }
+  const _bigMap = Object.assign({}, DATAMAP, { "data/catalogue.json": _bigCat });
+  delete _bigMap["data/tf.json"]; delete _bigMap["data/sci.json"];
+  const bigWin = await bootFreshWindow(_bigMap);
+  const bigA = bigWin.__api, bigSlot = bigWin.document.getElementById("countSlot");
+  ok(bigA.nST() === 1200, "C5: the 1,200-station window did not build; got " + bigA.nST() + " stations");
+  bigA.setView("map");
+  ok(/^1200 shown · 0 selected · 1200 total$/.test(bigSlot.textContent.trim()),
+    "C5: the map counter renders as today - plain integers, no separator - got " +
+    JSON.stringify(bigSlot.textContent.trim()));
+  bigA.setView("surveys");
+  bigA.setSelected(_bigCat.slice(0, 1018).map(r => r[0]));
+  ok(/ · 1,018 stations selected$/.test(bigSlot.textContent),
+    "C5: the workspace line's station count takes the en-AU thousands separator, got " +
+    JSON.stringify(bigSlot.textContent));
 
   // C6. THE DISCOVERY BAR AS THE PRIMARY FILTER SURFACE (brief 10). Two gaps, one cause: the year-range
   // and downloadable-only filters lived in the map rail, and the rail is HIDDEN on the Surveys view, so

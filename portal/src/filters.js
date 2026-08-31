@@ -138,9 +138,12 @@ function updateCounts(){
       (sel?` · <b>${_countN(sel)}</b> station${sel===1?"":"s"} selected`:"");
     return;}
   // MAP: the three station counts, rebuilt into the form index.html ships (ids included, since other
-  // surfaces paint them by id).
+  // surfaces paint them by id). C5 says this view renders AS TODAY, so the three numbers stay plain
+  // integers, exactly as origin/main wrote them; _countN belongs to the workspace line, which is new
+  // copy. The counts pin drives a 1,200-station window, because at the fixture's five the two formats
+  // are the same string.
   slot.title="stations passing the current filters · stations selected · total stations in the catalogue";
-  slot.innerHTML=`<b id="nVis">${_countN(visible.length)}</b> shown · <b id="nSel">${_countN(selected.size)}</b> selected · <span id="nTot">${_countN(ST.length)}</span> total`;}
+  slot.innerHTML=`<b id="nVis">${visible.length}</b> shown · <b id="nSel">${selected.size}</b> selected · <span id="nTot">${ST.length}</span> total`;}
 function refresh(){visible=ST.filter(passes);
   // ONE call paints the visible set into the map's single dot container; map.js owns the layer and this
   // stays the caller it always was. Nothing collapses, so a filter change is the only thing that can alter
@@ -321,7 +324,10 @@ function paintAvailSelect(){
   const ix=(typeof TSACC!=="undefined"&&TSACC)||{};
   const empty=known&&!Object.keys(ix).length;
   [...av.querySelectorAll("option")].forEach(o=>{
-    if(o.value===""||o.value==="tf")return;
+    // "" is the Any option, which rides the catalogue and is live from first paint. The "tf" option this
+    // also used to skip was DELETED from #availSel by C6 (the capability is a discovery chip now), so no
+    // option can reach that branch any more; the harness pin asserts #availSel carries no "tf" value.
+    if(o.value==="")return;
     o.disabled=!known||empty;
     o.title=known?(empty?"Availability by level: "+TS_NONE_HINT:""):TS_PENDING_HINT;});
 }
