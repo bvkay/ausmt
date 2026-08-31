@@ -283,3 +283,70 @@ def test_the_narrow_width_stacking_still_wins_under_760px():
         assert stack > 0, (
             f"{where}: the full-width stacking override must live inside the 760px block that "
             f"follows the zone rules; without it three 112px tabs drag a 375px page sideways")
+
+
+# --------------------------------------------------------------------------- the header's HEIGHT
+#
+# EVERY pin above measures the header HORIZONTALLY: the tab group's x, the zone widths, the tab box's
+# own width, the font stack the labels are measured in. A header can therefore change shape
+# VERTICALLY and pass all of them at once, which is exactly what the 30px identity mark did. The mark
+# pushed the identity block past the width of its own zone, the tagline dropped onto a second line,
+# and the generated pages' header grew from 57.00px to 82.47px at 1280px while nothing horizontal
+# moved by a single pixel. Measured in Chrome at a device scale factor of 1.
+#
+# THE HEIGHT FORMULA. The header is a wrapping flex row of three zones, so
+#
+#     header  = padding-block + border-bottom + max(zone heights)
+#
+# and once the identity block wraps, that zone's own height is
+#
+#     hleft   = line-box(wordmark) + row-gap + line-box(tagline)
+#
+# Every term on the right is a declared constant except the two line boxes, and a line box is
+# font-size x line-height. The font sizes are declared, and identical on every surface. The
+# LINE-HEIGHT was not declared at all: the header inherited it from whatever the host document had
+# set on body, and the documents carrying this header set three different things. The SPA leaves body
+# at normal; the static pages' sheet sets font:16px/1.55; releases, about and brand set
+# line-height:1.6. So one header rule rendered three different heights at 1280px:
+#
+#     portal/index.html          74.00px   line-height normal
+#     engine/extract/_pages.py   82.47px   1.55, inherited from body
+#     portal/brand.html          84.19px   1.6, inherited from body
+#
+# A global component must not take its vertical rhythm from the prose of whichever page it is dropped
+# into. The header declares its own, and line-height is pinned on every surface that wears the chrome
+# because it is the one term of the formula a host document can change from the outside.
+HEADER_LINE_HEIGHT = "line-height:normal"
+
+
+def _chrome_surfaces():
+    """Every surface carrying the three-zone header, by the path a failure message should name: the
+    static pages' sheet, plus every portal document that declares the zones. Discovered from the
+    filesystem rather than from a list, so a new page wearing the chrome is pinned the day it
+    appears rather than the day someone remembers to add it here."""
+    out = [("engine/extract/_pages.py", PAGES_PY.read_text(encoding="utf-8"))]
+    for page in sorted(ROOT.glob("*.html")):
+        text = page.read_text(encoding="utf-8")
+        if ".hzone{" in text:
+            out.append((f"portal/{page.name}", text))
+    return out
+
+
+def _header_rule(text, where):
+    """The header's own rule body, on either surface's spelling of the selector."""
+    return _rule_body(text, r"(?m)^\s*header(?:\.site)?\{([^}]*)\}", where)
+
+
+def test_every_chrome_surface_declares_the_headers_own_line_height():
+    """The header's vertical rhythm belongs to the header. FAILS IF any surface leaves line-height
+    to be inherited from its host document's body: the identity block's two line boxes are
+    font-size x line-height, so an inherited 1.55 or 1.6 renders the SAME header 8.47px or 10.19px
+    taller than the SPA's the moment that block wraps. Different heights on different pages is a
+    different header on different pages, and the standing ruling is one header on every surface."""
+    surfaces = _chrome_surfaces()
+    assert len(surfaces) >= 2, "no chrome surfaces were discovered; the glob or the zone marker moved"
+    for where, text in surfaces:
+        body = _header_rule(text, where)
+        assert HEADER_LINE_HEIGHT in body, (
+            f"{where}: the header rule must declare {HEADER_LINE_HEIGHT!r}, so that the host "
+            f"document's body prose line-height cannot change the header's height; got {body!r}")

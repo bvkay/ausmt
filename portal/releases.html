@@ -31,7 +31,7 @@
      right-zone alignment, which is on origin/main as of a568b55 (PR #117). Copied rather than shared
      because the portal ships as classic static pages with no template step; the header-parity pin in
      tests/test_releases_page.py fails if the two ever drift apart. */
-  header{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
+  header{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
   .hleft{flex:1 1 auto}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
