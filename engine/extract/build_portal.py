@@ -364,7 +364,15 @@ def derived_rendition_withheld(r):
     inherits it rather than re-deciding it.
 
     The per-station coordinate byte-gate is a SEPARATE, additional filter with its own home in
-    _coord_access; both are applied, neither subsumes the other."""
+    _coord_access; both are applied, neither subsumes the other.
+
+    NOT the tipper mask, and that is a stated gap awaiting an owner ruling rather than an oversight.
+    The shipped tipper mask has the same shape and leaks the same way (a masked tipper is republished
+    in the served XML and both MTH5 tiers), but withholding those renditions would delete downloads
+    that are already published for two live surveys, so it is an owner decision, not a fix this seam
+    can make on its own. When it is ruled, it is one more clause here and a flag stamped at the
+    tipper-mask seam, exactly as the impedance half does.
+    """
     return bool(r.get("impedance_masked"))
 
 

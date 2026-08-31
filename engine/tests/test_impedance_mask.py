@@ -34,6 +34,7 @@ sys.path.insert(0, str(REPO / "extract"))
 sys.path.insert(0, str(REPO))
 import _mtm as mtm          # noqa: E402
 import build_portal         # noqa: E402
+import cache as cache_mod   # noqa: E402
 from _contract import SCI_COLUMNS, TF_COLUMNS   # noqa: E402
 
 PLACEHOLDER = HERE / "fixtures" / "impedance" / "placeholder-impedance-tipper.edi"
@@ -377,3 +378,58 @@ def test_a_real_impedance_survey_keeps_its_renditions_under_a_full_declaration(t
     out = _build(tmp_path, extra=_DERIVED_RENDITIONS)
     assert sorted((out / "xml" / "real-z").glob("*.xml"))
     assert (out / "bundles" / "real-z-tf.h5").exists()
+
+
+def test_a_warm_cache_hit_masks_and_withholds_exactly_as_a_cold_build(tmp_path, capfd, monkeypatch):
+    """A GUARD on where the mask lives, not a fix for a defect: it passes on both sides of the
+    withholding commit and exists to keep passing.
+
+    The whole mask runs AFTER the C18 cache so the cached parse stays survey-independent, and the
+    rendition withholding reads a flag stamped at that same seam. Production rebuilds run
+    --incremental (deploy/Makefile), so every masked survey after its first build is a cache HIT: if
+    that flag ever moved into the cached parse product, a warm rebuild would republish the
+    renditions a cold build withholds, and only the warm one would leak. Cold and warm are built
+    over one cache dir, the hit is asserted rather than assumed, and the two builds are compared.
+    """
+    # The cache disables itself on a dirty engine checkout, which every development tree is, so pin
+    # the gate's INPUT to clean and the salt's commit to a constant. Same two-line pin as
+    # test_build_cache.py's clean_salt fixture, which is file-local to that module.
+    monkeypatch.setattr(cache_mod, "_dirty_checkout", lambda cwd: False)
+    monkeypatch.setattr(build_portal, "_git_commit_at",
+                        lambda cwd: "testpin" if Path(cwd) == build_portal.HERE else None)
+    monkeypatch.delenv("AUSMT_ENGINE_COMMIT", raising=False)
+    monkeypatch.delenv("AUSMT_CACHE_MAX_MB", raising=False)
+
+    _survey(tmp_path, "masked", PLACEHOLDER, channels=["Bx", "By", "Bz"])
+    cache = tmp_path / "cache"
+    outs = []
+    for name in ("cold", "warm"):
+        out = tmp_path / name
+        rc = build_portal.main(["--surveys", str(tmp_path / "surveys"), "--out", str(out),
+                                "--no-validate", "--products", str(out / "products"),
+                                *_DERIVED_RENDITIONS,
+                                "--incremental", "--cache-dir", str(cache), "--cache-mode", "rw"])
+        assert rc == 0
+        _cap = capfd.readouterr()
+        outs.append((out, _cap.out + _cap.err))
+    (cold, _cold_log), (warm, warm_log) = outs
+    assert "C18 cache [rw]: hits=1" in warm_log, "the warm build was not a cache hit; guard is vacuous"
+
+    for name in ("catalogue.json", "tf.json", "sci.json"):
+        assert (cold / name).read_bytes() == (warm / name).read_bytes(), name
+    for out in (cold, warm):
+        assert not sorted(out.rglob("*.xml")), f"{out.name}: an EMTF XML shipped"
+        assert not sorted(out.rglob("*.h5")), f"{out.name}: an MTH5 shipped"
+
+    def _entry(out):
+        e = json.loads((out / "build_report.json").read_text(encoding="utf-8"))["surveys"]["masked"]
+        return e["warnings"], e["frame"]
+    assert _entry(cold) == _entry(warm)
+
+    def _doc(out):
+        d = json.loads((out / "products" / "masked" / "MASKZ1" / "station.json")
+                       .read_text(encoding="utf-8"))
+        d["provenance"].pop("generated", None)   # the build clock, the one legitimate difference
+        return d
+    assert _doc(cold) == _doc(warm)
+    assert _doc(warm)["frame"]["convention_check"] is None
