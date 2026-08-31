@@ -48,6 +48,11 @@ on:
       # of that pin is an INPUT to this lane. The engine lane triggers on engine/** alone
       # and cannot see the portal half, which is why the pin lives here.
       - "engine/extract/_pages.py"
+      # tests/test_brand_source_of_truth.py rederives the whole AusMT dot lattice from the engine's
+      # coastline truth, so _au_outline.py is an INPUT to this lane exactly as _pages.py is: an edit
+      # to a COAST ring changes the mark, and without this path the pin would only fire on the next
+      # portal-touching PR.
+      - "engine/extract/_au_outline.py"
       # A3: tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
       # pinned copy on CI) over every survey.yaml the form packages, so a validator refresh is an
       # INPUT to this lane and must gate it, exactly as the docs/branding inputs above do.
@@ -69,6 +74,11 @@ on:
       # of that pin is an INPUT to this lane. The engine lane triggers on engine/** alone
       # and cannot see the portal half, which is why the pin lives here.
       - "engine/extract/_pages.py"
+      # tests/test_brand_source_of_truth.py rederives the whole AusMT dot lattice from the engine's
+      # coastline truth, so _au_outline.py is an INPUT to this lane exactly as _pages.py is: an edit
+      # to a COAST ring changes the mark, and without this path the pin would only fire on the next
+      # portal-touching PR.
+      - "engine/extract/_au_outline.py"
       # A3: tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
       # pinned copy on CI) over every survey.yaml the form packages, so a validator refresh is an
       # INPUT to this lane and must gate it, exactly as the docs/branding inputs above do.
