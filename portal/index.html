@@ -701,6 +701,7 @@
   .disc-years-in span{color:var(--muted)}
   .disc-years-in input{width:5.5em;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:12.5px}
   .disc-years-in input:focus{outline:none;border-color:var(--copper)}
+  .disc-yearnote{flex-basis:100%;margin-top:0}
   .facet{font-size:12px;padding:5px 10px;border-radius:14px;border:1px solid var(--line);background:var(--panel-2);
     color:var(--muted);cursor:pointer}
   .facet:hover{border-color:var(--copper);color:var(--text)}
@@ -926,7 +927,7 @@
            (filters.js passesYearRange) reads them exactly as it always did; what changed is that they
            are now on the view where choosing a survey happens. applyYearRangeHints fills the
            placeholders, the min/max attrs and the corpus-range suffix on #yearRangeHead. -->
-      <label class="disc-years" id="yearRangeHead" title="Filters on each survey&#39;s declared acquisition year(s); surveys with no declared date are hidden once a year is set">Year range</label>
+      <span class="disc-years" id="yearRangeHead">Year range</span>
       <div class="disc-years-in">
         <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
         <span>-</span>
@@ -938,6 +939,11 @@
         <button type="button" data-layout="compact">Compact</button>
       </div>
       <button type="button" id="clearFilters" class="disc-clear">Clear filters</button>
+      <!-- The year filter's own rule, restored as visible copy where the rail used to carry it. A set
+           year hides every undated survey, which is a SILENT exclusion; a title attribute states it only
+           to a reader with a mouse. Last child of the bar and full-width, so it wraps onto its own line
+           without breaking the controls' row (and #recentStrip stays the bar's next sibling). -->
+      <div class="fieldnote disc-yearnote" id="yearRangeNote">Filters on each survey's declared acquisition year(s); surveys with no declared date are hidden once a year is set.</div>
     </div>
     <!-- C4 (brief 9, Option A): the recently-added strip is one wrapping line and sits BELOW the
          discovery controls, so the controls open the view and the strip reads as a shortcut into the

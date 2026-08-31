@@ -1712,6 +1712,24 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const yearHead = doc.getElementById("yearRangeHead");
   // C1 (owner R2): the corpus-range suffix takes the SPACED HYPHEN, like every other rendered range.
   ok(yearHead && yearHead.textContent === "Year range (2010 - 2019)", "Year range label should append the corpus range with a spaced hyphen, got: " + (yearHead && yearHead.textContent));
+  // C6 (fix round): the promotion must not cost the control what the rail copy gave it. A <label> with
+  // no `for` and no wrapped control labels NOTHING - it only claims to - and the two inputs carry their
+  // own aria-labels, so the honest markup is a plain element.
+  const _lblFor = yearHead.tagName === "LABEL" ? yearHead.getAttribute("for") : null;
+  ok(yearHead.tagName !== "LABEL" ||
+     (_lblFor && doc.getElementById(_lblFor)) || yearHead.contains(yearFrom) || yearHead.contains(yearTo),
+    "C6: #yearRangeHead is a <label> with no `for` and no wrapped control, so it labels nothing; " +
+    "use a plain element or give it a real association. tagName=" + yearHead.tagName +
+    " for=" + JSON.stringify(_lblFor));
+  // ...and the rule this filter runs on must be READABLE. A set year hides every undated survey, which
+  // is a silent exclusion; the rail said so in visible copy, and the promotion left it only in a title
+  // attribute, which is unreachable by keyboard and on touch.
+  const yearNote = doc.getElementById("yearRangeNote");
+  ok(yearNote && /surveys with no declared date are hidden once a year is set/.test(yearNote.textContent),
+    "C6: the undated-survey rule must be visible copy beside the control, not a title attribute; got " +
+    JSON.stringify(yearNote && yearNote.textContent));
+  ok(yearNote && doc.getElementById("discoveryControls").contains(yearNote),
+    "C6: the year-range note belongs in the discovery bar, beside the control it explains");
   yearFrom.value = "2015"; fire(yearFrom, "input");
   ok(A.visSurveys().includes("Beta Survey"), "year filter wrongly excluded Beta Survey (within range)");
   ok(!A.visSurveys().includes("Alpha Survey"), "year filter did not exclude Alpha Survey (ended before 2015)");
