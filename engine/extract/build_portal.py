@@ -2258,7 +2258,9 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                 # `stations_dropped` answers "which stations are not here", alongside every other
                 # drop; `source_parse_failures` answers "which FILE, and what did the reader say" -
                 # the honest twin of source_parse_fallbacks, which records the files a normalised
-                # reparse rescued. Also raised as a counted survey warning below.
+                # reparse rescued. The stations_dropped row is what raises the survey warning, via
+                # the per-drop echo every drop already goes through, so one lost station is counted
+                # once however many ledgers name it.
                 print(f"  PARSE FAIL {p.name}: {e}", file=sys.stderr)
                 if report is not None:
                     _why = f"source file unreadable by mt_metadata: {type(e).__name__}: {e}"
@@ -5767,13 +5769,12 @@ def _main_build(argv=None):
         # same discipline as xml_failures and the integrity gate. These stations parsed only from a
         # normalised TEMPORARY copy, so a curator should know the custodian's file trips a reader
         # defect -- while the bytes AusMT serves for them are still the custodian's, unmodified.
+        # NO separate counted warning for these: the per-drop echo above already raises one warning
+        # per stations_dropped row, and a parse failure now writes such a row. A second warning here
+        # counted one lost station twice (measured on the current corpus: 68 warnings became 70 for
+        # ONE newly-recorded drop). The typed rows below carry the file and the reader's own error,
+        # which is what the echo cannot say.
         _parse_failure_rows = list(_gate_report.get("parse_failures", []))
-        if _parse_failure_rows:
-            _survey_warnings.append(
-                f"mt_metadata could not read {len(_parse_failure_rows)} source file(s) at all and "
-                f"no normalised reparse rescued them; each is a DROPPED station "
-                f"[{', '.join(_row['file'] for _row in _parse_failure_rows[:8])}"
-                f"{', ...' if len(_parse_failure_rows) > 8 else ''}]")
         _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
         if _parse_fallback_rows:
             # Compact defect clause: the row carries the full reason; the counted warning names the

@@ -83,14 +83,17 @@ def test_the_failure_carries_the_file_and_the_readers_own_error(tmp_path):
     assert ":" in rows[0]["error"], "the error must name its exception class"
 
 
-def test_the_failure_is_also_a_counted_survey_warning(tmp_path):
-    """Same discipline as the fallback ledger beside it: a green build must not be able to hide a
-    dropped station behind a key nobody reads."""
+def test_one_lost_station_raises_exactly_one_warning(tmp_path):
+    """A green build must not be able to hide a dropped station, and must not count it twice
+    either. The drop goes through the per-drop echo every stations_dropped row already goes
+    through, so the warning comes from there and the typed ledger adds none of its own. Pinned
+    because the first version of this change raised a second aggregate warning beside the echo,
+    which the framing build pair caught as 68 survey warnings becoming 70 for one lost station."""
     _survey(tmp_path)
     entry = _build(tmp_path)
-    assert any("could not read 1 source file(s) at all" in w for w in entry["warnings"]), \
-        entry["warnings"]
-    assert any("unreadable.edi" in w for w in entry["warnings"]), entry["warnings"]
+    named = [w for w in entry["warnings"] if "unreadable" in w]
+    assert len(named) == 1, named
+    assert "unreadable by mt_metadata" in named[0], named[0]
 
 
 def test_a_survey_whose_files_all_read_reports_no_failures(tmp_path):
