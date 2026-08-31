@@ -21,9 +21,11 @@ that file. These pins hold that arrangement:
     geometry existing anywhere.
   * the typography block records the ruling itself: the web/SVG wordmark renders in the site's system
     UI stack, and the bundled face is a DETERMINISTIC RASTER SUBSTITUTE, never the AusMT typeface.
-  * the bundled face ships its OFL text and a provenance note, and no served page references it.
+  * the bundled face ships its OFL text and a provenance note whose recorded digests are CHECKED
+    against the bytes beside them, so the note's own replacement procedure enforces itself.
   * gen_brand.py --check is green on the committed tree (the drift gate, mirroring gen_config).
 """
+import hashlib
 import json
 import re
 import subprocess
@@ -168,6 +170,40 @@ def test_the_bundled_face_ships_its_licence_and_provenance_and_no_page_fetches_i
         text = page.read_text(encoding="utf-8").lower()
         assert stem not in text and "brand_font" not in text, \
             f"{page.name} references the generator-only face; it is never served to a browser"
+
+
+def test_the_recorded_digests_are_the_digests_of_the_bundled_bytes():
+    """The provenance note is only worth its ink if the numbers in it describe the files beside it.
+    The pin above checks the note SAYS sha256; this one checks it says the RIGHT one, for the face
+    and for the licence text, plus the recorded byte count.
+
+    FAILS IF a face is swapped without updating the table, or the table is updated without swapping
+    the face. Either way the recorded provenance would be describing bytes that are not there, which
+    is the one thing a provenance note must never do. It also makes the note's own "Replacing it"
+    procedure self-enforcing rather than a request."""
+    face = sorted(FONT_DIR.glob("*.ttf"))[0]
+    prov = (FONT_DIR / "PROVENANCE.md").read_text(encoding="utf-8")
+
+    def recorded(label):
+        m = re.search(rf"^\|\s*{label}\s*\|(.*)$", prov, flags=re.M)
+        assert m, f"the provenance table must carry a {label!r} row"
+        return m.group(1)
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    bundled = re.search(r"`([0-9a-f]{64})`", recorded("Bundled sha256"))
+    assert bundled and bundled.group(1) == digest(face), (
+        f"PROVENANCE.md records a bundled sha256 that is not {face.name}'s: recorded "
+        f"{bundled and bundled.group(1)}, actual {digest(face)}")
+    licence = re.search(r"`([0-9a-f]{64})`", recorded("Licence file"))
+    assert licence and licence.group(1) == digest(FONT_DIR / "OFL.txt"), (
+        f"PROVENANCE.md records a licence sha256 that is not OFL.txt's: recorded "
+        f"{licence and licence.group(1)}, actual {digest(FONT_DIR / 'OFL.txt')}")
+    size = re.search(r"([\d,]+) bytes", recorded("Bundled size"))
+    assert size and int(size.group(1).replace(",", "")) == face.stat().st_size, (
+        f"PROVENANCE.md records {size and size.group(1)} bytes for {face.name}, which is "
+        f"{face.stat().st_size} bytes on disk")
 
 
 def test_gen_brand_check_is_green_on_the_committed_tree():

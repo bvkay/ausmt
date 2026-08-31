@@ -35,8 +35,11 @@ PAGES_PY = REPO / "engine" / "extract" / "_pages.py"
 
 ICONS = {"ausmt-icon-180.png": 180, "ausmt-icon-192.png": 192, "ausmt-icon-512.png": 512}
 # The static portal documents that carry the site chrome. 404.html is deliberately not in scope: it
-# is a bare error document with no header, and the contract names these four.
-CHROME_PAGES = ("index.html", "about.html", "add-survey.html", "releases.html")
+# is a bare error document with no header. brand.html is here because E5 created it in this same
+# lane, shipping both icon links; it was not in the contract's E4 list only because it did not exist
+# when that list was written, and leaving it out would mean the one page the lane added is the one
+# page whose icon links nothing holds.
+CHROME_PAGES = ("index.html", "about.html", "add-survey.html", "brand.html", "releases.html")
 
 
 def _brand():

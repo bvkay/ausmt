@@ -1,8 +1,8 @@
 """Where the static pages' chrome actually points (findability lane, index pages).
 
-The three static portal pages (about, releases, add-survey) carry the same header as index.html so
-the chrome reads identically across the site. Their LINKS did not follow: every primary nav item
-pointed at bare index.html, which meant
+The static portal pages (about, releases, add-survey, and brand since the brand-assets lane) carry
+the same header as index.html so the chrome reads identically across the site. Their LINKS did not
+follow: every primary nav item pointed at bare index.html, which meant
 
   * Surveys and Collections both landed on the Map - four header items that silently
     mis-navigated, documented as deliberate in about.html's own source comment because no route
@@ -26,10 +26,13 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = "https://ausmt.auscope.org.au"
 
 # page -> its canonical path, the URL a crawler must be told is the one true address for it.
+# brand.html joined them in the brand-assets lane: it is substantive, linked from About and
+# advertised in sitemap.xml, so it answers to the same chrome rules as the other three.
 _STATIC_PAGES = {
     "about.html": f"{BASE}/about.html",
     "releases.html": f"{BASE}/releases.html",
     "add-survey.html": f"{BASE}/add-survey.html",
+    "brand.html": f"{BASE}/brand.html",
 }
 
 
