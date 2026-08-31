@@ -3113,17 +3113,21 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // screen pack in five and then six columns of cards too narrow to read; and .cardgrid was the ONLY
   // uncapped grid on the view - .discovery and .collfeature-grid already cap at 1500px - so at 2560px
   // the cards ran a metre wider than the controls that filter them, and the bar no longer looked like it
-  // belonged to the grid. A 360px floor under a 1500px cap yields exactly four columns at the cap
-  // (4*360 + 3*14 gap = 1482 <= 1500; a fifth would need 1856) and never more, at any width.
+  // belonged to the grid. A 352px floor under a 1500px cap yields exactly four columns at the cap
+  // (4*352 + 3*14 gap = 1450 <= 1500; a fifth would need 1816) and never more, at any width; the
+  // floor sits low enough that a 1500px viewport (grid content 1460px after the view's 20px padding)
+  // fits four as well, not just the capped ultrawide case. Four-across is the ceiling by ruling: a
+  // fifth column on ultrawides would need its own ruling, not a lower floor here.
   // E3 above pins class names only; jsdom resolves declared class CSS through getComputedStyle with no
   // layout engine, so the cap and the floor are pinned as the CSS contract they are.
   const _gridCss = win.getComputedStyle(cardGridEl);
   ok(_gridCss.maxWidth === "1500px",
     "C3: .cardgrid must cap at 1500px so the grid never outruns the discovery bar above it, got maxWidth=" +
     JSON.stringify(_gridCss.maxWidth));
-  ok(/minmax\(\s*min\(\s*360px\s*,\s*100%\s*\)\s*,\s*1fr\s*\)/.test(_gridCss.gridTemplateColumns),
-    "C3: .cardgrid must lay out on a 360px minimum column so the cap yields four across, and that floor " +
-    "must be min(360px,100%) - a bare 360px cannot shrink, so a 375px phone scrolled sideways. Got " +
+  ok(/minmax\(\s*min\(\s*352px\s*,\s*100%\s*\)\s*,\s*1fr\s*\)/.test(_gridCss.gridTemplateColumns),
+    "C3: .cardgrid must lay out on a 352px minimum column so a 1500px viewport and the 1500px cap both " +
+    "yield four across, and that floor must be min(352px,100%) - a bare minimum cannot shrink, so a " +
+    "375px phone would scroll sideways. Got " +
     JSON.stringify(_gridCss.gridTemplateColumns));
   // The cap is only coherent if it MATCHES the bar's; a grid capped at some other width would still be
   // a grid that does not line up with its controls.
