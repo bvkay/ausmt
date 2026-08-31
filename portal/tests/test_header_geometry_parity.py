@@ -87,6 +87,99 @@ def test_the_two_headers_carry_identical_zone_rules():
             f"  engine/extract/_pages.py   {pages[zone]!r}")
 
 
+# --------------------------------------------------------------------------- the nav itself
+#
+# The zone rules alone were proven insufficient at review: with both centres geometrically
+# centred, the two navs still resolved DIFFERENT intrinsic widths (146px tabs on the pages vs
+# 112px on the SPA, a 47.5px x offset at 1280px), because three inputs the zone rules never see
+# differed between the surfaces: the box model (the SPA's universal border-box vs the pages'
+# unreset content-box, which turns the shared min-width:112px into 146 rendered pixels), the nav
+# container's wrap mode, and the font stack the labels measure in. A tab's rendered width is a
+# function of ALL of them, so every one is pinned pairwise here.
+
+# The geometry-bearing declarations of a tab box. Colours, hover and cursor are surface-local
+# and deliberately NOT compared.
+TAB_GEOMETRY = ("flex:1;", "min-width:112px", "min-height:40px", "padding:0 16px",
+                "font-size:14px", "font-weight:600", "border:1px solid ")
+
+
+def _rule_body(text, pattern, where):
+    bodies = re.findall(pattern, text)
+    assert len(bodies) == 1, f"{where}: expected exactly one match for {pattern!r}, got {len(bodies)}"
+    # The SPA states some rules across several source lines; fold the line breaks away so the
+    # declaration list compares as one string.
+    return re.sub(r"\s*\n\s*", "", bodies[0])
+
+
+def test_the_two_navs_carry_identical_container_rules():
+    """The nav CONTAINER rule, character-identical across the surfaces. FAILS IF the wrap modes
+    (or the gap, or the display) drift apart: a nowrap container and a wrap container hand
+    zero-basis flex children different resolved widths, which is exactly the 47.5px tab-group
+    offset the C9 review measured between the SPA and the pages at 1280px."""
+    spa = _rule_body(INDEX.read_text(encoding="utf-8"), r"(?m)^\s*nav\{([^}]*)\}",
+                     "portal/index.html")
+    pages = _rule_body(PAGES_PY.read_text(encoding="utf-8"),
+                       r"header\.site nav\{([^}]*)\}", "engine/extract/_pages.py")
+    assert spa == pages, (
+        "the nav container rules have drifted between the two headers:\n"
+        f"  portal/index.html          {spa!r}\n"
+        f"  engine/extract/_pages.py   {pages!r}")
+
+
+def test_every_tab_box_shares_every_geometry_input():
+    """Each tab rule (the SPA's nav a AND nav button, the pages' nav a) carries the full set of
+    geometry-bearing declarations, so all three kinds of tab render the same box. FAILS IF any
+    surface drops or alters one: the surfaces would size their tabs from different inputs and
+    the group's x would split by surface again."""
+    spa_text = INDEX.read_text(encoding="utf-8")
+    pages_text = PAGES_PY.read_text(encoding="utf-8")
+    rules = {
+        "portal/index.html nav a": _rule_body(spa_text, r"(?m)^\s*nav a\{([^}]*)\}",
+                                              "portal/index.html"),
+        "portal/index.html nav button": _rule_body(spa_text, r"(?m)^\s*nav button\{([^}]*)\}",
+                                                   "portal/index.html"),
+        "engine/extract/_pages.py nav a": _rule_body(pages_text,
+                                                     r"header\.site nav a\{([^}]*)\}",
+                                                     "engine/extract/_pages.py"),
+    }
+    for where, body in rules.items():
+        for decl in TAB_GEOMETRY:
+            assert decl in body, f"{where}: tab rule must carry {decl!r}, got {body!r}"
+
+
+def test_the_two_headers_share_one_box_model():
+    """min-width:112px means one rendered width only if both surfaces measure it in the same box
+    model. The SPA resets everything to border-box; the pages sheet deliberately has no universal
+    reset, so its header carries its own scoped one. FAILS IF either goes missing: content-box
+    turns the same declarations into 146px tabs (112 + 32 padding + 2 border), the dominant term
+    of the measured 47.5px offset."""
+    assert "*{box-sizing:border-box" in INDEX.read_text(encoding="utf-8"), (
+        "portal/index.html: the universal border-box reset is gone; the SPA tab boxes would "
+        "resolve min-width:112px in a different box model than the pages'")
+    assert "header.site,header.site *{box-sizing:border-box}" in PAGES_PY.read_text(
+        encoding="utf-8"), (
+        "engine/extract/_pages.py: the header-scoped border-box rule is gone; the pages tab "
+        "boxes would render 146px against the SPA's 112px")
+
+
+def test_the_two_headers_measure_text_in_one_font_stack():
+    """The tab and control labels must measure identically on both surfaces, so the header on
+    the pages declares the SPA's own --sans stack. FAILS IF either side's stack moves without
+    the other: About and Contribute rendered ~2.4 and ~4.6px wider on the SPA under system-ui
+    than the pages' -apple-system-first stack, a ~3.5px centre-group offset on its own."""
+    spa = re.findall(r"--sans:([^;}]*)[;}]", INDEX.read_text(encoding="utf-8"))
+    assert len(spa) == 1, f"portal/index.html: expected exactly one --sans, got {len(spa)}"
+    pages_header = _rule_body(PAGES_PY.read_text(encoding="utf-8"),
+                              r"(?m)^\s*header\.site\{([^}]*)\}", "engine/extract/_pages.py")
+    m = re.search(r"font-family:([^;}]*)", pages_header)
+    assert m, ("engine/extract/_pages.py: header.site declares no font-family; the pages "
+               "header would measure its labels in the page body's stack instead of the SPA's")
+    assert m.group(1) == spa[0], (
+        "the header font stacks have drifted between the two surfaces:\n"
+        f"  portal/index.html --sans           {spa[0]!r}\n"
+        f"  engine/extract/_pages.py header.site {m.group(1)!r}")
+
+
 def test_the_narrow_width_stacking_still_wins_under_760px():
     """The wrap behaviour the zero-basis rule must not cost. FAILS IF either surface loses the
     760px full-width stacking override, or if it stops coming AFTER the zone rules (the selectors
