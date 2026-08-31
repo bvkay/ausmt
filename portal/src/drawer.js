@@ -1094,7 +1094,7 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   const pmin=Math.min(...ss.map(s=>s.pmin)),pmax=Math.max(...ss.map(s=>s.pmax));
   const mixbar=Object.entries(mix).map(([ty,n])=>`<div style="width:${100*n/ss.length}%;background:${TYPE_COL[ty]}" title="${esc(ty)}: ${n}"></div>`).join("");
   const yearTxt=acqYearText(m);
-  return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}</div>`+
+  return `<div class="scard"><div class="scardhead"><h3><a href="/surveys/${escAttr(m.slug||sv)}" title="Open survey">${esc(sv)}</a></h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}</div>`+
    surveyLocator(ss)+
    `<div class="mixbar">${mixbar}</div>`+
    `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))} s</b></div>`+
@@ -1421,7 +1421,7 @@ function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
   return arr;}
 // Compact/list layout row (E3): a single line — title, org, acquisition year, station count, licence badge.
 function surveyRow(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};const yearTxt=acqYearText(m);
-  return `<div class="srow"><button class="srow-title" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</button>`+
+  return `<div class="srow"><a class="srow-title" href="/surveys/${escAttr(m.slug||sv)}" title="Open survey">${esc(sv)}</a>`+
     `<span class="srow-org">${esc(m.org||"-")}</span>`+
     `<span class="srow-year">${yearTxt||"-"}</span>`+
     `<span class="srow-stn">${ss.length} station${ss.length===1?"":"s"}</span>`+
@@ -1859,7 +1859,7 @@ function openCollectionPage(cid){
     const tc={};sub.forEach(s=>{if(s.type)tc[s.type]=(tc[s.type]||0)+1;});
     const pmn=Math.min(...sub.map(s=>s.pmin).filter(v=>v!=null)),pmx=Math.max(...sub.map(s=>s.pmax).filter(v=>v!=null));
     const types=Object.keys(tc).sort().map(t=>`${esc(t)} ${tc[t]}`).join(" · ")||"-";
-    return `<tr><td><a href="#" data-act="story" data-survey="${escAttr(sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"-")}</div></td>`+
+    return `<tr><td><a href="/surveys/${escAttr(m.slug||sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"-")}</div></td>`+
       `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtRange(fmtPeriod(pmn),fmtPeriod(pmx))+" s":"-"}</td></tr>`;
   }).join("");
   const v=document.getElementById("collectionview");
@@ -1947,7 +1947,6 @@ document.addEventListener("click",e=>{
   const act=el.dataset.act,sv=el.dataset.survey,doi=el.dataset.doi;
   if(act==="tab"){e.preventDefault();selectDrawerTab(el.dataset.tab);}
   else if(act==="expand"){e.preventDefault();if(typeof openStationModal==="function"&&_curTf&&_curStation)openStationModal(stationModalHeader(_curStation,SMETA[_curStation.survey]||{}),_curTf);}
-  else if(act==="story"){e.preventDefault();openSurvey(sv);}
   else if(act==="collection"){e.preventDefault();location.hash="#/collection/"+encodeURIComponent(el.dataset.coll);}
   else if(act==="collidx"){e.preventDefault();if(location.hash.indexOf("#/collection/")===0)history.replaceState(null,"",location.pathname+location.search);setView("collections");}
   else if(act==="collmap"){e.preventDefault();if(typeof viewCollectionOnMap==="function")viewCollectionOnMap(el.dataset.coll);}   // E6: switch to map + fitBounds to the collection

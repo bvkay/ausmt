@@ -132,7 +132,7 @@ function recentlyAdded(limit){
 // it is not dropped: it rides each link as its title rather than spending a second line.
 function recentlyAddedHtml(entries){
   if(!entries.length)return"";
-  const items=entries.map(e=>`<a href="#/survey/${encodeURIComponent(e.slug)}" title="${escAttr("Latest release "+e.date)}">${esc(e.sv)}</a>`).join(" · ");
+  const items=entries.map(e=>`<a href="/surveys/${encodeURIComponent(e.slug)}" title="${escAttr("Latest release "+e.date)}">${esc(e.sv)}</a>`).join(" · ");
   return `<span class="ra-label">Recently added:</span> ${items}`;
 }
 // ONE surface only (the surveys-view #recentStrip). The map-rail #recentSideSection/#recentSide was

@@ -502,7 +502,6 @@ _CSS = """
   footer{margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0}
   .frow{display:flex;flex-wrap:wrap;gap:.3rem 1.2rem;justify-content:space-between;margin:.3rem 0}
   .flinks{display:flex;gap:1.1rem}
-  .fbuild{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;color:#8FA3B0;opacity:.85}
 """
 
 
@@ -613,19 +612,14 @@ def _site_footer(machine=None, build=None) -> str:
     record lives in MTCAT rather than advertising a surface that does not exist. The arrow is the
     leaves-this-page one; these links hand over a JSON document, not another page of the site.
 
-    Row 2 carries the attribution, the licence note, and the build identity as PRINTED text. It is
-    never a link: build_provenance.json is de-documented per the public-surface audit, and the deep
-    per-record provenance is already one hop away through row 1's own link. A tier-3 /build page is
-    the deliberate path if demand for more ever appears."""
+    Row 2 carries the attribution and the licence note. The build identity was removed from it
+    (owner ruling 2026-08-31): the commit sha spoke to operators, not to the readers a public
+    footer is for, and build_provenance.json still carries it for anyone who needs it. The `build`
+    argument is kept so callers do not change and a future /build page has its input."""
     left = ""
     if machine:
         label, href = machine
         left = f'<a href="{_e(href)}">{_e(label)} {_ARROW_OUT}</a>'
-    stamp = ""
-    if build and build.get("engine_commit"):
-        when = str(build.get("generated") or "")[:10]
-        stamp = (f'<span class="fbuild">Build {_e(build["engine_commit"])}'
-                 + (f" - {_e(when)}" if when else "") + "</span>")
     return ("\n<footer>\n"
             f'<div class="frow"><div>{left}</div>'
             '<div class="flinks"><a href="/releases.html">Releases</a>'
@@ -633,7 +627,7 @@ def _site_footer(machine=None, build=None) -> str:
             '<div class="frow"><span>&#169; 2026 AuScope and AusMT contributors - an AuScope '
             "service</span>"
             "<span>Data licences vary by survey; each download carries its licence.</span>"
-            f"{stamp}</div>\n"
+            "</div>\n"
             "</footer>\n")
 
 
@@ -1752,7 +1746,6 @@ def surveys_index_page(*, rows, base, build=None) -> str:
         "<h1>Surveys</h1>\n"
         f'<p class="idxsum">{summary}</p>\n'
         f'<p class="idxlede">{_SURVEYS_LEDE}</p>\n'
-        f'<p class="idxact"><a href="/">Explore on the map {_ARROW_FWD}</a></p>\n'
         f"{defs}\n"
         f'<div class="idxlist">{"".join(cards)}</div>\n')
     return _shell(title="Surveys - magnetotelluric survey data - AusMT",
@@ -1798,7 +1791,6 @@ def collections_index_page(*, rows, base, build=None) -> str:
         f'<p class="crumb"><a href="/">AusMT</a> / collections</p>\n'
         "<h1>Collections</h1>\n"
         f'<p class="idxlede">{_COLLECTIONS_LEDE}</p>\n'
-        f'<p class="idxact"><a href="/surveys">Browse every survey {_ARROW_FWD}</a></p>\n'
         f"{defs}\n"
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
     return _shell(title="Collections - magnetotelluric survey data - AusMT",

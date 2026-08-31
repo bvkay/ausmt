@@ -2178,8 +2178,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!recents.some(e => e.sv === "Gamma Survey" || e.sv === "Delta Survey"), "recentlyAdded() must omit the undated Gamma/Delta surveys");
   const recentStrip = doc.getElementById("recentStrip");
   ok(recentStrip && /Recently added/.test(recentStrip.innerHTML), "#recentStrip did not render a 'Recently added' label");
-  ok(recentStrip.innerHTML.indexOf("#/survey/" + recents[0].slug) >= 0,
-    "#recentStrip did not link the recent survey by its #/survey/<slug> route");
+  // SURVEY LINKS: every survey link in the SPA targets that survey's own published static page, never
+  // the right-hand drawer. The strip's link is therefore a path URL, and the fragment form is pinned
+  // ABSENT so a revert to the drawer route turns this red rather than passing on a substring.
+  const _raLink = recentStrip.querySelector("a");
+  ok(_raLink && _raLink.getAttribute("href") === "/surveys/" + recents[0].slug,
+    "#recentStrip must link the recent survey by its published /surveys/<slug> page, got href=" +
+    JSON.stringify(_raLink && _raLink.getAttribute("href")));
+  ok(recentStrip.innerHTML.indexOf("#/survey/") < 0,
+    "#recentStrip must NOT link the retired #/survey/<slug> drawer route");
   ok(!recentStrip.classList.contains("hidden"), "#recentStrip must be shown when the window has a survey");
   // C4 (brief 9, Option A): the strip is a CONCISE HORIZONTAL LINE, not a block. It was a heading over a
   // column of rows in a full-width container, which on a wide screen was a large sparse box of mostly
@@ -3020,6 +3027,18 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cardA1.indexOf('class="desc') < 0, "C2: the abstract block must NOT be on the workspace card");
   ok((cardA1.match(/data-act="select"/g) || []).length === 1 && (cardA1.match(/View survey/g) || []).length === 1,
     "C2: the workspace card keeps EXACTLY its two actions, one View survey and one Download");
+  // SURVEY LINKS: the card TITLE is a real anchor to the survey's published static page. A heading that
+  // a delegated handler turns into a JS navigation cannot be middle-clicked, opened in a new tab, copied,
+  // or previewed in the status bar; a real href hands all four back to the browser. Pinned on the ELEMENT
+  // rather than on a substring, so a revert to the JS-navigated heading fails here.
+  const _cardBox = doc.createElement("div"); _cardBox.innerHTML = cardA1;
+  const _cardTitle = _cardBox.querySelector(".scardhead h3 a");
+  ok(_cardTitle && _cardTitle.getAttribute("href") === "/surveys/alpha",
+    "survey links: the card title must be an anchor to /surveys/alpha, got href=" +
+    JSON.stringify(_cardTitle && _cardTitle.getAttribute("href")));
+  ok(_cardTitle && _cardTitle.textContent === "Alpha Survey",
+    "survey links: the card title anchor must keep the survey name as its visible text, got " +
+    JSON.stringify(_cardTitle && _cardTitle.textContent));
   // the removed renderers are NOT deleted from the codebase — they still render in the survey detail
   // (identifiersHtml + apa are exercised by section P above and the E2 rollup below).
 
@@ -3105,6 +3124,18 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cardGridEl.querySelectorAll(".srow").length === 4 && cardGridEl.querySelectorAll(".scard").length === 0,
     "E3: compact layout must render single-line .srow rows (no .scard), got srow=" + cardGridEl.querySelectorAll(".srow").length);
   ok(cardGridEl.querySelector(".srow .srow-lic .badge") != null, "E3: a compact row must carry the licence badge");
+  // SURVEY LINKS: the compact row's title is a real anchor to the published static page. The TAG is
+  // pinned as well as the href, because a button cannot be middle-clicked, opened in a new tab or copied
+  // however its click is wired, which is the whole reason the element changed.
+  const _rowTitle = cardGridEl.querySelector(".srow .srow-title");
+  ok(_rowTitle && _rowTitle.tagName === "A",
+    "survey links: the compact row title must be an anchor, got <" +
+    (_rowTitle && _rowTitle.tagName.toLowerCase()) + ">");
+  ok(_rowTitle && /^\/surveys\/(alpha|beta|gamma|delta)$/.test(_rowTitle.getAttribute("href") || ""),
+    "survey links: the compact row title must link /surveys/<slug>, got href=" +
+    JSON.stringify(_rowTitle && _rowTitle.getAttribute("href")));
+  ok(cardGridEl.innerHTML.indexOf("#/survey/") < 0 && cardGridEl.innerHTML.indexOf('data-act="story"') < 0,
+    "survey links: no compact row may reach the drawer, by hash route or by story action");
   layoutSeg.querySelector('[data-layout="cards"]').click();
   ok(cardGridEl.className === "cardgrid" && cardGridEl.querySelectorAll(".scard").length === 4, "E3: toggling back to Cards did not restore the card grid");
 
@@ -3459,6 +3490,16 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cv.querySelector(".collnote") == null && cv.innerHTML.indexOf("no transfer functions of its own") < 0,
     "E: the detail-page .collnote explainer must be deleted");
   ok(cv.querySelector(".colltable") != null, "E: the member-survey table must still render on the detail page");
+  // SURVEY LINKS: a member row's survey link goes to that survey's published static page. href="#" with
+  // the navigation done in JS is the worst of both worlds: it looks like a link, but the browser has
+  // nothing to preview, copy or open in a tab.
+  const _memberLinks = [...cv.querySelectorAll(".colltable td a")];
+  ok(_memberLinks.length >= 2, "survey links: the member table must link every member survey, got " + _memberLinks.length);
+  ok(_memberLinks.every(a => /^\/surveys\/(alpha|beta)$/.test(a.getAttribute("href") || "")),
+    "survey links: every member link must target /surveys/<slug>, got " +
+    JSON.stringify(_memberLinks.map(a => a.getAttribute("href"))));
+  ok(cv.innerHTML.indexOf('data-act="story"') < 0 && cv.innerHTML.indexOf('href="#"') < 0,
+    "survey links: no member link may be a JS-navigated href=\"#\" back into the drawer");
   // C: the rail (+ resize handle) are hidden on the full-width collection detail page too.
   ok(doc.getElementById("filterPane").classList.contains("hidden") && doc.getElementById("resizer").classList.contains("hidden"),
     "C: the rail + resize handle must be hidden on the collection detail page");
