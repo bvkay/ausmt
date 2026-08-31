@@ -1702,7 +1702,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(yearTo.placeholder === "2019", "yearTo placeholder should hint the corpus max (2019), got: " + yearTo.placeholder);
   ok(yearFrom.min === "2010" && yearFrom.max === "2019", "yearFrom min/max attrs should be the corpus range, got: " + JSON.stringify([yearFrom.min, yearFrom.max]));
   const yearHead = doc.getElementById("yearRangeHead");
-  ok(yearHead && yearHead.textContent === "Year range (2010–2019)", "Year range label should append the corpus range, got: " + (yearHead && yearHead.textContent));
+  // C1 (owner R2): the corpus-range suffix takes the SPACED HYPHEN, like every other rendered range.
+  ok(yearHead && yearHead.textContent === "Year range (2010 - 2019)", "Year range label should append the corpus range with a spaced hyphen, got: " + (yearHead && yearHead.textContent));
   yearFrom.value = "2015"; fire(yearFrom, "input");
   ok(A.visSurveys().includes("Beta Survey"), "year filter wrongly excluded Beta Survey (within range)");
   ok(!A.visSurveys().includes("Alpha Survey"), "year filter did not exclude Alpha Survey (ended before 2015)");
@@ -3750,6 +3751,63 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "R6: an em dash (—) rendered somewhere in the app: " +
     JSON.stringify((_emSweep.match(/.{0,30}—.{0,30}/) || [""])[0]));
   doc.getElementById("drawer").classList.remove("open");
+
+  // C1. DISPLAY GRAMMAR: the workspace prints a period, a range and a licence the way the entity pages
+  // do (owner rulings R1/R2/R3). The helpers' own parity with the engine's Python leaf is held by
+  // tests/display_grammar.test.js; THIS section pins that the rendered slots actually use them, which is
+  // the half a pure-function test cannot see. Fixture values: Alpha is 2010-2012 with periods
+  // 0.01 - 1000 s, so the pins below are exact strings, not patterns.
+  //
+  // (a) THE CARD. The old form was "0.010–1,000s": an en dash, a trailing zero the two-significant-figure
+  // rule strips, and no space before the unit.
+  A.setSMETA("Alpha Survey", { lic: "CC-BY-4.0" });
+  const c1card = A.cardHtml("Alpha Survey");
+  ok(c1card.indexOf("0.01 - 1,000 s") >= 0,
+    "C1/R1+R2: the card period range must read '0.01 - 1,000 s', got: " +
+    JSON.stringify((c1card.match(/periods[^<]*<b>[^<]*<\/b>/) || [""])[0]));
+  ok(c1card.indexOf("0.010") < 0, "C1/R1: the card must not print a trailing zero the significant-figure rule strips");
+  ok(c1card.indexOf("2010 - 2012") >= 0,
+    "C1/R2: the card acquisition range must take the spaced hyphen, got: " +
+    JSON.stringify((c1card.match(/acquired[^<]*<b>[^<]*<\/b>/) || [""])[0]));
+  // (b) LICENCE CHROME reads human; the SPDX identifier is the machine's name and is NOT what chrome shows.
+  ok(c1card.indexOf("CC BY 4.0") >= 0, "C1/R3: the card licence badge must read the human form 'CC BY 4.0'");
+  ok(c1card.indexOf("CC-BY-4.0") < 0, "C1/R3: the SPDX identifier must not appear in card chrome");
+  // ...while every MACHINE slot keeps the identifier untouched. This is the pin that stops R3 from being
+  // "read nicer" at the cost of an export a reference manager or a GIS reads as a different licence.
+  const c1gj = A.geoFC([A.station("A1")]);
+  ok(c1gj.features[0].properties.license === "CC-BY-4.0",
+    "C1/R3: the GeoJSON export must keep the SPDX identifier, got: " + JSON.stringify(c1gj.features[0].properties.license));
+  // (c) THE STATION DRAWER's Transfer-function period row, and (d) the SURVEY drawer's period coverage.
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  const c1stn = doc.getElementById("drawer").textContent;
+  ok(c1stn.indexOf("0.01 - 1,000 s") >= 0,
+    "C1/R2: the station drawer's periods row must read '0.01 - 1,000 s', got: " +
+    JSON.stringify((c1stn.match(/periods.{0,40}/) || [""])[0]));
+  A.openSurvey("Alpha Survey");
+  const c1sv = doc.getElementById("drawer").textContent;
+  ok(c1sv.indexOf("0.01 - 1,000 s") >= 0,
+    "C1/R2: the survey drawer's period coverage must read '0.01 - 1,000 s', got: " +
+    JSON.stringify((c1sv.match(/period coverage.{0,40}/) || [""])[0]));
+  ok(c1sv.indexOf("CC BY 4.0") >= 0, "C1/R3: the survey drawer's licence row must read the human form");
+  // (e) THE COLLECTION DETAIL: the rollup stat and the per-member table row.
+  win.location.hash = "#/collection/auslamp"; A.routeFromHash();
+  const c1coll = doc.getElementById("collectionview").textContent;
+  ok(c1coll.indexOf("0.01 - 1,000 s") >= 0,
+    "C1/R2: the collection detail's period slots must take the spaced hyphen, got: " +
+    JSON.stringify((c1coll.match(/period coverage.{0,40}/) || [""])[0]));
+  // (f) THE SWEEP that catches a range slot this list forgot: NO rendered text anywhere may join two
+  // digits with an en or em dash. Deliberately narrower than a whole-glyph ban - the SPA keeps its en
+  // dash for prose and for absent-value markers (F1 4.7); only a NUMERIC RANGE is converted.
+  win.location.hash = ""; A.routeFromHash();
+  A.setView("surveys"); A.renderCards();
+  A.openSurvey("Alpha Survey");
+  const c1sweep = (doc.body.textContent || "") + doc.getElementById("drawer").textContent;
+  ok(!/\d\s*[\u2013\u2014]\s*\d/.test(c1sweep),
+    "C1/R2: a numeric range still renders with a dash glyph: " +
+    JSON.stringify((c1sweep.match(/.{0,30}\d\s*[\u2013\u2014]\s*\d.{0,30}/) || [""])[0]));
+  A.setSMETA("Alpha Survey", { lic: null });
+  doc.getElementById("drawer").classList.remove("open");
+  A.setView("map");
 
   // QQ. DRAWER SCRIM (cleanup wave D): a dim backdrop behind the drawer on the Surveys / Collections views
   // (NEVER the map view, where the drawer sits side-by-side with the map). Clicking it closes the drawer.

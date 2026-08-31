@@ -777,7 +777,7 @@ function stationSummaryDetails(s,m,sc){
   // ("not recorded", "not stated in EDI") are claims about the source EDI. Those two wait.
   const sciGate=hydrGate("sci","processing details");
   const tf=_ssGroup("Transfer function",[
-    ["periods",`${fmtP(s.pmin)}–${fmtP(s.pmax)} s`],
+    ["periods",`${fmtRange(fmtPeriod(s.pmin),fmtPeriod(s.pmax))} s`],
     ["components",(esc(s.comps.split("").join(" + "))||"–")],
     ["tipper",s.comps.includes("T")?"yes":"no"],
     ["remote reference",sciGate||(sc[SC.rr]?"yes":"not recorded")]]);
@@ -812,7 +812,7 @@ function openStation(i,opts){
   const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
   if(!rehydrate)location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
   const azs=[],azPers=[];if(t[T.pt_az])t[T.pt_az].forEach((a,k)=>{if(a!=null&&t[T.pt_beta][k]!=null&&Math.abs(t[T.pt_beta][k])<5){azs.push(((a%180)+180)%180);const _pk=t[T.periods]&&t[T.periods][k];if(_pk!=null)azPers.push(_pk);}});
-  const _perTxt=azPers.length?` over ${fmtP(Math.min(...azPers))}–${fmtP(Math.max(...azPers))}s`:"";
+  const _perTxt=azPers.length?` over ${fmtRange(fmtPeriod(Math.min(...azPers)),fmtPeriod(Math.max(...azPers)))} s`:"";
   // Per-period 3-D screening threshold echoed from the build's own provenance (never hard-coded); when
   // build_provenance.json isn't loaded the degree figure is simply omitted rather than fabricated.
   const _bp=(typeof PROV!=="undefined"&&PROV&&PROV.parameters&&PROV.parameters.dimensionality)||{};const _betaThr=_bp.beta_per_period_deg;
@@ -834,10 +834,12 @@ function openStation(i,opts){
   // ---- UX6 Wave C: sticky header (identity + chips + primary actions) + tab strip -------------------
   const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}${TYPE_INK[s.type]?";color:"+TYPE_INK[s.type]:""}">${esc(s.type)}</span>`;
   const collChip=(m.collection&&m.collection.id)?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"";
-  // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if neither.
-  const yearTxt=m.dates?esc(m.dates):(m.year_start?esc(String(m.year_start))+(m.year_end&&m.year_end!==m.year_start?"–"+esc(String(m.year_end)):""):"");
+  // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if
+  // neither. This was a verbatim second copy of acqYearText, which is how the station chip could have
+  // kept an en-dash range while the card moved to the spaced hyphen; it now calls the one helper.
+  const yearTxt=acqYearText(m);
   const yearChip=yearTxt?`<span class="hchip">${yearTxt}</span>`:"";
-  const licBadge=badge(m.lic||"licence ?",licBadgeState(m.lic));
+  const licBadge=badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic));
   // UX8 (X4, owner ruling): Response is the default tab and Overview is gone (its facts fold into the
   // Response tab's "Station summary" collapsible). Four tabs active (Screening is commented out pending design review); Response first.
   // HIDDEN pending design review (owner 2026-07-22): screening surface not public-ready — restore by uncommenting the ["screening","Screening"] entry.
@@ -1084,7 +1086,7 @@ function cardDesc(m){
 // UX6 Wave E: a survey's declared acquisition window as display text — the dates string when present,
 // else the year_start(-end) range; "" when neither is declared (caller omits the field). Shared by the
 // slim survey card and the compact list row so both read the same value.
-function acqYearText(m){return m.dates?esc(m.dates):(m.year_start?esc(String(m.year_start))+(m.year_end&&m.year_end!==m.year_start?"–"+esc(String(m.year_end)):""):"");}
+function acqYearText(m){return m.dates?esc(m.dates):(m.year_start?(m.year_end&&m.year_end!==m.year_start?fmtRange(esc(String(m.year_start)),esc(String(m.year_end))):esc(String(m.year_start))):"");}
 // UX6 Wave E (E1): SLIM survey card. Field set is deliberately reduced to: title · organisation ·
 // collection chip · acquisition year · station count · data-type mixbar · period range · licence + DOI
 // badges · short description · two actions (View survey, Download). The heavier blocks that used to live
@@ -1101,8 +1103,8 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}</div>`+
    surveyLocator(ss)+
    `<div class="mixbar">${mixbar}</div>`+
-   `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtP(pmin)}–${fmtP(pmax)}s</b></div>`+
-   `<div class="badges">${badge(m.lic||"licence ?",licBadgeState(m.lic))}${badge("DOI",hasDatasetDoi(m)?"ok":"no")}</div>`+
+   `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))} s</b></div>`+
+   `<div class="badges">${badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic))}${badge("DOI",hasDatasetDoi(m)?"ok":"no")}</div>`+
    cardDesc(m)+
    `<div class="cardbtns"><a class="primary" href="/surveys/${escAttr(m.slug||sv)}">View survey →</a><button data-act="select" data-survey="${escAttr(sv)}">Download</button></div></div>`;}
 // Per-survey card locator (owner ruling 2026-08-28): the SAME fixed-Australia treatment as the
@@ -1412,7 +1414,7 @@ function surveyRow(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};cons
     `<span class="srow-org">${esc(m.org||"–")}</span>`+
     `<span class="srow-year">${yearTxt||"–"}</span>`+
     `<span class="srow-stn">${ss.length} station${ss.length===1?"":"s"}</span>`+
-    `<span class="srow-lic">${badge(m.lic||"licence ?",licBadgeState(m.lic))}</span></div>`;}
+    `<span class="srow-lic">${badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic))}</span></div>`;}
 function renderDiscovery(n){
   const cnt=document.getElementById("surveyCount");
   if(cnt)cnt.textContent=n+" survey"+(n===1?"":"s");
@@ -1541,14 +1543,14 @@ function surveySummary(ss,m){
   return `<div class="sechead">Survey summary <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(10-second view)</span></div><table class="meta">`+
     `<tr><td>stations</td><td>${ss.length}</td></tr>`+
     `<tr><td>data types</td><td>${esc(types)}</td></tr>`+
-    `<tr><td>period coverage</td><td>${isFinite(pmin)?fmtP(pmin)+" – "+fmtP(pmax)+" s":"–"}</td></tr>`+
+    `<tr><td>period coverage</td><td>${isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"–"}</td></tr>`+
     `<tr><td>tipper availability</td><td>${tipper} / ${ss.length} stations</td></tr>`+
     `<tr><td>remote reference</td><td>${sciGate||(rrKnown?`${rr} / ${rrKnown} stations`:"not recorded")}</td></tr>`+
     `<tr><td>instrumentation</td><td>${esc(m.instrument_model||"not recorded in source metadata")}</td></tr>`+
     `<tr><td>processing software</td><td>${sciGate||esc(software)}</td></tr>`+
     `<tr><td>acquisition</td><td>${esc(m.dates||"–")}</td></tr>`+
     `<tr><td>collection</td><td>${coll}</td></tr>`+
-    `<tr><td>licence / access</td><td>${esc(m.lic||"?")} · ${_accTxt}</td></tr>`+
+    `<tr><td>licence / access</td><td>${esc(licHuman(m.lic)||"?")} · ${_accTxt}</td></tr>`+
     `<tr><td>version</td><td>${esc(m.version||"–")}</td></tr>`+
     `</table>`;
 }
@@ -1835,7 +1837,7 @@ function openCollectionPage(cid){
     const pmn=Math.min(...sub.map(s=>s.pmin).filter(v=>v!=null)),pmx=Math.max(...sub.map(s=>s.pmax).filter(v=>v!=null));
     const types=Object.keys(tc).sort().map(t=>`${esc(t)} ${tc[t]}`).join(" · ")||"–";
     return `<tr><td><a href="#" data-act="story" data-survey="${escAttr(sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"–")}</div></td>`+
-      `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtP(pmn)+"–"+fmtP(pmx)+"s":"–"}</td></tr>`;
+      `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtRange(fmtPeriod(pmn),fmtPeriod(pmx))+" s":"–"}</td></tr>`;
   }).join("");
   const v=document.getElementById("collectionview");
   // Cleanup wave (E): a two-column HERO on wide screens; the abstract (+ the type/status/counts subline)
@@ -1854,7 +1856,7 @@ function openCollectionPage(cid){
      (ss.length?`<div class="collhero-aside">${collScatter(ss,720)}</div>`:"")+
    `</div>`+
    `<div class="cstats">`+stat("surveys",c.n_surveys)+stat("stations",c.n_stations)+
-     stat("period coverage",isFinite(pmin)?fmtP(pmin)+"–"+fmtP(pmax)+"s":"–")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
+     stat("period coverage",isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"–")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
    `<div class="csechead">Member surveys (${members.length})</div>`+
    `<table class="colltable"><thead><tr><th>Survey</th><th>Stations</th><th>Data&nbsp;types</th><th>Period&nbsp;range</th></tr></thead><tbody>${rows}</tbody></table>`;
   document.getElementById("map").style.display="none";

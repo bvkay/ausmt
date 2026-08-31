@@ -119,7 +119,57 @@ const TS_LEVELS=[
 const AUSMT_SELF={au:"AusMT contributors",yr:"2026",ti:"AusMT: curated station metadata, quality and provenance for Australian magnetotelluric transfer functions",ve:(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.version)||"",pb:"AusMT"};
 const NCI_CITE={au:"AuScope; NCI Australia",yr:"",ti:"NCI-AuScope Magnetotelluric Collection — packed raw, Level 1 and Level 2 time series",ve:"",pb:"NCI Australia"};
 
-const fmtP=p=>p>=1000?Math.round(p).toLocaleString("en-AU"):p>=1?(+p.toFixed(1)).toString():p.toPrecision(2);
+// ---- display grammar: one period, one range and one licence, printed one way ------------------
+// These three are JS TWINS of the engine's reference implementations (engine/extract/_pages.py:
+// _fmt_period, _range, _cc_human/_fmt_licence). A reader meets the same values on a static entity
+// page and in the workspace, so the two surfaces owe each other the same output; the parity is held
+// by tests/display_grammar.test.js against the worked examples the engine suite pins the Python leaf
+// against. Change one side and the other must move with it.
+
+// Round `v` to `d` decimals the way Python's format() does. The reason this is not a bare toFixed:
+// the two runtimes break an EXACT .5 tie differently - Python to the even neighbour, JS away from
+// zero - so a 1.25 s period read "1.3" in the workspace and "1.2" on the survey page. A tie is
+// exactly a decimal expansion that terminates in a 5 one place past the target, which is detectable
+// on the expansion itself; every other value toFixed already rounds correctly.
+function _fixedHalfEven(v,d){
+  const wide=Math.abs(v).toFixed(Math.min(100,d+20));
+  if(new RegExp("\\.\\d{"+d+"}50*$").test(wide)){
+    const cut=wide.slice(0,wide.indexOf(".")+(d?d+1:0));                 // truncated toward zero
+    const mag=((cut.charCodeAt(cut.length-1)-48)%2===0)?Number(cut):Number(cut)+Math.pow(10,-d);
+    return (v<0?-mag:mag).toFixed(d);}
+  return v.toFixed(d);}
+// A period in seconds as a READER sees it; the stored value never changes. Under 100: two
+// significant figures, trailing zeros stripped. At or above 100: a thousands-separated integer.
+// Never exponent notation, whatever the magnitude - "9.6e-05 s" is a number a processing log can
+// carry and a survey card cannot. The unit belongs to the caller's slot, not to this string.
+function fmtPeriod(v){
+  if(v===null||v===undefined||v==="")return "-";
+  const n=Number(v);
+  if(!isFinite(n))return "-";
+  if(n===0)return "0";
+  if(Math.abs(n)>=100)return Number(_fixedHalfEven(n,0)).toLocaleString("en-AU");
+  // Two significant figures without ever reaching for an exponent: the decimal place count comes
+  // from the magnitude, so 0.005012 rounds at the fourth place and 9.6e-05 at the sixth.
+  const out=_fixedHalfEven(n,Math.max(0,1-Math.floor(Math.log10(Math.abs(n)))));
+  return out.indexOf(".")>=0?out.replace(/0+$/,"").replace(/\.$/,""):out;}
+// The range separator, one place. Owner ruling R2: a numeric range in UI chrome reads as a SPACED
+// HYPHEN-MINUS rather than an en dash or the word "to". Curator prose is not chrome and keeps its
+// own glyph freedoms.
+function fmtRange(lo,hi){return lo+" - "+hi;}
+// The human form of a Creative Commons identifier, DERIVED from the identifier's own grammar so the
+// display cannot fall behind the allow-list: the prefix, the clause letters (which keep their
+// internal hyphens: BY-NC-SA), the version, and a jurisdiction port where one exists. A hand-kept
+// map covering only today's corpus goes wrong silently - the first third-party release under a 3.0,
+// -AU, NC or ND id would print "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on the next.
+// Non-CC ids (PUBLIC DOMAIN, ODBL-1.0, ALL RIGHTS RESERVED...) and unrecognised ids have no such
+// published reader's form and are printed verbatim, because guessing one would be inventing metadata.
+// The SPDX identifier itself stays untouched in exports, data slots and citation output.
+const _CC_ID=/^(CC0|CC)(?:-([A-Z]+(?:-[A-Z]+)*))?-(\d+\.\d+)(?:-([A-Z]{2,3}))?$/;
+function licHuman(lic){
+  const v=String(lic==null?"":lic).trim();
+  const m=_CC_ID.exec(v);
+  return m?m.slice(1).filter(Boolean).join(" "):v;}
+
 function clamp(x){return Math.max(0,Math.min(1,x));}
 function lerp(a,b,t){const pa=[1,3,5].map(i=>parseInt(a.substr(i,2),16)),pb=[1,3,5].map(i=>parseInt(b.substr(i,2),16));
   return "#"+pa.map((v,k)=>Math.round(v+(pb[k]-v)*t).toString(16).padStart(2,"0")).join("");}

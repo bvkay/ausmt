@@ -79,7 +79,7 @@ function applyYearRangeHints(){
   const dated=lo!=null&&hi!=null;
   if(fromEl){fromEl.placeholder=dated?String(lo):"from";if(dated)fromEl.min=lo,fromEl.max=hi;}
   if(toEl){toEl.placeholder=dated?String(hi):"to";if(dated)toEl.min=lo,toEl.max=hi;}
-  if(head)head.textContent="Year range"+(dated?` (${lo}–${hi})`:"");   // suffix hidden when no survey is dated
+  if(head)head.textContent="Year range"+(dated?` (${fmtRange(lo,hi)})`:"");   // suffix hidden when no survey is dated
 }
 // ---- "Recently added" (S3) --------------------------------------------------------------------
 // LOCKSTEP RULE (keep identical to the engine's _survey_latest_date at
