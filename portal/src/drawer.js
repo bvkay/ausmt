@@ -1833,7 +1833,11 @@ function collScatter(ss,maxW){
     const borders=(AU_OUTLINE.borders||[]).map(r=>`<path d="M${pts(r)}" fill="none" stroke="#3a5266" stroke-width=".8" stroke-dasharray="3 3"/>`).join("");
     outline=`<g class="au-outline">${coast}${borders}</g>`;
   }
-  const members=[...new Set(ss.map(s=>s.survey))].sort();
+  // The members that PLOT, which is the engine's `present` list (_pages.py _collection_scatter assigns
+  // colours over the members that have positioned stations) expressed with the SPA's own predicate. A
+  // wholly coordinate-withheld member is a live corpus state under C42; counting it here gave this ramp a
+  // different n from the page's and moved every later member's colour one step along it.
+  const members=[...new Set(ss.filter(hasPosition).map(s=>s.survey))].sort();
   // C7: the SAME ramp the static collection page lays (state.js memberColours, twin of the engine's
   // _member_colours). The old modulo handed the ninth member the first member's colour, so a
   // ten-survey collection drew two surveys in one colour and its legend stopped meaning anything.

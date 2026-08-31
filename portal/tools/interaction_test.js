@@ -3362,6 +3362,26 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     .map(t => (t.match(/background:(#[0-9A-F]{6})/) || [])[1]);
   ok(JSON.stringify(nineLegend) === JSON.stringify(nineFills),
     "C7: the legend swatches must be the dots' own colours, got " + JSON.stringify(nineLegend));
+  // ...and a member the PAGE leaves out must not shift the ramp here. _collection_scatter assigns colours
+  // over `present` - the members that HAVE positioned stations - so a wholly coordinate-withheld member
+  // (C42 is a live corpus state, and hasPosition already keeps such a station off every map surface) is
+  // not counted there. Counting it here gave the SPA a different n and moved every later member one step
+  // along the ramp, which is the divergence C7 exists to remove.
+  const withheldMix = [
+    { id: "P1", survey: "Sv A", lat: -30, lon: 136, type: "LPMT" },
+    { id: "P2", survey: "Sv B", lat: null, lon: null, type: "LPMT" },
+    { id: "P3", survey: "Sv C", lat: -32, lon: 138, type: "LPMT" },
+  ];
+  const svgMix = A.collScatter(withheldMix);
+  const mixFills = (svgMix.match(/<circle[^>]*fill="(#[0-9A-F]{6})"/g) || [])
+    .map(t => (t.match(/fill="(#[0-9A-F]{6})"/) || [])[1]);
+  ok(JSON.stringify(mixFills) === JSON.stringify(A.memberColours(2)),
+    "C7: a position-less member must not enter the colour assignment; the two plotted members take " +
+    JSON.stringify(A.memberColours(2)) + ", got " + JSON.stringify(mixFills));
+  const mixLegend = (svgMix.match(/csl-dot" style="background:(#[0-9A-F]{6})"/g) || [])
+    .map(t => (t.match(/background:(#[0-9A-F]{6})/) || [])[1]);
+  ok(JSON.stringify(mixLegend) === JSON.stringify(mixFills),
+    "C7: the legend must list the members that plot, in the dots' own colours, got " + JSON.stringify(mixLegend));
 
   // FF. E6 'View all stations on main map' — from the collection page, switch to map + fitBounds (spy on map).
   win.location.hash = "#/collection/auslamp"; A.routeFromHash();
