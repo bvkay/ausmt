@@ -70,15 +70,23 @@ ok(fmtRange(1, 2).indexOf("\u2013") < 0 && fmtRange(1, 2).indexOf("\u2014") < 0,
 
 // ---- R3: the licence in human form ------------------------------------------------------------
 // The SPDX identifier is the machine's name for a licence; what a reader sees in chrome is the form
-// the licence is published under. Derived from the identifier's own grammar (prefix, clause letters
-// keeping their internal hyphens, version, jurisdiction port), so a third-party release under an id
-// today's corpus does not declare still reads consistently. A non-CC id has no such published
-// reader's form and is printed verbatim rather than guessed at.
+// the licence is published under. The form is derived from the identifier's own grammar (prefix,
+// clause letters keeping their internal hyphens, version, jurisdiction port) over the identifiers
+// the INSTRUMENT recognises - contract/licenses.json's redistributable + recognised_only, the same
+// two tables _pages.py builds _LICENCE_DISPLAY from. A non-CC id has no such published reader's form
+// and is printed verbatim rather than guessed at.
 for (const [id, shown] of [["CC-BY-4.0", "CC BY 4.0"], ["CC0-1.0", "CC0 1.0"],
                            ["CC-BY-NC-SA-4.0", "CC BY-NC-SA 4.0"], ["CC-BY-3.0-AU", "CC BY 3.0 AU"],
                            ["CC-BY-SA-4.0", "CC BY-SA 4.0"], ["ODBL-1.0", "ODBL-1.0"],
                            ["PUBLIC DOMAIN", "PUBLIC DOMAIN"]])
   eq(licHuman(id), shown, "R3 licence display " + JSON.stringify(id));
+// THE DOMAIN, which is half of the parity and was the half nothing pinned. A CC-GRAMMAR id that the
+// instrument does not carry is echoed verbatim, because that is what _fmt_licence does: its lookup
+// table has a key only for an allow-listed id. A wider JS domain meant the survey page printed
+// "CC-BY-2.0" while the workspace printed "CC BY 2.0" for the same survey - two surfaces, one
+// identifier, two readings, which is exactly what R3 was ruled to stop.
+for (const id of ["CC-BY-2.0", "CC0-2.0", "CC-BY-ND-2.5", "CC-BY-NC-SA-2.0", "CC-BY-4.0-NZ"])
+  eq(licHuman(id), id, "R3: a CC id the instrument does not recognise is echoed, as the pages echo it");
 // An identifier the instrument does not recognise is echoed, never invented into a human form.
 eq(licHuman("NOT-A-LICENCE-9.9"), "NOT-A-LICENCE-9.9", "R3: an unrecognised id is printed verbatim");
 eq(licHuman(""), "", "R3: no licence, no text");

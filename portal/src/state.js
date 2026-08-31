@@ -186,17 +186,33 @@ function memberColours(n){
   for(let i=0;i<n;i++)out.push(_hlsHex(i/n,i%2===0?0.62:0.46,0.58));
   return out;}
 
-// The human form of a Creative Commons identifier, DERIVED from the identifier's own grammar so the
-// display cannot fall behind the allow-list: the prefix, the clause letters (which keep their
-// internal hyphens: BY-NC-SA), the version, and a jurisdiction port where one exists. A hand-kept
-// map covering only today's corpus goes wrong silently - the first third-party release under a 3.0,
-// -AU, NC or ND id would print "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on the next.
-// Non-CC ids (PUBLIC DOMAIN, ODBL-1.0, ALL RIGHTS RESERVED...) and unrecognised ids have no such
-// published reader's form and are printed verbatim, because guessing one would be inventing metadata.
+// The human form of a Creative Commons identifier, DERIVED from the identifier's own grammar rather
+// than from a hand-kept map: the prefix, the clause letters (which keep their internal hyphens:
+// BY-NC-SA), the version, and a jurisdiction port where one exists. A map covering only today's
+// corpus goes wrong silently - a 3.0, -AU, NC or ND id added to the instrument would print
+// "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on the next, and display_grammar.test.js walks
+// contract.js's own tables to prove no recognised id is missing a form.
+// The DERIVATION runs over the identifiers the INSTRUMENT recognises, which is the engine's domain
+// exactly: _pages.py builds _LICENCE_DISPLAY from redistributable + recognised_only and _fmt_licence
+// echoes anything else. An id outside those tables is echoed here for the same reason - the SPA
+// saying "CC BY 2.0" where the survey page says "CC-BY-2.0" is one identifier read two ways across
+// two surfaces, and the badge beside it already tells the reader this licence is not recognised.
+// Non-CC ids (PUBLIC DOMAIN, ODBL-1.0, ALL RIGHTS RESERVED...) have no published reader's form and
+// are printed verbatim too, because guessing one would be inventing metadata.
 // The SPDX identifier itself stays untouched in exports, data slots and citation output.
 const _CC_ID=/^(CC0|CC)(?:-([A-Z]+(?:-[A-Z]+)*))?-(\d+\.\d+)(?:-([A-Z]{2,3}))?$/;
+// Read at CALL time, not load time, and memoised only once the table is actually there: state.js is
+// loaded on its own by more than one harness, and a module-level read of contract.js's LICENSES turns
+// that into a ReferenceError at boot.
+let _licKnown=null;
+function _licKnownIds(){
+  if(_licKnown&&_licKnown.length)return _licKnown;
+  const L=(typeof LICENSES!=="undefined"&&LICENSES)||{};
+  _licKnown=(L.redistributable||[]).concat(L.recognised_only||[]);
+  return _licKnown;}
 function licHuman(lic){
   const v=String(lic==null?"":lic).trim();
+  if(_licKnownIds().indexOf(v)<0)return v;
   const m=_CC_ID.exec(v);
   return m?m.slice(1).filter(Boolean).join(" "):v;}
 
