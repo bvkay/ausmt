@@ -23,5 +23,5 @@
     <g fill="#FF6655"><circle cx="956" cy="500" r="24"/><circle cx="956" cy="548" r="24"/></g>
   </g>
   <text x="1440" y="737.53" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-weight="800" font-size="620" letter-spacing="-0.02em" fill="#11182D">AusMT</text>
-  <text x="1440" y="1077.53" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-weight="800" font-size="150" fill="#646979">Australia's Magnetotelluric Data Portal</text>
+  <text x="1440" y="1077.53" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-weight="800" font-size="150" textLength="2833.35" lengthAdjust="spacing" fill="#646979">Australia's Magnetotelluric Data Portal</text>
 </svg>

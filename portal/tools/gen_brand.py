@@ -144,7 +144,9 @@ LETTER_SPACING_EM = -0.02
 # without a font engine. A viewer whose system stack measures the WORDMARK wider or narrower than
 # this sits a little closer to, or further from, the right clear-space edge, and the clear space
 # absorbs it: measured in a real browser at the SVG's own sizes, the widest common fallback (Verdana)
-# draws the wordmark 113 user units over the declared advance against 200 units of clear space.
+# draws the wordmark 113 user units over the declared advance against 200 units of clear space. The
+# TAGLINE is not absorbed (Verdana draws it 434 units over), so it declares its advance in the SVG;
+# see _svg_text for the measurements and for why the wordmark is deliberately left free.
 WORDMARK_ADVANCE_EM = 3.429      # "AusMT" at the declared tracking
 TAGLINE_ADVANCE_EM = 18.889      # the tagline at default tracking
 CAP_HEIGHT_EM = 0.728            # cap height, for optically centring the text block on the mark
@@ -330,10 +332,27 @@ def _svg_open(width, height, label):
             f'width="{_n(width)}" height="{_n(height)}" role="img" aria-label="{label}">\n')
 
 
-def _svg_text(x, y, size, ink, spacing, body):
+def _svg_text(x, y, size, ink, spacing, body, advance=None):
+    """One <text>. `advance`, when given, is the declared width the line must occupy.
+
+    WHY THE TAGLINE DECLARES ONE AND THE WORDMARK DOES NOT. The canvas is sized from the declared
+    advances, which were measured from the bundled face; the SVG then renders in the READER's system
+    stack, which measures the same string differently, and an outermost <svg> loaded through <img>
+    clips at its own viewBox. Measured in a real browser at the SVG's own sizes, the tagline's right
+    edge lands at 4131.6 user units in the site stack, 4358.1 in Tahoma, 4461.6 in Georgia and 4707.5
+    in Verdana, against a canvas 4473.35 wide: a Verdana or DejaVu-class fallback loses the end of the
+    line, served with a 200 and the right content type. The tagline is the line that sets the canvas
+    edge on the extended lockups, so it declares its advance and any stack renders it at the declared
+    width. lengthAdjust="spacing" adjusts the gaps only, never the glyph shapes, and in the common
+    case the correction is imperceptible (the site stack is 141.7 units short over 39 gaps).
+
+    The WORDMARK is deliberately left free. Its widest measured overrun is 113 units against 200
+    units of clear space, so it cannot clip, and forcing its advance would override the tracking the
+    owner chose by eye with whatever a viewer's font happens to need."""
     sp = f' letter-spacing="{spacing}em"' if spacing is not None else ""
+    adv = f' textLength="{_n(advance)}" lengthAdjust="spacing"' if advance is not None else ""
     return (f'  <text x="{_n(x)}" y="{_n(y)}" font-family="{WEB_FONT_STACK}" '
-            f'font-weight="{WEB_FONT_WEIGHT}" font-size="{_n(size)}"{sp} '
+            f'font-weight="{WEB_FONT_WEIGHT}" font-size="{_n(size)}"{sp}{adv} '
             f'fill="{ink}">{body}</text>\n')
 
 
@@ -374,7 +393,8 @@ def svg_logo(dark, extended):
                         LETTER_SPACING_EM, "AusMT"))
     if extended:
         body += _svg_text(lay["text_x"], lay["tagline_baseline"], lay["tagline_size"],
-                          TAGLINE_INK["on_dark" if dark else "on_light"], None, TAGLINE)
+                          TAGLINE_INK["on_dark" if dark else "on_light"], None, TAGLINE,
+                          advance=lay["tagline_size"] * TAGLINE_ADVANCE_EM)
     return body + "</svg>\n"
 
 
