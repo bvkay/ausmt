@@ -2121,10 +2121,36 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!recents.some(e => e.sv === "Alpha Survey"), "recentlyAdded() must EXCLUDE Alpha (2012-05-01, outside the 30-day window)");
   ok(!recents.some(e => e.sv === "Gamma Survey" || e.sv === "Delta Survey"), "recentlyAdded() must omit the undated Gamma/Delta surveys");
   const recentStrip = doc.getElementById("recentStrip");
-  ok(recentStrip && /Recently added/.test(recentStrip.innerHTML), "#recentStrip did not render a 'Recently added' heading");
+  ok(recentStrip && /Recently added/.test(recentStrip.innerHTML), "#recentStrip did not render a 'Recently added' label");
   ok(recentStrip.innerHTML.indexOf("#/survey/" + recents[0].slug) >= 0,
     "#recentStrip did not link the recent survey by its #/survey/<slug> route");
   ok(!recentStrip.classList.contains("hidden"), "#recentStrip must be shown when the window has a survey");
+  // C4 (brief 9, Option A): the strip is a CONCISE HORIZONTAL LINE, not a block. It was a heading over a
+  // column of rows in a full-width container, which on a wide screen was a large sparse box of mostly
+  // empty space sitting between the reader and the catalogue. Option A is one wrapping line:
+  // "Recently added: Vulcan 2022 (interpunct) AusLAMP Queensland Phase 3". Pins moved with the markup per
+  // contract section 1, C4 ("section N pins move with the markup"); the WINDOW LOGIC above is untouched
+  // and its pins are unchanged, which is the point - this commit may only change how the strip reads.
+  ok(recentStrip.querySelector("h2") === null,
+    "C4: the strip must not open with a block heading; the label is inline (brief 9 Option A)");
+  ok(recentStrip.querySelector("ul, li") === null,
+    "C4: the strip must not render a vertical list; Option A is one wrapping line");
+  ok(/Recently added:/.test(recentStrip.textContent),
+    "C4: the inline label reads 'Recently added:', got " + JSON.stringify(recentStrip.textContent));
+  ok(recentStrip.querySelectorAll("a").length === recents.length,
+    "C4: the strip must link every survey in the window, got " + recentStrip.querySelectorAll("a").length +
+    " links for " + recents.length + " entries");
+  // The date is what makes an entry "recent", so it may not simply be dropped: it rides the link as its
+  // title, reachable without spending a second line on it.
+  ok((recentStrip.querySelector("a").getAttribute("title") || "").indexOf(recents[0].date) >= 0,
+    "C4: a strip link must carry its date, got title=" +
+    JSON.stringify(recentStrip.querySelector("a").getAttribute("title")));
+  // POSITION (contract C4): the strip sits directly BELOW the discovery controls, so the controls are
+  // the first thing on the view and the strip reads as a shortcut into the grid rather than a preamble.
+  const _dc = doc.getElementById("discoveryControls");
+  ok(_dc && _dc.nextElementSibling === recentStrip,
+    "C4: #recentStrip must sit directly below the discovery controls, got " +
+    JSON.stringify(_dc && _dc.nextElementSibling && _dc.nextElementSibling.id));
   // The map-rail recently-added section is GONE (deleted, not merely hidden): the leak was that section
   // un-hiding on every view. Neither the element nor its old wrapper must exist.
   ok(doc.getElementById("recentSide") == null && doc.getElementById("recentSideSection") == null,

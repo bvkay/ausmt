@@ -588,13 +588,13 @@
   .yearrange input{width:0;flex:1;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
   .yearrange span{color:var(--muted)}
   .fieldnote{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}
-  .recentlist{list-style:none;display:flex;flex-direction:column;gap:6px}
-  .recentlist li{font-size:12.5px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
-  .recentlist a{color:var(--text);text-decoration:none}
-  .recentlist a:hover{color:var(--copper);text-decoration:underline}
-  .recentlist .ra-date{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
-  #recentStrip{margin-bottom:16px}
-  #recentStrip h2{margin-bottom:8px}
+  /* C4 (brief 9, Option A): ONE wrapping line, capped with the grid and the discovery bar so all three
+     line up. The old form was a heading over a column of rows, which on a wide screen was a large sparse
+     block of empty space between the reader and the catalogue. */
+  #recentStrip{max-width:1500px;margin:0 0 16px;font-size:12.5px;line-height:1.9;color:var(--muted)}
+  #recentStrip .ra-label{color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-size:12px}
+  #recentStrip a{color:var(--text);text-decoration:none}
+  #recentStrip a:hover{color:var(--copper);text-decoration:underline}
 
   /* ===== UX6 Wave D — map page + sidebar structure ============================================== */
   /* D2: Browse / Select-&-export mode panes. Wrapping the rail sections in two containers costs them
@@ -903,7 +903,7 @@
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
   <div id="map"></div>
-  <div id="surveysview"><div id="recentStrip" class="hidden"></div>
+  <div id="surveysview">
     <!-- Discovery controls: a surveys-view search (name/org/region/blurb; cleanup wave B, replaces the
          rail #find here), sort, live result count, facet chips (Open licence + data-type BBMT/LPMT/AMT/GDS),
          a compact/list toggle and clear-filters. Wired in drawer.js; state lives there. There is
@@ -927,6 +927,11 @@
       </div>
       <button type="button" id="clearFilters" class="disc-clear">Clear filters</button>
     </div>
+    <!-- C4 (brief 9, Option A): the recently-added strip is one wrapping line and sits BELOW the
+         discovery controls, so the controls open the view and the strip reads as a shortcut into the
+         grid rather than a preamble to it. main.js renderRecentlyAdded fills it; the 30-day
+         build-window rule that decides WHAT it lists is untouched. -->
+    <div id="recentStrip" class="hidden"></div>
     <div class="cardgrid" id="cardGrid"></div></div>
   <div id="collectionsview"><div class="cardgrid" id="collectionsGrid"></div></div>
   <div id="collectionview"></div>
