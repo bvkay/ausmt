@@ -350,3 +350,23 @@ def test_every_chrome_surface_declares_the_headers_own_line_height():
         assert HEADER_LINE_HEIGHT in body, (
             f"{where}: the header rule must declare {HEADER_LINE_HEIGHT!r}, so that the host "
             f"document's body prose line-height cannot change the header's height; got {body!r}")
+
+
+def test_every_chrome_surface_carries_the_same_zone_geometry():
+    """The zone rules, character-identical on EVERY surface wearing the chrome, not just across the
+    pair above. The pair covers the SPA and the generated pages, which is where the geometry was
+    ruled; releases.html and about.html each carry their OWN copy of the chrome, and both kept the
+    auto-basis sides the C9 ruling replaced. An auto basis sizes each side zone from its own content,
+    so on those two pages the identity block set the width of its own zone and shoved the tab group
+    out to x=525.63 and x=525.27 at 1280px, while the SPA, the generated pages and brand.html all
+    sat at x=350.83. A reader following the header's own Releases or About link watched the nav jump
+    roughly 175px sideways and jump back on the way out. FAILS IF any surface's zone rules drift from
+    the SPA's in any way at all."""
+    reference = _zone_rules(INDEX.read_text(encoding="utf-8"), "portal/index.html")
+    for where, text in _chrome_surfaces():
+        rules = _zone_rules(text, where)
+        for zone in ZONES:
+            assert rules[zone] == reference[zone], (
+                f".{zone} has drifted from the ruled zone geometry:\n"
+                f"  portal/index.html            {reference[zone]!r}\n"
+                f"  {where:<28} {rules[zone]!r}")
