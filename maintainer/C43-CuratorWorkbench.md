@@ -159,10 +159,10 @@ mockup's single stacked screen), mirroring the shipped Surveys-list → survey-h
   the rail under the Surveys group.
 
 **A2 — controlled vocabularies (engine truth, corrects the mockup):**
-* **type** = `programme | release | institutional | other` (the docs vocab,
-  `docs/.../collection-ids.md`; the mockup's *campaign/compilation* are dropped). type is
-  validator-unenforced, so the console's select IS the guardrail; **also update the docs if this
-  ever changes.**
+* **type** = `programme | release | institutional | compilation | other` (the docs vocab,
+  `docs/.../collection-ids.md`; the mockup's *campaign* stays dropped, *compilation* is ratified for
+  groupings AusMT assembled from independent surveys). type is validator-unenforced, so the
+  console's select IS the guardrail; **also update the docs if this ever changes.**
 * **status** = `active | completed | archived` (the mockup's "complete" would silently null on
   build — out-of-vocab is dropped, `test_collections.py:71-84`).
 * **description = the reader-facing programme abstract** (portal collection page); a first-class

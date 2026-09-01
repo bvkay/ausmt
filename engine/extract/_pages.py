@@ -1688,8 +1688,11 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
 _INDEX_MAP_WIDTH = 230          # the surveys index card map
 _COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
 
+# The vocabulary named here is the one docs/docs/developer/collection-ids.md ratifies, and the two
+# must not drift: a reader meeting a chip on this hub looks the value up in that page.
 _COLLECTIONS_LEDE = ("Collections group related surveys for discovery and exploration. A collection "
-                     "may represent a programme, region, geological province, or thematic dataset.")
+                     "may be a field programme, a data release, an institutional holding, or a "
+                     "compilation of related surveys.")
 
 # The catalogue document a hub page hands over: MTCAT is the machine-readable form of exactly what
 # a hub lists, so it is the honest counterpart to the hub itself.

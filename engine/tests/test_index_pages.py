@@ -201,7 +201,8 @@ def test_collections_index_explains_the_concept_and_lists_the_rollup(built):
     assert '<meta name="robots" content="noindex">' not in page
     assert "<h1>Collections</h1>" in page
     assert ("Collections group related surveys for discovery and exploration. A collection may "
-            "represent a programme, region, geological province, or thematic dataset.") in page
+            "be a field programme, a data release, an institutional holding, or a compilation of "
+            "related surveys.") in page
     assert '<a href="/collections/idxcoll">Index Collection</a>' in page
     assert (built / "pages" / "collections" / "idxcoll.html").is_file()
     assert "Explore collection" in page

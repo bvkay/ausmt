@@ -1,8 +1,8 @@
 # Glossary
 
 ## Collection
-A grouping of related surveys (a programme, a release, an institutional holding). Discovery context,
-not data.
+A grouping of related surveys (a programme, a release, an institutional holding, a compilation).
+Discovery context, not data.
 
 ## Survey package
 The primary publication unit: transfer functions, metadata, provenance and citation information for one

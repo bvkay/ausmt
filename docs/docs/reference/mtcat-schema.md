@@ -732,7 +732,7 @@ transfer functions of its own, and all scientific provenance stays with its memb
 | Obligation | recommended; omitted when undeclared |
 | Occurrence | 0-1 |
 | Type | string |
-| Allowed values | `programme`, `release`, `institutional`, `other` |
+| Allowed values | `programme`, `release`, `institutional`, `compilation`, `other` |
 | Example | `"programme"` |
 
 ### 4.4 collections[].status

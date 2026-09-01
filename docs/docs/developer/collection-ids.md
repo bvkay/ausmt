@@ -1,13 +1,13 @@
 # Collection IDs
 
-A collection groups related surveys (a programme, a release, an institutional holding). Membership is
-declared per survey in `survey.yaml`:
+A collection groups related surveys (a programme, a release, an institutional holding, a
+compilation). Membership is declared per survey in `survey.yaml`:
 
 ```yaml
 collection:
   id: auslamp                 # the collection id (see policy below)
   title: AusLAMP
-  type: programme             # programme | release | institutional | other
+  type: programme             # programme | release | institutional | compilation | other
   status: completed           # active | completed | archived
   start_year: 2013            # programme start, rolled up to the collection page
   last_updated: "2026-01-01"  # date of the most recent member release
@@ -33,6 +33,17 @@ console; reconcile it by editing the member `survey.yaml` files. Omit a prose ke
 say in rather than writing an empty one, because an empty value still counts as declared and blocks
 later members.
 
+## Type vocabulary
+
+`type` says what kind of grouping a collection is. It is not validator-enforced; this list is the
+vocabulary, and the hub chip renders whatever value the corpus carries.
+
+- `programme`: a funded field programme.
+- `release`: a data release.
+- `institutional`: an institutional holding.
+- `compilation`: a grouping AusMT assembled from independent surveys.
+- `other`: anything the four above do not describe.
+
 ## ID policy
 
 - Lowercase, hyphenated ASCII: `^[a-z0-9]+(-[a-z0-9]+)*$` (`auslamp`, `wamt`, `sa-heat-flow`). The
@@ -43,9 +54,9 @@ later members.
 
 ## Known collection IDs
 
-The de-facto registry; add a row when a curator confirms a new programme id.
+The de-facto registry; add a row when a curator confirms a new collection id.
 
 | id | title | type |
 |---|---|---|
 | `auslamp` | AusLAMP | programme |
-| `australia-legacy-gds` | Australia legacy GDS | programme |
+| `australia-legacy-gds` | Australia legacy GDS | compilation |

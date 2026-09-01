@@ -128,7 +128,7 @@ Programme groupings, rolled up from the `collection` block each member survey de
 |---|---|---|
 | `id` | string | the collection id, repeated inside the record |
 | `title` | string | display name; falls back to the id |
-| `type` | string or null | `programme`, `release`, `institutional`, `other` |
+| `type` | string or null | `programme`, `release`, `institutional`, `compilation`, `other` |
 | `status` | string or null | `active`, `completed`, `archived`; null where a member declared something else |
 | `start_year` | integer or null | year the programme began |
 | `last_updated` | string or null | ISO date the programme record was last updated |
