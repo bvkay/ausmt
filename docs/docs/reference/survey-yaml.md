@@ -736,6 +736,56 @@ exact match on `id`, so every member survey must spell it identically. Naming ru
 | `start_year` | optional | integer | |
 | `last_updated` | optional | string | ISO date |
 | `description` | optional | string | one paragraph, shown on the collection card and page |
+| `prose` | optional | map of string arrays | long-form page copy, one array of paragraphs per section. See below |
+
+`description` stays ONE flat paragraph. It is the discovery text: the hero lede, the hub card blurb,
+the `<meta>` and `og:description` link preview, the schema.org record and the MTCAT catalogue all take
+their single-line summary from it. Long-form copy belongs in `prose`.
+
+### 12.1 collection.prose
+
+`prose` carries the collection page's long-form copy as a map of paragraph arrays, one array per
+section of the page. Every recognised key is optional.
+
+| Key | Renders |
+|---|---|
+| `about` | the About section, replacing the flat `description` there |
+| `data` | the Data available intro, replacing the engine's own sentence |
+| `members_before` | Member surveys, before the generated survey cards |
+| `members_after` | Member surveys, after the generated survey cards |
+| `organisations` | Participating organisations, before the generated organisation list |
+
+```yaml
+collection:
+  id: australia-legacy-gds
+  description: "One flat paragraph. This is the discovery text."
+  prose:
+    about:
+      - "The first paragraph of the About section."
+      - "# Preservation and reprocessing"
+      - "The first paragraph under that subheading."
+    members_before:
+      - "Each survey remains an independent AusMT record."
+    members_after:
+      - "Where appropriate, surveys may be identified as:"
+      - "Reprocessed: transfer functions newly estimated from surviving time-series data."
+```
+
+Rules:
+
+- Each entry is ONE paragraph and renders as its own `<p>`. Paragraph breaks come from the array, not
+  from blank lines inside a string.
+- An entry beginning `# ` (hash, space) is that section's subheading and renders as an `<h3>`. This is
+  the only structural convention; there is no inline formatting, and it is recognised only at the start
+  of a paragraph. Such an entry MUST be quoted, since a YAML scalar cannot begin with `#`.
+- Everything is escaped. Author-supplied angle brackets, ampersands and quotes render as text, never as
+  markup.
+- Prose WRAPS generated content, it never replaces it. The survey cards, the availability rows and the
+  organisation list are rolled up from the member records and are always emitted.
+- OMIT a key you have nothing to say in. Never write an empty one: the roll-up takes each
+  programme-level field from the first member that declares it, and an empty value counts as declared,
+  so it would block every later member from supplying the real prose.
+- Like every other programme-level field, `prose` must be identical across all member surveys.
 
 ---
 

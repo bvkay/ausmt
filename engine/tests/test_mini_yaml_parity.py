@@ -127,3 +127,42 @@ def test_parity_comment_on_key_line_before_nested_block():
             '  Two lines\n'
             '  folded to one.\n')
     assert _mini_yaml(text2) == yaml.safe_load(text2)
+
+
+def test_parity_collection_prose_map_of_paragraph_lists():
+    """`collection.prose` is the only place in the schema that nests a MAP OF LISTS two levels under
+    a top-level key, and the only field whose values may begin with '#' (the subheading sigil) or
+    carry a mid-string colon (the classification lines). Each of those is a live hazard for the
+    tokeniser: a '#'-leading line is dropped as a comment, and an unquoted colon splits a scalar
+    into a mapping. All three are safe only because the paragraphs are QUOTED scalars in a block
+    sequence, which is exactly what this pins.
+
+    FAILS IF a no-PyYAML box would parse the collection prose differently from a PyYAML box, which
+    would serve two different collection pages from one corpus."""
+    import yaml
+    from extract.build_portal import _mini_yaml
+    text = ('collection:\n'
+            '  id: australia-legacy-gds\n'
+            '  status: completed\n'
+            '  description: "One flat paragraph, the discovery text."\n'
+            '  prose:\n'
+            '    about:\n'
+            '      - "The collection brings together historical surveys."\n'
+            '      - "# Preservation and reprocessing"\n'
+            "      - \"Variations in the Earth's magnetic field.\"\n"
+            '    members_after:\n'
+            '      - "Where appropriate, surveys may be identified as:"\n'
+            '      - "Reprocessed: transfer functions newly estimated."\n'
+            '    organisations:\n'
+            '      - "The organisations represented include institutions."\n')
+    assert _mini_yaml(text) == yaml.safe_load(text)
+
+    prose = _mini_yaml(text)["collection"]["prose"]
+    assert prose["about"][1] == "# Preservation and reprocessing", \
+        "a quoted '#' paragraph must survive the tokeniser's comment strip"
+    assert prose["members_after"][1] == "Reprocessed: transfer functions newly estimated.", \
+        "a mid-string colon must stay in the scalar, not split it into a mapping"
+    assert prose["about"][2].endswith("Earth's magnetic field."), \
+        "an ASCII apostrophe inside a double-quoted scalar survives both parsers"
+    assert [type(v) for v in prose.values()] == [list, list, list], \
+        "every prose section is a list of paragraphs, never a bare string"

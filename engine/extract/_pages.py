@@ -422,6 +422,7 @@ _CSS = """
   a:focus-visible,summary:focus-visible{outline:2px solid #EF7256;outline-offset:2px;border-radius:2px}
   h1{color:#fff;font-size:1.7rem;margin:.5rem 0 .3rem}
   h2{color:#fff;font-size:1.12rem;margin:1.7rem 0 .5rem}
+  h3{color:#fff;font-size:1rem;margin:1.2rem 0 .4rem}
   .crumb{font-size:.85rem;opacity:.8}
   .crumb a{opacity:1}
   .pagenav{display:flex;gap:.6rem;margin:.2rem 0 .6rem}
@@ -437,6 +438,14 @@ _CSS = """
   .typebadge{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
   .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
   .prose{max-width:70ch}
+  /* The collection page reads at the width of its own hero map, not at the 70ch reading measure
+     the survey pages keep: its prose runs beside a map and a metric rail, and a column narrower
+     than the graphic above it reads as a mistake. One token carries the map width so the two
+     cannot drift, and below the hero's own collapse breakpoint the rail is gone and the prose
+     takes the full column. .prose is NOT widened: it is shared with the survey pages. */
+  main{--collw:820px;--railw:230px;--railgap:1.2rem}
+  .collprose{max-width:min(var(--collw), 100% - var(--railgap) - var(--railw))}
+  @media(max-width:860px){.collprose{max-width:var(--collw)}}
   .hero{display:grid;grid-template-columns:minmax(0,2fr) minmax(180px,1fr);gap:1.2rem;align-items:start;margin:.8rem 0}
   .hero-maps{display:grid;grid-template-columns:1fr;gap:.6rem;max-width:520px}
   .hero-maps.two{max-width:none;grid-template-columns:1fr 1fr;align-items:start}
@@ -470,7 +479,7 @@ _CSS = """
   .integrity summary{cursor:pointer;color:#8FA3B0}
   .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#8FA3B0;word-break:break-all}
   .tspath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#8FA3B0;word-break:break-all}
-  .collmap{margin:1rem 0 .4rem;max-width:820px}
+  .collmap{margin:1rem 0 .4rem;max-width:var(--collw)}
   .collmap svg{width:100%;height:auto;display:block}
   .colllegend{font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:.2rem 0 1rem}
   .collhero{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,230px);gap:1.2rem;align-items:start}
@@ -838,7 +847,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     years = _survey_years(sm_doc, smeta)
     url = f"{base}/surveys/{slug}"
     desc = (blurb or f"Magnetotelluric survey data: {title}.").strip()
-    desc_meta = (desc[:157] + "...") if len(desc) > 160 else desc
+    desc_meta = _meta_summary(desc)
     docs = sorted(station_docs, key=lambda d: str(d.get("station") or d.get("ausmt_id")))
     n_stations = len(docs)
 
@@ -1473,6 +1482,39 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
             f'<p class="colllegend">{"".join(legend_rows)}</p>')
 
 
+def _prose_block(paragraphs) -> str:
+    """Curator paragraphs as escaped <p class="collprose">, with one ratified structural
+    convention: a paragraph whose first two characters are '# ' is that section's subheading and
+    renders as <h3>. Everything else is a paragraph.
+
+    This is NOT markdown and must not grow into it. There is one sigil, it is recognised only at
+    the start of a paragraph, there is no inline syntax, and every character of every paragraph
+    (subheadings included) goes through _e(). Author-supplied text can never carry markup onto a
+    served page. A non-list value yields nothing rather than one <p> per character.
+    """
+    if not isinstance(paragraphs, (list, tuple)):
+        return ""
+    out = []
+    for p in paragraphs:
+        s = str(p or "").strip()
+        if not s:
+            continue
+        if s.startswith("# "):
+            out.append(f'<h3 class="collsub">{_e(s[2:].strip())}</h3>\n')
+        else:
+            out.append(f'<p class="collprose">{_e(s)}</p>\n')
+    return "".join(out)
+
+
+def _prose_of(coll, key) -> str:
+    """The rendered block for one collection prose slot, or "" when the collection declares none.
+    Every caller keeps its own fallback, so a collection with no prose renders exactly as before."""
+    prose = (coll or {}).get("prose")
+    if not isinstance(prose, dict):
+        return ""
+    return _prose_block(prose.get(key))
+
+
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
                     member_facts=None, level_counts=None, formats=None, build=None) -> str:
     """The collection page as an EXPLORATORY layer (design brief 23 to 31), not a catalogue record.
@@ -1556,13 +1598,17 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
             avail.append(f"<dt>{_e(name)}</dt><dd>{n:,} stations</dd>")
     data_section = ""
     if avail:
-        data_section = (
-            '<h2 id="data">Data available</h2>\n'
-            '<p class="prose">A collection groups surveys for discovery; each member survey '
+        # A collection that declares its own prose for this section speaks for itself; the engine
+        # sentence is the fallback for one that does not. Either way the section must still say
+        # that the data are the members' own, never the collection's as a single download.
+        data_intro = _prose_of(coll, "data") or (
+            '<p class="collprose">A collection groups surveys for discovery; each member survey '
             "publishes its own data under its own licence, and the rows below say what exists "
             f"across the {len(member_slugs)} members rather than offering the collection as one "
-            "download.</p>\n"
-            f"<dl>{''.join(avail)}</dl>\n")
+            "download.</p>\n")
+        data_section = ('<h2 id="data">Data available</h2>\n'
+                        f"{data_intro}"
+                        f"<dl>{''.join(avail)}</dl>\n")
 
     # ---- member surveys, the brief's compact list ----
     rows = []
@@ -1585,8 +1631,12 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
                     f'<a href="/surveys/{_e(slug)}">{_e(lbl or row.get("title") or slug)}</a></p>'
                     + (f'<p class="memfacts">{facts_line}</p>' if facts_line else "")
                     + "</div>")
-    members_section = (f'<h2 id="surveys">Member surveys</h2>\n<div class="memlist">'
-                       f'{"".join(rows)}</div>\n') if rows else ""
+    # The curator's prose WRAPS the generated roll-call rather than replacing it: what a member
+    # survey is goes before the cards, and any explanation of how to read them goes after.
+    members_section = (f'<h2 id="surveys">Member surveys</h2>\n'
+                       f'{_prose_of(coll, "members_before")}'
+                       f'<div class="memlist">{"".join(rows)}</div>\n'
+                       f'{_prose_of(coll, "members_after")}') if rows else ""
 
     # ---- participating organisations: names the members declare, ROR-linked, no logos ----
     org_bits, seen_orgs = [], set()
@@ -1598,8 +1648,11 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
         seen_orgs.add(name)
         ror = str(row.get("org_ror") or "").strip()
         org_bits.append(f'<a href="{_e(ror)}">{_e(name)}</a>' if ror else _e(name))
+    # The prose precedes the roll-call and never replaces it: the list is generated from the member
+    # records, so a curator paragraph can qualify what the names mean but cannot restate them.
     orgs_section = (f'<h2 id="organisations">Participating organisations</h2>\n'
-                    f'<p class="prose">{" &#183; ".join(org_bits)}</p>\n') if org_bits else ""
+                    f'{_prose_of(coll, "organisations")}'
+                    f'<p class="collprose">{" &#183; ".join(org_bits)}</p>\n') if org_bits else ""
 
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / <a href="/collections">collections</a> / '
@@ -1614,13 +1667,16 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
         # the breakpoint the rail falls back under the map.
         + f'<div class="collhero"><div>{scatter}</div>{stats}</div>\n'
         + f'<p><a class="navbtn" href="/#/collection/{_e(cid)}">Open in the interactive portal</a></p>\n'
-        + f'<h2 id="about">About</h2>\n<p class="prose">{_e(desc)}</p>\n'
+        + '<h2 id="about">About</h2>\n'
+        + (_prose_of(coll, "about") or f'<p class="collprose">{_e(desc)}</p>\n')
         + data_section
         + members_section
         + orgs_section
     )
     return _shell(title=f"{title} - magnetotelluric data - AusMT",
-                  description=desc if len(desc) <= 160 else desc[:157] + "...",
+                  # The meta/og description is a summary of the rollup description, never the
+                  # section prose: the prose is a page-length payload and a link preview is a line.
+                  description=_meta_summary(desc),
                   canonical=url, body=body, jsonld=ld, base=base,
                   nav="navCollections", build=build,
                   machine=("Collection record in the MTCAT catalogue - JSON",
@@ -1672,6 +1728,29 @@ def _first_sentences(text, *, limit=2, budget=220) -> str:
             break
         out = cand
     return out
+
+
+_META_LIMIT = 160
+
+
+def _meta_summary(text) -> str:
+    """A BOUNDED single-line summary for <meta name="description"> and og:description.
+
+    A slice at a fixed offset cuts mid-word, so a long description shipped a link preview ending on
+    a broken word. Whole sentences are taken where they fit; where one opening sentence is already
+    longer than the budget the cut still falls on a word boundary, never inside a word. The result
+    is never longer than the budget, so the page cannot ship an unbounded preview.
+    """
+    s = " ".join(str(text or "").split())
+    if len(s) <= _META_LIMIT:
+        return s
+    out = _first_sentences(s, limit=2, budget=_META_LIMIT)
+    if out and len(out) <= _META_LIMIT:
+        return out
+    cut = s[:_META_LIMIT - 3]
+    if " " in cut:
+        cut = cut[:cut.rindex(" ")]
+    return cut.rstrip(" ,;:") + "..."
 
 
 def _plural(n, word) -> str:
