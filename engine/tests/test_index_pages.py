@@ -407,38 +407,114 @@ def test_collections_index_shares_one_outline_and_stays_inside_the_budget():
     assert size < 300_000, f"the collections index must stay under 300 KB, got {size} bytes"
 
 
-def test_the_hub_card_scatter_thins_its_dots_and_keeps_every_member():
-    """The hub card is a SUMMARY of a collection's footprint, and it was drawing one dot per member
-    station: the six-collection synthetic already spends most of a 300 KB budget on 2,610 circles,
-    and the cost scales with station count rather than with card count, so a corpus that grows
-    stations rather than collections walks into the ceiling with nothing between it and the wall.
+def _detail_page(pages, rows, i=0):
+    """The collection PAGE for one synthetic row, drawn from the same points its card is."""
+    return pages.collection_page(cid=f"coll-{i}", coll={"title": f"Synthetic Collection {i}"},
+                                 member_slugs=[(lbl, f"s{j}") for j, lbl
+                                               in enumerate(rows[i]["member_labels"])],
+                                 member_smeta=[{} for _ in rows[i]["member_labels"]],
+                                 base=BASE, member_points=rows[i]["member_points"])
 
-    The card now grid-decimates above a cap, which keeps the SHAPE of the footprint rather than its
-    first N points, and decimates per member so a card can never silently drop a survey. The
-    collection PAGE is unthinned: it is the large map the design brief asks for, and it carries the
-    legend and the per-dot labels that make each colour readable. FAILS IF the cap stops biting, if
-    a member disappears from a card, or if the page's own scatter starts being thinned."""
+
+def test_the_hub_card_draws_a_dot_for_every_member_station():
+    """A card's map is a COVERAGE claim, so it draws every member station or it misreports one.
+
+    The card used to grid-decimate above a per-card cap, and the cap was split between members and
+    then snapped to a grid, so it bit about a third harder than its own number implied: the AusLAMP
+    card drew 180 of its 1,354 stations and the legacy GDS card 193 of its 579. The two largest
+    programmes in the corpus were the two the card understated most, and a reader comparing cards
+    saw sparse reconnaissance where a dense national array sits.
+
+    Every dot is drawn instead, and the per-dot cost carries the page: fill and fill-opacity ride
+    on a wrapping <g> per colour run rather than on each circle. That is what the size assertion
+    below measures, and it is not decorative. Emitting the same 2,610 dots with the colour repeated
+    on every circle is 319,782 bytes, which is through the ceiling; this page holds because the
+    repetition is gone, not because the dots are.
+
+    FAILS IF a card draws fewer dots than its members have stations, if a member stops getting its
+    own colour, or if the per-dot cost regresses far enough to put the page over budget."""
     pages = _pages_module()
     rows = _synthetic_collections()
     page = pages.collections_index_page(rows=rows, base=BASE)
-    per_card = [c.count("<circle") for c in page.split('<article class="idxccard">')[1:]]
-    assert len(per_card) == len(rows), per_card
-    for n, row in zip(per_card, rows):
+    cards = page.split('<article class="idxccard">')[1:]
+    assert len(cards) == len(rows), f"one card per collection, got {len(cards)}"
+    for card, row in zip(cards, rows):
         full = sum(len(v) for v in row["member_points"].values())
-        assert n < full, f"a card carrying {full} stations must thin, drew {n}"
-        assert n >= len(row["member_labels"]), \
-            f"every member keeps at least one dot: {n} dots for {len(row['member_labels'])} members"
-    assert len(page.encode("utf-8")) < 300_000
+        drew = card.count("<circle")
+        assert drew == full, f"a card carrying {full} stations must draw {full} dots, drew {drew}"
+        # and every member survey is still separable by colour, which is what the map is for
+        fills = set(re.findall(r'fill="(#[0-9A-Fa-f]{6})"', card))
+        assert len(fills) == len(row["member_labels"]), \
+            f"{len(row['member_labels'])} members must draw in {len(row['member_labels'])} " \
+            f"colours, got {len(fills)}"
+    size = len(page.encode("utf-8"))
+    assert size < 300_000, (
+        f"the collections hub must draw every station AND stay under 300 KB, got {size} bytes")
 
-    # the collection page itself draws every dot: it is the hero map, not a card
-    full_pts = rows[0]["member_points"]
-    detail = pages.collection_page(cid="coll-0", coll={"title": "Synthetic Collection 0"},
-                                   member_slugs=[(lbl, f"s{i}") for i, lbl
-                                                 in enumerate(rows[0]["member_labels"])],
-                                   member_smeta=[{} for _ in rows[0]["member_labels"]],
-                                   base=BASE, member_points=full_pts)
-    assert detail.count("<circle") == sum(len(v) for v in full_pts.values()), \
+    # the collection page draws the same footprint: the card is no longer a reduced version of it
+    detail = _detail_page(pages, rows)
+    assert detail.count("<circle") == sum(len(v) for v in rows[0]["member_points"].values()), \
         "the collection page draws the whole footprint"
+    assert cards[0].count("<circle") == detail.count("<circle"), \
+        "card and page now agree on how many stations the collection has"
+
+
+def test_no_collection_map_draws_the_single_survey_locator_ring():
+    """The ring the owner asked to be rid of: a large grey circle sitting mid-continent on a card.
+
+    The ring is the minimap's stand-in for dots too small to draw, so it says "this one survey is
+    here". A collection gathers many surveys and has no one location, and the ring was marking the
+    centroid of a continent-spanning programme, a spot no member of it occupies. Rendered it was
+    19.8 px across against a 3.1 px station dot, so it read as the most prominent object on the map.
+
+    FAILS IF a ring returns to either collection surface, the card or the page."""
+    pages = _pages_module()
+    rows = _synthetic_collections()
+    page = pages.collections_index_page(rows=rows, base=BASE)
+    assert 'stroke="#8FA3B0"' not in page, \
+        "no collection card may draw the single-survey locator ring"
+    # non-vacuous: the assertion above is only worth anything if these maps drew circles at all
+    assert page.count("<circle") == sum(sum(len(v) for v in r["member_points"].values())
+                                        for r in rows), \
+        "every circle on the collections hub is a station dot and nothing else"
+    detail = _detail_page(pages, rows)
+    assert 'stroke="#8FA3B0"' not in detail and detail.count("<circle") > 0, \
+        "the collection page must not draw it either"
+
+
+def test_the_locator_ring_follows_extent_not_station_count():
+    """The root cause behind the ring on the collection cards, pinned on the minimap itself.
+
+    The ring exists because a footprint under a degree across projects to less than a pixel on a
+    continental viewBox: the dots are suppressed there and the ring says where to look instead. The
+    gate was a proxy for that, `len(points) < 400`, and a count does not predict an extent. A
+    54-station survey spread over 39 degrees sailed under the number and got a ring around the
+    middle of Australia, and the collection card inherited the same fault the moment its own
+    thinning pushed its count under 400. Both surfaces, one wrong test.
+
+    FAILS IF the ring returns on a wide footprint, goes missing on a compact one, starts tracking
+    how many stations were passed, or stops honouring the explicit opt-out."""
+    pages = _pages_module()
+    ring = 'stroke="#8FA3B0"'
+    wide = [(115.0 + i * 0.8, -33.0 - (i % 7) * 0.9, "LPMT") for i in range(40)]
+    tight = [(136.97 + i * 0.0004, -30.14 + i * 0.0003, "LPMT") for i in range(40)]
+    assert ring not in pages._minimap_svg(wide), \
+        "a wide footprint draws its own dots, so it needs nothing to stand in for them"
+    assert "<circle" in pages._minimap_svg(wide), "and those dots must actually be there"
+    assert ring in pages._minimap_svg(tight), \
+        "a sub-degree footprint draws no dots, so the ring is the only thing marking it"
+
+    # count is not the lever it was mistaken for, in either direction
+    tight_many = [(136.97 + (i % 25) * 0.0004, -30.14 + (i // 25) * 0.0003, "LPMT")
+                  for i in range(500)]
+    assert ring in pages._minimap_svg(tight_many), \
+        "500 sub-degree stations still draw no dots, so they still need the ring"
+    wide_few = [(115.0, -33.0, "LPMT"), (150.0, -25.0, "LPMT")]
+    assert ring not in pages._minimap_svg(wide_few), \
+        "two stations a continent apart have no centroid worth marking"
+
+    # and a caller that has no single location to mark says so, whatever the extent
+    assert ring not in pages._minimap_svg(tight, locator=False)
 
 
 # ==================================================================================================

@@ -1061,13 +1061,19 @@ def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
                             member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
                                            for i in range(14)},
                             member_facts=None, level_counts=None, formats=None)
-    fills = re.findall(r'<circle [^>]*fill="(#[0-9A-Fa-f]{6})"', page)
+    # A member's colour is stated once, on the group carrying that member's dots; it used to be
+    # repeated on every circle. Either element answers this test, which is about fourteen members
+    # getting fourteen distinct colours and not about where the attribute sits. The coast rings are
+    # excluded by naming the two elements rather than by matching a bare fill, because a <path>
+    # carries the panel's own fill and would be counted as a fifteenth colour.
+    dot_fill = r'<(?:g|circle) [^>]*fill="(#[0-9A-Fa-f]{6})"'
+    fills = re.findall(dot_fill, page)
     assert len(fills) == 14, fills
     assert len(set(fills)) == 14, f"fourteen members must get fourteen colours, got {len(set(fills))}"
     for i in range(14):
         assert f"<title>Member {i}</title>" in page, f"dot for Member {i} must name its survey"
     # determinism: the same input renders the same colours, every time
-    assert fills == re.findall(r'<circle [^>]*fill="(#[0-9A-Fa-f]{6})"',
+    assert fills == re.findall(dot_fill,
                                _collection_call(pages, n_members=14,
                                                 member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
                                                                for i in range(14)},

@@ -74,11 +74,6 @@ _TYPE_FALLBACK = "#4FC3D9"
 # same colour and its legend could not disambiguate them (AusLAMP: 14 members, 8 colours, 6 reused).
 _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
 
-# Dots per hub CARD before the footprint is thinned. The card is a summary; the collection page
-# draws the whole footprint. Sized so six corpus-scale collections stay well inside the hub's
-# asserted 300 KB budget with room for the cards' own text.
-_CARD_DOT_CAP = 320
-
 # The map panel's own ground, one step CLOSER to the card it sits on than the near-black it used to
 # carry. The panel was a box on a box: a dark rectangle inside a lighter card, so the eye read the
 # rectangle before it read the coastline. Stepping the fill to the card's own token and softening the
@@ -272,16 +267,18 @@ def au_outline_defs(width):
 
 
 def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=False,
-                 label="Survey location in Australia", outline_ref=None) -> str:
+                 label="Survey location in Australia", outline_ref=None, locator=True) -> str:
     """The location minimap: the shared schematic outline with this survey's stations, dots
     coloured by data type in the portal's own palette (or by `colours`, the collection page's
     member-colour map). The projection is the portal collections view's own fixed-extent
     equirectangular fit, so the two surfaces draw one map. Under one degree of extent the dots
     are sub-pixel here, so only the ring renders and the footprint panel owns the dots.
-    `outline_ref`: a symbol id from au_outline_defs, referenced instead of inlining the geometry."""
-    ext = au.EXTENT
+    `outline_ref`: a symbol id from au_outline_defs, referenced instead of inlining the geometry.
+    `locator`: whether this map is allowed to mark a single location at all. A footprint that
+    gathers many surveys has no one location to mark, so the collection surfaces pass False."""
+    extent = au.EXTENT
     height = _minimap_height(width)
-    p = _proj(ext)(width, height, 8)
+    p = _proj(extent)(width, height, 8)
     # Both reference forms: `href` on <use> is SVG2, `xlink:href` is the SVG 1.1 spelling older
     # engines read. They cost a few hundred bytes across a whole hub page, and without the second
     # one an engine that predates SVG2 draws the dots with no coastline behind them.
@@ -289,11 +286,14 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
                else _outline_paths(p))
     xlink_ns = ' xmlns:xlink="http://www.w3.org/1999/xlink"' if outline_ref else ""
     # Dot size: on a compact survey the separate footprint panel carries the structure, so the
-    # minimap dots are a location hint under the ring and stay small regardless of count; a
-    # state-wide survey has no zoom panel, so its dots ARE the content and scale by density.
+    # minimap dots are a location hint and stay small regardless of count; a state-wide survey has
+    # no zoom panel, so its dots ARE the content and scale by density.
     r = 1.2 if compact else (2 if len(points) <= 60 else (1.4 if len(points) <= 200 else 1.1))
+    # Below one degree the whole footprint projects to under a pixel on this continental viewBox,
+    # so the dots would be an invisible smudge and the separate footprint panel owns them instead.
+    dots_drawn = _extent_deg(points) >= 1
     dots = ""
-    if _extent_deg(points) >= 1:
+    if dots_drawn:
         def col(pt):
             if colours is not None:
                 return colours.get(pt[2], _TYPE_FALLBACK)
@@ -301,7 +301,7 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
 
         def dot(pt):
             x, y = p(pt[0], pt[1])
-            head = (f'<circle cx="{x}" cy="{y}" r="{r}" fill="{col(pt)}" fill-opacity=".9"')
+            head = f'<circle cx="{x}" cy="{y}" r="{r}"'
             # A dot whose colour encodes WHICH member survey it belongs to must also say so in
             # text: colour alone is not an identifier (design brief 45), and the SPA's own scatter
             # has carried these titles all along. Type-coloured dots need none; the type is a
@@ -309,9 +309,31 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
             if labelled:
                 return f"{head}><title>{_e(pt[2])}</title></circle>"
             return f"{head}/>"
-        dots = "".join(dot(pt) for pt in points)
+
+        # `fill` and `fill-opacity` repeat identically across every dot of a run, so they ride on a
+        # wrapping <g> rather than on each circle: a map carrying a thousand-station footprint pays
+        # for its colour once per run instead of once per station, which is what lets a hub card
+        # draw every member station inside the page's size budget. Runs rather than one group per
+        # colour, because collapsing a colour globally would reorder the paint and these dots are
+        # translucent. `r` stays on the circle: geometry properties do not inherit, so an r hoisted
+        # onto the group would leave every circle at the default radius of zero and draw nothing.
+        runs, group, fill = [], [], None
+        for pt in points:
+            colour = col(pt)
+            if colour != fill:
+                if group:
+                    runs.append(f'<g fill="{fill}">{"".join(group)}</g>')
+                group, fill = [], colour
+            group.append(dot(pt))
+        if group:
+            runs.append(f'<g fill="{fill}">{"".join(group)}</g>')
+        dots = f'<g fill-opacity=".9">{"".join(runs)}</g>'
     marker = ""
-    if points and len(points) < 400:
+    # The ring is the exact complement of the dot gate: its whole job is to stand in for dots too
+    # small to draw, so it is meaningful when and only when they are suppressed. Keying it off a
+    # point COUNT instead put a ring on every map that happened to be short, including one drawn
+    # from a sampled footprint, where it marked the centroid of a continent.
+    if locator and points and not dots_drawn:
         clon = sum(pt[0] for pt in points) / len(points)
         clat = sum(pt[1] for pt in points) / len(points)
         mx, my = p(clon, clat)
@@ -1410,58 +1432,40 @@ def _member_colours(n):
     return out
 
 
-def _grid_decimate(points, cap):
-    """At most `cap` points, keeping the SHAPE of the footprint rather than its first `cap` rows.
-
-    Points are snapped to a grid and the first point in each cell wins, so a dense traverse thins
-    to a line and a regional array thins to an array. The grid is coarsened until the kept count
-    fits, which always terminates because a 1x1 grid keeps one point. Deterministic in input
-    order."""
-    if not cap or len(points) <= cap:
-        return list(points)
-    lons = [pt[0] for pt in points]
-    lats = [pt[1] for pt in points]
-    lo0, la0 = min(lons), min(lats)
-    dlo = max(max(lons) - lo0, 1e-9)
-    dla = max(max(lats) - la0, 1e-9)
-    n = max(1, int(math.sqrt(cap)))
-    while True:
-        seen, out = set(), []
-        for pt in points:
-            key = (min(n - 1, int((pt[0] - lo0) / dlo * n)),
-                   min(n - 1, int((pt[1] - la0) / dla * n)))
-            if key not in seen:
-                seen.add(key)
-                out.append(pt)
-        if len(out) <= cap or n == 1:
-            return out[:cap]
-        n = max(1, n - max(1, n // 8))
-
-
 def _collection_scatter(member_labels, member_points, title, *, width=560, legend=True,
-                        outline_ref=None, max_dots=None) -> str:
+                        outline_ref=None) -> str:
     """The member-coloured footprint the portal collections view draws (collScatter), as static
-    SVG: dots coloured per member survey, each carrying its survey's name as a `<title>`, with a
-    compact legend. `legend=False` plus `max_dots` is the hub card's form, where the card is a
-    summary: the footprint is thinned PER MEMBER so no survey can silently vanish from a card, and
-    the roll-call belongs on the collection page itself."""
+    SVG: dots coloured per member survey, with a compact legend. `legend=False` is the hub card's
+    form, where the roll-call belongs on the collection page itself.
+
+    BOTH forms draw every member station. A card that sampled its footprint reported a programme
+    as smaller and sparser than it is, which is the one thing a coverage map may not do, and it
+    reported it worst for the largest collections. The per-dot cost carries the page instead (see
+    the dot grouping in _minimap_svg), and the hub's own asserted size budget is what holds the
+    line as the corpus grows: it fails loudly rather than quietly dropping stations.
+
+    The per-dot `<title>` rides with the legend. It exists so that colour is not the only
+    identifier of a member survey (design brief 45), and the legend is what gives those colours
+    names. The card has no legend, and its whole surface is one stretched link, so no pointer can
+    reach a dot there to read a title in the first place."""
     if not member_points:
         return ""
     present = [lbl for lbl in member_labels if member_points.get(lbl)]
     palette = _member_colours(len(present))
-    share = max(1, max_dots // len(present)) if (max_dots and present) else None
     colours, pts, legend_rows = {}, [], []
     for i, lbl in enumerate(present):
         colour = palette[i]
         colours[lbl] = colour
-        kept = _grid_decimate(member_points[lbl], share)
-        pts += [(lon, lat, lbl) for lon, lat in kept]
+        pts += [(lon, lat, lbl) for lon, lat in member_points[lbl]]
         legend_rows.append(f'<span style="white-space:nowrap"><span style="display:inline-block;'
                            f'width:.6em;height:.6em;border-radius:50%;background:{colour}"></span> '
                            f'{_e(lbl)}</span>')
     if not pts:
         return ""
-    svg = _minimap_svg(pts, width=width, colours=colours, outline_ref=outline_ref, labelled=True,
+    # No locator ring on a collection footprint: a grouping of surveys has no single location, and
+    # the centroid of a continent-spanning programme is a spot no member of it occupies.
+    svg = _minimap_svg(pts, width=width, colours=colours, outline_ref=outline_ref,
+                       labelled=legend, locator=False,
                        label=f"Member stations of {title} over Australia")
     if not legend:
         return svg
@@ -1771,7 +1775,7 @@ def collections_index_page(*, rows, base, build=None) -> str:
                         for v in (r.get("type"), r.get("status")) if v)
         scatter = _collection_scatter(r.get("member_labels") or [], r.get("member_points") or {},
                                       title, width=_COLL_INDEX_MAP_WIDTH, legend=False,
-                                      outline_ref=ref, max_dots=_CARD_DOT_CAP)
+                                      outline_ref=ref)
         blurb = _first_sentences(r.get("description"))
         chip_row = f"<p>{chips}</p>" if chips else ""
         desc_row = f'<p class="idxdesc">{_e(blurb)}</p>' if blurb else ""
