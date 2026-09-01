@@ -33,6 +33,7 @@ from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, mailer a
                uploader_keys as uploader_keys_mod, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
+from .curatorpage import _COLLECTION_STATUS_VOCAB, _COLLECTION_TYPE_VOCAB
 from .orcid import is_valid_orcid
 
 logger = logging.getLogger("ausmt.gateway")
@@ -53,10 +54,11 @@ _KEY_EMAIL_MAX_CHARS = 254
 
 # C43 Stage 3b collections editor — the gateway-side guardrails (record D5-A A2: the console's select
 # IS the guardrail; type/id/status are validator-WARNING-grade only, so the write path enforces them
-# here before an operation is built). The id vocab is the engine's (docs/.../collection-ids.md).
+# here before an operation is built). The id vocab is the engine's (docs/.../collection-ids.md). The
+# type and status vocabularies are the select's own tuples, imported above rather than restated: a
+# second copy here can drift, and a write path that refuses a value the console offers is a 400 no
+# curator can act on.
 _COLLECTION_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-_COLLECTION_TYPE_VOCAB = ("programme", "release", "institutional", "other")
-_COLLECTION_STATUS_VOCAB = ("active", "completed", "archived")
 # F4 (D5-C): any control character (incl. newline/CR/TAB) is rejected in the collection id + release
 # note before they interpolate into a commit subject/body — a newline in either forges fake
 # `Curated-by:`/`Approved-by:` trailers into the git audit record (the git history IS the audit trail).

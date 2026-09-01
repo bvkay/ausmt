@@ -1689,7 +1689,9 @@ _INDEX_MAP_WIDTH = 230          # the surveys index card map
 _COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
 
 # The vocabulary named here is the one docs/docs/developer/collection-ids.md ratifies, and the two
-# must not drift: a reader meeting a chip on this hub looks the value up in that page.
+# must not drift: a reader meeting a chip on this hub looks the value up in that page. Every value but
+# `other` is named; `other` is the catch-all, and a lede that named it would tell a reader nothing.
+# gateway/tests/test_c43_collection_type_vocab.py holds this sentence to that rule.
 _COLLECTIONS_LEDE = ("Collections group related surveys for discovery and exploration. A collection "
                      "may be a field programme, a data release, an institutional holding, or a "
                      "compilation of related surveys.")

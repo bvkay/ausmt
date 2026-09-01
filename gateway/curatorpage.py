@@ -6959,7 +6959,12 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
     return _shell("AusMT collections", body, nav=nav)
 
 
-_COLLECTION_TYPE_VOCAB = ("programme", "release", "institutional", "other")
+# Record D5-A A2: collection type is validator-unenforced, so the console's select IS the guardrail
+# and these tuples ARE that select's options. app.py imports them for its write-path gates rather than
+# restating them, so the gate can never refuse a value the console offers, or admit one it does not.
+# The ratified vocabulary is docs/docs/developer/collection-ids.md; a value added here must be added
+# to every carrier gateway/tests/test_c43_collection_type_vocab.py reads, or that pin goes red.
+_COLLECTION_TYPE_VOCAB = ("programme", "release", "institutional", "compilation", "other")
 _COLLECTION_STATUS_VOCAB = ("active", "completed", "archived")
 
 
