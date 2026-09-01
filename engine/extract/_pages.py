@@ -835,6 +835,51 @@ def _citation_locator(smeta, access_url):
     return access_url
 
 
+# The corpus's own spelling for each recorded channel, in the order a page prints them: electric
+# first, then the horizontal magnetic pair, then the vertical coil. The keys are the normalised
+# form (lowercase, B-for-H folded) that build_portal's channels_recorded masks read, so a survey
+# declaring Hz and a survey declaring Bz are the same declaration to both.
+_CHANNEL_LABELS = {"ex": "Ex", "ey": "Ey", "hx": "Bx", "hy": "By", "hz": "Bz"}
+
+
+def _channel_key(name) -> str:
+    """One declared channel name in the normalised form the impedance and tipper masks use."""
+    key = str(name).strip().lower()
+    return "h" + key[1:] if key.startswith("b") else key
+
+
+def _channels_declared(declared) -> str:
+    """The channels tile from the survey's OWN channels_recorded declaration.
+
+    The declaration is the ratified authority on what a survey measured: it is what masks the
+    impedance and the tipper survey-wide, so it is also what the page may state. Known channels
+    print in the corpus's spelling and in one fixed order, and a channel outside that vocabulary
+    prints as the declaration spells it rather than being dropped, because a tile that silently
+    discards a declared channel is the same defect as one that invents an undeclared one."""
+    seen = {}
+    for raw in declared or []:
+        name = str(raw).strip()
+        if name:
+            seen.setdefault(_channel_key(name), name)
+    known = [label for key, label in _CHANNEL_LABELS.items() if key in seen]
+    other = sorted(name for key, name in seen.items() if key not in _CHANNEL_LABELS)
+    return " ".join(known + other)
+
+
+def _survey_kind(served_types) -> str:
+    """What KIND of survey this is, in lower case, from the same served station types the data-type
+    badge prints. A geomagnetic depth sounding survey records no electric field and estimates no
+    impedance, so calling it magnetotelluric is wrong in the crumb, the page title, the meta
+    description and the structured data alike. A survey serving both kinds names both: neither half
+    is a rewrite of the other, and naming only the larger one would suppress a real holding. A
+    survey whose stations disclose no type keeps the magnetotelluric reading, which is what the
+    corpus is."""
+    gds = "GDS" in served_types
+    if gds and served_types - {"GDS"}:
+        return "magnetotelluric and geomagnetic depth sounding survey"
+    return "geomagnetic depth sounding survey" if gds else "magnetotelluric survey"
+
+
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
                 base, extent=None, discovery=None, build=None) -> str:
     smeta = smeta or {}
@@ -846,8 +891,6 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     version = smeta.get("version") or ""
     years = _survey_years(sm_doc, smeta)
     url = f"{base}/surveys/{slug}"
-    desc = (blurb or f"Magnetotelluric survey data: {title}.").strip()
-    desc_meta = _meta_summary(desc)
     docs = sorted(station_docs, key=lambda d: str(d.get("station") or d.get("ausmt_id")))
     n_stations = len(docs)
 
@@ -890,9 +933,20 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         if not tipper:
             tipper = int(srow.get("n_stations_tipper") or 0)
 
+    # The band classes this survey actually serves, read once and spent on both the survey's kind
+    # and the channels tile's fallback, so the two can never disagree about the same stations. Read
+    # after the discovery fallback, which is what fills the types for an embargoed survey.
+    served_types = {t for t in type_counts if t}
+    # The kind is derived once and spent on every surface that names it: the crumb, the page title,
+    # the meta-description fallback and the JSON-LD name must tell one story.
+    kind = _survey_kind(served_types)
+    kind_lead = kind[0].upper() + kind[1:]
+    desc = (blurb or f"{kind_lead} data: {title}.").strip()
+    desc_meta = _meta_summary(desc)
+
     # ---- JSON-LD ----
     ld = {"@context": "https://schema.org", "@type": "Dataset",
-          "name": f"{title} magnetotelluric survey",
+          "name": f"{title} {kind}",
           "description": desc, "url": url,
           "identifier": url,
           "isAccessibleForFree": True,
@@ -1114,12 +1168,22 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
             f'<div class="herofacts">{"".join(core)}</div></div>')
 
     # ---- the optional secondary metrics, after the hero ----
-    # Channels recorded, from the served components: what the survey actually measured. The
-    # tipper tile appears only where a tipper exists (a zero count is the channels tile's job).
-    channels = "Ex Ey Bx By" + (" Bz" if tipper == n_stations and n_stations else "")
-    if 0 < tipper < n_stations:
-        channels = "Ex Ey Bx By (+Bz)"
-    tiles = [tile(_e(channels), "channels recorded")]
+    # Channels recorded: what the survey actually measured, from its own declaration where it makes
+    # one and from the served components where it does not. The declaration is the authority the
+    # build already acts on (it masks the impedance and the tipper survey-wide), so a page that
+    # contradicted it would contradict the data beside it. With no declaration the tile may assert
+    # only what the served components corroborate: a survey serving nothing but tipper-only stations
+    # recorded no electric field, and Ex Ey on that tile is an invented channel. The tipper tile
+    # appears only where a tipper exists (a zero count is the channels tile's job).
+    channels = _channels_declared(smeta.get("channels_recorded"))
+    if not channels:
+        if served_types and not (served_types - {"GDS"}):
+            channels = "Bx By Bz"
+        else:
+            channels = "Ex Ey Bx By" + (" Bz" if tipper == n_stations and n_stations else "")
+            if 0 < tipper < n_stations:
+                channels = "Ex Ey Bx By (+Bz)"
+    tiles = [tile(_e(channels), "channels recorded")] if channels else []
     if tipper:
         tiles.append(tile(f"{tipper} / {n_stations}", "tipper stations"))
     if len(rates) == 1:
@@ -1240,7 +1304,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         crumb,
         nav,
         f"<h1>{_e(title)}{type_badge}</h1>",
-        f'<p class="crumb">Magnetotelluric survey &#183; {_e(region)}'
+        f'<p class="crumb">{_e(kind_lead)} &#183; {_e(region)}'
         + (f" &#183; {_e(org)}" if org else "") + "</p>",
         coll_line, cite, embargo, lede, hero, stats,
         about, downloads, table, provenance, pubs_html,
@@ -1252,7 +1316,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # bare route of its own (the entity rewrite matches the two-segment shapes only), so this is
     # the one URL at which the rendered card is reachable.
     og_image = f"{base}/data/pages/og/{slug}.png" if _og_available() else None
-    return _shell(title=f"{title} - magnetotelluric survey data - AusMT",
+    return _shell(title=f"{title} - {kind} data - AusMT",
                   description=desc_meta, canonical=url, body=body, jsonld=ld,
                   og_image=og_image, base=base, nav="navSurveys", build=build,
                   machine=("Machine-readable survey metadata - JSON",
