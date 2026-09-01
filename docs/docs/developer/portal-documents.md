@@ -133,6 +133,7 @@ Programme groupings, rolled up from the `collection` block each member survey de
 | `start_year` | integer or null | year the programme began |
 | `last_updated` | string or null | ISO date the programme record was last updated |
 | `description` | string or null | one paragraph shown on the collection card and page |
+| `prose` | object | ABSENT unless a member declares it. Long-form page copy: `{about, data, members_before, members_after, organisations}`, each an array of paragraph strings. A paragraph beginning `# ` is a subheading. Not emitted to MTCAT or to `survey.json` |
 | `surveys` | array of string | member survey DISPLAY names, sorted |
 | `n_surveys` | integer | length of `surveys` |
 | `n_stations` | integer | total stations across the member surveys |

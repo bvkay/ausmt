@@ -809,13 +809,20 @@ def _history_subcommand(argv: list[str]) -> str | None:
 # real fixture tree. READ-ONLY: no git verb, no file mutation — the history-job trust class.
 
 # The programme-level fields the rollup carries, in the engine's field order (build_portal.py:396).
-_COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_updated", "description")
+_COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_updated", "description",
+                             "prose")
 # F2 (D5-C): the fields whose per-member DIVERGENCE the console reports + offers Normalise for.
 # EXCLUDES `last_updated`: it is a GATEWAY-MANAGED per-member timestamp (stamped on only the changed
 # members in a diff-minimal batch), NOT a curator-reconcilable programme field — including it would
 # make the console permanently report "members disagree on last_updated" with a Normalise remedy that
 # has no form field to fix it. It stays in _COLLECTION_ROLLUP_FIELDS for engine-rollup parity only.
-_COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS if f != "last_updated")
+# ALSO EXCLUDES `prose`, on the same rule: the console has no form field for it, so a reported prose
+# divergence would raise a Need-attention band that _divergence_summary cannot phrase (it iterates
+# curatorpage's own field tuple) and that Normalise has no input to clear. It stays in
+# _COLLECTION_ROLLUP_FIELDS for engine-rollup parity only. A divergent prose block is reconciled by
+# editing the member survey.yaml files, not in the console.
+_COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS
+                                      if f not in ("last_updated", "prose"))
 # Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality (D5-C
 # round 2, R1): the editor's no-op check compares str-form (F1), the divergence detector buckets
 # str-form (R1 — else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
@@ -836,6 +843,13 @@ def _json_scalar(v):
     collections.json stringifies the same date)."""
     if v is None or isinstance(v, (str, int, float, bool)):
         return v
+    # A nested programme field (collection.prose: a map of paragraph lists) is coerced ELEMENTWISE.
+    # A bare str() here would surface a Python repr as the field's value and break rollup parity
+    # with the engine, which keeps the real structure.
+    if isinstance(v, dict):
+        return {str(k): _json_scalar(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_json_scalar(x) for x in v]
     return str(v)
 
 

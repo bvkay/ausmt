@@ -1321,3 +1321,215 @@ def test_the_licence_reads_in_human_form_in_chrome_and_keeps_its_identifier_in_j
     assert "<dt>Licence</dt><dd>CC BY 4.0</dd>" in page, "the facts row must read in human form"
     assert '"license": "https://creativecommons.org/licenses/by/4.0/"' in page, \
         "the JSON-LD licence stays the canonical URL the identifier maps to"
+
+
+# ==================================================================================================
+# Collection prose: the About text is a structured payload, not one escaped block
+
+
+_PROSE = {
+    "about": ["The collection brings together historical surveys.",
+              "# Preservation and reprocessing",
+              "A major source is the Australian Electromagnetic Database.",
+              "The provenance of each data product is retained."],
+    "data": ["Data are provided through the individual surveys."],
+    "members_before": ["Each survey remains an independent AusMT record."],
+    "members_after": ["Where appropriate, surveys may be identified as:",
+                      "Reprocessed: transfer functions newly estimated.",
+                      "Mixed: more than one of these sources."],
+    "organisations": ["The organisations represented include institutions."],
+}
+
+
+def _prose_collection(pages, prose=_PROSE, **over):
+    """The standard collection fixture with a declared prose payload."""
+    coll = {"title": "Test Collection", "n_stations": 400, "type": "programme", "status": "active",
+            "description": "A national programme. It spans several states.", "prose": prose}
+    coll.update(over.pop("coll", {}))
+    return _collection_call(pages, coll=coll, **over)
+
+
+def test_collection_prose_renders_as_paragraphs_with_a_subheading(tmp_path):
+    """FAULT 1. The whole collection description used to be emitted as ONE escaped <p>, so every
+    paragraph break and every section heading the author wrote was destroyed: about 450 words
+    arrived as a single block.
+
+    FAILS IF the paragraphs are joined back into one element, if the '# ' subheading convention
+    renders as a literal hash, or if the subheading is emitted at a level that outranks the <h2>
+    section it sits inside."""
+    pages = _pages_module()
+    page = _prose_collection(pages)
+    about = page.split('<h2 id="about">About</h2>\n', 1)[1].split('<h2 id="data"', 1)[0]
+
+    assert about.count('<p class="collprose">') == 3, \
+        f"the three About paragraphs must each be their own element, got:\n{about}"
+    for para in ("The collection brings together historical surveys.",
+                 "A major source is the Australian Electromagnetic Database.",
+                 "The provenance of each data product is retained."):
+        assert f'<p class="collprose">{para}</p>' in about, f"paragraph lost or merged: {para}"
+
+    # The subheading is an <h3>: it is subordinate to the <h2> section that contains it, so the
+    # document outline stays valid. It must not arrive as a literal '# ' in the reader's text.
+    assert '<h3 class="collsub">Preservation and reprocessing</h3>' in about, \
+        "a '# ' paragraph is the section's subheading, not a paragraph"
+    assert "# Preservation" not in page, "the sigil is structure and must never reach the reader"
+    assert re.search(r"\bh3\{[^}]*font-size:1rem", page), \
+        "an unstyled h3 falls back to the UA's 18.72px and renders LARGER than its own h2 section"
+
+
+def test_collection_prose_wraps_the_generated_member_cards(tmp_path):
+    """FAULT 3. The owner's marker '[Survey cards/list]' sits INSIDE Member surveys, so the prose
+    wraps the generated roll-call rather than replacing it: what a member survey is comes BEFORE the
+    cards, and the classification list comes AFTER them.
+
+    FAILS IF either block lands on the wrong side of the cards, if the generated cards are displaced
+    by the prose, or if the per-section prose is dumped into About instead of its own section."""
+    pages = _pages_module()
+    page = _prose_collection(pages)
+
+    cards = page.index('<div class="memlist">')
+    before = page.index("Each survey remains an independent AusMT record.")
+    after = page.index("Where appropriate, surveys may be identified as:")
+    heading = page.index('<h2 id="surveys">')
+    assert heading < before < cards < after, (
+        "member prose must read: heading, intro, the generated cards, then the classification list "
+        f"(heading={heading} before={before} cards={cards} after={after})")
+    assert '<a href="/surveys/m0">Member 0</a>' in page, \
+        "the prose wraps the generated roll-call and must never replace it"
+    assert page.index('<a href="/surveys/m0">Member 0</a>') < after, \
+        "the classification list follows the cards it classifies"
+
+    # The classification list is PROSE, not a badge: no machine field carries it anywhere in the
+    # corpus, so each entry renders as its own paragraph and reads as a definition line.
+    assert '<p class="collprose">Reprocessed: transfer functions newly estimated.</p>' in page and \
+           '<p class="collprose">Mixed: more than one of these sources.</p>' in page, \
+        "each classification entry is its own paragraph"
+
+    # data / organisations: the prose leads, and the GENERATED content it introduces still follows.
+    data = page.split('<h2 id="data">', 1)[1].split('<h2 id="surveys"', 1)[0]
+    assert data.index("Data are provided through the individual surveys.") < data.index("<dl>"), \
+        "the data prose introduces the availability rows, which are generated and must remain"
+    assert "<dt>Transfer functions</dt>" in data, "the generated availability rows must survive"
+    orgs = page.split('<h2 id="organisations">', 1)[1]
+    assert orgs.index("The organisations represented include institutions.") < \
+           orgs.index('<a href="https://ror.org/00000000">Org 0</a>'), \
+        "the organisations prose qualifies the generated roll-call and never replaces it"
+
+
+def test_collection_prose_is_escaped_and_carries_no_markup(tmp_path):
+    """The prose is author-supplied text on a public serving surface. Only the one ratified
+    structural convention is interpreted; everything else is inert.
+
+    FAILS IF any author-supplied character reaches the page as markup, in a paragraph OR in a
+    subheading (the subheading path is the easy one to forget, because it builds its own element)."""
+    pages = _pages_module()
+    page = _prose_collection(pages, prose={
+        "about": ['<script>alert(1)</script> & "quoted" <b>bold</b>',
+                  '# <img src=x onerror=alert(2)> & \'sub\''],
+        "members_after": ['<iframe src="evil"></iframe>']})
+
+    for hostile in ("<script>alert(1)</script>", "<b>bold</b>", "<img src=x onerror=alert(2)>",
+                    '<iframe src="evil"></iframe>'):
+        assert hostile not in page, f"hostile prose must not reach the page live: {hostile}"
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page, \
+        "the paragraph must render escaped, not dropped"
+    assert "&lt;img src=x onerror=alert(2)&gt;" in page, \
+        "the SUBHEADING path escapes too: it builds its own element and must not skip _e()"
+    assert "&amp;" in page and "&quot;quoted&quot;" in page, \
+        "ampersands and quotes are escaped exactly as every other curated field is"
+    # The h3 element itself is still emitted: escaping must not cost the structure.
+    assert '<h3 class="collsub">&lt;img' in page, "the subheading is still a subheading"
+
+
+def test_a_collection_without_prose_renders_exactly_as_before(tmp_path):
+    """Only the GDS collection declares prose. FAILS IF adding the field changes a collection that
+    declares none: the flat description must still fill About, and the engine's own sentence must
+    still introduce the availability rows."""
+    pages = _pages_module()
+    page = _collection_call(pages)          # the standing fixture, no prose
+    assert '<p class="collprose">A national programme. It spans several states.</p>' in page, \
+        "with no prose declared the flat description still fills About"
+    assert "each member survey publishes its own data" in page, \
+        "the engine's own data sentence is the fallback, not something prose removed"
+    assert "<h3" not in page.split("<body>", 1)[1], "no prose means no subheading"
+    # An empty or malformed payload is not a licence to emit rubbish (one <p> per character).
+    for junk in ({}, {"about": []}, {"about": ""}, {"about": None}, {"about": "flat string"}):
+        quiet = _prose_collection(pages, prose=junk)
+        assert '<p class="collprose">A national programme.' in quiet, \
+            f"a payload declaring no About paragraphs falls back to the description: {junk!r}"
+        assert '<p class="collprose">f</p>' not in quiet, \
+            f"a bare string must never be iterated character by character: {junk!r}"
+
+
+def test_the_collection_prose_reads_wider_than_the_survey_reading_measure(tmp_path):
+    """FAULT 2. The collection prose was capped at the 70ch reading measure while the map above it
+    ran to 820px, so the text read as a narrow ribbon under a wide graphic.
+
+    .prose is SHARED with the survey pages (the About-this-survey blurb and the NCI note), so the
+    fix is a scoped class, never a widened .prose. FAILS IF the survey reading measure moves."""
+    pages = _pages_module()
+    page = _prose_collection(pages)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+
+    assert ".prose{max-width:70ch}" in css, \
+        "the SURVEY pages' reading measure must not move: .prose is shared"
+    assert "class=\"prose\"" not in page, \
+        "the collection page carries no unscoped .prose element left behind by the rescope"
+    assert re.search(r"\.collprose\{max-width:min\(", css), \
+        "the collection measure is its own class, scoped away from the survey pages"
+
+    # The prose tracks the hero map's column rather than a flat pixel value, because the map is
+    # itself squeezed by the metric rail below the wide breakpoint: a flat 820px would leave the
+    # text WIDER than the graphic it sits under through the whole mid-width band. One token feeds
+    # both rules so the two cannot drift.
+    assert re.search(r"main\{[^}]*--collw:820px", css), "one token carries the collection measure"
+    assert re.search(r"\.collmap\{[^}]*max-width:var\(--collw\)", css), \
+        "the map must read its width from the same token the prose does"
+    assert "--railw" in css and "--railgap" in css, \
+        "the prose subtracts the metric rail so it aligns with the map beside it"
+    assert re.search(r"@media\(max-width:860px\)\{\.collprose\{max-width:var\(--collw\)\}", css), \
+        "below the hero's own collapse breakpoint the rail is gone and the prose takes the column"
+
+    # The survey page is the thing that must NOT have moved.
+    survey = pages.survey_page(slug="s", label="S", sm_doc=None,
+                               smeta={"slug": "s", "blurb": "A survey blurb.", "org": "O",
+                                      "lic": "CC-BY-4.0"},
+                               station_docs=[], bundle_rows=[], ts_access=None,
+                               base="https://x.example")
+    assert '<p class="prose">A survey blurb.</p>' in survey, \
+        "the survey blurb keeps the 70ch reading measure and its unscoped class"
+
+
+def test_the_single_line_description_consumers_never_take_the_page_prose(tmp_path):
+    """The prose is a page-length payload; a link preview, a lede and a hub card are each ONE line.
+    FAILS IF prose leaks into a single-line consumer, or if a long description is cut mid-word."""
+    pages = _pages_module()
+    long_desc = ("The Australia Legacy Geomagnetic Depth Sounding collection brings together "
+                 "historical Australian GDS surveys acquired between the 1960s and early 2000s. "
+                 "The collection currently comprises 24 surveys and 583 stations distributed "
+                 "across much of the Australian continent.")
+    page = _prose_collection(pages, coll={"description": long_desc})
+
+    meta = re.search(r'<meta name="description" content="([^"]+)">', page).group(1)
+    og = re.search(r'<meta property="og:description" content="([^"]+)">', page).group(1)
+    assert meta == og, "the link preview and the meta description must tell one story"
+    assert len(meta) <= 160, f"the meta description must stay bounded, got {len(meta)}"
+    # The old code sliced desc[:157], which landed inside "and": "...between the 1960s an...".
+    assert not meta.endswith("an..."), "a fixed slice cut mid-word; the cut must fall on a boundary"
+    tail = meta[:-3].rstrip() if meta.endswith("...") else meta
+    assert long_desc.startswith(tail) and (len(tail) == len(long_desc) or
+                                           long_desc[len(tail)] in " ."), \
+        f"the summary must end on a word or sentence boundary, got {meta!r}"
+    for para in _PROSE["about"] + _PROSE["members_after"]:
+        assert para.lstrip("# ") not in meta, "page prose must never reach the link preview"
+
+    # The hero lede and the JSON-LD both read the flat description, never the prose payload.
+    lede = re.search(r'<p class="lede">([^<]*)</p>', page).group(1)
+    assert lede.startswith("The Australia Legacy Geomagnetic Depth Sounding collection"), \
+        "the lede is the description's first sentence"
+    assert "<p" not in lede and "collprose" not in lede, "the lede is one line of plain text"
+    ld = json.loads(re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>',
+                              page).group(1))
+    assert ld["description"] == long_desc, \
+        "the machine record carries the flat discovery description, not the page prose"
+    assert "prose" not in json.dumps(ld), "the prose payload is page furniture, not catalogue data"

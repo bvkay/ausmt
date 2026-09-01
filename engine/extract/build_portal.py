@@ -520,8 +520,13 @@ def _group_collections(surveys_meta: dict, all_stations: list):
                                        "type": c.get("type"), "surveys": [], "n_stations": 0,
                                        "start_year": None, "status": None, "last_updated": None,
                                        "description": None, "_lat": [], "_lon": []})
-            # programme-level fields are consistent across members; take the first declared value
-            for fld in ("title", "type", "start_year", "status", "last_updated", "description"):
+            # programme-level fields are consistent across members; take the first declared value.
+            # `prose` is deliberately NOT seeded in the setdefault above, so a collection that
+            # declares none carries no key at all rather than a null. A member must OMIT the key
+            # rather than declare an empty one: an empty value counts as declared here and would
+            # block every later member from supplying the real prose.
+            for fld in ("title", "type", "start_year", "status", "last_updated", "description",
+                        "prose"):
                 if e.get(fld) in (None, "") and c.get(fld) not in (None, ""):
                     e[fld] = c.get(fld)
             if e["status"] and e["status"] not in _STATUS:
