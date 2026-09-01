@@ -1553,7 +1553,8 @@ def _instruments_of(y: dict):
 
 
 def _collection_of(y: dict):
-    """The collection facet {id, title, type, status, start_year, last_updated, description}, or None."""
+    """The collection facet {id, title, type, status, start_year, last_updated, description, prose},
+    or None."""
     coll = y.get("collection")
     if not (isinstance(coll, dict) and (coll.get("id") or coll.get("title"))):
         return None
@@ -1561,7 +1562,14 @@ def _collection_of(y: dict):
     return {"id": coll.get("id"), "title": coll.get("title"), "type": coll.get("type"),
             "status": coll.get("status"), "start_year": coll.get("start_year"),
             "last_updated": str(lu) if lu is not None else None,
-            "description": coll.get("description")}
+            "description": coll.get("description"),
+            # `prose` is a rolled-up programme field like the six above, so it must reach
+            # _group_collections through this facet or the collection page can never render it.
+            # Carrying it here cannot violate that rollup's "omit rather than declare empty" rule:
+            # a member that declares no prose yields None, and the merge treats None as undeclared,
+            # so a later member's real block still wins. The machine surfaces stay whitelists and
+            # do not gain the key.
+            "prose": coll.get("prose")}
 
 
 def _date_range_of(y: dict):
