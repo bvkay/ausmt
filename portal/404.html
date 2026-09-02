@@ -11,7 +11,29 @@
   a{color:#EF7256}
   h1{color:#fff;font-size:1.7rem;margin:.2rem 0 .6rem}
   .crumb{font-size:.85rem;opacity:.8}
-  footer{margin-top:2.2rem;font-size:.8rem;opacity:.7}
+  /* One footer, three regions, the grammar every page here repeats: the MTCAT machine-readable link
+     on the LEFT, the attribution and licence note in the CENTRE, Releases beside About this build on
+     the RIGHT. This document declares its palette as literals rather than tokens, so the footer does
+     too; the values are the site's.
+
+     BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's: this footer sits inside a 760px
+     reading column and answers for the column it is in. Below the width the three regions need, the
+     centre takes a row of its own UNDER the two side phrases, where it is centred on the footer's
+     axis rather than in the space left over beside the machine-readable link. Below 520px the two
+     side phrases no longer share a row either, so every region takes one and aligns left.
+
+     Ordering the centre last costs no reading order: it is prose and carries no link, so the tab
+     sequence stays the left link then the right links, in the order a reader meets them. */
+  footer{margin-top:2.2rem;font-size:.8rem;color:#8FA3B0;border-top:1px solid #2B3557;padding-top:.7rem;
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem 1.2rem;container-type:inline-size}
+  footer a{color:#EF7256;text-decoration:none}
+  .apilink{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:#8FA3B0;text-decoration:none}
+  .apilink:hover{color:#EF7256}
+  footer .apilink{flex:0 0 auto}
+  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
+  footer .foot-right{flex:1 0 auto;text-align:right}
+  @container (max-width:950px){footer .foot-main{order:1;flex:1 1 100%}}
+  @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
 </style>
 </head>
 <body>
@@ -22,7 +44,20 @@
 stale.</p>
 <p><a href="/">Open the interactive portal</a> to browse every survey and station, or start from
 the <a href="/surveys">survey index</a>.</p>
-<footer>AusMT - Australia's Magnetotelluric Data Portal - an AuScope service.</footer>
+<!-- Caddy rewrites ANY unmatched path to this document, so every link here is root-absolute: a
+     relative one would resolve against the address that was not found. About this build is a LINK,
+     not the disclosure popover the scripted pages carry: this document loads no script and no
+     version chip, so a popover here could only restate the line above it, and /about.html is the
+     page that does carry the running build's identity. -->
+<footer>
+  <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
+  <a class="apilink" href="/data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a>
+  <!-- CENTRE. Attribution and the licence note, and nothing else: it is prose, not navigation, so it
+       carries no link. The year is a literal, the mechanism every page uses. -->
+  <span class="foot-main">&copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey</span>
+  <!-- RIGHT. Releases beside About this build, separated by U+00B7, the glyph the centre carries. -->
+  <span class="foot-right"><a href="/releases.html">Releases</a> &middot; <a href="/about.html">About this build</a></span>
+</footer>
 </main>
 </body>
 </html>

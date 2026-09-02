@@ -140,26 +140,49 @@
   .modal .bar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
   .modal .bar .spacer{margin-left:auto}
   .leaflet-container{background:#0e1822}
-  /* UX6 Wave B (B3): same footer pattern as index/about, one visible line + an "About this build"
-     popover. Like about, this static page carries the version chip but no #buildId (main.js/build.json
-     are not loaded here). */
-  /* UX7a (A5): flex footer, MTCAT machine-readable link pinned bottom-left (first item), the copyright +
-     About-this-build line centred in the remaining space (matches index / about). */
-  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5}
+  /* One footer, three regions, the grammar index.html carries and every page here repeats: the
+     MTCAT machine-readable link on the LEFT, the attribution and licence note in the CENTRE,
+     Releases beside the About-this-build control on the RIGHT. The portal ships as classic static
+     pages with no template step and no shared sheet, so these rules are copied rather than shared,
+     the same bargain every other block on this page makes.
+
+     BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, so a footer set inside a reading
+     column answers for the column it sits in. Below the width the three regions need, the centre
+     takes a row of its own UNDER the two side phrases, where it is centred on the footer's axis
+     rather than in the space left over beside the machine-readable link. Below 520px the two side
+     phrases no longer share a row either, so every region takes one and aligns left.
+
+     Ordering the centre last costs no reading order: it is prose and carries no link, so the tab
+     sequence stays the left link then the right links, in the order a reader meets them.
+
+     Like about, this page carries the version chip but no #buildId (main.js/build.json are not
+     loaded here). */
+  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;position:relative;container-type:inline-size}
   footer a{color:var(--copper);text-decoration:none}
-  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
   .apilink:hover{color:var(--copper)}
+  footer .apilink{flex:0 0 auto}
+  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
+  footer .foot-right{flex:1 0 auto;text-align:right}
+  @container (max-width:950px){footer .foot-main{order:1;flex:1 1 100%}}
+  @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
   footer details.aboutbuild{display:inline-block;position:relative}
   footer details.aboutbuild>summary{display:inline;cursor:pointer;color:var(--copper);list-style:none}
   footer details.aboutbuild>summary::-webkit-details-marker{display:none}
   footer details.aboutbuild>summary::marker{content:""}
   footer details.aboutbuild>summary:hover{text-decoration:underline}
-  footer .aboutbuild-body{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  footer .aboutbuild-body{position:absolute;bottom:calc(100% + 8px);right:0;
     width:min(440px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:8px;
     padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.5);text-align:left;font-size:12px;color:var(--muted);
     line-height:1.5;z-index:50}
   footer .aboutbuild-body .ver{margin-top:8px;display:inline-block}
+  /* Stacked, the About-this-build control sits near the left of its own row, so a popover anchored
+     to it runs off the screen edge whichever side it opens from. In that state it is anchored to
+     the FOOTER, the only box on that row wide enough to hold it, inset to the footer's own
+     horizontal padding. The footer carries position:relative unconditionally because a container
+     query cannot style the element that establishes it. */
+  @container (max-width:520px){footer details.aboutbuild{position:static}
+    footer .aboutbuild-body{left:18px;right:18px;width:auto}}
   /* C13 direct-upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes. */
   #gatewayBlock{display:none}
   #gatewayBlock.show{display:block}
@@ -579,10 +602,14 @@
   </fieldset>
 </main>
 <footer>
-  <!-- UX7a (A5): the machine-readable MTCAT link is the first footer item, pinned bottom-left, matching
-       index and about (this page never carried it in its simpler header). -->
+  <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
   <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
-  <span class="foot-main">© 2026 AuScope and the AusMT contributors · Data licences vary by survey ·
+  <!-- CENTRE. Attribution and the licence note, and nothing else: it is prose, not navigation, so it
+       carries no link. The year is a literal, the mechanism both surfaces use. -->
+  <span class="foot-main">© 2026 AuScope and the AusMT contributors · Data licences vary by survey</span>
+  <!-- RIGHT. Releases beside About this build, separated by U+00B7, the glyph the centre carries. -->
+  <span class="foot-right">
+    <a href="releases.html">Releases</a> ·
     <details class="aboutbuild">
       <summary>About this build</summary>
       <div class="aboutbuild-body">

@@ -346,7 +346,15 @@ def mask_impedance_sci_row(sci_row):
     mask is not a symmetric one-liner: _edi_science back-derives rho/phase FROM Z when the source
     carries no RHO/PHS blocks, so a fabricated flat impedance otherwise publishes a smooth power-law
     resistivity, a flat phase and a non-zero quality score. Same by-name build and SCI_COLUMNS
-    projection as withhold_sci_row."""
+    projection as withhold_sci_row.
+
+    `q` is ALREADY null on the row this receives: _edi_science withholds it wherever the component
+    dict carries no impedance, which is the same condition under a different name (the mask drops Z
+    from the components column; the science layer reads the component dict the fabricated Z is in).
+    The two are not redundant. The mask sees a station whose file DOES carry an impedance and rules
+    it an invention, so it must null the diagnostics computed from it; the science rule sees a
+    station with no impedance at all. Keeping q in this set is what makes them agree on the one case
+    they share, and what stops a masked station's q depending on which seam ran."""
     _sc = {n: i for i, n in enumerate(sci.SCI_COLUMNS)}
     return [(_SCI_IMPEDANCE_DERIVED[c] if c in _SCI_IMPEDANCE_DERIVED else sci_row[_sc[c]])
             for c in sci.SCI_COLUMNS]
@@ -3177,6 +3185,11 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
         # sidecar keeps being written byte-unchanged through 1.x (D14): deleting a served file is a
         # deprecation. This block sits INSIDE the C1 access gate above, so a withheld record gains no
         # diagnostics at all and the interpretation product stays out of it.
+        # completeness_smoothness_diagnostic.value screens an impedance, so it is null on every
+        # tipper-only station (_edi_science withholds it there) and the served `note` stays the
+        # not-a-verdict caveat rather than growing a reason string: `tipper_available` and the
+        # catalogue's components already say which case a null is, and the definition lives in
+        # docs/docs/reference/station-products.md 1.8.1.
         "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
                         "tipper_available": "T" in (r.get("comps") or ""),
                         "completeness_smoothness_diagnostic": {
@@ -3674,7 +3687,7 @@ def _reproducible_derived_edi(raw: bytes) -> bytes:
 
     The download manifest's reference states that the served EDI and the per-survey EDI zip are
     byte-reproducible across builds, so their SHA-256 is a stable cross-build invariant, unlike the
-    EMTF XML and the MTH5 which embed timestamps and UUIDs. A custodian EDI satisfies that for free
+    MTH5 which embeds timestamps and UUIDs. A custodian EDI satisfies that for free
     because it is copied. A generated EDI is WRITTEN, and mt_metadata's header writer assigns
     FILEDATE = now at write time with no knob to pass it (Header.write_header), so an untouched
     generated file would publish a new digest for its station AND for its survey's whole EDI zip on
@@ -3689,7 +3702,11 @@ def _reproducible_derived_edi(raw: bytes) -> bytes:
     file dates the transfer function it renders, and re-reading it yields the same
     provenance.creation_time the source asserts rather than a build clock. Falls back to the INFO
     provenance.creation_time, then to mt_metadata's null date (the value whose presence makes it drop
-    original_file.date altogether); every branch is a function of the source bytes alone.
+    original_file.date altogether); every branch is a function of the source bytes alone. The served
+    EMTF XML's CreateTime resolves to this same value by the same rule (ingest.normalize
+    _pin_create_time), so a station whose EDI this build GENERATES agrees with its EMTF XML about that
+    date instead of contradicting it by the seconds between two writes. A copied custodian EDI is
+    served as its custodian wrote it and keeps that file's own FILEDATE.
 
     Byte-level on purpose: this runs on a file the round-trip gate has already passed, so it must not
     re-serialise anything. A file with no FILEDATE line is returned unchanged (nothing to pin)."""

@@ -11,25 +11,24 @@ submitted, so worker scheduling can never reach an identity decision.
 The contract these tests pin: a --workers N build is INDISTINGUISHABLE from a --workers 1 build
 everywhere a byte can be compared, and semantically identical where HDF5 forbids byte comparison
 (an .h5 embeds write-time clocks; its manifest sha256 is a this-build integrity hash, not a
-cross-build invariant -- _write_tf_mth5's own NOTE). Two FRESH builds already differ in exactly
-four enumerated wall-clock places (measured 2026-08-27, serial vs serial):
+cross-build invariant -- _write_tf_mth5's own NOTE). Two FRESH builds differ in exactly three
+places, all of them deliberate build records rather than leaks:
 
-  * every served XML: the one <CreateTime> line,
   * products/*/*/station.json and products/*/survey-metadata.json: provenance.generated,
   * mtcat.json: portal.generated_at,
-  * the xml-zip bundles: DEFLATE length varies with the CreateTime digits inside the members,
+  * the .h5 files and the manifest sha256 rows over them,
 
-plus the manifest sha256 fields that follow those stamped bytes, and the build.json /
-build_provenance.json / build_report.json build records (timings and wall stamps by design).
-The comparator normalises ONLY those places and byte-compares everything else, default-deny:
-a file with no rule is byte-compared, so any NEW nondeterminism the pool introduced fails
-loudly instead of being quietly excused. catalogue.json, tf.json and sci.json are byte-stable
-fresh-vs-fresh, so the positional order pin on tf/sci stays byte-level.
+plus the build.json / build_provenance.json / build_report.json build records (timings and wall
+stamps by design). The served EDI, the served EMTF XML and BOTH zips are byte-compared with no
+exemption: their published digests are cross-build invariants (C18 Amendment A5), so a
+<CreateTime> or a zip-metadata leak fails here rather than being normalised away. The comparator
+normalises ONLY the places above and byte-compares everything else, default-deny: a file with no
+rule is byte-compared, so any NEW nondeterminism the pool introduced fails loudly instead of being
+quietly excused. catalogue.json, tf.json and sci.json are byte-stable fresh-vs-fresh, so the
+positional order pin on tf/sci stays byte-level.
 """
 import json
 import os
-import re
-import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -47,8 +46,6 @@ sys.path.insert(0, str(REPO))
 import build_portal  # noqa: E402
 
 SAMPLE_EDIS = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
-
-_CREATETIME = re.compile(rb"<CreateTime>[^<]*</CreateTime>")
 
 
 @pytest.fixture(autouse=True)
@@ -125,10 +122,10 @@ def _assert_h5_equal(a, b, rel):
 
 
 def _norm_manifest(out):
-    """sha256 is normalised on every row: the artifact bytes behind it legitimately carry wall-clock
-    stamps (XML CreateTime, HDF5 write clocks). size is normalised ONLY on xml-zip bundles, whose
-    DEFLATE length varies with the CreateTime digits inside the members (measured: +-2 bytes between
-    two serial builds); every other size, h5 included, is a deterministic pin and stays compared.
+    """sha256 is normalised ONLY on mth5 rows, whose bytes legitimately carry HDF5 write clocks; the
+    EDI, EMTF XML and both zip rows keep their digests compared, because those digests are the
+    cross-build invariant the download reference publishes. Every size, h5 included, is a
+    deterministic pin and stays compared.
 
     KNOWN LIMIT of the h5 size pin, adjudicated at corpus scale 2026-08-27: a MULTI-TF bundle's
     size can wiggle a few KB with the writing process's accumulated history (serial corpus main
@@ -141,9 +138,8 @@ def _norm_manifest(out):
     doc = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     for key in ("files", "bundles"):
         for row in doc.get(key, []):
-            row["sha256"] = "NORMALISED"
-            if row.get("format") == "xml-zip":
-                row["size"] = -1
+            if row.get("format") == "mth5":
+                row["sha256"] = "NORMALISED"
     doc.get("portal", {}).pop("generated_at", None)
     doc.pop("generated_at", None)
     return doc
@@ -158,15 +154,10 @@ def _norm_json(path, drop):
     return json.dumps(doc, sort_keys=True)
 
 
-def _xmlzip_members(path):
-    with zipfile.ZipFile(path) as z:
-        return {n: _CREATETIME.sub(b"<CreateTime/>", z.read(n)) for n in sorted(z.namelist())}
-
-
 def test_parallel_build_products_identical_to_serial(tmp_path):
     """FAILS IF: a --workers 3 build differs from a --workers 1 build in ANY served surface beyond
-    the four enumerated wall-clock stamps and the h5 bytes HDF5 timestamps make unrepeatable
-    (whose CONTENT is compared exactly instead). Default-deny: an unmatched file is byte-compared."""
+    the three enumerated build records and the h5 bytes HDF5 timestamps make unrepeatable (whose
+    CONTENT is compared exactly instead). Default-deny: an unmatched file is byte-compared."""
     surveys = _make_corpus(tmp_path)
     o_ser, o_par = tmp_path / "serial", tmp_path / "parallel"
     _build(surveys, o_ser, workers=1)
@@ -206,15 +197,10 @@ def test_parallel_build_products_identical_to_serial(tmp_path):
             _assert_h5_equal(a, b, rel)
         elif rel == "manifest.json":
             assert _norm_manifest(o_ser) == _norm_manifest(o_par), \
-                "manifest differs beyond the h5/xml sha256 stamps"
+                "manifest differs beyond the h5 sha256 stamps"
         elif name == "mtcat.json":
             assert _norm_json(a, ["portal", "generated_at"]) == _norm_json(b, ["portal", "generated_at"]), \
                 "mtcat.json differs beyond generated_at"
-        elif name.endswith(".xml"):
-            assert _CREATETIME.sub(b"", a.read_bytes()) == _CREATETIME.sub(b"", b.read_bytes()), \
-                f"{rel} differs beyond CreateTime"
-        elif name.endswith("-xml.zip"):
-            assert _xmlzip_members(a) == _xmlzip_members(b), f"{rel} members differ beyond CreateTime"
         elif name == "station.json":
             assert _norm_json(a, ["provenance", "generated"]) == _norm_json(b, ["provenance", "generated"]), \
                 f"{rel} differs beyond provenance.generated"

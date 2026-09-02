@@ -63,7 +63,8 @@ Transfer Functions
 The transfer functions stay authoritative; everything above is a diagnostic computed from them and
 regenerable. AusMT does not rank transfer functions. It computes one per-station screening scalar, `q`,
 labelled a completeness and smoothness diagnostic rather than a data-quality judgement; its definition
-is under [`station.json` diagnostics](../reference/station-products.md#18-diagnostics).
+is under [`station.json` diagnostics](../reference/station-products.md#18-diagnostics). It screens an
+impedance, so it is withheld on a tipper-only station, which has none.
 
 Transfer functions are themselves derived products: the time series they came from stay in
 [external archives](../interoperability/external-archives.md), and the

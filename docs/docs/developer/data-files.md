@@ -94,8 +94,8 @@ MTpy) on most of the corpus and is published separately as `processing.file_writ
 
 | Index | Name | Type | Meaning |
 |---|---|---|---|
-| `sc[0]` | `q` | number\|null | completeness/smoothness diagnostic, 0-5 (NOT a quality ranking); defined under [`station.json` 1.8](../reference/station-products.md#18-diagnostics) |
-| `sc[1]` | `qb` | string | basis of `q`: `"e"` error-based, `"s"` shape-based |
+| `sc[0]` | `q` | number\|null | completeness/smoothness diagnostic, 0-5 (NOT a quality ranking); **null on a tipper-only station**, which has no impedance to screen; defined under [`station.json` 1.8](../reference/station-products.md#18-diagnostics) |
+| `sc[1]` | `qb` | string | basis of `q`: `"e"` error-based, `"s"` shape-based; `"s"` where `q` is null |
 | `sc[2]` | `rr` | 0\|1 | remote reference stated in the EDI |
 | `sc[3]` | `sw` | string\|null | the program that processed the transfer function (mined from the file's free text) |
 | `sc[4]` | `alg` | string\|null | processing algorithm (scraped) |

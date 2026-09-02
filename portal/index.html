@@ -518,20 +518,49 @@
      data-build id + date, version chip) moves INTACT into an "About this build" popover. The #buildId
      element and the [data-ver-chip] chip are RELOCATED here, not reimplemented — main.js renderBuildId()
      and version.js still fill them by id/attribute. */
-  /* UX7a (A5): the footer is a flex row — the MTCAT machine-readable link pinned to the LEFT (first item),
-     the copyright + About-this-build line centred in the remaining space. Wraps on narrow widths. */
-  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5}footer a{color:var(--copper);text-decoration:none}
+  /* One footer, three regions, the same here as on the static pages the engine emits: the MTCAT
+     machine-readable link on the LEFT, the attribution and licence note in the CENTRE, Releases
+     beside the About-this-build control on the RIGHT. The left link is content-sized and never
+     shrinks, so it is not broken mid-phrase on a narrow measure; the centre takes what is left and
+     centres its text in it; the right grows so that on a wrapped row it still sits against the
+     right edge rather than under the left one.
+
+     BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, which is what lets one rule serve
+     this footer and the narrower ones the sibling pages set inside their reading column. Measured,
+     the three regions want 921px of footer; below that the centre takes a row of its own UNDER the
+     two side phrases, where it is centred on the footer's axis rather than in the space left over
+     beside the machine-readable link. Below 520px the two side phrases no longer share a row
+     either, so every region takes one and aligns left, which is what keeps 375px stacking rather
+     than colliding.
+
+     Ordering the centre last costs no reading order: it is prose and carries no link, so the tab
+     sequence stays the left link then the right links, in the order a reader meets them. The
+     overrides follow the rules they override; the two tie on specificity and source order wins. */
+  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;position:relative;container-type:inline-size}footer a{color:var(--copper);text-decoration:none}
+  footer .apilink{flex:0 0 auto}
   footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
+  footer .foot-right{flex:1 0 auto;text-align:right}
+  @container (max-width:950px){footer .foot-main{order:1;flex:1 1 100%}}
+  @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
   footer details.aboutbuild{display:inline-block;position:relative}
   footer details.aboutbuild>summary{display:inline;cursor:pointer;color:var(--copper);list-style:none}
   footer details.aboutbuild>summary::-webkit-details-marker{display:none}
   footer details.aboutbuild>summary::marker{content:""}
   footer details.aboutbuild>summary:hover{text-decoration:underline}
-  footer .aboutbuild-body{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  footer .aboutbuild-body{position:absolute;bottom:calc(100% + 8px);right:0;
     width:min(440px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:8px;
     padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.5);text-align:left;font-size:12px;color:var(--muted);
     line-height:1.5;z-index:50}
   footer .aboutbuild-body .ver{margin-top:8px;display:inline-block}
+  /* Stacked, the About-this-build control sits near the left of its own row, so a popover anchored
+     to it runs off the screen edge whichever side it opens from (it did before the regions were
+     split, too). In that state it is anchored to the FOOTER instead, the only box on that row wide
+     enough to hold it, inset to the footer's own horizontal padding. It is the STACKED state that
+     moves the control, so the query is the stacking one; the footer carries position:relative
+     unconditionally because a container query cannot style the element that establishes it. This
+     follows the rules it overrides: they tie on specificity, order wins. */
+  @container (max-width:520px){footer details.aboutbuild{position:static}
+    footer .aboutbuild-body{left:18px;right:18px;width:auto}}
   .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px}
   .leaflet-tooltip.qtip::before{display:none}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
@@ -1067,13 +1096,18 @@
 </main>
 
 <footer>
-  <!-- UX7a (A5): the machine-readable MTCAT link (moved here from the header's right zone) is the first
-       footer item, pinned bottom-left. The Wave A honest link text + href/title are kept verbatim. -->
+  <!-- LEFT. The machine-readable MTCAT link, the same document from every page on both surfaces.
+       The honest link text + href/title are kept verbatim. -->
   <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
-  <span class="foot-main">© 2026 AuScope and the AusMT contributors · Data licences vary by survey ·
-    <!-- Quarterly citable snapshots of the corpus (releases.html). It sits beside "About this build"
-         because the two answer neighbouring questions: which build am I looking at now, and which
-         frozen snapshots can I cite. -->
+  <!-- CENTRE. Attribution and the licence note, and nothing else: it is prose, not navigation, so it
+       carries no link. The year is a literal here and in the engine's page shell, one mechanism for
+       both surfaces; a copyright year that moved on rebuild would differ across the tree for a
+       reason no reader could see. -->
+  <span class="foot-main">© 2026 AuScope and the AusMT contributors · Data licences vary by survey</span>
+  <!-- RIGHT. Quarterly citable snapshots of the corpus (releases.html) sit beside "About this build"
+       because the two answer neighbouring questions: which build am I looking at now, and which
+       frozen snapshots can I cite. The separator is U+00B7, the same glyph the centre carries. -->
+  <span class="foot-right">
     <a href="releases.html">Releases</a> ·
     <details class="aboutbuild">
       <summary>About this build</summary>

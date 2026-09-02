@@ -11,8 +11,9 @@ this module upholds:
 
   * The cache may only ever change build SPEED, never output bytes. `scripts/verify.py` stays full,
     byte-re-hashing and cache-blind; a warm build is byte-identical to the build that populated its
-    cache (proven by test; Amendment A1c records why INDEPENDENT full builds are not the baseline —
-    mt_metadata stamps a wall-clock <CreateTime> in every written XML).
+    cache, and so is an INDEPENDENT full build of the same inputs (proven by test; the served XML's
+    CreateTime is pinned to the date its source declares, so no served artifact carries a build
+    clock; Amendment A1c is superseded on that point).
   * The key is derived from the SOURCE EDI content sha + a coarse engine-commit salt + library
     versions + the positional/schema contract + the whole survey.yaml digest. A byte-changed EDI,
     an engine commit, a library upgrade, a contract change, or ANY survey.yaml edit all miss.
