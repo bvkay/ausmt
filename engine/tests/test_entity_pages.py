@@ -884,6 +884,134 @@ def test_the_embargoed_survey_page_says_so(tmp_path):
         "the station table must carry the catalogue's public coordinates"
 
 
+# ==================================================================================================
+# The station kind: a geomagnetic depth sounding station is not a magnetotelluric station
+# ==================================================================================================
+# Every station page introduced its transfer function as "Magnetotelluric" and described the station
+# as a "Magnetotelluric station", including every station of the legacy geomagnetic depth sounding
+# collection, which recorded no electric field and serves no impedance. The page already knew: the
+# Data type row it prints two lines below the crumb reads GDS off the very same document.
+
+GDS_STATION_EDI = HERE / "fixtures" / "impedance" / "placeholder-impedance-tipper.edi"
+
+
+def _make_tipper_only_survey(tmp_path, *, slug="pages-gds-stn", name="Pages GDS Station"):
+    """A package whose survey.yaml declares the magnetic channels only, built end to end.
+
+    That declaration is what fires the impedance mask, which is why the released placeholder
+    impedance is dropped and the served station comes out of the band classifier as GDS: the same
+    path the whole legacy collection takes."""
+    pkg = tmp_path / "surveys" / slug
+    edir = pkg / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    (pkg / "survey.yaml").write_text(
+        f"name: {name}\nslug: {slug}\ncountry: Australia\norganisation: Test Org\n"
+        f"access: open\nlicense: CC-BY-4.0\nabstract: A tipper-only test survey.\n"
+        f"channels_recorded: [Bx, By, Bz]\n", encoding="utf-8")
+    (edir / GDS_STATION_EDI.name).write_text(
+        GDS_STATION_EDI.read_text(encoding="latin-1"), encoding="latin-1")
+    return tmp_path / "surveys"
+
+
+def _station_kind_surfaces(page):
+    """The three places a station page names the KIND of station it is, read out of the rendered
+    output: the crumb under the h1, the meta description and the og:description a link preview
+    shows. They are two separate strings in the emitter and a reader meets all three, so the test
+    that they agree has to read all three rather than the one derivation behind them."""
+    crumb = re.search(r"</h1>\n<p class=\"crumb\">(.*?)</p>", page)
+    desc = re.search(r'<meta name="description" content="([^"]*)">', page)
+    og = re.search(r'<meta property="og:description" content="([^"]*)">', page)
+    assert crumb and desc and og, "the page must carry a kind crumb, a description and an og pair"
+    return {"crumb": crumb.group(1), "meta description": desc.group(1),
+            "og:description": og.group(1)}
+
+
+def _one_station_page(out, slug):
+    """The single emitted station page of a one-station build, with its ausmt id."""
+    docs = sorted((out / "products" / slug).glob("*/station.json"))
+    assert len(docs) == 1, f"the fixture must serve exactly one station, got {len(docs)}"
+    doc = json.loads(docs[0].read_text(encoding="utf-8"))
+    return doc, (out / "pages" / "stations" / (doc["ausmt_id"] + ".html")).read_text(
+        encoding="utf-8")
+
+
+def test_a_tipper_only_station_page_names_the_kind_it_actually_is(tmp_path):
+    """The live defect, end to end from the declaration a curator writes.
+
+    FAILS IF any of the three kind surfaces still calls a magnetic-only station magnetotelluric, or
+    if they stop agreeing with each other and with the Data type row the same page prints."""
+    out = _build(_make_tipper_only_survey(tmp_path), tmp_path / "out")
+    doc, page = _one_station_page(out, "pages-gds-stn")
+    assert doc["data"]["type"] == "GDS", "the served station must come out of the mask as GDS"
+    assert "<dt>Data type</dt><dd>GDS</dd>" in page, "the page already prints the band class"
+
+    surfaces = _station_kind_surfaces(page)
+    for where, text in surfaces.items():
+        assert "agnetotelluric" not in text, \
+            f"the {where} still calls a magnetic-only station magnetotelluric: {text!r}"
+    assert surfaces["crumb"] == \
+        f"Geomagnetic depth sounding transfer function &#183; {doc['survey']}", surfaces
+    expected = (f"Geomagnetic depth sounding station {doc['station']} from the {doc['survey']} "
+                "survey: transfer function data, metadata and downloads on AusMT.")
+    assert surfaces["meta description"] == expected, surfaces
+    assert surfaces["og:description"] == expected, surfaces
+    # The kind belongs to the station, not to the page furniture: the browser title never carried
+    # it and must not gain it. A station page emits no structured data, so there is no JSON-LD
+    # vocabulary term here to rule on.
+    assert f"<title>{doc['station']} - {doc['survey']} - AusMT</title>" in page, \
+        "the browser title names the station and its survey and nothing else"
+
+
+def test_an_impedance_station_page_reads_exactly_as_it_always_has(tmp_path):
+    """The byte-identity guard. Every published magnetotelluric station page must render word for
+    word as it did, so the fix is a derivation and not a second hard-coded string.
+
+    FAILS IF any kind surface on an MT station changes by a single character."""
+    out = _build(_make_survey(tmp_path), tmp_path / "out")
+    docs = sorted((out / "products" / "pages-a").glob("*/station.json"))
+    assert docs, "fixture must serve station documents"
+    for path in docs:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        assert doc["data"]["type"] != "GDS", "the sample survey is the magnetotelluric control"
+        page = (out / "pages" / "stations" / (doc["ausmt_id"] + ".html")).read_text(
+            encoding="utf-8")
+        surfaces = _station_kind_surfaces(page)
+        assert surfaces["crumb"] == \
+            f"Magnetotelluric transfer function &#183; {doc['survey']}", surfaces
+        expected = (f"Magnetotelluric station {doc['station']} from the {doc['survey']} survey: "
+                    "transfer function data, metadata and downloads on AusMT.")
+        assert surfaces["meta description"] == expected, surfaces
+        assert surfaces["og:description"] == expected, surfaces
+
+
+def test_every_band_class_but_gds_keeps_the_magnetotelluric_reading():
+    """The whole vocabulary the classifier emits, spent through the page in one pass.
+
+    GDS is the only band class that is not magnetotelluric: AMT, BBMT and LPMT all estimate an
+    impedance from a measured electric field. A station whose document discloses no type keeps the
+    magnetotelluric reading, which is what the corpus is.
+
+    FAILS IF an impedance band flips, if an undisclosed type flips, or if GDS stops flipping."""
+    pages = _pages_module()
+
+    def surfaces_for(dtype):
+        doc = {"ausmt_id": "au.s.A1", "station": "A1", "survey": "S",
+               "location": {"lat": -30.0, "lon": 137.0},
+               "data": {} if dtype is None else {"type": dtype}}
+        return _station_kind_surfaces(
+            pages.station_page(doc=doc, survey_slug="s", base="https://x.example"))
+
+    for dtype in ("AMT", "BBMT", "LPMT", "unknown", None):
+        for where, text in surfaces_for(dtype).items():
+            assert "Magnetotelluric" in text, \
+                f"data type {dtype!r} must stay magnetotelluric, the {where} reads {text!r}"
+            assert "eomagnetic depth sounding" not in text, \
+                f"the {where} must not name a kind data type {dtype!r} is not: {text!r}"
+    for where, text in surfaces_for("GDS").items():
+        assert text.startswith("Geomagnetic depth sounding"), \
+            f"the {where} must lead with the station's own kind, got {text!r}"
+
+
 # ---- unit pins: time-series levels and the collection rollup ------------------------------------
 
 def _pages_module():
