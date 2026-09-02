@@ -681,26 +681,25 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # ==================================================================================================
 # B9 R11 to R14: ONE header and ONE footer, across every page kind
 # ==================================================================================================
-# The page kinds this tier emits, with the tab that must be active, the contextual machine-readable
-# link the footer must resolve to, and whether the header's right status slot carries anything.
+# The page kinds this tier emits, with the tab that must be active, the machine-readable link the
+# footer must resolve to, and whether the header's right status slot carries anything. The footer
+# column USED to differ per row, which is exactly what the owner's one-footer ruling ended; it is
+# kept as a column, one value repeated, so a re-divergence shows up here as rows that disagree.
 # LANE-ADDENDUM-HUB-FEEDBACK.md R11 to R13. The tokens asserted below are the SPA header's own
 # (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
 # rather than read across, because the engine image ships engine/ and contract/ and cannot see
 # portal/ at all, and a test that reaches out of the image is a test the image cannot run.
+_FOOTER_LINK = ("Machine-readable record (MTCAT JSON)", "/data/mtcat.json")
+
+
 def _kinds(built):
     aid = sorted(p.stem for p in (built / "pages" / "stations").glob("*.html"))[0]
     return {
-        "surveys/index.html": ("navSurveys", "Machine-readable catalogue - MTCAT JSON",
-                               "/data/mtcat.json", True),
-        "collections/index.html": ("navCollections", "Machine-readable catalogue - MTCAT JSON",
-                                   "/data/mtcat.json", False),
-        "surveys/idx-a.html": ("navSurveys", "Machine-readable survey metadata - JSON",
-                               "/data/products/idx-a/survey-metadata.json", False),
-        f"stations/{aid}.html": ("navSurveys", "Machine-readable station metadata - JSON",
-                                 None, False),
-        "collections/idxcoll.html": ("navCollections",
-                                     "Collection record in the MTCAT catalogue - JSON",
-                                     "/data/mtcat.json", False),
+        "surveys/index.html": ("navSurveys", *_FOOTER_LINK, True),
+        "collections/index.html": ("navCollections", *_FOOTER_LINK, False),
+        "surveys/idx-a.html": ("navSurveys", *_FOOTER_LINK, False),
+        f"stations/{aid}.html": ("navSurveys", *_FOOTER_LINK, False),
+        "collections/idxcoll.html": ("navCollections", *_FOOTER_LINK, False),
     }
 
 
@@ -762,49 +761,138 @@ def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(bui
             assert slot.strip() == "", f"{rel}: the status slot must be empty, got {slot!r}"
 
 
-def test_the_footer_is_contextual_and_its_machine_link_resolves_per_page_kind(built):
-    """R13. Two rows on every static page. Row 1 left is the machine-readable link FOR THIS PAGE, so
-    a reader on a station page is handed that station's document rather than the whole catalogue;
-    the collection line is deliberately honest, because no per-collection document is served and a
-    footer must not advertise a surface we do not have. Row 1 right is Releases and About. Row 2 is
-    the copyright, the licence note and the build stamp.
+def test_one_footer_of_three_regions_on_every_page_kind(built):
+    """R13, restated to the owner's ruling: ONE footer, three regions, byte-identical on every page.
 
-    FAILS IF the one-line footer survives anywhere, if a machine link points at the wrong document,
-    if a link's target is not actually served, or if the build identity becomes a link."""
+    The footer used to be contextual, so a reader could not learn it once. Left is the catalogue,
+    the same document from every page; centre is the attribution and the licence note; right is
+    Releases and About this build. The separator is U+00B7, written as the numeric reference so a
+    mis-decoded read of this file cannot smuggle a hyphen past the pin.
+
+    A per-page machine link is NOT lost by this: a survey and a station page each carry their own
+    record in the body under "Identifiers and provenance", which is asserted separately.
+
+    FAILS IF the one-line footer survives anywhere, if the three regions are not present with the
+    owner's exact strings, if a region's links move or retarget, if the footer differs between page
+    kinds, or if the removed build stamp comes back."""
+    seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         foot = page.split("\n<footer>", 1)[1].split("</footer>", 1)[0]
+        seen[rel] = foot
         assert "AusMT - Australia's Magnetotelluric Data Portal - an AuScope service." not in page, \
             f"{rel}: the one-line footer must be replaced everywhere in pages/"
-        m = re.search(r'<a href="([^"]+)">([^<]*?) &#8599;</a>', foot)
-        assert m, f"{rel}: no machine-readable link carrying the leaves-this-page arrow: {foot!r}"
-        assert m.group(2) == label, f"{rel}: footer link must read {label!r}, got {m.group(2)!r}"
-        if href is not None:
-            assert m.group(1) == href, f"{rel}: footer link must target {href}, got {m.group(1)}"
-        else:
-            assert m.group(1).endswith("/station.json"), \
-                f"{rel}: a station page must offer its OWN station.json, got {m.group(1)}"
+
+        # LEFT. One machine-readable link, the whole catalogue, carrying the leaves-this-page arrow.
+        left = foot.split('<div class="fzone fleft">', 1)[1].split("</div>", 1)[0]
+        assert left == f'<a href="{href}">{label} &#8599;</a>', \
+            f"{rel}: left region is not the MTCAT link: {left!r}"
         # /data/* is the served route onto the build's own out dir, so the advertised path is
         # checked against the tree this same build wrote: a footer link is a promise about a file.
-        assert m.group(1).startswith("/data/"), m.group(1)
-        assert (built / m.group(1)[len("/data/"):]).is_file(), \
-            f"{rel}: the footer advertises {m.group(1)}, which this build did not write"
-        assert '<a href="/releases.html">Releases</a>' in foot and \
-               '<a href="/about.html">About</a>' in foot, f"{rel}: row 1 right must be Releases, About"
-        assert "&#169; 2026 AuScope and AusMT contributors - an AuScope service" in foot
-        assert "Data licences vary by survey; each download carries its licence." in foot
+        assert href.startswith("/data/") and (built / href[len("/data/"):]).is_file(), \
+            f"{rel}: the footer advertises {href}, which this build did not write"
+
+        # CENTRE. The owner's string, and no link: the attribution line is prose, not navigation.
+        centre = foot.split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
+        assert centre == ("&#169; 2026 AuScope and the AusMT contributors &#183; "
+                          "Data licences vary by survey"), \
+            f"{rel}: centre region is not the owner's attribution line: {centre!r}"
+        assert "<a" not in centre, f"{rel}: the centre region carries no link: {centre!r}"
+
+        # RIGHT. Two links, separated by the middle dot, About this build resolving to the page
+        # that carries the running build's identity (this tier ships no script and no popover).
+        right = foot.split('<div class="fzone fright">', 1)[1].split("</div>", 1)[0]
+        assert right == ('<a href="/releases.html">Releases</a> &#183; '
+                         '<a href="/about.html">About this build</a>'), \
+            f"{rel}: right region is not Releases and About this build: {right!r}"
+
         assert "fbuild" not in foot and "Build " not in foot, (
-            f"{rel}: the build identity stamp was removed from the footer (owner 2026-08-31); "
+            f"{rel}: the build identity stamp stays out of the footer; "
             f"build_provenance.json still carries it: {foot!r}")
-        # Scoped to the WHOLE of row 2, not to the stamp's own match. A match bounded by
-        # <span ...>[^<]+</span> can never contain "<a" by construction, so asserting over it
-        # restated the regex rather than the rule and left the one mutation R13 forbids (wrapping
-        # the stamp in an anchor to build_provenance.json, a surface the public-surface audit keeps
-        # de-documented) passing green. R13's rule is that row 2 carries no link at all.
-        rows = foot.split('<div class="frow">')
-        assert len(rows) == 3, f"{rel}: the footer is two rows, got {len(rows) - 1}: {foot!r}"
-        assert "<a" not in rows[2], \
-            f"{rel}: row 2 is the copyright, the licence note and a PRINTED build identity: {rows[2]!r}"
+        # The regions are the WHOLE footer: an extra zone, or a stray stamp between them, fails.
+        assert foot.count('<div class="fzone ') == 3, \
+            f"{rel}: the footer is exactly three regions: {foot!r}"
+
+    assert len(set(seen.values())) == 1, (
+        "the footer must be identical on every page kind; it differs:\n"
+        + "\n".join(f"  {rel}: {foot!r}" for rel, foot in seen.items()))
+
+
+def test_the_per_page_machine_record_survives_in_the_body(built):
+    """The footer's left link is the whole catalogue on every page, so a survey's and a station's
+    OWN machine-readable record is reachable only from the body. That link is what makes the
+    uniform footer a simplification rather than a loss, so it is pinned here too.
+
+    FAILS IF a survey or station page stops offering its own record under Identifiers and
+    provenance, or points it somewhere this build did not write."""
+    aid = sorted(p.stem for p in (built / "pages" / "stations").glob("*.html"))[0]
+    for rel, label, href in (
+            ("surveys/idx-a.html", "Machine-readable survey record",
+             "/data/products/idx-a/survey-metadata.json"),
+            (f"stations/{aid}.html", "Machine-readable station record",
+             f"/data/products/idx-a/{aid.rsplit('.', 1)[-1]}/station.json")):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        body = page.split("</footer>", 1)[0].split('id="identifiers"', 1)
+        assert len(body) == 2, f"{rel}: no Identifiers and provenance section"
+        assert f'<a href="{href}">{label}</a>' in body[1], \
+            f"{rel}: the body must offer {label} at {href}"
+        assert (built / href[len("/data/"):]).is_file(), \
+            f"{rel}: the body advertises {href}, which this build did not write"
+
+
+def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
+    """The three regions are a wrapping flex row in which the CENTRE is the region that gives: the
+    left link and the right links are short fixed phrases that read badly broken, and the
+    attribution line is prose that does not.
+
+    THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and that is the point of them. main
+    is 840px on an entity page, 920px on a hub and 1120px above 1180px of viewport, so a viewport
+    number answers the question wrongly on two page kinds out of three: measured in Chrome, an
+    entity page at a 1000px viewport gives the footer 840px, the three regions want 871px, and a
+    760px viewport rule leaves the right region alone on a second row with the attribution centred
+    in what is left beside the machine-readable link, 135px off the footer's axis.
+
+    Below 900px of footer the centre therefore takes a row of its own UNDER the two side phrases,
+    where it spans the footer and is centred on its axis. Below 500px the side phrases no longer
+    share a row either, so every region takes one and aligns left, which is the 375px stack.
+
+    FAILS IF the footer stops being a wrapping flex row or stops being a query container, if the
+    left link becomes shrinkable (it is then broken mid-phrase at the reading measure), if the right
+    zone stops growing (on a wrapped row its links fall under the left ones instead of against the
+    right edge), if either state below one row goes, if one stops following the rules it overrides
+    (they tie on specificity, so an override placed above them does nothing at all), or if a
+    viewport rule comes back in their place."""
+    page = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    rule = re.search(r"\bfooter\{([^}]*)\}", css)
+    assert rule and "display:flex" in rule.group(1) and "flex-wrap:wrap" in rule.group(1), \
+        f"the footer must be a wrapping flex row: {rule and rule.group(1)!r}"
+    assert "container-type:inline-size" in rule.group(1), (
+        f"the footer must establish the query container the two states below one row ask about; "
+        f"without it neither @container rule can ever match: {rule.group(1)!r}")
+    for zone, decls in ((".fleft", ("flex:0 0 auto",)),
+                        (".fcenter", ("flex:1 1 auto", "min-width:0", "text-align:center")),
+                        (".fright", ("flex:1 0 auto", "text-align:right"))):
+        m = re.search(re.escape(zone) + r"\{([^}]*)\}", css)
+        assert m, f"{zone} carries no rule"
+        for decl in decls:
+            assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
+
+    centre_row = css.find("@container (max-width:900px){.fcenter{order:1;flex:1 1 100%}}")
+    assert centre_row > 0, (
+        "below 900px of footer the centre must take a full row of its own, or it is centred in the "
+        "space left over beside the machine-readable link instead of on the footer's axis")
+    stack = css.find("@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
+    assert stack > centre_row, (
+        "below 500px of footer every region must take a full row and align left, in a rule that "
+        "FOLLOWS the centre's own-row rule: the two tie on specificity, so placed above it the "
+        "stack would not restore the reading order at 375px")
+    assert css.index(".fright{") < centre_row, (
+        "both states below one row must follow the zone rules they override; the selectors tie on "
+        "specificity and source order alone decides")
+    assert "@media(max-width:760px){.fzone" not in css, (
+        "the footer's width is not the viewport's on this tier, so the stacking rule must not go "
+        "back to asking the viewport")
 
 
 def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
