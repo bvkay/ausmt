@@ -819,22 +819,35 @@ def test_the_per_page_machine_record_survives_in_the_body(built):
 
 
 def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
-    """The three regions are a wrapping flex row in which the CENTRE is the region that gives. The
-    entity pages read at 840px and the three regions want about 870, so something has to yield on
-    every page narrower than the wide-screen measure: the left link and the right links are short
-    fixed phrases that read badly broken, and the attribution line is prose that does not. Below
-    the header's own breakpoint each region takes a full row and aligns left, so at 375px they
-    stack instead of overlapping.
+    """The three regions are a wrapping flex row in which the CENTRE is the region that gives: the
+    left link and the right links are short fixed phrases that read badly broken, and the
+    attribution line is prose that does not.
 
-    FAILS IF the footer stops being a wrapping flex row, if the left link becomes shrinkable (it is
-    then broken mid-phrase at the reading measure), if the right zone stops growing (on a wrapped
-    row its links fall under the left ones instead of against the right edge), or if the stacking
-    rule goes."""
+    THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and that is the point of them. main
+    is 840px on an entity page, 920px on a hub and 1120px above 1180px of viewport, so a viewport
+    number answers the question wrongly on two page kinds out of three: measured in Chrome, an
+    entity page at a 1000px viewport gives the footer 840px, the three regions want 871px, and a
+    760px viewport rule leaves the right region alone on a second row with the attribution centred
+    in what is left beside the machine-readable link, 135px off the footer's axis.
+
+    Below 900px of footer the centre therefore takes a row of its own UNDER the two side phrases,
+    where it spans the footer and is centred on its axis. Below 500px the side phrases no longer
+    share a row either, so every region takes one and aligns left, which is the 375px stack.
+
+    FAILS IF the footer stops being a wrapping flex row or stops being a query container, if the
+    left link becomes shrinkable (it is then broken mid-phrase at the reading measure), if the right
+    zone stops growing (on a wrapped row its links fall under the left ones instead of against the
+    right edge), if either state below one row goes, if one stops following the rules it overrides
+    (they tie on specificity, so an override placed above them does nothing at all), or if a
+    viewport rule comes back in their place."""
     page = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
     rule = re.search(r"\bfooter\{([^}]*)\}", css)
     assert rule and "display:flex" in rule.group(1) and "flex-wrap:wrap" in rule.group(1), \
         f"the footer must be a wrapping flex row: {rule and rule.group(1)!r}"
+    assert "container-type:inline-size" in rule.group(1), (
+        f"the footer must establish the query container the two states below one row ask about; "
+        f"without it neither @container rule can ever match: {rule.group(1)!r}")
     for zone, decls in ((".fleft", ("flex:0 0 auto",)),
                         (".fcenter", ("flex:1 1 auto", "min-width:0", "text-align:center")),
                         (".fright", ("flex:1 0 auto", "text-align:right"))):
@@ -842,8 +855,22 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
         assert m, f"{zone} carries no rule"
         for decl in decls:
             assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
-    assert re.search(r"@media\(max-width:760px\)\{\.fzone\{flex:1 1 100%;text-align:left\}\}", css), \
-        "the footer regions must take a full row each below the header's own breakpoint"
+
+    centre_row = css.find("@container (max-width:900px){.fcenter{order:1;flex:1 1 100%}}")
+    assert centre_row > 0, (
+        "below 900px of footer the centre must take a full row of its own, or it is centred in the "
+        "space left over beside the machine-readable link instead of on the footer's axis")
+    stack = css.find("@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
+    assert stack > centre_row, (
+        "below 500px of footer every region must take a full row and align left, in a rule that "
+        "FOLLOWS the centre's own-row rule: the two tie on specificity, so placed above it the "
+        "stack would not restore the reading order at 375px")
+    assert css.index(".fright{") < centre_row, (
+        "both states below one row must follow the zone rules they override; the selectors tie on "
+        "specificity and source order alone decides")
+    assert "@media(max-width:760px){.fzone" not in css, (
+        "the footer's width is not the viewport's on this tier, so the stacking rule must not go "
+        "back to asking the viewport")
 
 
 def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):

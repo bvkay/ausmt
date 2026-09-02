@@ -531,13 +531,24 @@ _CSS = """
   .counts b{color:#E8EDF1}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
   /* The centre is the region that gives: the two side phrases read badly broken, the attribution is
-     prose that does not. The right grows so a wrapped row keeps it against the right edge. The
-     stacking rule follows the zone rules; the two tie on specificity and source order wins. */
-  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0}
+     prose that does not. The right grows so a wrapped row keeps it against the right edge.
+
+     BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's. main is 840px on an entity page,
+     920px on a hub and 1120px above 1180px of viewport, so one viewport number answers the question
+     wrongly on two page kinds out of three. Measured, the three regions want 871px of footer; below
+     that the centre takes a row of its own UNDER the two side phrases, where it is centred on the
+     footer's axis rather than in the space left over beside the machine-readable link. Below 500px
+     the two side phrases no longer share a row either, so every region takes one and aligns left.
+
+     Ordering the centre last costs no reading order: it is prose and carries no link, so the tab
+     sequence stays the left link then the right links, in the order a reader meets them. The
+     overrides follow the rules they override; the two tie on specificity and source order wins. */
+  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0;container-type:inline-size}
   .fleft{flex:0 0 auto}
   .fcenter{flex:1 1 auto;min-width:0;text-align:center}
   .fright{flex:1 0 auto;text-align:right}
-  @media(max-width:760px){.fzone{flex:1 1 100%;text-align:left}}
+  @container (max-width:900px){.fcenter{order:1;flex:1 1 100%}}
+  @container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}
 """
 
 
