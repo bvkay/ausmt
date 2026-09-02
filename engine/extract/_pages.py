@@ -1468,6 +1468,16 @@ def _station_ts_section(ts_levels) -> str:
             f'<tbody>{"".join(rows)}</tbody></table></div>\n')
 
 
+def _station_kind(dtype) -> str:
+    """What KIND of station this is, in lower case, from the SAME band class the page's own Data
+    type row prints. A geomagnetic depth sounding station recorded no electric field and serves no
+    impedance, so calling its transfer function magnetotelluric is wrong in the crumb and in the
+    description alike. The comparison is exact, against the classifier's own spelling, so the kind
+    and the Data type row beside it can never read off different values. A station whose document
+    discloses no type keeps the magnetotelluric reading, which is what the corpus is."""
+    return "geomagnetic depth sounding" if dtype == "GDS" else "magnetotelluric"
+
+
 def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
     aid = doc["ausmt_id"]
     st = doc.get("station") or aid
@@ -1493,10 +1503,15 @@ def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
                      + _range(_fmt_period(data["period_min_s"]),
                               _fmt_period(data["period_max_s"])) + " s"
                      f" ({int(data.get('n_periods') or 0)} periods)</dd>")
+    # The kind is derived once and spent on every surface that names it: the crumb under the h1 and
+    # the description the meta and og:description tags both carry must tell one story, and the same
+    # story as the Data type row this page already prints.
+    kind = _station_kind(data.get("type"))
+    kind_lead = kind[0].upper() + kind[1:]
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / <a href="/surveys/{_e(survey_slug)}">{_e(survey)}</a></p>\n'
         f"<h1>Station {_e(st)}</h1>\n"
-        f'<p class="crumb">Magnetotelluric transfer function &#183; {_e(survey)}</p>\n'
+        f'<p class="crumb">{_e(kind_lead)} transfer function &#183; {_e(survey)}</p>\n'
         "<dl>\n" + "\n".join(facts) + "\n</dl>\n"
         f'<p><a class="navbtn" href="/#/station/{_e(aid)}">Open in the interactive portal</a></p>\n'
         + _runs_section(doc)
@@ -1505,7 +1520,7 @@ def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
         + f'<p><a href="/data/products/{_e(survey_slug)}/{_e(st)}/station.json">Machine-readable station record</a></p>\n'
     )
     return _shell(title=f"{st} - {survey} - AusMT",
-                  description=f"Magnetotelluric station {st} from the {survey} survey: "
+                  description=f"{kind_lead} station {st} from the {survey} survey: "
                               "transfer function data, metadata and downloads on AusMT.",
                   canonical=url, body=body, noindex=True, base=base,
                   nav="navSurveys", build=build,
