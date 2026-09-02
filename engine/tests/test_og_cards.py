@@ -60,12 +60,12 @@ def _pages_module():
     return _pages
 
 
-def _survey(tmp_path, slug, name, lat, extra=""):
+def _survey(tmp_path, slug, name, lat, extra="", region="South Australia"):
     pkg = tmp_path / "surveys" / slug
     edir = pkg / "transfer_functions" / "edi"
     edir.mkdir(parents=True)
     (pkg / "survey.yaml").write_text(
-        f"name: {name}\nslug: {slug}\ncountry: Australia\nregion: South Australia\n"
+        f"name: {name}\nslug: {slug}\ncountry: Australia\nregion: {region}\n"
         f"organisation: Test Org\naccess: open\nlicense: CC-BY-4.0\n"
         f"abstract: A card fixture survey.\n{extra}", encoding="utf-8")
     for src in SAMPLE_EDIS:
@@ -79,11 +79,21 @@ def _survey(tmp_path, slug, name, lat, extra=""):
 
 @pytest.fixture(scope="module")
 def built(tmp_path_factory):
-    """One corpus whose two surveys are members of one collection, built once with the cards on."""
+    """One corpus whose two surveys are members of one collection, built once with the cards on.
+
+    The two surveys carry the two text lengths the column rule has to hold, because a scan over
+    cards that all fit anyway would stay green with the rule deleted. card-a is the corpus's worst
+    case, shaped on the survey the rule was written for: a name that overflows the 476 px column at
+    the top of the size ladder and still overflows it at the bottom, so the title has to step down
+    to the smallest size AND wrap; and a region naming three states with a year range, which
+    overflows the same column at 29 px, so the fact line has to wrap under it. card-b stays short
+    enough that neither happens, so the scan also covers a card the rule leaves alone."""
     tmp = tmp_path_factory.mktemp("ogcards")
     coll = ("collection:\n  id: cardcoll\n  title: Card Collection\n  type: programme\n"
             "  status: active\n")
-    surveys = _survey(tmp, "card-a", "Card A", "-30.5", coll)
+    surveys = _survey(tmp, "card-a", "AusLAMP Musgraves APY Lands Deployment 2016", "-30.5",
+                      coll + "dates: {start: 2016, end: 2018}\n",
+                      region="South Australia / Western Australia / Northern Territory")
     _survey(tmp, "card-b", "Card B", "-24.5", coll)
     out = tmp / "out"
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(out), "--bundle-edi",
