@@ -4999,14 +4999,32 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "discoverability: robots.txt must name the sitemap at the institutional URL");
     ok(/^Disallow: \/gateway$/m.test(_robots),
       "discoverability: robots.txt must keep crawlers out of the gateway surface");
-    const _ldEl = doc.querySelector('script[type="application/ld+json"]');
-    ok(_ldEl, "discoverability: index.html must carry a JSON-LD block");
-    let _cat = null;
-    try { _cat = JSON.parse(_ldEl.textContent); } catch (e) { die("discoverability: root JSON-LD must parse: " + e); }
-    ok(_cat["@type"] === "DataCatalog" && _cat.name === "AusMT",
-      "discoverability: the root JSON-LD must be the AusMT DataCatalog, got " + JSON.stringify(_cat["@type"]));
+    // EVERY block, not the first: the page carries two nodes (what it publishes, and what it IS),
+    // and a pin that reads only the first would go quiet the moment their order changed.
+    const _ldEls = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
+    ok(_ldEls.length === 2, "discoverability: index.html must carry two JSON-LD blocks, got " + _ldEls.length);
+    const _nodes = _ldEls.map(el => {
+      try { return JSON.parse(el.textContent); } catch (e) { die("discoverability: every JSON-LD block must parse: " + e); }
+    });
+    const _byType = {};
+    _nodes.forEach(n => { _byType[n["@type"]] = n; });
+    const _cat = _byType["DataCatalog"];
+    ok(_cat && _cat.name === "AusMT",
+      "discoverability: a DataCatalog node named AusMT is required, got " + JSON.stringify(Object.keys(_byType)));
     ok(_cat.url === "https://ausmt.auscope.org.au/",
       "discoverability: the DataCatalog url must be the institutional root");
+    // The site's own name. Without it the only site-level name in the markup was the publisher's,
+    // and search results labelled the whole portal AuScope.
+    const _site = _byType["WebSite"];
+    ok(_site, "discoverability: index.html must carry a WebSite node naming the site itself");
+    ok(_site.name === "AusMT",
+      "discoverability: the WebSite name must be AusMT, got " + JSON.stringify(_site.name));
+    ok(_site.alternateName === "Australia's Magnetotelluric Data Portal",
+      "discoverability: the WebSite alternateName must be the portal's full name, got " + JSON.stringify(_site.alternateName));
+    ok(_site.url === "https://ausmt.auscope.org.au/",
+      "discoverability: the WebSite url must be the institutional root");
+    ok(_site.publisher && _site.publisher.name === "AuScope",
+      "discoverability: the WebSite publisher must stay AuScope");
   }
 
   // ---- Map chrome: muted basemap + soft attribution + Search Console ownership --------------------

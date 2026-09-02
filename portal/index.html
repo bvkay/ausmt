@@ -30,6 +30,21 @@
  "keywords": ["magnetotellurics", "MT", "AusLAMP", "transfer functions", "geophysics", "Australia"]
 }
 </script>
+<!-- The SITE, named. The catalogue block above says what this site PUBLISHES and names AuScope as
+     its publisher, which is the only site-level name the markup ever carried, so search results
+     labelled the whole site by its publisher. A second node, deliberately not a @graph wrapper: a
+     graph would put both nodes behind one array and hide the catalogue from anything that reads
+     the first block. The catalogue stays first for the same reason. -->
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "WebSite",
+ "name": "AusMT",
+ "alternateName": "Australia's Magnetotelluric Data Portal",
+ "url": "https://ausmt.auscope.org.au/",
+ "publisher": {"@type": "Organization", "name": "AuScope", "url": "https://www.auscope.org.au"}
+}
+</script>
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="AusMT - Australia's Magnetotelluric Data Portal">
 <meta name="twitter:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">

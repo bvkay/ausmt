@@ -68,9 +68,11 @@ from _au_outline import COAST, EXTENT  # noqa: E402  (sibling engine module, std
 GRID_COLS = 21
 GRID_ROWS = 18
 
-# The palette. FOUR stops, sampled ONCE from the established artwork (portal/vendor/social-card.png,
-# the pixelated-Australia hero) and then hardcoded here as the declared truth, so the mark never
-# depends on re-reading a PNG at build time. Derivation, recorded so the sampling can be repeated:
+# The palette. FOUR stops, sampled ONCE from the established artwork and then hardcoded here as the
+# declared truth, so the mark never depends on re-reading a PNG at build time. The artwork is
+# vendor/social-card-source.png: the served root card is now a composite of it (tools/gen_social_card.py
+# adds the AuScope mark to its signature row), and the sampling was done on the artwork itself.
+# Derivation, recorded so the sampling can be repeated:
 # the card's dot centres were recovered from its own lattice (7.3 px pitch), sorted by hue, and the
 # cool end, the median and the warm end of that distribution taken as blue, purple and pink; coral is
 # the card's own accent literal (#FF6655, the rule under the wordmark and the URL line).
@@ -79,7 +81,7 @@ PALETTE_STOPS = (("blue", "#3953DC", 0.00),
                  ("pink", "#E44696", 0.76),
                  ("coral", "#FF6655", 1.00))
 PALETTE_DERIVATION = (
-    "Sampled once from portal/vendor/social-card.png, the established pixelated-Australia artwork. "
+    "Sampled once from portal/vendor/social-card-source.png, the established pixelated-Australia artwork. "
     "Its dot centres were recovered on the artwork's own 7.3 px lattice and sorted by hue: blue is the "
     "median of the coolest two per cent (#3953DC), purple the median of the middle (#9444CE), pink the "
     "median of the warmest two per cent (#E44696). Coral is the card's own accent literal (#FF6655), "

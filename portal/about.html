@@ -12,6 +12,20 @@
      now advertised in sitemap.xml, so it must say which address it is served at (index.html
      has carried its own canonical since the head-hygiene lane; these three had none). -->
 <link rel="canonical" href="https://ausmt.auscope.org.au/about.html">
+<!-- Search snippet and link preview. The description is this page's OWN lede, word for word: an
+     invented summary is a second wording of the page that nobody maintains. Preview crawlers
+     resolve nothing relative, so og:url and og:image are absolute, and the card is the portal's
+     root artwork (this page has no map of its own to preview). -->
+<meta name="description" content="A national catalogue of Australian magnetotelluric transfer functions, carrying the provenance, licence and citation details of each one.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AusMT">
+<meta property="og:title" content="About - AusMT">
+<meta property="og:description" content="A national catalogue of Australian magnetotelluric transfer functions, carrying the provenance, licence and citation details of each one.">
+<meta property="og:url" content="https://ausmt.auscope.org.au/about.html">
+<meta property="og:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   :root{
     --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
