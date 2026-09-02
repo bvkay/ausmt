@@ -143,6 +143,11 @@ ATTRIBUTION_KEYS = frozenset({"custodian", "custodian_ror", "statement", "change
 SOURCE_KEYS = frozenset({"title", "custodian", "identifier", "licence", "retrieved", "statement",
                          "profile", "relation", "identifier_type", "identifies", "scope"})
 SOURCE_PROFILES = frozenset({"ga", "generic"})
+# collection.prose: the curator paragraphs the collection PAGE renders, one list of paragraphs per
+# page section. The slot names are FROZEN and must stay in exact parity with the engine's renderer
+# (extract/_pages.py `_prose_of` reads these keys and no others); a paragraph is rendered verbatim as
+# one escaped <p>, except that a leading "# " marks that paragraph as the section's subheading.
+COLLECTION_PROSE_SLOTS = ("about", "data", "members_before", "members_after", "organisations")
 # §2a (identifiers design — the related-identifiers model): the model TYPES the C46 sources[] object.
 # It adds a `relation` + an `identifier_type` to the untyped upstream-dataset identifier sources[]
 # already carries, rather than inventing a parallel structure ("C46 built the object; this types it").
@@ -152,7 +157,8 @@ SOURCE_PROFILES = frozenset({"ga", "generic"})
 # presets (design Decision 3); IDENTIFIER_TYPES is the small set AusMT records against (eCat/SARIG ids
 # normalise to URL/DOI). Same vocab-select discipline as SOURCE_PROFILES above.
 RELATION_TYPES = frozenset({"IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites",
-                            "IsPartOf", "IsSourceOf"})
+                            "IsPartOf", "IsSourceOf",
+                            "IsDocumentedBy"})   # activity-scope records (e.g. ANSIR project pages)
 IDENTIFIER_TYPES = frozenset({"DOI", "Handle", "URL", "RAiD"})
 # Entity scope of an external identifier (METADATA-INTERFACE-CONTRACT section 2, survey-metadata
 # lane S1): `scope` states the KIND of thing a related identifier identifies, so a collection DOI
@@ -1218,6 +1224,66 @@ def parse_angle(tok: str):
         return None
 
 
+# INFO-block angles are decimal ("LATITUDE: -29.3675") or DMS ("LATITUDE : -28:31:33.45"). A
+# decimal-only pattern truncates a DMS value at the first colon, which manufactures whole-degree
+# coordinates, so the optional :MM:SS tail is part of the match.
+_NUM = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
+_INFO_ANGLE = _NUM + r"(?::\d+(?:\.\d+)?){0,2}"
+
+
+def _info_coords(raw):
+    """INFO-block (lat, lon), or (None, None)."""
+    mi_lat = re.search(r"LATITUDE\s*:\s*(" + _INFO_ANGLE + ")", raw)
+    mi_lon = re.search(r"LONGITUDE\s*:\s*(" + _INFO_ANGLE + ")", raw)
+    return (parse_angle(mi_lat.group(1)) if mi_lat else None,
+            parse_angle(mi_lon.group(1)) if mi_lon else None)
+
+
+COORD_TIERS = ("HEAD", "REF", "INFO")
+
+
+def edi_coords_resolved(raw):
+    """((lat, lat_tier), (lon, lon_tier)) from an EDI, each axis resolved independently down the
+    HEAD LAT/LONG -> DEFINEMEAS REFLAT/REFLONG -> INFO LATITUDE/LONGITUDE chain. The tier is the
+    name of the field that supplied the value, or None where the axis resolves nowhere.
+
+    Mirrors the coordinate read of the catalogue reader the build itself runs
+    (engine extract/_edi_catalog.coords_of), so the gate is never stricter than that reader: a file
+    this rejects would otherwise have been read. Legacy conversion output spells the HEAD longitude
+    key LON= and carries the coordinate in REFLONG=; reprocessed output spells it LON= with no REF
+    fallback at all, so LON= is read at the HEAD tier beside LONG=. Semantics are mirrored, not
+    imported: the two repos are independent, and a parity test would need a cross-repo checkout.
+
+    What is mirrored is the FALLBACK CHAIN. The reference also rounds its pair to 6 dp, which is a
+    catalogue-storage concern; rounding here would perturb coordinates the gate already reads, so
+    the parsed values are returned as they always were.
+
+    The converse is NOT true, and the tier is returned so the caller can say so. coords_of is a
+    light QC read (state bucketing); the coordinate a station is PUBLISHED at comes from
+    mt_metadata, which reads HEAD and DEFINEMEAS and never the INFO block. So for the INFO tier
+    alone this chain is more permissive than the build, which publishes such a file at 0.0, 0.0 -
+    hence the caller's warning. Measured where it matters: of the 2631 corpus EDIs all 2631 resolve
+    on HEAD, and of the 579 staged legacy-GDS EDIs 155 resolve on HEAD and 424 need REF on the
+    longitude, so no file AusMT holds reaches the INFO tier at all.
+    """
+    info_lat, info_lon = _info_coords(raw)
+    # LONG and LON are both HEAD spellings of the same field, so they share a tier: a file
+    # carrying either resolves at HEAD rather than falling through to REF.
+    head_lon = _grab(raw, "LONG")
+    if head_lon is None:
+        head_lon = _grab(raw, "LON")
+    chains = ((parse_angle(_grab(raw, "LAT")), parse_angle(_grab(raw, "REFLAT")), info_lat),
+              (parse_angle(head_lon), parse_angle(_grab(raw, "REFLONG")), info_lon))
+    return tuple(next(((v, t) for t, v in zip(COORD_TIERS, chain) if v is not None), (None, None))
+                 for chain in chains)
+
+
+def edi_coords(raw):
+    """(lat, lon) from an EDI via the tier chain in edi_coords_resolved, which owns the semantics."""
+    (lat, _lt), (lon, _ln) = edi_coords_resolved(raw)
+    return lat, lon
+
+
 class Report:
     def __init__(self):
         self.items = []
@@ -1585,6 +1651,240 @@ def _check_station_ids(block, edi_names, r, *, complete_read=True, declared_in_t
     if not [i for i in r.items if i["check"] == "station_ids" and i["level"] == "FAIL"]:
         r.add("PASS", "station_ids", f"station_ids: {len(raw_map)} source file(s) mapped, all "
                                      f"present in transfer_functions/edi/, no duplicate ids")
+
+
+def _check_collection_prose(prose, r) -> None:
+    """Check an OPTIONAL collection.prose block: a mapping of section name to a list of paragraphs.
+
+    Why this is checked at all, when the rest of the collection block is not: the engine's collection
+    rollup takes the FIRST member that declares a field and ignores the other members entirely, so a
+    block that is malformed, or declared but empty, in any ONE member can become the whole
+    collection's prose without any member disagreeing out loud. The corpus convention is therefore to
+    OMIT a slot with nothing in it, never to write it empty, and every member of a collection must
+    carry a byte-identical block.
+    """
+    if prose is None:
+        return
+    if not isinstance(prose, dict):
+        r.add("FAIL", "collection",
+              f"collection.prose must be a mapping of section name to a list of paragraphs, got "
+              f"{type(prose).__name__}")
+        return
+    if not prose:
+        r.add("FAIL", "collection",
+              "collection.prose is declared with no sections. The rollup reads a declared empty "
+              "block as the collection's prose and suppresses every other member's, so a member "
+              "with nothing to say must omit the key")
+        return
+    unknown = sorted(str(k) for k in prose if str(k) not in COLLECTION_PROSE_SLOTS)
+    if unknown:
+        r.add("WARNING", "collection",
+              f"collection.prose declares unrendered section(s) {unknown}; the page renders only "
+              f"{list(COLLECTION_PROSE_SLOTS)}, so these paragraphs would never reach a reader")
+    n_para = 0
+    for slot, paras in prose.items():
+        if not isinstance(paras, list):
+            r.add("FAIL", "collection",
+                  f"collection.prose['{slot}'] must be a LIST of paragraph strings, got "
+                  f"{type(paras).__name__}. A bare string here is a sequence of characters, not a "
+                  f"sequence of paragraphs")
+            continue
+        if not paras:
+            r.add("FAIL", "collection",
+                  f"collection.prose['{slot}'] is declared with no paragraphs; to say nothing in a "
+                  f"section, omit the section")
+            continue
+        for n, para in enumerate(paras, 1):
+            where = f"collection.prose['{slot}'][{n}]"
+            if not isinstance(para, str) or not para.strip():
+                r.add("FAIL", "collection", f"{where} is not a non-empty paragraph string")
+                continue
+            s = para.strip()
+            n_para += 1
+            # "# " is the ONE structural sigil the renderer honours, and only at the start of a
+            # paragraph. A hash written any other way renders as a literal hash in served prose.
+            if s.startswith("#") and not s.startswith("# "):
+                r.add("FAIL", "collection",
+                      f"{where} opens with '#' but not '# '. A subheading is written as "
+                      f"'# Heading text' and needs text after the space; anything else publishes a "
+                      f"literal hash")
+            bad = sorted({ch for ch in s if ch in ("\u2013", "\u2014")})
+            if bad:
+                r.add("WARNING", "collection",
+                      f"{where} carries {[f'U+{ord(c):04X}' for c in bad]}. House style is ASCII "
+                      f"punctuation, and pasted prose is where these arrive; --strict FAILs this")
+    if not [i for i in r.items if i["check"] == "collection" and i["level"] == "FAIL"]:
+        r.add("PASS", "collection",
+              f"collection.prose: {len(prose)} section(s), {n_para} paragraph(s), well-formed")
+
+
+# The five channels the build understands, keyed by the normalised name both survey-wide masks test
+# and valued by the corpus spelling the survey page prints. This set IS the vocabulary: a declared
+# name outside it is inert to the masks. Mirrors the engine's _pages._CHANNEL_LABELS.
+CHANNEL_LABELS = {"ex": "Ex", "ey": "Ey", "hx": "Bx", "hy": "By", "hz": "Bz"}
+
+# The eight impedance blocks, in the order a fabrication recogniser reads them.
+Z_COMPONENTS = ("ZXXR", "ZXXI", "ZXYR", "ZXYI", "ZYXR", "ZYXI", "ZYYR", "ZYYI")
+
+
+def _channel_key(name) -> str:
+    """One declared channel name in the normalised form the impedance and tipper masks use.
+
+    Case, order and duplication are all irrelevant to the build; the corpus spelling B for the
+    magnetic channels folds onto the mt_metadata H. Copied from the engine so the two agree.
+    """
+    key = str(name).strip().lower()
+    return "h" + key[1:] if key.startswith("b") else key
+
+
+def _check_channels_recorded(channels, r):
+    """Check the OPTIONAL channels_recorded declaration; return the normalised channel keys or None.
+
+    This field is an assertion the build acts on, not a label. A declaration without a vertical coil
+    masks any file-borne tipper survey-wide, and a declaration without either horizontal electric
+    channel masks the impedance and every product derived from it. Most of the corpus does not
+    declare the field at all and an absent declaration masks nothing, which is why a name outside
+    the vocabulary is a WARNING and not a FAIL: it is inert to the masks rather than a breach, and a
+    field the corpus has been using without a hard rule does not acquire one retrospectively.
+
+    The shape, by contrast, is a FAIL: the build drops anything that is not a non-empty list, so a
+    survey writing another shape is asking for a mask it will silently not get.
+    """
+    if channels is None:
+        return None
+    if not isinstance(channels, list):
+        r.add("FAIL", "channels",
+              f"channels_recorded must be a list of channel names, got {type(channels).__name__}. "
+              f"The build drops any other shape, so the declared mask would silently not apply")
+        return None
+    if not channels:
+        r.add("FAIL", "channels",
+              "channels_recorded is declared with no channels. The build drops an empty list, so "
+              "this declares nothing while reading as a declaration; to declare nothing, omit the key")
+        return None
+    keys, malformed = set(), False
+    for n, c in enumerate(channels, 1):
+        if not isinstance(c, str) or not c.strip():
+            r.add("FAIL", "channels",
+                  f"channels_recorded[{n}] is not a non-empty channel-name string")
+            malformed = True
+            continue
+        key = _channel_key(c)
+        keys.add(key)
+        if key not in CHANNEL_LABELS:
+            r.add("WARNING", "channels",
+                  f"channels_recorded[{n}] '{c}' is outside the vocabulary the build understands "
+                  f"({', '.join(CHANNEL_LABELS.values())}, or the mt_metadata spellings "
+                  f"{', '.join(CHANNEL_LABELS)}; case is ignored). The masks cannot see it, though "
+                  f"its presence still arms them, so it changes nothing the build serves")
+    return None if malformed else keys
+
+
+def _edi_block(raw, *names):
+    """The numbers of the first >NAME block present in a normalised EDI, as floats.
+
+    Names are tried in order, which is how the suffixed (>TXR.EXP) and bare (>TXR) spellings of one
+    block are both read. A block runs from its marker line to the next line opening with '>'. An
+    absent block, and a token that is not a number, both contribute nothing.
+    """
+    for name in names:
+        m = re.search(r"^>" + re.escape(name) + r"(?:[ \t][^\n]*)?\n(.*?)(?=^>|\Z)", raw, re.M | re.S)
+        if m is None:
+            continue
+        out = []
+        for tok in m.group(1).split():
+            try:
+                out.append(float(tok))
+            except ValueError:
+                pass
+        return out
+    return []
+
+
+def _flat(vals) -> bool:
+    """True when a block's spread is at or below float noise.
+
+    The absolute floor is load-bearing: one fabrication dialect writes an exact constant alongside
+    components at 1e-8 to 1e-9 rounding noise, which is constant in every sense that matters.
+    """
+    if not vals:
+        return True
+    lo, hi = min(vals), max(vals)
+    return (hi - lo) <= max(1e-6, 1e-6 * max(abs(lo), abs(hi)))
+
+
+def _z_is_converter_constant(z) -> bool:
+    """The 2002 GDS converter's twelve constants, written for WinGLink and never measured.
+
+    ZXX and ZYY are 0.2+0.2i and ZXY and ZYX are 1.0+1.0i at every period, in every station, in
+    every survey it converted. Keyed on the numbers, never on the banner comment: one re-rendered
+    file carries the constants with no banner, and the tolerance is what catches its 1.999999e-01.
+    """
+    diag = z["ZXXR"] + z["ZXXI"] + z["ZYYR"] + z["ZYYI"]
+    off = z["ZXYR"] + z["ZXYI"] + z["ZYXR"] + z["ZYXI"]
+    if not diag or not off:
+        return False
+    return (all(abs(v - 0.2) <= 1e-6 for v in diag)
+            and all(abs(v - 1.0) <= 1e-6 for v in off))
+
+
+def _z_is_period_invariant(freqs, z) -> bool:
+    """An impedance that does not vary across period, which implies no earth at all.
+
+    Two further fabrication dialects sit here that the constant test does not reach. The
+    two-frequency floor is what stops a genuine single-period impedance being called fabricated on
+    the strength of having only one value to be constant over.
+    """
+    if len(set(freqs)) < 2:
+        return False
+    return all(_flat(z[c]) for c in Z_COMPONENTS)
+
+
+def _z_is_synthetic_rho_ramp(freqs, z) -> bool:
+    """The synthetic ramp that renders a flat apparent resistivity at every period.
+
+    An impedance built as a multiple of sqrt(f) gives one constant apparent resistivity across the
+    whole band. The three-frequency floor is essential: without it the test is vacuously true of
+    every single-period file and would swallow real data.
+    """
+    if len({f for f in freqs if f > 0}) < 3:
+        return False
+    zr, zi = z["ZXYR"], z["ZXYI"]
+    if len(zr) != len(freqs) or len(zi) != len(freqs):
+        return False
+    rho = [0.2 * (zr[i] ** 2 + zi[i] ** 2) / f for i, f in enumerate(freqs) if f > 0]
+    if len(rho) < 3 or min(rho) <= 0:
+        return False
+    return (max(rho) - min(rho)) <= 0.01 * max(rho)
+
+
+def _edi_impedance_is_real(raw) -> bool:
+    """True when an EDI carries an impedance that is a measurement rather than a known fabrication.
+
+    Only such a file is evidence that an impedance mask is discarding data. An absent or all-zero
+    impedance is missing data, not masked data, and the corpus carries hundreds of files whose
+    impedance was fabricated by a converter; warning on those would be noise on every legacy GDS
+    survey, which is exactly the population the mask exists to serve.
+    """
+    z = {c: _edi_block(raw, c) for c in Z_COMPONENTS}
+    if not any(abs(v) > 1e-6 for c in Z_COMPONENTS for v in z[c]):
+        return False
+    if _z_is_converter_constant(z):
+        return False
+    freqs = _edi_block(raw, "FREQ")
+    return not (_z_is_period_invariant(freqs, z) or _z_is_synthetic_rho_ramp(freqs, z))
+
+
+def _edi_has_tipper(raw) -> bool:
+    """True when an EDI carries a non-zero tipper.
+
+    An all-zero TXR/TXI/TYR/TYI block is absent data presented as measurement, not a measurement a
+    mask would discard.
+    """
+    for base in ("TXR", "TXI", "TYR", "TYI"):
+        if any(v != 0.0 for v in _edi_block(raw, base + ".EXP", base)):
+            return True
+    return False
 
 
 def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
@@ -2096,6 +2396,12 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
         if status is not None and str(status) not in ("active", "completed", "archived"):
             r.add("WARNING", "collection",
                   f"collection status '{status}' is not one of active/completed/archived")
+        _check_collection_prose(coll.get("prose"), r)
+    # channels_recorded (optional): shape and vocabulary here, the two survey-wide masks it arms
+    # below. Both masks are EDI-only in the build, so the silent-loss checks read the EDIs alone.
+    declared_channels = _check_channels_recorded(meta.get("channels_recorded"), r)
+    mask_tipper = bool(declared_channels) and not ({"hz"} & declared_channels)
+    mask_impedance = bool(declared_channels) and not ({"ex", "ey"} & declared_channels)
     # nci_base (optional): a contributor-supplied NCI THREDDS fileServer dir concatenated into the
     # published download URL. Validate scheme + host so a typo'd or non-http(s) value can't ship a
     # broken/unsafe link (the engine also drops a non-http(s) nci_base defensively).
@@ -2217,17 +2523,37 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     w, e, s, n = (_flt(extent.get("west")), _flt(extent.get("east")), _flt(extent.get("south")), _flt(extent.get("north")))
     box = (w, e, s, n) if None not in (w, e, s, n) else AUS_BBOX
     n_parse_fail = 0
+    n_masked_tipper, masked_impedance = 0, []
     for p in edis:
         raw = p.read_text(encoding="latin-1", errors="replace")
         # tolerate CRLF/CR and indented >markers / KEY= lines (EDL/BIRRP) — same normalisation
         # the science readers use, so the validator and the pipeline agree on what is parseable.
         raw = _norm(raw)
-        lat = parse_angle(_grab(raw, "LAT"))
-        lon = parse_angle(_grab(raw, "LONG"))
+        # Counted before any parse gate, because a file the build masks is masked whether or not it
+        # also has a coordinate problem.
+        if mask_tipper and _edi_has_tipper(raw):
+            n_masked_tipper += 1
+        if mask_impedance and _edi_impedance_is_real(raw):
+            masked_impedance.append(p.name)
+        (lat, _lat_tier), (lon, _lon_tier) = edi_coords_resolved(raw)
         if lat is None or lon is None:
             n_parse_fail += 1
-            r.add("FAIL", "edi_parse", f"{p.name}: missing coordinates (LAT/LONG in HEAD)")
+            r.add("FAIL", "edi_parse",
+                  f"{p.name}: missing coordinates (LAT/LONG in HEAD, REFLAT/REFLONG in "
+                  f"DEFINEMEAS, or LATITUDE/LONGITUDE in INFO)")
             continue
+        # The one tier where mirroring the reference reader makes this gate MORE permissive than the
+        # build. mt_metadata, which the build parses with, reads HEAD and DEFINEMEAS only, so an
+        # axis that resolves nowhere but the INFO block passes here and is then published at 0.0.
+        # Still a PASS (the reference reader does resolve it, and the gate must not be stricter than
+        # its reader), but never a silent one.
+        if "INFO" in (_lat_tier, _lon_tier):
+            _axes = " and ".join(a for a, t in (("latitude", _lat_tier), ("longitude", _lon_tier))
+                                 if t == "INFO")
+            r.add("WARNING", "coordinates",
+                  f"{p.name}: {_axes} read only from the >INFO block. The build parses with "
+                  f"mt_metadata, which reads HEAD LAT/LONG and DEFINEMEAS REFLAT/REFLONG only, so "
+                  f"this station would publish at 0.0. Put the coordinate in one of those fields.")
         if not re.search(r"^>FREQ", raw, re.M):
             if re.search(r"SPECTRA", raw):
                 # Phoenix EMpower spectra-section EDI: no >FREQ/impedance block, but the AusMT
@@ -2250,6 +2576,32 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     if edis and n_parse_fail == 0:
         r.add("PASS", "edi_parse", f"all {len(edis)} EDIs parsed with coordinates")
 
+    # --- channels_recorded: what the declared masks would withhold from the served files ---
+    if n_masked_tipper:
+        r.add("WARNING", "channels",
+              f"channels_recorded declares no {CHANNEL_LABELS['hz']} yet {n_masked_tipper} of "
+              f"{len(edis)} EDIs carry a non-zero tipper. The build masks the tipper survey-wide, "
+              f"so it and every product derived from it are withheld; the source files are still "
+              f"served byte for byte. Declare the vertical coil if it was recorded")
+    if masked_impedance:
+        shown = ", ".join(masked_impedance[:8])
+        more = f", and {len(masked_impedance) - 8} more" if len(masked_impedance) > 8 else ""
+        r.add("WARNING", "channels",
+              f"channels_recorded declares neither {CHANNEL_LABELS['ex']} nor "
+              f"{CHANNEL_LABELS['ey']} yet {len(masked_impedance)} of {len(edis)} EDIs carry an "
+              f"impedance that is not a recognised fabrication ({shown}{more}). The build masks "
+              f"the impedance, the resistivity, the phase and every other derived product; the "
+              f"source files are still served byte for byte")
+    if declared_channels and not [i for i in r.items
+                                  if i["check"] == "channels" and i["level"] == "FAIL"]:
+        labels = [lab for key, lab in CHANNEL_LABELS.items() if key in declared_channels]
+        labels += sorted(key for key in declared_channels if key not in CHANNEL_LABELS)
+        masked = [what for what, on in (("tipper", mask_tipper), ("impedance", mask_impedance)) if on]
+        r.add("PASS", "channels",
+              f"channels_recorded: {len(declared_channels)} channel(s) declared "
+              f"({' '.join(labels)}); "
+              f"{' and '.join(masked) + ' masked survey-wide' if masked else 'no survey-wide mask'}")
+
     # --- MTH5 transfer-function validation (structure / version / TF groups / station metadata) ---
     for h5 in mh_files:
         _validate_mth5(h5, r)
@@ -2266,7 +2618,10 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
 def _grab(text, key):
     # [ \t] rather than \s around '=': \s matches the NEWLINE, so an EMPTY value line ('DATAID=')
     # silently captured the NEXT header line as the value (found arming the D5 id authority).
-    m = re.search(rf"^{key}[ \t]*=[ \t]*(.+?)[ \t]*$", text, re.M | re.I)
+    # Leading whitespace is legal in EDI and real generators indent their header keys, so the
+    # anchor tolerates it. The key must still open the line's content, so a REFLAT= line can
+    # never satisfy a LAT= read.
+    m = re.search(rf"^[ \t]*{key}[ \t]*=[ \t]*(.+?)[ \t]*$", text, re.M | re.I)
     return m.group(1).strip().strip('"') if m else None
 
 

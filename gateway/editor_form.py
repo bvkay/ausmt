@@ -307,7 +307,8 @@ SOURCE_PROFILES = ("ga", "generic")
 # the form (SectionError) — byte-identical posture to access.coordinates, because a mis-typed relation
 # publishes a WRONG provenance claim and must block, not ship.
 RELATION_TYPES = ("IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites",
-                  "IsPartOf", "IsSourceOf")
+                  "IsPartOf", "IsSourceOf",
+                  "IsDocumentedBy")   # activity-scope records (e.g. ANSIR project pages)
 IDENTIFIER_TYPES = ("DOI", "Handle", "URL", "RAiD")
 
 # "Identifiers by data level" (D-L1/D-L2, owner-ratified 2026-07-23; SPEC §9). Every related_identifiers

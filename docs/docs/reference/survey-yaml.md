@@ -49,6 +49,7 @@ absence is silent.
 | `abstract` | recommended | string | [4 Description and extent](#4-description-and-extent) |
 | `geographic_extent` | recommended | mapping | [4 Description and extent](#4-description-and-extent) |
 | `data_types` (or `data_type`) | recommended | list or string | [4 Description and extent](#4-description-and-extent) |
+| `channels_recorded` | optional | list of string | [4 Description and extent](#4-description-and-extent) |
 | `identifiers` | optional | mapping | [5 Identifiers](#5-identifiers) |
 | `related_identifiers` | optional | list of mapping | [6 Identifiers by data level](#6-identifiers-by-data-level) |
 | `funding` | optional | list of mapping | [7 Funding and publications](#7-funding-and-publications) |
@@ -106,6 +107,9 @@ abstract: >
 geographic_extent: { west: 0.0, east: 0.0, south: 0.0, north: 0.0, datum: WGS84 }
 
 data_types: [BBMT]                    # all that apply: AMT | BBMT | LPMT | GDS
+channels_recorded: [Ex, Ey, Bx, By, Bz]  # optional; omitting it masks nothing. A declaration the
+                                      # build acts on: no Bz masks the tipper, and neither Ex nor
+                                      # Ey masks the impedance, survey-wide
 
 identifiers:
   survey_pid: null
@@ -369,6 +373,59 @@ not a value a survey declares for itself.
 | Allowed values | `AMT`, `BBMT`, `LPMT`, `GDS` |
 | Example | `[BBMT]` |
 | Note | `data_type`, a single string, is the accepted alias. The per-station band served in the catalogue and in MTCAT is derived from the transfer function itself, not from this declaration. |
+
+### 4.4 channels_recorded
+
+| | |
+|---|---|
+| Definition | Which channels the survey actually recorded. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | list of string |
+| Allowed values | `Ex`, `Ey`, `Bx`, `By`, `Bz`; the `mt_metadata` spellings `ex`, `ey`, `hx`, `hy`, `hz` are the same declaration, and case is ignored |
+| Default | absent means no survey-wide mask, which is how the whole undeclared corpus builds |
+| Example | `[Bx, By, Bz]` |
+
+Unlike every other field on this page, this one is not a description. It is an assertion the build
+acts on, and it is the only value in `survey.yaml` that withholds served science.
+
+A declaration carrying no vertical coil masks any file-borne tipper across every station in the
+survey. A declaration carrying neither horizontal electric channel masks the impedance and
+everything derived from it: the apparent resistivity, the phase, the phase tensor, the propagated
+errors, the quality score, the sign-convention verdict, and the EMTF XML and MTH5 renditions the
+build writes. This is the intended behaviour for a GDS survey whose impedance was fabricated by a
+converter for a modelling package that demanded one. Applied to a survey that did measure an
+electric field, it is a silent loss: nothing looks broken, and the derived products simply never
+appear.
+
+The source files are never modified. A masked survey still serves its EDIs byte for byte, so
+whatever the files carry remains available to anyone who downloads them.
+
+Both masks are applied to EDIs only. A survey submitted as MTH5, or as EMTF XML, does not inherit
+its own declaration today, so the declaration protects nothing there.
+
+Omitting the field is always safe, and most of the corpus omits it. Declare it when it says
+something true that the files alone do not.
+
+| Situation | Outcome |
+|---|---|
+| absent | silent; no mask, and the served components alone say what the survey recorded |
+| present but not a list, or an empty list | `FAIL`; the build drops both shapes, so the declared mask would silently not apply |
+| a name outside the vocabulary | `WARNING`; the name is named. The masks cannot see it, though its presence still arms them, so it changes nothing the build serves |
+| no `Bz`, and the EDIs carry a non-zero tipper | `WARNING`; the count is named. The tipper is masked survey-wide |
+| no `Ex` and no `Ey`, and the EDIs carry an impedance that is not a recognised fabrication | `WARNING`; the count and the files are named |
+| no `Ex` and no `Ey`, and every impedance is a recognised fabrication | silent; this is the legacy GDS norm |
+
+The validator recognises three fabricated impedances and warns on none of them: the twelve constants
+the 2002 GDS converter wrote for WinGLink, any impedance that does not vary across period at all,
+and a synthetic ramp that renders one flat apparent resistivity at every period. An absent or
+all-zero impedance, and an all-zero tipper, are absent data rather than masked data and are equally
+silent. Everything else counts, including a genuine single-period impedance.
+
+One published survey warns today. `kalkaroo-2022` declares `[Ex, Ey, Bx, By]` while 174 of its 216
+files carry a tipper, which the package documents as a processing artifact it intends to discard.
+That is the warning working, not a defect: `--strict` is the publication gate, so a deliberate mask
+over real data is expected to need a curator's eye every time.
 
 ---
 
