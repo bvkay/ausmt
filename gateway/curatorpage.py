@@ -5051,6 +5051,7 @@ _RELATION_DISPLAY = {
     "Cites": "Cites (this dataset cites it)",
     "IsPartOf": "Part of (a parent collection record)",
     "IsSourceOf": "Source of (a model derives from this dataset)",
+    "IsDocumentedBy": "Documented by (an activity or project record describes this dataset)",
 }
 
 # D-L1 (SPEC §9.1) — plain-language display text for the `identifies` <select>, in NCI Table 1 ORDER.
