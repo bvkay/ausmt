@@ -3672,7 +3672,7 @@ def _reproducible_derived_edi(raw: bytes) -> bytes:
 
     The download manifest's reference states that the served EDI and the per-survey EDI zip are
     byte-reproducible across builds, so their SHA-256 is a stable cross-build invariant, unlike the
-    EMTF XML and the MTH5 which embed timestamps and UUIDs. A custodian EDI satisfies that for free
+    MTH5 which embeds timestamps and UUIDs. A custodian EDI satisfies that for free
     because it is copied. A generated EDI is WRITTEN, and mt_metadata's header writer assigns
     FILEDATE = now at write time with no knob to pass it (Header.write_header), so an untouched
     generated file would publish a new digest for its station AND for its survey's whole EDI zip on
@@ -3687,7 +3687,11 @@ def _reproducible_derived_edi(raw: bytes) -> bytes:
     file dates the transfer function it renders, and re-reading it yields the same
     provenance.creation_time the source asserts rather than a build clock. Falls back to the INFO
     provenance.creation_time, then to mt_metadata's null date (the value whose presence makes it drop
-    original_file.date altogether); every branch is a function of the source bytes alone.
+    original_file.date altogether); every branch is a function of the source bytes alone. The served
+    EMTF XML's CreateTime resolves to this same value by the same rule (ingest.normalize
+    _pin_create_time), so a station whose EDI this build GENERATES agrees with its EMTF XML about that
+    date instead of contradicting it by the seconds between two writes. A copied custodian EDI is
+    served as its custodian wrote it and keeps that file's own FILEDATE.
 
     Byte-level on purpose: this runs on a file the round-trip gate has already passed, so it must not
     re-serialise anything. A file with no FILEDATE line is returned unchanged (nothing to pin)."""

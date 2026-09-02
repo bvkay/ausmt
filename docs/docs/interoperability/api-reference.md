@@ -276,15 +276,22 @@ and `bundles/<slug>-tf.h5`. The portal joins each url onto its configured data b
 to NCI is a manifest change with no consumer edits. Handle both tiers by checking whether the `url`
 already starts with a scheme.
 
-Integrity across builds. Every digest is of the served bytes. A served EDI and the per-survey EDI zip
-are byte-reproducible across builds given a fixed zlib and, for a generated EDI, a fixed mt_metadata:
-the writer stamps its own name and version into the EDI's HEAD block, so a toolchain bump moves the
-digest of every generated EDI without any change to the transfer function, and a copied custodian EDI
-is unaffected. The only clock-dependent field an EMTF-XML-sourced station's EDI would carry is its
-`FILEDATE`, and the build stamps that from the date the source document declares. Within those pins the
-SHA-256 is a stable cross-build invariant. EMTF XML, the EMTF-XML zip and the transfer-function MTH5
-embed timestamps and UUIDs and are not byte-reproducible: their SHA-256 is a per-build
-download-integrity hash, not a cross-build invariant.
+Integrity across builds. Every digest is of the served bytes. A served EDI, a served EMTF XML and the
+two per-survey zips over them are byte-reproducible across builds given a fixed zlib and, for a
+written file, a fixed mt_metadata: the writer stamps its own name and version into the EDI's HEAD
+block, so a toolchain bump moves the digest of every generated EDI without any change to the transfer
+function, and a copied custodian EDI is unaffected. Two clock-dependent fields would otherwise carry a
+build clock, an EMTF-XML-sourced station's EDI `FILEDATE` and every served EMTF XML's `CreateTime`, and
+the build stamps both from the creation date the source document declares, as mt_metadata reads it:
+for an EDI source, the `INFO` block's declared creation time where it has one and its `FILEDATE`
+otherwise; for an EMTF-XML source, that document's own `CreateTime`; and where the source declares no
+date at all, the null instant `1980-01-01T00:00:00+00:00`. A station whose EDI this build generates
+therefore agrees with its EMTF XML about when the transfer function they render was created, both
+renditions being stamped from that one declared date. A copied custodian EDI is served as its
+custodian wrote it and keeps that file's own `FILEDATE`. Within
+those pins the SHA-256 is a stable cross-build invariant. The transfer-function MTH5 embeds timestamps
+and UUIDs and is not byte-reproducible: its SHA-256 is a per-build download-integrity hash, not a
+cross-build invariant.
 
 The manifest lists only what AusMT serves. Only redistributably licensed surveys with an open access
 level appear. A non-served station has no row and the portal routes it to the source archive; an
