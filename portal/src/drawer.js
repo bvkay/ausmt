@@ -719,7 +719,7 @@ function loadStationFrameLine(s){
 // grey 'not evaluated' — never a fabricated green. Thresholds echo PROV.parameters where the pipeline
 // records one (phase-tensor consistency uses PROV pct_periods_3d_threshold, passed in as pctThr); the
 // others use the documented screen thresholds below.
-//   d.q          completeness/smoothness check (0..5)      -> Smoothness            green>=4  amber>=3
+//   d.q          completeness/smoothness check (0..5), null on a tipper-only station -> Smoothness  green>=4  amber>=3
 //   d.azR/azN    circular resultant length + count of low-skew PT azimuths -> Strike stability  green>=.9 amber>=.75 (need >=3)
 //   d.beta,betaThr median |β| (deg) vs its PROV threshold skew_3d_deg      -> Phase tensor consistency  green<=thr amber<=2*thr
 //   d.phaseSplit median |φxy − φyx| separation (deg)       -> Phase split           green<=15 amber<=35
@@ -891,12 +891,16 @@ function openStation(i,opts){
   // word; never colour alone; a not-computable check is neutral grey "not evaluated"), then a "Show
   // details" expander preserving the full automated screening prose (strike + median |β| lines, the
   // galvanic flag, and the completeness/smoothness check with its not-a-verdict framing — UX3-7a fence).
+  // The check screens an impedance, so sc[SC.q] is null on every tipper-only station; the line says so
+  // from the components column rather than showing a bare "n/a" a reader could mistake for a missing
+  // value. A null q on a station that DOES carry Z is the access gate withholding it, and reads
+  // "not available" instead: the two absences have two reasons and must not share one sentence.
   /* const screeningHtml=`<div class="sechead">Screening indicators ${roleChip("Automated screening")} <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+
     screeningIndicatorList(_inds)+
     `<details class="prov-d"><summary>Show details</summary><div class="prov-dbody">`+
     `<div class="dim">Automated screening estimate — ${strikeClause}${skew!=null?` · median |β| <b>${skew}°</b> · <b>${p3d}%</b> of evaluated periods exceeded the |β|${_betaThr!=null?` &gt; ${esc(String(_betaThr))}°`:""} screening threshold`:""}. Not a structural interpretation.<br>`+
     `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
-    `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`+
+    `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:(String(s.comps||"").indexOf("Z")<0?"not computed; this station carries no impedance, so there is nothing to screen":"not available")}.</span></div>`+
     `</div></details>`; */
   // Files — the NCI data-level product list. R5: the section-level role chip is dropped; each product row
   // now carries its OWN origin tag (AusMT-derived vs source archive), so a single section chip would be

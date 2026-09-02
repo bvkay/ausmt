@@ -3,7 +3,8 @@
 pipeline calls science_from_components).
 
 Per station: [q, qb, rr, sw, alg, dim, p3d, gd, ellip, skew, mre, decades]
-  q    quality score 0-5 (one dp) | qb basis: 'e'=error-based, 's'=shape-based
+  q    completeness/smoothness diagnostic 0-5 (one dp), null where the station carries no
+       impedance | qb basis: 'e'=error-based, 's'=shape-based
   rr   remote reference: 1=stated, 0=unknown (absence of INFO != "no RR")
   sw   processing software string | null      alg algorithm string | null
   dim  "1-D"/"2-D"/"3-D" | null (phase-tensor)  p3d % periods |beta|>3 deg
@@ -74,6 +75,23 @@ def clamp(x, lo=0.0, hi=1.0):
     return max(lo, min(hi, x))
 
 
+# The impedance series of the canonical component dict, named so the presence test below reads the
+# same eight keys `_mtm.components_from_tf` writes.
+_Z_SERIES = tuple("Z" + c + r for c in ("XX", "XY", "YX", "YY") for r in ("R", "I"))
+
+
+def has_impedance(comp):
+    """True when the component dict carries an impedance.
+
+    CONSTRAINT: this is the catalogue components column's own decision, carried through the single
+    seam between parsing and science rather than re-derived. `_mtm.components_from_tf` fills the Z
+    series ONLY under `tf.has_impedance()`, the same test that puts "Z" in the components column,
+    and nulls any series that stays empty, so a component dict with no Z series is a station the
+    catalogue publishes as tipper-only.
+    """
+    return any(any(v is not None for v in (comp.get(k) or ())) for k in _Z_SERIES)
+
+
 def science_from_components(periods, comp, proc):
     """Diagnostics from a canonical component dict — SHARED by the regex and mt_metadata
     extractors, so dimensionality/diagnostic differences trace purely to parsing."""
@@ -137,6 +155,15 @@ def science_from_components(periods, comp, proc):
         qb = "s"
         mre = None
 
+    # q scores an impedance, so a station that carries none has no q to publish: with no resistivity
+    # and no phase the shape-based score collapses to period coverage plus a constant, which reads
+    # as an assessed diagnostic and is not one. Withheld on the components column's own "no
+    # impedance" fact, so a tipper-only station is unscored for ONE reason whether its survey's
+    # channel declaration masks a fabricated impedance or its file never carried one. The basis stays
+    # 's', matching the no-periods row above and the mask's null convention in build_portal.
+    if not has_impedance(comp):
+        q, qb = None, "s"
+
     # phase tensor dimensionality
     zr = {c: comp.get("Z" + c.upper() + "R") for c in ("xx", "xy", "yx", "yy")}
     zi = {c: comp.get("Z" + c.upper() + "I") for c in ("xx", "xy", "yx", "yy")}
@@ -192,6 +219,7 @@ def science_from_components(periods, comp, proc):
 
     # Build the row BY NAME, then project through SCI_COLUMNS so the emit order self-follows the
     # contract (a reorder regenerates _contract.py and this projection tracks it). Byte-identical.
-    row = {"q": round(q, 1), "qb": qb, "rr": rr, "sw": sw, "alg": alg, "dim": dim,
+    row = {"q": round(q, 1) if q is not None else None,
+           "qb": qb, "rr": rr, "sw": sw, "alg": alg, "dim": dim,
            "p3d": p3d, "gd": gd, "ellip": ellip, "skew": skew, "mre": mre, "decades": round(decades, 1)}
     return [row[c] for c in SCI_COLUMNS]

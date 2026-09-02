@@ -1,0 +1,62 @@
+ >HEAD
+
+   DATAID="TIPONLY1"
+   ACQBY="AusMT test fixture"
+   PROSPECT="Tipper-only fixture"
+   LOC="Fixture"
+   LAT=-18.69
+   LONG=138.53
+   ELEV=  0.00
+
+ >INFO   MAXLINES=1000
+
+   MINTED FIXTURE - NOT CUSTODIAN DATA. The block layout reproduces the shape of
+   the regenerated magnetometer-array registry files in the AusMT corpus, measured
+   on the carpentaria-north-1995 station Adels_Cove - a three-channel DEFINEMEAS
+   with no EMEAS, an MTSECT naming HX/HY/HZ only, and a TIPPER block with no
+   impedance section anywhere in the file. No byte is copied from a corpus file.
+   The header identity is invented and the tipper values below are minted for this
+   test. The point of the fixture is the ABSENCE - a station that never carried an
+   impedance, so nothing masks it and nothing derives an apparent resistivity or a
+   phase from it.
+
+ >=DEFINEMEAS
+
+   MAXCHAN=3
+   MAXRUN=999
+   MAXMEAS=99999
+   UNITS=M
+   REFTYPE=CART
+   REFLAT=-18.69:0:0
+   REFLONG=138.53:0:0
+   REFELEV=  0.00
+
+ >HMEAS ID= 1001.001 CHTYPE=HX X = 0.  Y = 0.  AZM = 0.
+ >HMEAS ID= 1002.001 CHTYPE=HY X = 0.  Y = 0.  AZM= 90.
+ >HMEAS ID= 1003.001 CHTYPE=HZ X = 0.  Y = 0.  AZM= 0.
+
+ >=MTSECT
+  SECTID= TIPONLY1
+   NFREQ=    6
+   HX = 1001.001
+   HY = 1002.001
+   HZ = 1003.001
+
+ >!****FREQUENCIES****!
+ >FREQ NFREQ= 6  ORDER=DEC // 6
+    0.16667E-02    0.83333E-03    0.41667E-03    0.26042E-03    0.13021E-03    0.65104E-04
+ >!****TIPPER PARAMETERS****!
+ >TXR.EXP ROT=0.0 // 6
+   -0.24400E+00   -0.19000E+00   -0.19300E+00   -0.18600E+00   -0.12900E+00   -0.91900E-01
+ >TXI.EXP ROT=0.0 // 6
+   -0.57500E-01   -0.10100E+00   -0.92500E-01   -0.11400E+00   -0.10900E+00   -0.89800E-01
+ >TXVAR.EXP ROT=0.0 // 6
+    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01
+ >TYR.EXP ROT=0.0 // 6
+   -0.97200E-01   -0.12100E+00   -0.16700E+00   -0.24700E+00   -0.21100E+00   -0.23300E+00
+ >TYI.EXP ROT=0.0 // 6
+    0.13700E+00    0.10500E+00    0.94100E-01    0.99900E-01    0.51700E-01    0.19900E-01
+ >TYVAR.EXP ROT=0.0 // 6
+    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01    0.10000E-01
+
+ >END
