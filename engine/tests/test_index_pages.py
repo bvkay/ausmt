@@ -18,6 +18,7 @@ its own budget test for the same ceiling: its cost scales with member STATION co
 card count, so it is asserted against six collections at corpus scale before that data arrives.
 """
 import html
+import json
 import re
 import sys
 from pathlib import Path
@@ -193,10 +194,15 @@ def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
     """FAILS IF an index page grows a script, a stylesheet link, or any fetched asset beyond the one
     allow-listed identity mark. The entity pages' determinism posture (stdlib-only build, everything
     else inline, no network at build) is inherited, not re-litigated; the mark is the single named
-    exception and it is same-origin."""
+    exception and it is same-origin.
+
+    A ld+json block is data, not code: nothing in it executes, and the hub pages carry one so a
+    search result can show the trail back to the root. It is stripped before the guard rather than
+    excused, so an EXECUTABLE script on a hub still fails on the same line."""
     for rel in ("surveys/index.html", "collections/index.html"):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        assert "<script" not in page, f"{rel}: no script may appear on an index page"
+        assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
+            f"{rel}: no executable script may appear on an index page"
         srcs = _page_srcs(page, rel)
         assert srcs == _allowed_srcs(rel), \
             f"{rel}: the only fetched assets may be {_allowed_srcs(rel)}, got {srcs}"
@@ -1005,3 +1011,68 @@ def test_the_separator_span_stays_on_the_hub_cards_alone(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert 'class="sep"' not in page, f"{rel}: entity pages keep their current spacing"
         assert "&#183;" in page, f"{rel}: the bare interpunct grammar itself must survive"
+
+
+# ==================================================================================================
+# Discoverability: what each page kind says about the site and about where it sits in it
+# ==================================================================================================
+def _ld_nodes(page):
+    """Every JSON-LD block on a page, parsed, in document order."""
+    return [json.loads(m) for m in
+            re.findall(r'<script type="application/ld\+json">([\s\S]*?)</script>', page)]
+
+
+def test_every_page_kind_names_the_site_it_belongs_to(built):
+    """Google labelled the whole portal "AuScope" because the only site-level name anywhere in the
+    markup was the publisher's. og:site_name is what a link preview prints above the title, so every
+    page kind states it, station pages included: an inbound link lands on those most often, and a
+    preview card that names the wrong site is wrong wherever it is shared."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        assert '<meta property="og:site_name" content="AusMT">' in page, \
+            f"{rel}: the page must name the site it belongs to"
+
+
+def test_the_indexable_page_kinds_carry_the_trail_back_to_the_root(built):
+    """A BreadcrumbList is what turns a bare URL in a search result into a labelled path, and the
+    entity pages are the ones a reader arrives at cold. The markup matches the VISIBLE crumb word
+    for word, which is what Google requires of it.
+
+    FAILS IF a page kind loses its breadcrumb, if a crumb name stops matching the trail the page
+    prints, or if a station page grows one: station pages are noindex, so a trail on one describes
+    a rich result that can never be rendered and would cost the tier a block per document."""
+    expected = {
+        "surveys/index.html": ["AusMT", "surveys"],
+        "collections/index.html": ["AusMT", "collections"],
+        "surveys/idx-a.html": ["AusMT", "surveys", "Index A"],
+        "collections/idxcoll.html": ["AusMT", "collections", "Index Collection"],
+    }
+    for rel, names in expected.items():
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        crumbs = [n for n in _ld_nodes(page) if n.get("@type") == "BreadcrumbList"]
+        assert len(crumbs) == 1, f"{rel}: exactly one BreadcrumbList, got {len(crumbs)}"
+        items = crumbs[0]["itemListElement"]
+        assert [i["name"] for i in items] == names, f"{rel}: {items}"
+        assert [i["position"] for i in items] == list(range(1, len(names) + 1)), items
+        assert items[0]["item"] == f"{BASE}/", items[0]
+        # every crumb name the markup claims is a name the reader is actually shown
+        visible = re.search(r'<p class="crumb">(.*?)</p>', page).group(1)
+        for name in names:
+            assert html.escape(name, quote=True) in visible, \
+                f"{rel}: breadcrumb name {name!r} is not in the visible crumb {visible!r}"
+    station = [rel for rel in _kinds(built) if rel.startswith("stations/")][0]
+    spage = (built / "pages" / station).read_text(encoding="utf-8")
+    assert '<meta name="robots" content="noindex">' in spage, "station pages stay noindex"
+    assert not _ld_nodes(spage), \
+        f"{station}: a noindex page carries no structured data at all"
+
+
+def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
+    """Order is load-bearing: several pins and any reader taking "the page's structured data" read
+    the FIRST block, so the record the page is about must stay in front of its breadcrumb."""
+    for rel, entity in (("surveys/idx-a.html", "Dataset"),
+                        ("collections/idxcoll.html", "Dataset")):
+        nodes = _ld_nodes((built / "pages" / rel).read_text(encoding="utf-8"))
+        assert len(nodes) == 2, f"{rel}: entity node plus breadcrumb, got {len(nodes)}"
+        assert nodes[0]["@type"] == entity, f"{rel}: the entity node must come first, got {nodes}"
+        assert nodes[1]["@type"] == "BreadcrumbList", nodes

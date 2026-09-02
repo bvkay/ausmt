@@ -43,8 +43,13 @@ def _engine_fmt_licence():
     ns = {"re": re}
     exec(compile(CONTRACT_PY.read_text(encoding="utf-8"), str(CONTRACT_PY), "exec"), ns)  # noqa: S102
     assert "LICENSES" in ns, "engine/extract/_contract.py must define LICENSES"
-    block = re.search(r"^_CC_ID = re\.compile\(.*?^def _fmt_licence\(lic\)[^\n]*\n(?:[ \t].*\n|\n)*",
-                      PAGES_PY.read_text(encoding="utf-8"), re.M | re.S)
+    # The body sweep matches indented lines and blank lines, so it must NOT run under re.S: with
+    # DOTALL a single `[ \t].*\n` runs to the last newline in the file and the "block" becomes the
+    # whole module, which then fails on whatever the module's later imports need. The leading span
+    # spells its own any-character class instead of borrowing the flag.
+    block = re.search(r"^_CC_ID = re\.compile\([\s\S]*?^def _fmt_licence\(lic\)[^\n]*\n"
+                      r"(?:[ \t][^\n]*\n|\n)*",
+                      PAGES_PY.read_text(encoding="utf-8"), re.M)
     assert block, "engine/extract/_pages.py must define _CC_ID ... _fmt_licence"
     exec(compile(block.group(0), str(PAGES_PY), "exec"), ns)  # noqa: S102
     return ns["_fmt_licence"]

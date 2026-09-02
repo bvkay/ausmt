@@ -21,8 +21,13 @@ render ONLY the levels the served register carries. NO em/en dashes and NO tick 
 numeric ranges take a spaced hyphen, absent cells are plain hyphens, availability is stated as data
 (sizes), per the owner's rulings.
 
-Per-survey link-preview cards (og:image) are rendered when Pillow is importable; without it
-every entity page falls back to the portal's root card. Both paths emit the og/twitter tags.
+Per-survey AND per-collection link-preview cards (og:image) are rendered when Pillow is importable;
+without it every entity page falls back to the portal's root card. Both paths emit the og/twitter
+tags, and a page advertises a card only where the emitter has actually written that file.
+
+Structured data is emitted per page kind: the entity node (Dataset) first where a page has one,
+then a BreadcrumbList matching the visible crumb. Station pages carry neither, because they are
+noindex and a trail on one describes a result that can never be shown.
 
 Stdlib only (Pillow soft-gated), deliberately: this is a leaf like _license_text, importable by
 the spawn workers' build_portal without extra weight.
@@ -34,6 +39,7 @@ import html
 import json
 import math
 import re
+from pathlib import Path
 
 import _au_outline as au
 import _stationcheck as stcheck
@@ -81,6 +87,16 @@ _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "
 _MAP_PANEL = "#18213D"
 _MAP_PANEL_LINE = "#222C4E"
 
+# The coastline's own two colours, declared once because two surfaces draw the same outline in two
+# media: the SVG panels below and the raster collection card. A card that previewed a page whose
+# coastline was a different colour would read as a different map.
+_COAST_FILL = "#1d3140"
+_COAST_LINE = "#3a5266"
+
+# The site's own name, as the structured data and every og:site_name state it. Google labelled the
+# site by its publisher because nothing on it ever named the site itself.
+_SITE_NAME = "AusMT"
+
 
 _ROLE_LABELS = {"ProjectLeader": "Project Leader", "ProjectMember": "Project Member",
                 "DataCollector": "Data Collector", "DataCurator": "Data Curator",
@@ -94,6 +110,20 @@ def _e(v) -> str:
 
 def _jsonld(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=1).replace("</", "<\\/")
+
+
+def _breadcrumb(base, trail):
+    """A BreadcrumbList for `trail`: [(name, path)] from the site root down to this page.
+
+    The names are the VISIBLE crumb's own words, because the markup has to describe the trail the
+    reader is actually shown; a hub whose crumb reads "surveys" may not claim "Surveys" here.
+    Station pages take no breadcrumb at all: they are noindex, so a trail on one describes a rich
+    result that can never be rendered, and this tier's thousands of station documents are the one
+    place where a block per page is worth counting."""
+    return {"@context": "https://schema.org", "@type": "BreadcrumbList",
+            "itemListElement": [{"@type": "ListItem", "position": i, "name": name,
+                                 "item": f"{base}{path}"}
+                                for i, (name, path) in enumerate(trail, start=1)]}
 
 
 def _initials(authors) -> str:
@@ -244,9 +274,9 @@ def _outline_paths(p) -> str:
     def path(ring, close=True):
         d = "M" + "L".join(f"{x},{y}" for x, y in (p(lo, la) for lo, la in ring))
         return d + ("Z" if close else "")
-    coast = "".join(f'<path d="{path(r)}" fill="#1d3140" stroke="#3a5266" stroke-width="1"/>'
-                    for r in au.COAST)
-    borders = "".join(f'<path d="{path(r, False)}" fill="none" stroke="#3a5266" '
+    coast = "".join(f'<path d="{path(r)}" fill="{_COAST_FILL}" stroke="{_COAST_LINE}" '
+                    f'stroke-width="1"/>' for r in au.COAST)
+    borders = "".join(f'<path d="{path(r, False)}" fill="none" stroke="{_COAST_LINE}" '
                       f'stroke-width=".8" stroke-dasharray="3 3"/>' for r in au.BORDERS)
     return coast + borders
 
@@ -691,7 +721,12 @@ def _site_footer(machine=None, build=None) -> str:
 def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
            og_image=None, base="", extra_css="", nav="", machine=None, build=None,
            status="") -> str:
-    ld = f'<script type="application/ld+json">{_jsonld(jsonld)}</script>\n' if jsonld else ""
+    # `jsonld` is ONE node or a list of nodes, emitted in order as one script element each. Order is
+    # load-bearing: the entity node stays first on every page that carries one, so anything reading
+    # "the page's structured data" gets the record the page is about and not its breadcrumb. A
+    # @graph wrapper would have collapsed the two into a node no first-block reader can follow.
+    nodes = [n for n in (jsonld if isinstance(jsonld, list) else [jsonld]) if n]
+    ld = "".join(f'<script type="application/ld+json">{_jsonld(n)}</script>\n' for n in nodes)
     # noindex: the page exists for the URL contract and for humans following published links, but
     # is deliberately kept out of the search index (station pages: thousands of templated
     # documents would read as thin content at scale and dilute the survey/collection pages that
@@ -702,6 +737,10 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     og = ""
     if image:
         og = (f'<meta property="og:type" content="website">\n'
+              # The SITE's name, not the publisher's. Every page states it, station pages included:
+              # a preview card that names the wrong site is wrong wherever it is shared, and the
+              # station pages are exactly the ones an inbound link is most likely to land on.
+              f'<meta property="og:site_name" content="{_SITE_NAME}">\n'
               f'<meta property="og:title" content="{_e(title)}">\n'
               f'<meta property="og:description" content="{_e(description)}">\n'
               f'<meta property="og:url" content="{_e(canonical)}">\n'
@@ -907,7 +946,11 @@ def _survey_kind(served_types) -> str:
 
 
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
-                base, extent=None, discovery=None, build=None) -> str:
+                base, extent=None, discovery=None, build=None, og_image=None) -> str:
+    """`og_image` is the absolute URL of the card the EMITTER has already written for this survey,
+    or None for the portal's root card. The page used to derive it from "is Pillow importable",
+    which is a claim about the environment rather than about the file: a card whose write failed
+    still left the page advertising it, and a link preview then fetched a 404."""
     smeta = smeta or {}
     title = ((sm_doc or {}).get("title")) or label
     blurb = smeta.get("blurb") or ""
@@ -1338,12 +1381,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         f'<p><a href="/data/products/{_e(slug)}/survey-metadata.json">Machine-readable survey record</a>'
         ' &#183; catalogue schema <a href="/data/mtcat.schema.json">mtcat 2.0</a></p>',
     ) if part) + "\n"
-    # The card lives in the DATA volume, which is served under /data/*; the pages/ tree has no
-    # bare route of its own (the entity rewrite matches the two-segment shapes only), so this is
-    # the one URL at which the rendered card is reachable.
-    og_image = f"{base}/data/pages/og/{slug}.png" if _og_available() else None
     return _shell(title=f"{title} - {kind} data - AusMT",
-                  description=desc_meta, canonical=url, body=body, jsonld=ld,
+                  description=desc_meta, canonical=url, body=body,
+                  jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys"),
+                                                 (title, f"/surveys/{slug}")])],
                   og_image=og_image, base=base, nav="navSurveys", build=build,
                   machine=("Machine-readable survey metadata - JSON",
                            f"/data/products/{slug}/survey-metadata.json"))
@@ -1632,13 +1673,18 @@ def _prose_of(coll, key) -> str:
 
 
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
-                    member_facts=None, level_counts=None, formats=None, build=None) -> str:
+                    member_facts=None, level_counts=None, formats=None, build=None,
+                    og_image=None) -> str:
     """The collection page as an EXPLORATORY layer (design brief 23 to 31), not a catalogue record.
 
     `member_facts` ({slug: row}), `level_counts` ({level: n stations}) and `formats` are rollups the
     emitter computes from the SAME served documents the member survey pages render from. All three
     are optional: a caller that supplies none gets the hero, the map and the member list, and the
     sections those rollups would have filled are simply not written.
+
+    `og_image` is the absolute URL of the card the emitter has already written for this collection,
+    or None for the portal's root card. A collection whose members disclose no position gets no card
+    and therefore no URL: an empty coastline would read as a collection with no coverage.
     """
     title = (coll or {}).get("title") or cid
     desc = (coll or {}).get("description") or f"{title}: a collection of magnetotelluric surveys on AusMT."
@@ -1793,8 +1839,11 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
                   # The meta/og description is a summary of the rollup description, never the
                   # section prose: the prose is a page-length payload and a link preview is a line.
                   description=_meta_summary(desc),
-                  canonical=url, body=body, jsonld=ld, base=base,
-                  nav="navCollections", build=build,
+                  canonical=url, body=body, base=base,
+                  jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"),
+                                                 ("collections", "/collections"),
+                                                 (title, f"/collections/{cid}")])],
+                  og_image=og_image, nav="navCollections", build=build,
                   machine=("Collection record in the MTCAT catalogue - JSON",
                            "/data/mtcat.json"))
 
@@ -1949,6 +1998,7 @@ def surveys_index_page(*, rows, base, build=None) -> str:
         f'<div class="idxlist">{"".join(cards)}</div>\n')
     return _shell(title="Surveys - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
+                  jsonld=_breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")]),
                   extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts,
                   machine=_MTCAT_LINK)
 
@@ -1994,6 +2044,7 @@ def collections_index_page(*, rows, base, build=None) -> str:
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
     return _shell(title="Collections - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
+                  jsonld=_breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")]),
                   extra_css=_INDEX_CSS, nav="navCollections", build=build,
                   machine=_MTCAT_LINK)
 
@@ -2008,22 +2059,94 @@ def _og_available() -> bool:
         return False
 
 
+_CARD_SIZE = (1200, 630)
+_CARD_MARGIN = 60                 # the text margin every card's left column sits on
+_CARD_WORDMARK = "ausmt.auscope.org.au"
+_CARD_WORDMARK_Y = 540
+_CARD_WORDMARK_SIZE = 28
+_CARD_TITLE_SIZES = (64, 52, 44, 36)
+# The collection card's title column. It stops well short of the map panel's outset edge, because
+# the gutter between a 64 px title and a bordered panel has to read as space rather than as a near
+# miss; the ladder above steps the type down inside this width, it does not widen the column.
+_CARD_TEXT_WIDTH = 476
+
+# The AuScope mark the card signs itself with. It ships BESIDE this module rather than being read
+# from portal/vendor/, because the engine image carries no portal tree: an emitter that reached
+# across to the portal would draw an unsigned card in exactly the environment that serves the
+# corpus. The two files are pinned byte-identical, so there is still one asset.
+_CARD_MARK = Path(__file__).resolve().parent / "_auscope_mark.png"
+
+
+def _rgb(colour):
+    """'#RRGGBB' as the (r, g, b) tuple the raster cards draw with, so a card and the SVG panel it
+    previews can share one declared colour instead of each carrying its own literal."""
+    h = str(colour).lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _card_wordmark_row(img, d, font, ink):
+    """The AuScope mark, a half-mark-width gap, then the wordmark: ONE row on the card's text
+    margin, on every card family this module draws.
+
+    The mark's height is the wordmark's own line height and it is centred on the wordmark's INK
+    rather than on its em box, so the pair reads as a single line of type. Centring on the em box
+    would pay out the face's descent, which no glyph in this string uses, and sit the mark high."""
+    from PIL import Image
+    x0, y0 = _CARD_MARGIN, _CARD_WORDMARK_Y
+    box = d.textbbox((x0, y0), _CARD_WORDMARK, font=font)
+    try:
+        line_h = sum(font.getmetrics())
+    except AttributeError:                # Pillow < 10.1: the bitmap face carries no metrics
+        line_h = box[3] - box[1]
+    with Image.open(_CARD_MARK) as src:
+        mark = src.convert("RGBA").resize(
+            (round(line_h * src.width / src.height), line_h), Image.LANCZOS)
+    # Floor, not round: half of an odd width under banker's rounding is a gap nobody can predict
+    # from the numbers on this line.
+    gap = mark.width // 2
+    img.paste(mark, (x0, round((box[1] + box[3]) / 2 - line_h / 2)), mark)
+    d.text((x0 + mark.width + gap, y0), _CARD_WORDMARK, font=font, fill=ink)
+
+
+def _card_font(size):
+    """Pillow's bundled scalable default face (no font files shipped or fetched)."""
+    from PIL import ImageFont
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:                     # Pillow < 10.1: tiny bitmap face, still legible
+        return ImageFont.load_default()
+
+
+def _card_lines(d, text, font, width, max_lines):
+    """(lines, whether the WHOLE string fitted). Word boundaries only.
+
+    A title that is silently cut is a title the card gets wrong, so the caller steps the type down
+    while the whole string still fits and truncates only when nothing does."""
+    lines, cur = [], ""
+    for word in str(text).split():
+        trial = f"{cur} {word}".strip()
+        if cur and d.textlength(trial, font=font) > width:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    whole = (len(lines) <= max_lines
+             and all(d.textlength(ln, font=font) <= width for ln in lines))
+    return lines[:max_lines] or [""], whole
+
+
 def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, points):
     """One 1200x630 link-preview card in the portal card's design language: footprint dots,
-    Australia locator inset, the survey's key numbers. Pillow's bundled scalable default face
-    (no font files shipped or fetched)."""
-    from PIL import Image, ImageDraw, ImageFont
-    W, H = 1200, 630
+    Australia locator inset, the survey's key numbers."""
+    from PIL import Image, ImageDraw
+    W, H = _CARD_SIZE
     ink, panel, line = (13, 20, 40), (17, 26, 51), (43, 53, 87)
     text, muted, copper, cyan = (255, 255, 255), (143, 163, 176), (239, 114, 86), (79, 195, 217)
     img = Image.new("RGB", (W, H), ink)
     d = ImageDraw.Draw(img)
-
-    def font(size, bold=False):
-        try:
-            return ImageFont.load_default(size=size)
-        except TypeError:                     # Pillow < 10.1: tiny bitmap face, still legible
-            return ImageFont.load_default()
+    font = _card_font
 
     # footprint panel, right side
     if points:
@@ -2069,8 +2192,86 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
         d.text((60, 330), period_line, font=font(26), fill=(201, 212, 232))
     if dims_line:
         d.text((60, 370), dims_line, font=font(26), fill=(201, 212, 232))
-    d.text((60, 540), "ausmt.auscope.org.au", font=font(28), fill=copper)
+    _card_wordmark_row(img, d, font(_CARD_WORDMARK_SIZE), copper)
     img.save(path, "PNG", optimize=True)
+
+
+def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels,
+                        member_points) -> bool:
+    """One 1200x630 link-preview card per collection: the member-coloured footprint the collections
+    hub card draws, at raster scale. Returns whether a card was written.
+
+    The palette and the member ORDER are the hub card's, byte for byte (_member_colours over the
+    members that declare a position), so one survey carries the same colour on the hub, on the
+    collection page's own map and here. Two things deliberately differ from the SVG:
+
+      - the dot radius is the SURVEY card's raster rule, not the hub's. A link preview is resampled
+        to roughly a third of this width by the clients that show it, and the hub's rule scaled to
+        this panel gives a radius under 1.5 px at AusLAMP density: those dots disappear.
+      - the dots are opaque. Translucency on the hub buys a readable overlap for a map that can be
+        hovered and has a legend; this card has neither, so it buys nothing and costs contrast.
+
+    NO locator inset: a grouping of surveys has no single location to point at, and the centroid of
+    a continent-spanning programme is a place no member of it occupies. A collection whose members
+    disclose no position at all gets NO CARD rather than a bare coastline, which would read as a
+    collection with no coverage."""
+    from PIL import Image, ImageDraw
+    present = [lbl for lbl in member_labels if (member_points or {}).get(lbl)]
+    palette = _member_colours(len(present))
+    pts = []
+    for i, lbl in enumerate(present):
+        colour = _rgb(palette[i])
+        pts += [(lon, lat, colour) for lon, lat in member_points[lbl]]
+    if not pts:
+        return False
+
+    W, H = _CARD_SIZE
+    ink = (13, 20, 40)
+    text, muted, copper = (255, 255, 255), (143, 163, 176), (239, 114, 86)
+    img = Image.new("RGB", (W, H), ink)
+    d = ImageDraw.Draw(img)
+
+    # ---- the member footprint, in the survey card's panel slot and vertically centred in it ----
+    ext = au.EXTENT
+    pw = 510
+    ph = round(pw * (ext["n"] - ext["s"]) / (ext["e"] - ext["w"]))
+    px0, py0 = 640, 70 + ((560 - 70) - ph) // 2
+    d.rounded_rectangle([px0 - 16, py0 - 16, px0 + pw + 16, py0 + ph + 16], radius=12,
+                        fill=_rgb(_MAP_PANEL), outline=_rgb(_MAP_PANEL_LINE), width=2)
+    # The hub card's own projection, with its 8 unit pad scaled by the width ratio so the coastline
+    # sits in the panel exactly as it does at the hub's width.
+    p = _proj(ext)(pw, ph, 8 * pw / _COLL_INDEX_MAP_WIDTH)
+    for ring in au.COAST:
+        d.polygon([(px0 + x, py0 + y) for x, y in (p(lo, la) for lo, la in ring)],
+                  fill=_rgb(_COAST_FILL), outline=_rgb(_COAST_LINE))
+    r = 4 if len(pts) <= 60 else (3 if len(pts) <= 200 else 2.2)
+    for lon, lat, colour in pts:
+        x, y = p(lon, lat)
+        d.ellipse([px0 + x - r, py0 + y - r, px0 + x + r, py0 + y + r], fill=colour)
+
+    # ---- the text column, stepped down until the WHOLE title fits ----
+    tsize, lines = _CARD_TITLE_SIZES[-1], [str(title)]
+    for tsize in _CARD_TITLE_SIZES:
+        lines, whole = _card_lines(d, title, _card_font(tsize), _CARD_TEXT_WIDTH, 3)
+        if whole:
+            break
+    else:
+        # Nothing in the ladder fits the whole title, so the last line says so rather than ending
+        # mid-thought on a word the reader cannot tell was the last one.
+        lines[-1] = f"{lines[-1]} ..."
+    y = 130
+    for ln in lines:
+        d.text((_CARD_MARGIN, y), ln, font=_card_font(tsize), fill=text)
+        y += round(tsize * 1.18)
+    # The survey card's subtitle and region slots, at its scale: a single-line title lands on the
+    # same two baselines there, so the two families read as one card design.
+    y = max(y + 8, 220)
+    d.text((_CARD_MARGIN, y), facts_line, font=_card_font(29), fill=muted)
+    if taxonomy_line:
+        d.text((_CARD_MARGIN, y + 42), taxonomy_line, font=_card_font(29), fill=muted)
+    _card_wordmark_row(img, d, _card_font(_CARD_WORDMARK_SIZE), copper)
+    img.save(path, "PNG", optimize=True)
+    return True
 
 
 # --------------------------------------------------------------------------- the emitter
@@ -2078,10 +2279,14 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
 def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collections,
                bundle_formats, survey_extent, survey_coll,
                bundle_rows=None, ts_access=None, mtcat=None, build=None) -> int:
-    """Write every entity page under <out>/pages/ (and, when Pillow is importable, the
-    per-survey link-preview cards under <out>/pages/og/). Inputs are the served documents and
-    rollups the build already produced; the return value is the page count the caller reconciles
-    against the sitemap (the two must always agree, pinned in tests)."""
+    """Write every entity page under <out>/pages/ (and, when Pillow is importable, the per-survey
+    link-preview cards under <out>/pages/og/ and the per-collection cards under
+    <out>/pages/og/collections/). Inputs are the served documents and rollups the build already
+    produced; the return value is the page count the caller reconciles against the sitemap (the two
+    must always agree, pinned in tests).
+
+    Each card is written BEFORE the page that names it and the page is given the URL only once the
+    file is on disk, so a page can never advertise a card a failed write left missing."""
     base = base.rstrip("/")
     n = 0
     # The hub pages occupy pages/<kind>/index.html, so an entity id of "index" would silently
@@ -2125,11 +2330,50 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             # url alone and the size/sha cells stay absent.
             rows = [{"slug": slug, "format": f, "url": rel}
                     for f, rel in sorted(bundle_formats[slug].items())]
+        # The card is drawn BEFORE the page that advertises it, and the page is handed the URL only
+        # once the file is on disk: a page may never point a link-preview fetcher at a 404.
+        og_image = None
+        if draw_cards:
+            points = _station_points(docs)
+            pmin = pmax = None
+            types: dict = {}
+            for doc in docs:
+                data = doc.get("data") or {}
+                if data.get("period_min_s") is not None:
+                    pmin = data["period_min_s"] if pmin is None else min(pmin, data["period_min_s"])
+                if data.get("period_max_s") is not None:
+                    pmax = data["period_max_s"] if pmax is None else max(pmax, data["period_max_s"])
+                if data.get("type"):
+                    types[data["type"]] = types.get(data["type"], 0) + 1
+            tdesc = " + ".join(sorted(types)) if types else "magnetotelluric"
+            years = _survey_years(survey_docs.get(slug), smeta)
+            period_line = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
+                           if pmin is not None and pmax is not None else "")
+            dims = ""
+            if points and len(points) > 1:
+                lons = [pt[0] for pt in points]
+                lats = [pt[1] for pt in points]
+                dkm_x = (max(lons) - min(lons)) * 111 * 0.83
+                dkm_y = (max(lats) - min(lats)) * 111
+                dims = f"about {dkm_x:.0f} x {dkm_y:.0f} km"
+            cardpath = ogdir / f"{slug}.png"
+            _og_card(cardpath,
+                     title=((survey_docs.get(slug) or {}).get("title")) or label,
+                     subtitle=f"{len(docs)}-station {tdesc} survey",
+                     region_year=" · ".join(x for x in (smeta.get("region"), years) if x),
+                     period_line=period_line, dims_line=dims, points=points)
+            if not cardpath.is_file():
+                raise ValueError(f"survey card {cardpath} was not written; the page must not "
+                                 "advertise a card that does not exist")
+            # The card lives in the DATA volume, which is served under /data/*; the pages/ tree has
+            # no bare route of its own (the entity rewrite matches the two-segment shapes only), so
+            # this is the one URL at which the rendered card is reachable.
+            og_image = f"{base}/data/pages/og/{slug}.png"
         htmlpage = survey_page(slug=slug, label=label, sm_doc=survey_docs.get(slug),
                                smeta=smeta, station_docs=docs,
                                bundle_rows=rows or [], ts_access=ts_access,
                                base=base, extent=(survey_extent or {}).get(label),
-                               build=build,
+                               build=build, og_image=og_image,
                                discovery={"stations": disc_stations.get(slug),
                                           "survey": disc_survey.get(slug)})
         (sdir / f"{slug}.html").write_text(htmlpage, encoding="utf-8")
@@ -2160,35 +2404,6 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             "lic": _drow.get("license") or smeta.get("lic"),
             "doi": _drow.get("doi") or smeta.get("doi"),
             "points": _pts})
-        if draw_cards:
-            points = _station_points(docs)
-            pmin = pmax = None
-            types: dict = {}
-            for doc in docs:
-                data = doc.get("data") or {}
-                if data.get("period_min_s") is not None:
-                    pmin = data["period_min_s"] if pmin is None else min(pmin, data["period_min_s"])
-                if data.get("period_max_s") is not None:
-                    pmax = data["period_max_s"] if pmax is None else max(pmax, data["period_max_s"])
-                if data.get("type"):
-                    types[data["type"]] = types.get(data["type"], 0) + 1
-            title = ((survey_docs.get(slug) or {}).get("title")) or label
-            tdesc = " + ".join(sorted(types)) if types else "magnetotelluric"
-            years = _survey_years(survey_docs.get(slug), smeta)
-            period_line = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
-                           if pmin is not None and pmax is not None else "")
-            dims = ""
-            if points and len(points) > 1:
-                lons = [pt[0] for pt in points]
-                lats = [pt[1] for pt in points]
-                dkm_x = (max(lons) - min(lons)) * 111 * 0.83
-                dkm_y = (max(lats) - min(lats)) * 111
-                dims = f"about {dkm_x:.0f} x {dkm_y:.0f} km"
-            _og_card(ogdir / f"{slug}.png",
-                     title=title,
-                     subtitle=f"{len(docs)}-station {tdesc} survey",
-                     region_year=" · ".join(x for x in (smeta.get("region"), years) if x),
-                     period_line=period_line, dims_line=dims, points=points)
 
     stdir = out / "pages" / "stations"
     stdir.mkdir(parents=True, exist_ok=True)
@@ -2200,6 +2415,12 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
 
     cdir = out / "pages" / "collections"
     cdir.mkdir(parents=True, exist_ok=True)
+    # The collection cards take a SUBDIRECTORY of their own, not the flat og/ tree the survey cards
+    # sit in: a collection id equal to a survey slug would otherwise overwrite that survey's card,
+    # silently and only for the pair that collided.
+    cogdir = ogdir / "collections"
+    if draw_cards:
+        cogdir.mkdir(parents=True, exist_ok=True)
     coll_index_rows = []
     # The collection page's rollups come from the SAME rows the surveys hub was built from, so a
     # fact can never differ between a collection page and the survey page it names.
@@ -2222,17 +2443,39 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             for doc in docs_by_survey.get(s, []):
                 for level in (ts_access or {}).get(doc.get("ausmt_id")) or {}:
                     level_counts[level] = level_counts.get(level, 0) + 1
+        coll = collections[cid] or {}
+        # The card first, on the same rule the survey cards follow. A collection whose members
+        # disclose no position writes none, and the page then carries the portal's root card.
+        coll_og = None
+        if draw_cards:
+            cardpath = cogdir / f"{cid}.png"
+            n_st = int(coll.get("n_stations") or 0)
+            if _og_collection_card(
+                    cardpath,
+                    title=coll.get("title") or cid,
+                    # A raster card carries the interpunct as the CHARACTER, never as the entity
+                    # the HTML slots use: nothing here goes through a markup parser.
+                    facts_line=" · ".join(x for x in (_plural(len(members), "survey"),
+                                                      _plural(n_st, "station") if n_st else "")
+                                          if x),
+                    taxonomy_line=" · ".join(str(x) for x in (coll.get("type"),
+                                                              coll.get("status")) if x),
+                    member_labels=[lbl for lbl, _s in members],
+                    member_points=member_points):
+                if not cardpath.is_file():
+                    raise ValueError(f"collection card {cardpath} was not written; the page must "
+                                     "not advertise a card that does not exist")
+                coll_og = f"{base}/data/pages/og/collections/{cid}.png"
         (cdir / f"{cid}.html").write_text(
             collection_page(cid=cid, coll=collections[cid], member_slugs=members,
                             member_smeta=member_smeta, base=base,
                             member_points=member_points,
                             member_facts={s: facts_by_slug[s] for _lbl, s in members
                                           if s in facts_by_slug},
-                            level_counts=level_counts,
+                            level_counts=level_counts, og_image=coll_og,
                             formats=sorted(member_formats), build=build),
             encoding="utf-8")
         n += 1
-        coll = collections[cid] or {}
         coll_index_rows.append({
             "cid": cid, "title": coll.get("title") or cid,
             "description": coll.get("description"),
