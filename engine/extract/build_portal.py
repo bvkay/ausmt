@@ -346,7 +346,15 @@ def mask_impedance_sci_row(sci_row):
     mask is not a symmetric one-liner: _edi_science back-derives rho/phase FROM Z when the source
     carries no RHO/PHS blocks, so a fabricated flat impedance otherwise publishes a smooth power-law
     resistivity, a flat phase and a non-zero quality score. Same by-name build and SCI_COLUMNS
-    projection as withhold_sci_row."""
+    projection as withhold_sci_row.
+
+    `q` is ALREADY null on the row this receives: _edi_science withholds it wherever the component
+    dict carries no impedance, which is the same condition under a different name (the mask drops Z
+    from the components column; the science layer reads the component dict the fabricated Z is in).
+    The two are not redundant. The mask sees a station whose file DOES carry an impedance and rules
+    it an invention, so it must null the diagnostics computed from it; the science rule sees a
+    station with no impedance at all. Keeping q in this set is what makes them agree on the one case
+    they share, and what stops a masked station's q depending on which seam ran."""
     _sc = {n: i for i, n in enumerate(sci.SCI_COLUMNS)}
     return [(_SCI_IMPEDANCE_DERIVED[c] if c in _SCI_IMPEDANCE_DERIVED else sci_row[_sc[c]])
             for c in sci.SCI_COLUMNS]
@@ -3175,6 +3183,11 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
         # sidecar keeps being written byte-unchanged through 1.x (D14): deleting a served file is a
         # deprecation. This block sits INSIDE the C1 access gate above, so a withheld record gains no
         # diagnostics at all and the interpretation product stays out of it.
+        # completeness_smoothness_diagnostic.value screens an impedance, so it is null on every
+        # tipper-only station (_edi_science withholds it there) and the served `note` stays the
+        # not-a-verdict caveat rather than growing a reason string: `tipper_available` and the
+        # catalogue's components already say which case a null is, and the definition lives in
+        # docs/docs/reference/station-products.md 1.8.1.
         "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
                         "tipper_available": "T" in (r.get("comps") or ""),
                         "completeness_smoothness_diagnostic": {

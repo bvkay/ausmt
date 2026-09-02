@@ -270,7 +270,7 @@ time-series row the identifier rides only the level whose product it names.
 | `median_relative_error` | number or null | median relative apparent-resistivity error |
 | `remote_reference` | boolean | whether the source file states remote reference processing |
 | `tipper_available` | boolean | whether a tipper is present |
-| `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based |
+| `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based. `value` is null on a tipper-only station, which carries no impedance to screen ([1.8.1](#181-how-the-completeness-smoothness-diagnostic-is-computed)) |
 | `classification` | string | the dimensionality screening class: `1-D`, `2-D`, `3-D` or `indeterminate` |
 | `skew_beta_median_deg` | number | median absolute phase-tensor skew across usable periods, in degrees |
 | `pct_periods_3d` | integer | percentage of usable periods whose absolute skew exceeds the three-dimensional threshold |
@@ -294,7 +294,16 @@ served file is a deprecation with its own notice; read either one.
 `completeness_smoothness_diagnostic.value` is the 0-5 scalar the catalogue serves as `sci.json`
 column `q`, computed by `engine/extract/_edi_science.py`. It exists so a reader screening hundreds of
 stations can spot incomplete or rough transfer functions quickly. It is not a data-quality or
-geological-value ranking, and AusMT ranks no station or survey. Its inputs:
+geological-value ranking, and AusMT ranks no station or survey.
+
+**The value is present only where an impedance is.** Every one of its inputs is computed from the
+apparent resistivity and phase, so a tipper-only station has nothing for it to screen: with no
+resistivity and no phase the formula collapses to period coverage plus a constant, which would read
+as an assessed diagnostic without being one. Such a station is served with `value` null and `basis`
+`s`, uniformly, whether the station's file carries no impedance at all or carries one its survey's
+`channels_recorded` declaration masks as a conversion artifact. `tipper_available` and the
+catalogue's `components` say which case a station is; the diagnostic does not vary between them.
+Its inputs, where it is computed:
 
 | Input | Definition |
 |---|---|

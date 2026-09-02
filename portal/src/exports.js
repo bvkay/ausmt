@@ -168,6 +168,11 @@ bindClick("dlCsv",()=>{track("DownloadGenerated",{format:"csv",n:scopeSel().leng
 // not travel with the download, and whoever opens this file next has no other way to learn the difference
 // between "not screened" and "the screening data never loaded".
 const GEO_SCI_UNAVAILABLE="quality, dimensionality and remote_ref are OMITTED from every feature in this file: the screening product (sci.json) could not be loaded in the session that generated it. Their absence records a load failure, NOT a screening outcome.";
+// `quality` is the completeness/smoothness diagnostic (sci.json column q), never a quality ranking; the
+// property keeps the name it shipped under because renaming it would break every saved GIS project
+// joined on it. It screens an impedance, so it is null on a tipper-only station (`components` without
+// `Z`) and on a station whose survey withholds its science, and it is ABSENT rather than null when the
+// screening product failed to load, which is the distinction GEO_SCI_UNAVAILABLE above exists to state.
 // Extracted from the click handler for the same reason csvRows was (see above): the honesty rule now has a
 // branch here, and a branch that only exists inside an onclick is a branch no test can reach.
 function geoFeatureCollection(stations,sciOk){
