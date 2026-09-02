@@ -512,6 +512,181 @@ def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
         "prose keeps a narrow measure even when main widens"
 
 
+# ==================================================================================================
+# The channels tile and the survey kind: a geomagnetic depth sounding survey is not an MT survey
+# ==================================================================================================
+# Every survey page stated "Ex Ey Bx By" and introduced itself as a "Magnetotelluric survey",
+# including the 24 legacy geomagnetic depth sounding surveys, which recorded no electric field at
+# all and whose survey.yaml says so. The declaration is not decorative: it is what masks the
+# impedance survey-wide, so the page was contradicting the data served beside it.
+
+GDS_EDI = HERE / "fixtures" / "impedance" / "placeholder-impedance-tipper.edi"
+
+
+def _make_declared_survey(tmp_path, *, slug, name, channels, source=None, blurb=None):
+    """A package whose survey.yaml DECLARES its recorded channels, built end to end.
+
+    `source` defaults to the MT sample survey; passing the tipper fixture gives the magnetic-only
+    shape the legacy corpus has, where the same declaration masks the impedance and the served
+    stations come out as GDS."""
+    pkg = tmp_path / "surveys" / slug
+    edir = pkg / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    (pkg / "survey.yaml").write_text(
+        f"name: {name}\nslug: {slug}\ncountry: Australia\nregion: South Australia\n"
+        f"organisation: Test Org\naccess: open\nlicense: CC-BY-4.0\n"
+        + (f"abstract: {json.dumps(blurb)}\n" if blurb else "")
+        + f"channels_recorded: [{', '.join(channels)}]\n", encoding="utf-8")
+    for src in ([source] if source else SAMPLE_EDIS):
+        (edir / src.name).write_text(src.read_text(encoding="latin-1"), encoding="latin-1")
+    return tmp_path / "surveys"
+
+
+def _channels_tile(page):
+    """The rendered channels-recorded tile, or None where the page renders none."""
+    m = re.search(r'<div class="cstat"><div class="cnum">([^<]*)</div>'
+                  r'<div class="clab">channels recorded</div></div>', page)
+    return m.group(1) if m else None
+
+
+def _kind_surfaces(page):
+    """The four places a survey page names the KIND of survey it is, read out of the rendered
+    output: the crumb under the h1, the browser title, the meta description and the JSON-LD name.
+    They are four separate strings in the emitter and a reader meets all four, so the test that
+    they agree has to read all four rather than the one derivation behind them."""
+    crumb = re.search(r"</h1>\n<p class=\"crumb\">(.*?)</p>", page)
+    title = re.search(r"<title>(.*?)</title>", page)
+    desc = re.search(r'<meta name="description" content="([^"]*)">', page)
+    ld = json.loads(re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>',
+                              page).group(1))
+    assert crumb and title and desc, "the page must carry a kind crumb, a title and a description"
+    return {"crumb": crumb.group(1), "browser title": title.group(1),
+            "meta description": desc.group(1), "JSON-LD name": ld["name"]}
+
+
+def test_a_survey_declaring_magnetic_channels_only_states_them_and_calls_itself_gds(tmp_path):
+    """The live defect, end to end from the declaration a curator writes.
+
+    The package declares `channels_recorded: [Bx, By, Bz]`, which is what the whole legacy GDS
+    collection declares. FAILS IF the channels tile asserts an electric channel the survey did not
+    record, if any of the four kind surfaces still calls it magnetotelluric, or if the four stop
+    agreeing with each other and with the data-type badge the same page prints."""
+    surveys = _make_declared_survey(tmp_path, slug="pages-gds", name="Pages GDS",
+                                    channels=["Bx", "By", "Bz"], source=GDS_EDI)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-gds.html").read_text(encoding="utf-8")
+
+    assert _channels_tile(page) == "Bx By Bz", \
+        f"the tile must state the declared channels and no others, got {_channels_tile(page)!r}"
+    assert "Ex" not in _channels_tile(page), "an undeclared electric channel must never be asserted"
+    # The page already knew: the data-type badge reads GDS off the served station documents, which
+    # is the same fact the four surfaces were contradicting.
+    assert '<span class="typebadge">GDS</span>' in page, "the served stations must come out as GDS"
+    surfaces = _kind_surfaces(page)
+    for where, text in surfaces.items():
+        assert "agnetotelluric" not in text, \
+            f"the {where} still calls a magnetic-only survey magnetotelluric: {text!r}"
+        assert "eomagnetic depth sounding survey" in text, \
+            f"the {where} must name the survey's own kind, got {text!r}"
+    assert surfaces["crumb"].startswith("Geomagnetic depth sounding survey &#183;"), surfaces
+    assert surfaces["browser title"] == "Pages GDS - geomagnetic depth sounding survey data - AusMT"
+    assert surfaces["meta description"] == \
+        "Geomagnetic depth sounding survey data: Pages GDS.", surfaces
+    assert surfaces["JSON-LD name"] == "Pages GDS geomagnetic depth sounding survey", surfaces
+
+
+def test_a_survey_declaring_the_full_channel_set_keeps_the_magnetotelluric_kind(tmp_path):
+    """The complementary case, so the fix is a derivation and not a second hard-coded string.
+
+    FAILS IF an MT survey loses a declared channel from its tile, if any kind surface starts naming
+    geomagnetic depth sounding, or if the four surfaces stop reading exactly as they always have."""
+    surveys = _make_declared_survey(tmp_path, slug="pages-mt", name="Pages MT",
+                                    channels=["Ex", "Ey", "Bx", "By"])
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-mt.html").read_text(encoding="utf-8")
+
+    assert _channels_tile(page) == "Ex Ey Bx By", \
+        f"the declared set renders in full and in order, got {_channels_tile(page)!r}"
+    surfaces = _kind_surfaces(page)
+    for where, text in surfaces.items():
+        assert "eomagnetic depth sounding" not in text, \
+            f"the {where} must not name a kind this survey is not: {text!r}"
+    assert surfaces["crumb"] == "Magnetotelluric survey &#183; South Australia &#183; Test Org"
+    assert surfaces["browser title"] == "Pages MT - magnetotelluric survey data - AusMT"
+    assert surfaces["meta description"] == "Magnetotelluric survey data: Pages MT.", surfaces
+    assert surfaces["JSON-LD name"] == "Pages MT magnetotelluric survey", surfaces
+
+
+def test_the_declaration_prints_in_the_corpus_spelling_and_one_stable_order():
+    """A declaration is curator-authored text and the corpus writes the magnetic channels both ways
+    (Bx and Hx are the same channel; the impedance and tipper masks already fold them together). The
+    tile is one reader-facing string, so it prints one spelling, in one order, whatever the
+    declaration's own order and case. A channel outside the vocabulary is printed as declared rather
+    than dropped: silently discarding a declared channel is the same defect as inventing one."""
+    pages = _pages_module()
+    for declared, shown in ((["Bz", "By", "Bx"], "Bx By Bz"),
+                            (["hx", "hy", "hz"], "Bx By Bz"),
+                            (["Hx", "Hy"], "Bx By"),
+                            (["ey", "EX", "Bx", "by", "bz"], "Ex Ey Bx By Bz"),
+                            (["Ex", "Ey", "Bx", "By", "Bz", "Ez"], "Ex Ey Bx By Bz Ez")):
+        page = pages.survey_page(slug="s", label="S", sm_doc={"title": "S"},
+                                 smeta={"slug": "s", "org": "O", "lic": "CC-BY-4.0",
+                                        "channels_recorded": declared},
+                                 station_docs=[], bundle_rows=[], ts_access=None,
+                                 base="https://x.example")
+        assert _channels_tile(page) == shown, \
+            f"{declared!r} must print as {shown!r}, got {_channels_tile(page)!r}"
+
+
+def test_an_undeclared_survey_infers_channels_only_from_the_components_it_serves():
+    """With no declaration the tile may assert only what the served transfer functions corroborate.
+
+    A GDS station is tipper-only with no impedance BY DEFINITION of the band classifier, so a
+    survey serving nothing else recorded no electric field and Ex Ey on its tile would be invented.
+    Everywhere else the inference is unchanged, including the partial-tipper form.
+
+    FAILS IF an all-tipper survey gets electric channels back, if an MT survey loses the Bz or the
+    (+Bz) form, or if a survey mixing the two kinds stops naming both."""
+    pages = _pages_module()
+
+    def stn(sid, dtype, tipper):
+        return {"ausmt_id": f"au.s.{sid}", "station": sid, "survey_id": "s",
+                "location": {"lat": -30.0, "lon": 137.0},
+                "data": {"type": dtype, "period_min_s": 10.0, "period_max_s": 6360.0},
+                "diagnostics": {"tipper_available": tipper}}
+
+    def page_for(docs):
+        return pages.survey_page(slug="s", label="S", sm_doc={"title": "S"},
+                                 smeta={"slug": "s", "org": "O", "lic": "CC-BY-4.0"},
+                                 station_docs=docs, bundle_rows=[], ts_access=None,
+                                 base="https://x.example")
+
+    gds = page_for([stn("A1", "GDS", True), stn("A2", "GDS", True)])
+    assert _channels_tile(gds) == "Bx By Bz", \
+        f"a survey serving tipper only recorded no electric field, got {_channels_tile(gds)!r}"
+    for where, text in _kind_surfaces(gds).items():
+        assert "agnetotelluric" not in text, f"the {where} reads {text!r}"
+
+    assert _channels_tile(page_for([stn("A1", "BBMT", True)])) == "Ex Ey Bx By Bz"
+    assert _channels_tile(page_for([stn("A1", "BBMT", False)])) == "Ex Ey Bx By"
+    assert _channels_tile(page_for([stn("A1", "BBMT", True), stn("A2", "BBMT", False)])) \
+        == "Ex Ey Bx By (+Bz)", "the partial-tipper form survives the fix"
+
+    # A survey serving both kinds serves an impedance and a tipper, and names both kinds: neither
+    # half is a rewrite of the other, and naming only the larger one would suppress a real holding.
+    mixed = page_for([stn("A1", "GDS", True), stn("A2", "BBMT", True)])
+    assert _channels_tile(mixed) == "Ex Ey Bx By Bz"
+    for where, text in _kind_surfaces(mixed).items():
+        assert "magnetotelluric and geomagnetic depth sounding survey" in text.lower(), \
+            f"the {where} must name both kinds this survey serves, got {text!r}"
+
+    # A survey whose stations disclose no type at all keeps the corpus's own reading.
+    untyped = page_for([])
+    assert _channels_tile(untyped) == "Ex Ey Bx By"
+    for where, text in _kind_surfaces(untyped).items():
+        assert "agnetotelluric" in text, f"an untyped survey stays magnetotelluric: {text!r}"
+
+
 def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
     """Design brief 15 plus AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md.
 
