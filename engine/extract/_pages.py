@@ -530,9 +530,14 @@ _CSS = """
   .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#8FA3B0;font-variant-numeric:tabular-nums}
   .counts b{color:#E8EDF1}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
-  footer{margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0}
-  .frow{display:flex;flex-wrap:wrap;gap:.3rem 1.2rem;justify-content:space-between;margin:.3rem 0}
-  .flinks{display:flex;gap:1.1rem}
+  /* The centre is the region that gives: the two side phrases read badly broken, the attribution is
+     prose that does not. The right grows so a wrapped row keeps it against the right edge. The
+     stacking rule follows the zone rules; the two tie on specificity and source order wins. */
+  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0}
+  .fleft{flex:0 0 auto}
+  .fcenter{flex:1 1 auto;min-width:0;text-align:center}
+  .fright{flex:1 0 auto;text-align:right}
+  @media(max-width:760px){.fzone{flex:1 1 100%;text-align:left}}
 """
 
 
@@ -634,36 +639,46 @@ def _site_header(active="", status="") -> str:
             "</header>\n")
 
 
-def _site_footer(machine=None, build=None) -> str:
-    """The contextual footer, two rows, on every page in this tier.
+# The catalogue document the footer hands over, on every page and on both surfaces. MTCAT is the
+# machine-readable form of the whole corpus, so it is the one target a site-wide footer can promise.
+_MTCAT_HREF = "/data/mtcat.json"
 
-    Row 1 left is the machine-readable document FOR THIS PAGE, so a reader on a station page is
-    handed that station's own record rather than the whole catalogue. The collection wording is
-    deliberately honest: no per-collection document is served, so the footer says the collection's
-    record lives in MTCAT rather than advertising a surface that does not exist. The arrow is the
-    leaves-this-page one; these links hand over a JSON document, not another page of the site.
 
-    Row 2 carries the attribution and the licence note. The build identity was removed from it
-    (owner ruling 2026-08-31): the commit sha spoke to operators, not to the readers a public
-    footer is for, and build_provenance.json still carries it for anyone who needs it. The `build`
-    argument is kept so callers do not change and a future /build page has its input."""
-    left = ""
-    if machine:
-        label, href = machine
-        left = f'<a href="{_e(href)}">{_e(label)} {_ARROW_OUT}</a>'
+def _site_footer(build=None) -> str:
+    """The site's ONE footer, three regions, identical on every page in this tier and on the SPA.
+
+    It was contextual: the left link handed over the machine-readable document for the page you
+    were standing on, and every page kind therefore wore a different footer. The owner's ruling is
+    one footer everywhere, so the left link is the catalogue itself. Nothing is lost by that: a
+    survey and a station page each carry their own record under "Identifiers and provenance" in the
+    body, which is where a per-page document belongs, and the collection and hub footers already
+    pointed at MTCAT. The arrow is the leaves-this-page one; the link hands over a JSON document,
+    not another page of the site.
+
+    The centre carries the attribution and the licence note. The build identity is not printed
+    here: the commit sha spoke to operators, not to the readers a public footer is for, and
+    build_provenance.json still carries it. The `build` argument is kept so callers do not change
+    and a future /build page has its input.
+
+    "About this build" is a LINK on this tier, not the SPA's disclosure popover: these pages ship no
+    script, so a popover here could only restate what the centre already says. It resolves to
+    /about.html, the page that does carry the running build's identity and version chip.
+
+    The year is a literal, the one the SPA's own footer carries. It is deliberately not a build-time
+    value: a copyright year that moves when a page is rebuilt makes every page in the tree differ
+    from the tree beside it for a reason no reader can see."""
     return ("\n<footer>\n"
-            f'<div class="frow"><div>{left}</div>'
-            '<div class="flinks"><a href="/releases.html">Releases</a>'
-            '<a href="/about.html">About</a></div></div>\n'
-            '<div class="frow"><span>&#169; 2026 AuScope and AusMT contributors - an AuScope '
-            "service</span>"
-            "<span>Data licences vary by survey; each download carries its licence.</span>"
-            "</div>\n"
+            f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">Machine-readable record '
+            f'(MTCAT JSON) {_ARROW_OUT}</a></div>\n'
+            '<div class="fzone fcenter">&#169; 2026 AuScope and the AusMT contributors &#183; '
+            "Data licences vary by survey</div>\n"
+            '<div class="fzone fright"><a href="/releases.html">Releases</a> &#183; '
+            '<a href="/about.html">About this build</a></div>\n'
             "</footer>\n")
 
 
 def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
-           og_image=None, base="", extra_css="", nav="", machine=None, build=None,
+           og_image=None, base="", extra_css="", nav="", build=None,
            status="") -> str:
     ld = f'<script type="application/ld+json">{_jsonld(jsonld)}</script>\n' if jsonld else ""
     # noindex: the page exists for the URL contract and for humans following published links, but
@@ -702,7 +717,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f"{_site_header(nav, status)}"
         "<main>\n"
         f"{body}"
-        f"{_site_footer(machine, build)}"
+        f"{_site_footer(build)}"
         "</main>\n</body>\n</html>\n"
     )
 
@@ -1254,9 +1269,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     og_image = f"{base}/data/pages/og/{slug}.png" if _og_available() else None
     return _shell(title=f"{title} - magnetotelluric survey data - AusMT",
                   description=desc_meta, canonical=url, body=body, jsonld=ld,
-                  og_image=og_image, base=base, nav="navSurveys", build=build,
-                  machine=("Machine-readable survey metadata - JSON",
-                           f"/data/products/{slug}/survey-metadata.json"))
+                  og_image=og_image, base=base, nav="navSurveys", build=build)
 
 
 def _unit_value(uv) -> str:
@@ -1418,9 +1431,7 @@ def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
                   description=f"Magnetotelluric station {st} from the {survey} survey: "
                               "transfer function data, metadata and downloads on AusMT.",
                   canonical=url, body=body, noindex=True, base=base,
-                  nav="navSurveys", build=build,
-                  machine=("Machine-readable station metadata - JSON",
-                           f"/data/products/{survey_slug}/{st}/station.json"))
+                  nav="navSurveys", build=build)
 
 
 def _member_colours(n):
@@ -1678,9 +1689,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
                   # section prose: the prose is a page-length payload and a link preview is a line.
                   description=_meta_summary(desc),
                   canonical=url, body=body, jsonld=ld, base=base,
-                  nav="navCollections", build=build,
-                  machine=("Collection record in the MTCAT catalogue - JSON",
-                           "/data/mtcat.json"))
+                  nav="navCollections", build=build)
 
 
 # --------------------------------------------------------------------------- the two index pages
@@ -1690,10 +1699,6 @@ _COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
 
 _COLLECTIONS_LEDE = ("Collections group related surveys for discovery and exploration. A collection "
                      "may represent a programme, region, geological province, or thematic dataset.")
-
-# The catalogue document a hub page hands over: MTCAT is the machine-readable form of exactly what
-# a hub lists, so it is the honest counterpart to the hub itself.
-_MTCAT_LINK = ("Machine-readable catalogue - MTCAT JSON", "/data/mtcat.json")
 
 # The surveys hub's own lede, the owner's wording verbatim. It sits between the summary line (the
 # headline numbers) and the list, and it answers the question a hub page has to answer before its
@@ -1833,8 +1838,7 @@ def surveys_index_page(*, rows, base, build=None) -> str:
         f'<div class="idxlist">{"".join(cards)}</div>\n')
     return _shell(title="Surveys - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
-                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts,
-                  machine=_MTCAT_LINK)
+                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts)
 
 
 def collections_index_page(*, rows, base, build=None) -> str:
@@ -1878,8 +1882,7 @@ def collections_index_page(*, rows, base, build=None) -> str:
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
     return _shell(title="Collections - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
-                  extra_css=_INDEX_CSS, nav="navCollections", build=build,
-                  machine=_MTCAT_LINK)
+                  extra_css=_INDEX_CSS, nav="navCollections", build=build)
 
 
 # --------------------------------------------------------------------------- og cards (Pillow)
