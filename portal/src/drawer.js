@@ -1814,8 +1814,12 @@ function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&C
 const AU_EXTENT={w:112,e:154,so:-44,no:-9};
 // Fluid (viewBox + width:100%) so it scales inside its container; `maxW` optionally raises the max-width
 // cap (the detail-page hero gives it more room than a list card). W stays the viewBox coordinate space so
-// the geometry is identical regardless of rendered size. Both call sites pass just `ss` or `(ss,maxW)`.
-function collScatter(ss,maxW){
+// the geometry is identical regardless of rendered size.
+// `mark` puts the AuScope mark in the panel's bottom-left corner, matching the static collection page's
+// figure. Off by default: the list card is a thumbnail with no corner to spare, and the detail hero is the
+// full-size map this belongs on. The mark is a sibling of the SVG inside a panel capped at the same width,
+// never an <image> in the SVG, so the geometry stays what the colour and dot pins measure.
+function collScatter(ss,maxW,mark){
   if(!ss.length) return "";
   const W=560,H=Math.round(W*(AU_EXTENT.no-AU_EXTENT.so)/(AU_EXTENT.e-AU_EXTENT.w)),pad=22;
   const cap=(typeof maxW==="number"&&maxW>0)?maxW:W;
@@ -1843,7 +1847,8 @@ function collScatter(ss,maxW){
     return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${col(s.survey)}" fill-opacity=".9"><title>${esc(s.id)} · ${esc(s.survey)}</title></circle>`;}).join("");
   const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${cap}px;background:#16242f;border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
   const legend=`<div class="collscatter-legend">`+members.map(sv=>`<span class="csl-item"><span class="csl-dot" style="background:${col(sv)}"></span>${esc(sv)}</span>`).join("")+`</div>`;
-  return `<div class="collscatter">${svg}${legend}</div>`;
+  const panel=mark?`<div class="collscatter-panel" style="max-width:${cap}px">${svg}<img class="collmark" src="/vendor/auscope-icon-white.png" alt="AuScope" width="27" height="28"></div>`:svg;
+  return `<div class="collscatter">${panel}${legend}</div>`;
 }
 function openCollectionPage(cid){
   const c=(typeof COLL!=="undefined"&&COLL?COLL[cid]:null);
@@ -1876,7 +1881,7 @@ function openCollectionPage(cid){
        `<div class="collsub">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""} · ${c.n_surveys} survey${c.n_surveys===1?"":"s"} · ${c.n_stations} station${c.n_stations===1?"":"s"}${c.start_year?" · since "+esc(c.start_year):""}${c.last_updated?" · updated "+esc(c.last_updated):""}</div>`+
        (c.description?`<div class="colldesc">${esc(c.description)}</div>`:"")+
      `</div>`+
-     (ss.length?`<div class="collhero-aside">${collScatter(ss,720)}</div>`:"")+
+     (ss.length?`<div class="collhero-aside">${collScatter(ss,720,true)}</div>`:"")+
    `</div>`+
    `<div class="cstats">`+stat("surveys",c.n_surveys)+stat("stations",c.n_stations)+
      stat("period coverage",isFinite(pmin)?fmtRange(fmtPeriod(pmin),fmtPeriod(pmax))+" s":"-")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+

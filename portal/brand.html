@@ -36,6 +36,8 @@
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .brandmark{height:30px;width:30px;display:block;flex:none}
+  .orgmark{display:flex;align-items:center;flex:none;margin-left:16px}
+  .orgmark img{height:30px;width:auto;display:block}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
   .tagline{color:var(--muted);font-size:12.5px}
   nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -118,6 +120,11 @@
     <div class="counts corpus" id="corpusCounts" hidden
          title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations &middot;
       <b id="corpusSurveys"></b> surveys</div>
+    <!-- The AuScope mark closes the header on every surface: whose service this is, stated
+         where the site's own identity is not. It is not an identity and never opens a header;
+         the left zone owns that. Last in the zone, so it follows the primary nav in the tab
+         order, and focusable, because it is a real destination. -->
+    <a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>
   </div>
 </header>
 <main>

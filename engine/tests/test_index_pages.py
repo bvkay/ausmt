@@ -144,15 +144,25 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
     assert not (bare / "pages").exists(), "no --sitemap-base must mean no pages tree at all"
 
 
-# The ONE fetched asset a page in this tier may carry, restated (not weakened) per
+# The fetched assets a page in this tier may carry, restated (not weakened) per
 # LANE-CONTRACT-BRAND-ASSETS.md E3. The rule was "no src at all", which was the right rule while the
 # pages had no identity mark: it kept out build-time reads, inlined copies and every external fetch.
-# The AusMT mark makes one exception worth stating precisely rather than loosening the rule to
-# "images are fine": ONE same-origin file, served by the portal image, cached once for the whole site.
+# The marks make an exception worth stating precisely rather than loosening the rule to
+# "images are fine": same-origin files, served by the portal image, cached once for the whole site.
 # The alternative was inlining 180 circles into 2,655 documents. What stays forbidden is everything
 # the old rule was actually protecting: no http, no https, no protocol-relative and no data URI may
-# ever appear as a src, and no OTHER path may either. The list is exact, so a second asset fails here.
-ALLOWED_PAGE_SRCS = ["/vendor/brand/ausmt-mark.svg"]
+# ever appear as a src, and no OTHER path may either. The lists below are EXACT and ORDERED, so a
+# third asset, or the same asset in the wrong slot, fails here.
+#
+# Two marks, in the order the header emits them: the AusMT identity opening the left zone, the
+# AuScope parent mark closing the right one.
+ALLOWED_PAGE_SRCS = ["/vendor/brand/ausmt-mark.svg", "/vendor/auscope-icon-white.png"]
+
+# The collection page draws the one thing in this tier that carries a mark in its BODY as well: the
+# member footprint map, which repeats the AuScope mark in the panel's bottom-left corner. It is the
+# same file the header already asked for, so it costs the reader no second request. Keyed by the
+# page's own path so that no OTHER page kind can quietly grow a body mark.
+ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope-icon-white.png"]}
 
 # RESTATED, WHICH MEANS THE SAME SURFACE. The old rule was `"src=" not in page`: a raw substring
 # test, blind to nothing. An allow-list parsed from double-quoted attributes alone would be NARROWER
@@ -163,11 +173,18 @@ ALLOWED_PAGE_SRCS = ["/vendor/brand/ausmt-mark.svg"]
 _SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
 
 
+def _allowed_srcs(rel):
+    """The exact, ordered src list this page kind may carry: the two header marks, then whatever
+    body mark the kind is named for."""
+    return ALLOWED_PAGE_SRCS + ALLOWED_BODY_SRCS.get(rel, [])
+
+
 def _page_srcs(page, rel):
     """Every src on the page, in every quoting form, with the raw-substring count held too."""
+    allowed = _allowed_srcs(rel)
     raw = page.count("src=")
-    assert raw == len(ALLOWED_PAGE_SRCS), (
-        f"{rel}: the tier allows exactly {len(ALLOWED_PAGE_SRCS)} src attribute(s) and the page "
+    assert raw == len(allowed), (
+        f"{rel}: the tier allows exactly {len(allowed)} src attribute(s) and the page "
         f"carries {raw}; the old rule counted the substring itself and this one still does")
     return [m.group(1).strip("\"'") for m in _SRC_ATTR.finditer(page)]
 
@@ -181,8 +198,8 @@ def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert "<script" not in page, f"{rel}: no script may appear on an index page"
         srcs = _page_srcs(page, rel)
-        assert srcs == ALLOWED_PAGE_SRCS, \
-            f"{rel}: the only fetched asset may be {ALLOWED_PAGE_SRCS}, got {srcs}"
+        assert srcs == _allowed_srcs(rel), \
+            f"{rel}: the only fetched assets may be {_allowed_srcs(rel)}, got {srcs}"
         assert '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT"' in page, \
             f"{rel}: the header must carry the AusMT mark as the site identity"
         assert "rel=\"stylesheet\"" not in page, f"{rel}: styles stay inline"
@@ -726,11 +743,16 @@ def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(bui
     """R12. The shell is identical everywhere; what rides in the right slot is not. The Map view
     keeps its live counter in the SPA; the surveys hub states the static catalogue counts; every
     other static page shows NOTHING, because a counter that cannot count the page it is on is
-    decoration pretending to be data."""
+    decoration pretending to be data.
+
+    The right zone also closes with the parent-organisation mark, which is chrome and not status: it
+    says the same thing on every page and rides every one of them. It is discounted from the slot
+    here so that "empty" keeps meaning "no status", and pinned in its own right below."""
     for rel, (_active, _lbl, _href, has_slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         head = page.split("<header", 1)[1].split("</header>", 1)[0]
         slot = head.split('class="hzone hright"', 1)[1].split("</div>", 1)[0].lstrip(">")
+        slot = slot.replace(ORG_MARK_IMG, "")
         if has_slot:
             assert "surveys" in slot and "stations" in slot, \
                 f"{rel}: the surveys hub must state its static counts, got {slot!r}"
@@ -797,8 +819,8 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
         assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
             f"{rel}: no executable script may appear on a static page"
         srcs = _page_srcs(page, rel)
-        assert srcs == ALLOWED_PAGE_SRCS, \
-            f"{rel}: the only fetched asset may be {ALLOWED_PAGE_SRCS}, got {srcs}"
+        assert srcs == _allowed_srcs(rel), \
+            f"{rel}: the only fetched assets may be {_allowed_srcs(rel)}, got {srcs}"
         assert 'rel="stylesheet"' not in page, f"{rel}: styles stay inline"
         assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
 
@@ -834,6 +856,66 @@ def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
         css = page.split("<style>", 1)[1].split("</style>", 1)[0]
         assert ".brandmark{height:30px;width:30px;display:block;flex:none}" in css, \
             f"{rel}: the mark must carry the shared sizing rule the SPA header uses"
+
+
+# The parent-organisation mark, RENDERED. It is the same string the portal documents carry and the
+# character-for-character parity across surfaces is held in the portal lane
+# (portal/tests/test_header_geometry_parity.py); what is asserted here is that the emitter actually
+# puts it on every page kind, once, in the right zone, at a height matched to the identity mark.
+ORG_MARK_IMG = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
+
+
+def test_every_page_kind_closes_its_header_with_the_auscope_mark(built):
+    """Whose service this is, on every page the tier emits. FAILS IF a page kind renders without the
+    mark, renders it twice (it is APPENDED to a zone, so a careless edit adds rather than replaces),
+    puts it anywhere but the header's right zone, or sizes it off the shared rule.
+
+    Once per page is the assertion that costs something: the header is emitted from one literal, so
+    a second copy would mean a second emission site, and the tier's whole posture is one header."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        assert page.count(ORG_MARK_IMG) == 1, \
+            f"{rel}: the AuScope mark must appear exactly once, got {page.count(ORG_MARK_IMG)}"
+        head = page.split("<header", 1)[1].split("</header>", 1)[0]
+        right = head.split('class="hzone hright"', 1)[1]
+        assert ORG_MARK_IMG in right, \
+            f"{rel}: the mark belongs to the header's RIGHT zone: {head[:400]!r}"
+        # The nav lives in the centre zone, so a mark in the right zone follows every primary
+        # control in the document order the keyboard walks.
+        assert head.index('class="hzone hcenter"') < head.index(ORG_MARK_IMG), \
+            f"{rel}: the mark must follow the primary nav rather than take a tab stop ahead of it"
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        assert ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}" in css, \
+            f"{rel}: the mark must carry the shared header rule"
+        # Matched to the identity mark's 30px box, so the two read as siblings across the header
+        # rather than as a mark and a banner.
+        assert ".orgmark img{height:30px;width:auto;display:block}" in css, \
+            f"{rel}: the mark's height must match the identity mark's"
+
+
+# The FILE, bounded per page kind, which is the portal surface's pin restated on this one. The mark
+# pin above counts the whole anchor literal and the src allow-list holds each kind's src attributes
+# exactly and in order; neither bounds how often the image is NAMED, so a url() in the inline CSS or
+# a preload link would carry it a second time and pass both.
+ORG_ASSET = "auscope-icon-white.png"
+
+# The collection page is the one kind that legitimately names it twice: the header's parent mark and
+# the member-footprint map's own corner mark, which is the same file and so costs no second request.
+# Every other kind carries the header mark alone.
+ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 2}
+
+
+def test_no_page_kind_names_the_auscope_image_beyond_the_marks_it_carries(built):
+    """FAILS IF a page kind names the AuScope image more often than the marks it is entitled to, or
+    loses one of them. The header mark is appended to a zone and the map mark is drawn into a panel,
+    so on either surface a careless edit adds rather than replaces, and a page holding the same image
+    twice over reads as a mistake while satisfying every slot-scoped pin above."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        want = ORG_ASSET_PER_KIND.get(rel, 1)
+        assert page.count(ORG_ASSET) == want, (
+            f"{rel}: the AuScope image may be named {want} time(s) on this page kind; "
+            f"found {page.count(ORG_ASSET)}")
 
 
 def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):

@@ -93,6 +93,8 @@
      zone without moving the centre tabs. The rule is stated character-identically in the static
      pages' sheet (engine/extract/_pages.py) and pinned pairwise, like the zone rules. */
   .brandmark{height:30px;width:30px;display:block;flex:none}
+  .orgmark{display:flex;align-items:center;flex:none;margin-left:16px}
+  .orgmark img{height:30px;width:auto;display:block}
   .tagline{color:var(--muted);font-size:12.5px}
   /* UX6 Wave B (B4, owner ruling O2): the primary view nav is prominent — equal-width buttons, each a
      clearly bordered box with a ≥40px click target; the ACTIVE view is a filled copper box with dark
@@ -759,6 +761,18 @@
   .collhero-aside{min-width:0}
   /* E6: collection footprint scatter — svg backdrop + per-survey legend. */
   .collscatter{margin:10px 0 4px}
+  /* The AuScope mark over the collection map's bottom-left, twin of the static collection page's
+     .collmap/.collmark rule (engine/extract/_pages.py). The panel is capped at the same width the
+     SVG is, so the corner the mark is pinned to is the MAP's corner and not the column's. The
+     bottom-left of this fixed-extent projection is open ocean at every rendered width, and the
+     legend is a sibling of the panel, so the mark can reach neither. */
+  .collscatter-panel{position:relative}
+  /* The SVG is an inline element here, so its line box leaves a 3px descender gap under it and
+     the panel's bottom edge stops being the MAP's bottom edge. The static page's sheet already
+     blocks its own; this is the same rule, and it is what makes the two offsets identical. */
+  .collscatter-panel svg{display:block}
+  .collscatter-panel .collmark{position:absolute;left:14px;bottom:14px;height:28px;width:auto;opacity:.82;pointer-events:none}
+  @media(max-width:640px){.collscatter-panel .collmark{left:9px;bottom:9px;height:20px}}
   .collscatter-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px}
   .csl-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
   .csl-dot{width:9px;height:9px;border-radius:50%;flex:none}
@@ -770,9 +784,10 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <!-- The AusMT mark, not the AuScope symbol: AusMT is the thing this header identifies, and the
-         AuScope relationship belongs in the footer and on About as words, not embedded in the
-         lockup. Same file, same markup, same rule as the static pages' header. -->
+    <!-- The AusMT mark, not the AuScope symbol: AusMT is the thing this header IDENTIFIES, so it
+         opens the header. The AuScope mark states whose service this is and closes the header from
+         the right; it never stands in for the identity. Same file, same markup and same rule on
+         every surface wearing this chrome. -->
     <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
     <div class="wordmark">AusMT</div>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
@@ -805,6 +820,11 @@
          markup here is the MAP form (the three station counts and the ids the app paints), which is
          both the boot state and the form the slot is rebuilt into whenever the map is showing. -->
     <div class="counts" id="headerCounts"><span id="countSlot" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</span></div>
+    <!-- The AuScope mark closes the header on every surface: whose service this is, stated
+         where the site's own identity is not. It is not an identity and never opens a header;
+         the left zone owns that. Last in the zone, so it follows the primary nav in the tab
+         order, and focusable, because it is a real destination. -->
+    <a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>
   </div>
 </header>
 

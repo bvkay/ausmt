@@ -1636,6 +1636,51 @@ def test_a_collection_without_prose_renders_exactly_as_before(tmp_path):
             f"a bare string must never be iterated character by character: {junk!r}"
 
 
+def test_the_collection_map_carries_the_auscope_mark_in_its_bottom_left_corner():
+    """The mark over the collection footprint, asserted on the RENDERED page.
+
+    The corner is chosen, not arbitrary: this map is a FIXED-EXTENT projection of Australia, so the
+    bottom left shows the same open ocean at every rendered width (the nearest coastline in the
+    bottom quarter of the viewBox is Tasmania's, better than half the panel away to the right). The
+    legend is a SIBLING of the figure rather than content inside it, so the mark cannot reach that
+    either.
+
+    FAILS IF the mark leaves the figure, if the figure stops being the positioning context it is
+    absolutely placed against, or if it is pushed INSIDE the SVG. That last one is the reason for
+    the <image> assertion: the footprint's geometry is what the colour ramp, the dot-per-station
+    coverage pin and the hub's size budget all measure, and a brand asset inside it would land in
+    the middle of all three."""
+    pages = _pages_module()
+    page = _collection_call(pages)
+    mark = ('<img class="collmark" src="/vendor/auscope-icon-white.png" alt="AuScope" '
+            'width="27" height="28">')
+    assert page.count(mark) == 1, f"the collection map must carry the mark exactly once, got {page.count(mark)}"
+    figure = page.split('<figure class="collmap">', 1)[1].split("</figure>", 1)[0]
+    assert mark in figure, "the mark must sit inside the map's own figure"
+    assert figure.index("</svg>") < figure.index(mark), \
+        "the mark rides OVER the map, after the SVG closes, never inside its geometry"
+    assert "<image" not in page, \
+        "no <image> element may enter the footprint SVG: every geometry pin measures what is in it"
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    assert ".collmap{position:relative;" in css, \
+        "the figure must be the positioning context, or the mark escapes to an outer ancestor"
+    assert (".collmark{position:absolute;left:14px;bottom:14px;height:28px;width:auto;"
+            "opacity:.82;pointer-events:none}") in css, \
+        "the mark must carry the shared placement the SPA's own collection map uses"
+    assert "@media(max-width:640px){.collmark{left:9px;bottom:9px;height:20px}}" in css, \
+        "the mark must step down on a narrow screen, where the panel has least corner to spare"
+
+
+def test_the_hub_collection_card_takes_no_mark_on_its_thumbnail_map():
+    """The scope line, pinned as one. A card's map is a thumbnail with no corner to spare, and a
+    mark on it would read larger against the map than the map does against the card. FAILS IF the
+    legend=False form (which is the card's) starts carrying the mark."""
+    pages = _pages_module()
+    card = pages._collection_scatter(["M"], {"M": [(137.0, -30.0)]}, "T", width=380, legend=False)
+    assert card.startswith("<svg") and "collmark" not in card, \
+        "the hub card draws the bare footprint and takes no mark"
+
+
 def test_the_collection_prose_reads_wider_than_the_survey_reading_measure(tmp_path):
     """FAULT 2. The collection prose was capped at the 70ch reading measure while the map above it
     ran to 820px, so the text read as a narrow ribbon under a wide graphic.
