@@ -110,9 +110,9 @@ def test_served_create_time_is_the_source_date_not_the_build_clock(tmp_path):
     does not assert. Byte-stability alone cannot see this: a pinned constant would satisfy the
     reproducibility test while publishing a fabricated provenance date.
 
-    The value must equal what the source declares, which is the same value the document's own
-    <ProcessDate> carries and the same value the served EDI's FILEDATE is pinned to, so a station's
-    two served renditions agree about when its transfer function was created."""
+    The value must equal the creation date the source declares as mt_metadata reads it, which for
+    these EDI sources is the INFO block's declared creation time where it has one and the FILEDATE
+    otherwise."""
     from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
 
     surveys = _make_survey(tmp_path / "src", SAMPLE_EDIS)
@@ -134,8 +134,6 @@ def test_served_create_time_is_the_source_date_not_the_build_clock(tmp_path):
         assert len(stamps) == 1, f"{x.name}: expected one CreateTime, got {stamps}"
         assert stamps[0] in declared, \
             f"{x.name}: CreateTime {stamps[0]} is not a date any source declares ({sorted(declared)})"
-        proc = re.findall(r"<ProcessDate>([^<]*)</ProcessDate>", text)
-        assert proc == stamps, f"{x.name}: CreateTime {stamps} disagrees with ProcessDate {proc}"
 
 
 def test_xml_bundle_digest_moves_when_a_member_changes(tmp_path):

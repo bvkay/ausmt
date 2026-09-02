@@ -282,10 +282,13 @@ written file, a fixed mt_metadata: the writer stamps its own name and version in
 block, so a toolchain bump moves the digest of every generated EDI without any change to the transfer
 function, and a copied custodian EDI is unaffected. Two clock-dependent fields would otherwise carry a
 build clock, an EMTF-XML-sourced station's EDI `FILEDATE` and every served EMTF XML's `CreateTime`, and
-the build stamps both from the date the source document declares: an EDI source's `FILEDATE`, an
-EMTF-XML source's own `CreateTime`, and where the source declares no date the null instant
-`1980-01-01T00:00:00+00:00`. That is the value the document also carries in `ProcessDate`, so a
-station's EDI and EMTF XML agree about when the transfer function they render was created. Within
+the build stamps both from the creation date the source document declares, as mt_metadata reads it:
+for an EDI source, the `INFO` block's declared creation time where it has one and its `FILEDATE`
+otherwise; for an EMTF-XML source, that document's own `CreateTime`; and where the source declares no
+date at all, the null instant `1980-01-01T00:00:00+00:00`. A station whose EDI this build generates
+therefore agrees with its EMTF XML about when the transfer function they render was created, both
+renditions being stamped from that one declared date. A copied custodian EDI is served as its
+custodian wrote it and keeps that file's own `FILEDATE`. Within
 those pins the SHA-256 is a stable cross-build invariant. The transfer-function MTH5 embeds timestamps
 and UUIDs and is not byte-reproducible: its SHA-256 is a per-build download-integrity hash, not a
 cross-build invariant.

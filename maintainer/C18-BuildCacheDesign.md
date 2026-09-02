@@ -132,7 +132,7 @@ proven-failing-first (the failing evidence is in the fix commits).**
     version tag bumped to `ausmt-c18-cache-v2` (v1-format entries are orphaned and age out via
     the prune).
 
-(c) **§4.5 — the equivalence contract, stated precisely. SUPERSEDED BY AMENDMENT A5: its premise
+(c) **§4.5, the equivalence contract, stated precisely. SUPERSEDED BY AMENDMENT A5: its premise
     was a defect, not a property, and independent full builds ARE byte-identical.**
     mt_metadata's EMTF-XML writer stamps a
     wall-clock `<CreateTime>` in every written XML, so two INDEPENDENT full builds are NOT
