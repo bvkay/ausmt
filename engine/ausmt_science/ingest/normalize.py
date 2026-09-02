@@ -37,6 +37,12 @@ distinct conditioning failures occur that way, and item 7 below is a different c
      mt_metadata defaults the source never stated. The values stay (the writer requires them) but
      each gets a machine-readable NOT-asserted conditioning note, like the rotation zero-fill.
 
+One further post-write byte fix is not a conditioning failure but a reproducibility one:
+  8. mt_metadata assigns Provenance.create_time = now() inside to_xml(), so the written <CreateTime>
+     carries the build clock and the served XML's digest churns on every rebuild of unchanged inputs.
+     It is rewritten to the date the source declares (see _pin_create_time), the same value the served
+     EDI's FILEDATE is pinned to.
+
 The round-trip is then VERIFIED (impedance allclose) and a failure RAISES — a hard QC gate, so a
 silently-broken canonical artifact can never be published. The original upload remains the citable
 artifact (it is never mutated here); this module only produces the derived canonical + convenience
@@ -66,6 +72,14 @@ _ENUM_REPR = re.compile(r"\b\w+Enum\.(\w+)")
 # mt_metadata/EMTF-XML missing-data sentinel (~1e32, settled design — see extract/_mtm.py _FILL_MAX).
 # Same threshold reused here for the round-trip QC gate's tipper/error comparisons (not invented).
 _FILL_MAX = 1e8
+# The EMTF-XML Provenance/CreateTime element, whose text mt_metadata assigns from the wall clock.
+_CREATE_TIME = re.compile(r"(<CreateTime>)[^<]*(</CreateTime>)")
+# The shape a pinned CreateTime must have to be substituted in: an ISO-8601 UTC instant, the form
+# mt_metadata's MTime emits and its reader accepts. A value that does not match is not written.
+_MT_ISO = re.compile(r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?\+00:00\Z")
+# mt_metadata's own "no date asserted" instant, the value MTime yields for a source that declares
+# none. Same constant the served-EDI FILEDATE pin falls back to (extract/build_portal _EDI_NULL_DATE).
+_MT_NULL_DATE = "1980-01-01T00:00:00+00:00"
 
 
 def _sanitize_id(value: Optional[str], default: str) -> str:
@@ -489,6 +503,45 @@ def _fix_enum_repr(xml_path: Path) -> bool:
     return False
 
 
+def _pin_create_time(xml_path: Path, tf) -> bool:
+    """Rewrite the written XML's <CreateTime> to the date the SOURCE document declares, replacing the
+    minute this build ran.
+
+    The served EMTF XML and the per-survey EMTF-XML zip publish a SHA-256 that a consumer is invited to
+    check against a previously published one. mt_metadata assigns Provenance.create_time = now() inside
+    to_xml() with no knob to pass a value (verified: setting provenance.creation_time before the write
+    does not reach the file), so an untouched canonical XML publishes a new digest for its station AND
+    for its survey's whole XML zip on every rebuild of unchanged inputs. That is the same build-clock
+    leak the served EDI's FILEDATE already pins out (extract/build_portal _reproducible_derived_edi),
+    and it is fixed the same way and for the same reason.
+
+    The value stamped in is not invented and not a constant: it is the station's own
+    provenance.creation_time, which mt_metadata carried in from the source (an EDI's FILEDATE, an
+    EMTF-XML source's own CreateTime) and which it already writes, stably, into this document's
+    <ProcessDate>. It is the SAME value the served EDI's FILEDATE pin resolves to, so the two served
+    renditions of one station agree about when the transfer function they render was created instead of
+    contradicting each other by the seconds between two writes. A source that declares no date yields
+    mt_metadata's own null instant, which is a function of the source bytes alone like every other
+    branch.
+
+    Byte-level on purpose, and it must run BEFORE the round-trip gate re-reads the file, so the gate
+    certifies the bytes that are served. Every occurrence is substituted (a document carries one) and a
+    value that is not an ISO-8601 UTC instant falls back to the null date rather than writing text the
+    reader would reject."""
+    try:
+        pinned = str(tf.station_metadata.provenance.creation_time)
+    except Exception:  # noqa: BLE001  (provenance shape varies across versions; never abort the write)
+        pinned = ""
+    if not _MT_ISO.match(pinned):
+        pinned = _MT_NULL_DATE
+    text = xml_path.read_text(encoding="utf-8")
+    fixed = _CREATE_TIME.sub(lambda m: m.group(1) + pinned + m.group(2), text)
+    if fixed != text:
+        xml_path.write_text(fixed, encoding="utf-8")
+        return True
+    return False
+
+
 def _mask_fills(a, b):
     """Boolean mask of cells where EITHER side is the ~1e32 EMTF-XML missing-data fill (|v|>_FILL_MAX).
 
@@ -609,6 +662,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     # tf.json is a display derivative that nulls the fill; the canonical XML keeps it.
     tf.write(str(canonical_xml), file_type="emtfxml")
     _fix_enum_repr(canonical_xml)
+    _pin_create_time(canonical_xml, tf)
 
     derived_edi = out_dir / f"{stem}.edi"
     tf.write(str(derived_edi), file_type="edi")

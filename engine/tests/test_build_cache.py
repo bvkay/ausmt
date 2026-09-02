@@ -211,8 +211,9 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     """FAILS IF: after mutating one impedance value in a source EDI, the incremental rebuild serves the
     OLD (cached) XML instead of re-deriving from the new bytes. The key is the source-EDI content sha,
     so a byte-changed EDI must MISS and re-run normalize on the new value. Tightened both directions:
-    the OTHER station's served XML must be BYTE-IDENTICAL across the two builds — byte-identity is
-    only possible from a cache hit, since a recompute re-stamps the wall-clock <CreateTime>.
+    the OTHER station's served XML must be BYTE-IDENTICAL across the two builds. The exact hit/miss
+    counters below are what prove the unchanged station came from the cache; the byte comparison
+    proves the stronger and separate thing, that its served bytes did not drift either way.
 
     Pairing note (the CI tripwire this test once fell into): the mutation target is sorted[0] and the
     served XML is looked up BY THE STATION'S FILENAME derived from that same EDI's DATAID — never by
@@ -268,12 +269,11 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     import numpy as np
     assert not np.allclose(z_before, z_after), \
         "STALE CACHE: the served XML impedance did not change after the source EDI was edited"
-    # Both directions: every UNCHANGED station's served XML is byte-identical across the builds —
-    # only a cache hit can achieve that (a recompute would re-stamp <CreateTime>).
+    # Both directions: every UNCHANGED station's served XML is byte-identical across the builds.
     for name, p in xml2.items():
         if name != target_xml_name:
             assert p.read_bytes() == xml1[name].read_bytes(), \
-                f"unchanged station {name} was NOT served from cache (bytes differ across builds)"
+                f"unchanged station {name}: served bytes differ across builds"
 
 
 def test_xml_cache_key_binds_disambiguated_station_id(tmp_path, clean_salt):
@@ -633,18 +633,12 @@ def _flip_payload_byte(blob: Path):
     blob.write_bytes(bytes(raw))
 
 
-def _xml_sans_createtime(p: Path) -> bytes:
-    """Served-XML bytes with the wall-clock <CreateTime> line removed — the ONLY line a legitimate
-    recompute re-stamps (Amendment A1c). Everything else must match byte-for-byte."""
-    return b"\n".join(ln for ln in p.read_bytes().splitlines() if b"<CreateTime>" not in ln)
-
-
 def test_corrupt_cached_xml_payload_detected_and_recomputed(tmp_path, clean_salt):
     """FAILS IF: a bit-flipped cached XML payload is SERVED (the poison ships) instead of being
     detected by the entry's own embedded checksum, counted in the `corrupt` counter, deleted, and
-    recomputed from source. The recompute re-stamps only <CreateTime>; every other byte must equal
-    the populating build's served XML. Proven failing pre-fix: the flipped bytes were served verbatim
-    with hits=6 and no corrupt counter existed."""
+    recomputed from source. Every byte must equal the populating build's served XML: nothing a
+    recompute writes depends on the build clock (Amendment A5). Proven failing pre-fix: the flipped
+    bytes were served verbatim with hits=6 and no corrupt counter existed."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     o_pop = tmp_path / "pop"
@@ -666,14 +660,12 @@ def test_corrupt_cached_xml_payload_detected_and_recomputed(tmp_path, clean_salt
     assert c["misses"] == N_STATIONS, c
     assert c["writes"] == 2 * N_STATIONS, c
 
-    # The poison can never ship: the served XML matches the populating build byte-for-byte except
-    # the re-stamped <CreateTime> line. (A byte-identical assertion would be vacuous-tight: the
-    # recompute NECESSARILY re-stamps the wall clock — Amendment A1c records this.)
+    # The poison can never ship: the served XML matches the populating build byte-for-byte.
     xw, xp = _served_xml(o_warm), _served_xml(o_pop)
     assert xw and len(xw) == len(xp)
     for a, b in zip(xw, xp):
-        assert _xml_sans_createtime(a) == _xml_sans_createtime(b), \
-            f"served {a.name} differs from the populating build beyond CreateTime — corrupt bytes shipped"
+        assert a.read_bytes() == b.read_bytes(), \
+            f"served {a.name} differs from the populating build: corrupt bytes shipped"
     # And the corrupt entries were replaced with GOOD ones: a second warm build fully hits.
     o_warm2 = tmp_path / "warm2"
     assert _build(surveys, o_warm2, cache) == 0
@@ -735,11 +727,11 @@ def test_torn_entry_xml_without_meta_is_a_miss_not_a_phantom_hit(tmp_path, clean
     assert c["writes"] == 2, c
     assert c["corrupt"] == 0, c
 
-    # The recomputed station's XML is correct (matches the populating build modulo CreateTime).
+    # The recomputed station's XML is correct: byte-identical to the populating build.
     xw, xp = _served_xml(o_warm), _served_xml(o_pop)
     for a, b in zip(xw, xp):
-        assert _xml_sans_createtime(a) == _xml_sans_createtime(b), \
-            f"served {a.name} differs from the populating build beyond CreateTime"
+        assert a.read_bytes() == b.read_bytes(), \
+            f"served {a.name} differs from the populating build"
 
 
 # --------------------------------------------------------------------------------------------------

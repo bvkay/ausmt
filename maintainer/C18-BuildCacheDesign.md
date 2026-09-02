@@ -132,7 +132,9 @@ proven-failing-first (the failing evidence is in the fix commits).**
     version tag bumped to `ausmt-c18-cache-v2` (v1-format entries are orphaned and age out via
     the prune).
 
-(c) **§4.5 — the equivalence contract, stated precisely.** mt_metadata's EMTF-XML writer stamps a
+(c) **§4.5 — the equivalence contract, stated precisely. SUPERSEDED BY AMENDMENT A5: its premise
+    was a defect, not a property, and independent full builds ARE byte-identical.**
+    mt_metadata's EMTF-XML writer stamps a
     wall-clock `<CreateTime>` in every written XML, so two INDEPENDENT full builds are NOT
     byte-identical (the XML sha difference cascades into manifest.json). The equivalence guarantee
     — and the CI test — is: a warm all-hits build is byte-identical to THE BUILD THAT POPULATED
@@ -318,3 +320,34 @@ deleted in containment; see "residual" below).
   in its log), gateway sqlite/audit + `git -C surveys-live reflog --date=iso` for the edit instant,
   `findmnt` on AUSMT_DATA_DIR (a non-local mount would reopen the fs-incoherence alternative).
   M1 stands as root cause structurally regardless; these would settle the historical attribution.
+
+## Amendment A5 (2026-09-02): A1c's premise retired, independent full builds ARE the baseline
+
+A1c stated the equivalence contract around a defect rather than around the design. Its premise was
+that mt_metadata's EMTF-XML writer stamps a wall-clock `<CreateTime>` in every written XML, so two
+INDEPENDENT full builds could not be byte-identical and the guarantee had to be narrowed to "a warm
+all-hits build equals THE BUILD THAT POPULATED ITS CACHE".
+
+That narrowing had a cost the amendment did not name: it made the cache the only thing standing
+between the corpus and a churning published digest. With the cache cold or a station legitimately
+recomputed, the served EMTF XML and the whole per-survey EMTF-XML zip published a new SHA-256 for
+unchanged inputs, so the manifest digest a consumer was invited to check was a function of which
+build happened to populate the cache. The cache MASKED the defect; it did not cause it, and it was
+never the right place to fix it.
+
+The stamp is now pinned at the write site (`ausmt_science/ingest/normalize.py::_pin_create_time`):
+the served `<CreateTime>` carries the date the source document declares, the same value the served
+EDI's `FILEDATE` is pinned to. No served artifact except the MTH5 carries a build clock.
+
+Consequences for this contract:
+
+* **§4.5 / A1c superseded.** The equivalence guarantee is the plain one: three INDEPENDENT full
+  builds of the same inputs produce byte-identical served artifacts and bundles, and a warm all-hits
+  build is byte-identical to any of them. A recomputed entry (corrupt/torn) is byte-identical too,
+  not "identical modulo one line".
+* **The cache's own invariant is unchanged** and is now checkable without an exemption: the cache may
+  only ever change build SPEED, never output bytes.
+* **Tests.** `engine/tests/test_bundle_determinism.py` pins the independent-build baseline and the
+  matching sensitivity leg (a changed impedance value must move the digest). The `<CreateTime>`
+  normalisations in `test_build_cache.py` and `test_build_parallel.py` are removed, so the served XML
+  and the xml-zip are byte-compared like everything else and a regression fails loudly.
