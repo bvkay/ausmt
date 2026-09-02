@@ -39,6 +39,15 @@ dev = ["pytest>=8", "pytest-xdist>=3", "jsonschema>=4"]
 # never published to PyPI (chief-architect ruling); see engine/extract/__init__.py.
 include = ["ausmt_science*", "extract*"]
 
+[tool.setuptools.package-data]
+# The link-preview cards draw with assets that ship BESIDE the emitter, because the engine image
+# carries no portal tree (see the asset note in extract/_pages.py). Setuptools installs no non-Python
+# file it is not told about, and there is no MANIFEST.in, so without this list a non-editable build
+# would install an emitter whose marks and address face are simply absent. The repo installs this
+# package editable everywhere it runs, so this declares the intent rather than repairing a live
+# break; a card asset added beside the emitter belongs on this list.
+extract = ["_auscope_mark.png", "_ausmt_mark.png", "_inter_bold.ttf", "_inter_bold_OFL.txt"]
+
 [tool.ruff]
 line-length = 120
 # C35b/D3: the vendored validator is a byte-for-byte PINNED copy of the sibling ausmt-surveys

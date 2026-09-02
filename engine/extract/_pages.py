@@ -2082,18 +2082,49 @@ _CARD_SIZE = (1200, 630)
 _CARD_MARGIN = 60                 # the text margin every card's left column sits on
 _CARD_WORDMARK = "ausmt.auscope.org.au"
 _CARD_WORDMARK_Y = 540
-_CARD_WORDMARK_SIZE = 28
+_CARD_WORDMARK_SIZE = 31
 _CARD_TITLE_SIZES = (64, 52, 44, 36)
-# The collection card's title column. It stops well short of the map panel's outset edge, because
-# the gutter between a 64 px title and a bordered panel has to read as space rather than as a near
-# miss; the ladder above steps the type down inside this width, it does not widen the column.
+# The card's flat field: the root card artwork's own ground, so the three families a link preview
+# can land on read at one brightness rather than as two slightly different dark blues.
+_CARD_GROUND = (7, 22, 47)
+# The SURVEY card's text column. It stops well short of the map panel's outset edge, because the
+# gutter between a 64 px title and a bordered panel has to read as space rather than as a near miss;
+# the ladder above steps the type down inside this width, it does not widen the column.
 _CARD_TEXT_WIDTH = 476
+# The map panel's air: what it keeps against the card's right edge, and the gutter it keeps against
+# the text column. One number, because the two have to read as the same amount of space.
+_CARD_PANEL_AIR = 34
+_CARD_PANEL_INSET = 16            # the panel frame's outset from the map it holds
 
-# The AuScope mark the card signs itself with. It ships BESIDE this module rather than being read
-# from portal/vendor/, because the engine image carries no portal tree: an emitter that reached
-# across to the portal would draw an unsigned card in exactly the environment that serves the
-# corpus. The two files are pinned byte-identical, so there is still one asset.
+# The AusMT mark in the card's top-left corner, and the height it is drawn at. It is square, so the
+# height is the whole geometry; the pinned export is a whole multiple of it (see gen_brand.py), so
+# the resample is a clean box rather than an arbitrary ratio.
+_CARD_CORNER_SIZE = 42
+_CARD_CORNER_Y = 44
+
+# The Australia locator inset's opacity. The inset covers part of the footprint it is explaining,
+# and an opaque panel hides exactly the stations a reader is trying to count, so the panel and its
+# coastline are composited at this alpha and only the centre marker stays opaque.
+_CARD_INSET_ALPHA = 0.7
+
+# The collection card's map, as a multiple of the survey card's panel width. A collection map is
+# read for its SHAPE (which parts of the continent a programme covers) rather than for a single
+# footprint, and at the survey card's width that shape arrives at about a third of this size in a
+# feed. The panel keeps _CARD_PANEL_AIR on the card's edge, and the text column below is what the
+# enlarged panel leaves at the same air on the other side.
+_COLL_CARD_MAP_WIDTH = 510
+_COLL_CARD_MAP_SCALE = 1.2
+_COLL_CARD_MAP_PX = round(_COLL_CARD_MAP_WIDTH * _COLL_CARD_MAP_SCALE)
+_COLL_CARD_TEXT_WIDTH = (_CARD_SIZE[0] - _CARD_PANEL_AIR - 2 * _CARD_PANEL_INSET
+                         - _COLL_CARD_MAP_PX - _CARD_PANEL_AIR - _CARD_MARGIN)
+
+# The three assets the cards draw with. They ship BESIDE this module rather than being read from
+# portal/vendor/, because the engine image carries no portal tree: an emitter that reached across to
+# the portal would draw an unsigned card in exactly the environment that serves the corpus. Each is
+# pinned byte-identical to the portal's own copy, so there is still one asset behind each of them.
 _CARD_MARK = Path(__file__).resolve().parent / "_auscope_mark.png"
+_CARD_CORNER_MARK = Path(__file__).resolve().parent / "_ausmt_mark.png"
+_CARD_ADDRESS_FACE = Path(__file__).resolve().parent / "_inter_bold.ttf"
 
 
 def _rgb(colour):
@@ -2103,23 +2134,38 @@ def _rgb(colour):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
+def _card_mark(path, height):
+    """One mark image at `height` pixels, at its own aspect."""
+    from PIL import Image
+    with Image.open(path) as src:
+        mark = src.convert("RGBA")
+        return mark.resize((round(height * mark.width / mark.height), height), Image.LANCZOS)
+
+
+def _card_corner_mark(img):
+    """The AusMT mark in the card's top-left corner, on the same text margin the title sits on.
+
+    It leads rather than trails because it names the site the card belongs to, and the clear space
+    below it is larger than the space above, so it reads as a corner mark rather than as the first
+    line of the title block. The ROOT card does not carry it: that card's artwork is the mark."""
+    mark = _card_mark(_CARD_CORNER_MARK, _CARD_CORNER_SIZE)
+    img.paste(mark, (_CARD_MARGIN, _CARD_CORNER_Y), mark)
+
+
 def _card_wordmark_row(img, d, font, ink):
-    """The AuScope mark, a half-mark-width gap, then the wordmark: ONE row on the card's text
+    """The AuScope mark, a half-mark-width gap, then the address: ONE row on the card's text
     margin, on every card family this module draws.
 
-    The mark's height is the wordmark's own line height and it is centred on the wordmark's INK
+    The mark's height is the address's own line height and it is centred on the address's INK
     rather than on its em box, so the pair reads as a single line of type. Centring on the em box
     would pay out the face's descent, which no glyph in this string uses, and sit the mark high."""
-    from PIL import Image
     x0, y0 = _CARD_MARGIN, _CARD_WORDMARK_Y
     box = d.textbbox((x0, y0), _CARD_WORDMARK, font=font)
     try:
         line_h = sum(font.getmetrics())
-    except AttributeError:                # Pillow < 10.1: the bitmap face carries no metrics
+    except AttributeError:                # a face that carries no metrics
         line_h = box[3] - box[1]
-    with Image.open(_CARD_MARK) as src:
-        mark = src.convert("RGBA").resize(
-            (round(line_h * src.width / src.height), line_h), Image.LANCZOS)
+    mark = _card_mark(_CARD_MARK, line_h)
     # Floor, not round: half of an odd width under banker's rounding is a gap nobody can predict
     # from the numbers on this line.
     gap = mark.width // 2
@@ -2134,6 +2180,22 @@ def _card_font(size):
         return ImageFont.load_default(size=size)
     except TypeError:                     # Pillow < 10.1: tiny bitmap face, still legible
         return ImageFont.load_default()
+
+
+def _card_address_font(size):
+    """Inter Bold, the one face the address is set in on every card family.
+
+    The generated cards draw the rest of their type in Pillow's bundled face, which ships with the
+    library and so cannot go missing; the ADDRESS is the string the root card's hand-made artwork
+    also carries, and that artwork is set in Inter Bold. Sharing the face is what makes the three
+    families' signature rows one row rather than three that happen to say the same thing.
+
+    BASIC layout is pinned, not defaulted: Pillow picks Raqm when its wheel bundles libraqm and
+    Basic when it does not, and the two shape text differently, so the same call would render
+    different pixels on a developer's wheel and on CI's."""
+    from PIL import ImageFont
+    return ImageFont.truetype(str(_CARD_ADDRESS_FACE), size,
+                              layout_engine=ImageFont.Layout.BASIC)
 
 
 def _card_lines(d, text, font, width, max_lines):
@@ -2156,12 +2218,48 @@ def _card_lines(d, text, font, width, max_lines):
     return lines[:max_lines] or [""], whole
 
 
+def _card_title_block(d, title, width, max_lines):
+    """(size, lines) for a title inside a declared column.
+
+    The ladder is walked ONE LINE AT A TIME first, so a title that fits on a single line keeps the
+    largest type that holds it; only when the smallest size still overflows does the block wrap, and
+    it then walks the ladder again at each line count up to max_lines. A title that is silently cut
+    is a title the card gets wrong, so truncation is the last resort and it is marked."""
+    for lines_allowed in range(1, max_lines + 1):
+        for size in _CARD_TITLE_SIZES:
+            lines, whole = _card_lines(d, title, _card_font(size), width, lines_allowed)
+            if whole:
+                return size, lines
+    size = _CARD_TITLE_SIZES[-1]
+    lines, _ = _card_lines(d, title, _card_font(size), width, max_lines)
+    # Nothing in the ladder fits the whole title, so the last line says so rather than ending
+    # mid-thought on a word the reader cannot tell was the last one.
+    return size, lines[:-1] + [f"{lines[-1]} ..."]
+
+
+def _card_column(d, y, floor_y, rows, width, ink, step):
+    """Draw wrapped rows down the card's text column and return the y the next block starts at.
+
+    Every row wraps inside the DECLARED column rather than running past it, and each block starts at
+    the later of where the block above ended and its own slot, so a card whose text all fits keeps
+    the fixed baselines the design was drawn on and a card whose text wraps pushes what follows down
+    instead of overprinting it."""
+    y = max(y, floor_y)
+    for text, size in rows:
+        if not text:
+            continue
+        for line in _card_lines(d, text, _card_font(size), width, 2)[0]:
+            d.text((_CARD_MARGIN, y), line, font=_card_font(size), fill=ink)
+            y += step
+    return y
+
+
 def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, points):
     """One 1200x630 link-preview card in the portal card's design language: footprint dots,
     Australia locator inset, the survey's key numbers."""
     from PIL import Image, ImageDraw
     W, H = _CARD_SIZE
-    ink, panel, line = (13, 20, 40), (17, 26, 51), (43, 53, 87)
+    ink, panel, line = _CARD_GROUND, (17, 26, 51), (43, 53, 87)
     text, muted, copper, cyan = (255, 255, 255), (143, 163, 176), (239, 114, 86), (79, 195, 217)
     img = Image.new("RGB", (W, H), ink)
     d = ImageDraw.Draw(img)
@@ -2188,30 +2286,48 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
             x = px0 + (lo - lo0) / dlo * pw
             y = py0 + (la1 - la) / dla * ph
             d.ellipse([x - pr, y - pr, x + pr, y + pr], fill=cyan)
-        # Australia locator inset, bottom-right over the panel
+        # Australia locator inset, bottom-right over the panel. It is drawn on its own layer and
+        # composited at _CARD_INSET_ALPHA, because the inset sits over the footprint it is
+        # explaining and an opaque panel hides exactly the stations a reader is trying to count.
+        # The centre marker is drawn afterwards, on the card, so the one mark that says WHERE stays
+        # at full strength.
         ext = au.EXTENT
         iw = 190
         ih = round(iw * (ext["n"] - ext["s"]) / (ext["e"] - ext["w"]))
         ix, iy = W - iw - 36, H - ih - 36
-        d.rounded_rectangle([ix - 10, iy - 10, ix + iw + 10, iy + ih + 10], radius=10,
-                            fill=ink, outline=line, width=2)
+        inset = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        idr = ImageDraw.Draw(inset)
+        idr.rounded_rectangle([ix - 10, iy - 10, ix + iw + 10, iy + ih + 10], radius=10,
+                              fill=ink + (255,), outline=line + (255,), width=2)
 
         def ip(lon, lat):
             return (ix + (lon - ext["w"]) / (ext["e"] - ext["w"]) * iw,
                     iy + (ext["n"] - lat) / (ext["n"] - ext["s"]) * ih)
         for ring in au.COAST:
-            d.polygon([ip(lo, la) for lo, la in ring], fill=(20, 29, 54), outline=(49, 64, 107))
+            idr.polygon([ip(lo, la) for lo, la in ring],
+                        fill=(20, 29, 54, 255), outline=(49, 64, 107, 255))
+        # The layer's own alpha channel, scaled: scaling the CHANNEL rather than each fill keeps
+        # the anti-aliased edges the shapes were drawn with instead of re-cutting them.
+        img.paste(inset, (0, 0),
+                  inset.getchannel("A").point(lambda a: round(a * _CARD_INSET_ALPHA)))
         cx, cy = ip((lo0 + lo1) / 2, (la0 + la1) / 2)
         d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=copper)
         d.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], outline=copper, width=2)
-    d.text((60, 130), title, font=font(64), fill=text)
-    d.text((60, 220), subtitle, font=font(29), fill=muted)
-    d.text((60, 262), region_year, font=font(29), fill=muted)
-    if period_line:
-        d.text((60, 330), period_line, font=font(26), fill=(201, 212, 232))
-    if dims_line:
-        d.text((60, 370), dims_line, font=font(26), fill=(201, 212, 232))
-    _card_wordmark_row(img, d, font(_CARD_WORDMARK_SIZE), copper)
+
+    _card_corner_mark(img)
+    # The text column, on the declared width. Nothing steps outside it: the title walks the ladder
+    # and wraps, and the fact lines wrap, so a long survey name or a three-state region never runs
+    # into the footprint panel beside it.
+    tsize, lines = _card_title_block(d, title, _CARD_TEXT_WIDTH, 2)
+    y = 130
+    for ln in lines:
+        d.text((_CARD_MARGIN, y), ln, font=font(tsize), fill=text)
+        y += round(tsize * 1.18)
+    y = _card_column(d, y + 8, 220, ((subtitle, 29), (region_year, 29)),
+                     _CARD_TEXT_WIDTH, muted, 42)
+    _card_column(d, y, 330, ((period_line, 26), (dims_line, 26)),
+                 _CARD_TEXT_WIDTH, (201, 212, 232), 40)
+    _card_wordmark_row(img, d, _card_address_font(_CARD_WORDMARK_SIZE), copper)
     img.save(path, "PNG", optimize=True)
 
 
@@ -2245,17 +2361,22 @@ def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels
         return False
 
     W, H = _CARD_SIZE
-    ink = (13, 20, 40)
+    ink = _CARD_GROUND
     text, muted, copper = (255, 255, 255), (143, 163, 176), (239, 114, 86)
     img = Image.new("RGB", (W, H), ink)
     d = ImageDraw.Draw(img)
 
-    # ---- the member footprint, in the survey card's panel slot and vertically centred in it ----
+    # ---- the member footprint, enlarged into the slack the survey card's panel slot leaves ----
+    # The map is the survey card's panel width at _COLL_CARD_MAP_SCALE. The panel keeps
+    # _CARD_PANEL_AIR against the card's right edge and stays vertically centred on the card, and
+    # the text column below is narrowed to whatever it leaves at the same air on the other side.
     ext = au.EXTENT
-    pw = 510
+    pw = _COLL_CARD_MAP_PX
     ph = round(pw * (ext["n"] - ext["s"]) / (ext["e"] - ext["w"]))
-    px0, py0 = 640, 70 + ((560 - 70) - ph) // 2
-    d.rounded_rectangle([px0 - 16, py0 - 16, px0 + pw + 16, py0 + ph + 16], radius=12,
+    px0 = W - _CARD_PANEL_AIR - _CARD_PANEL_INSET - pw
+    py0 = 70 + ((560 - 70) - ph) // 2
+    d.rounded_rectangle([px0 - _CARD_PANEL_INSET, py0 - _CARD_PANEL_INSET,
+                         px0 + pw + _CARD_PANEL_INSET, py0 + ph + _CARD_PANEL_INSET], radius=12,
                         fill=_rgb(_MAP_PANEL), outline=_rgb(_MAP_PANEL_LINE), width=2)
     # The hub card's own projection, with its 8 unit pad scaled by the width ratio so the coastline
     # sits in the panel exactly as it does at the hub's width.
@@ -2269,26 +2390,17 @@ def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels
         d.ellipse([px0 + x - r, py0 + y - r, px0 + x + r, py0 + y + r], fill=colour)
 
     # ---- the text column, stepped down until the WHOLE title fits ----
-    tsize, lines = _CARD_TITLE_SIZES[-1], [str(title)]
-    for tsize in _CARD_TITLE_SIZES:
-        lines, whole = _card_lines(d, title, _card_font(tsize), _CARD_TEXT_WIDTH, 3)
-        if whole:
-            break
-    else:
-        # Nothing in the ladder fits the whole title, so the last line says so rather than ending
-        # mid-thought on a word the reader cannot tell was the last one.
-        lines[-1] = f"{lines[-1]} ..."
+    _card_corner_mark(img)
+    tsize, lines = _card_title_block(d, title, _COLL_CARD_TEXT_WIDTH, 3)
     y = 130
     for ln in lines:
         d.text((_CARD_MARGIN, y), ln, font=_card_font(tsize), fill=text)
         y += round(tsize * 1.18)
     # The survey card's subtitle and region slots, at its scale: a single-line title lands on the
     # same two baselines there, so the two families read as one card design.
-    y = max(y + 8, 220)
-    d.text((_CARD_MARGIN, y), facts_line, font=_card_font(29), fill=muted)
-    if taxonomy_line:
-        d.text((_CARD_MARGIN, y + 42), taxonomy_line, font=_card_font(29), fill=muted)
-    _card_wordmark_row(img, d, _card_font(_CARD_WORDMARK_SIZE), copper)
+    _card_column(d, y + 8, 220, ((facts_line, 29), (taxonomy_line, 29)),
+                 _COLL_CARD_TEXT_WIDTH, muted, 42)
+    _card_wordmark_row(img, d, _card_address_font(_CARD_WORDMARK_SIZE), copper)
     img.save(path, "PNG", optimize=True)
     return True
 

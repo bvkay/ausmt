@@ -176,6 +176,13 @@ TAGLINE = "Australia's Magnetotelluric Data Portal"
 # Export sizes. Presentation resolution for the logos, a square mark for reuse at any size.
 PNG_LOGO_WIDTH = 2400
 PNG_MARK_SIZE = 1024
+# The small mark the engine's link-preview cards carry in their corner. The cards draw it at
+# CARD_MARK_DRAWN_PX, and this export is a whole multiple of that height so the card's resample is a
+# clean 4:1 box rather than an arbitrary ratio. It exists because the engine image ships no portal
+# tree and so must carry its own copy of whatever it draws with: a copy of the 1024 px mark would
+# put a third of a megabyte in that image to be shown at 42 px.
+PNG_CARD_MARK_SIZE = 168
+CARD_MARK_DRAWN_PX = 42
 # Rendering is supersampled and then resampled down, which is what gives the dots and the wordmark
 # clean edges at every size. The factor is capped so the working canvas stays a sane size.
 SUPERSAMPLE_TARGET = 6000
@@ -553,6 +560,7 @@ _OUTPUT_INDEX = (
     ("portal/vendor/brand/ausmt-logo-light-extended.png", "png", "logo with tagline, light background"),
     ("portal/vendor/brand/ausmt-mark.svg", "svg", "standalone mark"),
     ("portal/vendor/brand/ausmt-mark.png", "png", "standalone mark"),
+    ("portal/vendor/brand/ausmt-mark-168.png", "png", "standalone mark, link-preview card corner"),
     ("portal/vendor/favicon.svg", "svg", "browser tab icon"),
     ("portal/vendor/brand/ausmt-icon-180.png", "png", "apple-touch-icon"),
     ("portal/vendor/brand/ausmt-icon-192.png", "png", "app icon"),
@@ -579,6 +587,8 @@ def artefacts():
             items.append((BRAND_DIR / f"{stem}.png", "image", png_logo(dark, extended)))
     items.append((BRAND_DIR / "ausmt-mark.svg", "bytes", svg_mark().encode("utf-8")))
     items.append((BRAND_DIR / "ausmt-mark.png", "image", png_mark(PNG_MARK_SIZE)))
+    items.append((BRAND_DIR / f"ausmt-mark-{PNG_CARD_MARK_SIZE}.png", "image",
+                  png_mark(PNG_CARD_MARK_SIZE)))
     items.append((ROOT / "vendor" / "favicon.svg", "bytes", svg_favicon().encode("utf-8")))
     for size in APP_ICON_SIZES:
         items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", png_mark(size)))

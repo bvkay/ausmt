@@ -1436,6 +1436,11 @@
       "variant": "standalone mark"
     },
     {
+      "path": "portal/vendor/brand/ausmt-mark-168.png",
+      "kind": "png",
+      "variant": "standalone mark, link-preview card corner"
+    },
+    {
       "path": "portal/vendor/favicon.svg",
       "kind": "svg",
       "variant": "browser tab icon"

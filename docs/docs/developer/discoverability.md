@@ -106,7 +106,9 @@ that the field is emitted only where it is true.
 
 ## Link-preview cards
 
-Three card families, all 1200 by 630 PNGs, all declared as `og:image` on the page they belong to.
+Three card families, all 1200 by 630 PNGs on one ground, all declared as `og:image` on the page they
+belong to. The ground is the root card artwork's own, so the three families a link preview can land
+on read at one brightness rather than as two slightly different dark blues.
 
 | Card | Written to | Served at | Drawn by |
 |---|---|---|---|
@@ -130,7 +132,9 @@ now fails the build; a page with no card falls back to the root card.
 ### What each card shows
 
 The survey card carries the survey's title, its station count and type, its region and years, its
-period band and extent, a footprint panel of its stations and an Australia locator inset.
+period band and extent, a footprint panel of its stations and an Australia locator inset. The inset
+is composited at 70 per cent over the footprint it explains, so the stations it covers still show
+through it; only its centre marker, the one mark that says WHERE, is drawn at full strength.
 
 The collection card is a preview of the collection page's own map: every member station, coloured by
 member survey in the collections hub's palette and member order, so one survey is the same colour on
@@ -142,32 +146,70 @@ the dots are drawn opaque, because this card has neither a legend nor a hover, s
 nothing and costs contrast. A collection whose members disclose no position at all gets no card,
 rather than a bare coastline that would read as a collection with no coverage.
 
-The card title steps down a size ladder until the whole title fits in three lines, and truncates only
-when nothing in the ladder does. A silently cut title is a title the card gets wrong.
+### The text column
+
+Every card declares the width its left column may use, and no ink crosses it. The title walks the
+size ladder, first as a single line and then at each further line the card has room for, and takes
+the largest size that holds the whole title; the fact lines below it wrap rather than run past the
+column edge, and each block starts at the later of where the block above ended and its own slot, so
+a card whose text all fits keeps the baselines the design was drawn on and a card whose text wraps
+pushes what follows down instead of overprinting it. Truncation is the last resort and it is marked:
+a silently cut title is a title the card gets wrong.
+
+The survey card's column stops well short of its footprint panel, because the gutter between a title
+and a bordered panel has to read as space rather than as a near miss. The collection card's column
+is narrower, and is derived rather than declared: its map is drawn at 1.2 times the survey card's
+panel width, because a collection map is read for the SHAPE of a programme's coverage and that shape
+arrives at about a third of this width in a feed, and the column is whatever that enlarged panel
+leaves at the same air it keeps against the card's own edge.
+
+### The AusMT mark in the corner
+
+The survey and collection cards carry the AusMT mark in the top-left corner, on the same text margin
+the title sits on. The root card does not: its artwork IS the mark, at full size.
+
+The engine draws the corner mark from a small pinned derivative,
+`portal/vendor/brand/ausmt-mark-168.png`, emitted by `gen_brand.py` from the same lattice as every
+other brand export and gated by `gen_brand.py --check`. It exists because the engine image ships no
+portal tree and so must carry its own copy of whatever it draws with; the 1024 px mark would put a
+third of a megabyte in that image to be shown at a fraction of the size. 168 is a whole multiple of
+the height the card draws at, so the resample is a clean box rather than an arbitrary ratio.
 
 ### The signature row
 
-Every card is signed the same way: the AuScope mark, then a gap of half the mark's width, then
-`ausmt.auscope.org.au`, all on the card's own text margin. The mark's height is the wordmark's line
-height and it is centred on the wordmark's ink, so the pair reads as one line of type rather than as
-a logo with a caption beside it.
+Every card is signed the same way: the AuScope mark, then a gap of half the mark's width, then the
+address `ausmt.auscope.org.au`, all on the card's own text margin. The mark's height is the address's
+line height and it is centred on the address's ink, so the pair reads as one line of type rather than
+as a logo with a caption beside it.
 
-The engine ships its own copy of the mark at `engine/extract/_auscope_mark.png`, byte-identical to
-`portal/vendor/auscope-icon-white.png` and pinned equal in tests. The engine image carries no portal
-tree, so an emitter that reached across to the portal would draw an unsigned card in exactly the
-environment that serves the corpus.
+The address is set in Inter Bold on all three families. The root card's artwork is set in that face,
+so the generated cards adopting it is what makes the three signature rows one row rather than three
+that happen to say the same thing; the rest of a generated card's type stays in Pillow's bundled
+face, which ships with the library and so cannot go missing.
+
+The engine ships its own copy of everything it draws with, beside the emitter and pinned
+byte-identical to the portal's copy in tests: `engine/extract/_auscope_mark.png` against
+`portal/vendor/auscope-icon-white.png`, `engine/extract/_ausmt_mark.png` against
+`portal/vendor/brand/ausmt-mark-168.png`, and `engine/extract/_inter_bold.ttf` against
+`portal/tools/brand_font/Inter-Bold.ttf`, whose Open Font Licence ships beside it. The engine image
+carries no portal tree, so an emitter that reached across to the portal would draw an unsigned card
+in exactly the environment that serves the corpus. These four files are listed under
+`[tool.setuptools.package-data]` in `engine/pyproject.toml`: the repository installs the engine
+editable everywhere it runs, so the list declares the intent rather than repairing a live break, but
+a card asset added beside the emitter belongs on it.
 
 ### The root card is a composite, not a render
 
 `portal/vendor/social-card.png` is hand-made artwork. Nothing in this repository draws its
-dot-Australia, so the mark could not be added by re-rendering it. `portal/tools/gen_social_card.py`
-translates the wordmark block along the artwork's own pixels and composites the mark into the space
-that opens on the text margin; the untouched artwork ships beside it as
+dot-Australia, so the signature row could not be changed by re-rendering the card.
+`portal/tools/gen_social_card.py` clears the one band the address occupies, sets the address again
+in the artwork's own face at the size the design asks for, and composites the mark onto the text
+margin beside it; the untouched artwork ships beside the card as
 `portal/vendor/social-card-source.png` and is what `gen_brand.py` records as the palette's source.
 
-The tool verifies its assumptions before it writes: it refuses if the block it is about to move
-carries anything but wordmark ink, or if the destination band is not empty ground. It is hand-run
-and is deliberately not wired into `gen_brand.py --check`, which compares decoded pixels exactly; a
+The tool verifies its assumptions before it writes: it refuses if the band it is about to clear
+carries anything but address ink, or if the row it is about to draw would not fit inside that band.
+It is hand-run and deliberately not wired into `gen_brand.py --check`, which compares pixels exactly; a
 resampled paste is the one artefact whose bytes could legitimately move under a Pillow upgrade with
 no brand decision behind it. `portal/tests/test_social_card.py` holds it with the same
 tolerance-based geometry pins the generated cards answer to, and runs

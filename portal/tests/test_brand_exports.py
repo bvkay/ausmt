@@ -210,3 +210,45 @@ def test_gen_brand_check_covers_every_export():
     n = int(re.search(r"brand: (\d+) generated", r.stdout).group(1))
     assert n >= len(SVGS) + len(PNGS) + 1, \
         f"the gate must cover brand.json and all ten exports, it reports {n} artefacts"
+
+
+def test_the_cards_corner_mark_is_a_generated_export_the_gate_holds():
+    """The link-preview cards draw the AusMT mark small, in their top-left corner, and the engine
+    ships its own pinned copy of it (engine/tests/test_og_cards.py). That copy is only as trustworthy
+    as the file it is pinned to, so the small mark is a DECLARED export like every other: rendered
+    from brand.json's geometry by png_mark, listed in the output index, and compared by --check.
+
+    It exists at all because the 1024 px mark is a third of a megabyte to show at 42 px, and the
+    engine image would have to carry that. The export size is a whole multiple of the drawn height,
+    so the card's resample is a clean box rather than an arbitrary ratio.
+
+    Teeth: the gate must go red when this one file is perturbed, which is what proves it is compared
+    rather than merely listed."""
+    # Compiled and run rather than imported, so this reads the tool's CURRENT source. An import is
+    # answered from __pycache__ whenever the stamped source mtime matches to the second, so an edit
+    # and a test run in the same second can be answered with the previous compile.
+    ns = {"__file__": str(TOOL), "__name__": "gen_brand_pin"}
+    exec(compile(TOOL.read_text(encoding="utf-8"), str(TOOL), "exec"), ns)
+    name = f"ausmt-mark-{ns['PNG_CARD_MARK_SIZE']}.png"
+    rel = f"portal/vendor/brand/{name}"
+    assert rel in [row[0] for row in ns["_OUTPUT_INDEX"]], \
+        f"{rel} must be a declared export, or --check never looks at it"
+    assert ns["PNG_CARD_MARK_SIZE"] % ns["CARD_MARK_DRAWN_PX"] == 0, (
+        f"the export ({ns['PNG_CARD_MARK_SIZE']}) must be a whole multiple of the drawn height "
+        f"({ns['CARD_MARK_DRAWN_PX']}) so the card resamples it as a clean box")
+    target = BRAND_DIR / name
+    assert target.is_file(), f"{rel} must be committed"
+    original = target.read_bytes()
+    try:
+        from PIL import Image
+        with Image.open(target) as im:
+            perturbed = im.convert("RGBA")
+        perturbed.putpixel((0, 0), (255, 0, 0, 255))
+        perturbed.save(target, "PNG")
+        r = subprocess.run([sys.executable, str(TOOL), "--check"], capture_output=True,
+                           text=True, encoding="utf-8", cwd=str(REPO))
+        assert r.returncode == 1, \
+            f"--check must fail on a perturbed {name}, it returned {r.returncode}"
+        assert name in r.stdout + r.stderr, f"--check must name the file that drifted:\n{r.stdout}"
+    finally:
+        target.write_bytes(original)

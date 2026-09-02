@@ -1,14 +1,16 @@
 """vendor/social-card.png: the root link-preview card, and the artwork it is composed from.
 
-The card is hand-made art. Nothing in this repo draws its dot-Australia, so the AuScope mark could
-not be added by re-rendering it; tools/gen_social_card.py translates the wordmark block and
-composites the mark onto the artwork's own pixels instead, and the untouched artwork ships beside
-the card as vendor/social-card-source.png.
+The card is hand-made art. Nothing in this repo draws its dot-Australia, so the signature row could
+not be added by re-rendering it; tools/gen_social_card.py clears the one band the address occupies,
+sets the address again in the artwork's own face, and composites the mark onto the artwork's own
+pixels, and the untouched artwork ships beside the card as vendor/social-card-source.png.
 
-That arrangement needs three things held. The source must keep shipping, or the card can never be
-regenerated. The composite must still be reproducible from it. And the signature row must read the
-way the generated survey and collection cards' rows read, which is a geometric property of the
-pixels rather than of the code, so it is measured off the file.
+That arrangement needs four things held. The source must keep shipping, or the card can never be
+regenerated. The composite must still be reproducible from it. The signature row must read the way
+the generated survey and collection cards' rows read, which is a geometric property of the pixels
+rather than of the code, so it is measured off the file. And the card must carry NO corner mark:
+the generated cards put the AusMT mark in their top-left corner to name the site they belong to,
+but this card's artwork IS that mark, and a second copy of it would read as a duplicate.
 
 The composite is deliberately NOT part of gen_brand.py --check. That gate compares decoded pixels
 exactly, and a resampled paste is the one artefact whose bytes could legitimately move under a
@@ -27,11 +29,16 @@ CARD = ROOT / "vendor" / "social-card.png"
 SOURCE = ROOT / "vendor" / "social-card-source.png"
 TOOL = ROOT / "tools" / "gen_social_card.py"
 
-# The line height the card's own wordmark is signed at. The artwork's typeface is not in the repo,
-# so this is a declared constant rather than a measurement, and gen_social_card.py records how it
-# was derived from the generated cards' own ink-to-line ratio.
-LINE_H = 38
+# The line height the card's own address is signed at, and the size that address is set at. Both are
+# declared here rather than measured, so that a change to the tool's constants has to be made twice
+# and on purpose; gen_social_card.py records how each was derived from the artwork's own pixels.
+LINE_H = 42
+ADDRESS_SIZE = 30
+GROUND = (7, 22, 47)
 _SIG_REGION = (0, 500, 620, 630)
+# The top-left corner, the slot the GENERATED cards put the AusMT mark in. On this card it is the
+# artwork's own empty margin, and it stays empty.
+_CORNER_REGION = (40, 0, 300, 100)
 
 Image = pytest.importorskip("PIL.Image")
 
@@ -84,6 +91,40 @@ def test_the_card_signs_itself_with_the_mark_beside_the_wordmark():
     mark_h = mark[3] - mark[1] + 1
     assert abs(mark_h - LINE_H) / LINE_H <= 0.15, \
         f"the mark's height must be the wordmark's line height, got {mark_h} for {LINE_H}"
+
+
+def test_the_tool_sets_the_row_at_the_sizes_this_file_declares():
+    """The pin above is geometric and tolerant, which is what makes it survive a Pillow upgrade and
+    also what stops it noticing a size change on its own: a mark drawn at 38 px passes a tolerance
+    declared for 42, and so does one at 46. The two numbers are therefore held exactly, here and in
+    the tool, so a change to the signature row's scale has to be made in both places.
+
+    The tool's source is compiled and run here rather than imported. An import would write a
+    __pycache__ entry beside a hand-run tool and, worse, could READ a stale one: the validity stamp
+    is the source's mtime to the second, so an edit and a test in the same second can be answered
+    with the previous compile. A pin that can report the constant a file used to hold is not a pin."""
+    ns = {"__file__": str(TOOL), "__name__": "gen_social_card_pin"}
+    exec(compile(TOOL.read_text(encoding="utf-8"), str(TOOL), "exec"), ns)
+    assert ns["LINE_H"] == LINE_H, \
+        f"the mark stands on a {LINE_H} px line, the tool uses {ns['LINE_H']}"
+    assert ns["ADDRESS_SIZE"] == ADDRESS_SIZE, \
+        f"the address is set at {ADDRESS_SIZE} px, the tool uses {ns['ADDRESS_SIZE']}"
+    assert ns["FONT_FILE"].is_file(), "the address face must ship with the tool that sets it"
+    assert ns["FONT_FILE"].name == "Inter-Bold.ttf", \
+        f"the address is set in the artwork's own face, got {ns['FONT_FILE'].name}"
+
+
+def test_the_root_card_carries_no_corner_mark():
+    """The generated survey and collection cards put the AusMT mark in their top-left corner to name
+    the site the card belongs to. This card does not need naming: its artwork IS the mark, at the
+    size the whole card is built around. FAILS IF a corner mark is ever composited onto it, which
+    would put two copies of the same mark on one card."""
+    with Image.open(CARD) as im:
+        px = im.convert("RGB").load()
+    x0, y0, x1, y1 = _CORNER_REGION
+    ink = [(x, y) for y in range(y0, y1) for x in range(x0, x1) if px[x, y] != GROUND]
+    assert not ink, \
+        f"the root card's corner must stay the artwork's own ground, found ink at {ink[:3]}"
 
 
 def test_the_artwork_itself_is_unsigned():
