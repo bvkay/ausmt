@@ -1824,8 +1824,13 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
 _INDEX_MAP_WIDTH = 230          # the surveys index card map
 _COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
 
+# The vocabulary named here is the one docs/docs/developer/collection-ids.md ratifies, and the two
+# must not drift: a reader meeting a chip on this hub looks the value up in that page. Every value but
+# `other` is named; `other` is the catch-all, and a lede that named it would tell a reader nothing.
+# gateway/tests/test_c43_collection_type_vocab.py holds this sentence to that rule.
 _COLLECTIONS_LEDE = ("Collections group related surveys for discovery and exploration. A collection "
-                     "may represent a programme, region, geological province, or thematic dataset.")
+                     "may be a field programme, a data release, an institutional holding, or a "
+                     "compilation of related surveys.")
 
 # The surveys hub's own lede, the owner's wording verbatim. It sits between the summary line (the
 # headline numbers) and the list, and it answers the question a hub page has to answer before its

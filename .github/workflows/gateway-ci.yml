@@ -33,11 +33,37 @@ on:
     paths:
       - "gateway/**"
       - "deploy/**"
+      # ...AND the carriers of the collection type vocabulary. The console's select IS that
+      # vocabulary's only guardrail (record D5-A A2), so it is a contract with no schema behind it,
+      # written out in the select's tuple, four docs pages and the /collections hub lede.
+      # gateway/tests/test_c43_collection_type_vocab.py reads all of them and holds them equal as a
+      # set. Scoped to gateway/** alone that pin could only ever fail on the NEXT gateway-touching
+      # PR: a PR adding a value to the docs and not to the select ships a machine contract the
+      # console contradicts, and touches no path this lane watches. Listing the files it reads makes
+      # it a same-PR gate, the same reason portal-ci.yml lists its own engine and docs inputs.
+      - "docs/docs/developer/collection-ids.md"
+      - "docs/docs/developer/portal-documents.md"
+      - "docs/docs/reference/mtcat-schema.md"
+      - "docs/docs/reference/survey-yaml.md"
+      - "engine/extract/_pages.py"
       - ".github/workflows/gateway-ci.yml"
   pull_request:
     paths:
       - "gateway/**"
       - "deploy/**"
+      # ...AND the carriers of the collection type vocabulary. The console's select IS that
+      # vocabulary's only guardrail (record D5-A A2), so it is a contract with no schema behind it,
+      # written out in the select's tuple, four docs pages and the /collections hub lede.
+      # gateway/tests/test_c43_collection_type_vocab.py reads all of them and holds them equal as a
+      # set. Scoped to gateway/** alone that pin could only ever fail on the NEXT gateway-touching
+      # PR: a PR adding a value to the docs and not to the select ships a machine contract the
+      # console contradicts, and touches no path this lane watches. Listing the files it reads makes
+      # it a same-PR gate, the same reason portal-ci.yml lists its own engine and docs inputs.
+      - "docs/docs/developer/collection-ids.md"
+      - "docs/docs/developer/portal-documents.md"
+      - "docs/docs/reference/mtcat-schema.md"
+      - "docs/docs/reference/survey-yaml.md"
+      - "engine/extract/_pages.py"
       - ".github/workflows/gateway-ci.yml"
 
 concurrency:

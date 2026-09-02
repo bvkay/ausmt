@@ -788,7 +788,7 @@ exact match on `id`, so every member survey must spell it identically. Naming ru
 |---|---|---|---|
 | `id` | required for the block to take effect | string | lowercase, hyphen separated. Anything else warns |
 | `title` | recommended | string | free text |
-| `type` | recommended | string | `programme`, `release`, `institutional`, `other` |
+| `type` | recommended | string | `programme`, `release`, `institutional`, `compilation`, `other` |
 | `status` | recommended | string | `active`, `completed`, `archived`. Anything else warns and is served as null |
 | `start_year` | optional | integer | |
 | `last_updated` | optional | string | ISO date |

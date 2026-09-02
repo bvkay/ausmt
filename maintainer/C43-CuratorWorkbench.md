@@ -159,10 +159,20 @@ mockup's single stacked screen), mirroring the shipped Surveys-list → survey-h
   the rail under the Surveys group.
 
 **A2 — controlled vocabularies (engine truth, corrects the mockup):**
-* **type** = `programme | release | institutional | other` (the docs vocab,
-  `docs/.../collection-ids.md`; the mockup's *campaign/compilation* are dropped). type is
-  validator-unenforced, so the console's select IS the guardrail; **also update the docs if this
-  ever changes.**
+* **type** = `programme | release | institutional | compilation | other` (the docs vocab,
+  `docs/.../collection-ids.md`; the mockup's *campaign* stays dropped, *compilation* is ratified for
+  groupings AusMT assembled from independent surveys). type is validator-unenforced, so the console's
+  select IS the guardrail, and it carries all five. Shipped as a `<select>` over
+  `curatorpage._COLLECTION_TYPE_VOCAB`, and `app.py` imports that same tuple for both write-path
+  gates, so the form gate and the publish spec gate refuse exactly what the select cannot emit. Those
+  two gates are the whole of the enforcement: the vocabulary gates the collections console and the
+  write path behind it, and nothing else. Two other carriers of the same field take free text against
+  no vocabulary at all, the `collection.type` row of `gateway/editor_form.py` (a plain `text` field,
+  so `_validate_scalar` never looks at the value) and the `m_coll_type` input on the public
+  contribute form `portal/add-survey.html`. The vocabulary also lives in four docs pages and
+  in the `/collections` hub lede, and all of them must move together:
+  `gateway/tests/test_c43_collection_type_vocab.py` holds every carrier equal as a set, so a value
+  added in one place alone is red rather than shipped.
 * **status** = `active | completed | archived` (the mockup's "complete" would silently null on
   build — out-of-vocab is dropped, `test_collections.py:71-84`).
 * **description = the reader-facing programme abstract** (portal collection page); a first-class
