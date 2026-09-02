@@ -40,8 +40,8 @@ distinct conditioning failures occur that way, and item 7 below is a different c
 One further post-write byte fix is not a conditioning failure but a reproducibility one:
   8. mt_metadata assigns Provenance.create_time = now() inside to_xml(), so the written <CreateTime>
      carries the build clock and the served XML's digest churns on every rebuild of unchanged inputs.
-     It is rewritten to the date the source declares (see _pin_create_time), the same value the served
-     EDI's FILEDATE is pinned to.
+     It is rewritten to the creation date the source declares (see _pin_create_time), which for a
+     station whose EDI this build generates is what that EDI's FILEDATE is pinned to as well.
 
 The round-trip is then VERIFIED (impedance allclose) and a failure RAISES — a hard QC gate, so a
 silently-broken canonical artifact can never be published. The original upload remains the citable
@@ -516,13 +516,14 @@ def _pin_create_time(xml_path: Path, tf) -> bool:
     and it is fixed the same way and for the same reason.
 
     The value stamped in is not invented and not a constant: it is the station's own
-    provenance.creation_time, which mt_metadata carried in from the source (an EDI's FILEDATE, an
-    EMTF-XML source's own CreateTime) and which it already writes, stably, into this document's
-    <ProcessDate>. It is the SAME value the served EDI's FILEDATE pin resolves to, so the two served
-    renditions of one station agree about when the transfer function they render was created instead of
-    contradicting each other by the seconds between two writes. A source that declares no date yields
-    mt_metadata's own null instant, which is a function of the source bytes alone like every other
-    branch.
+    provenance.creation_time, the creation date mt_metadata carried in from the source, which for an
+    EDI source is the INFO block's declared creation time where it has one and the FILEDATE otherwise,
+    and for an EMTF-XML source is that document's own CreateTime. A station whose EDI this build
+    GENERATES therefore agrees with its EMTF XML about when the transfer function they render was
+    created, both renditions being stamped from that one declared date, instead of contradicting each
+    other by the seconds between two writes; a copied custodian EDI is served untouched and keeps the
+    FILEDATE its custodian wrote. A source that declares no date yields mt_metadata's own null instant,
+    which is a function of the source bytes alone like every other branch.
 
     Byte-level on purpose, and it must run BEFORE the round-trip gate re-reads the file, so the gate
     certifies the bytes that are served. Every occurrence is substituted (a document carries one) and a

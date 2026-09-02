@@ -3689,8 +3689,9 @@ def _reproducible_derived_edi(raw: bytes) -> bytes:
     provenance.creation_time, then to mt_metadata's null date (the value whose presence makes it drop
     original_file.date altogether); every branch is a function of the source bytes alone. The served
     EMTF XML's CreateTime resolves to this same value by the same rule (ingest.normalize
-    _pin_create_time), so a station's two served renditions agree about that date instead of
-    contradicting each other by the seconds between two writes.
+    _pin_create_time), so a station whose EDI this build GENERATES agrees with its EMTF XML about that
+    date instead of contradicting it by the seconds between two writes. A copied custodian EDI is
+    served as its custodian wrote it and keeps that file's own FILEDATE.
 
     Byte-level on purpose: this runs on a file the round-trip gate has already passed, so it must not
     re-serialise anything. A file with no FILEDATE line is returned unchanged (nothing to pin)."""

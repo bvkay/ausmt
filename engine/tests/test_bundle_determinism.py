@@ -36,6 +36,12 @@ import build_portal  # noqa: E402
 
 SAMPLE_EDIS = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
 
+# A minted EDI whose INFO block declares a creation time seven years from its HEAD FILEDATE, so the
+# precedence between the two is visible; the sample EDIs above declare the same date in both places.
+PRECEDENCE_EDI = HERE / "fixtures" / "create-time" / "info-over-filedate.edi"
+INFO_DECLARED = "2019-03-04T00:00:00+00:00"
+FILEDATE_DECLARED = "2011-07-18T00:00:00+00:00"
+
 
 def _make_survey(root, edis):
     """One survey package (survey.yaml + edi/) from the real sample EDIs. Returns the --surveys root."""
@@ -134,6 +140,34 @@ def test_served_create_time_is_the_source_date_not_the_build_clock(tmp_path):
         assert len(stamps) == 1, f"{x.name}: expected one CreateTime, got {stamps}"
         assert stamps[0] in declared, \
             f"{x.name}: CreateTime {stamps[0]} is not a date any source declares ({sorted(declared)})"
+
+
+def test_served_create_time_prefers_the_info_declared_date_over_filedate(tmp_path):
+    """FAILS IF: the served XML's <CreateTime> carries an EDI's HEAD FILEDATE while its INFO block
+    declares a creation time of its own.
+
+    The reference states which of the two declared dates the pin resolves to, and the sibling test
+    above cannot tell them apart: in the sample EDIs the INFO date and the FILEDATE are the same
+    instant, so a pin reading either would pass. This fixture separates them by seven years."""
+    from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
+
+    tf = TF()
+    tf.read(str(PRECEDENCE_EDI))
+    assert str(tf.station_metadata.provenance.creation_time) == INFO_DECLARED, \
+        "the fixture no longer resolves to its INFO-declared creation time (mt_metadata changed?)"
+    assert str(tf.station_metadata.transfer_function.processed_date) == FILEDATE_DECLARED, \
+        "the fixture no longer carries a FILEDATE distinct from its INFO-declared creation time"
+
+    surveys = _make_survey(tmp_path / "src", [PRECEDENCE_EDI])
+    out = _build(surveys, tmp_path / "out")
+    xmls = sorted((out / "xml" / "det-survey").glob("*.xml"))
+    assert len(xmls) == 1, f"expected one served XML, got {[x.name for x in xmls]}"
+
+    import re  # noqa: PLC0415
+    stamps = re.findall(r"<CreateTime>([^<]*)</CreateTime>", xmls[0].read_text(encoding="utf-8"))
+    assert stamps == [INFO_DECLARED], \
+        (f"{xmls[0].name}: CreateTime {stamps} is not the INFO-declared {INFO_DECLARED} "
+         f"(the FILEDATE instant is {FILEDATE_DECLARED})")
 
 
 def test_xml_bundle_digest_moves_when_a_member_changes(tmp_path):

@@ -336,8 +336,11 @@ build happened to populate the cache. The cache MASKED the defect; it did not ca
 never the right place to fix it.
 
 The stamp is now pinned at the write site (`ausmt_science/ingest/normalize.py::_pin_create_time`):
-the served `<CreateTime>` carries the date the source document declares, the same value the served
-EDI's `FILEDATE` is pinned to. No served artifact except the MTH5 carries a build clock.
+the served `<CreateTime>` carries the creation date the source document declares as mt_metadata reads
+it, which for an EDI source is the `INFO` block's declared creation time where it has one and the
+`FILEDATE` otherwise. A station whose EDI this build generates is pinned to that same value, so its
+two served renditions agree; a copied custodian EDI keeps the `FILEDATE` its custodian wrote. No
+served artifact except the MTH5 carries a build clock.
 
 Consequences for this contract:
 
