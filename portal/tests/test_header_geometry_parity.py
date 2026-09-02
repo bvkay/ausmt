@@ -315,11 +315,15 @@ ORG_RULE = ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}
 ORG_IMG_RULE = ".orgmark img{height:30px;width:auto;display:block}"
 
 # The one surface that closes its header WITHOUT the parent mark, and for a stated reason rather
-# than by oversight: about.html still carries the AuScope symbol as its header IDENTITY, in the left
-# zone, pending the owner's ruling on that header. A parent mark there as well would put the same
-# image in one header twice. The exemption is therefore the SAME page as the identity carve-out, and
-# the pin below holds the two equal so neither can drift without the other.
-ORG_EXEMPT = MARK_EXEMPT
+# than by oversight: about.html carries the AuScope symbol as its header IDENTITY, in the left zone,
+# and a parent mark beside it would put the same image in one header twice. The exemption lifts with
+# the owner's ruling on that header's identity: once the page takes the AusMT mark it takes the
+# parent mark like every other surface, and both names below shrink to nothing together.
+#
+# Spelled out rather than aliased to the identity carve-out. The two are one decision seen from two
+# sides, and the pin that holds them equal is only worth running while each side can move on its
+# own; an alias would make that pin a tautology.
+ORG_EXEMPT = {"about.html"}
 
 
 def test_the_two_carve_outs_are_the_same_page():
@@ -372,6 +376,33 @@ def test_the_exempt_page_shows_the_auscope_symbol_once_and_only_as_its_identity(
             f"identity; found {header.count(asset)}")
         assert IDENTITY_CLASS in header, \
             f"portal/{name}: that one appearance must be the identity slot, not a loose image"
+
+
+# The FILE, bounded per page. Every pin above is scoped to a slot: to the .auscope-logo class, to
+# the parent mark's whole anchor literal, or to the carved-out page's header alone. None of them
+# says how often the IMAGE may be named, so a second loose copy of it, in a body, in a url() or as a
+# preload, satisfies the lot. Counting the filename is what makes one mark per page a statement
+# about the image rather than about one spelling of it in one slot.
+ORG_ASSET = ORG_SRC.rsplit("/", 1)[-1]
+
+# One appearance per chrome page, whichever slot earns it. A page that takes the parent mark names
+# the file there and nowhere else; the carved-out page names it as its identity and takes no parent
+# mark. Both come to one, which is why this is a single number rather than a table.
+ORG_ASSET_PER_PAGE = 1
+
+
+def test_no_chrome_page_names_the_auscope_image_more_than_its_one_slot():
+    """FAILS IF a chrome page carries the AuScope image a second time, in any slot and by either
+    spelling. The mark is appended to a zone, so a careless edit adds rather than replaces, and a
+    header holding two copies of the same image reads as a mistake to every visitor while passing
+    every slot-scoped pin above it."""
+    pages = _chrome_pages()
+    assert pages, "no chrome page was discovered; the glob or the header marker has moved"
+    for page in pages:
+        count = page.read_text(encoding="utf-8").count(ORG_ASSET)
+        assert count == ORG_ASSET_PER_PAGE, (
+            f"portal/{page.name}: the AuScope image may be named {ORG_ASSET_PER_PAGE} time on a "
+            f"chrome page, as the parent mark or as the carved-out identity; found {count}")
 
 
 def test_the_auscope_mark_closes_the_header_after_the_primary_nav():

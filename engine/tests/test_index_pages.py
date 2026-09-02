@@ -893,6 +893,31 @@ def test_every_page_kind_closes_its_header_with_the_auscope_mark(built):
             f"{rel}: the mark's height must match the identity mark's"
 
 
+# The FILE, bounded per page kind, which is the portal surface's pin restated on this one. The mark
+# pin above counts the whole anchor literal and the src allow-list holds each kind's src attributes
+# exactly and in order; neither bounds how often the image is NAMED, so a url() in the inline CSS or
+# a preload link would carry it a second time and pass both.
+ORG_ASSET = "auscope-icon-white.png"
+
+# The collection page is the one kind that legitimately names it twice: the header's parent mark and
+# the member-footprint map's own corner mark, which is the same file and so costs no second request.
+# Every other kind carries the header mark alone.
+ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 2}
+
+
+def test_no_page_kind_names_the_auscope_image_beyond_the_marks_it_carries(built):
+    """FAILS IF a page kind names the AuScope image more often than the marks it is entitled to, or
+    loses one of them. The header mark is appended to a zone and the map mark is drawn into a panel,
+    so on either surface a careless edit adds rather than replaces, and a page holding the same image
+    twice over reads as a mistake while satisfying every slot-scoped pin above."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        want = ORG_ASSET_PER_KIND.get(rel, 1)
+        assert page.count(ORG_ASSET) == want, (
+            f"{rel}: the AuScope image may be named {want} time(s) on this page kind; "
+            f"found {page.count(ORG_ASSET)}")
+
+
 def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):
     """What the narrow-width visual check found. The three tabs carry the SPA's own equal-width
     floor (min-width:112px, min-height:40px), and three of those plus their gaps and the header's
