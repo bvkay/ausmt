@@ -9,9 +9,8 @@ had lost them.
 The split these tests pin. The BUILD still exits 0 on a parse failure, because one malformed legacy
 file must not take the whole corpus down with it. The VERIFIER is the gate: scripts/verify.py FAILs,
 naming the survey and the file, unless the curator has written that file into the allow file, a
-reviewed repository artifact carrying one entry and its reason (capricorn-2010's CP3B21.edi, whose
-reference latitude no reader has ever accepted). That is the same posture the survey-level D20
-loud-skip gate already takes one level up.
+reviewed repository artifact that is EMPTY over the whole corpus. That is the same posture the
+survey-level D20 loud-skip gate already takes one level up.
 
 The rule-8 pin at the end reads .github/workflows/build-products.yml, which the engine image does
 not ship; it skips there on the allow-listed image-topology reason and asserts on every checkout lane.
@@ -120,20 +119,18 @@ def test_the_curator_can_allow_a_named_file_and_only_that_file(tmp_path):
     assert _verify(out, allow=other).returncode != 0
 
 
-def test_the_shipped_allow_file_names_the_one_station_the_corpus_has_given_up_on():
+def test_the_shipped_allow_file_is_empty():
     """The allow file is a list of stations the corpus has deliberately given up on, and it is meant
-    to be read, not grown. It holds exactly one entry, measured over the whole 55-package corpus on
-    origin/main: capricorn-2010's CP3B21.edi, whose DEFINEMEAS reference latitude carries a doubled
-    minus that mt_metadata's position validator refuses and that no temporary-copy conditioning can
-    repair without inventing a coordinate.
+    to be read, not grown. It is EMPTY over the whole corpus: the one entry it ever carried was
+    capricorn-2010's CP3B21.edi, whose reference latitude repeats its sign character, and the pre-read
+    conditioning now collapses that run on a temporary copy so the station publishes.
 
-    This test is a LEDGER, not a policy: a second entry is a station the corpus stopped publishing,
-    and whoever adds it has to come here and say so."""
+    This test is a LEDGER, not a policy: an entry here is a station the corpus stopped publishing, and
+    whoever adds one has to come here and say so."""
     assert ALLOW.is_file(), f"{ALLOW} must exist so the default gate has a subject"
     entries = [ln.strip() for ln in ALLOW.read_text(encoding="utf-8").splitlines()
                if ln.strip() and not ln.strip().startswith("#")]
-    assert entries == ["capricorn-2010/CP3B21.edi"], entries
-    assert "doubled" in ALLOW.read_text(encoding="utf-8"), "every entry carries its reason"
+    assert entries == [], entries
 
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),

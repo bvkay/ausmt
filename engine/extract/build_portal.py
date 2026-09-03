@@ -2159,6 +2159,12 @@ def _parse_one_edi(p):
     # every EDI in the corpus, so an ordinary station's record is unchanged key for key.
     if _parse_facts.get("section_selected"):
         r["section_selected"] = dict(_parse_facts["section_selected"])
+    # The coordinate sign collapse: what the file writes and what the reader was given. Rides the
+    # record for the same reason the section of record does, and is ABSENT for every file that
+    # writes one sign, which is every file in the corpus but one.
+    if _parse_facts.get("coordinate_signs_collapsed"):
+        r["coordinate_signs_collapsed"] = [dict(row) for row
+                                           in _parse_facts["coordinate_signs_collapsed"]]
     # mt_metadata reads only the HEAD coordinate, so run the INFO-vs-HEAD DMS-bug detection +
     # the processing-metadata scrape on the raw EDI text (kept helpers; not a TF re-parse).
     # Curator signal only (C3): the SOURCE EDI (as submitted/served) still carries whatever the
@@ -3240,12 +3246,15 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
         # THIRD-PARTY ingest provenance the custodian declared in survey.yaml's station_ids block. It
         # rides AusMT's record because the source EDI is served byte-identical and is never rewritten.
         # ADDITIVE + absent-means-absent: a survey that declares none gains no key at all.
-        # `section_selected` is a PARSE provenance fact and belongs beside input_file: it says which
-        # of a multi-section source file's data sections these numbers came from. Additive and
-        # absent-means-absent, so a single-section source (every EDI in the corpus) gains no key.
+        # `section_selected` and `coordinate_signs_collapsed` are PARSE provenance facts and belong
+        # beside input_file: which of a multi-section source file's data sections these numbers came
+        # from, and which coordinate the reader was handed with a repeated sign character collapsed.
+        # Additive and absent-means-absent, so a source needing neither gains no key.
         "provenance": {**prov, "input_file": p.name, "input_sha256": sha256(p),
                        **({"source": r["source_provenance"]} if r.get("source_provenance") else {}),
-                       **({"section_selected": r["section_selected"]} if r.get("section_selected") else {})},
+                       **({"section_selected": r["section_selected"]} if r.get("section_selected") else {}),
+                       **({"coordinate_signs_collapsed": r["coordinate_signs_collapsed"]}
+                          if r.get("coordinate_signs_collapsed") else {})},
         # coordinate QC: present only when the parse flagged something, so consumers can surface
         # "treat with caution" without implying anything about unflagged stations.
         "coordinate_qc": ({"flag": r.get("coord_flag"),

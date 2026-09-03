@@ -525,9 +525,9 @@ def _reference_positions(lines: list[str]) -> dict[str, str]:
     """The `>=DEFINEMEAS` reference position strings, keyed reflat/reflon/refelev.
 
     Mirrors `DefineMeasurement.get_measurement_lists` + `read_measurement`, whose `setattr` is
-    UNGUARDED: a reference latitude mt_metadata's validator refuses stops the read dead. That is the
-    one pre-existing failure in the selected corpus (capricorn-2010 CP3B21.edi, reflat
-    `--26.0322667`, a doubled minus), and it is a failure the >INFO fallback cannot help with."""
+    UNGUARDED: a reference latitude mt_metadata's validator refuses stops the read dead. The one
+    instance in the selected corpus is capricorn-2010 CP3B21.edi, reflat `--26.0322667`, a repeated
+    sign character; the >INFO fallback cannot help with it, and the pre-read sign-run collapse can."""
     out: dict[str, str] = {}
     found = False
     for line in lines:
@@ -572,6 +572,25 @@ def _position_is_readable(value: str, kind: str) -> bool:
     except (TypeError, ValueError):
         return False
     return abs(degrees) <= (90 if kind == "latitude" else 180)
+
+
+# A repeated sign character on a reference position: the one shape of the refused-position class
+# AusMT repairs, on a temporary copy, by collapsing the run to a single sign. Mixed runs are excluded
+# here for the same reason the reader excludes them (see _mtm.collapse_coordinate_sign_runs): a
+# repeated keystroke is repairable, a mixed pair would make the hemisphere up.
+_SIGN_RUN_RE = re.compile(r"^([+-])\1+(?=[0-9.])")
+
+
+def _sign_run_is_rescued(value: str, kind: str) -> bool:
+    """Does collapsing this value's leading sign run make it a position the reader accepts? Asked of
+    the collapsed string rather than assumed, so a value that repeats its sign AND is malformed for
+    some other reason is still reported as terminal."""
+    if not isinstance(value, str):
+        return False
+    m = _SIGN_RUN_RE.match(value.strip())
+    if m is None:
+        return False
+    return _position_is_readable(m.group(1) + value.strip()[m.end():], kind)
 
 
 _STATION_NAME_OK = re.compile(r"^[a-zA-Z0-9_]+$")
@@ -744,18 +763,30 @@ def preflight_bytes(raw: bytes, *, label: str = "") -> dict:
         f"station's site_name")
     _rows = [dataid_row] if dataid_row else []
 
-    # 2. A reference position mt_metadata refuses. Set unguarded in read_measurement, and no AusMT
-    #    conditioning touches it, so this is terminal.
+    # 2. A reference position mt_metadata refuses. Set unguarded in read_measurement, so a stock read
+    #    stops here. AusMT RESCUES one shape of it: a repeated sign character is collapsed to one on
+    #    a temporary copy. Anything else in the class stays terminal, and it short-circuits, because
+    #    a value nothing can read is the whole answer for the file.
     positions = _reference_positions(lines)
+    signrun_reason = None
     for key, kind in (("reflat", "latitude"), ("reflon", "longitude")):
         value = positions.get(key)
-        if value not in _NULL_VALUES and not _position_is_readable(value, kind):
-            finding["outcome"] = WILL_NOT_READ
-            finding["blocking_fields"] = _rows + [{"field": f">=DEFINEMEAS {key.upper()}",
-                                                   "field_plain": f"reference {kind}", "value": value}]
-            finding["reason"] = (f"the reference {kind} is written as \"{value}\", which is not a "
-                                 f"number or a DD:MM:SS position, so no reader can open this file")
-            return finding
+        if value in _NULL_VALUES or _position_is_readable(value, kind):
+            continue
+        row = {"field": f">=DEFINEMEAS {key.upper()}", "field_plain": f"reference {kind}",
+               "value": value}
+        if _sign_run_is_rescued(value, kind):
+            _rows = _rows + [row]
+            signrun_reason = signrun_reason or (
+                f"the reference {kind} is written as \"{value}\", which repeats its sign character "
+                f"and so is not a number the reader accepts; AusMT reads it by collapsing the run to "
+                f"a single sign on a temporary copy and never changes the file on disk")
+            continue
+        finding["outcome"] = WILL_NOT_READ
+        finding["blocking_fields"] = _rows + [row]
+        finding["reason"] = (f"the reference {kind} is written as \"{value}\", which is not a "
+                             f"number or a DD:MM:SS position, so no reader can open this file")
+        return finding
 
     # 3. An >INFO value bound for an unguarded numeric field. If dropping the trailing delimiters
     #    inside the block clears it, this is precisely what the AusMT fallback rescues; if it does
@@ -779,10 +810,17 @@ def preflight_bytes(raw: bytes, *, label: str = "") -> dict:
                                  f"mt_metadata reader refuses the file; AusMT reads it by repairing "
                                  f"a temporary copy and never changes the file on disk" + _also)
         return finding
-    if dataid_row is not None:
+    if _rows:
+        # Both rescues can fire on one file, and both rows ride blocking_fields either way. The
+        # sentence leads with the station id, which is the older and more familiar of the two.
         finding["outcome"] = NEEDS_REPAIR
         finding["blocking_fields"] = _rows
-        finding["reason"] = dataid_reason
+        if dataid_row is not None:
+            finding["reason"] = dataid_reason + (
+                "; the reference position repeats its sign character and is repaired on the same "
+                "temporary copy" if signrun_reason else "")
+        else:
+            finding["reason"] = signrun_reason
     return finding
 
 

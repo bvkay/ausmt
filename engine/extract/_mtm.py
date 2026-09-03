@@ -516,6 +516,72 @@ def rewrite_head_dataid(raw: bytes, dataid: str) -> bytes:
     return raw
 
 
+# ---------------------------------------------------------------------------------------------
+# THE DOUBLED COORDINATE SIGN.
+#
+# A coordinate written with its sign character repeated -- `REFLAT=--26.0322667` -- is not a number,
+# and what the reader does with it depends on which key carries it. Measured against the pinned
+# library, per key, rather than reasoned from its source:
+#
+#   >=DEFINEMEAS REFLAT / REFLONG   FATAL. read_measurement assigns through a BARE setattr, outside
+#                                   any try/except, and the position validator refuses the string, so
+#                                   the read stops before anything else is attempted. One file in the
+#                                   corpus carries this (capricorn-2010 CP3B21.edi) and it has
+#                                   therefore published nothing at all.
+#   >HEAD LAT / LONG                SILENT. The assignment is guarded, so the value is dropped: the
+#                                   station falls back to the reference position, or, with no
+#                                   reference position behind it, publishes latitude 0.0.
+#
+# So the fatal case costs a station and the silent case would mislocate one, and neither key carries
+# the defect anywhere in the corpus but that single REFLAT. Covering all four is inert today and
+# closes the silent case before a delivery brings it.
+#
+# THE COLLAPSE RULE: a run of two or more IDENTICAL leading sign characters becomes one of that
+# character, and nothing else on the line is touched. A repeated keystroke is the whole class this
+# repairs. A MIXED run (`-+`) is deliberately left refused: it is not a repeated keystroke, and
+# picking either of its signs would choose a hemisphere the custodian did not write. Nor does this
+# touch a value that is unreadable for any other reason -- a coordinate written as a word still fails
+# with the reader's own error.
+#
+# Applied ON A TEMPORARY COPY, exactly like the >INFO delimiter repair and the section selection: the
+# served bytes keep the custodian's own characters.
+COORDINATE_SIGN_RUN_DEFECT = (
+    "a coordinate is written with its sign character repeated, which is not a number the reader can "
+    "accept; reparsed from a temporary copy with the run collapsed to a single sign (the source file "
+    "is untouched and is what is served)"
+)
+
+# The four keys above, anchored at the start of their line so nothing inside a data block or a
+# measurement definition can match, and requiring a digit or a decimal point after the sign run so a
+# value that is not numeric at all is left alone.
+_COORD_SIGN_RUN_RE = re.compile(
+    rb"^[ \t]*(?P<key>(?:REF)?(?:LATITUDE|LAT|LONGITUDE|LONG|LON))[ \t]*=[ \t]*"
+    rb"(?P<sign>[+-])(?P=sign)+(?P<rest>[0-9.][^\s]*)",
+    re.IGNORECASE)
+
+
+def collapse_coordinate_sign_runs(raw: bytes):
+    """(bytes, rows): `raw` with every doubled coordinate sign collapsed to one, and a row per
+    collapse naming the key, what the file says and what the reader is given.
+
+    Returns the ORIGINAL object and an empty list when there is nothing to collapse, which is what
+    lets the caller refuse to condition a file that does not need it. Operates on BYTES, keeps each
+    line's indentation and padding, and never re-encodes."""
+    lines = raw.splitlines(keepends=True)
+    rows: list = []
+    for i, line in enumerate(lines):
+        body = line.rstrip(b"\r\n")
+        m = _COORD_SIGN_RUN_RE.match(body)
+        if m is None:
+            continue
+        one = m.group("sign") + m.group("rest")
+        rows.append({"field": m.group("key").decode("utf-8", "replace").upper(),
+                     "value": body[m.start("sign"):m.end("rest")].decode("utf-8", "replace"),
+                     "read_as": one.decode("utf-8", "replace")})
+        lines[i] = body[:m.start("sign")] + one + body[m.end("rest"):] + line[len(body):]
+    return (b"".join(lines), rows) if rows else (raw, [])
+
+
 def _freq_count(raw: bytes, sectid) -> int | None:
     """How many values the named section's `>FREQ` block carries, counted from the bytes. None when
     the section carries no such block."""
@@ -561,13 +627,14 @@ def _assert_section_of_record(p: Path, conditioned: bytes, sectid: str, tf) -> N
 
 
 def _pre_read_conditioning(p: Path, raw: bytes):
-    """(conditioned_bytes, facts, reasons) for the two EPI-KIT defects, both read off the FILE.
+    """(conditioned_bytes, facts, reasons) for the three defects that are read off the FILE.
 
-    They are conditioned BEFORE the read, not after a failure, because neither announces itself as
-    one: a multi-section file parses happily and returns the wrong transfer function, and a refused
-    DATAID raises inside the header read where no signature distinguishes it from a malformed
-    header. Both conditions are measured instead -- the reader's own section scan, the reader's own
-    name validator -- so each is as narrow as the signature predicates its siblings use.
+    They are conditioned BEFORE the read, not after a failure, because none announces itself as one:
+    a multi-section file parses happily and returns the wrong transfer function, a refused DATAID
+    raises inside the header read where no signature distinguishes it from a malformed header, and a
+    doubled coordinate sign is fatal on one key and silent on another. Every condition is measured
+    instead -- the reader's own section scan, the reader's own name validator, the shape of the
+    coordinate itself -- so each is as narrow as the signature predicates its siblings use.
 
     Narrow in the same four ways as every other conditioning here: `.edi` only (the caller's guard);
     only when the measured condition holds; only when the conditioning actually CHANGES the bytes;
@@ -577,6 +644,11 @@ def _pre_read_conditioning(p: Path, raw: bytes):
     facts: dict = {}
     reasons: list = []
     conditioned = raw
+    collapsed, sign_rows = collapse_coordinate_sign_runs(conditioned)
+    if collapsed is not conditioned:
+        conditioned = collapsed
+        facts["coordinate_signs_collapsed"] = sign_rows
+        reasons.append(COORDINATE_SIGN_RUN_DEFECT)
     sectid, _index, total = section_of_record(conditioned)
     if total > 1 and sectid is not None:
         kept = keep_single_section(conditioned, sectid)
@@ -707,9 +779,10 @@ def _read_with_parse_facts(path: Path):
     conditionings that have to happen BEFORE the reader sees the file (see `_pre_read_conditioning`).
 
     `facts` is what the build records per station: `section_selected` when the file carried more than
-    one data section, `dataid_normalised` when the reader's name validator refused the DATAID. Absent
-    keys mean absent conditioning, so every file in a corpus of ordinary EDIs yields `{}` and takes
-    the untouched path below, byte for byte as before.
+    one data section, `dataid_normalised` when the reader's name validator refused the DATAID, and
+    `coordinate_signs_collapsed` when a coordinate repeated its sign character. Absent keys mean
+    absent conditioning, so every file in a corpus of ordinary EDIs yields `{}` and takes the
+    untouched path below, byte for byte as before.
 
     The reason string stays what it has always meant -- what stopped mt_metadata reading the file at
     all -- so a section selection does NOT set one: the file read perfectly well, it just answered
