@@ -1259,7 +1259,7 @@ def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
 # portal half of this pin (portal/tests/test_footer_regions.py) reads _pages.py's source text.
 # AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F5 and F6.
 _FLOW_BELOW = 560
-_FLOW_RULE = f"@media(max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
+_FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 
 
 def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
@@ -1300,9 +1300,26 @@ def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
         assert _FLOW_RULE in css and css.index(_FLOW_RULE) > foot.start(), \
             f"{rel}: below {_FLOW_BELOW}px of viewport the footer returns to flow, in a rule that " \
             f"FOLLOWS the sticky one; the two tie on specificity"
-        assert "padding:1.6rem 1.25rem 0" in css or "padding:4rem 1.25rem 0" in css, \
-            f"{rel}: main must carry no bottom padding, or the footer comes to rest ABOVE the " \
-            f"document's bottom edge and lifts off the viewport at the end of the scroll"
+        # THE SEPARATION ABOVE THE FOOTER IS main'S, not the footer's own margin. This tier used to
+        # give it as footer{margin-top:2.2rem}, which the one rule set cannot carry: the Map's
+        # footer is the last child of a column whose body does not scroll, so a margin there takes
+        # height from the map itself. It moves to main's bottom padding, where the portal's content
+        # pages already keep it. The failure this replaces (a bottom padding lifting the footer off
+        # the viewport at the end of the scroll) does not reproduce and is not what guarantees the
+        # footer rests on the document's bottom edge; what guarantees it is that the footer is the
+        # LAST box in a body with no bottom padding of its own. Measured in Chrome at 900x500,
+        # scrolled to the end: the footer's bottom sits at 499.61px of a 500px viewport on a survey
+        # page, a hub and 404.html, the 0.39px being the sub-pixel the scroll height rounds.
+        assert "padding:1.6rem 1.25rem 2.2rem" in css, (
+            f"{rel}: main states the separation above the footer, because the footer no longer "
+            f"carries a margin of its own")
+        assert "margin-top" not in foot.group(1) and "margin:" not in foot.group(1), (
+            f"{rel}: the footer takes no margin; it is not in the one rule set and on the Map it "
+            f"would take height from the map: {foot.group(1)!r}")
+        assert "padding-bottom" not in body.group(1) and not re.search(
+                r"padding:[^;]*\s\S", body.group(1)), (
+            f"{rel}: body carries no bottom padding, which is what makes the footer's flow "
+            f"position the document's own bottom edge: {body.group(1)!r}")
 
 
 def test_the_centre_line_is_bold_on_every_page_kind(built):

@@ -702,7 +702,7 @@ _STACK_RULE = "@container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-al
 
 # The seven selectors that ARE the footer's rule set, longest first so the alternation cannot take
 # the short form of a longer selector.
-_SET_RE = re.compile(r"(?m)(?:^[ \t]*|\})"
+_SET_RE = re.compile(r"(?m)(?:^[ \t]*|(?<=\}))"
                      r"(footer a|footer|\.orglogo img|\.orglogo|\.fleft|\.fcenter|\.fright)"
                      r"\{([^}]*)\}")
 _RULE_SET = ("footer", "footer a", ".fleft", ".fcenter", ".fright", ".orglogo", ".orglogo img")
