@@ -182,7 +182,7 @@ jobs:
       #   tests/test_epikit_parse_failure_gate.py  the deploy gate over build_report's
       #                                       source_parse_failures, and the rule-8 pin that keeps
       #                                       this list honest for the whole test_epikit_* family
-      # (the 39 enumerated above, plus tests/test_ci_check_skips.py which gates the
+      # (the 46 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of

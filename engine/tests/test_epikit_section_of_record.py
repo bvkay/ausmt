@@ -8,7 +8,7 @@ function of record; the realisations are its inputs, and the late ones are mostl
 mt_metadata reads a multi-section file by scanning EVERY data block in it and keeping the LAST value
 it meets for each label (io/edi/edi.py::_read_mt rebinds data_dict[key] on each new block header), so
 the parse returns the FINAL realisation and nothing says so. Measured across the three GSSA EPI-KIT
-packages (932 files, 2026-09-03): the reader returned the averaged block 0 times out of 75 sampled
+packages (932 files): the reader returned the averaged block 0 times out of 75 sampled
 and the last realisation 75 times; on copper-coast-2020 that is 440 of 3847 impedance values, with
 four stations left holding no resistivity at all.
 

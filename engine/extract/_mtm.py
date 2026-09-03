@@ -337,7 +337,7 @@ DATAID_CHARSET_DEFECT = (
 #
 # mt_metadata reads a multi-section file by scanning EVERY data block in it and REBINDING
 # data_dict[key] at each block header (io/edi/edi.py::_read_mt), so the parse silently returns the
-# LAST section in the file. Measured over the three GSSA EPI-KIT packages, 932 files, 2026-09-03:
+# LAST section in the file. Measured over the three GSSA EPI-KIT packages, 932 files:
 # the reader returned the averaged block 0 times of 75 sampled and the last realisation 75 times; on
 # copper-coast-2020 that is 440 of the 3847 impedance values the averaged blocks hold, and four
 # stations publishing no resistivity at all.
