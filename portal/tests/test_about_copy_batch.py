@@ -96,14 +96,19 @@ def _links(html):
 
 
 def test_the_raw_timeseries_archive_is_named_by_link_not_in_passing():
-    """FAILS if the third paragraph of section 1 still names the collection as plain text, or if the
-    link is not there. 'usually the NCI-AuScope MT collection' overstated a single archive as the
-    default; 'such as' makes it an example, and the link makes it findable."""
+    """FAILS if section 1 names the collection as plain text, or if the link is not there.
+    'usually the NCI-AuScope MT collection' overstated a single archive as the default; 'such as'
+    makes it an example, and the link makes it findable.
+
+    THE SENTENCE IT QUALIFIES MERGED, and this pin follows it there: the section used to make the
+    hand-off claim twice, and the surviving telling is the one holding the THREDDS A7 wording
+    verbatim. What is asserted is unchanged, the archive named as an example rather than as the
+    usual case, and named by an anchor on its collection DOI."""
     what = _flat(_section("what"))
     assert "usually the NCI-AuScope MT collection" not in what, (
         "the raw-time-series sentence must no longer name one archive as the usual case")
-    assert "it links to the archive that holds them, such as the" in what, (
-        "the sentence must read 'such as the <linked collection>'")
+    assert "routes you straight to the archive that does, such as the" in what, (
+        "the hand-off sentence must read 'such as the <linked collection>'")
     assert ("https://doi.org/10.25914/mtjg-jp22", "NCI-AuScope MT collection") in _links(_section("what")), (
         "the NCI-AuScope MT collection must be an anchor on its collection DOI")
 
