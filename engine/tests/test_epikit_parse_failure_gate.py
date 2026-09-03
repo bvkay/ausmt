@@ -154,5 +154,5 @@ def test_every_epikit_test_file_is_in_the_pr_gate_subset():
     assert len(subset) == 1, [s.split("\n")[0] for s in steps]
     listed = set(re.findall(r"tests/(test_\w+\.py)", subset[0]))
     ours = {p.name for p in sorted(HERE.glob("test_epikit_*.py"))}
-    assert len(ours) == 3, sorted(ours)
+    assert len(ours) == 4, sorted(ours)
     assert ours <= listed, f"not in the PR-gate subset: {sorted(ours - listed)}"

@@ -2225,9 +2225,16 @@ def _parse_one_edi(p):
     # EDI written directly by its processor, e.g. LEMIMT or Phoenix EMpower). A known writer never
     # becomes the processor, and nothing is invented — no evidence leaves sw None.
     _sw_writer = _writer.get("name") if not cat.is_known_writer(_writer.get("name")) else None
+    # rr: an EPI-KIT file DECLARES its processing type in a machine-readable field, so where it does
+    # that declaration is the answer and the evidence chain below is not consulted. It is the only
+    # source here that can say NO as well as yes, which is the point: the chain is a disjunction of
+    # weaker evidence and can only ever turn a 0 into a 1. Every other dialect answers None and keeps
+    # the chain exactly as it was.
+    _declared_rr = cat.epikit_remote_reference(_raw)
     proc = (_mined or _pt[0] or _pm[0] or _sw_writer,           # sw: THE PROCESSOR
             _pm[1] or _pt[1],                                  # alg: scrape
-            _pm[2] or _pt[2] or (1 if r.get("remote_site") else 0))  # rr: ...or remote_site found
+            int(_declared_rr) if _declared_rr is not None      # rr: the file's own declaration...
+            else (_pm[2] or _pt[2] or (1 if r.get("remote_site") else 0)))  # ...else the evidence
     r["file_written_by"] = _writer
     _tnotes = []
     per, comp = mtm.components_from_tf(tfobj, notes=_tnotes)

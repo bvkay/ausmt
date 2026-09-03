@@ -265,6 +265,7 @@ jobs:
             tests/test_epikit_section_of_record.py \
             tests/test_epikit_dataid_charset.py \
             tests/test_epikit_parse_failure_gate.py \
+            tests/test_epikit_remote_reference.py \
             tests/test_parse_failure_accounting.py \
             tests/test_reference_coordinate_sign.py \
             tests/test_stations_dropped_gate.py \
