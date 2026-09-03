@@ -3,168 +3,579 @@
 The twin of portal/tests/test_comment_hygiene.py, over the engine's own tree. Two kinds of surface
 live here and both are held to the same rule. The SERVED tier is the CSS _pages.py inlines into
 every page it emits, so those comment bytes are multiplied by the corpus and are capped as well as
-swept. The SOURCE tier is engine/extract, engine/scripts and this suite: a comment may state what
-must hold and why it would break otherwise, an invariant another file depends on, a bare pointer to
-the pin that holds it, or a licence obligation, and may not carry design history, decision
-provenance, work-item identifiers, dates, placeholders or commented-out code. Test files keep their
-pin semantics and may cite a contract path, because that is how a pin is traced.
+swept. The SOURCE tier is engine/extract, engine/scripts, the rest of the package and this suite:
+a comment may state what must hold and why it would break otherwise, an invariant another file
+depends on, a bare pointer to the pin that holds it, or a licence obligation, and may not carry
+design history, decision provenance, work-item identifiers, dates, placeholders, commented-out
+code or the name of a contract document. Test files keep their pin semantics and may cite a
+contract path, because that is how a pin is traced.
 
 IMAGE TOPOLOGY. Every path this module reads is under engine/, which deploy/docker/engine.Dockerfile
 COPYs to /app/engine, so this test runs identically on a checkout and inside the engine image and
 needs no skip. It must stay that way: reaching for portal/, docs/ or .github/ from here would make
-the module skip or fail in the image lanes, where those trees are not shipped. The portal half of
-the sweep therefore lives in portal/tests, which runs on a checkout.
+the module skip or fail in the image lanes, where those trees are not shipped. That is also why the
+extractor below is pasted rather than imported: a shared module outside engine/ would not ship.
+deploy/tests holds the three copies of the shared block equal instead.
 
 THIS FILE IS EXCLUDED FROM ITS OWN SWEEP, by basename, because the vocabulary it forbids has to be
 written down somewhere to be forbidden.
 
-Fails if: any comment on a covered surface matches the forbidden vocabulary, OR the served CSS
-carries more comment bytes than its cap, OR the extractor stops seeing comments on a surface class
-at all (a scanner that reads nothing must not report PASS over it).
+Fails if: any comment on a covered surface breaks the rule, OR the served CSS carries more comment
+bytes than its cap, OR the extractor stops seeing comments on a surface class at all (a scanner
+that reads nothing must not report PASS over it).
 """
 import ast
+import io
 import re
+import tokenize
 from pathlib import Path
 
 ENGINE = Path(__file__).resolve().parent.parent       # engine/
+ROOT = ENGINE.parent                                  # repo root
 
 SELF = "test_comment_hygiene.py"
 
-DENY = (
-    # OWNER in capitals is a shell variable the compose files carry, so a comment naming it beside
-    # another AUSMT_ variable, or calling it a variable, is naming an identifier rather than
-    # recording who decided something. Everywhere else the word is prose and is caught.
-    (re.compile(r"\b(?!(?-i:OWNER)\b(?=[\s\S]*(?:AUSMT_|variable)))owner(?:'s|s)?\b(?!@)", re.I),
-     "decision-owner language"),
-    (re.compile(r"\brulings?\b", re.I), "ruling language"),
-    # Approval OF A DESIGN DECISION, which is what may not be recorded here. The bare word is
-    # left alone: "Approved-by:" is a git trailer this code writes, and a curator approving a
-    # submission is the gateway's own workflow, not a note about who settled an argument.
-    (re.compile(r"\bowner[-\s]approved\b|\bapproved\s+(?:by\s+the\s+owner|mockup|preview|design|wording|copy)\b",
-                re.I), "approval language"),
-    (re.compile(r"\bwave\s+[a-z]\b", re.I), "wave identifier"),
-    (re.compile(r"\bux\d", re.I), "work-item identifier"),
-    (re.compile(r"\btask\s*#", re.I), "work-item identifier"),
-    # A pin may cite the contract it holds, and those documents are named LANE-CONTRACT-*.md and
-    # LANE-ADDENDUM-*.md, so a citation is not a lane name. Everything else that says lane is.
-    (re.compile(r"\blanes?\b(?!-[A-Z])", re.I), "lane name"),
-    (re.compile(r"\btreatments?\b", re.I), "design-history vocabulary"),
-    (re.compile(r"old\s*->\s*new", re.I), "old-to-new history"),
-    (re.compile(r"\b20\d\d-[01]\d-[0-3]\d\b"), "dated note"),
-    (re.compile(r"YOUR-"), "placeholder"),
-    (re.compile(r"TODO\(", re.I), "unowned marker"),
-    (re.compile(r"\bFIXME\b", re.I), "unowned marker"),
-)
 
-# A commented-out CALL, not prose that happens to name the function: the argument list is what
-# tells "fetch(url).then(...)" from "fetch() is the scripted probe".
-CODE_LINE = re.compile(r"^(?:<script\b[^>]*>\s*(?:</script>)?\s*$|(?:L\.map|fetch)\(\s*['\"`\w$])")
-LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
-
-# A comment that OPENS on a bare work-item tag, which the vocabulary list cannot see because the
-# tag is the whole identifier. Held over the served tier only, the one measured in bytes.
-LEAD_TAG = re.compile(r"^[A-Z]{1,3}\d{1,2}[a-z]?\b\s*[:.,()\-]")
-
-# The served CSS is inlined into every emitted page, so its comment bytes are paid once per page in
-# the corpus rather than once in the tree.
-SERVED_CSS_CAP = 1_200
-
-
-def bare(line):
-    s = line.strip()
-    changed = True
-    while changed:
-        changed = False
-        for lead in LEADERS:
-            if s.startswith(lead):
-                s = s[len(lead):].strip()
-                changed = True
-    return s
-
-
-# One left-to-right scan per file, so every comment is counted once and only once. A separate pass
-# per syntax double-counts twice over: a // line inside a /* */ block is read by both, and so is a
-# /* that a line comment happens to contain, such as the glob contract/*.json. Both overstate the
-# bytes, which would let a cap pass on an artefact instead of on the sweep.
-SYNTAX = {
-    ".html": r"(?s:<!--.*?-->)|(?s:/\*.*?\*/)",
-    ".js": r"(?s:/\*.*?\*/)|(?m:^[ \t]*//.*$)",
-    ".css": r"(?s:/\*.*?\*/)",
+# --- shared extractor and vocabulary: begin ---------------------------------
+# The three pins carry this block byte for byte. It cannot be imported from one
+# place: engine/tests must read nothing outside engine/, which the engine image
+# is the only tree to ship, so a shared module would make the engine pin skip
+# in the image builds. deploy/tests holds the three copies equal instead.
+#
+# THE EXTRACTOR. One left-to-right scan per file, so every comment is counted
+# once and only once: a // inside a /* */ block, a /* inside a line comment, a #
+# inside a quoted shell word and a // inside a URL are none of them comments,
+# and a scan that reads them as comments overstates the bytes a cap measures.
+#
+# The scanners are string-aware, which is what lets a comment AFTER code on the
+# same line be counted: a regex anchored to the start of a line cannot tell a
+# trailing comment from a slash inside a string. JavaScript is the hard case,
+# because / is both division and the opening of a regex literal and a regex may
+# contain \/\/. The tell is the token before the slash: a value (an identifier
+# or number that is not a keyword, a ) or a ]) means division, anything else
+# means a regex. That is the standard heuristic; it misreads only code that
+# divides by a parenthesised expression and writes a comment marker inside the
+# divisor.
+_WORD = re.compile(r"[A-Za-z_$][\w$]*|\d[\w.]*")
+_REGEX_OK_AFTER_WORD = {
+    "return", "typeof", "case", "in", "of", "new", "delete", "void", "do",
+    "instanceof", "else", "yield", "await", "throw",
 }
-HASH = re.compile(r"(?m:^[ \t]*#.*$)")
+
+
+def _skip_quoted(text, i, quote):
+    """Index just past a ' or " string opened at i. An unterminated quote ends
+    at the newline, so a lone apostrophe in prose cannot swallow the file."""
+    n = len(text)
+    i += 1
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == quote:
+            return i + 1
+        if c == "\n":
+            return i
+        i += 1
+    return n
+
+
+def _skip_regex(text, i):
+    """Index just past a regex literal opened at i, character classes included."""
+    n = len(text)
+    i += 1
+    in_class = False
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "\n":
+            return i
+        if in_class:
+            if c == "]":
+                in_class = False
+        elif c == "[":
+            in_class = True
+        elif c == "/":
+            return i + 1
+        i += 1
+    return n
+
+
+def _skip_template(text, i):
+    """Index just past a template literal opened at i, ${} holes included. A
+    comment written inside a hole is not extracted, a construct these trees do
+    not contain; what matters is that the literal's own bytes, which are full of
+    // in URLs and /* in markup, are never read as comments."""
+    n = len(text)
+    i += 1
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "`":
+            return i + 1
+        if c == "$" and i + 1 < n and text[i + 1] == "{":
+            i = _skip_hole(text, i + 2)
+            continue
+        i += 1
+    return n
+
+
+def _skip_hole(text, i):
+    """Index just past the } closing a ${ hole, nested strings included."""
+    n = len(text)
+    depth = 1
+    while i < n and depth:
+        c = text[i]
+        if c in "'\"":
+            i = _skip_quoted(text, i, c)
+            continue
+        if c == "`":
+            i = _skip_template(text, i)
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        i += 1
+    return i
+
+
+def js_comments(text):
+    """(offset, text) for every // and /* */ comment in JavaScript, a comment
+    trailing code on the same line included."""
+    out = []
+    i, n = 0, len(text)
+    prev = ""
+    prev_word = ""
+    while i < n:
+        c = text[i]
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            out.append((i, text[i:end]))
+            i = end
+            prev, prev_word = "", ""
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            out.append((i, text[i:end]))
+            i = end
+            prev, prev_word = "", ""
+            continue
+        if c in "'\"":
+            i = _skip_quoted(text, i, c)
+            prev, prev_word = c, ""
+            continue
+        if c == "`":
+            i = _skip_template(text, i)
+            prev, prev_word = "`", ""
+            continue
+        word = _WORD.match(text, i)
+        if word:
+            prev_word = word.group(0)
+            prev = prev_word[-1]
+            i = word.end()
+            continue
+        if c == "/" and (prev_word in _REGEX_OK_AFTER_WORD
+                         or (not prev_word and prev not in {")", "]"})):
+            i = _skip_regex(text, i)
+            prev, prev_word = "/", ""
+            continue
+        if not c.isspace():
+            prev, prev_word = c, ""
+        i += 1
+    return out
+
+
+def css_comments(text):
+    """(offset, text) for every /* */ comment in CSS, quoted urls skipped."""
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            out.append((i, text[i:end]))
+            i = end
+            continue
+        if c in "'\"":
+            i = _skip_quoted(text, i, c)
+            continue
+        i += 1
+    return out
+
+
+_TAG_OPEN = re.compile(r"<(script|style)\b([^>]*)>", re.I)
+_JS_TYPES = {"", "text/javascript", "application/javascript", "module",
+             "text/ecmascript", "application/ecmascript"}
+_TYPE_ATTR = re.compile(r"""\btype\s*=\s*["']?([^"'\s>]*)""", re.I)
+
+
+def html_comments(text):
+    """(offset, text) for every <!-- --> comment, every CSS comment inside a
+    <style> block and every JavaScript comment inside a <script> block. The
+    inline scripts are the larger half of a shipped page's commentary and a
+    scanner blind to them reports a page as clean that is not. A
+    <script type="application/ld+json"> block is DATA: its https:// values are
+    not comments and it is not read as JavaScript."""
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        if text.startswith("<!--", i):
+            end = text.find("-->", i)
+            end = n if end < 0 else end + 3
+            out.append((i, text[i:end]))
+            i = end
+            continue
+        tag = _TAG_OPEN.match(text, i)
+        if tag:
+            name = tag.group(1).lower()
+            close = re.compile(r"</%s\b" % name, re.I).search(text, tag.end())
+            end = close.start() if close else n
+            body = text[tag.end():end]
+            if name == "style":
+                out += [(tag.end() + k, c) for k, c in css_comments(body)]
+            else:
+                attr = _TYPE_ATTR.search(tag.group(2))
+                if (attr.group(1).lower() if attr else "") in _JS_TYPES:
+                    out += [(tag.end() + k, c) for k, c in js_comments(body)]
+            i = end
+            continue
+        i += 1
+    return out
+
+
+_HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_]\w*)\1")
+_QUOTE_OPENS_AFTER = set(" \t\n=:([,{$|&;>")
+
+
+def hash_comments(text):
+    """(offset, text) for every # comment in a shell script, a YAML document, a
+    systemd unit, a Caddyfile, a Makefile or a Dockerfile, a comment trailing a
+    command on the same line included. A # opens a comment only at the start of
+    a line or after whitespace, the rule shell and YAML share, so ${var#pattern}
+    and a URL fragment stay code. A heredoc body is data the script WRITES and
+    is skipped; a quote opens a string only at a token boundary, so an
+    apostrophe inside an unquoted YAML scalar cannot swallow the rest of the
+    file; and a #! shebang is a directive to the kernel, not commentary."""
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in "'\"" and (i == 0 or text[i - 1] in _QUOTE_OPENS_AFTER):
+            i = _skip_quoted(text, i, c)
+            continue
+        if c == "<" and text.startswith("<<", i) and not text.startswith("<<<", i):
+            here = _HEREDOC.match(text, i)
+            if here:
+                term = re.compile(r"^[ \t]*%s[ \t]*$" % re.escape(here.group(2)), re.M)
+                stop = term.search(text, here.end())
+                i = stop.end() if stop else n
+                continue
+        if c == "#" and (i == 0 or text[i - 1] in " \t\n"):
+            if i + 1 < n and text[i + 1] == "!" and text.count("\n", 0, i) == 0:
+                end = text.find("\n", i)
+                i = n if end < 0 else end
+                continue
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            out.append((i, text[i:end]))
+            i = end
+            continue
+        i += 1
+    return out
 
 
 def python_comments(text):
-    """A Python file's # comments and its REAL docstrings.
+    """A Python file's # comments and its commentary strings.
 
-    A triple-quoted string is not a docstring by virtue of its quotes: gateway/curatorpage.py holds
-    the curator console's HTML and its browser-side scripts in them, and a regex that reads those as
-    comments reports the served page as a wall of offences. The AST is what tells the two apart, so
-    the sweep lands on the module's own prose and never on a template it serves."""
-    out = [(text.count("\n", 0, m.start()) + 1, m.group(0)) for m in HASH.finditer(text)]
+    The # comments come from the tokenizer, so a # inside a string literal is
+    never read as one and a # trailing code on the same line always is. The
+    commentary strings are every STATEMENT-level string expression the AST
+    holds: a docstring is one of those, and so is a triple-quoted paragraph
+    dropped into the middle of a function, which is commentary written with
+    quotes and must not be the way around this rule. A string that is assigned
+    or returned is a value and not commentary, which is how the console
+    gateway/curatorpage.py serves and the stylesheet engine/extract/_pages.py
+    serves stay out of the sweep as content."""
+    out = []
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            if tok.type == tokenize.COMMENT:
+                out.append((tok.start, tok.string))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        out = [((text.count("\n", 0, m.start()) + 1, 0), m.group(0))
+               for m in re.finditer(r"(?m)^[ \t]*#.*$", text)]
     try:
         tree = ast.parse(text)
     except SyntaxError:
-        return sorted(out)
+        return [(where[0], body) for where, body in sorted(out)]
     starts, total = [], 0
     for line in text.splitlines(keepends=True):
         starts.append(total)
         total += len(line)
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            continue
-        first = node.body[0] if node.body else None
-        if (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
-                and isinstance(first.value.value, str)):
-            c = first.value
-            out.append((c.lineno, text[starts[c.lineno - 1] + c.col_offset:
-                                       starts[c.end_lineno - 1] + c.end_col_offset]))
-    return sorted(out)
+        value = getattr(node, "value", None)
+        if (isinstance(node, ast.Expr) and isinstance(value, ast.Constant)
+                and isinstance(value.value, str)):
+            out.append(((value.lineno, value.col_offset),
+                        text[starts[value.lineno - 1] + value.col_offset:
+                             starts[value.end_lineno - 1] + value.end_col_offset]))
+    return [(where[0], body) for where, body in sorted(out)]
+
+
+HASH_SUFFIXES = {".sh", ".bash", ".yml", ".yaml", ".service", ".timer", ".conf",
+                 ".example", ".map", ".dockerfile", ".toml", ".cfg", ".ini"}
+HASH_NAMES = {"Caddyfile", "Makefile", "Dockerfile", ".gitignore", ".dockerignore"}
 
 
 def comments(path, text):
     """Every comment in one file, as (line number, text), each counted once."""
-    if path.suffix == ".py":
+    suffix = path.suffix.lower()
+    if suffix == ".py":
         return python_comments(text)
-    pattern = SYNTAX.get(path.suffix)
-    if not pattern:
+    if suffix in (".html", ".htm", ".plist", ".xml", ".svg"):
+        found = html_comments(text)
+    elif suffix in (".js", ".mjs", ".hujson", ".json5"):
+        found = js_comments(text)
+    elif suffix == ".css":
+        found = css_comments(text)
+    elif suffix in HASH_SUFFIXES or path.name in HASH_NAMES:
+        found = hash_comments(text)
+    else:
         return []
-    scanner = re.compile(pattern)
-    out, pos = [], 0
-    while True:
-        match = scanner.search(text, pos)
-        if not match:
-            return out
-        out.append((text.count("\n", 0, match.start()) + 1, match.group(0)))
-        pos = match.end()
+    return [(text.count("\n", 0, off) + 1, body) for off, body in found]
 
 
-def offences(files, served=False):
+def comment_bytes(path):
+    text = path.read_text(encoding="utf-8")
+    return sum(len(body.encode("utf-8")) for _, body in comments(path, text))
+
+
+# THE VOCABULARY. A rule is a pattern, the label an offending comment is
+# reported under, and any number of exemptions. An exemption reads the matched
+# text and a BOUNDED window around it, never the rest of the comment: a
+# lookahead that scans to the end of a module docstring lets one mention of a
+# shell variable pages away excuse every use of the word, which is how a
+# narrowing turns into a hole.
+WINDOW = 60
+
+
+class Rule:
+    """An exemption is (pattern over the matched text or None, pattern over the
+    window or None) and excuses a match when every part it names holds; a match
+    is excused when ANY of the rule's exemptions does."""
+
+    def __init__(self, pattern, label, exemptions=()):
+        self.pattern = pattern
+        self.label = label
+        self.exemptions = exemptions
+
+    def excused(self, text, match):
+        window = text[max(0, match.start() - WINDOW):match.end() + WINDOW]
+        for on_match, near in self.exemptions:
+            if on_match is not None and not on_match.search(match.group(0)):
+                continue
+            if near is not None and not near.search(window):
+                continue
+            return True
+        return False
+
+    def hits(self, text):
+        return [m for m in self.pattern.finditer(text) if not self.excused(text, m)]
+
+
+RULES = (
+    # OWNER in capitals is a shell variable the compose files carry, so naming
+    # it beside AUSMT_ or calling it a variable is naming an identifier.
+    # Everywhere else the word records who settled an argument, and the
+    # exemption may read only the variable's own neighbourhood.
+    Rule(re.compile(r"\bowner(?:'s|s)?\b(?!@)", re.I), "decision-owner language",
+         ((re.compile(r"^OWNER$"), re.compile(r"AUSMT_|\bvariable\b|\benv\b")),)),
+    Rule(re.compile(r"\brulings?\b|\bruled\b", re.I), "ruling language"),
+    # Approval of a DESIGN DECISION is what may not be recorded here. The
+    # gateway's own workflow, in which a curator approves a submission and the
+    # code writes an `Approved-by:` trailer, is the one sense that survives, and
+    # it survives only where that workflow is named beside the word.
+    Rule(re.compile(r"\bapprov(?:e|es|ed|al|als|ing)\b", re.I), "approval language",
+         ((None, re.compile(r"curat|submi|trailer|Approved-by|moderat|reviewer", re.I)),)),
+    Rule(re.compile(r"\bwave\s+[a-z]\b", re.I), "wave identifier"),
+    Rule(re.compile(r"\bux\d", re.I), "work-item identifier"),
+    Rule(re.compile(r"\btask\s*#", re.I), "work-item identifier"),
+    # A pin may cite the contract it holds, and those documents are named
+    # LANE-CONTRACT-*.md and LANE-ADDENDUM-*.md, so a citation is not a lane
+    # name. Everything else that says lane is.
+    Rule(re.compile(r"\blanes?\b(?!-[A-Z])", re.I), "lane name"),
+    Rule(re.compile(r"\btreatments?\b", re.I), "design-history vocabulary"),
+    Rule(re.compile(r"old\s*->\s*new", re.I), "old-to-new history"),
+    Rule(re.compile(r"\b20\d\d-[01]\d-[0-3]\d\b"), "dated note"),
+    Rule(re.compile(r"YOUR-"), "placeholder"),
+    Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
+    Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),
+    # A vocabulary filter alone lets the history through wherever it avoids the
+    # banned words, so the two shapes history takes are named as well: what the
+    # code used to say, and what a rejected alternative would have done.
+    Rule(re.compile(r"\bused to (?:read|be|carry|say)\b"
+                    r"|\bwould have\b"
+                    r"|\bpreviously\b"
+                    r"|\bno longer\b"
+                    r"|\binstead of the old\b"
+                    r"|\brather than the (?:old|previous)\b"
+                    r"|\bhistorically\b"
+                    r"|\boriginally\b", re.I),
+         "history or alternatives narrative"),
+)
+
+# A pin traces itself by naming the contract it holds, so a test file may cite
+# one. Code may not: the contract is a document about a decision, and a decision
+# is what a comment may not record.
+CONTRACT_CITATION = Rule(
+    re.compile(r"\bLANE-(?:CONTRACT|ADDENDUM)-[A-Z0-9-]+"), "contract file name")
+
+# WORK-ITEM TAGS. A tag is one or two capitals, one or two digits and an
+# optional letter, and it is lane vocabulary in four positions: at the head of a
+# comment, before a colon, inside parentheses, and beside the words a work item
+# is counted with. It is NOT a station or site id, a licence id, a projection, a
+# digest, a percentile or a heading level, which is what the exemptions are for.
+_TAG = r"[A-Z]{1,2}\d{1,2}[a-z]?"
+_TAGS = r"%s(?:\s*[/,]\s*%s)*" % (_TAG, _TAG)
+_WORK = r"Amendment|amendment|lanes?|round|wave|gate|follow-up|phase"
+
+TAG_PATTERN = re.compile(
+    r"(?:^|(?<=\n))[ \t]*(?P<head>%s)(?![\w]|\.\d)"
+    r"|(?<![\w#])(?P<colon>%s)(?![\w]|\.\d)\s*:"
+    r"|\(\s*(?P<paren>%s)(?![\w]|\.\d)\s*[,;)]"
+    r"|(?:%s)\s+(?P<after>%s)(?![\w]|\.\d)"
+    r"|(?<![\w#])(?P<before>%s)(?![\w]|\.\d)\s+(?:%s)\b"
+    % (_TAGS, _TAGS, _TAGS, _WORK, _TAGS, _TAGS, _WORK)
+)
+
+# The false positives, one test per entry: a token shaped like a tag that names
+# a licence, a digest, an object store, an address family, a contrast level, a
+# projection, a percentile or a heading level is not lane vocabulary.
+TAG_NOT_A_TAG = re.compile(
+    r"^(?:CC0|MD5|SHA1|S3|IPv4|IPv6|AA|AAA|EPSG|WGS84|GDA94|GDA2020|UTM"
+    r"|H1|H2|H3|H4|H5|H6|P50|P95|P99|L1|L2|L3)$")
+# A station, site or survey id is data the corpus carries rather than a work
+# item, so the words that name one excuse the token beside them.
+TAG_NEAR_AN_ID = re.compile(
+    r"\b(?:station|stations|site|sites|id|ids|identifier|identifiers|survey"
+    r"|surveys|code|codes|Wp|Vulcan)\b|\bau\.[a-z]", re.I)
+
+
+def work_item_tags(text):
+    """Every work-item tag in a bare comment, as (match, tag)."""
+    found = []
+    for match in TAG_PATTERN.finditer(text):
+        tag = next(group for group in match.groups() if group)
+        window = text[max(0, match.start() - WINDOW):match.end() + WINDOW]
+        if all(TAG_NOT_A_TAG.match(part.strip()) for part in re.split(r"[/,]", tag)):
+            continue
+        if TAG_NEAR_AN_ID.search(window):
+            continue
+        found.append((match, tag))
+    return found
+
+
+# COMMENTED-OUT CODE. A comment line that parses as an assignment, a call
+# statement, a declaration, a return or a control keyword is code that was
+# switched off rather than deleted, and git is where it belongs. One line must
+# look like code unambiguously; a run of three or more lines that each END the
+# way code ends is caught even when no single line would be, which is how a
+# commented-out template literal of markup is found.
+CODE_LINE = tuple(re.compile(p) for p in (
+    r"^(?:const|let|var)\s+[\w$\[\]{},\s]+=\s*\S",
+    r"^(?:export\s+)?(?:async\s+)?function\s*[\w$]*\s*\(",
+    r"^class\s+[\w$]+\s*(?:extends\s+[\w$.]+\s*)?\{",
+    r"^(?:\}\s*)?(?:if|for|while|switch|catch)\s*\(",
+    r"^(?:\}\s*)?else\s*(?:\{|if\s*\()",
+    r"^return\b[^.!?]*;\s*$",
+    r"^(?:await\s+|new\s+)?[\w$][\w$.\[\]'\"]*\s*(?:\+|\|\||\?\?)?=[^=~>]\s*\S.*[;,{]\s*$",
+    r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*[;,)]\s*$",
+    r"^\.[\w$]+\(.*\)",
+    r"^(?:def\s+\w+\s*\(|import\s+[\w.]+\s*$|from\s+[\w.]+\s+import\s)",
+    r"^<script\b[^>]*>\s*(?:</script>)?\s*$",
+    r"^(?:L\.map|fetch)\(\s*['\"`\w$]",
+))
+# The looser tell, only ever counted in a run: a line that ends the way a
+# statement or a block ends, or opens a markup tag. Prose wraps mid-sentence.
+CODE_RUN_LINE = re.compile(r"[;{}]\s*$|^</?[a-zA-Z][\w-]*[\s>]|^\}\)?[;,]?\s*$")
+CODE_RUN = 3
+
+LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
+
+
+def bare_line(line):
+    stripped = line.strip()
+    changed = True
+    while changed:
+        changed = False
+        for lead in LEADERS:
+            if stripped.startswith(lead):
+                stripped = stripped[len(lead):].strip()
+                changed = True
+    return stripped
+
+
+def bare(comment):
+    """The comment with its leaders stripped, line for line, so a rule reads the
+    prose a reader reads and the head of the comment heads line one."""
+    return "\n".join(bare_line(line) for line in comment.splitlines())
+
+
+def looks_like_code(comment):
+    run = 0
+    for line in bare(comment).splitlines():
+        if not line:
+            run = 0
+            continue
+        if any(p.match(line) for p in CODE_LINE):
+            return True
+        run = run + 1 if CODE_RUN_LINE.search(line) else 0
+        if run >= CODE_RUN:
+            return True
+    return False
+
+
+def labels_for(comment, cite_contract=False):
+    """Every way one comment breaks the rule, as sorted labels."""
+    text = bare(comment)
+    found = {rule.label for rule in RULES if rule.hits(text)}
+    if not cite_contract and CONTRACT_CITATION.hits(text):
+        found.add(CONTRACT_CITATION.label)
+    if work_item_tags(text):
+        found.add("work-item identifier")
+    if looks_like_code(comment):
+        found.add("commented-out code")
+    return sorted(found)
+
+
+def offences(files, cite_contract=False, root=None):
+    """Every comment that breaks the rule across a set of files, as report lines."""
     found = []
     for path in files:
         text = path.read_text(encoding="utf-8")
-        seen = comments(path, text)
-        if served:
-            # The served stylesheet is a CSS comment inside a Python string, which the Python
-            # extractor sees only as one opaque literal. Read it as CSS as well, so the rule lands
-            # on the block a reader of an emitted page would see.
-            seen = seen + [(text.count("\n", 0, m.start()) + 1, m.group(0))
-                           for m in re.finditer(r"(?s)/\*.*?\*/", text)]
-        for lineno, comment in sorted(seen):
-            labels = sorted({label for pattern, label in DENY if pattern.search(comment)})
-            for line in comment.splitlines():
-                if CODE_LINE.match(bare(line)):
-                    labels.append("commented-out code")
-                    break
-            if served:
-                head = next((bare(ln) for ln in comment.splitlines() if bare(ln)), "")
-                if LEAD_TAG.match(head):
-                    labels.append("work-item identifier")
+        for lineno, comment in comments(path, text):
+            labels = labels_for(comment, cite_contract=cite_contract)
             if labels:
-                excerpt = " ".join(comment.split())[:110]
-                where = path.relative_to(ENGINE.parent) if path.is_relative_to(ENGINE.parent) else path.name
-                found.append(f"{where}:{lineno}: {', '.join(sorted(set(labels)))}: {excerpt}")
+                where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+                found.append("%s:%s: %s: %s"
+                             % (where, lineno, ", ".join(labels),
+                                " ".join(comment.split())[:110]))
     return found
+# --- shared extractor and vocabulary: end -----------------------------------
+
+
+# The served stylesheet is inlined into every emitted page, so its comment bytes are paid once per
+# page in the corpus rather than once in the tree.
+SERVED_CSS_CAP = 1_200
 
 
 def listing(*globs):
@@ -207,16 +618,28 @@ SURFACES = {
 
 
 def served_css_comments():
-    """The CSS comments _pages.py inlines into every page it emits."""
+    """The CSS comments _pages.py inlines into every page it emits. They live inside a Python
+    string, which the Python extractor reads as one opaque literal, so the served bytes are read
+    again as CSS: the rule must land on the block a reader of an emitted page would see."""
     text = (ENGINE / "extract" / "_pages.py").read_text(encoding="utf-8")
     return re.findall(r"(?s)/\*.*?\*/", text)
+
+
+def served_offences():
+    found = list(offences(emitter(), root=ROOT))
+    for comment in served_css_comments():
+        labels = labels_for(comment)
+        if labels:
+            found.append("engine/extract/_pages.py (served CSS): %s: %s"
+                         % (", ".join(labels), " ".join(comment.split())[:110]))
+    return found
 
 
 # ---------------------------------------------------------------------------
 # The served tier: what every emitted page carries.
 # ---------------------------------------------------------------------------
 def test_served_css_comments_state_constraints_only():
-    hits = offences(emitter(), served=True)
+    hits = served_offences()
     assert not hits, (
         f"{len(hits)} comment(s) in the page emitter carry provenance rather than a constraint "
         "(its stylesheet is inlined into every page the engine emits):\n" + "\n".join(hits)
@@ -237,7 +660,7 @@ def test_served_css_stays_under_its_comment_cap():
 # The source tier.
 # ---------------------------------------------------------------------------
 def test_extractor_comments_state_constraints_only():
-    hits = offences(extractors())
+    hits = offences(extractors(), root=ROOT)
     assert not hits, (
         f"{len(hits)} comment(s) in engine/extract carry provenance rather than a constraint:\n"
         + "\n".join(hits)
@@ -245,7 +668,7 @@ def test_extractor_comments_state_constraints_only():
 
 
 def test_package_comments_state_constraints_only():
-    hits = offences(package())
+    hits = offences(package(), root=ROOT)
     assert not hits, (
         f"{len(hits)} comment(s) elsewhere in the engine package carry provenance rather than a "
         "constraint:\n" + "\n".join(hits)
@@ -253,7 +676,7 @@ def test_package_comments_state_constraints_only():
 
 
 def test_script_comments_state_constraints_only():
-    hits = offences(scripts())
+    hits = offences(scripts(), root=ROOT)
     assert not hits, (
         f"{len(hits)} comment(s) in engine/scripts carry provenance rather than a constraint:\n"
         + "\n".join(hits)
@@ -261,7 +684,7 @@ def test_script_comments_state_constraints_only():
 
 
 def test_guard_test_comments_state_constraints_only():
-    hits = offences(guard_tests())
+    hits = offences(guard_tests(), cite_contract=True, root=ROOT)
     assert not hits, (
         f"{len(hits)} comment(s) in engine/tests carry provenance rather than a constraint "
         "(a pin may cite the contract that it holds; it may not carry dates, decision provenance "
@@ -295,6 +718,34 @@ def test_every_surface_class_is_actually_read():
     assert not empty, "the extractor read no comments at all on:\n" + "\n".join(empty)
 
 
+# ---------------------------------------------------------------------------
+# The extractor and the vocabulary. The full battery lives in the portal twin,
+# which runs on a checkout; these are the cases the engine tree turns on.
+# ---------------------------------------------------------------------------
+def test_a_comment_trailing_code_is_extracted(tmp_path):
+    f = tmp_path / "trail.py"
+    f.write_text("a = 1  # the trailing note\n", encoding="utf-8")
+    assert [c for _, c in comments(f, f.read_text(encoding="utf-8"))] == ["# the trailing note"]
+
+
+def test_a_docstring_and_a_floating_string_are_both_commentary(tmp_path):
+    """A triple-quoted paragraph in the middle of a function is a comment written with quotes.
+    Reading only the four docstring positions leaves that as the way around the rule."""
+    f = tmp_path / "mod.py"
+    f.write_text('"""The module note."""\n\n\ndef f():\n    """The function note."""\n'
+                 '    a = 1\n    """The floating note."""\n    return """served content"""\n',
+                 encoding="utf-8")
+    found = [c for _, c in comments(f, f.read_text(encoding="utf-8"))]
+    assert found == ['"""The module note."""', '"""The function note."""',
+                     '"""The floating note."""'], found
+
+
+def test_a_hash_inside_a_string_is_not_a_comment(tmp_path):
+    f = tmp_path / "hash.py"
+    f.write_text('colour = "#11182D"  # the page ground\n', encoding="utf-8")
+    assert [c for _, c in comments(f, f.read_text(encoding="utf-8"))] == ["# the page ground"]
+
+
 def test_a_planted_comment_is_caught(tmp_path):
     f = tmp_path / "planted.py"
     f.write_text("a = 1\n# UX6 Wave B: the owner's ruling of 2026-08-19\n", encoding="utf-8")
@@ -304,11 +755,43 @@ def test_a_planted_comment_is_caught(tmp_path):
 def test_a_planted_work_item_tag_is_caught_on_the_served_tier(tmp_path):
     f = tmp_path / "planted_tag.py"
     f.write_text('_CSS = """\n/* C18: the cache seam. */\n"""\n', encoding="utf-8")
-    assert not offences([f]), "the vocabulary list alone should not see a bare work-item tag"
-    assert offences([f], served=True), "the served-tier rule did not catch a bare work-item tag"
+    assert not offences([f]), "a served stylesheet is a string, not a comment the Python scan sees"
+    assert [c for c in re.findall(r"(?s)/\*.*?\*/", f.read_text(encoding="utf-8"))
+            if labels_for(c)], "the served-tier read did not catch a bare work-item tag"
 
 
 def test_a_clean_comment_is_not_flagged(tmp_path):
     f = tmp_path / "clean.py"
-    f.write_text("# The two lists must stay equal; pinned by tests/test_index_pages.py.\na = 1\n", encoding="utf-8")
-    assert not offences([f], served=True), "the scanner flagged a comment that states a constraint and a pin"
+    f.write_text("# The two lists must stay equal; pinned by tests/test_index_pages.py.\na = 1\n",
+                 encoding="utf-8")
+    assert not offences([f]), "the scanner flagged a comment that states a constraint and a pin"
+
+
+def test_the_owner_narrowing_reaches_only_the_variable_beside_it(tmp_path):
+    named = tmp_path / "named.py"
+    named.write_text("# OWNER is the AUSMT_OWNER variable the compose files read.\na = 1\n",
+                     encoding="utf-8")
+    assert not offences([named]), "the narrowing missed the shell variable it exists for"
+    far = tmp_path / "far.py"
+    far.write_text('"""The panel is the shape the owner asked for.\n\n'
+                   + "    Filler that carries the paragraph well past the window.\n" * 4
+                   + '    The compose files read AUSMT_OWNER for the same value.\n    """\n',
+                   encoding="utf-8")
+    assert offences([far]), (
+        "a mention of the variable pages away excused decision-owner language, so the narrowing "
+        "is a hole rather than an exemption"
+    )
+
+
+def test_commented_out_code_is_caught(tmp_path):
+    f = tmp_path / "code.py"
+    f.write_text("# def build_row(station, level):\na = 1\n", encoding="utf-8")
+    hits = offences([f])
+    assert hits and "commented-out code" in hits[0], "commented-out code went unseen"
+
+
+def test_prose_that_names_a_keyword_is_not_commented_out_code(tmp_path):
+    f = tmp_path / "prose.py"
+    f.write_text("# return the first row whose level matches (the caller relies on the order).\na = 1\n",
+                 encoding="utf-8")
+    assert not offences([f]), "the rule flagged prose that merely names a keyword"
