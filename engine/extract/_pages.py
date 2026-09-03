@@ -932,10 +932,18 @@ def _related_by_identifies(smeta):
     return out
 
 
-# The AusMT access acknowledgement, verbatim from AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md
-# section 9. It is a SEPARATE statement from the citation and is never folded into it: providing
-# access does not make AusMT the cited object.
-_ACKNOWLEDGEMENT = ("Data were accessed through the AusMT national magnetotelluric data portal.")
+# The AusMT access acknowledgement. It is a SEPARATE statement from the citation and is never
+# folded into it (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md section 9): providing access does
+# not make AusMT the cited object.
+#
+# ONE WORDING, not one per surface. about.html carries the same sentence as the block a reader is
+# asked to copy, and portal/tests/test_about_copy_batch.py holds the two equal by reading this
+# constant, so a change here that the page does not follow fails the portal lane rather than
+# shipping two versions of one statement.
+_ACKNOWLEDGEMENT = (
+    "Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric "
+    "Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government "
+    "via the National Collaborative Research Infrastructure Strategy (NCRIS).")
 
 # The related-identifier scopes that name THIS SURVEY RECORD rather than something near it. Only
 # `entire` qualifies. A collection row names the parent, a raw_packed row names the time-series
