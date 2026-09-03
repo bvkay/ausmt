@@ -182,6 +182,11 @@ jobs:
       #   tests/test_epikit_parse_failure_gate.py  the deploy gate over build_report's
       #                                       source_parse_failures, and the rule-8 pin that keeps
       #                                       this list honest for the whole test_epikit_* family
+      #   tests/test_comment_hygiene.py        the comment rule over engine/extract, engine/scripts and
+      #                                       this suite, plus the byte cap on the stylesheet
+      #                                       _pages.py inlines into every emitted page. Reads only
+      #                                       paths under engine/, so it runs unchanged in the image
+      #                                       lanes where portal/, docs/ and .github/ are not shipped.
       # (the 46 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
@@ -269,6 +274,7 @@ jobs:
             tests/test_parse_failure_accounting.py \
             tests/test_reference_coordinate_sign.py \
             tests/test_stations_dropped_gate.py \
+            tests/test_comment_hygiene.py \
             tests/test_ci_check_skips.py \
             | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out
