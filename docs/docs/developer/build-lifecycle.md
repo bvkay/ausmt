@@ -155,6 +155,14 @@ repair without inventing a coordinate.
 The build itself still exits 0 on a refused file, so one malformed legacy file costs its own station
 and never the whole corpus; the verifier is what stops a build that lost a station reaching a swap.
 
+`stations_dropped` is the ledger every drop lands in, whatever refused it: a convention gate, a
+missing coordinate or period, or the reader. Each row carries the source `file` beside the `station`
+and the `reason`, because the only action a drop row can lead to is opening that file and `station`
+is the id the build settled on, which for a third-party release is neither the file's name nor
+usually a substring of it. `file` is not a required property: `scripts/verify.py --data-dir`
+validates a report that is already on disk, and during a rollback that report is one an older engine
+wrote without it.
+
 An `xml_failures` entry means different things by source. An `edi`-sourced station falls back to its
 custodian EDI and loses only its XML download; an `emtfxml`-sourced station has no custodian file
 behind it and serves nothing, and the build removes the two unverified files. Every such entry is also

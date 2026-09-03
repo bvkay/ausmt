@@ -2276,7 +2276,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
     C25: the per-EDI parse runs the convention gates (extract/_conventions.py). A gate FAIL skips
     the station LOUDLY (stderr + a structured drop record); a derotation/warn is carried as
     conditioning-style frame notes. `report`, when given, is a dict the caller owns that collects
-    the survey-scoped gate output: {"stations_dropped": [{station, reason}],
+    the survey-scoped gate output: {"stations_dropped": [{station, file, reason}],
     "frame_notes": {station_id: [note, ...]}} — the main loop feeds these into build_report.json
     (stations_dropped + warnings) and the survey-level NOTICE log. Optional so existing callers
     (tests) are unchanged.
@@ -2336,7 +2336,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                 if report is not None:
                     _why = f"source file unreadable by mt_metadata: {type(e).__name__}: {e}"
                     report.setdefault("stations_dropped", []).append(
-                        {"station": p.stem, "reason": _why})
+                        {"station": p.stem, "file": p.name, "reason": _why})
                     report.setdefault("parse_failures", []).append(
                         {"station": p.stem, "file": p.name,
                          "error": f"{type(e).__name__}: {e}"})
@@ -2351,7 +2351,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             print(f"  GATE FAIL {p.name} [{_sk['gate']}]: {_sk['reason']}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": _sk.get("station") or p.stem,
+                    {"station": _sk.get("station") or p.stem, "file": p.name,
                      "reason": f"[{_sk['gate']}] {_sk['reason']}"})
             continue
         r, tf, srow = parsed["record"], parsed["tf"], parsed["sci"]
@@ -2426,7 +2426,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                   f"(malformed header or unreadable transfer function)", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": r.get("id") or p.stem,
+                    {"station": r.get("id") or p.stem, "file": p.name,
                      "reason": "no coordinates/periods recovered by mt_metadata"})
             continue
         r["survey"] = survey_label
@@ -2539,7 +2539,7 @@ def process_mth5(h5_paths, survey_label, org, slug, report=None):
                     print(f"  SKIP {r.get('id')} in {h5.name}: no coordinates/periods in MTH5", file=sys.stderr)
                     if report is not None:
                         report.setdefault("stations_dropped", []).append(
-                            {"station": str(r.get("id") or h5.stem),
+                            {"station": str(r.get("id") or h5.stem), "file": h5.name,
                              "reason": "no coordinates/periods in MTH5"})
                     continue
                 r["survey"] = survey_label
@@ -2554,7 +2554,8 @@ def process_mth5(h5_paths, survey_label, org, slug, report=None):
             print(f"  MTH5 READ FAIL {h5.name}: {e}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": h5.stem, "reason": f"MTH5 read failed: {type(e).__name__}"})
+                    {"station": h5.stem, "file": h5.name,
+                     "reason": f"MTH5 read failed: {type(e).__name__}"})
             continue
     _disambiguate(stations, slug)   # keep same-station re-processings as distinct variant records
     return stations, tf_rows, sci_rows
@@ -2690,7 +2691,7 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
                   f"(malformed EMTF XML or unreadable transfer function)", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": r.get("id") or p.stem,
+                    {"station": r.get("id") or p.stem, "file": p.name,
                      "reason": "no coordinates/periods recovered from EMTF XML"})
             continue
         r["survey"] = survey_label
@@ -2730,7 +2731,8 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
             print(f"  GATE FAIL {p.name} [rotation-frame]: {_fail}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": r["id"], "reason": f"[rotation-frame] {_fail}"})
+                    {"station": r["id"], "file": p.name,
+                     "reason": f"[rotation-frame] {_fail}"})
             continue
         # C25 Gate 2 (sign convention) is format-agnostic -- it reads the SERVED components, so the
         # EMTF-XML path runs the identical check the EDI path does. A coherent quadrant flip FAILs
@@ -2740,7 +2742,8 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
             print(f"  GATE FAIL {p.name} [sign-convention]: {_ck['detail']}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": r["id"], "reason": f"[sign-convention] {_ck['detail']}"})
+                    {"station": r["id"], "file": p.name,
+                     "reason": f"[sign-convention] {_ck['detail']}"})
             continue
         _frame["convention_check"] = _ck
         r["frame"] = _frame
@@ -5970,9 +5973,12 @@ def _main_build(argv=None):
                 f"bytes at all")
         build_report_surveys[slug] = {
             "stations_built": len(stations),
-            # STRUCTURED drops ({station, reason}): the C25 convention-gate skips, the stations with
-            # no recoverable coordinates or periods, and - since the GDS readers lane - the source
-            # files mt_metadata could not read at all, which until then dropped silently.
+            # STRUCTURED drops ({station, file, reason}): the C25 convention-gate skips, the stations
+            # with no recoverable coordinates or periods, and - since the GDS readers lane - the
+            # source files mt_metadata could not read at all, which until then dropped silently.
+            # `file` is the SOURCE FILE NAME. A drop row is the whole record for a station the corpus
+            # does not publish, and `station` is the id the build settled on, which for a third-party
+            # release is not the file's name and often not a substring of it.
             "stations_dropped": list(_gate_report.get("stations_dropped", [])),
             # Per-station record of the source files the reader could not read AND could not rescue
             # from a normalised copy: the file, and what the reader said about it. The negative twin

@@ -8,13 +8,15 @@ silence covered ninety-five files and four whole surveys, and the corpus validat
 items for it.
 
 Two ledgers, because they answer different questions. `stations_dropped` answers "which stations
-are not here", alongside every other drop, and is where counts are read. `source_parse_failures`
-answers "which FILE, and what did the reader say" - the negative twin of `source_parse_fallbacks`,
-which records the files a normalised reparse rescued. `stations_dropped` rows are {station, reason}
-under `additionalProperties: false` and have no room for a file name or an error class, which is
-why the second key exists rather than a widened first one.
+are not here", alongside every other drop, and is where counts are read; every row names the source
+file beside the station, because the only action a drop row can lead to is opening that file and
+`station` is the id the build settled on, not a path. `source_parse_failures` answers "what did the
+READER say" - the negative twin of `source_parse_fallbacks`, which records the files a normalised
+reparse rescued. The reader's own error is what stays exclusive to it: a drop row is one line in a
+build log and a pydantic traceback is not one, and a gate refusal has no reader error at all.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -36,6 +38,32 @@ REAL = REPO / "data" / "sample-survey" / "transfer_functions" / "edi" / "Vulcan_
 # the file whose failure the build must report rather than repair.
 UNREADABLE = b">HEAD\n  DATAID=\"NOPE\"\n  LAT=-30.0\n  LONG=136.0\n>END\n"
 
+_IMAG_Z_BLOCKS = ("ZXXI", "ZXYI", "ZYXI", "ZYYI")
+_NUM = re.compile(r"-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?")
+
+
+def _conjugated(text):
+    """The in-repo clean station with every imaginary Z block negated, i.e. Z -> conj(Z).
+
+    A coherent quadrant flip in BOTH off-diagonals is exactly what C25's sign-convention gate
+    refuses to serve (the e^{+iwt} against e^{-iwt} sense), so this is the smallest honest fixture
+    for a GATE drop, as opposed to the unreadable-file drop above. Only the four imaginary data
+    blocks are rewritten: the header and the rotation blocks are untouched, so the frame gate ahead
+    of it still passes and the station drops for the one reason under test. The tests that use it
+    assert that precondition rather than assuming it."""
+    out, in_block = [], False
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s.startswith(">"):
+            token = s[1:].split()[0].upper() if len(s) > 1 else ""
+            in_block = token in _IMAG_Z_BLOCKS
+            out.append(ln)
+        elif in_block and s:
+            out.append(_NUM.sub(lambda m: f"{-float(m.group()): .9E}", ln))
+        else:
+            out.append(ln)
+    return "\n".join(out) + "\n"
+
 
 def _survey(tmp_path, slug="mixed", with_good=True):
     pkg = tmp_path / "surveys" / slug
@@ -48,6 +76,23 @@ def _survey(tmp_path, slug="mixed", with_good=True):
     (edir / "unreadable.edi").write_bytes(UNREADABLE)
     if with_good:
         (edir / REAL.name).write_bytes(REAL.read_bytes())
+    return pkg
+
+
+def _gate_survey(tmp_path, slug="gated", name="a-contractors-file-name.edi"):
+    """A survey whose second station is refused by the sign-convention gate, under a FILE NAME that
+    appears nowhere in its own header (the fixture's DATAID is "A1"). That mismatch is the point:
+    it is the shape a third-party release has, and it is what makes the drop row's `file` field
+    carry information its `station` field cannot."""
+    pkg = tmp_path / "surveys" / slug
+    edir = pkg / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    (pkg / "survey.yaml").write_text(
+        f"schema_version: \"0.1\"\nname: Gate Drop\nslug: {slug}\ncountry: Australia\n"
+        "organisation: Test Org\naccess: open\nlicense: CC-BY-4.0\n"
+        "abstract: Convention-gate drop accounting fixture survey.\n", encoding="utf-8")
+    (edir / REAL.name).write_bytes(REAL.read_bytes())
+    (edir / name).write_text(_conjugated(REAL.read_text(encoding="latin-1")), encoding="latin-1")
     return pkg
 
 
@@ -68,6 +113,42 @@ def test_an_unreadable_source_file_is_named_in_the_drop_ledger(tmp_path):
     drops = entry["stations_dropped"]
     assert [d["station"] for d in drops] == ["unreadable"], drops
     assert "unreadable by mt_metadata" in drops[0]["reason"], drops[0]
+
+
+def test_a_gate_drop_names_the_source_file_beside_the_station(tmp_path):
+    """FAILS against the pre-change engine: a station refused by the sign-convention gate is
+    recorded as {station, reason} only, and `station` is the id the build settled on, not a path.
+
+    A drop row is the whole record for a station the corpus does not publish, and the only action
+    it can lead to is opening the source file. On the GSSA Roxby Downs 2018 release that is not a
+    lookup a curator can do in their head: the withheld station is RD18-188e and the file is
+    188_S__2.edi, and nothing in the row connects them. `source_parse_failures` carries a file name
+    for the reader's own refusals, but a GATE drop writes no row there at all, so for the drops the
+    convention gates make there is no ledger that names the file. This closes that."""
+    _gate_survey(tmp_path)
+    entry = _build(tmp_path, slug="gated")
+    assert entry["stations_built"] == 1, "the clean twin must still build"
+    drops = entry["stations_dropped"]
+    assert len(drops) == 1, drops
+    assert "[sign-convention]" in drops[0]["reason"], drops[0]
+    assert drops[0]["station"] == "A1", "precondition: the row names the DATAID, not the file"
+    assert drops[0]["file"] == "a-contractors-file-name.edi", drops[0]
+
+
+def test_every_drop_row_names_its_source_file(tmp_path):
+    """The field is a property of the LEDGER, not of one drop path. `process_edis` and
+    `process_emtfxml` write a drop row from several places (the unreadable file, the gate refusals,
+    the station with no recoverable coordinates or periods), and a row that omits the file is worse
+    than one that never carried it: a consumer cannot tell 'no file' from 'this drop has none'.
+    Both fixture surveys are swept, so a new drop path that forgets the field is caught here."""
+    _survey(tmp_path)
+    _gate_survey(tmp_path)
+    for slug in ("mixed", "gated"):
+        entry = _build(tmp_path, slug=slug)
+        assert entry["stations_dropped"], slug
+        for row in entry["stations_dropped"]:
+            assert row.get("file"), (slug, row)
+            assert row["file"].endswith(".edi"), (slug, row)
 
 
 def test_the_failure_carries_the_file_and_the_readers_own_error(tmp_path):
@@ -119,6 +200,7 @@ def test_the_report_still_validates_against_its_own_schema(tmp_path):
     properties, so this both proves the schema was updated and that nothing else drifted."""
     jsonschema = pytest.importorskip("jsonschema")
     _survey(tmp_path)
+    _gate_survey(tmp_path)     # both drop shapes in the one report the schema must accept
     out = tmp_path / "out"
     rc = build_portal.main(["--surveys", str(tmp_path / "surveys"), "--out", str(out),
                             "--no-validate", "--products", str(out / "products")])
@@ -128,6 +210,14 @@ def test_the_report_still_validates_against_its_own_schema(tmp_path):
     items = SCHEMA["definitions"]["survey"]["properties"]["source_parse_failures"]["items"]
     assert items["required"] == ["station", "file", "error"]
     assert items["additionalProperties"] is False
+    # The drop row learned `file`. It is NOT in `required`: verify.py --data-dir validates a
+    # build_report that is already ON DISK, which during a rollback or a pre-swap check is one an
+    # older engine wrote with no file names in it, and a required field would fail that report for
+    # a gap the current build cannot have. What the current build emits is pinned above instead.
+    drop_items = SCHEMA["definitions"]["survey"]["properties"]["stations_dropped"]["items"]
+    assert drop_items["required"] == ["station", "reason"]
+    assert drop_items["additionalProperties"] is False
+    assert "file" in drop_items["properties"]
 
 
 # An .edi whose DEFINEMEAS declares an impossible reference latitude: mt_metadata's model refuses it
