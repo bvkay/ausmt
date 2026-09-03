@@ -228,7 +228,15 @@ function routeFromHash(){
     // Called directly, as filters.js does: focusSurvey is a top-level declaration in drawer.js,
     // which index.html loads before this file, so a typeof guard here could never be false and
     // would only turn a real regression into a silent no-op.
-    if(sv){openSurvey(sv);focusSurvey(sv);}
+    // Idempotent for the same reason the station branch above is: openSurvey WRITES this hash, so the
+    // browser hands it straight back. Re-running the route then re-renders the record and, worse, re-frames
+    // the map, so opening a survey's record from the Surveys grid threw the reader onto the map view a tick
+    // later. A drawer already showing this survey has nothing to route to.
+    if(sv){
+      const showing=_drawerSubject&&_drawerSubject.kind==="survey"&&_drawerSubject.sv===sv&&
+                    drawer.classList&&drawer.classList.contains("open");
+      if(!showing){openSurvey(sv);focusSurvey(sv);}
+    }
     return;}                                           // unknown slug: fall through, no crash, no view change
   // hash fell through (e.g. browser Back to ''): if a full-width collection detail is showing, restore a tab view
   if(curView==="collection")setView("map");}

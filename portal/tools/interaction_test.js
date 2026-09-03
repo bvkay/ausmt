@@ -1802,6 +1802,16 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "route: re-routing to the station the drawer already shows must not re-render it and reset the reader's tab, on " +
     A.curDrawerTab());
   A.closeDrawer();
+  // The SURVEY route carries the same defect with a louder symptom: openSurvey writes #/survey/<slug>, and
+  // routing that hash back re-opens the record AND frames its stations on the map, so opening a survey's
+  // record from the Surveys grid threw the reader onto the map view a tick later.
+  A.setView("surveys");
+  A.openSurvey(A.tourDemoSurvey());
+  A.routeFromHash();
+  ok(A.curView() === "surveys",
+    "route: re-routing to the survey the drawer already shows must not re-frame the map, on " + A.curView());
+  A.closeDrawer();
+  A.setView("map");
 
   const _demoSv = A.tourDemoSurvey();
   ok(_demoSv === "Alpha Survey",
