@@ -760,6 +760,12 @@ def _site_footer(build=None) -> str:
     without taking a runtime dependency on the organisation's own host. Its display height is CSS;
     the file ships at the brand kit's own resolution.
 
+    BOTH ANCHORS TO THAT ADDRESS OPEN IN A NEW TAB, and neither hands the opened page a handle on
+    this one: target="_blank" grants window.opener, from which the opened document could navigate
+    the tab it came from, and noreferrer keeps a reader's path through the catalogue out of a third
+    party's logs. The MTCAT link takes no target, so a new tab means one thing here: the link leaves
+    AusMT. The pair is spelt exactly as the portal's six documents spell it.
+
     Releases and About this build left this region with the ruling. Neither is lost: /about.html
     carries the running build's identity, the software licence and the route to the citable
     releases in its own body, which is the page the retired control pointed at anyway.
@@ -776,11 +782,13 @@ def _site_footer(build=None) -> str:
             f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">Machine-readable record '
             f'(MTCAT JSON) {_ARROW_OUT}</a></div>\n'
             '<div class="fzone fcenter">AusMT is enabled by AuScope &#183; '
-            '<a href="https://www.auscope.org.au">www.auscope.org.au</a> &#183; '
+            '<a href="https://www.auscope.org.au" target="_blank" '
+            'rel="noopener noreferrer">www.auscope.org.au</a> &#183; '
             "&#169; 2026 AuScope and the AusMT contributors &#183; "
             "Data licences vary by survey</div>\n"
             '<div class="fzone fright">'
-            '<a class="orglogo" href="https://www.auscope.org.au" rel="noopener">'
+            '<a class="orglogo" href="https://www.auscope.org.au" target="_blank" '
+            'rel="noopener noreferrer">'
             '<img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
             'width="1919" height="325"></a></div>\n'
             "</footer>\n")
