@@ -1061,13 +1061,20 @@ def test_the_basemap_credit_sits_in_the_spa_footer_and_on_no_other_surface():
 
     assert _CREDIT_RE.search(_index_text()[:_index_text().index("\n<footer>")]) is None, (
         "the credit belongs to the footer; it must not also be drawn over the map")
+    # THE OTHER SURFACES, held by the LINK and not only by the class: a page could carry the
+    # copyright href without the class and still be making the claim.
+    osm = MAP_CREDIT_LINKS[0][0]
     for name in _portal_pages():
         if name == "index.html":
             continue
-        assert MAP_CREDIT_CLASS not in (ROOT / name).read_text(encoding="utf-8"), (
-            f"{name}: this surface draws no map, so it credits no basemap")
-    assert MAP_CREDIT_CLASS not in _pages_text(), (
-        "the generated tier draws no map in its footer, so it credits no basemap")
+        other = (ROOT / name).read_text(encoding="utf-8")
+        assert MAP_CREDIT_CLASS not in other and osm not in other, (
+            f"{name}: this surface draws no map, so it credits no basemap and carries no link to "
+            f"{osm}")
+    eng = _pages_text()
+    assert MAP_CREDIT_CLASS not in eng and osm not in eng, (
+        f"the generated tier draws no map in its footer, so it credits no basemap and carries no "
+        f"link to {osm}")
 
 
 def test_the_map_carries_no_attribution_control():
