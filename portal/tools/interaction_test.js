@@ -5089,20 +5089,57 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "discoverability: the WebSite publisher must stay AuScope");
   }
 
-  // ---- Map chrome: muted basemap + soft attribution + Search Console ownership --------------------
+  // ---- Map chrome: muted basemap + NO attribution control + Search Console ownership --------------
   // The protomaps light flavour renders a stronger sea blue than the portal's palette wants, and the
   // bundle exposes no per-colour flavour override, so the muting is a CSS filter scoped to the tile
-  // pane ONLY (station overlays render in other panes and must keep full colour). The attribution
-  // stays readable but recedes. The google-site-verification meta proves domain ownership to Search
-  // Console; the content value is the owner's token, pinned by shape so a token rotation is a
-  // one-line index.html edit.
+  // pane ONLY (station overlays render in other panes and must keep full colour). The google-site-
+  // verification meta proves domain ownership to Search Console; the content value is the owner's
+  // token, pinned by shape so a token rotation is a one-line index.html edit.
+  //
+  // THE ATTRIBUTION CONTROL IS GONE FROM THE MAP at the owner's ask, and this is where that is
+  // proven against a DRIVEN map rather than against source text: the map is built and rendered in
+  // this document, so a control Leaflet still mounted would be in the DOM here. The credit itself
+  // did not go: it is a licence obligation (ODbL basemap data, Protomaps tiles) and it now sits in
+  // the footer, which is directly beneath the map and always on screen. Both halves are asserted
+  // together, because either alone is the defect: the corner line without the footer line is the
+  // owner's complaint, and the footer line without the corner removed is the same credit twice.
   {
     ok(/#map \.leaflet-tile-pane\{filter:[^}]*saturate\(/.test(html),
       "map-chrome: index.html must mute the basemap via a saturate filter on the tile pane only");
     ok(!/leaflet-overlay-pane\{[^}]*filter/.test(html) && !/#map\{[^}]*filter/.test(html),
       "map-chrome: the mute filter must never widen to the overlay panes or the whole map");
-    ok(/#map \.leaflet-control-attribution\{opacity:\.7\}/.test(html),
-      "map-chrome: the attribution control must sit at 70 percent opacity");
+    ok(!/leaflet-control-attribution/.test(html),
+      "map-chrome: index.html must not style an attribution control the map no longer mounts");
+
+    // The map RENDERS: a Leaflet container with its pane stack, and the station dots this fixture
+    // supplies drawn into it. Without this the assertion below would pass on a map that failed to
+    // build at all, which is the one way "no attribution control" is true and worthless.
+    const _mapEl = doc.getElementById("map");
+    ok(_mapEl && _mapEl.classList.contains("leaflet-container"),
+      "map-chrome: the map must still build a Leaflet container");
+    ok(doc.querySelectorAll("#map .leaflet-map-pane").length === 1 &&
+       doc.querySelectorAll("#map .leaflet-tile-pane").length === 1 &&
+       doc.querySelectorAll("#map .leaflet-overlay-pane").length === 1,
+      "map-chrome: the rendered map must carry its pane stack");
+    ok(doc.querySelectorAll("#map .leaflet-control-attribution").length === 0,
+      "map-chrome: the rendered map must mount NO attribution control, and so print no Leaflet prefix");
+
+    // The credit, in the footer, under the acknowledgement, with both sources linked and both links
+    // leaving the tab the way every other outbound anchor on this site does.
+    const _credit = doc.querySelector("footer .fcenter .mapcredit");
+    ok(_credit, "map-chrome: the SPA footer must carry the basemap credit under the acknowledgement");
+    ok(_credit.textContent.replace(/\s+/g, " ").trim() ===
+       "Map data \u00a9 OpenStreetMap contributors, tiles \u00a9 Protomaps",
+      "map-chrome: the credit wording is the ruling's, got " + JSON.stringify(_credit.textContent));
+    const _cl = [..._credit.querySelectorAll("a")];
+    ok(_cl.length === 2 &&
+       _cl[0].getAttribute("href") === "https://www.openstreetmap.org/copyright" &&
+       _cl[1].getAttribute("href") === "https://protomaps.com",
+      "map-chrome: the credit links its two sources, OSM's copyright page then Protomaps");
+    ok(_cl.every(a => a.getAttribute("target") === "_blank" &&
+                      a.getAttribute("rel") === "noopener noreferrer"),
+      "map-chrome: a credit link leaves the site, so it opens in a new tab and hands it no opener");
+
     const _gsv = doc.querySelector('meta[name="google-site-verification"]');
     ok(_gsv && /^[A-Za-z0-9_-]{20,}$/.test(_gsv.getAttribute("content") || ""),
       "map-chrome: index.html must carry the google-site-verification meta with a token-shaped content");
