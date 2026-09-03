@@ -359,11 +359,11 @@ def test_every_chrome_surface_carries_the_auscope_mark_exactly_once():
         assert ORG_IMG_RULE in text, f"{where}: the mark must carry {ORG_IMG_RULE!r}"
 
 
-# The FILE, bounded per page. Every pin above is scoped to a slot: to the .auscope-logo class, to
-# the parent mark's whole anchor literal, or to the carved-out page's header alone. None of them
-# says how often the IMAGE may be named, so a second loose copy of it, in a body, in a url() or as a
-# preload, satisfies the lot. Counting the filename is what makes one mark per page a statement
-# about the image rather than about one spelling of it in one slot.
+# The FILE, bounded per page. Every pin above is scoped to a SLOT: to the .auscope-logo class the
+# identity used to use, or to the parent mark's whole anchor literal. Neither says how often the
+# IMAGE may be named, so a second loose copy of it, in a body, in a url() or as a preload, satisfies
+# the lot. Counting the filename is what makes one mark per page a statement about the image rather
+# than about one spelling of it in one slot.
 ORG_ASSET = ORG_SRC.rsplit("/", 1)[-1]
 
 # One appearance per chrome page: the parent mark in the right zone, and nowhere else. It was one
