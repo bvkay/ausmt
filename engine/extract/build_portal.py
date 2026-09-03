@@ -2125,7 +2125,10 @@ def _parse_one_edi(p):
     # read this file from a NORMALISED TEMPORARY COPY (its >INFO JSON trailing-delimiter defect; see
     # _mtm). Parse-only: that copy is destroyed inside the read, so `p` -- the custodian's file --
     # remains the ONLY path this build ever copies to the served tree or hands to sha256().
-    tfobj, _parse_fallback = mtm.read_with_fallback(p)
+    # `_parse_facts` carries the EPI-KIT conditioning the reader applies to a temporary copy BEFORE
+    # reading (see _mtm._pre_read_conditioning): which data section the transfer function came from
+    # when the file carried more than one. An absent key means absent conditioning.
+    tfobj, _parse_fallback, _parse_facts = mtm.read_with_parse_facts(p)
     _raw = ep.read_norm(p)   # raw EDI text: frame evidence + coord-QC + processing-metadata scrape
     _did = cat.grab(_raw, "DATAID")
 
@@ -2149,6 +2152,12 @@ def _parse_one_edi(p):
     _frame_notes = list(_disp.notes)
 
     r = mtm.record_from_tf(tfobj, p.name)
+    # The EPI-KIT section of record: which of the file's data sections these numbers came from, and
+    # how many were left behind. Rides the record (so it reaches station.json and build_report) and
+    # the C18 cache with the rest of the parse; ABSENT for a file carrying one section, which is
+    # every EDI in the corpus, so an ordinary station's record is unchanged key for key.
+    if _parse_facts.get("section_selected"):
+        r["section_selected"] = dict(_parse_facts["section_selected"])
     # mt_metadata reads only the HEAD coordinate, so run the INFO-vs-HEAD DMS-bug detection +
     # the processing-metadata scrape on the raw EDI text (kept helpers; not a TF re-parse).
     # Curator signal only (C3): the SOURCE EDI (as submitted/served) still carries whatever the
@@ -2472,6 +2481,12 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             if _fb:
                 report.setdefault("parse_fallbacks", []).append(
                     {"station": _r["id"], "file": _p.name, "defect": _fb})
+            # The section of record stays ON the record (station.json publishes it) and is ALSO
+            # collected here, keyed by the FINAL id, so build_report answers "which solution did this
+            # corpus publish" without opening every station document.
+            if _r.get("section_selected"):
+                report.setdefault("section_selections", []).append(
+                    {"station": _r["id"], "file": _p.name, **_r["section_selected"]})
     else:
         for (_p, _r) in stations:
             _r.pop("_frame_notes", None)
@@ -3215,8 +3230,12 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
         # THIRD-PARTY ingest provenance the custodian declared in survey.yaml's station_ids block. It
         # rides AusMT's record because the source EDI is served byte-identical and is never rewritten.
         # ADDITIVE + absent-means-absent: a survey that declares none gains no key at all.
+        # `section_selected` is a PARSE provenance fact and belongs beside input_file: it says which
+        # of a multi-section source file's data sections these numbers came from. Additive and
+        # absent-means-absent, so a single-section source (every EDI in the corpus) gains no key.
         "provenance": {**prov, "input_file": p.name, "input_sha256": sha256(p),
-                       **({"source": r["source_provenance"]} if r.get("source_provenance") else {})},
+                       **({"source": r["source_provenance"]} if r.get("source_provenance") else {}),
+                       **({"section_selected": r["section_selected"]} if r.get("section_selected") else {})},
         # coordinate QC: present only when the parse flagged something, so consumers can surface
         # "treat with caution" without implying anything about unflagged stations.
         "coordinate_qc": ({"flag": r.get("coord_flag"),
@@ -5880,6 +5899,20 @@ def _main_build(argv=None):
         # which is what the echo cannot say.
         _parse_failure_rows = list(_gate_report.get("parse_failures", []))
         _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
+        # EPI-KIT section of record: a counted survey WARNING as well as the structured ledger, same
+        # discipline as the fallbacks below. The file parses either way, so nothing here is a repair;
+        # what the operator must be told is that these stations' published transfer function is ONE
+        # of several solutions the file carries, and which one.
+        _section_rows = list(_gate_report.get("section_selections", []))
+        if _section_rows:
+            _sect_names = sorted({_row["sectid"] for _row in _section_rows})
+            _survey_warnings.append(
+                f"{len(_section_rows)} source file(s) carry more than one data section; the "
+                f"published transfer function is the section of record for each "
+                f"({mtm.SECTION_OF_RECORD_RULE}), and "
+                f"{sum(_row['sections_dropped'] for _row in _section_rows)} other section(s) were "
+                f"not read [{', '.join(_sect_names[:8])}"
+                f"{', ...' if len(_sect_names) > 8 else ''}]")
         if _parse_fallback_rows:
             # Compact defect clause: the row carries the full reason; the counted warning names the
             # class (everything before the first "; ", which is where the reason strings start
@@ -5947,6 +5980,11 @@ def _main_build(argv=None):
             # fact, not a repair log: the parse came from a normalised temporary copy that no longer
             # exists, while the served bytes and the sha256 columns are the custodian's source file.
             "source_parse_fallbacks": _parse_fallback_rows,
+            # Per-station record of which data section each multi-section source file's transfer
+            # function came from, and how many sections were left behind. Written ONLY when it
+            # fires: every EDI in the corpus carries one section, so the key is absent for all of
+            # them and their reports are unchanged.
+            **({"source_section_selections": _section_rows} if _section_rows else {}),
             # The INGEST SOURCE per station (owner ruling 2026-08-03): {station_id: edi|mth5|emtfxml}.
             # A provenance fact, not a summary: for a mixed survey it is the only place that says
             # which stations the EDI precedence rule resolved to EDI and which came from EMTF XML.

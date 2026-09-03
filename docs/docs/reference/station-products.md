@@ -381,6 +381,18 @@ is reported separately under `file_written_by` rather than being published as th
 | Example | `{ "original_filename": "92_S1.edi", "source_record_id": "2781110A", "acquisition_stage": "1" }` |
 | Note | Present only for a station whose survey declares a mapping-form `station_ids.map` entry carrying provenance keys, which the [survey.yaml reference](survey-yaml.md#162-station_idsmapsource-provenance) defines. `original_filename` is derived from the map key rather than declared, so it always names the file the bytes came from. AusMT does not interpret these values; they are the custodian's, and they travel in AusMT's own records only. The source file itself is served byte for byte and is never rewritten. |
 
+#### 1.11.2 provenance.section_selected
+
+| | |
+|---|---|
+| Definition | Which data section of a multi-section source file this station's transfer function was read from, and how many sections were left unread. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | object |
+| Default | absent, which is every station whose source file carries one data section |
+| Example | `{ "sectid": "Wp01_avg", "sections_dropped": 100 }` |
+| Note | An EPI-KIT processor writes its solution twice over: one `>=MTSECT` block carries the averaged solution, named `<DATAID>_avg`, and after it come the per-frequency realisations `XPR-0` to `XPR-n`. The averaged block is the transfer function of record. AusMT reads the section of record and states which one it was: `<DATAID>_avg`, else the section named for the `DATAID`, else the first section. The selection is applied to a temporary copy carrying that section alone, so the served file stays byte-identical to the custodian's and `input_sha256` still hashes it. A station whose source names no such stack of sections carries no member at all. |
+
 ### 1.12 coordinate_qc
 
 | | |

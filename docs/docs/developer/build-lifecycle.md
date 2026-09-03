@@ -141,6 +141,10 @@ generated, so the digest of the file the custodian supplied matches neither of i
 the served file, drops its manifest row and raises a counted warning. `source_parse_fallbacks` lists
 the files read through a normalised temporary copy (the mt_metadata 1.0.9 `>INFO` JSON defect); the
 copy is never served or hashed, and the custodian's bytes are what is served.
+`source_section_selections` is written only where it fires: it names, per station, which `>=MTSECT`
+section of a multi-section source file the published transfer function came from and how many
+sections went unread, because an EPI-KIT file carries an averaged solution of record and then the
+per-frequency realisations that produced it.
 
 An `xml_failures` entry means different things by source. An `edi`-sourced station falls back to its
 custodian EDI and loses only its XML download; an `emtfxml`-sourced station has no custodian file

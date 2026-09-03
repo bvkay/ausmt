@@ -319,6 +319,198 @@ def _is_single_period_defect(exc: BaseException) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------------------------
+# THE EPI-KIT SECTION OF RECORD.
+#
+# An EPI-KIT file records its solution twice over: one `>=MTSECT` block carries the averaged
+# solution, named <DATAID>_avg, and after it come the per-frequency realisations the processor's own
+# "EstimationsPerFrequency" setting produced, named XPR-0 .. XPR-n. The averaged block is the
+# transfer function of record; the realisations are its inputs, and the late ones hold little but the
+# EMPTY sentinel.
+#
+# mt_metadata reads a multi-section file by scanning EVERY data block in it and REBINDING
+# data_dict[key] at each block header (io/edi/edi.py::_read_mt), so the parse silently returns the
+# LAST section in the file. Measured over the three GSSA EPI-KIT packages, 932 files, 2026-09-03:
+# the reader returned the averaged block 0 times of 75 sampled and the last realisation 75 times; on
+# copper-coast-2020 that is 440 of the 3847 impedance values the averaged blocks hold, and four
+# stations publishing no resistivity at all.
+#
+# THE SELECTION RULE: <DATAID>_avg, else the section named for the DATAID, else the FIRST section.
+# The last clause is the honest default for a file whose sections name no solution of record -- the
+# first section is where a writer puts the answer -- and it is never "whichever one the parser
+# happened to finish on".
+#
+# Applied ON A TEMPORARY COPY, exactly like the >INFO delimiter repair: the copy keeps the head, the
+# info block, the measurement definitions and the chosen section alone. D1 stands: the served bytes
+# are the custodian's file.
+SECTION_OF_RECORD_RULE = "<DATAID>_avg, else the section named for the DATAID, else the first"
+
+_SECTID_RE = re.compile(rb"^\s*SECTID\s*=\s*(.*?)\s*$", re.IGNORECASE)
+_DATAID_RE = re.compile(rb"^\s*DATAID\s*=\s*(.*?)\s*$", re.IGNORECASE)
+
+
+def _unquote(value: bytes) -> str:
+    """The value as mt_metadata sees it: io/tools.py::_validate_edi_lines strips `"` and `'` from
+    every line before any section parser runs, so quoting is not part of any identifier."""
+    return value.replace(b'"', b"").replace(b"'", b"").strip().decode("utf-8", "replace")
+
+
+def _is_section_header(stripped: bytes) -> bool:
+    """True for a line that OPENS an EDI data section. mt_metadata's own test (data_section.py::
+    get_data) is `">=" in line and "sect" in line.lower()`, which also matches a line carrying that
+    pair anywhere -- an >INFO note, for instance. This requires the `>=` to LEAD the stripped line,
+    which every real section header does. The two only disagree on a file whose prose fools the
+    reader, and there this test finds FEWER sections, so the conditioning below stands down and the
+    file reads exactly as it does today."""
+    return stripped.startswith(b">=") and b"sect" in stripped.lower()
+
+
+def _head_dataid(lines: list[bytes]) -> str | None:
+    """The DATAID written in the >HEAD block, or None. Block bounds mirror header.py::
+    get_header_list (start: a line containing ">" and "head"; end: the next line starting with ">"),
+    so a DATAID-shaped line anywhere else in the file is not mistaken for the header's."""
+    in_head = False
+    for line in lines:
+        stripped = line.strip()
+        if not in_head:
+            if stripped.startswith(b">") and b"head" in stripped.lower():
+                in_head = True
+            continue
+        if stripped.startswith(b">"):
+            return None
+        m = _DATAID_RE.match(stripped)
+        if m:
+            return _unquote(m.group(1))
+    return None
+
+
+def _sections(lines: list[bytes]) -> list[tuple]:
+    """Every data section as (sectid_or_None, start_line, stop_line). A section runs from its header
+    to the next section header, or to the `>END` marker, or to the end of the file."""
+    starts = [i for i, ln in enumerate(lines) if _is_section_header(ln.strip())]
+    end = next((i for i, ln in enumerate(lines) if ln.strip().upper().startswith(b">END")),
+               len(lines))
+    out = []
+    for n, start in enumerate(starts):
+        stop = starts[n + 1] if n + 1 < len(starts) else (end if end > start else len(lines))
+        sectid = None
+        for ln in lines[start:stop]:
+            m = _SECTID_RE.match(ln.strip())
+            if m:
+                sectid = _unquote(m.group(1))
+                break
+        out.append((sectid, start, stop))
+    return out
+
+
+def section_of_record(raw: bytes) -> tuple:
+    """(sectid, index, total) for `raw` under SECTION_OF_RECORD_RULE. `total` is how many data
+    sections the file carries, so a caller can tell "one section, nothing to choose" from "chose the
+    first of several". (None, -1, 0) for a file with no data section at all."""
+    lines = raw.splitlines(keepends=True)
+    sections = _sections(lines)
+    if not sections:
+        return (None, -1, 0)
+    dataid = _head_dataid(lines)
+    if dataid:
+        wanted = dataid.strip().lower()
+        for preferred in (wanted + "_avg", wanted):
+            for i, (sectid, _a, _b) in enumerate(sections):
+                if sectid is not None and sectid.strip().lower() == preferred:
+                    return (sectid, i, len(sections))
+    return (sections[0][0], 0, len(sections))
+
+
+def keep_single_section(raw: bytes, sectid) -> bytes:
+    """Return `raw` carrying the section named `sectid` and no other, every other byte exactly as it
+    was: the head, the info block and the measurement definitions ahead of the first section are
+    kept, the other sections' metadata and data blocks are dropped, and the `>END` marker and
+    anything after it are kept. Operates on BYTES and never re-encodes.
+
+    Returns the ORIGINAL object when there is nothing to drop (one section, or a name this file does
+    not carry), which is what lets the caller refuse to condition a file that does not need it."""
+    lines = raw.splitlines(keepends=True)
+    sections = _sections(lines)
+    if len(sections) < 2:
+        return raw
+    chosen = next(((a, b) for sid, a, b in sections if sid == sectid), None)
+    if chosen is None:
+        return raw
+    end = next((i for i, ln in enumerate(lines) if ln.strip().upper().startswith(b">END")),
+               len(lines))
+    tail = lines[end:] if end >= sections[-1][1] else []
+    return b"".join(lines[:sections[0][1]] + lines[chosen[0]:chosen[1]] + tail)
+
+
+def _freq_count(raw: bytes, sectid) -> int | None:
+    """How many values the named section's `>FREQ` block carries, counted from the bytes. None when
+    the section carries no such block."""
+    lines = raw.splitlines(keepends=True)
+    for sid, a, b in _sections(lines):
+        if sid != sectid:
+            continue
+        values, reading = 0, False
+        for line in lines[a:b]:
+            stripped = line.strip()
+            if stripped.startswith(b">"):
+                reading = stripped.upper().startswith(b">FREQ")
+                continue
+            if reading:
+                values += len(stripped.split())
+        return values if values else None
+    return None
+
+
+def _assert_section_of_record(p: Path, conditioned: bytes, sectid: str, tf) -> None:
+    """The build-time assertion the refuter asked for: when a file carried more than one section, the
+    parse must have come from the one the rule names, or the station is dropped LOUDLY (the caller
+    records the raise in build_report's source_parse_failures and stations_dropped, and the deploy
+    gate refuses the build). Two independent observables over the conditioned bytes: exactly one
+    section survives and it is the named one, and the parsed frequency count is that section's own.
+
+    BOUNDARY, stated: the frequency count cannot tell two sections of equal length apart, which every
+    EPI-KIT realisation is. It catches a copy that lost or merged blocks, not a mis-selection; the
+    NAME check is what proves the selection, and the per-value proof against a section's own ZXYR
+    block lives in the test suite and in the lane's build evidence, not in every build of every
+    file."""
+    sections = _sections(conditioned.splitlines(keepends=True))
+    if len(sections) != 1 or sections[0][0] != sectid:
+        raise ValueError(
+            f"section-of-record conditioning did not isolate {sectid!r} in {p.name}: the copy carries "
+            f"{[s[0] for s in sections]} (rule: {SECTION_OF_RECORD_RULE})")
+    want = _freq_count(conditioned, sectid)
+    got = int(tf.period.size) if getattr(tf, "period", None) is not None else 0
+    if want is not None and want != got:
+        raise ValueError(
+            f"section-of-record parse of {p.name} returned {got} frequencies where section "
+            f"{sectid!r} declares {want}: the parse did not come from the section it was given")
+
+
+def _pre_read_conditioning(p: Path, raw: bytes):
+    """(conditioned_bytes, facts, reasons) for the EPI-KIT section of record, read off the FILE.
+
+    It is conditioned BEFORE the read, not after a failure, because it never announces itself as
+    one: a multi-section file parses happily and returns the wrong transfer function. The condition
+    is measured with the reader's own section scan instead, which is as narrow as the signature
+    predicates its siblings use.
+
+    Narrow in the same four ways as every other conditioning here: `.edi` only (the caller's guard);
+    only when the measured condition holds; only when the conditioning actually CHANGES the bytes;
+    and, unlike the failure-triggered fallbacks, a conditioned read that fails is NOT quietly
+    replaced by the unconditioned one -- publishing the wrong section silently is the defect, so the
+    station is dropped loudly instead."""
+    facts: dict = {}
+    reasons: list = []
+    conditioned = raw
+    sectid, _index, total = section_of_record(conditioned)
+    if total > 1 and sectid is not None:
+        kept = keep_single_section(conditioned, sectid)
+        if kept is not conditioned:
+            conditioned = kept
+            facts["section_selected"] = {"sectid": sectid, "sections_dropped": total - 1}
+    return conditioned, facts, reasons
+
+
 def _read_once(path: Path):
     tf = TF()
     tf.read(str(path))
@@ -427,8 +619,47 @@ def _read_with_fallback(path: Path):
         raise
 
 
+def _read_with_parse_facts(path: Path):
+    """(TF, fallback_reason_or_None, facts). `_read_with_fallback` preceded by the EPI-KIT
+    conditioning that has to happen BEFORE the reader sees the file (see `_pre_read_conditioning`).
+
+    `facts` is what the build records per station: `section_selected` when the file carried more than
+    one data section. An absent key means absent conditioning, so every file in a corpus of ordinary
+    EDIs yields `{}` and takes the untouched path below, byte for byte as before.
+
+    The reason string stays what it has always meant -- what stopped mt_metadata reading the file at
+    all -- so a section selection does NOT set one: the file read perfectly well, it just answered
+    with the wrong one of its solutions. The two are recorded in different ledgers for that reason.
+    """
+    p = Path(path)
+    if p.suffix.lower() != ".edi":
+        tf, reason = _read_with_fallback(p)
+        return tf, reason, {}
+    raw = p.read_bytes()
+    conditioned, facts, reasons = _pre_read_conditioning(p, raw)
+    if conditioned is raw:
+        tf, reason = _read_with_fallback(p)
+        return tf, reason, facts
+    # The conditioned copy lives in a TemporaryDirectory destroyed before this returns, is never
+    # returned to a caller and never reaches the served tree or the sha256 integrity gate (both of
+    # which take the ORIGINAL path). The three failure-triggered fallbacks still apply to it, so a
+    # file carrying a section stack AND a delimiter defect is still rescued.
+    with tempfile.TemporaryDirectory(prefix="ausmt-edi-epikit-") as scratch_dir:
+        scratch = Path(scratch_dir) / p.name
+        scratch.write_bytes(conditioned)
+        tf, reason = _read_with_fallback(scratch)
+    if facts.get("section_selected"):
+        _assert_section_of_record(p, conditioned, facts["section_selected"]["sectid"], tf)
+    # mt_metadata records the path it read in TF.fn. Point it back at the custodian's file, exactly
+    # as the delimiter fallback does. NOT guarded -- a failure to scrub is a leak and must be loud.
+    tf.fn = p
+    if reason:
+        reasons.append(reason)
+    return tf, (" + ".join(reasons) if reasons else None), facts
+
+
 def _read(path: Path):
-    return _read_with_fallback(path)[0]
+    return _read_with_parse_facts(path)[0]
 
 
 def read(path: Path):
@@ -439,9 +670,16 @@ def read(path: Path):
 
 
 def read_with_fallback(path: Path):
-    """`read`, plus the reason string when the >INFO delimiter fallback fired (None when it did not),
-    so the build can RECORD per station that a file needed it. Silent repair is not acceptable."""
-    return _read_with_fallback(path)
+    """`read`, plus the reason string when a normalising fallback fired (None when none did), so the
+    build can RECORD per station that a file needed one. Silent repair is not acceptable."""
+    return _read_with_parse_facts(path)[:2]
+
+
+def read_with_parse_facts(path: Path):
+    """`read_with_fallback`, plus the per-file parse facts the build carries into station.json and
+    build_report: which data section the transfer function came from. `{}` for a file that carried
+    one section, which is every EDI in the corpus."""
+    return _read_with_parse_facts(path)
 
 
 def classify(pmin, has_z, has_t):

@@ -120,6 +120,21 @@
             }
           }
         },
+        "source_section_selections": {
+          "type": "array",
+          "description": "per-station record of which data section a MULTI-section source file's transfer function came from, and how many sections were left unread. An EPI-KIT file records its solution twice over: one >=MTSECT block carries the averaged solution named <DATAID>_avg, and after it come the per-frequency realisations XPR-0..XPR-n. mt_metadata rebinds each data block as it meets it, so an unconditioned read returns the LAST section, which is one sparse realisation rather than the transfer function of record. AusMT reads the section of record instead (<DATAID>_avg, else the section named for the DATAID, else the first), from a temporary copy carrying that section alone; the served bytes and the catalogue sha256 are still the custodian's unmodified file. A PROVENANCE fact, not a repair log, and also raised as a counted survey warning. WRITTEN ONLY WHEN IT FIRES: a survey whose files each carry one section (which is every survey in the corpus at the time this was added) carries no such key at all.",
+          "items": {
+            "type": "object",
+            "required": ["station", "file", "sectid", "sections_dropped"],
+            "additionalProperties": false,
+            "properties": {
+              "station": {"type": "string"},
+              "file": {"type": "string", "description": "the supplied file's name"},
+              "sectid": {"type": "string", "description": "the SECTID of the section the transfer function was read from"},
+              "sections_dropped": {"type": "integer", "minimum": 1, "description": "how many other data sections the file carries and this build did not read"}
+            }
+          }
+        },
         "source_integrity": {
           "type": "object",
           "description": "the served-bytes integrity gate for EDI-sourced stations. AusMT serves a custodian's EDI byte for byte and never rewrites it, so each build re-hashes what actually landed in the served tree and compares it to the supplied file. `checked` counts the stations whose bytes were copied, `verified` those whose served copy hashed equal. A mismatch is a GATE, not a note: that station's served file is removed, it gets no manifest row and it serves no bytes at all, and it is also raised as a counted survey warning. Optional for pre-gate reports.",

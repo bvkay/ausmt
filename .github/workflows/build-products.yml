@@ -171,7 +171,12 @@ jobs:
       #                                       their time-series routes from ts_access.json, so this
       #                                       file asserts over a projection surface and the rule
       #                                       below requires it here
-      # (the 36 enumerated above at 2026-08-30, plus tests/test_ci_check_skips.py which gates the
+      #   tests/test_epikit_section_of_record.py  which >=MTSECT section a multi-section EDI's
+      #                                       transfer function comes from. It decides WHICH NUMBERS
+      #                                       every product above carries for such a file, so it
+      #                                       gates this workflow's build step as directly as the
+      #                                       schema tests do
+      # (the 37 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
@@ -251,6 +256,7 @@ jobs:
             tests/test_half_coordinate_guard.py \
             tests/test_coord_resolution_guard.py \
             tests/test_survey_drop_visibility.py \
+            tests/test_epikit_section_of_record.py \
             tests/test_ci_check_skips.py \
             | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out
