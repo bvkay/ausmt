@@ -1793,6 +1793,16 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // step then shows the SAME station's Files pane, and stepping back must re-show it on Response WITHOUT
   // re-opening it - an idempotent enter, because re-opening rewrites the hash and throws away the reader's
   // scroll position.
+  // The same rule stated on its own terms, away from the tour: a station drawer that is already open on the
+  // routed station is left alone, tab and all.
+  A.openStation(A.stIndex("A1"));
+  A.selectDrawerTab("cite");
+  A.routeFromHash();
+  ok(A.curDrawerTab() === "cite",
+    "route: re-routing to the station the drawer already shows must not re-render it and reset the reader's tab, on " +
+    A.curDrawerTab());
+  A.closeDrawer();
+
   const _demoSv = A.tourDemoSurvey();
   ok(_demoSv === "Alpha Survey",
     "demo: the fixture corpus carries no survey at the preferred size, so the demo survey must degrade to " +
@@ -1836,6 +1846,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "files: the Files tab button must read as selected");
   ok(win.location.hash === _hashAtDrawer,
     "files: the Files step must not re-open the station; the hash moved to " + win.location.hash);
+  // The hash the drawer itself wrote arrives back as a hashchange a tick later, and routing it must not
+  // re-render a drawer that is already showing that station: the re-render resets the tab (and the scroll)
+  // under a reader who has just moved off the default panel. Driven through the route directly, because the
+  // event's timing is the browser's business and the defect is the route's.
+  A.routeFromHash();
+  ok(A.curDrawerTab() === "files",
+    "files: routing the hash the drawer itself wrote must not reset the tab, on " + A.curDrawerTab());
+  ok(doc.getElementById("dp-files").hidden === false,
+    "files: routing that hash must leave the Files pane showing");
   // BACK: step 5 re-enters, re-shows Response, and still does not re-open.
   _arrow("ArrowLeft");
   ok(A.tourStep() === 4, "files: ArrowLeft did not return to the drawer step, at " + A.tourStep());

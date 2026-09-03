@@ -208,7 +208,15 @@ function routeFromHash(){
   if(m){const id=decodeURIComponent(m[1]);
     // resolve by the globally-unique ausmt_id (DATAID s.id repeats across surveys); fall back to s.id for old links
     const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);
-    if(s){if(curView!=="map")setView("map");openStation(s.i);}return;}
+    // openStation WRITES this hash, so the browser delivers it straight back as a hashchange a tick later.
+    // Re-opening a drawer that is already showing that station rebuilds its whole markup for no new
+    // information, and the rebuild resets the active tab and the scroll offset under a reader who has just
+    // moved off the default panel. The route is idempotent instead: it opens what is not open.
+    if(s){if(curView!=="map")setView("map");
+      const showing=_drawerSubject&&_drawerSubject.kind==="station"&&_drawerSubject.i===s.i&&
+                    drawer.classList&&drawer.classList.contains("open");
+      if(!showing)openStation(s.i);}
+    return;}
   const msv=location.hash.match(/^#\/survey\/(.+)$/);
   if(msv){const slug=decodeURIComponent(msv[1]),sv=SLUG_TO_SURVEY[slug];
     // The entity page's button for this route is labelled "View all stations on the main map", and it
