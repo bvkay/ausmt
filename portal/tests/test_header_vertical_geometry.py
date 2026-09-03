@@ -54,10 +54,11 @@ status slot carries a live counter, and at 375px that one 15px line renders inde
 235px against brand.html's 220px with every term in this file in agreement. That is the pin working
 as intended, not a drift: the chrome is shared, the contents of the contextual slot are not.
 
-THE ONE CARVE-OUT. about.html still carries the AuScope symbol as its identity mark, pending the
-owner's ruling on that header. Its mark is a different rule with a different file behind it, so this
-file reads the identity mark's height from whichever rule that surface uses. The height is the only
-thing a mark contributes to the header's height, and every surface declares it as 30px.
+NO CARVE-OUT. about.html carried the AuScope symbol as its identity mark, under a rule of its own,
+while the owner ruled on that header; this file used to read the mark's height from whichever of the
+two rules a surface happened to use. The ruling put the AusMT mark in that slot like everywhere
+else, so there is one rule to read and every surface must carry it. The height is the only thing a
+mark contributes to the header's height, and every surface declares it as 30px.
 """
 import re
 from pathlib import Path
@@ -65,9 +66,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
-# The identity mark rule, by the two spellings in use: the AusMT mark everywhere, and the AuScope
-# symbol on about.html alone while its header awaits the owner's ruling.
-MARK_RULES = (".brandmark", ".auscope-logo")
+# The identity mark rule. One spelling, on every surface: the AusMT mark opens every header.
+MARK_RULE = ".brandmark"
 
 
 def _rule(text, pattern, where, what, must_contain=None):
@@ -122,16 +122,11 @@ def _fingerprint(where, text, is_pages):
     tagline = _rule(text, r"(?m)^\s*\.tagline\{([^}]*)\}", where, ".tagline")
     tab = _rule(text, tab_sel, where, "nav tab")
 
-    mark = None
-    for name in MARK_RULES:
-        found = re.findall(r"(?m)^\s*" + re.escape(name) + r"\{([^}]*)\}", text)
-        if found:
-            assert len(found) == 1, f"{where}: expected exactly one {name} rule, found {len(found)}"
-            mark = re.sub(r"\s*\n\s*", "", found[0])
-            break
-    assert mark is not None, (
-        f"{where}: no identity mark rule; expected one of {MARK_RULES}, which is where the "
+    found = re.findall(r"(?m)^\s*" + re.escape(MARK_RULE) + r"\{([^}]*)\}", text)
+    assert len(found) == 1, (
+        f"{where}: expected exactly one {MARK_RULE} rule, found {len(found)}; it is where the "
         "header's first line takes its height from")
+    mark = re.sub(r"\s*\n\s*", "", found[0])
 
     return {
         # The header box itself: the padding and the border are added to the tallest zone, the

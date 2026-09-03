@@ -243,16 +243,16 @@ def test_the_mark_the_two_headers_name_is_a_real_committed_asset():
 # symbol after the SPA and the 2,655 generated pages had switched, so a reader following the
 # header's own "Contribute a survey" link watched the site's identity change under them.
 #
-# about.html is the ONE carve-out, by name: its IDENTITY SLOT is a separate pending owner ruling and
-# this lane does not touch it. 404.html is a bare error document with no header at all.
+# NO PAGE IS EXEMPT. about.html was the last one, its identity slot held open while the owner ruled
+# on that header; the ruling is that about wears the chrome every other surface wears. There is no
+# exemption list here any more, and the pages are discovered from the filesystem, so a page cannot
+# arrive with an identity of its own. 404.html is a bare error document with no header at all.
 MARK_IMG = f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">'
-MARK_EXEMPT = {"about.html"}
 
-# The IDENTITY SLOT, by the class that expresses it, which is what these pins are actually about.
-# A page's identity is .brandmark; about.html's carve-out is .auscope-logo, the AuScope symbol
-# standing in for one. Keying the carve-out on the CLASS rather than on the filename of the image is
-# what lets the parent-organisation mark below share that file without pre-empting the ruling: the
-# two are different slots doing different jobs, and only one of them is an identity.
+# The IDENTITY SLOT, by the class that expressed the one exception to it. A page's identity is
+# .brandmark; .auscope-logo was the AuScope symbol standing in for one. Keyed on the CLASS rather
+# than on the filename of the image, because EVERY page names that file as the parent-organisation
+# mark below: the two are different slots doing different jobs, and only one of them is an identity.
 IDENTITY_CLASS = 'class="auscope-logo"'
 
 
@@ -264,11 +264,10 @@ def _chrome_pages():
 def test_every_static_chrome_page_carries_the_ausmt_mark():
     """FAILS IF a portal page that wears the chrome shows anything but the AusMT mark as its
     identity, and equally if a NEW page appears wearing the chrome without one. Discovered from the
-    filesystem rather than from a list, so adding a page cannot quietly add a sixth identity."""
+    filesystem rather than from a list, so adding a page cannot quietly add a sixth identity, and
+    no page is skipped."""
     seen = []
     for page in _chrome_pages():
-        if page.name in MARK_EXEMPT:
-            continue
         seen.append(page.name)
         text = page.read_text(encoding="utf-8")
         assert MARK_IMG in text, (
@@ -281,20 +280,19 @@ def test_every_static_chrome_page_carries_the_ausmt_mark():
     assert seen, "no chrome page was discovered; the glob or the header marker has moved"
 
 
-def test_the_auscope_symbol_stands_in_for_an_identity_on_exactly_the_carved_out_page():
-    """The carve-out is a DECISION, so it is pinned as one. FAILS IF about.html quietly loses the
-    AuScope symbol from its identity slot before the owner has ruled on that header, and equally if
-    a second page picks it up as an identity. Either way the pending ruling would have been
-    pre-empted by a drift.
+def test_no_header_stands_the_auscope_symbol_in_for_an_identity():
+    """The ruling that closed the carve-out, pinned as one. FAILS IF any page carries the AuScope
+    symbol in its identity slot: the AusMT mark opens every header, and the symbol states the parent
+    organisation from the right zone instead. A header copied from the pre-ruling about.html is
+    exactly how the old slot comes back.
 
-    Scoped to the identity CLASS, not to the image file: every page carries that file now, as the
-    parent-organisation mark in the right zone, which is a different slot and not a ruling on this
-    one."""
+    Scoped to the identity CLASS, not to the image file: every page carries that file, as the
+    parent-organisation mark in the right zone, which is a different slot and not an identity."""
     holders = [p.name for p in sorted(ROOT.glob("*.html"))
                if IDENTITY_CLASS in p.read_text(encoding="utf-8")]
-    assert holders == sorted(MARK_EXEMPT), (
-        f"exactly {sorted(MARK_EXEMPT)} may still carry the AuScope symbol as a header identity "
-        f"pending the owner's ruling on that header, got {holders}")
+    assert holders == [], (
+        "no page may carry the AuScope symbol as its header identity; the AusMT mark opens every "
+        f"header and the symbol closes it from the right zone, got {holders}")
 
 
 # ------------------------------------------------------------------- the parent-organisation mark
@@ -314,28 +312,30 @@ ORG_IMG = (f'<a class="orgmark" href="https://www.auscope.org.au" target="_blank
 ORG_RULE = ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}"
 ORG_IMG_RULE = ".orgmark img{height:30px;width:auto;display:block}"
 
-# The one surface that closes its header WITHOUT the parent mark, and for a stated reason rather
-# than by oversight: about.html carries the AuScope symbol as its header IDENTITY, in the left zone,
-# and a parent mark beside it would put the same image in one header twice. The exemption lifts with
-# the owner's ruling on that header's identity: once the page takes the AusMT mark it takes the
-# parent mark like every other surface, and both names below shrink to nothing together.
-#
-# Spelled out rather than aliased to the identity carve-out. The two are one decision seen from two
-# sides, and the pin that holds them equal is only worth running while each side can move on its
-# own; an alias would make that pin a tautology.
-ORG_EXEMPT = {"about.html"}
+# NO SURFACE IS EXEMPT from the parent mark either, and that is the same ruling seen from the other
+# side. about.html was exempt for a stated reason: it carried the AuScope symbol as its header
+# IDENTITY, and a parent mark beside it would have put the same image in one header twice. The
+# ruling took the symbol out of that identity slot, so the exemption went with it and every surface
+# now closes its header the same way.
 
 
-def test_the_two_carve_outs_are_the_same_page():
-    """FAILS IF the identity carve-out and the parent-mark exemption come apart. They are one
-    decision seen from two sides: a page that shows the AuScope symbol as its identity must not also
-    show it as the parent mark, and a page that has moved to the AusMT identity must take the parent
-    mark like every other. Splitting them would leave a page with the same image twice, or with no
-    AuScope mark at all."""
-    assert ORG_EXEMPT == MARK_EXEMPT, (
-        "the parent-mark exemption must name exactly the pages still carrying the AuScope symbol "
-        f"as an identity; identity carve-out {sorted(MARK_EXEMPT)}, mark exemption "
-        f"{sorted(ORG_EXEMPT)}")
+def test_no_chrome_page_is_exempt_from_either_mark():
+    """The guard over the two per-surface pins around it: neither may be hollowed out by skipping a
+    page. FAILS IF any discovered chrome page is missing either mark, the AusMT mark that opens its
+    header or the AuScope mark that closes it.
+
+    It replaces the pin that held the two carve-out names equal. That pin was worth running only
+    while each side could move on its own; with no carve-out left, what is worth holding is that
+    every page satisfies BOTH, which is the stronger half of what the pair used to say."""
+    pages = _chrome_pages()
+    assert pages, "no chrome page was discovered; the glob or the header marker has moved"
+    for page in pages:
+        text = page.read_text(encoding="utf-8")
+        assert MARK_IMG in text, (
+            f"portal/{page.name}: the AusMT mark must open this header; no page is exempt")
+        assert text.count(ORG_IMG) == 1, (
+            f"portal/{page.name}: the AuScope mark must close this header exactly once; no page "
+            f"is exempt, found {text.count(ORG_IMG)}")
 
 
 def test_every_chrome_surface_carries_the_auscope_mark_exactly_once():
@@ -349,8 +349,7 @@ def test_every_chrome_surface_carries_the_auscope_mark_exactly_once():
     page of the site at once. The LINK is external by definition and carries the new-tab pairing
     (rel noopener noreferrer) the rest of the site's outbound links do."""
     surfaces = [("engine/extract/_pages.py", PAGES_PY.read_text(encoding="utf-8"))]
-    surfaces += [(f"portal/{p.name}", p.read_text(encoding="utf-8"))
-                 for p in _chrome_pages() if p.name not in ORG_EXEMPT]
+    surfaces += [(f"portal/{p.name}", p.read_text(encoding="utf-8")) for p in _chrome_pages()]
     assert len(surfaces) >= 2, "no chrome surface was discovered; the glob or the marker has moved"
     for where, text in surfaces:
         assert text.count(ORG_IMG) == 1, (
@@ -360,24 +359,6 @@ def test_every_chrome_surface_carries_the_auscope_mark_exactly_once():
         assert ORG_IMG_RULE in text, f"{where}: the mark must carry {ORG_IMG_RULE!r}"
 
 
-def test_the_exempt_page_shows_the_auscope_symbol_once_and_only_as_its_identity():
-    """The exemption is a DECISION, so what it buys is pinned too. FAILS IF the carved-out page ends
-    up showing the AuScope symbol twice in one header, which is exactly what an unconsidered "add it
-    everywhere" produces on the one page that already had it."""
-    for name in sorted(ORG_EXEMPT):
-        text = (ROOT / name).read_text(encoding="utf-8")
-        header = text.split("<header>", 1)[1].split("</header>", 1)[0]
-        # By FILENAME, not by the absolute path: the carved-out identity still names the image
-        # relatively, which is part of what the pending ruling covers. Either spelling is the same
-        # image in the same header, and one appearance is the whole point of this pin.
-        asset = ORG_SRC.rsplit("/", 1)[-1]
-        assert header.count(asset) == 1, (
-            f"portal/{name}: the AuScope symbol may appear in this header once, as the carved-out "
-            f"identity; found {header.count(asset)}")
-        assert IDENTITY_CLASS in header, \
-            f"portal/{name}: that one appearance must be the identity slot, not a loose image"
-
-
 # The FILE, bounded per page. Every pin above is scoped to a slot: to the .auscope-logo class, to
 # the parent mark's whole anchor literal, or to the carved-out page's header alone. None of them
 # says how often the IMAGE may be named, so a second loose copy of it, in a body, in a url() or as a
@@ -385,9 +366,9 @@ def test_the_exempt_page_shows_the_auscope_symbol_once_and_only_as_its_identity(
 # about the image rather than about one spelling of it in one slot.
 ORG_ASSET = ORG_SRC.rsplit("/", 1)[-1]
 
-# One appearance per chrome page, whichever slot earns it. A page that takes the parent mark names
-# the file there and nowhere else; the carved-out page names it as its identity and takes no parent
-# mark. Both come to one, which is why this is a single number rather than a table.
+# One appearance per chrome page: the parent mark in the right zone, and nowhere else. It was one
+# number covering two slots while the carved-out page named the file as its identity instead; there
+# is one slot now, and the number is still one.
 ORG_ASSET_PER_PAGE = 1
 
 
@@ -402,7 +383,7 @@ def test_no_chrome_page_names_the_auscope_image_more_than_its_one_slot():
         count = page.read_text(encoding="utf-8").count(ORG_ASSET)
         assert count == ORG_ASSET_PER_PAGE, (
             f"portal/{page.name}: the AuScope image may be named {ORG_ASSET_PER_PAGE} time on a "
-            f"chrome page, as the parent mark or as the carved-out identity; found {count}")
+            f"chrome page, as the parent mark that closes it; found {count}")
 
 
 def test_the_auscope_mark_closes_the_header_after_the_primary_nav():
