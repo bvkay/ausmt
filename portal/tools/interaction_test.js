@@ -1903,6 +1903,32 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "Escape" }));
   ok(animA.tourAnimPending().running === false, "demo/cancel: closing the tour must leave nothing pending");
 
+  // H7. THE DOWNLOAD BLOCK, SPLIT IN TWO (LANE-CONTRACT-TOUR-REVISION.md T1 steps 9/10). One step used to
+  // point at the whole block and say one sentence about four different things: zips AusMT serves and lists
+  // NCI holds are not the same offer and do not arrive the same way. The block is now spotlit in two parts,
+  // which needs two wrappers to point at. They are MARKUP ONLY: no class, no inline style and no rule of
+  // their own, so the block renders exactly as it did and this is a tour change, not a layout change.
+  const _dl2 = doc.getElementById("dlLevel2"), _dlTs = doc.getElementById("dlTimeSeries");
+  ok(_dl2 && _dlTs, "download split: both wrappers must exist (#dlLevel2, #dlTimeSeries)");
+  ok(_dl2.closest(".dlbox") && _dlTs.closest(".dlbox"),
+    "download split: both wrappers must live inside the download block, not beside it");
+  ok(_dl2.querySelector(".sechead") && /Level 2/.test(_dl2.querySelector(".sechead").textContent),
+    "download split: the Level 2 wrapper must carry the Level 2 heading");
+  ["dlZip", "dlZipXml", "dlZipH5"].forEach(id => ok(_dl2.querySelector("#" + id),
+    "download split: #" + id + " must sit inside the Level 2 wrapper"));
+  ok(!_dl2.querySelector("#tsSeg"), "download split: the time-series rows must NOT sit inside the Level 2 wrapper");
+  ok(_dlTs.querySelector(".sechead") && /Time series/.test(_dlTs.querySelector(".sechead").textContent),
+    "download split: the time-series wrapper must carry the Time series heading");
+  ok(_dlTs.querySelector("#tsSeg") && _dlTs.querySelector("#tsSegNote"),
+    "download split: the time-series rows and their note must sit inside the time-series wrapper");
+  ["class", "style"].forEach(a => ok(!_dl2.getAttribute(a) && !_dlTs.getAttribute(a),
+    "download split: the wrappers are markup only; a " + a + " attribute would change the block's rendering"));
+  ok(!/#dlLevel2|#dlTimeSeries/.test(_sheet),
+    "download split: no stylesheet rule may name the wrappers; they exist to be pointed at, not to style");
+  ok(A.tourStepSel(8) === "#dlLevel2" && A.tourStepSel(9) === "#dlTimeSeries",
+    "download split: the two download steps must point at one wrapper each, got " +
+    JSON.stringify([A.tourStepSel(8), A.tourStepSel(9)]));
+
   // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
   // (forward, back, close). The collapse set is real state (treeCollapsedKeys), not a proxy.

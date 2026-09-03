@@ -1002,15 +1002,24 @@
            .prod/.pdot/.sechead/.rolechip verbatim, whole tile is the action, a level with nothing
            in scope is .dis with a hollow dot (present, priced at nothing), an in-flight index is
            .dis with the unknown dot. exports.js paintDownloadRows() owns every state. -->
-      <div class="sechead">Level 2 · transfer functions <span class="rolechip">served by AusMT</span></div>
-      <div class="dltiles">
-        <button type="button" class="prod" id="dlZip" disabled><span class="pdot"></span><div><span class="pname">EDI (zip)</span> <span class="rolechip">source archive</span><small id="dlZipMeta"></small></div></button>
-        <button type="button" class="prod" id="dlZipXml" disabled><span class="pdot"></span><div><span class="pname">EMTF XML (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipXmlMeta"></small></div></button>
-        <button type="button" class="prod" id="dlZipH5" disabled><span class="pdot"></span><div><span class="pname">MTH5 (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipH5Meta"></small></div></button>
+      <!-- The two offers are wrapped so the guided tour can spotlight them separately: zips AusMT serves
+           and lists NCI holds are not the same offer and do not arrive the same way. MARKUP ONLY - each
+           wrapper is a bare block with an id and nothing else, carries no class, no inline style and no
+           rule of its own, and the .dlbox descendant selectors above still reach every child through it,
+           so the block renders exactly as it did. -->
+      <div id="dlLevel2">
+        <div class="sechead">Level 2 · transfer functions <span class="rolechip">served by AusMT</span></div>
+        <div class="dltiles">
+          <button type="button" class="prod" id="dlZip" disabled><span class="pdot"></span><div><span class="pname">EDI (zip)</span> <span class="rolechip">source archive</span><small id="dlZipMeta"></small></div></button>
+          <button type="button" class="prod" id="dlZipXml" disabled><span class="pdot"></span><div><span class="pname">EMTF XML (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipXmlMeta"></small></div></button>
+          <button type="button" class="prod" id="dlZipH5" disabled><span class="pdot"></span><div><span class="pname">MTH5 (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipH5Meta"></small></div></button>
+        </div>
       </div>
-      <div class="sechead">Time series <span class="rolechip">at NCI, handed off</span></div>
-      <div class="dltiles" id="tsSeg" role="group" aria-label="Time series by level"></div>
-      <div class="fieldnote" id="tsSegNote"></div>
+      <div id="dlTimeSeries">
+        <div class="sechead">Time series <span class="rolechip">at NCI, handed off</span></div>
+        <div class="dltiles" id="tsSeg" role="group" aria-label="Time series by level"></div>
+        <div class="fieldnote" id="tsSegNote"></div>
+      </div>
     </div>
   </section>
   <section data-views="map">
