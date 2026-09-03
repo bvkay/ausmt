@@ -5,7 +5,7 @@
 //   t[T.periods] periods · t[T.rho_xy] ρ_xy · t[T.rho_yx] ρ_yx · t[T.phs_xy] φ_xy · t[T.phs_yx_adj] φ_yx(+180°) · t[T.tip_mag] |T| ·
 //   t[T.pt_min] pt_min · t[T.pt_max] pt_max · t[T.pt_az] pt_az · t[T.pt_beta] pt_β ·
 //   t[T.rho_xy_err]/t[T.rho_yx_err] ρ errors · t[T.phs_xy_err]/t[T.phs_yx_err] φ errors (°) ·
-//   t[T.tzx_re]/t[T.tzx_im] Tx (Hz/Hx) · t[T.tzy_re]/t[T.tzy_im] Ty (Hz/Hy)   (C20)
+//   t[T.tzx_re]/t[T.tzx_im] Tx (Hz/Hx) · t[T.tzy_re]/t[T.tzy_im] Ty (Hz/Hy)
 // Source-data frame: x = north, y = east (so Tx couples Hz to the north field, Ty to the east field).
 // The SVG builders are viewBox-responsive. svgOpen emits the DESIGN size
 // as width/height AND the same design coordinates as the viewBox, so ONE plotter serves both surfaces: the
@@ -13,7 +13,7 @@
 // content column. No geometry is recomputed and every pinned <line/rect/path> signature is untouched. The
 // former `_k` display-scale argument (a fixed 2x pixel blow-up in the modal, which grew with the monitor
 // rather than with the layout) is gone: modal sizing is CSS now. Series markers are shape-differentiated
-// (xy = circle, yx = square) so the copper/teal pair is not colour-only. Curve COLOURS remain frozen (C20).
+// (xy = circle, yx = square) so the copper/teal pair is not colour-only. The curve COLOURS are frozen.
 const W=372,PADL=40,PADR=8;
 const xScale=per=>{const lo=Math.log10(per[0]),hi=Math.log10(per[per.length-1]);return v=>PADL+(Math.log10(v)-lo)/(hi-lo||1)*(W-PADL-PADR);};
 function decades(per){const o=[];const lo=Math.ceil(Math.log10(per[0])),hi=Math.floor(Math.log10(per[per.length-1]));for(let d=lo;d<=hi;d++)o.push(10**d);return o;}
@@ -149,9 +149,9 @@ function plotCollapsible(kind,t,open){const m=PLOT_META[kind];if(!m)return"";con
 // handler yields while the modal is open (it checks for #plotmodal) so Esc closes the modal, not the
 // drawer. All data is already client-side (the stashed TF row); no fetches.
 //
-// SIZING. The panels used to be rendered at a fixed STATION_MODAL_SCALE=2
-// pixel blow-up, which sized the modal to the MONITOR rather than to the layout. That constant is gone.
-// The panels are now emitted at design size and stretched by CSS to FILL a CAPPED content column
+// SIZING. A fixed STATION_MODAL_SCALE pixel blow-up sizes the modal to the MONITOR rather than to the
+// layout, so there is no such constant.
+// The panels are emitted at design size and stretched by CSS to FILL a CAPPED content column
 // (.plotmodal-capw in index.html: max-width min(92vw,760px), centred, with the overlay's viewport margin;
 // .plotmodal-svg svg{width:100%;min-width:372px}). So the modal is comfortably larger than the drawer
 // plots (~1.95x at the cap) but never wall-sized, the svg never renders NARROWER than the drawer's 372px

@@ -12,7 +12,7 @@
 //   SCI[i]  sc[] = [0 q,1 qb,2 rr,3 sw,4 alg,5 dim,6 p3d,7 gd,8 ellip,9 skew,10 mre,11 decades]
 //   TFD[i]  t[]  = [0 periods,1 rho_xy,2 rho_yx,3 phs_xy,4 phs_yx_adj,5 tip_mag,6 pt_min,7 pt_max,
 //                   8 pt_az,9 pt_beta,10 rho_xy_err,11 rho_yx_err,12 phs_xy_err,13 phs_yx_err,
-//                   14 tzx_re,15 tzx_im,16 tzy_re,17 tzy_im]   (C20: 10 -> 18; tip_mag kept for compat)
+//                   14 tzx_re,15 tzx_im,16 tzy_re,17 tzy_im]   (18 columns; tip_mag kept for compat)
 // To change a column: edit contract/columns.json, run `python contract/generate.py`, then data-files.md. APPEND, never reorder.
 // Data files are produced by the AusMT engine. By default they are served from the portal's own
 // ./data/ directory; a deployment may instead point at a remote base (AUSMT_CONFIG.data_base_url,
@@ -42,10 +42,10 @@ function fetchOptional(name,fallback,opts){return fetchJson(name,opts).then(v=>v
 // Everything the map dots, the filter rail and the survey/collection views need, and nothing else:
 // catalogue.json (~320KB, REQUIRED: it IS the dots) + surveys.json (REQUIRED: the per-survey metadata
 // every card and drawer header reads) + the four SMALL optionals. All SIX are issued together.
-// Before this split the boot awaited a Promise.all that also carried tf.json (3.2MB raw / ~1MB gzipped,
-// ~3.1s measured on a live load) and then ran the five optionals STRICTLY SEQUENTIALLY, so their five
-// round trips stacked on top of that wait. Both defects die here: the dots no longer wait on the transfer
-// functions, and the optionals no longer wait on each other.
+// The split is what keeps first paint off the big product: tf.json is 3.2MB raw / ~1MB gzipped, ~3.1s on
+// a live load, so awaiting it in the same Promise.all would hold the dots behind it, and issuing the five
+// optionals sequentially would stack five round trips on top of that wait. The dots must not wait on the
+// transfer functions, and the optionals must not wait on each other.
 async function loadPhase1(){
   const [c,sv,prov,coll,build,cpol]=await Promise.all([
     fetchJson("catalogue.json"),
@@ -57,7 +57,7 @@ async function loadPhase1(){
     // No skew-handshake check here yet (comparing this against a contract hash the portal itself
     // carries); that is C16, once the contract-hash plumbing exists.
     fetchOptional("build.json",null),
-    // C42 Amendment A1: optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted
+    // Optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted
     // by the engine ONLY when a survey has a non-exact station. Absent for an all-exact corpus (the common
     // case) => {} => no badges. Same tolerant-of-absence pattern as collections/build above.
     fetchOptional("coord_policy.json",{}),
@@ -73,8 +73,7 @@ async function loadPhase1(){
 // Returns the four gates so a caller (and the headless drivers) can observe hydration.
 function startHydration(){
   HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";HYDR.tsaccess="pending";
-  // A tf/sci FAILURE is not absence: before the phased boot these were part of the required Promise.all and
-  // a bad fetch showed the load-error page. First paint no longer depends on them, so the failure is recorded
+  // A tf/sci FAILURE is not absence. First paint must not depend on them, so a failure is recorded
   // as "failed" and the products fall back to EMPTY arrays; the empty array keeps every positional deref
   // safe, and hydrFailed() is what the consumers render, so a broken build is never mistaken for a station
   // that genuinely has no curves.
@@ -83,7 +82,7 @@ function startHydration(){
   // manifest.json is OPTIONAL by contract (older data sets / empty builds ship none), so its 404 IS the
   // honest absence (MANIFEST=null, the exact value every consumer already tolerates), not a failure state.
   MANIFEST_READY=fetchOptional("manifest.json",null,FETCH_LOW).then(v=>{MANIFEST=v;HYDR.manifest="ready";});
-  // THREDDS A5/D6: ts_access.json is OPTIONAL by contract - the engine writes it only when the
+  // ts_access.json is OPTIONAL by contract - the engine writes it only when the
   // register projects at least one open, verified route, so a 404 IS the honest absence and there
   // is no "failed" state to report. The fallback is {} rather than null so every consumer reads one
   // shape, and the difference the Availability controls render is TSACC===null (still in flight)

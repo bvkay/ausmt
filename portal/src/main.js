@@ -20,7 +20,7 @@ function buildState(){
     // (au.<survey-slug>.<station>). Fall back to the legacy survey-name slugification only for
     // older data that predates r[C.ausmt_id], so the id shown/exported matches the product + MTCAT.
     ausmt_id:r[C.ausmt_id]||((CC[(SMETA[r[C.survey]]||{}).country]||"au").toLowerCase()+"."+r[C.survey].toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,"")+"."+r[C.id])}));
-  // C42 A1: fold the boot-loaded coordinate policy onto each station (generalised | withheld), keyed by
+  // Fold the boot-loaded coordinate policy onto each station (generalised | withheld), keyed by
   // the authoritative ausmt_id just derived; null when exact/unmarked. Positions are already masked in the
   // catalogue — this signals POLICY, not position — so the drawer can badge a generalised station honestly
   // without re-deriving precision client-side (forbidden by the record). Tolerant of an absent artifact.
@@ -404,8 +404,8 @@ function maybeShowIntro(){if(tourRequested()){startTourSafe();dropTourParam();re
 // store: a legend click flips the SAME checkbox the rail owns and dispatches its change event, so the one
 // existing #typeBoxes path (filters.js) runs every consumer - passesCore, the map redraw, the header
 // counts, the surveys-view decoupling and the select-lens semantics - exactly as a rail click does.
-// The survey-badge row is GONE with the badges: the legend may not key an object the
-// map does not draw, and there is no longer anything on the map but the four data types.
+// There is no survey-badge row: the legend may not key an object the
+// map does not draw, and the map draws nothing but the four data types.
 //
 // Resolve a rail type checkbox by its type key (LPMT / BBMT / AMT / GDS - the keys passesCore compares
 // against s.type). Read live from the DOM on each call: the rail is the single source of truth.
@@ -454,9 +454,9 @@ function buildLegend(){
     `title="Show or hide ${label} stations on the map"><span class="dot" style="background:var(${v})"></span>${label}</button>`).join("");
   const small=typeof window!=="undefined"&&window.innerWidth<=760;   // body defaults collapsed on small widths
   const el=document.createElement("div");el.id="mapLegend";el.className="maplegend";
-  // The hint takes the slot a "Legend" title would have occupied (the box carries no desktop title; the
+  // The hint takes the slot a "Legend" title occupies elsewhere (the box carries no desktop title; the
   // "Legend" button above is the small-width collapse control only), so the affordance is stated once,
-  // where the eye lands first, without adding a heading the desktop layout never had.
+  // where the eye lands first, without a heading the desktop layout does not have.
   el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+
     `<div class="maplegend-body"><div class="leghint">Click a type to show or hide it</div>${rows}</div>`;
   host.appendChild(el);
@@ -513,7 +513,7 @@ function renderBuildId(){
 // ---- two-phase boot ------------------------------------------------------------------------------
 // HYDRATION_DONE settles once every phase-2 product has landed AND its late-render work has run. It is not
 // on any user-facing path (nothing awaits it to paint); it exists so a headless driver can say "now the app
-// is in the state a single-phase boot would have produced" without racing the continuations.
+// is in the state a single-phase boot produces" without racing the continuations.
 let HYDRATION_DONE=Promise.resolve();
 // Late hydration must never leave a stale render standing. Each gate re-runs EXACTLY the surfaces that read
 // its product, and nothing else:

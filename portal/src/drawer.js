@@ -235,7 +235,7 @@ function withheldReason(m){
     : "not redistributable under its licence";
   return reason+", contact the custodian organisation ("+org+")";
 }
-// C42 Amendment A1: the boot-loaded coordinate policy for a station ('generalised' | 'withheld' | null),
+// The boot-loaded coordinate policy for a station ('generalised' | 'withheld' | null),
 // folded onto s by buildState() from coord_policy.json. The engine masks the VALUE (generalised => 0.1°
 // cell rendered verbatim, withheld => null lat/lon) AND — for a non-exact station — emits this policy
 // marker so the portal can badge honestly WITHOUT re-deriving precision client-side (forbidden by the
@@ -246,7 +246,7 @@ function coordPolicyOf(s){return (s&&s.coordPolicy)||null;}
 // (its 0.1° cell is a valid-looking position, indistinguishable from an exact grid-point without it).
 function coordsMasked(s){return !hasPosition(s)||coordPolicyOf(s)==="generalised"||coordPolicyOf(s)==="withheld";}
 // Survey-level honesty predicate: are ALL of a survey's station locations served EXACT? Backs the access-
-// panel stance text — "Station locations are public" is asserted only when this is true (D2/A1).
+// panel stance text: "Station locations are public" is asserted only when this is true.
 function surveyLocationsPublic(sv){return !ST.some(s=>s.survey===sv&&coordsMasked(s));}
 // The drawer's lat/lon cell. Withheld => the honest withheld line (no coords). Generalised => the masked
 // 0.1° cell rendered VERBATIM (never re-rounded — the record forbids client-side re-derivation) PLUS the
@@ -277,7 +277,7 @@ function stationModalHeader(s,m){
 function accessPanel(m,sv){
   const lvl=accessLevelOf(m);
   const when=(m&&m.embargo_until)?String(m.embargo_until):"";
-  // C42 A1: the location-publicity clause is only asserted when EVERY station's position is served exact.
+  // The location-publicity clause is only asserted when EVERY station's position is served exact.
   // When a custodian has generalised/withheld any station, "locations are public" is FALSE — say so.
   // (Disclosing that a location is generalised/withheld reveals POLICY, not POSITION.)
   const stance=surveyLocationsPublic(sv)
@@ -312,8 +312,8 @@ function datasetDoiResolution(m){m=m||{};
   for(const r of (m.related_identifiers||[]))if(r&&r.identifier_type==="DOI")res.push(r.resolution);
   if(!res.length)return null;
   return res.some(x=>x!=="reserved")?"ok":"reserved";}
-// IDCONS D1: "the raw time series is linked" now reads off a typed IsDerivedFrom relation (the new home of
-// the collection PID) OR the still-readable flat ts_pid (engine fallback) OR the pipeline availability flag.
+// "The raw time series is linked" reads off a typed IsDerivedFrom relation (which carries the collection
+// PID) OR the flat ts_pid (engine fallback) OR the pipeline availability flag.
 function tsLinked(m){m=m||{};
   return (m.related_identifiers||[]).some(r=>r&&r.relation==="IsDerivedFrom")||!!m.ts_pid||m.ts==="ok";}
 function maturityModel(m,sc){m=m||{};sc=sc||[];
@@ -322,7 +322,7 @@ function maturityModel(m,sc){m=m||{};sc=sc||[];
     {key:"curated",label:"Curated archive",achieved:true,note:""},
     {key:"repro",label:"Reproducible",achieved:!!(sc[SC.sw]&&m.ts==="ok"),note:""},
     {key:"licence",label:"Licence verified",achieved:licBadgeState(m.lic)!=="unk",note:""},
-    // IDCONS D4: the DOI star lights only for a RESOLVED (ok/unknown) dataset DOI. A reserved DOI shows a
+    // The DOI star lights only for a RESOLVED (ok/unknown) dataset DOI. A reserved DOI shows a
     // hollow star with honest wording — never a green "minted" off a DOI that 404s at doi.org today.
     {key:"doi",label:"DOI",achieved:doiRes==="ok",note:doiRes==="ok"?"minted":doiRes==="reserved"?"reserved (not yet active)":"not recorded"},
     {key:"ts",label:"Time series",achieved:tsOn,note:tsOn?"linked":"not available"},
@@ -437,10 +437,9 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     : {n:"EMTF XML",sub:"not currently available",origin:"AusMT-derived",st:"unk",d:null};
   // The Level 2 MTH5 sub-row is THIS STATION's own transfer-function h5: the manifest files[] row with
   // format mth5 (the h5/<slug>/<station>.h5 family), read from the very same `arts` rows the EDI and
-  // EMTF XML sub-rows beside it read. It used to read mth5BundleFor(m), the SURVEY-aggregated
-  // <slug>-tf.h5 bundles[] row, which was true only while that bundle was the sole MTH5 the build
-  // produced; once the per-station producer landed (build_portal emit_station_mth5) every station's
-  // Files tab started offering the WHOLE SURVEY under a station heading (reported:
+  // EMTF XML sub-rows beside it read. It must not read mth5BundleFor(m), the SURVEY-aggregated
+  // <slug>-tf.h5 bundles[] row: with a per-station producer in the build (build_portal
+  // emit_station_mth5) that row offers the WHOLE SURVEY under a station heading (reported:
   // SA026E showed the 1.74 MB survey bundle in place of its own 174,696 B file).
   // There is deliberately NO fallback to the bundle. A station with no row of its own gets none: the
   // engine emits no station h5 for a coordinate-generalised or withheld station, exactly as it serves no
@@ -477,9 +476,9 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   const level2Body=hydrating("manifest")?hydrBlock("served files"):level2Subs.map(row).join("");
   const level2=`<div class="fl-group"><div class="fl-ghead">Level 2 derived processed data <small>transfer functions</small></div>`+
     `<div class="fl-sub">${level2Body}</div></div>`;
-  // Level 3 models render ONLY when a model DOI is served in the survey metadata. No such field exists
-  // today, so the slot stays here as a comment and simply does not render yet. When one lands, e.g.:
-  //   if(m.model_doi) level3 = row({n:"Level 3 models",sub:...,origin:"source archive",st:"ok",d:{prod:"open",url:"https://doi.org/"+m.model_doi}});
+  // Level 3 models render ONLY when a model DOI is served in the survey metadata. No such field exists,
+  // so the slot renders nothing: a survey record carrying m.model_doi is what would fill it, as a row
+  // whose origin is the source archive and whose link is the doi.org resolver.
   return `<div class="filelist">${tsRows}${level2}${row(pubRow)}</div>`;}
 // The MOST SPECIFIC processing-software string available for a station. The
 // station-level string the source EDI carried (sc[SC.sw], e.g. "Geotools 4.0.5.12583") wins because it
@@ -505,11 +504,11 @@ const KNOWN_WRITERS=["geotools","winglink","mtpy"];
 function isKnownWriter(name){const n=String(name==null?"":name).trim().toLowerCase();
   return !!n&&KNOWN_WRITERS.some(w=>n.indexOf(w)>=0);}
 // The lineage's "File written by" cell: the program that SERIALISED this station's file, from
-// station.json's processing.file_written_by. This node exists because the row ABOVE it used to carry this
-// value under the heading "Processing software" — the reader was told Geotools/WinGLink/MTpy processed the
-// data when those tools only exported a file somebody else's code had estimated. Naming the exporter under
-// its own heading is the honest half of that fix, and a known exporter is annotated so the distinction is
-// legible without the reader having to know the tool. PURE (no DOM); the caller escapes it.
+// station.json's processing.file_written_by. It must not be shown under the heading "Processing software":
+// that tells the reader Geotools/WinGLink/MTpy processed the data when those tools only exported a file
+// somebody else's code had estimated. The exporter belongs under its own heading, and a known exporter is
+// annotated so the distinction is legible without the reader having to know the tool. PURE (no DOM); the
+// caller escapes it.
 function fileWrittenByText(fwb){
   const name=String((fwb&&fwb.name)==null?"":fwb.name).trim();
   if(!name)return "not stated in EDI";
@@ -532,8 +531,8 @@ function distributedFormatsText(s,m){
   const out=[];
   if(ediDescriptor(s,m).st==="ok")out.push("EDI");
   if(arts.some(a=>a&&a.format==="emtfxml"))out.push("EMTF XML");
-  // MTH5 reads the STATION's own files[] row, like its two neighbours. It used to read the survey's
-  // bundles[] row (mth5BundleFor), which made one drawer contradict itself the moment the two disagreed:
+  // MTH5 reads the STATION's own files[] row, like its two neighbours. Reading the survey's
+  // bundles[] row (mth5BundleFor) makes one drawer contradict itself the moment the two disagree:
   // the Files tab, reading the station row, said "not currently available" while this line, reading the
   // survey bundle, listed MTH5 as distributed for the station. Nothing on the screen told the reader
   // which of the two was about their station.
@@ -554,9 +553,9 @@ function pubShortCite(p){p=p||{};
   const head=[who||t,y?"("+y+")":""].filter(Boolean).join(" ").trim();
   return head||(doi?"doi:"+doi:"");}
 // The lineage PUBLICATION cell, read from the survey's related publications
-// (pubs[], the same list the survey card renders). It used to read the dataset DOI (m.doi), which is the
-// identifier of the DATA, not an interpretation publication, so a survey with a real paper in pubs[] and
-// no dataset DOI still read "none recorded" (live: Newer Volcanic Province 2019 and its 2023 paper). The
+// (pubs[], the same list the survey card renders). It must not read the dataset DOI (m.doi), which is the
+// identifier of the DATA, not an interpretation publication: a survey with a real paper in pubs[] and no
+// dataset DOI then reads "none recorded" (Newer Volcanic Province 2019 and its 2023 paper). The
 // first publication renders as a short cite, DOI-linked when it carries one, with a "+N more" tail.
 function publicationCell(m){
   const ps=(((m||{}).pubs)||[]).filter(p=>p&&typeof p==="object");
@@ -642,7 +641,7 @@ function provenanceBox(s){
 // (tools/frame_line_test.js) can drive it. Inputs are the VERBATIM station.json `frame` block values:
 //   declared_azimuth_deg        — the recorded acquisition-frame angle (0 => served in the
 //                                 declared-zero / geographic reference; no line by itself).
-//   tipper_declared_azimuth_deg — F2: present ONLY when the tipper's uniform declared frame DIVERGES
+//   tipper_declared_azimuth_deg: present ONLY when the tipper's uniform declared frame DIVERGES
 //                                 from the impedance's declared azimuth (the engine omits it when
 //                                 equal or undeclared), so presence itself is the trigger.
 //   survey_frame_note           — the V3-B "mixed declared frames across stations" note (present only
@@ -653,7 +652,7 @@ function frameLineText(frame){
   const az=frame.declared_azimuth_deg;
   const hasAngle=(typeof az==="number"&&isFinite(az)&&Math.abs(az)>0.01);
   const taz=frame.tipper_declared_azimuth_deg;
-  const hasTip=(typeof taz==="number"&&isFinite(taz));    // engine emits it ONLY when divergent (F2)
+  const hasTip=(typeof taz==="number"&&isFinite(taz));    // the engine emits it ONLY when divergent
   const mixed=(typeof frame.survey_frame_note==="string"&&frame.survey_frame_note.trim())?frame.survey_frame_note.trim():"";
   if(!hasAngle&&!hasTip&&!mixed) return "";
   const fmt=v=>{const a=Math.round(v*10)/10;return (a>0?"+":"")+a+"°";};   // at most 1 dp, terse
@@ -784,12 +783,9 @@ function stationSummaryDetails(s,m,sc){
     ["components",(esc(s.comps.split("").join(" + "))||"-")],
     ["tipper",s.comps.includes("T")?"yes":"no"],
     ["remote reference",sciGate||(sc[SC.rr]?"yes":"not recorded")]]);
-  // The "Data checks" group (the TF error row) is REMOVED, reversibly commented per
-  // house style for hidden-not-deleted surfaces. mre / DATA_CHECKS_LABEL / _ssGroup are left intact so
-  // re-enabling is uncommenting only.
-  /* const mre=sc[SC.mre];
-  const checks=_ssGroup(DATA_CHECKS_LABEL,[
-    ["TF error",mre!=null?Math.round(mre*100)+"%":"n/a"]]); */
+  // No "Data checks" group renders here: the TF error is not shown to readers. SC.mre and
+  // DATA_CHECKS_LABEL stay defined because the column index and the label are part of the sc.json
+  // vocabulary, which the products keep whether or not this surface renders.
   const proc=_ssGroup("Processing",[
     ["software",sciGate||(sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI")],
     ["source",esc(s.file)]]);
@@ -805,13 +801,13 @@ function openStation(i,opts){
   const keepScroll=rehydrate?(drawer.scrollTop||0):0;
   const keepTab=rehydrate?_curDrawerTab:"response";
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
-  if(!rehydrate)_rememberDrawerOpener();              // E7: capture the invoking element before the rewrite
+  if(!rehydrate)_rememberDrawerOpener();              // capture the invoking element before the rewrite
   _drawerSubject={kind:"station",i};                  // what rehydrateOpenDrawer re-renders when a gate settles
   const s=ST[i],t=tfRow(i)||[[]],m=SMETA[s.survey]||{},sc=sciRow(i);
-  // Sc[SC.dim] (dimensionality) is no longer surfaced in the drawer screening grid - it's
-  // inferable from the phase tensor + skew, which stay shown (strike/|β|/3-D-periods line below). The
-  // sc.json field itself is unchanged (data products are display-only edits); the map's colour-by-dim
-  // mode still reads s.dim. So `dim` is intentionally not destructured here anymore.
+  // Sc[SC.dim] (dimensionality) is not surfaced in the drawer screening grid: it is inferable from the
+  // phase tensor + skew, which are shown (strike/|β|/3-D-periods line below). The sc.json field itself
+  // carries it either way, and the map's colour-by-dim mode reads s.dim, so `dim` is deliberately not
+  // destructured here.
   const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
   if(!rehydrate)location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
   const azs=[],azPers=[];if(t[T.pt_az])t[T.pt_az].forEach((a,k)=>{if(a!=null&&t[T.pt_beta][k]!=null&&Math.abs(t[T.pt_beta][k])<5){azs.push(((a%180)+180)%180);const _pk=t[T.periods]&&t[T.periods][k];if(_pk!=null)azPers.push(_pk);}});
@@ -885,30 +881,23 @@ function openStation(i,opts){
       : accessPanel(m,s.survey)+`<div id="pt_anchor"></div>`)+
     `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+
     stationSummaryDetails(s,m,sc);
-  // HIDDEN pending design review: screening surface not public-ready - restore by uncommenting the screeningHtml block below (and its drawerPanel("screening",…) render + the ["screening","Screening"] TABS entry above). Underlying data/helpers (screeningIndicators, _inds, strikeClause…) are left intact so re-enabling is uncommenting only.
-  // Screening (X5) — a five-row indicator list (glyph + label + Green/Amber/Red state word + descriptive
-  // word; never colour alone; a not-computable check is neutral grey "not evaluated"), then a "Show
-  // details" expander preserving the full automated screening prose (strike + median |β| lines, the
-  // galvanic flag, and the completeness/smoothness check with its not-a-verdict framing).
+  // NO SCREENING SURFACE RENDERS in the drawer: the automated indicators are not public, so there is no
+  // "screening" panel and no ["screening","Screening"] TABS entry. The pure model behind them
+  // (screeningIndicators) stays defined and is pinned by tools/interaction_test.js, so it cannot rot
+  // while it is unrendered; screeningIndicatorList, _inds and strikeClause are the render side of the
+  // same model and stay with it.
   // The check screens an impedance, so sc[SC.q] is null on every tipper-only station; the line says so
   // from the components column rather than showing a bare "n/a" a reader could mistake for a missing
   // value. A null q on a station that DOES carry Z is the access gate withholding it, and reads
   // "not available" instead: the two absences have two reasons and must not share one sentence.
-  /* const screeningHtml=`<div class="sechead">Screening indicators ${roleChip("Automated screening")} <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+
-    screeningIndicatorList(_inds)+
-    `<details class="prov-d"><summary>Show details</summary><div class="prov-dbody">`+
-    `<div class="dim">Automated screening estimate — ${strikeClause}${skew!=null?` · median |β| <b>${skew}°</b> · <b>${p3d}%</b> of evaluated periods exceeded the |β|${_betaThr!=null?` &gt; ${esc(String(_betaThr))}°`:""} screening threshold`:""}. Not a structural interpretation.<br>`+
-    `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
-    `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:(String(s.comps||"").indexOf("Z")<0?"not computed; this station carries no impedance, so there is nothing to screen":"not available")}.</span></div>`+
-    `</div></details>`; */
-  // Files — the NCI data-level product list. R5: the section-level role chip is dropped; each product row
+  // Files: the NCI data-level product list. The section-level role chip is dropped; each product row
   // now carries its OWN origin tag (AusMT-derived vs source archive), so a single section chip would be
   // wrong (the list spans both source-archive time series and AusMT-derived deliverables).
   const filesHtml=`<div class="sechead">Related products</div>`+relatedProducts(s);
-  // Provenance (X6/X7/X8) — three source-data rows visible (processing software · transfer function
+  // Provenance: three source-data rows visible (processing software, transfer function
   // source file+sha · source archive), then the Dataset-maturity block (X7 stars), then EVERYTHING ELSE
   // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
-  // behind collapsed <details>. Nothing deleted — only demoted. The API box (X8) is the last, small expander.
+  // behind collapsed <details>. Nothing is dropped, only demoted; the API box is the last, small expander.
   const _srcArchive=sourceArchiveCell(m);
   // This station's served artifact rows (manifest `files`), read once and reused by the format-availability
   // badge and the API section below. Empty for a withheld/embargoed survey: the engine emits no manifest
@@ -920,9 +909,9 @@ function openStation(i,opts){
   // Whether a served EMTF-XML artifact exists for this station (drives the format-availability badge:
   // ok when served, else part — produced via the build pipeline for redistributable surveys).
   const _fmtXmlArt=_arts.some(a=>a.format==="emtfxml");
-  // The same question for MTH5, off the same station rows. It used to be answered by the SURVEY's
-  // <slug>-tf.h5 bundle (mth5BundleFor), which put a survey fact under a station heading: a station with no
-  // h5 of its own inside a survey that has a bundle showed a green MTH5 badge two tabs away from a Files
+  // The same question for MTH5, off the same station rows. It must not be answered by the SURVEY's
+  // <slug>-tf.h5 bundle (mth5BundleFor), which puts a survey fact under a station heading: a station with
+  // no h5 of its own inside a survey that has a bundle then shows a green MTH5 badge two tabs from a Files
   // row reading "not currently available". A badge in a station drawer answers about the station.
   const _fmtH5Art=_arts.some(a=>a.format==="mth5");
   // The writer row rides alongside the processing-software row for the same reason it does in the lineage
@@ -940,7 +929,7 @@ function openStation(i,opts){
     // C42 coordinate access: a custodian-withheld station carries null lat/lon (masked VALUE) — show the
     // honest withheld line instead of null-derefing .toFixed. A generalised station carries the 0.1° cell,
     // rendered VERBATIM (no client-side re-rounding) with a "position generalised" badge driven by the
-    // engine's coord_policy marker (A1). coordCellHtml encapsulates all three; hasPosition is the shared predicate.
+    // engine's coord_policy marker. coordCellHtml encapsulates all three; hasPosition is the shared predicate.
     `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
     `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"-"}</td></tr>`+
     `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`;
@@ -1024,11 +1013,11 @@ function openStation(i,opts){
     drawerPanel("cite",citeHtml,false);
   _curTf=t;                                        // stash for the expand-modal handler
   _curStation=s;                                   // stash the station for the response modal's identity header
-  drawer.setAttribute("aria-label","Station "+s.id+" details");   // E7: refine the dialog label per subject
+  drawer.setAttribute("aria-label","Station "+s.id+" details");   // the dialog label names its subject
   drawer.classList.add("open");drawer.scrollTop=keepScroll;showDrawerScrim();   // D: dim backdrop on non-map views
-  selectDrawerTab(keepTab);                        // UX8 (X4): Response default-selected (a rehydrate keeps the reader's tab)
+  selectDrawerTab(keepTab);                        // Response is the default tab (a rehydrate keeps the reader's tab)
   _restoreOpenDetails(keepOpen);                   // and the expanders they had open (empty on a real open)
-  if(!rehydrate)_focusDrawer();                    // E7: move focus into the dialog (never on a hydration re-render)
+  if(!rehydrate)_focusDrawer();                    // move focus into the dialog (never on a hydration re-render)
   if(isOpenAccess(m)) loadStationFrameLine(s);     // C25-V3: inject the frame line if this station declares one
 }
 // The hash prefixes that describe SOMETHING OPEN IN THE DRAWER, and which a
@@ -1050,16 +1039,16 @@ function closeDrawer(){const wasOpen=drawer.classList.contains&&drawer.classList
   _drawerSubject=null;                                 // nothing to rehydrate once it is shut
   drawer.classList.remove("open");hideDrawerScrim();   // D: drop the dim backdrop
   // The SURVEY hash is cleaned up on exactly the same terms the station hash
-  // always was. It used to be left behind, so after closing a survey the address bar still claimed
-  // #/survey/<slug> while nothing was open: reload or Back re-opened a drawer the reader had deliberately
-  // shut, and a copied URL shared a state the page was not in. One list, both prefixes, so the two routes
+  // always was. Leaving it behind means the address bar still claims
+  // #/survey/<slug> while nothing is open: reload or Back re-opens a drawer the reader deliberately
+  // shut, and a copied URL shares a state the page is not in. One list, both prefixes, so the two routes
   // cannot drift apart again. Every close path goes through here (the close control, the map-background
   // click, the scrim, Escape, a view switch), so this is the single seam that has to be right.
   if(HASH_ROUTES_CLEARED_ON_CLOSE.some(p=>location.hash.startsWith(p)))history.replaceState(null,"",location.pathname+location.search);
   // The survey focus dim is a VIEW state owned by the open drawer, so it lifts with it.
   // Opacity only, never a layer rebuild, so nothing reloads on close.
   if(typeof clearSurveyDim==="function")clearSurveyDim();
-  if(wasOpen)_restoreDrawerFocus();}               // E7: return focus to the invoking element (only if it was open)
+  if(wasOpen)_restoreDrawerFocus();}               // return focus to the invoking element (only if it was open)
 async function fetchEdi(file,avail,survey){
   // This EDI isn't redistributable here. Its dataset DOI (m.doi), when the survey has one, is the
   // TF source archive and is safe to open. There is NO honest substitute when no dataset DOI is
@@ -1224,7 +1213,7 @@ function attributionBoxHtml(m){m=m||{};
   return `<div class="attn">${linked.join("; ")}${yr?" ("+esc(yr)+")":""}</div>`;}
 // One funder rendered as its (ROR/pid-linked) name with the grant id appended in muted text when the
 // funding row carries one (the engine emits grant_id only for a real declared grant; absent -> just the
-// name). The Funding section owns this display; the identifiers rollup no longer duplicates the funders line.
+// name). The Funding section owns this display; the identifiers rollup must not duplicate the funders line.
 function funderHtml(f){f=f||{};
   const name=esc(f.name||"");
   const nm=f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${name}</a>`:name;
@@ -1392,7 +1381,7 @@ function _presentTypes(){const have=new Set(ST.map(s=>s.type));return _TYPE_ORDE
 function _yearKey(m){return m.year_start!=null?m.year_start:(m.year_end!=null?m.year_end:-Infinity);}
 function surveyPassesFacets(sv){const m=SMETA[sv]||{};
   if(_facets.lic&&!licIsOpen(m.lic))return false;   // "Open licence": an openly-licensed (redistributable) id per the canon tables
-  // C6 "Downloadable here": the SAME s.ediAvail predicate the map applies per station, asked of a survey
+  // "Downloadable here": the SAME s.ediAvail predicate the map applies per station, asked of a survey
   // - it passes when ANY of its stations carries a transfer function this portal may serve.
   if(_facets.dl&&!ST.some(s=>s.survey===sv&&s.ediAvail))return false;
   // C6 year range: the survey-level reading of passesYearRange's semantics. An undated survey passes
@@ -1466,11 +1455,11 @@ function clearDiscoveryFilters(){
   // refresh() re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
   if(typeof refresh==="function")refresh();else renderCards();
   if(typeof updateCounts==="function")updateCounts();}
-// "View on map" from the survey drawer header. It used to CHECK ONLY this survey in the rail tree
-// and refresh(), which removed every other survey from the map: the reader lost all context for where the
-// survey sits in the national coverage, and closing the drawer left the map still filtered. Other
-// surveys now STAY VISIBLE BUT DIMMED, so this no longer touches the tree or the filter
-// state at all; it dims (opacity only, see setSurveyDim in map.js) and frames. Nothing to reload on close.
+// "View on map" from the survey drawer header. It must not CHECK ONLY this survey in the rail tree
+// and refresh(): that removes every other survey from the map, so the reader loses all context for where
+// the survey sits in the national coverage, and closing the drawer leaves the map still filtered. Other
+// surveys STAY VISIBLE BUT DIMMED, so this touches neither the tree nor the filter
+// state; it dims (opacity only, see setSurveyDim in map.js) and frames. Nothing to reload on close.
 function focusSurvey(sv){
   setView("map");
   if(typeof setSurveyDim==="function")setSurveyDim(sv);
@@ -1493,7 +1482,7 @@ function selectSurvey(sv){
   // Stage B (selection-state isolation): scoping the map to one survey is a TEMPORARY LENS. Snapshot the
   // tree BEFORE mutating it (enterSelectLens, filters.js) and enter Select & download so the downloads this
   // selection enables are visible (they live in the Select pane). The lens is restored when the visitor
-  // returns to Browse or leaves the map. The Surveys catalogue no longer reads this tree state at all
+  // returns to Browse or leaves the map. The Surveys catalogue reads none of this tree state
   // (surveyVisible), so the scoping can never empty it; the snapshot keeps the MAP tree honest too.
   if(typeof enterSelectLens==="function")enterSelectLens();
   tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");
@@ -1582,7 +1571,7 @@ function releaseNotesHtml(m){
 }
 // Pre-built per-survey download bundles from the manifest (EDI zip + EMTF-XML zip always when served;
 // survey MTH5 only when the survey_h5_enabled flag produced one). Empty string when the survey isn't
-// served. C32: the MTH5 bundle holds TRANSFER FUNCTIONS ONLY (never time series) — the label says so,
+// served. The MTH5 bundle holds TRANSFER FUNCTIONS ONLY (never time series), and the label says so,
 // matching the engine's <slug>-tf.h5 filename.
 function surveyBundleTiles(slug){
   // Two-phase boot: the bundle rows live in the manifest (PHASE 2). "" (no tiles) reads as "this survey is
@@ -1600,9 +1589,9 @@ function surveyBundleTiles(slug){
   }).join("");
 }
 // ---- the survey DATA AT EVERY LEVEL tile grid ---------------------------
-// The block used to be a collapsed <details> of whatever single-value identifier rows happened to be
-// recorded, so its LENGTH varied per survey and a reader could not see what a survey had NOT deposited.
-// It is now a DATA-LEVEL grid: six fixed slots, always all six, rendered in the Downloads tile styling.
+// The block is a DATA-LEVEL grid: six fixed slots, always all six, rendered in the Downloads tile styling.
+// A collapsed <details> of whatever single-value identifier rows happen to be recorded varies in LENGTH
+// per survey, which hides from the reader what a survey has NOT deposited; six fixed slots cannot.
 // The vocabulary is the citable NCI scheme of Rees et al. 2019 - the same family the STATION Files tab
 // already speaks - and the slot keys ARE the shipped `identifies` enum (engine/schema/mtcat.schema.json),
 // so a slot can never drift from what the survey validator permits to publish. There is deliberately no
@@ -1664,7 +1653,7 @@ function surveyDataLevelsHtml(m){
   m=m||{};
   const rels=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object"&&r.identifier);
   // Resolve the six slots ONCE, recording which rows they consumed. With aliases in play, "this row's
-  // identifies is not a slot key" is no longer a safe proxy for "no slot took it", and getting that wrong
+  // identifies is not a slot key" is not a safe proxy for "no slot took it", and getting that wrong
   // would either drop a row or render it twice - so the consumed set is tracked explicitly and the extras
   // bucket is derived from it. `taken` also makes single-consumption structural: no row can fill two slots.
   const taken=[],slotRows=[];
@@ -1714,7 +1703,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   const rehydrate=!!(opts&&opts.rehydrate);
   const keepScroll=rehydrate?(drawer.scrollTop||0):0;
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
-  if(!rehydrate)_rememberDrawerOpener();              // E7: capture the invoking element before the rewrite
+  if(!rehydrate)_rememberDrawerOpener();              // capture the invoking element before the rewrite
   // The survey drawer OWNS its
   // route the way openStation always has. Without this, opening survey B over survey A left #/survey/<A> in
   // the address bar - the same stale-URL defect the close path had, one step further along. Skipped on a
@@ -1725,7 +1714,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
   // (7) publications, (8) identifiers (E2 rollup), (9) release history. Content is unchanged from before —
   // only the order. Acquisition/processing are carried inside the survey-summary table (sections 3/5 share
-  // That atomic block). Contributors (credit model, SPEC §3) no longer trail
+  // That atomic block). Contributors (credit model, SPEC §3) do not trail
   // below Downloads, they sit inside the ATTRIBUTION block directly beneath the attribution box.
   // Downloads move up ahead of funding/publications/identifiers; release history moves last.
   drawer.innerHTML=
@@ -1754,7 +1743,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    // survey, and per-station selection belongs to the station drawers; "View on map" moved to the header.
    `<div class="sechead">Downloads</div><div class="prodgrid">`+
      surveyBundleTiles(m.slug)+
-     // IDCONS D4: a reserved dataset DOI is shown as an inert, honestly-labelled chip — never a green
+     // A reserved dataset DOI is shown as an inert, honestly-labelled chip, never a green
      // "source archive" tile that opens a doi.org 404.
      (m.doi?(m.doi_resolution==="reserved"
        ?`<div class="prod dis"><span class="pdot" style="background:var(--part)"></span><div>Dataset DOI<small>reserved (not yet active)</small></div></div>`
@@ -1767,11 +1756,11 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    // link on the organisation name in the header subline above (orgNameLink) and on the About page.
    // identifiersHtml() itself is untouched and still serves the STATION drawer's identifiers expander.
    surveyDataLevelsHtml(m)+
-   releaseNotesHtml(m);   // ruling 3: the "Related surveys" section is removed; release notes are last
+   releaseNotesHtml(m);   // no "Related surveys" section; release notes are last
   drawer.setAttribute("aria-label",sv+", survey details");
   drawer.classList.add("open");drawer.scrollTop=keepScroll;showDrawerScrim();   // D: dim backdrop on non-map views
   _restoreOpenDetails(keepOpen);                      // and the expanders they had open (empty on a real open)
-  if(!rehydrate)_focusDrawer();}                      // E7: move focus into the dialog (never on a hydration re-render)
+  if(!rehydrate)_focusDrawer();}                      // move focus into the dialog (never on a hydration re-render)
 
 // ---- single delegated click handler (no inline onclick anywhere) ----
 function collLine(m){
@@ -1903,7 +1892,7 @@ function openCollectionPage(cid){
   closeDrawer();
   v.style.display="block";v.scrollTop=0;curView="collection";
   // This is the one view switch that does NOT go through setView, so it owes the header counter the
-  // repaint setView would have given it - otherwise the slot keeps whatever the previous view left there.
+  // repaint setView gives it - otherwise the slot keeps whatever the previous view left there.
   if(typeof updateCounts==="function")updateCounts();
 }
 function dispatchProd(d){
@@ -1957,7 +1946,7 @@ document.addEventListener("click",e=>{
   else if(act==="expand"){e.preventDefault();if(typeof openStationModal==="function"&&_curTf&&_curStation)openStationModal(stationModalHeader(_curStation,SMETA[_curStation.survey]||{}),_curTf);}
   else if(act==="collection"){e.preventDefault();location.hash="#/collection/"+encodeURIComponent(el.dataset.coll);}
   else if(act==="collidx"){e.preventDefault();if(location.hash.indexOf("#/collection/")===0)history.replaceState(null,"",location.pathname+location.search);setView("collections");}
-  else if(act==="collmap"){e.preventDefault();if(typeof viewCollectionOnMap==="function")viewCollectionOnMap(el.dataset.coll);}   // E6: switch to map + fitBounds to the collection
+  else if(act==="collmap"){e.preventDefault();if(typeof viewCollectionOnMap==="function")viewCollectionOnMap(el.dataset.coll);}   // switch to map + fitBounds to the collection
   else if(act==="focus")focusSurvey(sv);
   else if(act==="select")selectSurvey(sv);
   else if(act==="doi"&&doi)window.open(escUrl("https://doi.org/"+doi),"_blank","noopener,noreferrer");   // NOT encodeURIComponent — it %2F-escapes the DOI slash -> doi.org 404; escUrl still blocks scheme injection

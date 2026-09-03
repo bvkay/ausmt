@@ -17,7 +17,7 @@ let CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID; /*__DATA_BINDING__*/
 // harness that assigns TFD/SCI/MANIFEST directly (the coord-access and bundle-tile drivers do) behaves
 // byte-for-byte as it did before phasing: only a boot that actually starts phase 2 flips them to pending.
 let TF_READY=Promise.resolve(),SCI_READY=Promise.resolve(),MANIFEST_READY=Promise.resolve();
-// THREDDS D6: ts_access.json rides phase 2 as well. The chooser it feeds is a facet most visitors
+// ts_access.json rides phase 2 as well. The chooser it feeds is a facet most visitors
 // never open, so a phase-1 fetch would add a blocking boot request for it; the Availability controls
 // are disabled and aria-busy across the window instead, exactly as the colour modes are.
 let TSACC_READY=Promise.resolve();
@@ -50,7 +50,7 @@ let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState(); backs t
 // Its one consumer was the badge rule's never-collapse privilege, and nothing collapses now. Kept
 // because it is collection membership rather than map furniture; retiring it is a separate decision.
 let AUSLAMP_SET=new Set();
-// C42 Amendment A1: ausmt_id -> coordinate policy ('generalised' | 'withheld') for NON-EXACT stations,
+// ausmt_id -> coordinate policy ('generalised' | 'withheld') for NON-EXACT stations,
 // loaded at boot from the OPTIONAL coord_policy.json (absent for an all-exact corpus => empty => no
 // badges — graceful degrade, same tolerant-of-absence pattern as collections/manifest). buildState()
 // folds it onto each station as s.coordPolicy; the drawer badges from that. It carries POLICY, never a
@@ -63,8 +63,8 @@ let COORD_POLICY={};
 // the access rule: a withheld or coordinate-gated station is simply not in it.
 let TSACC=null;
 
-// BBMT moved off the copper action hex (#EF7256), and GDS off the
-// ok/status green (#5BAE6A), so a data-type marker can no longer be mistaken for the selection accent or a
+// BBMT stays off the copper action hex (#EF7256), and GDS off the
+// ok/status green (#5BAE6A), so a data-type marker cannot be mistaken for the selection accent or a
 // "good" status. LPMT teal is pinned (interaction test).
 // The four data-type hues are pulled further apart. BBMT #3F6FC4 -> #5E5ED6
 // (indigo) and AMT #A85CC4 -> #CDA1EC (light violet); LPMT teal and GDS magenta unchanged. The old AMT
@@ -97,7 +97,7 @@ const TYPE_INK={BBMT:"#fff"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
 const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric Collection"};
-// THREDDS D8: the time-series level vocabulary, [token, label, gloss], IN THE ORDER IT RENDERS.
+// The time-series level vocabulary, [token, label, gloss], IN THE ORDER IT RENDERS.
 // These tokens ARE ts_access.json's keys, so the chooser, the drawer rows and the hand-off pointer
 // file all name a level the same way and none of them re-derives the list. `level2` is absent BY
 // BY DESIGN, not by omission: the archive's level_2 tree holds transfer functions,
@@ -227,6 +227,6 @@ function lerp(a,b,t){const pa=[1,3,5].map(i=>parseInt(a.substr(i,2),16)),pb=[1,3
 // dichromacies: simulated low↔high separation deutan 106.8 / protan 103.1 / tritan 69.1 dE76. The olive
 // mid keeps the ramp off the lpmt teal and the ok green (every stop ≥17 dE00 from the data-type and
 // status colours), and the null/"not evaluated" grey #5A6E7D stays clearly apart from the dark low end
-// (dE00 20, L* 45 vs 26). The dark low end is marker-fill/dot material — drawer text no longer takes
-// qColor as a text colour (it renders a .qvdot swatch beside plain readable text instead).
+// (dE00 20, L* 45 vs 26). The dark low end is marker-fill/dot material, so drawer text must not take
+// qColor as a text colour; it renders a .qvdot swatch beside plain readable text instead.
 function qColor(q){if(q==null)return "#5A6E7D";const t=clamp((q-2)/3);return t<.5?lerp("#2A3B66","#6E7F46",t*2):lerp("#6E7F46","#F2E27E",(t-.5)*2);}

@@ -134,7 +134,7 @@ function _tourEnterTreeDemo(){
                   (typeof surveys!=="undefined"&&surveys.length?surveys[0]:null);
   if(!_tourTreeTarget)return;
   const box=[...tr.querySelectorAll('input[value]')].find(c=>c.value===_tourTreeTarget);
-  if(box&&typeof treeSetCollapsed==="function"){                                 // UX5 D8: ancestors expanded
+  if(box&&typeof treeSetCollapsed==="function"){                                 // the ancestors must be expanded
     treeSetCollapsed("c:"+box.dataset.country,false);
     treeSetCollapsed("o:"+box.dataset.org,false);
   }
@@ -216,7 +216,7 @@ function _tourBuild(){
   document.getElementById("tourNext").onclick=_tourNext;
   document.getElementById("tourClose").onclick=stopTour;
   document.addEventListener("keydown",_tourKeydown);
-  window.addEventListener("resize",_tourOnResize);                     // UX9: re-centre + redraw the leader on resize
+  window.addEventListener("resize",_tourOnResize);                     // re-centre + redraw the leader on resize
   return{backdrop,spot,leader,line,card};
 }
 // Re-run only the LAYOUT (not the step's enter hook) when the viewport changes while the tour is open -
@@ -237,7 +237,7 @@ function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 // the box; stop once the rect has held STABLE for _TOUR_SETTLE_STABLE_MS, or after a hard _TOUR_SETTLE_CAP_MS.
 // General, not a step-5 special case: a static target reads stable on the first frame and the watcher stands
 // down immediately; the map steps re-measure an unchanging box harmlessly. The transitionend hook is KEPT as
-// a cheap extra nudge (it re-lays-out the instant a transition ends) but is no longer relied on alone. The
+// a cheap extra nudge (it re-lays-out the instant a transition ends) but is not relied on alone. The
 // watcher is ATTACHED on arrival and DETACHED on EVERY departure (Next/Back/close/teardown) — the rAF handle
 // is cancelled and the listener removed — so no poll loop or listener leaks past the step or the tour.
 // jsdom has no layout engine and its rAF is driver-controllable, so the pin drives synthetic rect changes +
@@ -360,12 +360,12 @@ function _tourLayout(){
   card.style.left=box.left+"px";card.style.top=box.top+"px";
   if(!hasTarget){
     // Target absent (empty-data state, or an enter action found nothing to open): centred card, no
-    // spotlight, no leader — the backdrop carries the dim itself (U10).
+    // spotlight, no leader: the backdrop carries the dim itself.
     spot.style.display="none";
     if(leader)leader.style.display="none";
     backdrop.style.background="rgba(11,15,18,"+TOUR_DIM+")";
   }else{
-    // Targeted step: the spot's box-shadow supplies the dim (U10) and the backdrop stays transparent, so
+    // Targeted step: the spot's box-shadow supplies the dim and the backdrop stays transparent, so
     // the spotlighted element shows fully through the cutout.
     backdrop.style.background="transparent";
     spot.style.display="block";
@@ -415,7 +415,7 @@ function startTour(){
   if(_tourStep>=0)return;              // already running
   if(!TOUR_STEPS.length)return;
   _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
-  _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;   // D5/D2 demo state: fresh every run
+  _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;   // demo state: fresh every run
   // A COLLAPSED rail hides every child but the collapse button, so the rail steps (Find, the tree, the
   // Select and Download boxes) would spotlight nothing and narrate controls that are not on screen -
   // exactly what a returning visitor who collapsed the rail gets from About's ?tour=1 link. Expand it
@@ -429,10 +429,10 @@ function startTour(){
 }
 function stopTour(){
   if(_tourStep<0)return;
-  _tourExitCurrent();                  // D5: a demo step's cleanup runs on mid-tour close too
+  _tourExitCurrent();                  // a demo step's cleanup runs on mid-tour close too
   _tourStep=-1;
   document.removeEventListener("keydown",_tourKeydown);
-  window.removeEventListener("resize",_tourOnResize);   // U8: stop tracking the viewport once the tour closes
+  window.removeEventListener("resize",_tourOnResize);   // stop tracking the viewport once the tour closes
   _tourRestore();                      // Done/Esc/close from ANY step: restore only what the tour itself changed
   if(_tourEls){
     _tourEls.backdrop.remove();_tourEls.spot.remove();_tourEls.leader.remove();_tourEls.card.remove();

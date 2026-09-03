@@ -6,7 +6,7 @@ const tree=document.getElementById("tree");
 // The empty-state selection hint is OWNED by the markup (#selHint's default text in index.html);
 // read once at load so the copy lives in one place. updateSel restores it when a selection clears.
 const SEL_HINT_EMPTY=(document.getElementById("selHint")||{textContent:""}).textContent;
-let findActive=-1;   // UX6 Wave F (F3): index of the keyboard-highlighted Find option (-1 = none). Declared
+let findActive=-1;   // index of the keyboard-highlighted Find option (-1 = none). Declared
                      // up here so renderFind() (which resets it) is never in its temporal dead zone.
 // The period-window control is retired; the predicate is HEADLESS like qMin below - the
 // bounds live in state.js (periodLo/periodHi, full-range by default) and are drivable by harnesses.
@@ -44,7 +44,7 @@ function passesCore(s){
   // !hydrating: a FAILED sci.json leaves s.q undefined exactly as an in-flight one does, so a pending-only
   // gate would go live on a broken build and report "0 of 5 shown", which reads as a screening outcome.
   // SCI_READY re-runs refresh() the moment the values land, so a filter set early still takes effect.
-  // The completeness THRESHOLD control was retired with the Availability group (R2/R3); the predicate
+  // No completeness THRESHOLD control is offered with the Availability group; the predicate
   // is kept because qMin is still drivable (the headless drivers set it) and because deleting a
   // screening rule is a curation decision, not a rail-layout one.
   if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
@@ -59,7 +59,7 @@ function passesCore(s){
   // arrived is not a missing one, and filtering on it would empty the map over data the portal does not
   // have. paintAvailSelect disables the level options across the same window (belt and braces), and
   // TSACC_READY re-runs refresh() so a choice made early still takes effect. Membership in the index IS
-  // the access decision (R5): nothing here re-derives availability, and no filter state can surface a
+  // the access decision: nothing here re-derives availability, and no filter state can surface a
   // station the build gated out.
   const av=document.getElementById("availSel");
   if(av&&av.value&&typeof tsAccessKnown==="function"&&tsAccessKnown()){
@@ -84,8 +84,8 @@ function surveyMatchesSearch(sv){
   return [sv,m.org,m.region,m.blurb].some(x=>String(x||"").toLowerCase().includes(q));}
 // Stage B (selection-state isolation): the Surveys CATALOGUE is filtered ONLY by its own discovery
 // controls, the #surveySearch box (surveyMatchesSearch) plus the discovery facets (surveyPassesFacets,
-// applied by renderCards / updateCounts). It no longer reads passesCore, so the map rail's tree / type /
-// period / year / selection state can never hide a card. Coupling passesCore here let the All-EDIs tile,
+// applied by renderCards / updateCounts). It must not read passesCore, so the map rail's tree / type /
+// period / year / selection state can never hide a card. Coupling passesCore here lets the All-EDIs tile,
 // which checks a single tree box to scope the MAP, empty the whole catalogue with the rail (its only undo)
 // hidden on this view. The MAP still filters on passesCore via passes() / `visible`; only the catalogue is
 // cut loose.
@@ -121,10 +121,10 @@ function inShapes(s){if(!hasPosition(s))return false;
   const rings=layer.getLatLngs();const ring=Array.isArray(rings[0])?rings[0]:rings;let inn=false;
   for(let a=0,b=ring.length-1;a<ring.length;b=a++){const yi=ring[a].lat,xi=ring[a].lng,yj=ring[b].lat,xj=ring[b].lng;
     if(((yi>s.lat)!==(yj>s.lat))&&(s.lon<(xj-xi)*(s.lat-yi)/(yj-yi)+xi))inn=!inn;}if(inn)inside=true;});return inside;}
-// The header counter is ONE shell with a CONTEXTUAL slot. It used to read
-// "N shown / M selected / T total" on every view, and only on the map was that a description of what the
-// reader was looking at: on the Surveys view it counted stations while the screen showed survey cards,
-// and on the Collections views it counted something not on screen at all. The shell never moves; only
+// The header counter is ONE shell with a CONTEXTUAL slot. A fixed
+// "N shown / M selected / T total" describes what the reader is looking at only on the map: on the
+// Surveys view it counts stations while the screen shows survey cards, and on the Collections views it
+// counts something not on screen at all. The shell never moves; only
 // this slot's content changes, and where nothing true can be said about what is on screen it says
 // nothing rather than leaving a stale number standing.
 function _countN(x){return Number(x).toLocaleString("en-AU");}
@@ -161,7 +161,7 @@ function refresh(){visible=ST.filter(passes);
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("selBig").textContent=selected.size;
   // The selection is half the workspace line, so a selection change repaints the header slot. The
-  // map form's #nSel is rebuilt by the same call, which is why it is no longer set directly here.
+  // map form's #nSel is rebuilt by the same call, which is why it is not set directly here.
   updateCounts();
   // Downloads follow the SCOPE (scopeStations), so the metadata buttons enable whenever the
   // scope is non-empty - with nothing selected they act on the filtered corpus, and the scope line
@@ -191,7 +191,7 @@ function applyTreeVisibility(){
     row.classList.toggle("hidden",treeIsCollapsed("c:"+okey.slice(0,okey.indexOf("||"))));});
   tree.querySelectorAll("label.survey").forEach(row=>{const inp=row.querySelector("input");
     row.classList.toggle("hidden",treeIsCollapsed("c:"+inp.dataset.country)||treeIsCollapsed("o:"+inp.dataset.org));});
-  tree.querySelectorAll(".caret").forEach(c=>{c.textContent=treeIsCollapsed(c.dataset.key)?"▸":"▾";});   // ▸ / ▾, single source (O1 2026-07-12: collection carets removed — only country/org carets remain)
+  tree.querySelectorAll(".caret").forEach(c=>{c.textContent=treeIsCollapsed(c.dataset.key)?"▸":"▾";});   // the one place the caret glyphs are written; only country and org rows carry one
 }
 // Caret factory - its OWN click target INSIDE the label-wrapped row. preventDefault stops
 // the label from activating its checkbox (the click-target hazard, test-pinned); stopPropagation
@@ -209,8 +209,8 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
   // programme can span orgs) so this is NOT a nesting level: the checkbox is a PUSH-ONLY bulk toggle
   // with the country/org semantics — on change it sets every MEMBER survey's checkbox (matched by
   // LABEL: COLL[cid].surveys holds labels and survey checkboxes use value=<label>) and refreshes. No
-  // Derived/indeterminate state (country/org don't either - future polish). O1: the row is
-  // just name + survey count + station count now — no nested member list, no caret (per-survey toggling
+  // Derived/indeterminate state (country/org don't either). The row is
+  // just name + survey count + station count: no nested member list, no caret (per-survey toggling
   // lives in the org hierarchy). Org rows/counts below are untouched: member surveys still live under their orgs.
   // The Collections group is mounted in its OWN block (#collGroup) ABOVE the country/org/survey
   // tree, not first-within #tree. Only the mount point changed — the heading, the row label, the push-only
@@ -238,14 +238,14 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
   Object.keys(hier).sort().forEach(country=>{
     const cc=document.createElement("label");cc.className="country";
     cc.innerHTML=`<input type="checkbox" data-country="${escAttr(country)}" checked>${esc(country)}<span class="flag">${esc(CC[country]||"")}</span>`;
-    cc.insertBefore(_caret("c:"+country),cc.firstChild);   // UX5 (D7): disclosure caret ahead of the checkbox
+    cc.insertBefore(_caret("c:"+country),cc.firstChild);   // disclosure caret ahead of the checkbox
     tree.appendChild(cc);
     Object.keys(hier[country]).sort().forEach(org=>{
       const okey=country+"||"+org;   // org names can repeat across countries — namespace the toggle key
       const orow=document.createElement("label");orow.className="org";
       const _nsv=Object.keys(hier[country][org]).length;
       orow.innerHTML=`<input type="checkbox" data-org="${escAttr(okey)}" checked>${esc(org)} <span class="osv">(${_nsv} survey${_nsv===1?"":"s"})</span>`;
-      orow.insertBefore(_caret("o:"+okey),orow.firstChild);   // UX5 (D7)
+      orow.insertBefore(_caret("o:"+okey),orow.firstChild);   // the org row's disclosure caret
       tree.appendChild(orow);
       Object.keys(hier[country][org]).sort().forEach(sv=>{
         const l=document.createElement("label");l.className="survey";
@@ -261,7 +261,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
       refresh();});});
   tree.querySelectorAll('input[data-org]').forEach(inp=>{if(inp.hasAttribute("value"))return;
     inp.addEventListener("change",()=>{tree.querySelectorAll('input[data-org]').forEach(c=>{if(c.hasAttribute("value")&&c.dataset.org===inp.dataset.org)c.checked=inp.checked;});refresh();});});
-  applyTreeVisibility();   // UX5 (D7): default = everything expanded; normalises caret glyphs on (re)build
+  applyTreeVisibility();   // default = everything expanded; normalises caret glyphs on (re)build
 }
 
 // static control wiring (registrations only; functions resolved at event time)
@@ -338,8 +338,8 @@ function paintAvailSelect(){
     o.title=known?(empty?"Availability by level: "+TS_NONE_HINT:""):TS_PENDING_HINT;});
 }
 
-// ---- Availability > Time series: the per-level chooser (R3 / D7 / D8) ----------------------------
-// The R5 posture, restated where the level filter now reads it (passesCore) and where the Download
+// ---- Availability > Time series: the per-level chooser ------------------------------------------
+// The access posture, restated where the level filter reads it (passesCore) and where the Download
 // rows price it (exports.js paintDownloadRows): which stations appear in ts_access.json was decided
 // in the build - open access, a verified register row, never level_2 - so nothing in the portal
 // re-derives availability from survey metadata, and no control state can bring back a station the
@@ -390,8 +390,8 @@ function setSidebarMode(mode){
   if(sp)sp.classList.toggle("hidden",mode!=="select");
   if(seg)[...seg.children].forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));}
 document.getElementById("modeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b||!b.dataset.mode)return;setSidebarMode(b.dataset.mode);});
-// "Select all filtered" makes a selection, so (D2) auto-switch to Select & download for discoverability of
-// the exports it just enabled — the same nudge the draw-created handler in map.js makes.
+// "Select all filtered" makes a selection, so auto-switch to Select & download for discoverability of
+// the exports it just enabled: the same nudge the draw-created handler in map.js makes.
 // It also CLEARS any drawn shape: refresh() re-derives the selection from shapes, so a stale shape
 // would silently discard the select-all on the next filter change.
 document.getElementById("selAll").onclick=()=>{drawn.clearLayers();selected=new Set(visible.map(s=>s.i));updateSel();setSidebarMode("select");};

@@ -29,7 +29,7 @@ const map=L.map("map",{preferCanvas:true,attributionControl:false}).fitBounds(AU
 // deployment's key (config, public by nature) rides the tile URL when set.
 // EACH BRANCH STATES ITS OWN CREDIT, and the control prints whichever layer is on the map. This is
 // what a single fixed line of prose elsewhere on the page could not do: a deployment running on the
-// fallback would have been served CARTO tiles under a Protomaps credit. Both are rendered from
+// fallback serves CARTO tiles, and a fixed line would credit Protomaps for them. Both are rendered from
 // OpenStreetMap data, so both name OSM; the second name is the provider that built the tiles.
 // The links open the way every outbound anchor on this site opens.
 const _OSM_CREDIT='\u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
@@ -56,10 +56,9 @@ window.AusmtMapAttrib.mount(map,"Map data attribution");
 // zoom threshold. A compact survey now overlaps into a tight group of dots at national zoom and the
 // click-to-open-survey affordance the badge carried is gone. The
 // drawer's own survey route (#/survey/<slug>) and a dot click are what remain.
-// ONE dot container (change 6's own simplification, kept). There used to be two - a never-clustered plain
-// layer for AusLAMP members and a markerClusterGroup for everything else - purely because clustering had to
-// be withheld from the national LP grid. Nothing collapses now, so every station dot on the map is on the
-// map the same way.
+// ONE dot container. Two containers - a never-clustered plain layer for AusLAMP members and a
+// markerClusterGroup for everything else - are only needed while clustering has to be withheld from the
+// national LP grid. Nothing collapses, so every station dot on the map is on the map the same way.
 const dotLayer=L.layerGroup();
 map.addLayer(dotLayer);
 // AusLAMP membership is COLLECTION membership, not a data type - a station is AusLAMP iff its
@@ -81,7 +80,7 @@ function hasPosition(s){return !!(s&&s.lat!=null&&s.lon!=null&&isFinite(s.lat)&&
 // Paint the currently-visible stations into the ONE dot container. Called by refresh() (a filter changed).
 // `visible` (filters.js) is already the filtered set; only POSITIONED stations reach the layer, because a
 // coordinate-withheld station has no marker (C42) and no place on the map. Every one of them is a dot: the
-// set no longer depends on zoom or on the sidebar mode, so nothing else has to trigger a re-route.
+// set depends on neither zoom nor the sidebar mode, so nothing else has to trigger a re-route.
 // Returns what this pass painted. The app ignores the value; the jsdom driver calls the pass directly and
 // reads it, because under a stubbed Leaflet the layer contents are unreadable Proxies.
 function routeVisibleToLayers(){
@@ -221,9 +220,8 @@ function weightForZoom(z){return z<=4?1.0:1.5;}
 // defensively and default to 4 (national) when it isn't already a finite number.
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
 // One radius for every marker on the map (the per-type split is gone), so this stamps the same zoom-derived
-// size across the set. A zoom no longer re-routes: which stations are on the map is a FILTER answer, and
-// dots do not collapse, so the badge era's reflowForZoom (restyle AND re-route) is gone with the rule that
-// needed it.
+// size across the set. A zoom must not re-route: which stations are on the map is a FILTER answer, and
+// dots do not collapse, so a restyle-AND-re-route pass has nothing left to re-route.
 function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z);
   ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
 // The home frame buildMarkers fits to, remembered module-level so the setView("map") 60ms
@@ -242,7 +240,7 @@ function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z),weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
-  s.marker._survey=s.survey;   // UX8 (X3): the per-survey cluster facade buckets markers by this stamp
+  s.marker._survey=s.survey;   // the per-survey cluster facade buckets markers by this stamp
   // A marker click OPENS that station and must never ALSO read as a
   // background click that closes the drawer. L.Path defaults bubblingMouseEvents to TRUE, so without this
   // a marker click would fire the marker handler and then bubble to the map's click handler below - the
@@ -371,7 +369,7 @@ L.control.layers(null,{"Survey footprints":footprints,
 function drawSelectionMsg(n,layerType){const shape=layerType==="rectangle"?"rectangle":"polygon";
   return n+" station"+(n===1?"":"s")+" selected within "+shape;}
 // One active selection shape: a new box replaces the previous one rather than stacking. refresh()
-// recomputes `selected` from the new shape, THEN we toast the fresh count and (D2) surface the exports by
+// recomputes `selected` from the new shape, THEN we toast the fresh count and surface the exports by
 // auto-switching the rail to Select & download. Named (not inline) so the jsdom driver can invoke it.
 function onDrawCreated(e){e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();
   setArmedDraw(null);   // a completed draw disarms the mode — the panel button must not stay lit

@@ -63,7 +63,7 @@ function handoffSnack(filename,bytes){
 // value-binds these columns, which is the ONLY coverage of the qb/rr/sw call sites (buildState/drawer
 // don't expose them). Output is unchanged from the inline version.
 function csvRows(stations){
-  // C6/C46: `license`, `license_url` (the deed URL keyed off the canonical id) and `attribution` (the
+  // `license`, `license_url` (the deed URL keyed off the canonical id) and `attribution` (the
   // rendered attribution line — the custodian's verbatim statement when declared, else the org(year)
   // synthesis) travel with the exported rows so the rights don't get stripped when a CSV of the selection
   // is shared.
@@ -86,7 +86,7 @@ function attributionLine(m){m=m||{};
   const who=((m.cite&&m.cite.au)||m.org||"").toString().trim();
   const yr=(m.dates?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
   return [who,yr?"("+yr+")":""].filter(Boolean).join(" ").trim();}
-// C6/C46: the LICENSE.txt content that travels inside the client-side bulk-download zip, mirroring the
+// The LICENSE.txt content that travels inside the client-side bulk-download zip, mirroring the
 // engine's _license_text.license_instrument_text EXACTLY — the two implementations are pinned to a shared
 // vector file (engine/tests/fixtures/license_instrument_vectors.json), consumed by both an engine pytest
 // AND portal/tests/license_text_vectors.test.js, so they cannot drift silently. Deed URLs + attribution
@@ -118,7 +118,7 @@ function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
     "distributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric",
     "releases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the",
     "terms of that licence"+(url?" ("+url+").":"."),"");
-  // C46 additions (byte-inert when sources + changes are both absent): per-source attribution paragraphs,
+  // The attribution additions (byte-inert when sources + changes are both absent): per-source paragraphs,
   // supersession line(s), then the CC-BY §3(a) changes clause. Order + wording pinned to the Python leaf.
   const srcs=sources||[];
   if(srcs.length){
@@ -176,8 +176,8 @@ const GEO_SCI_UNAVAILABLE="quality, dimensionality and remote_ref are OMITTED fr
 // Extracted from the click handler for the same reason csvRows was (see above): the honesty rule now has a
 // branch here, and a branch that only exists inside an onclick is a branch no test can reach.
 function geoFeatureCollection(stations,sciOk){
-  return {type:"FeatureCollection",...(sciOk?{}:{note:GEO_SCI_UNAVAILABLE}),features:stations.map(s=>{const sc=sciRow(s.i);return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // C42: a withheld-coord station is an unlocated feature (spec-legal null geometry), never a (0,0)/[null,null] phantom point
-  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,...(sciOk?{quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:sc[SC.rr]==null?undefined:!!sc[SC.rr]}:{}),source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // C6/C46: licence + deed URL + attribution ride each GeoJSON feature
+  return {type:"FeatureCollection",...(sciOk?{}:{note:GEO_SCI_UNAVAILABLE}),features:stations.map(s=>{const sc=sciRow(s.i);return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // a withheld-coord station is an unlocated feature (spec-legal null geometry), never a (0,0)/[null,null] phantom point
+  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,...(sciOk?{quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:sc[SC.rr]==null?undefined:!!sc[SC.rr]}:{}),source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // licence + deed URL + attribution ride each GeoJSON feature
 }
 bindClick("dlGeo",async()=>{track("DownloadGenerated",{format:"geojson",n:scopeSel().length});
   if(hydrating("sci")){toast("Waiting for the screening data before writing the GeoJSON…");}
@@ -220,19 +220,19 @@ bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"poi
           {label:"Show terminal command",onClick:()=>showWgetDialog(cmds)});}
   else snack("Pointers written for "+rows.length+" station"+(rows.length===1?"":"s")+". None has a time-series file this deployment can route to.");});
 
-// ---- the time-series HAND-OFF list (R7 / D3 / D5) ------------------------------------------------
+// ---- the time-series HAND-OFF list ---------------------------------------------------------------
 // The offer is a POINTER FILE, never a server-built zip or a fourth exportSelectionFormat:
 // AusMT holds none of these bytes, and packaging them would make
 // this portal a proxy for an archive that already serves them properly.
 //
-// PORTAL-GENERATED, not gateway-generated (D5). A fifth public gateway route would touch two
+// PORTAL-GENERATED, not gateway-generated. A fifth public gateway route would touch two
 // independent allowlists, their parity test, both deny-by-default blocks and the route table; the
 // /go/ts/ path shape already carries survey, station and level, which is the whole of what the
 // measurement needs. That is also why nothing here calls track(): the request the reader actually
 // makes is counted at the front door, from the route it names.
 //
 // Each row states the ROUTE, because that is the string to fetch, and the archive's own address
-// alongside as an inert reference (D3) - so the file still names its bytes if AusMT is down, without
+// alongside as an inert reference - so the file still names its bytes if AusMT is down, without
 // pretending that address is what you were asked to fetch.
 var TS_HANDOFF_NOTE="AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. Fetch the urls from your own terminal - the portal's hand-off dialog shows ready-made commands: wget -c (Linux) or curl -L -C - (macOS/Windows) resumes on a re-run.";
 // One station's routable levels, in the vocabulary's own order so two readers' files sort alike.
@@ -441,8 +441,8 @@ function buildCitationFiles(_scope){
 
   let txt=["AusMT citation pack — generated "+today,"Stations: "+_scope.length+" across "+svs.length+" survey release(s).","","== Survey source releases =="];let bib="",risT="";
   svs.forEach(sv=>{const m=SMETA[sv]||{};const c=m.cite||AUSMT_SELF;
-    // An EXPLICIT fallback - a survey with no custodian cite block is no longer SILENTLY rendered as
-    // the AusMT brand (the pre-C46 `m.cite||AUSMT_SELF` masquerade). The human line SAYS the custodian
+    // An EXPLICIT fallback - a survey with no custodian cite block must not be SILENTLY rendered as
+    // the AusMT brand, which a bare `m.cite||AUSMT_SELF` does. The human line SAYS the custodian
     // citation is unrecorded and points at the AusMT package citation instead; the .bib/.ris twins keep
     // the package fallback but under a survey-slug key, never claiming to BE the custodian's own citation.
     if(m.cite){txt.push(citeLine(c,m.doi));}
@@ -466,7 +466,7 @@ function buildCitationFiles(_scope){
   // record (attribution.custodian, else the organisation) plus each unique source-dataset attribution
   // (verbatim statement, else the profile-rendered form). The AusLAMP/AuScope/NCI sentence is included
   // ONLY when the selection references that archive (a survey's ts_pid or a source pointing at NCI/AuScope
-  // / the collection DOI) — no longer a hardcoded paragraph on every pack.
+  // / the collection DOI), never a hardcoded paragraph on every pack.
   const custodians=[...new Set(svs.map(sv=>{const m=SMETA[sv]||{};return ((m.attribution||{}).custodian||m.org||"").toString().trim();}).filter(Boolean))];
   const saSeen={},srcAttrs=[];
   svs.forEach(sv=>{const m=SMETA[sv]||{};const yr=(m.dates?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
@@ -512,7 +512,7 @@ bindClick("dlCite",async()=>{const _scope=scopeSel();track("DownloadGenerated",{
 // as a bulk one. The gate is therefore the CALL SITE, not the shared dataUrl() helper both use.
 var SEL_BULK_FLAG="sel=bulk";
 function bulkUrl(u){u=String(u);return u+(u.indexOf("?")>=0?"&":"?")+SEL_BULK_FLAG;}
-// C6/C46: rights travel with the bytes: one LICENSE.txt per included survey, beside that survey's files
+// Rights travel with the bytes: one LICENSE.txt per included survey, beside that survey's files
 // (same slug namespace). Built entirely from client-side SMETA (no fetch), mirroring the served-zip
 // instrument. The m -> (who, yr, attn) derivation mirrors build_portal's LICENSE.txt call site;
 // sources/changes ride on SMETA when present (dormant until a survey carries an attribution/sources
@@ -615,9 +615,9 @@ var SEL_ZIP_BUTTONS=[["dlZip","EDI (zip)","edi","dlZipMeta"],["dlZipXml","EMTF X
 // This runs on EVERY KEYSTROKE (filters.js refresh() calls it after re-filtering), so it is a hot path and
 // is written as ONE pass over the selection that sums all three formats at once, reading each station's
 // rows through the manifest index (data.js mfFileIndex) rather than rescanning files[] per station per
-// format. It used to be three passes, each doing a linear scan of the whole manifest per station: 670ms
-// per repaint at 3000 selected stations against a 9000-row manifest, on the input path. It is now ~0.3ms
-// there, and flat in the manifest size.
+// format. Three passes, each doing a linear scan of the whole manifest per station, cost 670ms per
+// repaint at 3000 selected stations against a 9000-row manifest, on the input path. The one indexed pass
+// is ~0.3ms there, and flat in the manifest size.
 function paintL2Rows(st){
   const known=(typeof MANIFEST!=="undefined"&&!!MANIFEST);
   // Object.create(null), so a manifest row whose `format` happens to name an Object.prototype member
@@ -658,7 +658,7 @@ function _tileState(b,state){
 // The time-series rows: one per level token, priced over the scope, action = that level's fetch
 // list. Two-phase honesty carries over from the retired chooser: in flight is busy-and-disabled
 // with the pending hint; a settled-empty deployment says so in the note (a curation state, never a
-// load error); membership in ts_access.json is the access decision (R5).
+// load error); membership in ts_access.json is the access decision.
 function paintTsRows(st){
   const seg=document.getElementById("tsSeg");if(!seg||!seg.querySelectorAll)return;
   if(!seg.children.length&&typeof TS_LEVELS!=="undefined")TS_LEVELS.forEach(([tok,label,gloss])=>{
