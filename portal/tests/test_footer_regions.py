@@ -57,6 +57,9 @@ Each assertion states its failure criterion:
   * THE TWO EXTERNAL ANCHORS OPEN IN A NEW TAB - FAILS if either AuScope anchor on any surface
     loses target="_blank" or rel="noopener noreferrer", spells the pair differently, or if an
     in-site footer link takes a target of its own.
+  * ONE FOOTER RULE - FAILS if the five documents that share the portal's token layer stop
+    declaring the IDENTICAL footer rule, or if a second document leaves that layer. The content
+    pins cannot see the footer's box, which is where the surfaces drifted apart on height.
 
 BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's. On the static tier main is 840px on an
 entity page, 920px on a hub and 1120px above 1180px of viewport, and on the portal the sibling pages
@@ -867,3 +870,34 @@ def test_the_two_auscope_anchors_open_in_a_new_tab_on_every_surface():
                 continue
             assert "target=" not in tag, (
                 f"{where}: an in-site footer link stays in this tab, got {tag!r}")
+
+
+def test_the_token_surfaces_declare_one_footer_rule():
+    """ONE FOOTER MEANS ONE RULE, not five rules that happen to agree. A footer whose content is
+    pinned character for character but whose box is declared five times drifts in the only dimension
+    the content pins cannot see: its height. Measured in Chrome at 1280px before this pin, the six
+    documents and the generated tier spread over 4.36px, because about.html and releases.html had
+    kept a padding and a margin of their own (16px 20px 0 and margin-top:30px) where the other three
+    carried the SPA's 7px 18px.
+
+    404.html IS THE ONE SURFACE OUTSIDE THE COMPARISON, and its exclusion is asserted rather than
+    assumed. Caddy serves it for any unmatched path at any depth, so it carries no token layer and
+    writes its footer in literal colours and rem units; there is no character-for-character form it
+    could share. If it is ever brought onto the tokens this pin picks it up on its own.
+
+    FAILS if any token surface's footer rule drifts by a single character, or if a second document
+    leaves the token layer."""
+    shared, standalone = {}, []
+    for name in _portal_pages():
+        rule = _footer_rule(name, (ROOT / name).read_text(encoding="utf-8"))
+        if "var(--" in rule:
+            shared[name] = rule
+        else:
+            standalone.append(name)
+    assert standalone == ["404.html"], (
+        f"404.html is the one surface that carries no token layer; these do not either: "
+        f"{standalone}")
+    assert len(shared) == 5, f"expected five token surfaces, found {sorted(shared)}"
+    assert len(set(shared.values())) == 1, (
+        "the token surfaces must declare the IDENTICAL footer rule; found "
+        + "\n".join(f"  {n}: {r}" for n, r in sorted(shared.items())))
