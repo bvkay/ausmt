@@ -57,8 +57,9 @@ pages to stop the browser's automatic /favicon.ico 404.
 The AuScope-NCRIS white lockup, the parent-organisation logo the site footer carries on every
 surface. Committed VERBATIM from the AuScope brand kit ("2025 AuScope Logos", file
 `2025 AuScope-NCRIS Logo - White.png`); it is a third-party trademark asset, so it is never
-resized, re-encoded or recoloured here. Display size is CSS alone (`height:28px;width:auto`), which
-is why the committed file keeps its full 1919x325 resolution.
+resized, re-encoded or recoloured here. Display size is CSS alone (`height:30.8px;width:auto`, one
+declaration in portal/index.html's footer rule set and copied from there to every other surface),
+which is why the committed file keeps its full 1919x325 resolution.
 
 | File | Source | Dimensions | SHA-256 | Size |
 |---|---|---|---|---|
