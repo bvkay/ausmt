@@ -2010,6 +2010,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // the cancel failed to stop has had every chance to fire and re-arm the phase after it. The destination
   // step's own state is read with it, because the loudest way a survivor announces itself is not a dirty
   // registry at all: it is the demo's rectangle and selection landing on a step that never asked for them.
+  // The sequence bump is the defence this pin proves: a callback that survives cancellation, checks the
+  // sequence and returns is harmless by design, so a cancel that keeps the sequence bump but forgets
+  // its timer handles passes here, and that is the intended reading, not a gap.
   const _afterCancel = { step: animA.tourStep(), sel: animA.selCount() };
   await new Promise(r => setTimeout(r, Math.max(1200, _animMs * 2 + 400)));
   const _late = animA.tourAnimPending();
