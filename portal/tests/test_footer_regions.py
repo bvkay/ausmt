@@ -602,7 +602,7 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
 
 def test_the_lockup_is_sized_in_css_and_never_outgrows_its_zone():
     """THE LOCKUP NEVER OUTGROWS ITS ZONE. The committed file is 1919px wide because it is the brand
-    kit's own raster; what a reader sees is a 28px-high mark, and the width follows from the height.
+    kit's own raster; what a reader sees is a 30.8px-high mark, and the width follows from the height.
 
     FAILS if the height rule goes (the page would then paint the file at full size), if the width
     stops following it, or if the max-width cap is lost. The cap is what holds the mark inside the
@@ -675,8 +675,11 @@ _ENGINE_INK = "background:#11182D"
 _CENTRE_WEIGHT = "font-weight:700"
 
 # The lockup's rendered height, as ONE declaration in the master rule. The committed raster is
-# 1919x325, so the width follows from the height and the mark is 165.33px wide at 28px.
-LOCKUP_HEIGHT = "height:28px"
+# 1919x325, so the width follows from the height. The owner asked for it 10 percent taller: it stood
+# 28.00px (measured, matching the declaration) and now stands 30.80px, which carries the width from
+# 165.33px to 181.86px. The number is written exactly, not rounded: a rounded 31px is a different
+# ratio, and the ratio is what the owner ruled.
+LOCKUP_HEIGHT = "height:30.8px"
 
 _FOOTER_RULE = r"(?m)^\s*footer\{([^}]*)\}"
 _FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"

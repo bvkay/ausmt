@@ -956,7 +956,7 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
 
 def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
     """The committed lockup is 1919px wide because it is the brand kit's own raster; what a reader
-    sees is a 28px-high mark, and the width follows from the height.
+    sees is a 30.8px-high mark, and the width follows from the height.
 
     FAILS IF the height rule goes (every page would then paint the file at full size and the footer
     would be taller than the document above it), if the width stops following the height, or if the
@@ -967,7 +967,7 @@ def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
             encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
         m = re.search(r"\.orglogo img\{([^}]*)\}", css)
         assert m, f"{rel}: the footer lockup carries no sizing rule"
-        for decl in ("height:28px", "width:auto", "max-width:100%", "object-fit:contain"):
+        for decl in ("height:30.8px", "width:auto", "max-width:100%", "object-fit:contain"):
             assert decl in m.group(1), f"{rel}: the lockup rule must declare {decl}: {m.group(1)!r}"
 
 
