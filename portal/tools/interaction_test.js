@@ -513,6 +513,13 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // LAZY arrows so a boot on pre-lane code still REACHES the section and fails there with a precise
   // message, instead of dying at this api hook with a ReferenceError.
   "dispatchProd:(d)=>dispatchProd(d),selBulkFlag:()=>SEL_BULK_FLAG," +
+  // Drawer SUBJECT + active tab. The tour's pre-tour snapshot has to put a visitor's open drawer back on
+  // the same subject and the same tab, so the pin needs to read both as state rather than infer them from
+  // rendered markup. closeDrawer is exposed so a leg can return the world to a shut drawer without
+  // reaching through a rendered close control.
+  "curDrawerTab:()=>_curDrawerTab,closeDrawer,selectDrawerTab," +
+  "stIndex:(id)=>{const s=ST.find(x=>x.id===id);return s?s.i:-1;}," +
+  "drawerSubject:()=>_drawerSubject?JSON.parse(JSON.stringify(_drawerSubject)):null," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -1807,6 +1814,81 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));       // CLOSE from the step
   ok(A.tourStep() === -1, "D2-tour: Esc from a select-group step did not close the tour");
   ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
+
+  // H5. THE PRE-TOUR SNAPSHOT (LANE-CONTRACT-TOUR-REVISION.md T2/T4). The tour navigates, opens drawers,
+  // switches rail modes, forces a card layout and makes a selection. Closing it from ANY step must hand the
+  // visitor back exactly the workspace they had, field for field: nothing the tour did may leak. That is
+  // stronger than the old "undo only what the tour opened" rule, which could only undo the drawer, the hash
+  // and the collapsed rail, and had nothing to say about a selection, a card layout or a map frame.
+  //
+  // Driven as a MATRIX: a distinctive pre-tour state is built, its every field read, and then for EVERY step
+  // the tour is opened, walked to that step and closed - so a step that establishes state without a
+  // corresponding restore fails at the step that introduced it, not at whichever step happens to run last.
+  const _tourSnapRead = () => ({
+    view: A.curView(),
+    mode: A.sidebarMode(),
+    collapsed: doc.querySelector("aside.filters").classList.contains("collapsed"),
+    layout: (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout,
+    adv: doc.getElementById("advSearch").open,
+    drawerOpen: doc.getElementById("drawer").classList.contains("open"),
+    drawerSubject: JSON.stringify(A.drawerSubject()),
+    drawerTab: A.curDrawerTab(),
+    hash: win.location.hash,
+    selected: A.selCount(),
+    visible: A.nVisCount(),
+    find: doc.getElementById("find").value,
+    treeCollapsed: A.treeCollapsedKeys().slice().sort().join(","),
+  });
+  const _tourSnapDiff = (want, got) => Object.keys(want)
+    .filter(k => String(want[k]) !== String(got[k]))
+    .map(k => k + ": want " + JSON.stringify(want[k]) + ", got " + JSON.stringify(got[k]));
+  // Walk to `step` from a fresh tour and close with Esc. Returns the state the visitor is handed back.
+  const _tourCloseFrom = (step) => {
+    doc.getElementById("welcomeTour").click();
+    for (let k = 0; k < step; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+    ok(A.tourStep() === step, "snapshot: could not walk to step " + step + ", at " + A.tourStep());
+    win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
+    ok(A.tourStep() === -1, "snapshot: Esc from step " + step + " did not close the tour");
+    return _tourSnapRead();
+  };
+
+  // BASELINE A: a working map session. Select & download mode, Advanced search open, the compact card
+  // layout chosen, and a live selection with no drawn shape - every one of which a tour step overwrites.
+  A.setSidebarMode("select");
+  doc.getElementById("advSearch").open = true;
+  doc.querySelector('#layoutSeg [data-layout="compact"]').click();
+  doc.getElementById("selAll").click();
+  const _baseA = _tourSnapRead();
+  ok(_baseA.mode === "select" && _baseA.adv === true && _baseA.layout === "compact" && _baseA.selected > 0,
+    "snapshot setup A: the pre-tour state must be distinctive, got " + JSON.stringify(_baseA));
+  for (let s = 0; s < A.tourStepCount(); s++) {
+    const back = _tourCloseFrom(s);
+    ok(_tourSnapDiff(_baseA, back).length === 0,
+      "snapshot A: closing from step " + s + " did not restore the visitor's workspace: " +
+      _tourSnapDiff(_baseA, back).join("; "));
+  }
+
+  // BASELINE B: a reading session. Browse mode, a station drawer open on a NON-default tab, the cards
+  // layout, no selection. The tour opens its own station on the Response tab and closes the drawer for the
+  // selection demo, so both the subject and the tab have to come back.
+  doc.getElementById("clearSel").click();
+  A.setSidebarMode("browse");
+  doc.getElementById("advSearch").open = false;
+  doc.querySelector('#layoutSeg [data-layout="cards"]').click();
+  A.openStation(A.stIndex("A1"));
+  A.selectDrawerTab("cite");
+  const _baseB = _tourSnapRead();
+  ok(_baseB.drawerOpen === true && _baseB.drawerTab === "cite" && _baseB.mode === "browse" &&
+     _baseB.layout === "cards" && _baseB.selected === 0,
+    "snapshot setup B: the pre-tour state must be distinctive, got " + JSON.stringify(_baseB));
+  for (let s = 0; s < A.tourStepCount(); s++) {
+    const back = _tourCloseFrom(s);
+    ok(_tourSnapDiff(_baseB, back).length === 0,
+      "snapshot B: closing from step " + s + " did not restore the visitor's reading state: " +
+      _tourSnapDiff(_baseB, back).join("; "));
+  }
+  A.closeDrawer();                                   // hand the world back to the sections below
+  ok(!doc.getElementById("drawer").classList.contains("open"), "snapshot: could not shut the drawer after the matrix");
 
   // I. EMPTY-STATE fixture (UX7b U7): the welcome POPUP must still show on first visit (it explains the
   // portal even before any survey exists) and boot must not crash. A fresh window/localStorage so "first

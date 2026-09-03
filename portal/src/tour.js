@@ -89,8 +89,9 @@ function _tourInSelectGroup(i){return _TOUR_SELECT_GROUP.indexOf(i)>=0;}
 const TOUR_DIM=0.78;
 
 let _tourStep=-1,_tourEls=null;
-// What THIS run has itself opened, so the final step undoes only that and not pre-existing visitor state.
-let _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
+// What THIS run has itself opened, so the CLOSING STEP undoes only that and not pre-existing visitor
+// state. Closing the tour is a different question and is answered by the pre-tour snapshot below.
+let _tourOpened={drawer:false,hash:null};
 // The demo subjects resolved once per run (the corpus cannot change mid-run) and cleared on stop.
 let _tourDemoSv=undefined;
 
@@ -158,26 +159,38 @@ function _tourEnterFilters(){
 function _tourEnterSurveysView(){
   if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
 }
-// The select group's shared rail mode. The visitor's own mode is captured ONCE on entering the group and
-// restored when the walk leaves it, so a move inside the group never touches it.
-let _tourSelPrevMode=null;           // rail mode before the select group; null = nothing to restore
+// The select group's shared state: the rail mode, the demo rectangle and the demo selection. The visitor's
+// own mode is captured ONCE on entering the group and restored when the walk leaves it, so a move inside
+// the group never touches it. `created` records whether the tour made a selection of its own, so the
+// teardown clears the demo and never a selection the visitor brought with them.
+let _tourSel={mode:null,created:false,bounds:null};
 function _tourEnterSelectMode(){
   if(typeof setSidebarMode!=="function"||typeof sidebarMode==="undefined")return;
-  if(_tourSelPrevMode===null)_tourSelPrevMode=sidebarMode;
+  if(_tourSel.mode===null)_tourSel.mode=sidebarMode;
   if(sidebarMode!=="select")setSidebarMode("select");
 }
 function _tourLeaveSelectGroup(){
-  if(_tourSelPrevMode===null)return;
-  if(typeof setSidebarMode==="function")setSidebarMode(_tourSelPrevMode);
-  _tourSelPrevMode=null;
+  if(_tourSel.created){
+    try{if(typeof drawn!=="undefined"&&drawn.clearLayers)drawn.clearLayers();}catch(e){}
+    if(typeof selected!=="undefined"){selected.clear();if(typeof updateSel==="function")updateSel();}
+    if(typeof clearSurveyDim==="function")clearSurveyDim();
+  }
+  if(_tourSel.mode!==null&&typeof setSidebarMode==="function")setSidebarMode(_tourSel.mode);
+  if(_tourMapMoved&&_tourSnap){_tourFitBounds(_tourSnap.bounds);_tourMapMoved=false;}
+  _tourSel={mode:null,created:false,bounds:null};
 }
+// The selection demo needs an unobstructed map, so the group closes an open drawer on arrival. Whose
+// drawer it was does not matter: the pre-tour snapshot puts a visitor's own drawer back on close, and
+// stepping BACK re-opens the tour's own through the drawer step's idempotent enter.
 function _tourEnterSelbox(){
   _tourEnterMapView();
+  const dr=document.getElementById("drawer");
+  if(dr&&dr.classList.contains("open")&&typeof closeDrawer==="function")closeDrawer();
+  _tourOpened.drawer=false;
   _tourEnterSelectMode();
 }
 function _tourEnterSelectStep(){
-  _tourEnterMapView();
-  _tourEnterSelectMode();
+  _tourEnterSelbox();
 }
 // Find demo. Save the visitor's own query, type the demo query and dispatch a REAL bubbling input event
 // so the live wiring in filters.js (refresh() + renderFind()) filters the map and renders the actual
@@ -260,15 +273,114 @@ function _tourEnterFinal(){
   if(_tourOpened.hash!==null){history.replaceState(null,"",location.pathname+location.search+_tourOpened.hash);_tourOpened.hash=null;}
   _tourEnterMapView();
 }
-// Shared restore for stopTour: undo only what _tourOpened recorded as the tour's own doing.
-function _tourRestore(){
-  if(_tourOpened.collapsed){
-    if(typeof setSidebarCollapsed==="function")setSidebarCollapsed(true);
-    _tourOpened.collapsed=false;
+// ---- the pre-tour snapshot -------------------------------------------------------------------------
+// The tour navigates, opens drawers, switches rail modes, forces a card layout, draws a shape and makes a
+// selection. Undoing "only what the tour opened" cannot express that: it can restore a drawer and a hash,
+// but it has nothing to say about a selection a filter change silently dropped, a card layout a step
+// forced, or a map frame a fit moved. So the visitor's workspace is snapshotted ONCE at startTour and put
+// back whole on stop, from any step. The snapshot is the authority; the group teardowns below exist for
+// the boundaries the walk crosses while the tour is still running.
+let _tourSnap=null;
+let _tourMapMoved=false;             // whether the tour itself moved the map frame
+
+// The card layout is read and written through the layout control itself, so the tour drives the same path
+// a visitor's click does and never has to mirror the module's own layout state.
+function _tourCardLayout(){
+  const seg=document.getElementById("layoutSeg");
+  const on=seg&&seg.querySelector?seg.querySelector("button.on"):null;
+  return (on&&on.dataset&&on.dataset.layout)||null;
+}
+function _tourSetCardLayout(mode){
+  if(!mode||_tourCardLayout()===mode)return;
+  const seg=document.getElementById("layoutSeg");
+  const b=seg&&seg.querySelector?seg.querySelector('[data-layout="'+mode+'"]'):null;
+  if(b&&b.click)b.click();
+}
+function _tourMapBounds(){
+  try{if(typeof map!=="undefined"&&map.getBounds)return map.getBounds();}catch(e){}
+  return null;
+}
+function _tourFitBounds(b){
+  if(!b)return;
+  try{if(typeof map!=="undefined"&&map.fitBounds)map.fitBounds(b);}catch(e){}
+}
+function _tourDrawnLayers(){
+  const out=[];
+  try{if(typeof drawn!=="undefined"&&drawn.eachLayer)drawn.eachLayer(l=>out.push(l));}catch(e){}
+  return out;
+}
+function _tourTakeSnapshot(){
+  const dr=document.getElementById("drawer"),sb=document.querySelector("aside.filters");
+  const tr=document.getElementById("tree"),f=document.getElementById("find");
+  const adv=document.getElementById("advSearch");
+  _tourSnap={
+    view:(typeof curView!=="undefined")?curView:null,
+    mode:(typeof sidebarMode!=="undefined")?sidebarMode:null,
+    collapsed:!!(sb&&sb.classList.contains("collapsed")),
+    layout:_tourCardLayout(),
+    adv:!!(adv&&adv.open),
+    drawerOpen:!!(dr&&dr.classList.contains("open")),
+    drawerSubject:(typeof _drawerSubject!=="undefined"&&_drawerSubject)?_drawerSubject:null,
+    drawerTab:(typeof _curDrawerTab!=="undefined")?_curDrawerTab:null,
+    hash:location.hash,
+    shapes:_tourDrawnLayers(),
+    selected:(typeof selected!=="undefined")?[...selected]:[],
+    bounds:_tourMapBounds(),
+    find:f?f.value:null,
+    treeScroll:tr?tr.scrollTop:0,
+    treeCollapsed:(typeof _treeCollapsed!=="undefined")?[..._treeCollapsed]:null
+  };
+  _tourMapMoved=false;
+}
+// Put the visitor's own drawer back. A subject is re-opened through the same seam that opened it first,
+// so the drawer's contents are re-rendered rather than restored from stale markup; the active tab is
+// re-selected afterwards because opening a station resets it to the default panel.
+function _tourRestoreDrawer(s){
+  const dr=document.getElementById("drawer");
+  const open=!!(dr&&dr.classList.contains("open"));
+  if(!s.drawerOpen){if(open&&typeof closeDrawer==="function")closeDrawer();return;}
+  const sub=s.drawerSubject;
+  if(!sub)return;
+  if(sub.kind==="station"&&typeof openStation==="function")openStation(sub.i);
+  else if(sub.kind==="survey"&&typeof openSurvey==="function")openSurvey(sub.sv);
+  if(s.drawerTab&&typeof selectDrawerTab==="function")selectDrawerTab(s.drawerTab);
+}
+// Restore order is load bearing: the query first (it drives refresh(), which re-derives the selection),
+// then the tree, then the shapes and the selection, then the view (which closes any open drawer), then
+// the drawer, and the hash LAST because opening or closing a drawer rewrites it.
+function _tourRestoreSnapshot(){
+  const s=_tourSnap;
+  if(!s)return;
+  _tourSnap=null;
+  const f=document.getElementById("find");
+  if(f&&s.find!==null&&f.value!==s.find){
+    f.value=s.find;f.dispatchEvent(new Event("input",{bubbles:true}));
+    const fr=document.getElementById("findResults");
+    if(fr&&!s.find){fr.style.display="none";fr.innerHTML="";}
   }
-  if(_tourOpened.drawer){closeDrawer();_tourOpened.drawer=false;}
-  if(_tourOpened.hash!==null){history.replaceState(null,"",location.pathname+location.search+_tourOpened.hash);_tourOpened.hash=null;}
-  if(typeof curView!=="undefined"&&curView!=="map"&&typeof setView==="function")setView("map");
+  if(s.treeCollapsed&&typeof _treeCollapsed!=="undefined"&&typeof applyTreeVisibility==="function"){
+    _treeCollapsed.clear();s.treeCollapsed.forEach(k=>_treeCollapsed.add(k));applyTreeVisibility();
+  }
+  const tr=document.getElementById("tree");if(tr)tr.scrollTop=s.treeScroll;
+  const adv=document.getElementById("advSearch");if(adv)adv.open=s.adv;
+  try{if(typeof drawn!=="undefined"&&drawn.clearLayers){drawn.clearLayers();s.shapes.forEach(l=>drawn.addLayer(l));}}catch(e){}
+  if(typeof selected!=="undefined"){
+    selected=new Set(s.selected);
+    if(typeof updateSel==="function")updateSel();
+  }
+  _tourSetCardLayout(s.layout);
+  // "collection" is a full-width detail page, not one of setView's three tab views; a visitor who was
+  // reading one is returned to the map rather than to a view name setView cannot take.
+  const wantView=(s.view==="map"||s.view==="surveys"||s.view==="collections")?s.view:"map";
+  if(typeof setView==="function"&&typeof curView!=="undefined"&&curView!==wantView)setView(wantView);
+  if(typeof setSidebarMode==="function"&&typeof sidebarMode!=="undefined"&&sidebarMode!==s.mode&&s.mode)setSidebarMode(s.mode);
+  _tourRestoreDrawer(s);
+  if(_tourMapMoved){_tourFitBounds(s.bounds);_tourMapMoved=false;}
+  const sb=document.querySelector("aside.filters");
+  if(sb&&typeof setSidebarCollapsed==="function"&&sb.classList.contains("collapsed")!==s.collapsed)
+    setSidebarCollapsed(s.collapsed);
+  if(location.hash!==s.hash)history.replaceState(null,"",location.pathname+location.search+s.hash);
+  _tourOpened={drawer:false,hash:null};
 }
 
 function _tourBuild(){
@@ -492,16 +604,16 @@ function _tourPrev(){
 function startTour(){
   if(_tourStep>=0)return;              // already running
   if(!TOUR_STEPS.length)return;
-  _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
-  _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;
+  _tourOpened={drawer:false,hash:null};
+  _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;
+  _tourSel={mode:null,created:false,bounds:null};
   _tourDemoSv=undefined;               // resolve the demo subjects afresh against the loaded corpus
+  _tourTakeSnapshot();                 // the workspace the visitor is handed back on close, from any step
   // A COLLAPSED rail hides every child but the collapse button, so the rail steps would spotlight nothing
-  // and narrate controls that are not on screen. Expand it for the run and record that the tour did, so
-  // the restore puts the visitor's own choice back.
+  // and narrate controls that are not on screen. Expand it for the run; the snapshot above already holds
+  // the visitor's own choice, so the restore puts it back.
   const _sb=document.querySelector("aside.filters");
-  if(_sb&&_sb.classList.contains("collapsed")&&typeof setSidebarCollapsed==="function"){
-    setSidebarCollapsed(false);_tourOpened.collapsed=true;
-  }
+  if(_sb&&_sb.classList.contains("collapsed")&&typeof setSidebarCollapsed==="function")setSidebarCollapsed(false);
   _tourEls=_tourBuild();
   _tourStep=0;_tourPosition();
 }
@@ -513,7 +625,7 @@ function stopTour(){
   _tourStep=-1;
   document.removeEventListener("keydown",_tourKeydown);
   window.removeEventListener("resize",_tourOnResize);
-  _tourRestore();                      // restore only what the tour itself changed
+  _tourRestoreSnapshot();              // the visitor's whole pre-tour workspace, field for field
   if(_tourEls){
     _tourEls.backdrop.remove();_tourEls.spot.remove();_tourEls.leader.remove();_tourEls.card.remove();
     _tourEls=null;
