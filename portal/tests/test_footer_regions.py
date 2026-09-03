@@ -1085,26 +1085,3 @@ def test_the_centre_zone_holds_the_same_markup_on_every_surface():
         assert got == master, (
             f"{where}: the acknowledgement must hold portal/index.html's markup once the "
             f"separator's spelling is resolved.\n  master: {master!r}\n  {where}: {got!r}")
-
-
-def test_the_map_carries_no_attribution_control():
-    """THE CONTROL ITSELF IS GONE, not merely styled away. The map is created with
-    attributionControl:false, so Leaflet mounts no control and prints no "Leaflet" prefix, and the
-    tile layers state no attribution of their own: an option that reaches a control that does not
-    exist is dead configuration that reads as if the corner still carried the credit.
-
-    THE DORMANT LAYER PATH KEEPS ITS ESCAPING. userLayer() feeds a fetched GeoJSON's source field to
-    addAttribution, which renders HTML; the control is gone, so that call is guarded, and the guard
-    is written so tests/test_url_guard.py's driver still drives the escaping through its stub.
-
-    FAILS if the control comes back, if a layer re-declares an attribution, if the guard goes, or if
-    the map's own stylesheet keeps a rule for a control that no longer exists."""
-    map_js = (ROOT / "src" / "map.js").read_text(encoding="utf-8")
-    assert re.search(r'L\.map\("map",\s*\{[^}]*attributionControl:\s*false', map_js), (
-        "the SPA map must be created with attributionControl:false")
-    assert "attribution:" not in map_js, (
-        "no tile layer states an attribution of its own; the credit is the footer's")
-    assert re.search(r"&&\s*map\.attributionControl\b", map_js), (
-        "the dormant user-layer path must guard the control it can no longer assume exists")
-    assert "leaflet-control-attribution" not in _index_text(), (
-        "index.html must not style a control the map no longer mounts")

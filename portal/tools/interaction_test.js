@@ -143,8 +143,49 @@ const mapFacade = recProxy(mapOwn);
 // re-parenting cannot happen at all and the pin would be vacuous. Every other L.control member (the
 // layer control map.js builds) still degenerates to the old stub.
 const scaleControls = [];
+// L.control.attribution, recorded, for the SAME reason and on the same terms as the scale bar: the
+// collapsed control is ASSEMBLED IN THE DOM by src/mapattrib.js, so under the blanket stub there
+// would be no node to assemble it on and every assertion about the glyph, the state and the credit
+// would be vacuous. This reproduces the three behaviours the ruling turns on: the control renders
+// into a container of its own, it collects each LAYER's declared attribution (which is what makes
+// the credit follow the provider that is drawn), and it prints the prefix only when one is asked
+// for, so "no Leaflet flag" is a real assertion and not a restatement of the option.
+const attributionControls = [];
 const controlFacade = new Proxy(function () { }, {
   get: (t, p) => {
+    if (p === "attribution") return (opts) => {
+      const own = Object.create(null);
+      own.options = opts || {};
+      own.credits = [];
+      own.container = win.document.createElement("div");
+      own.container.className = "leaflet-control-attribution leaflet-control";
+      own.update = () => {
+        const bits = [];
+        if (own.options.prefix) bits.push(own.options.prefix);
+        if (own.credits.length) bits.push(own.credits.join(", "));
+        own.container.innerHTML = bits.join(' <span aria-hidden="true">|</span> ');
+      };
+      own.addAttribution = (s) => {
+        if (typeof s === "string" && s && own.credits.indexOf(s) < 0) own.credits.push(s);
+        own.update(); return own.__self;
+      };
+      own.addTo = () => {
+        // Leaflet appends a control into the map's corner and then reads every layer already on the
+        // map. jsdom runs no Leaflet, so #map stands in for the corner; what the pins care about is
+        // that the control lands inside the map, which is where a reader would look for it.
+        (win.document.getElementById("map") || win.document.body).appendChild(own.container);
+        layersAdded.forEach(l => {
+          let a = null;
+          try { a = l && typeof l.getAttribution === "function" ? l.getAttribution() : null; }
+          catch (e) { a = null; }
+          own.addAttribution(a);
+        });
+        own.update(); own.added = true; return own.__self;
+      };
+      own.getContainer = () => own.container;
+      attributionControls.push(own);
+      return recProxy(own);
+    };
     if (p !== "scale") return stub();
     return (opts) => {
       const own = Object.create(null);
@@ -175,6 +216,17 @@ win.L = new Proxy(function () { }, {
     if (p === "marker") return (ll, o) => recLayer("marker", ll, o, false);
     if (p === "polyline") return (lls, o) => recLayer("polyline", lls, o, true);
     if (p === "layerGroup") return () => recGroup();
+    // The basemap layer, recorded for ONE property: the attribution it declares. That is what the
+    // collapsed control reads, and "the credit follows the layer that is drawn" is the claim the
+    // whole ruling rests on, so it is asserted against the layer the app actually added rather
+    // than against a string in a source file.
+    if (p === "tileLayer") return (url, o) => {
+      const own = Object.create(null);
+      own.kind = "tileLayer"; own.url = url; own.options = o || {};
+      own.getAttribution = () => own.options.attribution;
+      own.addTo = () => { mapAddLayer(own.__self); return own.__self; };
+      return recProxy(own);
+    };
     if (p === "control") return controlFacade;
     return stub();
   },
@@ -281,7 +333,7 @@ win.fetch = url => {
 // analytics-shim is FIRST, exactly as index.html loads it: it defines the no-op window.track() every
 // export click handler calls on its first line. The harness used to omit it, which is why no pin could
 // drive a real export BUTTON (only the pure helpers behind one) without dying on an undefined track.
-const MODULES = ["analytics-shim", "contract", "security", "state", "data", "plots", "map", "filters", "drawer", "exports", "main", "tour"];
+const MODULES = ["analytics-shim", "contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer", "exports", "main", "tour"];
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFind," +
   "curView:()=>curView,nST:()=>ST.length,visIds:()=>visible.map(s=>s.id)," +
@@ -5041,13 +5093,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "basemap: the pmtiles branch must render through the vendored protomaps-leaflet");
     ok(/pmtiles_world/.test(_mapSrc) && /pmtiles_region/.test(_mapSrc),
       "basemap: both pmtiles paths must come from config, never hardcoded");
-    // THE CREDIT MOVED, so this half moved with it rather than being dropped. The layers used to
-    // carry it as a Leaflet attribution option; with no attribution control there is nothing to
-    // render one, and an option feeding a control that does not exist reads as if the map corner
-    // still carried the credit. The obligation is met in the SPA footer and asserted in the
-    // map-chrome block below, against the DRIVEN document. Here the negative: no layer restates it.
-    ok(!/attribution\s*:/.test(_mapSrc),
-      "basemap: no layer may state an attribution of its own; the footer carries the credit");
+    // EVERY BRANCH STATES ITS OWN CREDIT, which is what makes the corner control print what is
+    // actually drawn. A single line of prose elsewhere on the page cannot do that: the pmtiles
+    // build and the CARTO fallback are different providers, and only the layer knows which one is
+    // on the map.
+    ok(/attribution\s*:/.test(_mapSrc),
+      "basemap: each tile layer states its own credit; the control prints the layer that is drawn");
+    ok(/Protomaps/.test(_mapSrc) && /CARTO/.test(_mapSrc),
+      "basemap: the pmtiles branch credits Protomaps and the fallback credits CARTO, by name");
     const _vendored = fs.readFileSync(path.join(PORTAL, "vendor", "protomaps-leaflet.js"), "utf8");
     ok(_vendored.startsWith('"use strict";var protomapsL='),
       "basemap: vendor/protomaps-leaflet.js must be the verbatim upstream UMD (protomapsL global)");
@@ -5099,41 +5152,94 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "discoverability: the WebSite publisher must stay AuScope");
   }
 
-  // ---- Map chrome: muted basemap + NO attribution control + Search Console ownership --------------
+  // ---- Map chrome: muted basemap + the COLLAPSED attribution control + Search Console ownership ---
   // The protomaps light flavour renders a stronger sea blue than the portal's palette wants, and the
   // bundle exposes no per-colour flavour override, so the muting is a CSS filter scoped to the tile
   // pane ONLY (station overlays render in other panes and must keep full colour). The google-site-
   // verification meta proves domain ownership to Search Console; the content value is the owner's
   // token, pinned by shape so a token rotation is a one-line index.html edit.
   //
-  // THE ATTRIBUTION CONTROL IS GONE FROM THE MAP at the owner's ask, and this is where that is
-  // proven against a DRIVEN map rather than against source text: the map is built and rendered in
-  // this document, so a control Leaflet still mounted would be in the DOM here. The credit itself
-  // did not go: it is a licence obligation (ODbL basemap data, Protomaps tiles) and it now sits in
-  // the footer, which is directly beneath the map and always on screen. Both halves are asserted
-  // together, because either alone is the defect: the corner line without the footer line is the
-  // owner's complaint, and the footer line without the corner removed is the same credit twice.
+  // THE ATTRIBUTION IS BACK ON THE MAP, COLLAPSED, and this is where that is proven against a DRIVEN
+  // document rather than against source text. What the owner asked to be rid of was the LINE and the
+  // Leaflet flag beside it; the credit itself is a licence term (ODbL basemap data, and the tile
+  // provider's own terms) and it stays where the map is, because only the layer knows which provider
+  // is drawing. Every leg the ruling names is driven here: the control exists, it starts collapsed,
+  // it carries no prefix, it names OpenStreetMap, and a click and a keyboard focus both open it.
   {
     ok(/#map \.leaflet-tile-pane\{filter:[^}]*saturate\(/.test(html),
       "map-chrome: index.html must mute the basemap via a saturate filter on the tile pane only");
     ok(!/leaflet-overlay-pane\{[^}]*filter/.test(html) && !/#map\{[^}]*filter/.test(html),
       "map-chrome: the mute filter must never widen to the overlay panes or the whole map");
-    ok(!/leaflet-control-attribution/.test(html),
-      "map-chrome: index.html must not style an attribution control the map no longer mounts");
+    ok(/\.mapattrib \.leaflet-control-attribution\{[^}]*display:none/.test(html),
+      "map-chrome: index.html must style the control collapsed by default");
+    ok(/\.mapattrib\.mapattrib-open \.leaflet-control-attribution\{[^}]*display:block/.test(html),
+      "map-chrome: index.html must style the open state that reveals the credit");
 
-    // The map is STILL BUILT, and built with the control switched off. Proving the absence without
-    // proving the build would pass on a map that never came up at all, which is the one way "no
-    // attribution control" is true and worthless. Leaflet is stubbed in this harness, so the build
-    // is proven by what the app asked it for: one L.map on #map, the home extent fitted, and the
-    // station dots added.
+    // The map is STILL BUILT, and built without Leaflet's default control, which is the one that
+    // carries the flag and the word. Proving the control's shape without proving the build would
+    // pass on a map that never came up at all.
     ok(mapMade.length === 1 && mapMade[0].id === "map",
       "map-chrome: the app must build exactly one map, on #map, got " + JSON.stringify(mapMade.map(m => m.id)));
     ok(mapMade[0].opts.attributionControl === false,
-      "map-chrome: the map must be built with attributionControl:false, so Leaflet mounts no control " +
-      "and prints no Leaflet prefix; got " + JSON.stringify(mapMade[0].opts));
+      "map-chrome: the map must be built with attributionControl:false, so Leaflet's DEFAULT control " +
+      "(which carries the flag and the word) is never mounted; got " + JSON.stringify(mapMade[0].opts));
     ok(mapCalls.some(c => c.fn === "fitBounds") && layersAdded.length > 0,
       "map-chrome: the map must still come up: the home extent fitted and layers added, got " +
       mapCalls.length + " map calls and " + layersAdded.length + " layers");
+
+    // ONE control, mounted with no prefix, in the map.
+    ok(attributionControls.length === 1,
+      "map-chrome: the app must mount exactly one attribution control, got " + attributionControls.length);
+    ok(attributionControls[0].options.prefix === false,
+      "map-chrome: the control is mounted with prefix:false, so no Leaflet flag and no Leaflet word " +
+      "reach the corner; got " + JSON.stringify(attributionControls[0].options));
+    const _wrap = doc.querySelector("#map .mapattrib");
+    ok(_wrap, "map-chrome: the collapsed control must be mounted inside the map container");
+    const _attn = _wrap && _wrap.querySelector(".leaflet-control-attribution");
+    const _glyph = _wrap && _wrap.querySelector(".mapattrib-toggle");
+    ok(_attn, "map-chrome: the control must carry Leaflet's own attribution element");
+    ok(_glyph && _glyph.tagName === "BUTTON",
+      "map-chrome: the glyph must be a real button a keyboard can reach, got " +
+      (_glyph ? _glyph.tagName : "nothing"));
+    ok(_glyph && (_glyph.getAttribute("aria-label") || "").length > 3,
+      "map-chrome: the glyph is one letter, so it carries a label saying what it opens");
+
+    // COLLAPSED BY DEFAULT. jsdom measures no box, so the state is read where the page holds it;
+    // the box itself is a browser measurement recorded with the round's screenshots.
+    ok(_wrap && !_wrap.classList.contains("mapattrib-open"),
+      "map-chrome: the control must start collapsed");
+    ok(_glyph && _glyph.getAttribute("aria-expanded") === "false",
+      "map-chrome: a collapsed control says so, got aria-expanded=" +
+      JSON.stringify(_glyph && _glyph.getAttribute("aria-expanded")));
+
+    // NO PREFIX AND NO FLAG in what it prints, and the credit is the LAYER's: this document takes
+    // the CARTO branch (the vendored protomaps renderer is not loaded here), so what the control
+    // names is what that layer declared, which is the property a footer line could never have.
+    const _txt = _attn ? _attn.textContent : "";
+    ok(!/Leaflet/.test(_txt),
+      "map-chrome: the control prints no Leaflet prefix, got " + JSON.stringify(_txt));
+    ok(_attn && !_attn.querySelector(".leaflet-attribution-flag"),
+      "map-chrome: the Leaflet flag goes with the prefix");
+    ok(/OpenStreetMap/.test(_txt),
+      "map-chrome: the control names OpenStreetMap, whose data the basemap is under ODbL; got " +
+      JSON.stringify(_txt));
+    ok(/CARTO/.test(_txt),
+      "map-chrome: the control names the provider the LOADED layer declared, which is the CARTO " +
+      "fallback in this document; got " + JSON.stringify(_txt));
+
+    // OPENS ON CLICK, and on KEYBOARD FOCUS, and closes again both ways.
+    _glyph.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    ok(_wrap.classList.contains("mapattrib-open") && _glyph.getAttribute("aria-expanded") === "true",
+      "map-chrome: a click must expand the control");
+    _glyph.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    ok(!_wrap.classList.contains("mapattrib-open"),
+      "map-chrome: a second click must collapse it again");
+    _glyph.dispatchEvent(new win.Event("focusin", { bubbles: true }));
+    ok(_wrap.classList.contains("mapattrib-open") && _glyph.getAttribute("aria-expanded") === "true",
+      "map-chrome: focusing the glyph must expand the control, so a keyboard reaches the credit");
+    _glyph.dispatchEvent(new win.Event("focusout", { bubbles: true }));
+    ok(!_wrap.classList.contains("mapattrib-open"),
+      "map-chrome: the control must collapse again when focus leaves");
 
     // THE FOOTER CREDITS NO BASEMAP. It is the same box on seven surfaces, and a line only this one
     // carried made it a taller box here (90.80px against 74.30px at 1280, measured in Chrome); and a
