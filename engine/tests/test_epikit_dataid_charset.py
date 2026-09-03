@@ -192,6 +192,24 @@ def test_preflight_calls_a_refused_dataid_needs_repair_not_will_not_read():
     assert "site_name" in finding["reason"]
 
 
+def test_preflight_names_the_station_the_build_names():
+    """The module's own rule, extended to the class the rescue created: a finding a curator cannot
+    match to a station is a finding they cannot act on. The pre-flight's mirror of the station name
+    now has to carry the AusMT normalisation too, or it reports "53(RR)" for a station the build
+    calls 53_RR_. Held against the reader itself, never against an expectation, and the repository's
+    other real EDIs carry no refused DATAID, so nothing else pins this."""
+    assert pf.preflight_file(CHARSET)["station"] == mtm.read(CHARSET).station == "53_RR_"
+
+
+@pytest.mark.parametrize("dataid", ["222 ", "769 R", "MT-01", "MT.01", "MT+01", "Wp01"])
+def test_the_station_name_mirror_still_agrees_on_a_dataid_the_reader_accepts(dataid, tmp_path):
+    """The sweep is only safe because it AGREES with mt_metadata wherever mt_metadata is defined.
+    Checked against the real reader on each accepted shape, or the widened mirror could be renaming
+    stations the reader was perfectly happy with."""
+    work = _with_dataid(tmp_path / "ok.edi", SAMPLE, dataid)
+    assert pf.station_name(dataid) == mtm.read(work).station
+
+
 def test_preflight_still_calls_an_unreadable_reference_position_terminal(tmp_path):
     """The verdict that must NOT move: a reference position mt_metadata refuses is set unguarded in
     read_measurement and no AusMT conditioning touches it, so it stays terminal. Without this the

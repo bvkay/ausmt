@@ -577,21 +577,34 @@ def _position_is_readable(value: str, kind: str) -> bool:
 _STATION_NAME_OK = re.compile(r"^[a-zA-Z0-9_]+$")
 
 
-def station_name(raw_dataid: str) -> str:
-    """The station id the BUILD will use, not the string in the file. Mirrors
-    `utils/validators.validate_station_name`, which swaps space, `-`, `.` and `+` for `_`. The report
-    names stations the way the catalogue and the build log name them, so a curator can match a
-    finding to a station without translating."""
+def _mt_metadata_rewrite(raw_dataid: str) -> str:
+    """`utils/validators.validate_station_name`'s own rewrite and nothing else: strip, then swap
+    space, `-`, `.` and `+` for `_`. Whatever this leaves outside letters, digits and underscore is
+    what makes the validator RAISE, so this is the form the readability test below must see."""
     return raw_dataid.strip().replace(" ", "_").replace("-", "_").replace(".", "_").replace("+", "_")
+
+
+def station_name(raw_dataid: str) -> str:
+    """The station id the BUILD will use, not the string in the file. The report names stations the
+    way the catalogue and the build log name them, so a curator can match a finding to a station
+    without translating.
+
+    Every character outside letters, digits and underscore becomes `_`. On a DATAID mt_metadata
+    ACCEPTS that is exactly its own rewrite (it maps the four characters above and requires the rest
+    to be in the charset already, so no other character can survive), and on one it refuses it is the
+    AusMT normalisation the reader applies to its temporary copy. One expression covers both because
+    they agree wherever both are defined."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", raw_dataid.strip())
 
 
 def _station_name_is_readable(raw_dataid: str) -> bool:
     """`validate_station_name` RAISES on any surviving character outside letters, digits and
     underscore -- and `read_header` calls it OUTSIDE the try/except that guards the assignment, so a
-    station called `MT01(a)` stops the read before anything else is attempted. Measured against
+    station called `MT01(a)` stops a STOCK read before anything else is attempted. Measured against
     mt_metadata 1.0.9 (2026-08-09): `MT-01`, `MT 01` and `MT_01` all read; `MT01(a)`, `MT#1` and
-    `MT/1` all raise."""
-    return bool(_STATION_NAME_OK.match(station_name(raw_dataid)))
+    `MT/1` all raise. Reads mt_metadata's own rewrite, NOT `station_name` above, which sweeps the
+    refused characters too and would answer yes for every name."""
+    return bool(_STATION_NAME_OK.match(_mt_metadata_rewrite(raw_dataid)))
 
 
 def _is_number(value: object) -> bool:
