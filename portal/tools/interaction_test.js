@@ -1933,6 +1933,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(animA.tourStep() === 0, "demo/anim: ?tour=1 did not start the tour, at " + animA.tourStep());
   for (let k = 0; k < 7; k++) animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "ArrowRight" }));
   ok(animA.tourStep() === 7, "demo/anim: could not reach the selection-demo step, at " + animA.tourStep());
+  const _animT0 = Date.now();
   ok(animA.tourAnimPending().running === true,
     "demo/anim: the demo must be running with a frame or timer pending, got " + JSON.stringify(animA.tourAnimPending()));
   const _wantAnim = animA.tourRectMembers(animA.tourDemoBounds()).length;
@@ -1944,6 +1945,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify(animWin.document.getElementById("tourText").textContent));
   const _deadline = Date.now() + 8000;
   while (animA.selCount() !== _wantAnim && Date.now() < _deadline) await new Promise(r => setTimeout(r, 40));
+  const _animMs = Date.now() - _animT0;                  // the demo's real end-to-end cost on this machine
   ok(animA.selCount() === _wantAnim,
     "demo/anim: the animated path must reach the same end state within the bound, selection is " + animA.selCount());
   ok(animA.tourStepText(7).indexOf("- " + _wantAnim + " here") >= 0,
@@ -1960,6 +1962,23 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify(_pend));
   ok(!animWin.document.getElementById("tourCursor"),
     "demo/cancel: the cursor glyph must be removed from the document when the animation is cancelled");
+  // Read in the same tick as the interrupt, that registry proves too little: a cancel that emptied the
+  // arrays without stopping what they held reads exactly as clean as one that stopped everything. So the
+  // registry is read AGAIN once the demo would have finished twice over, by which time any frame or timer
+  // the cancel failed to stop has had every chance to fire and re-arm the phase after it. The destination
+  // step's own state is read with it, because the loudest way a survivor announces itself is not a dirty
+  // registry at all: it is the demo's rectangle and selection landing on a step that never asked for them.
+  const _afterCancel = { step: animA.tourStep(), sel: animA.selCount() };
+  await new Promise(r => setTimeout(r, Math.max(1200, _animMs * 2 + 400)));
+  const _late = animA.tourAnimPending();
+  ok(_late.raf === false && _late.timers === 0 && _late.cursor === false && _late.layer === false,
+    "demo/cancel: a frame or timer the cancel dropped instead of stopping has re-armed the animation, got " +
+    JSON.stringify(_late));
+  ok(!animWin.document.getElementById("tourCursor"),
+    "demo/cancel: the cancelled animation put its cursor glyph back into the document");
+  ok(animA.tourStep() === _afterCancel.step && animA.selCount() === _afterCancel.sel,
+    "demo/cancel: a surviving timer applied the demo to the step the walk moved to; step " +
+    animA.tourStep() + "/" + _afterCancel.step + ", selection " + animA.selCount() + "/" + _afterCancel.sel);
   animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "Escape" }));
   ok(animA.tourAnimPending().running === false, "demo/cancel: closing the tour must leave nothing pending");
 
