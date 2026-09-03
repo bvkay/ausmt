@@ -686,3 +686,41 @@ def test_the_page_and_the_engine_print_one_acknowledgement():
         "pages the engine prints it on:\n"
         f"  portal/about.html          {ACKNOWLEDGEMENT!r}\n"
         f"  engine/extract/_pages.py   {engine!r}")
+
+
+# ---------------------------------------------------------------------------
+# The privacy paragraph.
+#
+# These facts were the site's ONLY statement of them and they lived in an HTML comment in
+# index.html's <head>, beside a disabled analytics template. A privacy commitment a reader cannot
+# read is not a commitment, so they are visible copy in section 4 and the comment is gone.
+#
+# deploy/tests/test_caddy_log_masking.py holds the same paragraph against what the edge actually
+# does, so the promise and the logging cannot drift apart. This pin holds the paragraph's PLACE and
+# its four claims; that one holds their truth.
+# ---------------------------------------------------------------------------
+def test_about_states_the_privacy_promise_in_licence_and_access():
+    html = ABOUT.read_text(encoding="utf-8")
+    section = html.split('<section id="access">', 1)[1].split("</section>", 1)[0]
+    assert 'id="privacy"' in section, (
+        "the privacy paragraph belongs in section 4 (Licence and access), where a reader looking for "
+        "the terms of use will meet it"
+    )
+    para = " ".join(section.split('<p id="privacy">', 1)[1].split("</p>", 1)[0].split())
+    for claim in ("truncate IP addresses at the edge", "/24", "/48",
+                  "about seven days", "aggregate reporting",
+                  "no cookies, no cross-site tracking and no personal data"):
+        assert claim in para, f"the privacy paragraph must state {claim!r}; it reads: {para}"
+    assert "never stored" in para, "the paragraph must say a full address is never stored"
+
+
+def test_the_disabled_analytics_template_is_gone_from_every_shipped_page():
+    """The block that carried these facts also carried a domain placeholder and a live script tag
+    inside a comment. Both are gone, and neither may come back on any page the portal ships."""
+    back = []
+    for name in ("index.html", "about.html", "add-survey.html", "releases.html", "brand.html", "404.html"):
+        text = (ABOUT.parent / name).read_text(encoding="utf-8")
+        for marker in ("YOUR-DOMAIN", "YOUR-PLAUSIBLE-HOST", "plausible.io"):
+            if marker in text:
+                back.append(f"{name}: {marker}")
+    assert not back, "a disabled analytics template is back on a shipped page:\n" + "\n".join(back)

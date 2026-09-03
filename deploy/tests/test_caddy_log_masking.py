@@ -31,7 +31,9 @@ import pytest
 _REPO = Path(__file__).resolve().parents[2]
 _CADDYFILE = _REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
 _FRONTDOOR_CADDYFILE = _REPO / "deploy" / "frontdoor" / "Caddyfile"
-_INDEX = _REPO / "portal" / "index.html"
+# The privacy promise is VISIBLE COPY on About, not a comment in the SPA's <head>: a
+# commitment a reader cannot read is not a commitment. This pin follows it there.
+_PROMISE = _REPO / "portal" / "about.html"
 
 
 def _caddyfile_text() -> str:
@@ -167,11 +169,11 @@ def test_logs_volume_is_mounted_on_portal():
 
 
 def test_portal_promise_matches_logging_behaviour():
-    """PROMISE-CONSISTENCY PIN (C45 D2/D6). The shipped portal/index.html privacy text matches the
+    """PROMISE-CONSISTENCY PIN. The privacy paragraph in portal/about.html section 4 matches the
     logging behaviour: it states IPs are TRUNCATED/MASKED at the edge, keeps only aggregate counts, and
     no cookies — and it no longer makes the now-FALSE absolute 'no IPs stored' claim. FAILS IF the
     public promise and the implementation diverge (a public commitment must not lie)."""
-    text = _INDEX.read_text(encoding="utf-8").lower()
+    text = _PROMISE.read_text(encoding="utf-8").lower()
     assert "no ips stored" not in text, \
         "the absolute 'no IPs stored' claim is now false (a masked log line lands) — it must be amended"
     assert "truncate" in text or "mask" in text, "the promise must state IPs are truncated/masked at the edge"
