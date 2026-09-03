@@ -36,7 +36,7 @@ const TOUR_DEMO_STATION="A1";
 const TOUR_STEPS=[
   {sel:"#map",
    text:"Every dot is an MT station. Click one to see its transfer function.",
-   enter:_tourEnterMapView},
+   enter:_tourEnterOpening},
   {sel:"aside.filters",
    text:"Filter by data type; Advanced search adds find, data availability by level (time series; transfer function).",
    enter:_tourEnterFilters},
@@ -173,6 +173,15 @@ function _tourCloseOwnDrawer(){
 function _tourEnterMapView(){
   _tourMapView();
   _tourCloseOwnDrawer();
+}
+// The opening step. The map housekeeping above, plus Advanced search CLOSED. The step AFTER this one is
+// the step that opens the accordion, so an opening step that merely inherits it reads one way arriving
+// forward from the start and another way arriving backward from step 2, and every step of this deck has
+// to establish its complete state from either direction. The visitor's own accordion is in the pre-tour
+// snapshot and comes back on close.
+function _tourEnterOpening(){
+  _tourEnterMapView();
+  const adv=document.getElementById("advSearch");if(adv)adv.open=false;
 }
 // The BROWSE group: the rail steps whose targets live in the rail's Browse pane, which is hidden when the
 // visitor left the rail in Select mode. Their own mode is group state on the same terms as the select

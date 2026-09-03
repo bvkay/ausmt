@@ -1880,6 +1880,40 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   _arrow("Escape");
   ok(A.tourStep() === -1, "files: could not close the tour after the Files-step checks");
 
+  // H2d. THE TOUR'S DRAWER STARTS AT STEP 5 AND NOT ONE STEP EARLIER. The first four steps are about the
+  // map, the filter rail, Find and the browse tree. None of them is about the drawer, so none of them may
+  // touch one, and the reader this matters to is the one who was already reading a station when they
+  // started the tour: their drawer, on their own tab, has to still be there four steps in. It is also what
+  // makes the closing step's "close what this run opened" honest - the tour can only claim to have opened
+  // a drawer from the station step on.
+  A.setSidebarMode("browse");
+  doc.getElementById("clearSel").click();
+  A.openStation(A.stIndex("A2"));
+  A.selectDrawerTab("cite");
+  const _ownDrawer = JSON.stringify(A.drawerSubject());
+  doc.getElementById("welcomeTour").click();
+  for (let i = 0; i <= 3; i++) {
+    ok(A.tourStep() === i, "own drawer: the walk is at " + A.tourStep() + ", expected " + i);
+    ok(doc.getElementById("drawer").classList.contains("open"),
+      "own drawer: step " + i + " closed a drawer the tour did not open");
+    ok(JSON.stringify(A.drawerSubject()) === _ownDrawer,
+      "own drawer: step " + i + " changed the visitor's subject to " + JSON.stringify(A.drawerSubject()));
+    ok(A.curDrawerTab() === "cite",
+      "own drawer: step " + i + " moved the visitor off their own tab, now on " + A.curDrawerTab());
+    _arrow("ArrowRight");
+  }
+  ok(A.tourStep() === 4, "own drawer: could not reach the station step, at " + A.tourStep());
+  ok(JSON.stringify(A.drawerSubject()) === JSON.stringify({ kind: "station", i: A.stIndex("A1") }),
+    "own drawer: the station step is the first step with a drawer of the tour's own, got " +
+    JSON.stringify(A.drawerSubject()));
+  ok(A.curDrawerTab() === "response",
+    "own drawer: the station step must establish the Response tab, on " + A.curDrawerTab());
+  _arrow("Escape");
+  ok(JSON.stringify(A.drawerSubject()) === _ownDrawer && A.curDrawerTab() === "cite",
+    "own drawer: closing must hand the visitor's own drawer and tab back, got " +
+    JSON.stringify(A.drawerSubject()) + " on " + A.curDrawerTab());
+  A.closeDrawer();
+
   // H6. THE SELECTION DEMO (LANE-CONTRACT-TOUR-REVISION.md T3, T4). The demo zooms to the demo survey,
   // draws a rectangle over it and selects what falls inside. Three properties are pinned.
   //
@@ -2069,8 +2103,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // The map view and the visitor's card layout are CONSTANTS across the whole walk, and that is the point:
   // the two nav steps spotlight the Surveys and Collections buttons without pressing them, so no step of
   // the deck navigates and no step touches the Surveys grid's layout control.
+  //
+  // Advanced search is in the table because the accordion is exactly where a direction bug hides. The
+  // filter step opens it and no later step closes it, so from step 2 on it is open whichever way the walk
+  // arrived. Step 1 is the one that has to say so itself: inherit the accordion from whichever neighbour
+  // the walk came from and the opening step reads one way forward and another way backward.
   const _expect = (i, dir) => ({
     view: "map",
+    adv: i !== 0,
     mode: (i >= 1 && i <= 3) ? "browse" : ((i >= 6 && i <= 9) ? "select" : _walkBase.mode),
     drawer: (i === 4 || i === 5) ? "station" : "closed",
     tab: i === 5 ? "files" : (i === 4 ? "response" : null),
@@ -2082,6 +2122,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ok(A.tourStep() === i, at + ": the walk is at " + A.tourStep());
     ok(A.curView() === e.view, at + ": view must be " + e.view + ", on " + A.curView());
     ok(A.sidebarMode() === e.mode, at + ": rail mode must be " + e.mode + ", on " + A.sidebarMode());
+    ok(doc.getElementById("advSearch").open === e.adv,
+      at + ": Advanced search must be " + (e.adv ? "open" : "closed") +
+      ", it is " + (doc.getElementById("advSearch").open ? "open" : "closed"));
     const open = doc.getElementById("drawer").classList.contains("open");
     if (e.drawer === "closed") {
       ok(!open, at + ": the drawer must be closed, subject " + JSON.stringify(A.drawerSubject()));
