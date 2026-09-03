@@ -448,6 +448,101 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
         "colophon that inherited it is deleted, so this is the page's one way in")
 
 
+# ------------------------------------------------- the in-page anchor offset follows the header
+#
+# about.html is the one chrome surface that SCROLLS under its own header, so it is the one that has
+# to clear it: the header is position:sticky;top:0, and an in-page anchor that scrolls its section
+# to y=0 puts the heading underneath it. scroll-margin-top is the clearance, and it was ONE number,
+# 74px, measured at 1280px and applied at every width.
+#
+# That number is only right above about 1096px. The header WRAPS as the viewport narrows, in two
+# ways at once (the identity block drops its tagline onto a second line, the tab group stacks into
+# more rows, and under 760px the three zones each take a full-width row), and it does not shrink
+# monotonically: measured on this document in Chrome at a device scale factor of 1, its height runs
+# 220px below 388, 147px to 614, 111px to 760, 142px to 872 (the zones stop stacking and the tab
+# group takes two rows on a shared line), 104px to 957, 89px to 1095, 74px to 1345 and 57px above
+# that. At 375px a 74px clearance left a heading 146px under the header, which is off the screen.
+#
+# THE LADDER IS THE MAXIMUM PER BAND, NOT THE EXACT HEIGHT. Overshooting drops the heading a few
+# pixels lower than it needs to be, which a reader will not notice; undershooting hides it, which is
+# the defect. So each band carries the tallest header in its own range, which is why the 615 band
+# reads 142px rather than the 111px the header measures at 615 itself.
+#
+# THE FAILURE MODE OF DRIFT IS STATED because it cannot be pinned from source alone: these are
+# measurements of THIS header's content at THIS font stack, and a change to the header's wording or
+# its nav will move the wrap points. Anything that changes the header's height must re-measure the
+# ladder. What this file CAN hold, and does, is that the offset is a variable rather than a constant,
+# that the ladder descends, and that it resolves to the measured header height at the two widths the
+# lane pins.
+ANCHOR_VAR = "--about-anchor-offset"
+
+# The measured header height at each pinned width, from the same run the ladder was built from.
+MEASURED_HEADER = {375: 220, 1280: 74}
+
+
+def _anchor_ladder(text):
+    """The ladder as (min-width, px) pairs in source order, base first at min-width 0."""
+    base = re.search(r":root\{[^}]*" + re.escape(ANCHOR_VAR) + r":(\d+)px", text)
+    assert base, "about.html must declare the anchor offset on :root as the base of the ladder"
+    out = [(0, int(base.group(1)))]
+    for m in re.finditer(r"@media\s*\(min-width:(\d+)px\)\{:root\{"
+                         + re.escape(ANCHOR_VAR) + r":(\d+)px\}\}", text):
+        out.append((int(m.group(1)), int(m.group(2))))
+    return out
+
+
+def _resolve(ladder, width):
+    """The value a browser would use at this viewport width: the last matching min-width band."""
+    val = ladder[0][1]
+    for bp, px in ladder:
+        if width >= bp:
+            val = px
+    return val
+
+
+def test_the_in_page_anchor_offset_is_a_variable_and_not_one_number():
+    """FAILS if the retired static 74px comes back, or if the sections stop reading the ladder.
+    One number cannot follow a header that is 220px tall at 375px and 57px tall at 1440px, and the
+    direction it is wrong in at the narrow end is the one that hides the heading."""
+    text = ABOUT.read_text(encoding="utf-8")
+    assert "scroll-margin-top:74px" not in text, (
+        "the single-number anchor offset is retired; it was right only above about 1096px")
+    assert f"scroll-margin-top:var({ANCHOR_VAR})" in text, (
+        "every section's anchor offset must read the ladder rather than a constant")
+
+
+def test_the_anchor_offset_ladder_descends_and_is_declared_in_px():
+    """The ladder's shape. FAILS if a band is out of order, if the base is not the tallest (the
+    narrowest viewport has the tallest header), if a band repeats a breakpoint, or if a value stops
+    being an absolute length: a percentage or an em here would be measured against something that is
+    not the header."""
+    ladder = _anchor_ladder(ABOUT.read_text(encoding="utf-8"))
+    assert len(ladder) >= 3, f"the ladder must carry a base and at least two bands, got {ladder}"
+    widths = [bp for bp, _px in ladder]
+    assert widths == sorted(widths) and len(set(widths)) == len(widths), (
+        f"the ladder's breakpoints must ascend and not repeat: {widths}")
+    values = [px for _bp, px in ladder]
+    assert values == sorted(values, reverse=True), (
+        f"the offset must shrink as the viewport widens, because the header does: {ladder}")
+    assert values[0] == max(values), (
+        f"the base band carries the tallest header, at the narrowest viewport: {ladder}")
+
+
+def test_the_ladder_resolves_to_the_measured_header_height_at_the_pinned_widths():
+    """The ladder against the ruler. FAILS if the value a browser would use at 375px or at 1280px is
+    smaller than the header measured there: at 375px that is a heading scrolled under 220px of
+    header, and the reader sees the section below the one they asked for.
+
+    Held as ">=" and not "==" on purpose, for the reason the ladder is a per-band maximum: a band
+    that overshoots is doing its job."""
+    ladder = _anchor_ladder(ABOUT.read_text(encoding="utf-8"))
+    for width, header in MEASURED_HEADER.items():
+        got = _resolve(ladder, width)
+        assert got >= header, (
+            f"at {width}px the header measures {header}px and the ladder offers {got}px, so an "
+            f"in-page anchor lands {header - got}px under it")
+
+
 def test_about_no_longer_loads_the_script_that_filled_the_chip():
     """The other end of the deletion. version.js exists to fill [data-ver-chip]; with no chip on the
     page its load is a request that changes nothing a reader can see. FAILS if the tag comes back,
