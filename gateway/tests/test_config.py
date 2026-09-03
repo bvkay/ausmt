@@ -10,7 +10,7 @@ from gateway.tests.conftest import make_config
 
 
 def test_missing_key_aborts_startup(tmp_path):
-    # proven failing 2026-07-05: an empty AUSMT_SUBMIT_KEY was accepted and the app bound a port —
+    # Proven failing: an empty AUSMT_SUBMIT_KEY was accepted and the app bound a port -
     # fail_closed_startup returned instead of raising SystemExit.
     cfg = make_config(tmp_path, submit_key="")
     with pytest.raises(SystemExit):
@@ -54,7 +54,7 @@ def test_default_upload_cap_is_250_mb():
 
 
 # --------------------------------------------------------------------------------------------------
-# G7: numeric floors. A zero or negative knob is a typo, never an operator intent, and every one of
+# Numeric floors. A zero or negative knob is a typo, never an operator intent, and every one of
 # them fails INVISIBLY at runtime: the health surfaces stay green while the gateway serves a wall of
 # 413/429 or bounces every curator login. The floor belongs at startup for the same reason the key
 # guard does: loud and early, before the port binds.

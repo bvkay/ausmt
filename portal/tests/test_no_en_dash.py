@@ -1,6 +1,6 @@
 """U+2013 (the en dash) is banned from portal source: the sweep pin.
 
-The owner's ruling prefers plain dashes: the drawer's empty-value placeholder renders the
+The rule prefers plain dashes: the drawer's empty-value placeholder renders the
 hyphen-minus "-", ranges take the spaced hyphen (display grammar), and no portal source file
 carries the en dash at all, so the glyph cannot creep back through a copied string or a quoted
 example. The sweep covers src/*.js, portal-root *.html and tools/*.js; vendor/ and node_modules/

@@ -78,7 +78,7 @@ def test_no_other_usarray_station_fails():
 def test_ccmt_uniform_zrot_served_as_stored_v3a():
     """FAILS IF: a ccmt-2017 station (served survey; survey-uniform ZROT=8, ROTATION=FIX — the V3-A
     serve-as-stored case of frame POLICY v3) is ROTATED, or served without the declared angle
-    recorded, or its quadrants break as-stored. Owner ruling 2026-07-11: the engine serves data as
+    recorded, or its quadrants break as-stored. The rule: the engine serves data as
     stored and reports the frame — it does not de-rotate. (Under v2 this was the R3 record case; v3
     records every uniform declaration regardless of magnitude, so the outcome is unchanged here.)"""
     f = _find(REALDATA / "ccmt-2017", "CC01.edi")

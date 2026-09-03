@@ -1,4 +1,4 @@
-"""install-frontdoor.sh in-place reload logic (ops-hardening O1).
+"""Install-frontdoor.sh in-place reload logic (ops-hardening O1).
 
 Black-box over `sh`: a copy of the real install script is run in a tmp dir with a fabricated
 .env/Caddyfile/compose.yaml and a PATH of stubs (docker, sudo) that record every docker invocation, so
@@ -9,7 +9,7 @@ the O1 design turns on:
   * fresh (not running)          -> neither reload nor restart (up -d started it clean).
 
 Skips on Windows / a host with no POSIX sh (the same platform reason the reconcile/preflight suites use);
-on the gateway-ci ubuntu lane it RUNS with nothing skipped, so the skip tripwire needs no allow entry.
+on the gateway-ci ubuntu workflow it RUNS with nothing skipped, so the skip tripwire needs no allow entry.
 """
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ def test_fresh_install_neither_reloads_nor_restarts(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# The canonical-name lane: the installer TEMPLATES the legacy redirect block in or out ([A2]).
+# The canonical-name workflow: the installer TEMPLATES the legacy redirect block in or out ([A2]).
 # These run the REAL script against the REAL repo Caddyfile (not the stub), because the property
 # under test is the render of the shipped template: legacy var unset -> Caddyfile.rendered carries
 # exactly ONE site block and no legacy reference (an empty `{$VAR}` site address would be a Caddy
@@ -147,7 +147,7 @@ _PLACEHOLDER_TOKEN = re.compile(r"\{[^{}\s]+\}")
 def _site_addresses(text: str) -> list[str]:
     """Depth-0 site-block addresses (the global options block, a bare '{', excluded). Depth counts
     braces with PLACEHOLDER tokens removed first: a directive line like `map {src} {dest} {` (the
-    path-url contract lane) carries balanced placeholder braces beside one structural opener, and
+    path-url contract workflow) carries balanced placeholder braces beside one structural opener, and
     counting raw braces would inflate the depth permanently and hide every later site address."""
     out, depth = [], 0
     for raw in text.splitlines():
@@ -157,7 +157,7 @@ def _site_addresses(text: str) -> list[str]:
         if depth == 0 and line.endswith("{") and line[:-1].strip():
             addr = line[:-1].strip()
             # A parenthesised address is a SNIPPET definition (e.g. `(box_upstream)`, the
-            # 2026-08-28 shared box transport), not a site block: it binds no listener.
+            #  shared box transport), not a site block: it binds no listener.
             if not (addr.startswith("(") and addr.endswith(")")):
                 out.append(addr)
         structural = _PLACEHOLDER_TOKEN.sub("", line)

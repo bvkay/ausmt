@@ -1,4 +1,4 @@
-"""Head/serving hygiene pins (findability audit 2026-08-28): the duplicate-content redirect, the
+"""Head/serving hygiene pins: the duplicate-content redirect, the
 HDF5 content type, and the branded 404.
 
   * /index.html served the same bytes as / with no canonical anywhere - the host's one

@@ -26,7 +26,7 @@ def test_status_url_from_upload_works(tmp_path):
 def test_wrong_token_404_byte_identical(tmp_path):
     # An unknown token and a known-but-wrong token return the SAME 404 body (design §3): no oracle
     # that distinguishes "no such token" from "token exists but is wrong".
-    # proven failing 2026-07-05: an early handler returned a JSON {"detail": ...} for unknown tokens
+    # Proven failing: an early handler returned a JSON {"detail": ...} for unknown tokens
     # and an HTML 404 elsewhere -> bodies differed.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, _gw, _cfg):
@@ -40,7 +40,7 @@ def test_wrong_token_404_byte_identical(tmp_path):
 
 def test_wiped_row_token_404(tmp_path):
     # A valid token whose row is deleted -> 404 (the token is meaningless without its row; design §3).
-    # proven failing 2026-07-05: a cached-by-token lookup returned the stale page after the delete.
+    # Proven failing: a cached-by-token lookup returned the stale page after the delete.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, gw, _cfg):
             r = await submit_zip(client, good_package_zip())
@@ -58,7 +58,7 @@ def test_wiped_row_token_404(tmp_path):
 def test_status_never_leaks_pii(tmp_path):
     # The rendered status HTML must never contain the submitter email/name (design §6): a leaked
     # status URL must not leak PII.
-    # proven failing 2026-07-05: an early template echoed submitter_name in a header -> the email/
+    # Proven failing: an early template echoed submitter_name in a header -> the email/
     # name appeared in page.text.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, _gw, _cfg):

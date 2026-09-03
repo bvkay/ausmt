@@ -1,6 +1,6 @@
 """Portal INTERACTION coverage (Invariant 10) — the sidebar tree toggles, #/collection routing, and Find.
 
-These paths shipped with ZERO automated coverage: smoke.js stubs querySelectorAll()->[] so buildTree() never
+These paths shipped with ZERO automated coverage: smoke.js stubs querySelectorAll->[] so buildTree never
 makes a checkbox and only #/station routes. That is exactly how the value-less-checkbox toggle no-op reached
 a release. This boots the REAL portal in jsdom (tools/interaction_test.js) against a KNOWN fixture —
 4 stations / 2 countries / 3 orgs / 3 surveys / 1 collection — and drives the UI.
@@ -11,7 +11,7 @@ The driver FAILS (and so does this test) if:
   skipped binding the toggle handler entirely);
 - the #/collection/<id> hash does not open the full-width collection page over the map, or browser-Back
   (hash -> '') does not restore the map view;
-- a survey-name Find query blanks the map (passes() must also match s.survey).
+- a survey-name Find query blanks the map (passes must also match s.survey).
 
 Skips when Node or the jsdom dev-dependency is absent (CI runs `npm ci` in portal/ first)."""
 import json
@@ -44,7 +44,7 @@ def test_portal_interactions(tmp_path):
     # station D1 drives the drawer access-panel test (no plots; verbatim embargo copy). Its curves are
     # withheld at the ENGINE (empty tf series); the fixture mirrors that so the driver sees what ships.
     stations = [
-        # R4: A1 carries a site_name that DIFFERS from its (sanitised) displayed id, so the drawer's
+        # A1 carries a site_name that DIFFERS from its (sanitised) displayed id, so the drawer's
         # Station summary renders the "site name" row for it (the SA28_2B -> SA282B case).
         {"id": "A1", "survey": "Alpha Survey", "lat": -30.0, "lon": 136.0, "ausmt_id": "au.alpha.A1", "edi_available": 1, "site_name": "A_1"},
         {"id": "A2", "survey": "Alpha Survey", "lat": -31.0, "lon": 137.0, "ausmt_id": "au.alpha.A2", "edi_available": 1},
@@ -54,7 +54,7 @@ def test_portal_interactions(tmp_path):
     ]
     cat = [_row(COLS["catalogue"], {**base_cat, **s}) for s in stations]
     sci = [_row(COLS["sci"], base_sci) for _ in stations]
-    # C20: 18 arrays in TF_COLUMNS order for the OPEN stations (rows are built BY NAME then projected
+    # 18 arrays in TF_COLUMNS order for the OPEN stations (rows are built BY NAME then projected
     # through COLS["tf"], so they self-follow the contract). The embargoed Delta station D1 gets the
     # WITHHELD shape the engine emits for a non-open survey — every series column an EMPTY ARRAY.
     #
@@ -100,11 +100,11 @@ def test_portal_interactions(tmp_path):
         # each renders as a real <a href> (or, for the hostile value, a NON-executable href).
         "Alpha Survey": {"slug": "alpha", "org": "OrgX", "country": "Australia",
                          "year_start": 2010, "year_end": 2012,
-                         # R4: Alpha is a member of the AusLAMP collection (mirrors the engine's
+                         # Alpha is a member of the AusLAMP collection (mirrors the engine's
                          # SMETA.collection from survey.yaml), so its station drawer renders the
                          # "collection" summary row; Beta/Gamma/Delta stay collection-less (row omitted).
                          "collection": {"id": "auslamp", "title": "AusLAMP"},
-                         # C22: Alpha is the WITH-DOI citation fixture — driver section T asserts its
+                         # Alpha is the WITH-DOI citation fixture - driver section T asserts its
                          # real DOI survives in both .bib and .ris, and that its CITATIONS.txt line
                          # carries the DOI URL with NO "[no DOI assigned]" note. Beta stays the
                          # no-cite/no-DOI survey (section T's no-DOI leg pins that absence).
@@ -126,7 +126,7 @@ def test_portal_interactions(tmp_path):
                         "year_start": 2018, "year_end": 2019},
         "Gamma Survey": {"slug": "gamma", "org": "OrgZ", "country": "New Zealand",
                          "year_start": None, "year_end": None},
-        # C1b: an embargoed survey with NO embargo_until — the drawer must render the no-date verbatim
+        # An embargoed survey with NO embargo_until - the drawer must render the no-date verbatim
         # embargo panel in place of the four plots. Undated so it stays out of year/recently-added counts.
         "Delta Survey": {"slug": "delta", "org": "OrgW", "country": "Australia",
                          "year_start": None, "year_end": None,
@@ -151,8 +151,8 @@ def test_portal_interactions(tmp_path):
     (data / "surveys.json").write_text(json.dumps(surveys))
     (data / "collections.json").write_text(json.dumps(collections))
     # build.json fixes the recently-added window's reference day so the strip is DETERMINISTIC: with
-    # generated 2020-01-15, only Beta (latest 2019-12-31) falls inside the 30-day window; Alpha
-    # (2012-05-01) is outside it and undated Gamma/Delta are excluded outright.
+    # Generated, only Beta falls inside the 30-day window; Alpha
+    #  is outside it and undated Gamma/Delta are excluded outright.
     (data / "build.json").write_text(json.dumps({"build_id": "eng-src-2020", "engine_commit": "eng",
                                                  "source_commit": "src", "generated": "2020-01-15T00:00:00+00:00"}))
 

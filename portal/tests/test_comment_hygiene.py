@@ -40,7 +40,7 @@ DENY = (
     # OWNER in capitals is a shell variable the compose files carry, so a comment naming it beside
     # another AUSMT_ variable, or calling it a variable, is naming an identifier rather than
     # recording who decided something. Everywhere else the word is prose and is caught.
-    (re.compile(r"\b(?!(?-i:OWNER)\b(?=[^\n]*(?:AUSMT_|variable)))owner(?:'s|s)?\b", re.I),
+    (re.compile(r"\b(?!(?-i:OWNER)\b(?=[\s\S]*(?:AUSMT_|variable)))owner(?:'s|s)?\b(?!@)", re.I),
      "decision-owner language"),
     (re.compile(r"\brulings?\b", re.I), "ruling language"),
     # Approval OF A DESIGN DECISION, which is what may not be recorded here. The bare word is
@@ -51,7 +51,9 @@ DENY = (
     (re.compile(r"\bwave\s+[a-z]\b", re.I), "wave identifier"),
     (re.compile(r"\bux\d", re.I), "work-item identifier"),
     (re.compile(r"\btask\s*#", re.I), "work-item identifier"),
-    (re.compile(r"\blanes?\b", re.I), "lane name"),
+    # A pin may cite the contract it holds, and those documents are named LANE-CONTRACT-*.md and
+    # LANE-ADDENDUM-*.md, so a citation is not a lane name. Everything else that says lane is.
+    (re.compile(r"\blanes?\b(?!-[A-Z])", re.I), "lane name"),
     (re.compile(r"\btreatments?\b", re.I), "design-history vocabulary"),
     (re.compile(r"old\s*->\s*new", re.I), "old-to-new history"),
     (re.compile(r"\b20\d\d-[01]\d-[0-3]\d\b"), "dated note"),
@@ -64,7 +66,7 @@ DENY = (
 # three shapes are caught behind <!-- -->, /* */, // and #.
 # A commented-out CALL, not prose that happens to name the function: the argument list is what
 # tells "fetch(url).then(...)" from "fetch() is the scripted probe".
-CODE_LINE = re.compile(r"^(?:<script\b|(?:L\.map|fetch)\(\s*['\"`\w$])")
+CODE_LINE = re.compile(r"^(?:<script\b[^>]*>\s*(?:</script>)?\s*$|(?:L\.map|fetch)\(\s*['\"`\w$])")
 LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
 
 # A comment that OPENS on a bare work-item tag ("R10:", "C4 (", "X7:", "B4 -"). The vocabulary list

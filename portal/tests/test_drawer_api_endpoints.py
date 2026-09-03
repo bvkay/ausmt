@@ -12,7 +12,7 @@ which is what this section must now say, templated with the station in front of 
 
 The pins below boot the REAL src modules in a VM (the tools/*_test.js / test_drawer_copy_removals.py
 idiom) against two synthetic fixtures that differ in ONE respect - whether the manifest carries a
-served EDI artifact for the station - and render openStation() for each:
+served EDI artifact for the station - and render openStation for each:
 
   * FICTIONAL-PATH ABSENCE - FAILS if "(planned)" or any /api/ path survives in the rendered drawer.
     RED-proven against the pre-change drawer.js: that build renders all three fictional paths plus the
@@ -20,7 +20,7 @@ served EDI artifact for the station - and render openStation() for each:
   * REAL-ENDPOINT PRESENCE - FAILS if the station's station.json (templated with the station's OWN
     slug and id), the download index /data/manifest.json, or the docs pointer link are missing. This
     is the non-vacuous half: a build that merely deleted the API section would pass the absence pin
-    and fail here. Public-surface audit (2026-08-22), owner ruling: the only public metadata
+    and fail here. Public-surface audit, the rule: the only public metadata
     contracts are mtcat.json and station.json; manifest.json is the download index; everything else
     under /data is portal-internal. So the section must NOT advertise /data/surveys.json (no
     contract; superseded by survey-metadata.json), /data/products/manifest.json (the retired twin of
@@ -141,7 +141,7 @@ def test_drawer_api_section_lists_the_real_endpoints(tmp_path):
             f"the drawer API section must not advertise {gone}: surveys.json is portal-internal with no "
             f"contract, and the products/ twin of the manifest is retired (public-surface audit, "
             f"2026-08-22); rendered:\n{html[-2500:]}")
-    # Docs wave, stage 2 (owner ruling 3): the depth pointer is the docs site's API reference, and it must
+    # Docs wave, stage 2: the depth pointer is the docs site's API reference, and it must
     # be the SAME url About links, so a reader is never sent to two different "for depth" pages. Read off
     # about.html rather than typed twice, which is what makes the two surfaces provably agree.
     about = (ROOT / "about.html").read_text(encoding="utf-8")
@@ -182,9 +182,7 @@ def test_drawer_edi_line_absent_for_an_embargoed_station(tmp_path):
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 @pytest.mark.parametrize("access", ["open", "embargoed", "metadata_only"])
 def test_drawer_never_advertises_dimensionality_and_always_lists_station_json(tmp_path, access):
-    """dimensionality.json is served alongside station.json and is NOT a contract (public-surface audit,
-    2026-08-22; its fate, folding into station.json or staying a feature file, is the owner's pending
-    decision), so the API section never advertises it, for any access level. It used to be listed for
+    """Dimensionality.json is served alongside station.json and is NOT a contract, so the API section never advertises it, for any access level. It used to be listed for
     an open survey only, because the engine returns before writing it for a non-served survey
     (build_portal.py _write_station_products, "no dimensionality.json for a non-served survey"); the
     open-survey row is gone too now.

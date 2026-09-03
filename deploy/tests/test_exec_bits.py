@@ -1,6 +1,6 @@
 """Exec-bit tripwire — every tracked shell script must be git mode 100755.
 
-WHY THIS EXISTS (incident, 2026-07-10): the backup system shipped in PR #25 with everything under
+WHY THIS EXISTS: the backup system shipped in PR #25 with everything under
 deploy/scripts/ tracked at git mode 100644 (no executable bit) — restore-drill.sh, pull-backup.sh,
 and the pre-existing preflight.sh. Direct invocation on the production box (`./deploy/scripts/…`) then
 died with **exit 126** (permission denied / not executable). backup.sh itself was correctly 100755, so
@@ -9,7 +9,7 @@ red in CI instead of on the box.
 
 FAILURE CRITERION (Invariant 10 — this test FAILS if): any *.sh file tracked in git (at minimum every
 one under deploy/, checked recursively) has a git index mode other than 100755. A newly added shell
-script committed at 100644 reds this lane; so does a `git update-index --chmod=-x` on any existing one.
+script committed at 100644 reds this module; so does a `git update-index --chmod=-x` on any existing one.
 It reads the mode from `git ls-files -s` (the authoritative tracked mode), NOT the working-tree stat —
 because on Windows/MSYS the working-tree bit is meaningless but the git index mode is what actually
 ships, and it was the index mode that was wrong on the box.
@@ -63,8 +63,7 @@ def _tracked_sh_modes(root: Path) -> dict[str, str]:
 
 
 def test_all_tracked_shell_scripts_are_executable():
-    """Every tracked *.sh in the repo is git mode 100755. FAILS IF any is 100644 (the exit-126 trap
-    from 2026-07-10). This is the whole-repo sweep; the deploy-only assertion below is the belt."""
+    """Every tracked *.sh in the repo is git mode 100755. FAILS IF any is 100644. This is the whole-repo sweep; the deploy-only assertion below is the belt."""
     root = _toplevel()
     modes = _tracked_sh_modes(root)
     assert modes, "expected at least one tracked *.sh file; git ls-files returned none"

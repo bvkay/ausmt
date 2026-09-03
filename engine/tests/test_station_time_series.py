@@ -1,4 +1,4 @@
-"""kind=time_series rows on station.json: the archive's bytes, described but never re-hosted.
+"""Kind=time_series rows on station.json: the archive's bytes, described but never re-hosted.
 
 A2 projects the verified-resource register through the ONE internal model (`station_document`) as
 resource rows that carry a ROUTE and nothing local: `access_url` on the canonical NCI fileServer
@@ -12,7 +12,7 @@ differently:
   * `review: verified` (D9). A pending row is an ADJUDICATION QUEUE entry, and best-guess attachment
     of a file to a station is silent scientific error; a retired row (D17) is evidence of a resource
     that ceased to exist. Neither projects.
-  * `level != level2` (D19, ruled 2026-08-24). NCI's level_2 tree holds transfer functions, not time
+  * `level != level2`. NCI's level_2 tree holds transfer functions, not time
     series: seeding them here would assert a verified TIME SERIES for stations that have none. The
     fixture register carries a VERIFIED level2 row so this exclusion is a tested rule and
     not an accident of the corpus.
@@ -52,7 +52,7 @@ FILESERVER = "https://thredds.nci.org.au/thredds/fileServer/"
 # The API reference states ts_access.json's stability promise in prose. engine.Dockerfile COPYs
 # contract/ + engine/ and one generated portal file, never docs/, so in the engine image this file
 # does not exist and the prose legs below skip on the reason ci_check_skips.py already allow-lists
-# for that designed topology. On every checkout lane the docs tree is present and they assert.
+# For that designed topology. On every checkout workflow the docs tree is present and they assert.
 API_REFERENCE = REPO / "docs" / "docs" / "interoperability" / "api-reference.md"
 DOCS_SKIP_REASON = ("engine image build: docs tree not shipped "
                     "(designed topology; the docs surface is pinned from checkout lanes)")
@@ -124,12 +124,12 @@ def test_no_row_carries_a_local_path_a_checksum_or_a_service_url(built):
 
 
 def test_repository_names_the_holder_of_the_bytes(built):
-    """D2: the deferral trigger has fired and the crawler knows the host with certainty."""
+    """The deferral trigger has fired and the crawler knows the host with certainty."""
     assert {r["repository"] for r in _rows(_station(built, "example-survey", "EXAMPLE01"))} == {"NCI"}
 
 
 def test_the_processing_vocabularies_are_the_schema_enums_crosswalked_out(built):
-    """Gate 12 in use: this lane is STATION_VOCABULARY_CROSSWALK's first consumer, and the tokens it
+    """Gate 12 in use: this module is STATION_VOCABULARY_CROSSWALK's first consumer, and the tokens it
     emits come from the clean station vocabulary, never from NCI's level names."""
     levels = SCHEMA["definitions"]["resource"]["properties"]["processing_level"]["enum"]
     packagings = SCHEMA["definitions"]["resource"]["properties"]["packaging"]["enum"]
@@ -218,7 +218,7 @@ def test_only_the_hand_off_row_states_a_size(built):
 # ---- what never projects -------------------------------------------------------------------------
 
 def test_a_verified_level2_row_projects_nothing(built):
-    """D19, ruled 2026-08-24. The fixture register carries a VERIFIED level2 row, so this is the
+    """Ruled. The fixture register carries a VERIFIED level2 row, so this is the
     exclusion rule under test and not a corpus that happens to hold no level_2 files."""
     yaml = pytest.importorskip("yaml")
     register = yaml.safe_load((TS_INDEX / "example-survey" / "ts-index.yaml").read_text(encoding="utf-8"))
@@ -320,7 +320,7 @@ def _ts_access(out):
 
 
 def test_ts_access_carries_bytes_and_url_path_per_open_station_and_level(built):
-    """A5: `{ausmt_id: {level: {bytes, url_path}}}`. station.json is never fetched on navigation
+    """`{ausmt_id: {level: {bytes, url_path}}}`. station.json is never fetched on navigation
     (build_portal:5369-5370), so this is the only artifact that can carry the archive's route into a
     manifest the portal builds (D3). `url_path` is the archive's own string VERBATIM, which is the
     form that identifies the file; the encoding happens where it becomes a URL, never in storage."""
@@ -431,7 +431,7 @@ def test_the_blessed_docs_section_promises_what_the_emitter_guarantees():
     FAILS IF the unconditional promise returns, if the conditional wording stops naming the register
     as the condition, if the enumeration goes back to reading as closed, if a publishable level
     token stops being named, or if the never-projecting one stops being named as excluded. Skipped
-    only where the docs tree is not shipped (the engine image); asserted on every checkout lane."""
+    only where the docs tree is not shipped (the engine image); asserted on every checkout workflow."""
     section = _ts_access_docs_section()
     assert "`url_path`" in section, "the blessed section must still name the key it always carries"
     assert not re.search(r"[Ee]very row carries at least `bytes`", section), (
@@ -571,7 +571,7 @@ def test_the_rows_are_emitted_in_the_level_order_the_table_declares():
 
 def test_the_level_tokens_are_derived_from_the_crosswalk_and_exclude_level2():
     """The route table's vocabulary keys ARE crosswalk keys, so a level added to the crosswalk
-    cannot be silently unroutable here; level2 is absent by ruling, not by omission."""
+    cannot be silently unroutable here; level2 is absent by rule, not by omission."""
     assert set(bp._TS_LEVEL_ROUTE) == {"raw_packed", "level0", "level1_mth5", "level1_netcdf"}
     assert "level2" not in bp._TS_LEVEL_ROUTE, "D19: level_2 holds transfer functions, not time series"
     assert {v["vocab"] for v in bp._TS_LEVEL_ROUTE.values()} <= set(bp.STATION_VOCABULARY_CROSSWALK)

@@ -1,8 +1,8 @@
-"""G4: the reusable request-body cap for the small-field PUBLIC routes (gateway.upload).
+"""The reusable request-body cap for the small-field PUBLIC routes (gateway.upload).
 
 POST /gateway/submit has a whole module keeping a hostile body off the box; its sibling public route,
 POST /gateway/request-key, reads a body that carries one email address and has no ceiling at any
-layer (no middleware, and neither Caddy wall sets a body limit). starlette's Request.body() joins
+layer (no middleware, and neither Caddy wall sets a body limit). starlette's Request.body joins
 every chunk it is handed, and a Transfer-Encoding: chunked body declares no length, so the only bound
 is RAM on a read_only container with a 64m tmpfs.
 
@@ -83,12 +83,12 @@ def test_oversize_chunked_body_is_refused_before_it_is_buffered():
 
 def test_capped_body_is_reused_by_the_handler_json_parse():
     """The cap must be a ONE-LINE change at a call site that already parses the body: the helper fills
-    the same cache Request.body() fills, so the handler's existing await request.json() sees the
+    the same cache Request.body fills, so the handler's existing await request.json sees the
     capped bytes and no second read is attempted.
 
     Scope: upload.read_body_capped's body-cache handover (a starlette internal, pinned here so a
     starlette upgrade that moves the cache fails loudly instead of silently re-reading a consumed
-    stream). FAILS IF a later .json() raises or returns something other than the capped body.
+    stream). FAILS IF a later .json raises or returns something other than the capped body.
     """
     payload = json.dumps({"email": "reuse@example.test"}).encode("utf-8")
     request, _feed = _request([payload])
@@ -101,7 +101,7 @@ def test_capped_body_is_reused_by_the_handler_json_parse():
 
 def test_capped_body_is_reused_by_the_handler_form_parse():
     # The request-key handler accepts BOTH encodings, so the urlencoded branch must survive the cap
-    # too. FAILS IF the capped read leaves .form() with a consumed stream.
+    # Too. FAILS IF the capped read leaves .form with a consumed stream.
     payload = b"email=form%40example.test"
     request, _feed = _request([payload], content_type="application/x-www-form-urlencoded")
 
@@ -131,7 +131,7 @@ def test_route_refuses_oversize_body_mid_stream_and_stays_neutral_202(tmp_path):
     count is the app's own read behaviour, not the transport's).
 
     Scope: the request_key route's read_body_capped wiring. FAILS IF the route drains the whole body
-    before responding. RED before the app.py edit: await request.json() reads every chunk first, so
+    before responding. RED before the app.py edit: await request.json reads every chunk first, so
     `served` reached all 512 (assertion seen: `assert 512 <= 4`).
     """
     async def _body():

@@ -70,7 +70,7 @@ def test_status_url_is_gateway_prefixed(tmp_path):
 
 def test_caddyfile_preserves_gateway_prefix():
     # The Caddy ingress for /gateway/* MUST preserve the prefix (`handle`), NOT strip it
-    # (`handle_path`). proven failing 2026-07-05: the original Caddyfile shipped `handle_path
+    # (`handle_path`). proven failing: the original Caddyfile shipped `handle_path
     # /gateway/*`, which strips /gateway so the app (routes all /gateway/*) 404s every proxied
     # request — caught only because this assertion pins the directive.
     text = _CADDYFILE.read_text(encoding="utf-8")

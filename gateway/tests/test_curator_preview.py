@@ -22,7 +22,7 @@ def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
     # review #8 / design §7: the iframe must be sandbox="allow-scripts" WITHOUT allow-same-origin
     # (opaque origin — the framed submitter JS cannot read the curator cookie/DOM or make credentialed
     # same-origin requests). Failure criterion: fails if allow-same-origin is present, or allow-scripts
-    # is absent. proven failing 2026-07-06: the first pass had the tokens INVERTED
+    # Is absent. proven failing: the first pass had the tokens INVERTED
     # (sandbox="allow-same-origin", no allow-scripts) — same origin as the curator AND broken render.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):
@@ -41,7 +41,7 @@ def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
 def test_no_unsandboxed_navigation_to_preview(tmp_path):
     # review #8 / design §7: there must be NO anchor/link that top-level-navigates to the preview
     # (that would run submitter JS in the curator origin, escaping the frame). Failure criterion:
-    # fails if the detail page contains an <a href> pointing at /preview/. proven failing 2026-07-06:
+    # Fails if the detail page contains an <a href> pointing at /preview/. proven failing:
     # the first pass had an "open preview in a new tab" link (a target=_blank same-origin nav).
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):
@@ -84,7 +84,7 @@ def test_preview_authorized_by_id_not_session(tmp_path):
 def test_path_traversal_is_404(tmp_path):
     # Failure criterion: fails if a `..` sub-path escapes preview-data and serves a file (e.g. the
     # submission's own validate.json a level up, or worse).
-    # proven failing 2026-07-06: before the resolve()+containment check, /preview/{id}/../validate.json
+    # Proven failing: before the resolve+containment check, /preview/{id}/../validate.json
     # resolved to reports/validate.json (outside preview-data) and was served 200.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):

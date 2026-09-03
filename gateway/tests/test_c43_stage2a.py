@@ -1,6 +1,6 @@
 """C43 Stage 2a verification pins (record D13 + the contract's pin list). Each pin states its failure
 criterion (Invariant 10) and is mutation-provable — the report carries a captured failing run for each
-guarded behaviour. Async bodies run under conftest.run().
+guarded behaviour. Async bodies run under conftest.run.
 
 Pins here:
   * PHASE QUADRANT + φyx UNWRAP (phaseqc, the authoritative server-side seam the STATIONS_JS mirrors):
@@ -51,7 +51,7 @@ def test_phi_xy_quadrant_classification():
 
 
 def test_quadrant_slack_matches_engine_gate():
-    """CROSS-IMPORT PARITY PIN (fix-round F4a, architect ruling): the workbench's QUADRANT_SLACK_DEG
+    """CROSS-IMPORT PARITY PIN: the workbench's QUADRANT_SLACK_DEG
     must EQUAL the engine gate's single-sourced constant (engine/extract/_conventions.py:98) — the
     workbench verdict and the served-corpus Gate-2 verdict must never diverge on tolerance. FAILS IF
     either side changes its slack without the other. _conventions imports stdlib-only at module level
@@ -165,14 +165,14 @@ def test_stations_js_mirrors_phaseqc_constants():
 
 
 def test_combined_phase_plot_supersedes_separate_plots_source():
-    """C43 FR2-3 SOURCE PIN (owner ruling 2026-07-11: both phases on ONE ±180 plot). The two separate
+    """C43 FR2-3 SOURCE PIN. The two separate
     phase plots are SUPERSEDED by a single combined plot: STATIONS_JS carries the pure combinedPhasePlan
-    mapper + one phasePlot (full ±180 axis, both bands shaded by owner) + phaseVerdictParts (BOTH
+    mapper + one phasePlot + phaseVerdictParts (BOTH
     components) + combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component
     verdictStrip are GONE; and renderPlots stacks ρa, the combined phase plot (+ its verdict strip),
     then tipper. FAILS IF a separate per-component phase plot returns, the mapper/verdict-parts
     disappear, or the plot order drifts. (There were no pre-existing EXECUTABLE per-plot pins to rework
-    — the plots were covered only via classify() parity; the executable mapper pin lives in
+    - the plots were covered only via classify parity; the executable mapper pin lives in
     test_c43_hub_js_parity.py::test_combined_phase_plan_mapper_from_real_corpus.)"""
     js = curatorpage.STATIONS_JS
     assert "function combinedPhasePlan(" in js, "the pure combined-phase mapper must exist"
@@ -182,7 +182,7 @@ def test_combined_phase_plot_supersedes_separate_plots_source():
     assert "function phiXyPlot(" not in js, "the separate φxy plot must stay superseded"
     assert "function phiYxPlot(" not in js, "the separate φyx plot must stay superseded"
     assert "function verdictStrip(" not in js, "the single-component verdict strip is superseded"
-    # The combined plot is the FULL ±180 axis carrying both series, with both bands shaded by owner.
+    # The combined plot is the FULL ±180 axis carrying both series, with both bands shaded by band ownership.
     assert "var lo = -180, hi = 180;" in js, "the combined phase axis must span the full ±180"
     assert "comp: 'xy', lo: Q1_LO, hi: Q1_HI" in js, "Q1 band owned by xy"
     assert "comp: 'yx', lo: Q3_LO, hi: Q3_HI" in js, "Q3 band owned by yx"
@@ -245,11 +245,10 @@ def test_fc2_lag_label_rendered_when_served_differs_from_published(tmp_path):
 
 
 # ==================================================================================================
-# S2a-SPLIT: the Stations tab split layout (list LEFT / data panel RIGHT; narrow = panel-first)
+# The Stations tab split layout (list LEFT / data panel RIGHT; narrow = panel-first)
 # ==================================================================================================
 def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
-    """C43 FR2-2 RENDER PIN (three thirds; supersedes the S2a two-column split by owner ruling round
-    2, reworked-not-deleted). The Stations tab body carries the split grid with THREE slots: the
+    """C43 FR2-2 RENDER PIN. The Stations tab body carries the split grid with THREE slots: the
     station FACTS (#station-facts, .st-facts) and the PLOTS column (#station-plots-col, .st-plots)
     precede the site TABLE (#stations-list, .st-list) in DOM order — facts, then plots, then table.
     Facts-first DOM order is the load-bearing narrow-stacking mechanism (see the CSS pin below): on a
@@ -273,7 +272,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert i_facts >= 0, "the FACTS slot (#station-facts) must render"
             assert i_plots >= 0, "the PLOTS slot (#station-plots-col) must render"
             assert i_list >= 0, "the TABLE slot (#stations-list) must render"
-            # DOM ORDER (owner ruling round 2): facts FIRST, then plots, then table — so a narrow
+            # DOM ORDER: facts FIRST, then plots, then table - so a narrow
             # single column stacks facts / plots / table (panel-first stacking preserved).
             assert i_facts < i_plots < i_list, (
                 "DOM order must be facts (#station-facts) < plots (#station-plots-col) < table "
@@ -291,8 +290,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
 
 
 def test_stations_split_css_layout_mechanism_present():
-    """C43 FR2-2 CSS-MECHANISM PIN (three thirds; supersedes the S2a two-column mechanism by owner
-    ruling, reworked-not-deleted). Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
+    """C43 FR2-2 CSS-MECHANISM PIN. Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
     regression that silently breaks the layout goes red even though the DOM is unchanged:
       (a) WIDE: .stations-split is a 3-column grid; the site table is placed in grid-column 1 (LEFT),
           the facts in column 2 (MIDDLE), and the plots in column 3 (RIGHT) — all on grid-ROW 1.
@@ -305,7 +303,7 @@ def test_stations_split_css_layout_mechanism_present():
     FAILS IF any mechanism piece is dropped from the shell CSS."""
     head = curatorpage._HEAD
     # (a) three-column grid with explicit table-left / facts-middle / plots-right placement. grid-ROW
-    # is load-bearing, not decoration (usability incident 2026-07-11): with only grid-COLUMN set,
+    # Is load-bearing, not decoration: with only grid-COLUMN set,
     # auto-placement cannot move backwards within a row, so a DOM-later item wanting an earlier column
     # drops to ROW 2 silently. ALL THREE must pin grid-row:1. FAILS IF any grid-row:1 is dropped.
     assert ".stations-split{display:grid" in head, "the split must be a CSS grid"
@@ -667,7 +665,7 @@ def test_revoked_key_renders_read_only(tmp_path):
 
 
 def test_revoked_key_note_post_refused(tmp_path):
-    """F6 PIN (architect ruling — revoked keys are IMMUTABLE audit rows). A note POST to a REVOKED key
+    """F6 PIN: revoked keys are IMMUTABLE audit rows. A note POST to a REVOKED key
     id is refused 4xx and the stored note is UNCHANGED — the UI hiding the editor is not the
     enforcement; the route + the DB `AND revoked_utc IS NULL` guard are. FAILS IF the route accepts a
     note update on a revoked id (the shipped pre-fix behaviour, 'by-design' docstring overruled), or

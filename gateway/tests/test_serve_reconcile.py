@@ -5,7 +5,7 @@ shows published HEAD vs served build, the last reconcile outcome, and a pending 
 proves the gateway half against INDEPENDENT OBSERVABLES (the request file on disk + its parsed JSON,
 the response status, the rendered HTML), mirroring test_uploader_keys.py's structure.
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run()
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run
 (no pytest-asyncio), the established gateway pattern.
 """
 from __future__ import annotations
@@ -117,7 +117,7 @@ def test_rebuild_requires_csrf(tmp_path):
 
 def test_rebuild_success_writes_valid_request_and_redirects(tmp_path):
     """A valid session + CSRF writes a well-formed rebuild.request attributed to the curator and
-    redirects (303) to the SERVE-STATE screen's panel. C43 FR2-1 (owner ruling, ratified 2026-07-11)
+    redirects (303) to the SERVE-STATE screen's panel. C43 FR2-1
     moved the serve panel off the queue page to /gateway/curator/serve, so the redirect follows it
     there — that is where the curator now sees the 'rebuild requested — pending' state. FAILS IF: the
     file is absent/malformed, the curator is not recorded, or the response is not a redirect to the
@@ -180,7 +180,7 @@ def test_rebuild_unwritable_state_dir_503(tmp_path):
 
 
 # ---- panel rendering on the SERVE-STATE screen -------------------------------------------------
-# C43 FR2-1 (owner ruling, ratified 2026-07-11): the serve-state panel was REMOVED from the queue page
+# C43 FR2-1: the serve-state panel was REMOVED from the queue page
 # — the dedicated /gateway/curator/serve screen (which embeds render_serve_panel) + the ever-present
 # drift chip own the served-vs-published job now. These panel-render pins MOVE with the panel to its
 # new home /serve (checked against test_c43_stage2b_ops.py: that file pins the ops floor / sync strip
@@ -283,8 +283,7 @@ def test_published_head_via_git_seam_on_shell_and_serve(tmp_path):
 # ---- CSP delivery + the queue-is-pure-queue invariant (strictPages blocks inline) ---------------
 
 def test_queue_page_is_pure_queue_and_csp_clean(tmp_path):
-    """C43 FR2-1 + CSP PIN. The queue page is PURELY the queue now (owner ruling, ratified
-    2026-07-11): the inline serve-state panel is GONE — it does NOT reference serve-state.js and
+    """C43 FR2-1 + CSP PIN. The queue page is PURELY the queue now: the inline serve-state panel is GONE - it does NOT reference serve-state.js and
     carries no serve-state panel id (that job moved to /gateway/curator/serve + the drift chip). It
     still carries the shared UI script and stays CSP-clean: Caddy serves every /gateway/* page under
     script-src 'self', so inline <script> blocks and inline on*= handlers are silently BLOCKED and any
@@ -315,7 +314,7 @@ def test_no_page_renderer_emits_inline_handlers_or_scripts():
     """SOURCE-LEVEL CSP SWEEP: no gateway HTML-emitting module may contain an inline event-handler
     attribute (ANY on*= — onerror/ontoggle/onkeydown included, review S3) or an inline <script>
     block without src= (review S2) — all are dead under the strictPages CSP. Three handlers shipped
-    that way and silently never ran until 2026-07-08; behaviours belong in CURATOR_UI_JS's
+    that way and silently never ran until; behaviours belong in CURATOR_UI_JS's
     data-attribute delegation and scripts belong behind the external routes. FAILS IF: a new inline
     handler or inline script block lands in any listed module — or a listed module is renamed away
     (coverage must fail loudly, not silently narrow)."""
@@ -401,8 +400,7 @@ def test_ui_js_route_serves_shared_behaviours(tmp_path):
     (Rebuild/Reject/Revoke confirms ride it) and the data-toggle-big click handler (the preview
     size toggle). Deliberately UNGATED (review C2): a session gate here 303s the login page's own
     script fetch into a nosniff console error on every login view; the content is a static
-    public-repo constant. FAILS IF: the route 404s (every confirm/toggle silently dies again, the
-    pre-2026-07-08 state), lacks either delegated behaviour, or regains a gate that breaks the
+    public-repo constant. FAILS IF: the route 404s, lacks either delegated behaviour, or regains a gate that breaks the
     login page."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):

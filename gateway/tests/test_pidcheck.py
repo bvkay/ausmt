@@ -2,7 +2,7 @@
 
 The alive-rule (SPEC §5.1) is the load-bearing semantics: only doi.org's OWN 404 is `unregistered`;
 every other doi.org answer (200 / 30x redirect / 403 / 5xx) is `resolved`; a network failure is `error`.
-These tests pin the pure classifier, the DOI/URL normalisation, the check() flow over a MOCKED opener
+These tests pin the pure classifier, the DOI/URL normalisation, the check flow over a MOCKED opener
 (NEVER the network — the build/CI stays offline), the not-a-DOI skip, and the session-gated endpoint.
 
 The parity pin (test_alive_rule_parity_with_engine_tool) asserts the gateway's content-blind copy of the
@@ -55,7 +55,7 @@ def test_is_doi_heuristic():
     assert not pidcheck.is_doi("https://example.org/dataset")
 
 
-# ---- check() over a MOCKED opener (no network) ---------------------------------------------------
+# ---- check over a MOCKED opener (no network) ---------------------------------------------------
 
 class _FakeResp:
     def __init__(self, code):
@@ -67,7 +67,7 @@ class _FakeResp:
 
 class _FakeOpener:
     """A urllib opener stand-in: `open` returns a fake response, raises HTTPError, or raises URLError,
-    per the scripted behaviour — so check() exercises the real classify path with ZERO network."""
+    per the scripted behaviour - so check exercises the real classify path with ZERO network."""
 
     def __init__(self, *, code=None, http_error=None, url_error=False):
         self._code = code

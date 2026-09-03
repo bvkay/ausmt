@@ -1,6 +1,6 @@
-"""About-page copy batch (owner dictation, 2026-08-02) render pins.
+"""About-page copy batch render pins.
 
-The owner dictated nine changes to portal/about.html in one pass. Three of them make the page say
+Nine changes were dictated to portal/about.html in one pass. Three of them make the page say
 something NEW and factual, and those are the ones that can rot:
 
   * the raw-time-series sentence now LINKS the NCI-AuScope MT collection instead of naming it in
@@ -17,9 +17,9 @@ The rest are removals and rewordings. Each is pinned in BOTH directions: the ret
 gone, and the sentence that replaced it must be present, so neither a revert nor an over-delete can
 pass. Parsed structurally where structure is the claim (section 1 ending on the card, section 7 down
 to a single link, the acknowledgement being one copyable line), and by exact string where the exact
-words are the owner's.
+words are the.
 
-A SECOND OWNER BATCH follows it at the foot of this module. That one adds a section rather than
+A SECOND COPY BATCH follows it at the foot of this module. That one adds a section rather than
 editing one, so the page's SHAPE is pinned with the words: eight numbered answers in a fixed order,
 the colophon after them, and a contents box that lists exactly those sections in exactly that order.
 A renumbering that leaves the contents box behind is the failure that shape exists to catch.
@@ -148,10 +148,10 @@ def test_the_contribute_card_states_the_formats_and_the_review():
     """The card body is replaced wholesale. FAILS if the old browser-side-validation pitch survives or
     if the new two-sentence body is not rendered word for word.
 
-    POLICY NOTE (reported to the owner, deliberately NOT resolved here): the card names three
+    POLICY NOTE (reported, deliberately NOT resolved here): the card names three
     submission input formats. gateway-side, EMTF XML is curator-enabled per submission rather than
-    universally accepted, so this wording is ahead of the validator. The owner dictated the wording;
-    the reconciliation (validator opens EMTF XML, or the card narrows) is an owner decision and this
+    universally accepted, so this wording is ahead of the validator. The wording is dictated;
+    the reconciliation (validator opens EMTF XML, or the card narrows) is a decision and this
     pin will fail the day the card is narrowed, which is the point."""
     howto = _flat(_section("howto"))
     for retired in ("Package and submit your EDIs with guided validation",
@@ -338,12 +338,12 @@ def test_section_one_states_the_hand_off_beside_the_no_hosting_claim():
     """The "About this build" popover said only that AusMT doesn't host raw time series. That was the
     WHOLE story until a verified per-station route existed; it is now half of one, and a reader who
     stops there concludes the portal cannot help them get the files. FAILS in both directions: the
-    no-hosting claim must survive verbatim (a 302 is not hosting, and this lane never claims it is),
+    no-hosting claim must survive verbatim (a 302 is not hosting, and this module never claims it is),
     and the hand-off half must be there beside it.
 
     THE SENTENCE HAS MOVED TWICE and the pin has followed it both times, which is the point of
     holding it by its section. It left the footer's popover for about.html's #build section under the
-    one-footer ruling; the owner has now deleted that section, and the two claims are not build
+    one-footer rule, and that section is now deleted, so the two claims are not build
     identity, so they land in section 1, which is where a reader asks what AusMT is. Same two claims,
     read from the section that carries them now.
 
@@ -406,11 +406,11 @@ def test_the_software_licence_sentence_lives_in_the_licence_section():
 
 def test_section_eight_keeps_the_only_route_to_the_releases_page():
     """releases.html has no other way in. The Releases link left every footer with the one-footer
-    ruling and the colophon that inherited it is now deleted, so a page of citable snapshots would
+    rule and the colophon that inherited it is now deleted, so a page of citable snapshots would
     be unreachable from the site unless the Documentation section carried the route.
 
     FAILS if the sentence or its link is missing, and FAILS if it grows a version chip: the route is
-    what section 8 inherited, not the running build's identity, which the owner ruled off the page."""
+    what section 8 inherited, not the running build's identity, which the rule is off the page."""
     docs = _section("docs")
     assert 'href="releases.html"' in docs, (
         "section 8 must link releases.html; it is the page's one entry point")
@@ -422,7 +422,7 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
         "section 8 inherited the route, not the chip")
 
 
-# ============================================================ the second owner batch (2026-09-03)
+# ============================================================ the second copy batch
 #
 # The page gains a section rather than losing one, so what it needs held is its SHAPE as well as its
 # words: a reader who follows contents entry N expects heading N, and a renumbering that leaves the
@@ -433,10 +433,10 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
 # beside it.
 #
 # The page is eight sections and nothing else. "This build" used to close it WITHOUT a number, as a
-# colophon rather than a ninth answer to "what is this site"; the owner has deleted it. Its two
+# colophon rather than a ninth answer to "what is this site"; it has been deleted it. Its two
 # paragraphs that were not build identity moved into the numbered sections that own their subjects,
 # and the route to the citable releases moved into section 8, so nothing the colophon carried is
-# lost except the running build's identity, which is what the owner ruled out.
+# lost except the running build's identity, which is what the rule ruled out.
 NUMBERED = [
     ("what", "1 \u00b7 What AusMT is"),
     ("who", "2 \u00b7 Who enables AusMT"),
@@ -562,12 +562,12 @@ NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
 
 def test_the_route_to_auscope_opens_the_way_every_other_auscope_link_does():
-    """The owner's new-tab ruling reaches this anchor too. FAILS if section 2's link to AuScope
+    """The new-tab rule reaches this anchor too. FAILS if section 2's link to AuScope
     loses target="_blank" or rel="noopener noreferrer", or spells the pair in a different order from
     the footer's.
 
     BOTH HALVES MATTER AND FOR DIFFERENT REASONS. target="_blank" keeps the reader's place in the
-    catalogue rather than navigating the page out from under them, which is the ruling. rel is what
+    catalogue rather than navigating the page out from under them, which is the rule. rel is what
     makes that safe: without noopener the opened document gets window.opener and can navigate this
     tab to a look-alike, and without noreferrer the reader's path through the catalogue leaks to a
     third party. The anchor carried rel alone, which is the half that is useless on its own: rel
@@ -627,7 +627,7 @@ def test_section_two_carries_the_official_lockup_the_footer_already_ships():
 
 
 def test_section_two_closes_on_operation_and_governance():
-    """The sub-heading the owner dictated, and the three facts under it: who maintains AusMT, what
+    """The dictated sub-heading, and the three facts under it: who maintains AusMT, what
     custodians keep, and where the arrangements are written down. FAILS if the sub-heading goes, if
     a fact is dropped, or if the Governance link stops being the page it names.
 
@@ -673,7 +673,7 @@ def test_the_page_and_the_engine_print_one_acknowledgement():
 
     WHY IT LIVES HERE rather than in engine/tests, the same reason the header parity pin's engine
     half does: portal-ci runs on portal/** AND on engine/extract/_pages.py, so an edit to either
-    half fires this lane. The engine lane triggers on engine/** alone and cannot see about.html."""
+    half fires this module. The engine workflow triggers on engine/** alone and cannot see about.html."""
     tree = ast.parse(PAGES_PY.read_text(encoding="utf-8"))
     found = [node.value for node in tree.body
              if isinstance(node, ast.Assign)

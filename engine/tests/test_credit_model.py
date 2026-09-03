@@ -39,7 +39,7 @@ def test_citation_names_all_creators_even_with_lead_and_pis():
 
 
 def test_no_retired_credit_key_is_read_into_smeta():
-    """A1 (CONTRIBUTOR-CREDIT-SPEC C3, the reader retirement): a survey that still carries BOTH retired
+    """A survey that still carries BOTH retired
     keys and no creators serves NO investigators facet at all and cites the organisation and the year.
     Pre-change survey_meta_from_yaml folded the retired keys into a back-compat 'investigators' SMETA key
     (and _investigators_of existed to build it), so the retired values were still read and served."""
@@ -193,7 +193,7 @@ def test_edi_export_attribution_reads_creators_over_a_stale_retired_facet():
 
 
 def test_edi_export_attribution_falls_straight_to_the_org_without_creators():
-    """A1: with no creators the export author falls STRAIGHT to the custodian org. The retired
+    """With no creators the export author falls STRAIGHT to the custodian org. The retired
     investigators fallback is gone, so a stale facet in a hand-built SMETA is ignored rather than named.
     Pre-change this returned "A. R, B. S". Never the portal brand."""
     a1, _, _ = _survey_meta_get({"org": "Org", "investigators": [{"name": "A. R"}, {"name": "B. S"}]})

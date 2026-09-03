@@ -19,7 +19,7 @@ Each assertion states its failure criterion:
     meaning on a page with no map, no filter and no selection.
   * FOOTER CHROME - FAILS if the footer keeps the retired About-this-build popover or a version
     chip, loses the bottom-left MTCAT link, or does not carry the AuScope-NCRIS lockup the
-    one-footer ruling put in the right region on every surface.
+    one-footer rule put in the right region on every surface.
   * NO INLINE SCRIPT - FAILS if the page carries an inline <script> block. The deployed CSP for every
     page except add-survey.html is script-src 'self' with no 'unsafe-inline' (@strictPages in
     deploy/docker/caddy/Caddyfile is a `not path /add-survey.html` matcher, so a NEW page picks up the
@@ -32,7 +32,7 @@ Each assertion states its failure criterion:
   * SAFE RENDERING - FAILS if releases.js reaches the DOM through innerHTML: every value it renders
     (tags, notes, commits, file paths) comes from a served JSON document.
   * THE ENTRY POINT - FAILS if about.html's Documentation section stops linking this page, or if a
-    Releases link comes back to index.html's footer. The ruling took the link out of every footer
+    Releases link comes back to index.html's footer. The rule took the link out of every footer
     and the #build colophon that first inherited it is deleted, so section 8 is the page's one
     route in.
 """
@@ -140,7 +140,7 @@ def _nav_ids(path):
 def _centre_order(path):
     """The five primary header items in document order, each reduced to a stable label. Mirrors the
     reducer in test_about_uniform_chrome.test_header_parity_about_matches_index, including its
-    treatment of a stray .about item as 'other:<href>', which is how a sixth header entry (the retired
+    styling of a stray .about item as 'other:<href>', which is how a sixth header entry (the retired
     How-to-use link, or a successor to it) shows up here instead of passing quietly."""
     out = []
     for _tag, a, in_nav in _header(path):
@@ -156,7 +156,7 @@ def _centre_order(path):
 
 
 def test_header_parity_releases_matches_about():
-    """Docs wave, stage 2 (owner ruling): every shipped header is FIVE items, namely Map, Surveys,
+    """Docs wave, stage 2: every shipped header is FIVE items, namely Map, Surveys,
     Collections, About, Contribute. Releases arrived on main carrying the retired sixth entry, a
     "How to use AusMT" link to about.html#howto, so this pin held it to a six-item order that About no
     longer has. Non-vacuous in both halves: run against that six-item header, the RELEASES assertion
@@ -193,7 +193,7 @@ def test_no_live_app_state_ids():
 
 
 def test_footer_chrome_matches_the_other_pages():
-    """The one-footer ruling emptied the right region of Releases and About this build and put the
+    """The one-footer rule emptied the right region of Releases and About this build and put the
     AuScope-NCRIS lockup there instead, so the chrome this page must match is the new one. FAILS if
     the popover or a version chip comes back here, if the MTCAT link leaves the bottom-left, or if
     the lockup is missing. The strings and the targets are held for all six documents at once in
@@ -353,9 +353,9 @@ def test_releases_js_does_not_parse_the_catalogue():
 # --- the entry point ------------------------------------------------------------------------------
 
 def test_about_carries_the_entry_point_the_footer_gave_up():
-    """The Releases link was in every footer until the one-footer ruling; the page still needs ONE
+    """The Releases link was in every footer until the one-footer rule; the page still needs ONE
     entry point or it is unreachable from the site. It was about.html's #build colophon, which also
-    carried the running build's identity; the owner has deleted that section and ruled the identity
+    carried the running build's identity; it has been deleted that section and ruled the identity
     off the page, so the route alone survives in section 8, Documentation, beside the other places
     a reader is sent for more.
 

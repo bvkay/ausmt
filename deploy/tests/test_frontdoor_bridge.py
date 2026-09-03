@@ -1,7 +1,7 @@
 """C47 public bridge — front-door + box-side two-walls pins + log-shipping pins.
 
 The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader — and,
-since the 2026-07-24 owner ruling, the PUBLIC submission subset — to the box's dedicated public-subset
+since the the rule, the PUBLIC submission subset - to the box's dedicated public-subset
 listener over the tailnet. The Add Survey contribution flow is public (an MT user who clicks Add Survey
 must reach the page and lodge a survey); the curator/admin workbench stays refused. The load-bearing
 properties are public (privacy) and security properties, so — per the standing rule — each is proven
@@ -101,7 +101,7 @@ def _brace_match(text: str, open_at: int) -> str:
 def _site_body(caddy_text: str, opener_re: str) -> str:
     """The INNER body (without the outer braces) of the site whose opener matches opener_re. The opener
     regex MUST end at the site's own opening brace, because a `{$ENV}` placeholder in the address line
-    also contains braces — we brace-match from the site brace (m.end()-1), not the first '{'."""
+    also contains braces - we brace-match from the site brace (m.end-1), not the first '{'."""
     m = re.search(opener_re, caddy_text)
     assert m, f"could not find a site opener matching {opener_re!r}"
     brace_idx = caddy_text.index("{", m.end() - 1)  # the site's own opening brace
@@ -141,7 +141,7 @@ def _run_caddy(cfg_text: str, td: Path, name: str) -> subprocess.Popen:
 def _stub_cfg(port: int, tag: str = "STUB") -> str:
     # A stand-in upstream: echoes the path so a test can prove a request REACHED it. `tag` distinguishes
     # the READER stub (STUB) from the GATEWAY-container stub (GWSTUB) in the end-to-end compositions.
-    # The stub accepts h2c exactly as the real reader listener does (2026-08-28 serve-path tuning:
+    # The stub accepts h2c exactly as the real reader listener does serve-path tuning:
     # the front door's box_upstream snippet dials h2c with no h1 fallback, so a stub that only
     # spoke h1 would 502 every composed end-to-end request).
     return ("{\n\tadmin off\n\tauto_https off\n\tservers {\n\t\tprotocols h1 h2c\n\t}\n}\n"
@@ -157,7 +157,7 @@ def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
     body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
     logpath = td / "access-frontdoor.json"
     body = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", body)
-    # The site body imports the shipped (box_upstream) snippet (2026-08-28 serve-path tuning), so
+    # The site body imports the shipped (box_upstream) snippet, so
     # the composition carries the snippet definition verbatim and the upstream substitution is
     # applied there: the composed edge then dials the stub through the REAL transport (h2c +
     # keepalive), which is exactly the path production requests take.
@@ -342,7 +342,7 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
         assert cls in classes, f"the deny matcher must be self-complete: {cls!r} missing; got {classes}"
     handle = _brace_match(body, body.index("\thandle @nonpublic {"))
     assert re.search(r"respond\b.*\b404", handle), "the @nonpublic handle must explicitly respond 404"
-    # 2026-08-28 serve-path tuning: the box proxies ride the shared (box_upstream) snippet, so the
+    #  serve-path tuning: the box proxies ride the shared (box_upstream) snippet, so the
     # property splits in two: the site body reaches the box THROUGH the snippet, and the snippet
     # (the one place the transport lives) proxies to the env placeholder.
     assert "import box_upstream" in body, \
@@ -354,7 +354,7 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
 def test_frontdoor_tls_and_hsts_configured():
     """C47 invariant d (config level): the public name drives automatic HTTPS (a hostname site address,
     NO `auto_https off`) so a certificate issues and plain HTTP redirects; and HSTS is set once TLS is
-    in force. The live cert issuance is verified in the owner runbook (needs real DNS + public IP).
+    in force. The live cert issuance is verified in the brief runbook (needs real DNS + public IP).
     FAILS IF auto_https is disabled or HSTS is absent."""
     text = _fd_text()
     assert "{$AUSMT_PUBLIC_NAME}" in text, "the site address must be the public-name placeholder"

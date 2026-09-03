@@ -95,7 +95,7 @@ def test_both_listeners_preserve_the_query_on_the_index_html_redirect():
 
 
 def test_the_two_listeners_do_not_drift_on_the_new_directives():
-    """The C47 no-drift rule applied to this lane's own edit: the reader directives are a
+    """The C47 no-drift rule applied to this module's own edit: the reader directives are a
     deliberate near-duplicate across the two listeners, so a fix applied to one and not the other
     would leave the public path (via :8081) behaving differently from the tailnet one. FAILS IF the
     two renditions of the canonicalisation block differ by so much as a byte."""

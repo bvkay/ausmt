@@ -1,11 +1,11 @@
-"""C8: the survey validator gate must fail CLOSED, not open (CONTEXT: the sibling ausmt-surveys
+"""The survey validator gate must fail CLOSED, not open (CONTEXT: the sibling ausmt-surveys
 pytest suite never ran in CI, so a fail-open validator merged untested — see
 maintainer/ and build-products.yml). Three invariants pinned here:
-  (a) --surveys without --no-validate and an unresolvable validator => main() returns non-zero
+  (a) --surveys without --no-validate and an unresolvable validator => main returns non-zero
       (pre-fix this printed a WARNING and proceeded -- captured below as the pre-change evidence).
   (b) AUSMT_VALIDATOR_PATH pointing at the real ausmt-surveys/_validation resolves and is used.
   (c) --no-validate still builds (the explicit, documented opt-out survives).
-Stack-less lane: no mt_metadata needed (validator resolution is stdlib-only import plumbing).
+Stack-less workflow: no mt_metadata needed (validator resolution is stdlib-only import plumbing).
 """
 import sys
 from pathlib import Path
@@ -18,12 +18,12 @@ sys.path.insert(0, str(REPO / "extract"))
 sys.path.insert(0, str(REPO))
 import build_portal  # noqa: E402
 
-# C35b/D3 (review F7) + amendment D3.1 (2026-07-07, real-CI red on the engine image build): the
+# C35b/D3 (review F7) + amendment D3.1: the
 # validator resolves via the FOUR-arm environment enumeration recorded in
 # maintainer/C35b-GitTruthDesign.md §D3.1. The validator is stdlib-only import plumbing here
 # (_load_validator imports the module, no mt_metadata), so the vendored copy resolves in the
-# stack-less engine lane too. Every probe anchors off ONE root, _repo_root() — no second path
-# convention — and _repo_root() is the monkeypatch seam the D3.1 falsifiability tests use.
+# Stack-less engine workflow too. Every probe anchors off ONE root, _repo_root - no second path
+# Convention - and _repo_root is the monkeypatch seam the D3.1 falsifiability tests use.
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
                               "(designed topology; vendored oracle lives in gateway/tests)")
@@ -74,7 +74,7 @@ def _resolve_validator_dir() -> Path:
 def _empty_surveys(tmp_path):
     # An EMPTY --surveys dir + --allow-empty keeps this stack-less: discover_work finds zero
     # packages, process_edis (which hard-requires mt_metadata, build_portal.py:628) is never
-    # called, so these tests isolate the validator-gate branch in main() from the extractor.
+    # Called, so these tests isolate the validator-gate branch in main from the extractor.
     d = tmp_path / "surveys"; d.mkdir()
     return d
 
@@ -94,8 +94,8 @@ def test_unresolvable_validator_via_bogus_env_path_fails_closed(tmp_path, monkey
     """AUSMT_VALIDATOR_PATH set but pointing nowhere real is a HARD error (never silently fall
     through to the bounded walk) -- distinct from the env var being unset entirely. This fires
     immediately in _load_validator (sys.exit, matching the codebase's existing hard-error style,
-    e.g. the --canonical-dir mt_metadata-missing check) rather than main()'s own `return 2`, so it
-    surfaces as SystemExit when main() is called in-process (a non-zero process exit either way)."""
+    e.g. the --canonical-dir mt_metadata-missing check) rather than main's own `return 2`, so it
+    surfaces as SystemExit when main is called in-process (a non-zero process exit either way)."""
     monkeypatch.setenv("AUSMT_VALIDATOR_PATH", str(tmp_path / "does-not-exist"))
     out = tmp_path / "out"
     with pytest.raises(SystemExit) as ei:
@@ -134,7 +134,7 @@ def test_env_var_path_resolves_real_validator(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------------------------------
 # C35b/D3.1 falsifiability — both new arms of the environment enumeration must be reachable and
 # distinct (Invariant 10: a skip arm that could swallow a real broken checkout would be vacuous).
-# _repo_root() is the seam: point it at a scratch topology, never at the real tree.
+# _repo_root is the seam: point it at a scratch topology, never at the real tree.
 # --------------------------------------------------------------------------------------------------
 def test_d31_image_topology_skips_with_exact_reason(tmp_path, monkeypatch):
     """D3.1 arm (iii) — falsifiability (a): a scratch root shaped like the ENGINE IMAGE (/app: an

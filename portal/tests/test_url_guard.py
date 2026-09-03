@@ -1,4 +1,4 @@
-"""Section 4 Lane N - the client's two URL/HTML allowlist edges, via their node driver
+"""Section 4 - the client's two URL/HTML allowlist edges, via their node driver
 (tools/url_guard_test.js, the fetch_bounded/coord_access driver pattern).
 
 Both surfaces are decisions rather than renders, so the driver runs them over a vector table against
@@ -12,7 +12,7 @@ It FAILS if:
   upper-case variants), data:, vbscript:, a protocol-relative //host, or the backslash authority
   /\\host that an http(s) URL parser folds to the same off-site host;
 - the map layer attribution reaches Leaflet's addAttribution unescaped. That path is DORMANT (the
-  layer control is not mounted), so the pin exists to hold the guard until an owner revisit.
+  layer control is not mounted), so the pin exists to hold the guard until a revisit.
 
 Skips if Node is unavailable (CI installs Node - see .github/workflows/portal-ci.yml)."""
 import shutil

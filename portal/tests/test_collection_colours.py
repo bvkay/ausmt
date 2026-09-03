@@ -15,7 +15,7 @@ result is deterministic - never a hex value. That is the exact defect this parit
 
 WHY THE ENGINE HALF LIVES HERE rather than in engine/tests. Same reason test_type_palette_separability.py
 carries the _TYPE_COL parity: portal-ci runs on portal/** AND on engine/extract/_pages.py (see
-.github/workflows/portal-ci.yml), so a change to either half fires this lane. The engine lane triggers on
+.github/workflows/portal-ci.yml), so a change to either half fires this module. The engine workflow triggers on
 engine/** alone and cannot see a state.js edit.
 
 The rule is EXECUTED, not re-implemented: the two definitions are lifted out of _pages.py's source text and

@@ -1,6 +1,6 @@
 """The favicon and the app icons are the same mark, and every surface links them.
 
-The owner's favicon concept sheet asks for the AusMT mark in the browser tab, recognisable as
+The favicon concept sheet asks for the AusMT mark in the browser tab, recognisable as
 Australia at 16 px. That is one requirement with two halves:
 
   * ONE GEOMETRY. The favicon is not a second drawing. It is the same 180 dot lattice as the header
@@ -9,7 +9,7 @@ Australia at 16 px. That is one requirement with two halves:
     silhouette at tab size, which is what a favicon should do, and dissolve into a haze if they do
     not. The pin rederives the favicon's circle count and its radius from contract/brand.json rather
     than trusting the file OR this sentence, so the band can move without stranding the test.
-  * EVERY SURFACE LINKS IT. Before this lane the generated entity pages shipped no icon link at all,
+  * EVERY SURFACE LINKS IT. Before this module the generated entity pages shipped no icon link at all,
     so all 2,655 of them asked the server for /favicon.ico and got a 404 on every visit. They link the
     same file the static pages do, from the same origin.
 
@@ -18,8 +18,8 @@ add-survey did not have to move; what changed is that it is now generated from t
 being the hand-drawn MT-curve placeholder. It is transparent, so the one file works on a light and a
 dark browser chrome without a second variant.
 
-NO WEB MANIFEST this lane (architect default): 192 and 512 are generated and served so a manifest can
-be added later, but an installable PWA is its own decision and its own ruling.
+NO WEB MANIFEST this module (architect default): 192 and 512 are generated and served so a manifest can
+be added later, but an installable PWA is its own decision and its own rule.
 """
 import json
 import re
@@ -37,8 +37,8 @@ PAGES_PY = REPO / "engine" / "extract" / "_pages.py"
 ICONS = {"ausmt-icon-180.png": 180, "ausmt-icon-192.png": 192, "ausmt-icon-512.png": 512}
 # The static portal documents that carry the site chrome. 404.html is deliberately not in scope: it
 # is a bare error document with no header. brand.html is here because E5 created it in this same
-# lane, shipping both icon links; it was not in the contract's E4 list only because it did not exist
-# when that list was written, and leaving it out would mean the one page the lane added is the one
+# Workflow, shipping both icon links; it was not in the contract's E4 list only because it did not exist
+# When that list was written, and leaving it out would mean the one page the workflow added is the one
 # page whose icon links nothing holds.
 CHROME_PAGES = ("index.html", "about.html", "add-survey.html", "brand.html", "releases.html")
 
@@ -112,7 +112,7 @@ def test_every_chrome_page_links_the_favicon_and_the_apple_touch_icon(name):
 
 def test_the_generated_pages_link_both_icons_same_origin():
     """FAILS IF the static pages' shell stops emitting the icon links, or emits them anywhere but the
-    portal's own origin. Every entity page asked for /favicon.ico and got a 404 before this lane; the
+    portal's own origin. Every entity page asked for /favicon.ico and got a 404 before this module; the
     links are absolute because a page served at /surveys/<slug> cannot resolve a relative vendor path."""
     src = PAGES_PY.read_text(encoding="utf-8")
     for tag in ('<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">',
@@ -126,7 +126,7 @@ def test_the_generated_pages_link_both_icons_same_origin():
 def test_no_web_manifest_was_smuggled_in():
     """The architect's default, pinned so it stays a decision rather than a drift. 192 and 512 exist
     for a future manifest; shipping one would make the portal installable to a home screen, which is
-    a product decision the owner has not made. FAILS IF a manifest link appears on any chrome page."""
+    a product decision the brief has not made. FAILS IF a manifest link appears on any chrome page."""
     for name in CHROME_PAGES:
         text = (ROOT / name).read_text(encoding="utf-8")
         assert 'rel="manifest"' not in text, (

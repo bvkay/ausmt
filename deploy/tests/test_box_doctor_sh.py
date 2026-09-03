@@ -7,7 +7,7 @@ refuses (404) and FAILS on a breach (200), and the served-vs-HEAD comparison WAR
 is behind.
 
 Skips on Windows / no POSIX sh / no git (platform + tool reasons, same class as the reconcile/preflight
-suites). On the gateway-ci ubuntu lane git and sh are present, so it RUNS with nothing skipped and the
+suites). On the gateway-ci ubuntu workflow git and sh are present, so it RUNS with nothing skipped and the
 skip tripwire needs no allow entry.
 """
 from __future__ import annotations
@@ -173,8 +173,7 @@ def test_served_behind_head_warns(tmp_path):
 
 
 def test_dirty_surveys_live_fails(tmp_path):
-    """An untracked entry under surveys-live (the incident-2026-07-11 class: built + served but git can
-    never remove it) must FAIL the checkout-clean check and the run."""
+    """An untracked entry under surveys-live must FAIL the checkout-clean check and the run."""
     data = _make_tree(tmp_path, dirty=True)
     r = _run(_env(tmp_path, data))
     assert any(ln.startswith("FAIL surveys-live:") and "DIRTY" in ln for ln in r.stdout.splitlines()), (
@@ -199,7 +198,7 @@ def test_reconcile_timer_absent_fails(tmp_path):
     assert r.returncode != 0
 
 
-# ---- kernel OOM kills named by name (incident 2026-08-15) --------------------------------------------
+# ---- kernel OOM kills named by name --------------------------------------------
 
 def test_kernel_oom_kill_fails_and_names_the_process(tmp_path):
     """The P350 incident: the engine build was OOM-killed by the kernel five nights running and every
@@ -276,7 +275,7 @@ def test_permission_hint_does_not_hide_a_kill_that_is_visible(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# TS-ROUTE KEY-SET PARITY (THREDDS lane). The route table lives on the VPS and the data lives here, so
+# TS-ROUTE KEY-SET PARITY (THREDDS workflow). The route table lives on the VPS and the data lives here, so
 # a withheld flip is suppressed only once the table is regenerated, committed and installed. Both
 # renderings come from ONE projection, so their (station, level) key sets must be EQUAL: a route that
 # resolves for a station the data does not publish is the R5 leak, and a published route that 404s is
@@ -362,12 +361,12 @@ def test_ts_parity_warns_rather_than_fails_with_no_committed_table(tmp_path):
 # ---- section-5 review: legs that reported green over the failure they exist to catch -------------
 
 def test_gw_runner_not_running_fails_the_gateway_profile(tmp_path):
-    """gw-runner has NO compose healthcheck by design, so 'is it running' is the ONLY observable, and
+    """Gw-runner has NO compose healthcheck by design, so 'is it running' is the ONLY observable, and
     a crash-looping runner is the 'submissions stuck at SCANNED' incident. The doctor's own header
     always claimed it checked gw-runner under PROFILE=gateway; the loop only covered gateway+clamd,
     so the operator's final gate reported all-green over exactly that failure.
 
-    FAILS IF the container leg still ignores gw-runner (pre-lane behaviour)."""
+    FAILS IF the container leg still ignores gw-runner (earlier behaviour)."""
     data = _make_tree(tmp_path)
     b = tmp_path / "bin_norunner"
     b.mkdir()
@@ -391,7 +390,7 @@ esac
 def test_unreadable_surveys_live_git_warns_rather_than_reporting_clean(tmp_path):
     """`git status --porcelain` prints NOTHING and exits non-zero on a dubious-ownership or locked
     index error, and the leg suppressed stderr and read empty-as-clean. That is plausible on this
-    very repo (the gateway writes it as a different uid), and it turned the incident-2026-07-11
+    very repo (the gateway writes it as a different uid), and it turned the incident-
     dirty-checkout guard into a green light.
 
     FAILS IF a git error still reports 'checkout is clean'."""

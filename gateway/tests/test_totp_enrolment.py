@@ -6,7 +6,7 @@ the enrolment lifecycle (begin -> show-once secret -> activate -> active), the c
 fail-closed refusals (wrong code, already-enrolled begin, rotate-without-current-code), the throttle,
 and the strictPages CSP (no inline JS).
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
 """
 from __future__ import annotations
 

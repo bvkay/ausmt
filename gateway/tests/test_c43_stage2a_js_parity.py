@@ -10,12 +10,12 @@ semantics divergence — not just a missing substring — goes red.
 Node dependency posture (stated for the gate): pure `node` only — NO jsdom, NO npm install, no new
 deps (the extracted functions are DOM-free). Local dev box: node v22 present. Gateway CI
 (gateway-ci.yml, ubuntu-latest): node is preinstalled on GitHub-hosted runners, so these pins RUN in
-CI. If node were ever absent, the pytest.skip reason below is deliberately NOT on the gateway lane's
+CI. If node were ever absent, the pytest.skip reason below is deliberately NOT on the gateway workflow's
 skip-tripwire allow-list (engine/tests/ci_check_skips.py --allow "real engine stack / ..."), so the
-lane would fail LOUDLY rather than silently hollowing these pins out — the house tripwire posture.
+workflow would fail LOUDLY rather than silently hollowing these pins out - the house tripwire posture.
 
 Vector-set note: the sweep uses 0.5°-step values plus 2dp seam values (0, ±0.05, ±90, ±180, …).
-Exact x.25-style binary-representable decimal halves are deliberately excluded — Python round() is
+Exact x.25-style binary-representable decimal halves are deliberately excluded - Python round is
 round-half-even while JS Math.round is half-up, and the pin exists to catch MODULO/BAND semantics
 divergence, not decimal-rounding-convention differences on inputs the 1dp tf.json data cannot carry.
 """
@@ -91,7 +91,7 @@ def _sweep_vectors() -> list:
 
 
 # --------------------------------------------------------------------------------------------------
-# F1: wrap180 / trueYx / inQ1 / inQ3 parity (executable — Node vs phaseqc)
+# Wrap180 / trueYx / inQ1 / inQ3 parity (executable - Node vs phaseqc)
 # --------------------------------------------------------------------------------------------------
 def test_js_wrap180_trueyx_quadrant_parity_sweep(tmp_path):
     """EXECUTABLE PARITY (F1). The extracted STATIONS_JS wrap180/trueYx/inQ1/inQ3 must agree EXACTLY
@@ -135,7 +135,7 @@ process.stdout.write(JSON.stringify(out));
 
 
 # --------------------------------------------------------------------------------------------------
-# F2: URL construction parity (executable — absolute /data/... URLs, tricky slug/id encoding)
+# URL construction parity (executable - absolute /data/... URLs, tricky slug/id encoding)
 # --------------------------------------------------------------------------------------------------
 def test_js_data_urls_absolute(tmp_path):
     """EXECUTABLE URL PIN (F2). The extracted STATIONS_JS dataUrl/stationJsonUrl must produce the
@@ -170,7 +170,7 @@ process.stdout.write(JSON.stringify(out));
 
 
 # --------------------------------------------------------------------------------------------------
-# F4d: classify (slack + median) parity (executable — series semantics, seam-straddling medians)
+# Classify (slack + median) parity (executable - series semantics, seam-straddling medians)
 # --------------------------------------------------------------------------------------------------
 def test_js_classify_median_parity(tmp_path):
     """EXECUTABLE SERIES PARITY (F4d). The extracted STATIONS_JS classify (slack-widened per-point
@@ -227,23 +227,23 @@ process.stdout.write(JSON.stringify(out));
 
 
 # ==================================================================================================
-# H1 (C43-S2a-HOTFIX): the Stations-tab row filter, driven by an ENGINE-PRODUCED catalogue.
+# The Stations-tab row filter, driven by an ENGINE-PRODUCED catalogue.
 #
 # THE LESSON IS THE PIN: the merged Stage-2a filter compared the catalogue `survey` column to the
 # hub's SLUG, but the engine writes the survey display LABEL there (build_portal.py:
 # r["survey"] = survey_label) — zero matches, Stations tab blank on EVERY production survey
-# (owner-reported 2026-07-11). No pin caught it because none drove the filter with rows the ENGINE
+# . No pin caught it because none drove the filter with rows the ENGINE
 # produced. These pins run the REAL engine (the same _run_preview seam the gateway uses) over the
 # engine's own sample survey and drive the EXTRACTED filter function with the emitted catalogue —
 # hand-built rows are banned here by design.
 #
-# Skip posture: the engine stack (mt_metadata) is absent in the stackless gateway CI lane, so these
-# pins skip there with EXACTLY the lane's one allow-listed tripwire reason (gateway-ci.yml --allow);
-# on the dev box (ausmt env) and the engine lanes they RUN. Node-absent boxes hit the file-level
+# Skip posture: the engine stack (mt_metadata) is absent in the stackless gateway CI workflow, so these
+# Pins skip there with EXACTLY the module's one allow-listed tripwire reason (gateway-ci.yml --allow);
+# On the dev box (ausmt env) and the engine workflows they RUN. Node-absent boxes hit the file-level
 # pytestmark above, which is deliberately NOT allow-listed.
 # ==================================================================================================
 _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
-# EXACTLY the gateway lane's one allow-listed skip reason (.github/workflows/gateway-ci.yml --allow).
+# EXACTLY the gateway workflow's one allow-listed skip reason (.github/workflows/gateway-ci.yml --allow).
 _ENGINE_SKIP_REASON = "real engine stack / sample survey / validator not present"
 
 
@@ -251,7 +251,7 @@ def _has_real_engine() -> bool:
     """Mirrors test_runner.py's precondition for the no-mocks engine e2e: mt_metadata importable +
     the sample survey + a validator (sibling or vendored — _run_preview's in-build validation needs
     one). The mt_metadata requirement is what legitimately skips the H1 engine-truth pins in the
-    stackless gateway lane."""
+    stackless gateway workflow."""
     import importlib.util
 
     from gateway.tests.conftest import resolve_validator_dir
@@ -308,9 +308,7 @@ def test_stations_filter_selects_engine_built_rows_by_slug(engine_corpus, tmp_pa
     Node with the catalogue the REAL ENGINE emitted, must return EXACTLY the stations the engine
     built for each slug — judged against the engine's own slug-keyed products/<slug>/ tree, an
     INDEPENDENT observable (the products tree is keyed by slug on disk; the catalogue rows carry
-    the label). FAILS IF the filter misses a station the engine built for the slug (the shipped
-    Stage-2a defect: label-vs-slug compare matched nothing — shown red 2026-07-11, 0 of 2 rows for
-    both fixture slugs) OR pulls a sibling survey's rows across the trailing-dot boundary
+    the label). FAILS IF the filter misses a station the engine built for the slug OR pulls a sibling survey's rows across the trailing-dot boundary
     (au.burra-2017. must not match au.burra-2017-18.*, and vice versa)."""
     js = curatorpage.STATIONS_JS
     cmap = re.search(r"var C = \{.*?\};", js, re.DOTALL)
@@ -355,13 +353,12 @@ process.stdout.write(JSON.stringify(out));
 
 
 def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
-    """H1 VERIFY-GATE PIN, engine-truth form (architect ruling 2026-07-11). The 'au.' + slug + '.'
+    """H1 VERIFY-GATE PIN, engine-truth form. The 'au.' + slug + '.'
     prefix join is exact ONLY because every slug that can reach the hub is a safe_component FIXED
     POINT: the engine passes every declared slug through safe_component before it enters ausmt_id
     (build_portal.py discover_work), safe_component is idempotent, and the hub route 404s unless an
     on-disk <slug>/survey.yaml package exists — so no non-fixed-point slug is reachable. The literal
-    every-validate_slug-legal-slug form of the gate is FALSE (a legal slug may contain '..', which
-    safe_component collapses to '-'; verified 2026-07-11: 108 of 4920 legal probes transform); such
+    every-validate_slug-legal-slug form of the gate is FALSE; such
     a slug fails EMPTY (zero rows — the honest no-stations message), never WRONG (a sibling's rows).
     FAILS IF the engine's slug normalisation drifts so a produced slug is no longer a fixed point
     (the prefix join would then silently blank that survey's Stations tab), or a fixture-tree
@@ -400,15 +397,15 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
 # Frame-declaration readability — SUPERSEDED presentation, same invariant.
 #
 # S2a-SPLIT presented station.json's `frame` block as typed fact rows (frameRows). C43-HUB H3
-# (owner feedback round 2) replaced that table with the mockup's single worded line —
+#  replaced that table with the mockup's single worded line -
 # frameWords(frame): 'declared-zero · no rotation declared' — with EVERY extra frame field kept in
 # the collapsed raw-JSON <details>. The invariant is unchanged: the words derive from VERBATIM
 # station.json values (frame_served / derotated / declared_azimuth_deg), never a recompute, and
 # the pin drives the exact shipped function in Node with REAL engine-produced frames.
 # ==================================================================================================
 def _js_str(v) -> str:
-    """JS String() coercion for a JSON scalar (the JS frameRows uses String(v)). The ONE divergence
-    from Python str() that matters for real frame values is integer-valued floats: JS String(0.0)=='0'
+    """JS String coercion for a JSON scalar (the JS frameRows uses String(v)). The ONE divergence
+    from Python str that matters for real frame values is integer-valued floats: JS String(0.0)=='0'
     (no '.0'), Python str(0.0)=='0.0'. Both are faithful VERBATIM displays of the same JSON number —
     the JS just drops the trailing '.0' — so the reference mirrors JS here rather than imposing
     Python's float formatting (a recompute would change the VALUE, which this pin would still catch)."""
@@ -421,7 +418,7 @@ def _js_str(v) -> str:
 
 def _py_frame_words(frame: dict) -> str:
     """The reference frameWords mapping (VERBATIM coercion, no recompute) the JS must match.
-    Mirrors the JS String() coercions (see _js_str) so the pin compares the JS against the SERVED
+    Mirrors the JS String coercions (see _js_str) so the pin compares the JS against the SERVED
     values, not against itself: frame_served as stored, then de-rotated / declared-azimuth /
     no-rotation from the derotated + declared_azimuth_deg fields, then (C25-V3 F2) the divergent
     tipper frame from tipper_declared_azimuth_deg (present only when it diverges — the engine omits

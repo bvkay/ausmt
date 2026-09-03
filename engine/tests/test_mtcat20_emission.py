@@ -7,8 +7,7 @@ The 2.0 breaking list, each pinned here against the real emitter:
     never emitted null; the ONE defined null is the paired stations[].latitude/longitude (position
     not published). Relationship rows carry no null-valued keys either (the 110-error class).
   * formats is emitted only when at least one format is actually distributed (never []); an
-    embargoed/withheld survey OMITS the key (owner unified review finding 62: [] would falsely
-    assert that no formats are KNOWN when the holdings exist and are merely withheld).
+    embargoed/withheld survey OMITS the key.
   * sources[]/changes are never emitted: a sources row maps to a related_identifiers row (spec
     6.9); a row carrying statement/licence/retrieved/profile content is a HARD STOP (that content
     must be captured in survey-metadata, not silently deleted).
@@ -30,7 +29,7 @@ And the 2.0 additions:
     A withheld state omits bbox/centroid (they would republish the withheld footprint).
 
 stations[].has_time_series and surveys[].n_stations_time_series_verified project from the
-verified-resource register stamp (the THREDDS lane): true-or-absent, count present iff positive.
+verified-resource register stamp (the THREDDS workflow): true-or-absent, count present iff positive.
 """
 import sys
 import types

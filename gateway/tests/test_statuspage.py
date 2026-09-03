@@ -8,7 +8,7 @@ from gateway import states, statuspage
 
 
 def test_validator_table_renders_from_items():
-    # The real validator writes {"items":[{level,name,message}, ...]}. proven failing 2026-07-06:
+    # The real validator writes {"items":[{level,name,message}, ...]}. proven failing:
     # _validator_section read only "checks"/"rows", so a real {"items":...} report rendered an EMPTY
     # table (the whole §6 validator feature silently absent).
     report = {"items": [
@@ -38,7 +38,7 @@ def test_validator_rows_strip_absolute_paths():
 
 def test_preview_values_strip_absolute_paths():
     # review #11: preview values were rendered WITHOUT the abs-path strip that validator rows and the
-    # AV note get. A warning echoing a build path would leak it. proven failing 2026-07-06: the raw
+    # AV note get. A warning echoing a build path would leak it. proven failing: the raw
     # C:\... / /srv/... path appeared verbatim in the preview panel.
     summary = {"station_count": 3, "warnings": "build wrote /srv/ausmt/gateway/quarantine/01/reports"}
     html = statuspage.render(submission_id="01ABC", state=states.VALIDATED,
@@ -79,7 +79,7 @@ def test_note_renders_only_for_submitter_intended_states():
 
 
 # The >INFO pre-flight advisory arrives as a LIST of plain sentences written for a geophysicist.
-# Before the pre-flight lane the `warnings` key only ever held a 2-4 item build-failure list, or the
+# Before the pre-flight workflow the `warnings` key only ever held a 2-4 item build-failure list, or the
 # empty list `_summarise_preview` hardcodes, so nobody noticed the cell renders `str(the_list)`.
 
 _ADVISORY = [
@@ -90,7 +90,7 @@ _ADVISORY = [
 
 
 def test_preview_warnings_render_as_a_list_not_a_python_repr():
-    # proven failing 2026-08-09 on abc82d2: the whole advisory arrived in ONE table cell as a Python
+    # Proven failing on abc82d2: the whole advisory arrived in ONE table cell as a Python
     # list repr, a single unbroken 4,027-character run beginning `[&quot;EDI pre-flight: ...` with
     # the sentences separated by `&#x27;, &#x27;` and the quote style flipping mid-list wherever a
     # sentence contained a double quote. Prose written for a geophysicist, delivered as a debug dump.

@@ -3,7 +3,7 @@
 pytest -rs aggregates identical (location, reason) skips into ONE line carrying a multiplicity,
 "SKIPPED [2] path:line: reason". Two tests skipping through one shared helper (the D3.1 validator
 seam was the first) produce exactly that shape, and a parser that counts lines undercounts it -
-the 2026-08-24 PR #164 red, caught by the tripwire's own cross-check against pytest's summary
+the PR #164 red, caught by the tripwire's own cross-check against pytest's summary
 total. These pins keep both halves honest: multiplicities are summed, and the cross-check still
 fails loudly on formats the parser cannot see.
 """

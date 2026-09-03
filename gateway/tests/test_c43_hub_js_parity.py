@@ -17,10 +17,10 @@ DETERMINISTICALLY (the test_convention_gates manipulation, reimplemented as pure
   * Vulcan_A1 — untouched clean control (served, no warn).
 
 Node dependency posture: pure `node`, no jsdom/npm (the extracted functions are DOM-free by
-design); node absence is deliberately NOT allow-listed (the lane must red, not hollow out).
+design); node absence is deliberately NOT allow-listed (the workflow must red, not hollow out).
 Engine posture: the real engine stack (mt_metadata + the sample survey) is absent in the
-stackless gateway CI lane — those pins skip there with EXACTLY the lane's one allow-listed
-tripwire reason and RUN on the dev box + the engine/build lanes (ubuntu). Nothing here is
+stackless gateway CI workflow - those pins skip there with EXACTLY the module's one allow-listed
+tripwire reason and RUN on the dev box + the engine/build workflows (ubuntu). Nothing here is
 ubuntu-ONLY: every test that can run on this Windows dev box does.
 
 Failure criterion is in each test's docstring (Invariant 10).
@@ -333,8 +333,8 @@ def test_package_note_renders_once_despite_multiple_refusals(warn_report, tmp_pa
 def test_four_cards_producer_truth_and_build_id_absent(warn_report, tmp_path):
     """FOUR-CARDS PIN (engine truth) incl. the build-id-card-ABSENT assertion. cardsPlan over the
     real report yields EXACTLY the mockup's four cards: Serving/published '6 / 8' with '2 refused
-    by convention gate'; QA flags 5 (warn tone); Frame 'as-stored' + 'declared-zero reference'
-    (Q1 ruling: derotation notes only, record vocabulary, never 'geomagnetic'); Last build
+    by convention gate'; QA flags 5 (warn tone); Frame 'as-stored' + 'declared-zero reference' (derotation notes only, record vocabulary,
+    never 'geomagnetic'); Last build
     '<duration> s' + 'cold · engine <sha>' (a fresh build is all cache misses). FAILS IF a card
     is added/removed/reordered, the build-id card returns, published != built + dropped, or the
     frame card invents a frame fact."""
@@ -530,7 +530,7 @@ def _load_corpus(warn_report):
 
 def test_convention_sentence_vectors_match_phaseqc_medians(tmp_path):
     """CONVENTION-SENTENCE PIN (contract H3: sentence-format vectors on the Node harness). The
-    sentence is built from the SAME classify() medians the parity-tested seam computes — the pin
+    sentence is built from the SAME classify medians the parity-tested seam computes - the pin
     compares the extracted JS against a Python mirror over phaseqc.classify_series for healthy /
     yx-out (the mockup's exact shape, out-of-quadrant component LEADING) / xy-out / both-out /
     no-data series. FAILS IF the medians drop from the sentence, the lead-swap rule breaks, the
@@ -586,7 +586,7 @@ process.stdout.write(JSON.stringify(cases.map(function (c) {
 def test_short_sha_canonical_and_verbatim_fallback(warn_report, tmp_path):
     """TRUNCATED-SHA PIN (contract H3). A REAL engine-emitted catalogue sha256 truncates to
     'xxxx…yy' (first 4 + last 2, the mockup's inline form; the FULL hash rides the title attr —
-    render pin in the treatment file); an odd/short/non-hex value renders VERBATIM (never hide
+    render pin in the styling file); an odd/short/non-hex value renders VERBATIM (never hide
     information — the builddisplay posture), and empty stays empty. FAILS IF the canonical form
     drifts or the fallback truncates an unrecognised shape."""
     cat = _load_corpus(warn_report)["catalogue"]
@@ -691,7 +691,7 @@ def test_stations_list_merged_latlon_and_portal_link_source():
 
 
 # ==================================================================================================
-# Gate fix round (2026-07-11 browser pass): F1/F2 terse lines + F3 numeric range ordering
+# Gate fix round: F1/F2 terse lines + F3 numeric range ordering
 # ==================================================================================================
 def _station_docs(warn_report) -> list:
     """Every station.json document the REAL engine wrote for the fixture survey, read from the SERVED
@@ -805,7 +805,7 @@ process.stdout.write(JSON.stringify({
 
 
 # ==================================================================================================
-# C43 FR2-3 — the ONE combined ±180 phase plot's pure data mapper (owner ruling 2026-07-11: both
+# C43 FR2-3 - the ONE combined ±180 phase plot's pure data mapper (the rule: both
 # phases on a single axis; supersedes the mockup's two separate plots). combinedPhasePlan +
 # phaseVerdictParts run IN NODE against the tf rows the REAL ENGINE emitted, judged against the
 # parity-tested phaseqc.classify_series (the SAME seam the plot dots use) and an INDEPENDENT Python
@@ -831,7 +831,7 @@ def test_combined_phase_plan_mapper_from_real_corpus(warn_report, tmp_path):
     with the tf rows the REAL engine emitted, produces: (1) the φxy series verbatim (stored = true) and
     the φyx series UNWRAPPED to true phase (stored − 180, re-wrapped — trueYx); (2) per-point flags +
     median verdicts MATCHING phaseqc.classify_series (the parity-tested seam the plot dots use); (3)
-    TWO band owners on the ±180 axis — Q1 belongs to xy, Q3 (+ the +170..+180 seam continuation) to yx,
+    TWO bands own the ±180 axis - Q1 belongs to xy, Q3 (+ the +170..+180 seam continuation) to yx,
     and NO band crosses 0 (Q1 and Q3 stay separately owned). phaseVerdictParts yields BOTH component
     verdicts, in order, with the out flag = median-out.
 

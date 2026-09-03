@@ -1,6 +1,6 @@
 """About header corpus-totals block, behavioural pin (Invariant 10).
 
-api-docs lane. The About page's header right zone now carries the mono stats block that used to be
+api-docs workflow. The About page's header right zone now carries the mono stats block that used to be
 index-only, stating CORPUS totals ("N stations · N surveys") rather than index's live map state. The
 numbers are read from the served catalogue at load time, so the block has exactly one way to be wrong:
 showing something when it does not actually know. tools/corpus_stats_test.js drives the REAL

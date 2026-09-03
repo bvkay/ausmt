@@ -13,7 +13,7 @@ The second half is what stops the first from being satisfied by a constant. A wr
 same bytes regardless of input would pass a reproducibility test and publish a useless digest.
 
 The XML zip's members carry the one field that used to break this: mt_metadata assigns
-Provenance.create_time = now() inside to_xml(), so an untouched canonical XML re-stamped the build
+Provenance.create_time = now inside to_xml, so an untouched canonical XML re-stamped the build
 clock and both the per-station XML row and the whole zip's digest churned on every rebuild. The
 served value is now the date the source document declares (ingest.normalize._pin_create_time), so it
 is asserted here too: the digest being stable is not evidence on its own that the value is honest.

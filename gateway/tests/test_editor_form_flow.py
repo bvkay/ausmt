@@ -1,4 +1,4 @@
-"""End-to-end tests for the STRUCTURED metadata-editor form (the 2026-07-08 "hostile JSON" rework),
+"""End-to-end tests for the STRUCTURED metadata-editor form,
 driven through the real gateway HTTP surface with the in-process edit seam.
 
 The load-bearing test here is the ROUND-TRIP: render the edit form from a real, richly-populated
@@ -10,7 +10,7 @@ optional sections render empty widgets with example placeholders (never a null-s
 raw-JSON <details> override; per-field validation errors (bad ORCID / bad DOI) rendered on the form;
 spare blank rows submitted empty are ignored; the editor.js route + CSP (no inline JS).
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
 """
 from __future__ import annotations
 
@@ -245,7 +245,7 @@ def _added_removed_lines(diff_html: str) -> str:
 def test_form_renders_widgets_not_json_textareas(tmp_path):
     """A populated survey renders structured widgets (named s_/l_/c_ inputs, an access <select>) and
     NOT the old raw-JSON textareas (j_organisation etc. as the PRIMARY input). FAILS IF the sections
-    revert to bare JSON textareas — the whole point of the 2026-07-08 rework."""
+    revert to bare JSON textareas - the whole point of the rework."""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -271,13 +271,13 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             # The retired panels are GONE.
             assert 'name="s_lead_investigator_orcid"' not in body
             assert 'name="l_principal_investigators_0_name"' not in body
-            # A2 (D7): so is the legacy Convert notice and its named submit. A pre-migration survey
+            # So is the legacy Convert notice and its named submit. A pre-migration survey
             # that still carries the retired keys shows NOTHING about them: they are unmodelled keys,
             # byte-preserved through every save and read by nothing.
             assert "Legacy field" not in body
             assert "people_convert" not in body
             assert "Ada Lovelace" not in body and "Grace Hopper" not in body
-            # A2: the ratified curated homes have their own controls.
+            # The ratified curated homes have their own controls.
             assert 'name="l_organisations_0_name"' in body
             assert 'name="c_organisations_0_custodian"' in body
             assert 'name="c_organisations_primary"' in body

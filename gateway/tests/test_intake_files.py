@@ -5,7 +5,7 @@ Each test states its failure criterion and tests an independent observable (real
 REAL validator's report), never metadata self-consistency.
 
 The engine's stdlib-only _license_text leaf (D2) is imported here the way the runner reaches it in
-the stack-less lane: engine/extract on sys.path (the leaf pulls no heavy stack, so this needs no
+the stack-less workflow: engine/extract on sys.path (the leaf pulls no heavy stack, so this needs no
 mt_metadata). The runner's own _generate_intake_files uses the SAME import path.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 
 # Make the engine's stdlib-only _license_text leaf importable (the runner's intake module reaches it
 # via `from extract._license_text import ...`, falling back to the bare sibling name — this insert
-# feeds that fallback in the local/gateway test lane where `extract` is not pip-installed).
+# Feeds that fallback in the local/gateway test workflow where `extract` is not pip-installed).
 _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
 sys.path.insert(0, str(_ENGINE_DIR / "extract"))
 
@@ -52,7 +52,7 @@ def _make_package(root: Path, *, survey_yaml: str = _SURVEY_YAML, n_edi: int = 2
                   n_xml: int = 0) -> Path:
     """Build an extracted-package-shaped folder <root>/<slug>/ with survey.yaml, n_edi EDIs and n_xml
     EMTF XMLs, the layout safe_extract produces (package_dir/<slug>/...). EMTF XML is a first-class
-    submission input since the 2026-08-03 ruling, so a package may carry either folder or both."""
+    submission input since the rule, so a package may carry either folder or both."""
     pkg = root / "intake-survey-2026"
     (pkg / "transfer_functions" / "edi").mkdir(parents=True)
     (pkg / "survey.yaml").write_text(survey_yaml, encoding="utf-8")
@@ -171,8 +171,8 @@ def test_readme_carries_declared_metadata(tmp_path):
 def test_readme_station_count_covers_emtf_xml_submissions(tmp_path):
     # The README station count is what a curator reads to decide whether a submission arrived intact,
     # so it must count the transfer functions the engine will actually ingest. EMTF XML has been one
-    # of those since the 2026-08-03 ruling. FAILS IF an XML-only package is described as having no
-    # stations, or a mixed one counts only half of what it carries. RED against the pre-ruling
+    # Of those since the rule. FAILS IF an XML-only package is described as having no
+    # stations, or a mixed one counts only half of what it carries. RED against the pre-rule
     # _station_count (edi/ alone): "Stations: 0" for the first, "Stations: 1" for the second.
     xml_only = _make_package(tmp_path / "x", n_edi=0, n_xml=3)
     intake.generate_intake_files(xml_only, now_utc=_NOW)
@@ -235,7 +235,7 @@ def test_recognised_metadata_only_license_still_gets_license_md(tmp_path):
 # --------------------------------------------------------------------------------------------------
 def test_existing_files_are_never_overwritten(tmp_path):
     # FAILS IF generation clobbers a package's own LICENSE.md/README.md. proven RED by removing the
-    # `if not path.exists()` guard, which would replace the submitter's bytes with the skeleton.
+    # `if not path.exists` guard, which would replace the submitter's bytes with the skeleton.
     pkg = _make_package(tmp_path)
     orig_lic = b"# The submitter's own hand-written LICENSE\nCustom terms.\n"
     orig_rdm = b"# The submitter's own README\nHand-written notes.\n"
@@ -300,7 +300,7 @@ def test_unparseable_survey_yaml_generates_nothing(tmp_path):
 
 def _alias_bomb_yaml(levels: int = 5, fan: int = 10) -> str:
     """A survey.yaml whose declared metadata are YAML ALIAS chains: each level names the level below
-    it `fan` times, so safe_load builds a small DAG that str() expands to fan**levels leaves. Tiny on
+    it `fan` times, so safe_load builds a small DAG that str expands to fan**levels leaves. Tiny on
     disk (safe_extract's byte cap sees nothing wrong), enormous the moment it is coerced to text."""
     lines = ['schema_version: "0.2"', "slug: alias-bomb-2026", "a0: &a0 x"]
     for n in range(1, levels + 1):
@@ -313,11 +313,11 @@ def _alias_bomb_yaml(levels: int = 5, fan: int = 10) -> str:
 def test_alias_bomb_survey_yaml_generates_a_bounded_readme(tmp_path):
     """G3 amplification: intake runs BEFORE the validator, so every survey.yaml value it renders is
     still attacker-supplied. A value that is not a scalar must read as no declared metadata (the
-    module's fail-closed posture), never as str() of an expanded alias DAG, so the README written into
+    module's fail-closed posture), never as str of an expanded alias DAG, so the README written into
     the quarantine volume stays bounded no matter what the package declares.
 
     Scope: intake._readme_md_body's four survey.yaml fields plus the licence line. FAILS IF a
-    non-scalar value reaches str(). RED against the pre-cap intake in two ways: a non-scalar licence
+    non-scalar value reaches str. RED against the pre-cap intake in two ways: a non-scalar licence
     raised "AttributeError: 'list' object has no attribute 'strip'" out of canon_license (against the
     module's never-raise contract), and with the licence left scalar a 429-byte survey.yaml produced a
     3,133,630-byte README (7,304x), growing x10 per alias level.

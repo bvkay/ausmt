@@ -1,5 +1,4 @@
-"""Unit tests for the structured metadata-editor form assembly (gateway/editor_form.py) — the
-2026-07-08 "hostile JSON" fix that replaces the raw-JSON textareas with per-section widgets.
+"""Unit tests for the structured metadata-editor form assembly (gateway/editor_form.py) - the "hostile JSON" fix that replaces the raw-JSON textareas with per-section widgets.
 
 These are pure-function tests of the SERVER-SIDE half: the widget form fields <-> section dicts
 mapping, the advanced-JSON override precedence, per-field format validation, repeatable-row
@@ -862,7 +861,7 @@ def test_credit_vocab_matches_surveys_validator():
     surveys validator's FROZEN credit vocabularies, read from the arm conftest resolves. Skipped only when
     that validator predates the credit vocab - a stale sibling checkout, since the vendored copy carries
     it; that skip is deliberately NOT on gateway-ci's allow-list, so a CI run that lost the vocab reds the
-    lane instead of passing quietly. Where it runs it FAILS IF the editor vocab drifts from the ratified
+    workflow instead of passing quietly. Where it runs it FAILS IF the editor vocab drifts from the ratified
     validator vocab - a mis-typed name_type/role would mis-classify an actor or publish a wrong provenance
     claim, so the two must never disagree."""
     vv = _load_credit_validator()
@@ -1043,7 +1042,7 @@ def test_instrument_pid_persists_and_round_trips():
 
 
 # ==================================================================================================
-# A2 (LANE-CONTRACT-FORM-CREDIT section 5): the retired flat credit keys leave the editor, and the
+# The retired flat credit keys leave the editor, and the
 # ratified MTCAT 2.0 curated homes arrive - citation{}, organisations[], acknowledgements[] and the
 # identity_classification designation mapping. Every vocab is pinned to the vendored surveys
 # validator (the fail-closed parity discipline), and the key-parity pin feeds a fully assembled
@@ -1052,7 +1051,7 @@ def test_instrument_pid_persists_and_round_trips():
 # ==================================================================================================
 
 def test_retired_flat_credit_keys_are_no_longer_editor_sections():
-    """A2 (D14/D7): lead_investigator and principal_investigators are GONE from the editor registries,
+    """Lead_investigator and principal_investigators are GONE from the editor registries,
     and with them the legacy Convert surface (_LEGACY_CREDIT_KEYS / convert_requested /
     _apply_legacy_convert / DELETE_DIRECTIVE). FAILS IF any of them survives - a curator control that
     edits a key the migration deleted and the engine no longer reads."""
@@ -1089,7 +1088,7 @@ def test_citation_text_source_out_of_vocab_fails_closed():
 
 
 def test_citation_text_source_without_preferred_text_fails_closed():
-    """D17: text_source states where preferred_text came from, so it is meaningless without one.
+    """Text_source states where preferred_text came from, so it is meaningless without one.
     FAILS IF a bare text_source assembles (it would claim provenance for wording that is not there)."""
     form = {"s_citation_preferred_text": "", "s_citation_text_source": "source_provided",
             **_snap("citation", {})}
@@ -1098,7 +1097,7 @@ def test_citation_text_source_without_preferred_text_fails_closed():
 
 
 def test_citation_preferred_identifier_assembles_as_a_nested_pair():
-    """D18 (resolved): the editor writes citation.preferred_identifier ONLY as the NESTED
+    """The editor writes citation.preferred_identifier ONLY as the NESTED
     {scheme, identifier} pair. FAILS IF flat scheme/identifier sub-keys land on citation (the
     validator WARNs them as unrecognised keys) or the pair is not nested."""
     form = {"s_citation_preferred_text": "GSSA (2016).",
@@ -1112,7 +1111,7 @@ def test_citation_preferred_identifier_assembles_as_a_nested_pair():
 
 
 def test_citation_preferred_identifier_is_both_or_neither():
-    """D18: a half-declared pair cannot anchor the citation invariant, so the editor fail-closes on one
+    """A half-declared pair cannot anchor the citation invariant, so the editor fail-closes on one
     half. FAILS IF a lone scheme (or a lone identifier) is assembled and shipped to the validator."""
     for half in ({"s_citation_preferred_identifier_scheme": "DOI",
                   "s_citation_preferred_identifier_identifier": ""},
@@ -1261,7 +1260,7 @@ def test_acknowledgements_type_vocab_is_warn_only_not_fail_closed():
         {"text": "Wording", "type": "legacy_type"}]
 
 
-# ---- identity_classification (survey-metadata lane D12; the designation home) --------------------
+# ---- identity_classification (survey-metadata workflow D12; the designation home) --------------------
 
 def test_identity_classification_assembles_case_and_represents_rows():
     """The designation mapping {case, represents[] | own_identifiers[]} assembles from the case select
@@ -1387,7 +1386,7 @@ def test_key_parity_mtcat20_patch_through_real_validator(tmp_path):
 
 def test_key_parity_mtcat20_mutation_proof(tmp_path):
     """NON-VACUOUS proof: dropping the designation (identity_classification) makes the REAL validator
-    FAIL the assembled citation.preferred_identifier - the D20 citation-chain rule this lane relies on
+    FAIL the assembled citation.preferred_identifier - the D20 citation-chain rule this module relies on
     to refuse an inconsistent curator save. FAILS IF the validator would accept an undesignated
     preferred_identifier (which would make the parity pin above vacuous)."""
     vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_mtcat20_mut")
@@ -1423,7 +1422,7 @@ def test_gateway_carries_no_retired_credit_key_outside_tests():
 def test_care_json_edit_reaches_the_patch():
     """The CARE governance panel renders as j_care on both editing surfaces under 'leave blank to
     leave unchanged' - so a non-blank j_care MUST become a care patch. FAILS IF build_section_patch
-    never reads j_care (pre-lane: 'care' was in neither MAP_SECTIONS nor LIST_SECTIONS, so a
+    never reads j_care (earlier: 'care' was in neither MAP_SECTIONS nor LIST_SECTIONS, so a
     curator's Indigenous data-governance edit was silently discarded with no diff and no error)."""
     edited = {"traditional_owner_acknowledgement": "NEW WORDING",
               "land_access": {"permission_obtained": True},

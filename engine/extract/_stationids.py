@@ -104,7 +104,7 @@ _SAFE_ID = re.compile(r"\A[A-Za-z0-9._-]+\Z")
 # DIRECTORY name: ENAMETOOLONG, raised out of the per-survey emission, and the WHOLE corpus build
 # died with no catalogue.json written at all. A bound here turns that into an ordinary
 # survey-granularity StationIdError like every other charset violation. 96 is far beyond any real
-# Station identifier and leaves ample room inside the
+# station identifier (the RD18 scheme peaks at 13) and leaves ample room inside the
 # 255-byte filesystem component limit for the product suffixes appended to it.
 MAX_STATION_ID_LEN = 96
 

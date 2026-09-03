@@ -2,14 +2,14 @@
 modelled LIST_SECTION widgets that must round-trip AND save end-to-end.
 
 Three failure modes this pins:
-  1. The EDITABLE_LISTS gap (the SAME bug the related_identifiers lane shipped with): the widget assembles
+  1. The EDITABLE_LISTS gap (the SAME bug the related_identifiers workflow shipped with): the widget assembles
      a creators/contributors patch that the runner then REJECTS on save as a non-editable field, because
      the key was missing from gateway.runner.edit.EDITABLE_LISTS. The end-to-end assertions below drive a
      real merge and assert the save is ACCEPTED - RED before creators/contributors join the allow-list.
   2. Byte-clean round-trip: an unchanged creators/contributors list (org creator with ror-but-no-orcid,
      person creator with orcid-but-no-ror) reassembles to its snapshot -> _OMIT, so an unrelated edit
      never blanks or re-quotes a credit list the curator did not touch.
-  3. INFERRED-REVIEW adjudication: the RATIFIED migration (surveys origin/main, hardened 2026-07-25) marks a
+  3. INFERRED-REVIEW adjudication: the RATIFIED migration marks a
      seeded row with a COMMENT-ABOVE INFERRED-REVIEW note (its own line directly above `- name:`), NOT an
      inline comment. ruamel re-homes that above-comment onto a NEIGHBOUR (row 0 -> the parent list key;
      row i>0 -> the previous row's trailing comment), so the runner detector (inferred_review_indices) reads
@@ -178,7 +178,7 @@ def test_people_panel_contributors_save_is_accepted_by_the_runner(tmp_path):
 # ---- INFERRED-REVIEW detection + save-strips-the-marker adjudication -----------------------------
 
 # GROUND TRUTH (hermetic): the BYTE-EXACT output of the ratified credit migration
-# (_tools/migrate_credit.py at surveys origin/main, hardened 2026-07-25) on a survey carrying legacy
+#  on a survey carrying legacy
 # principal_investigators (-> two person creators) + lead_investigator (-> one ProjectLeader contributor).
 # The INFERRED-REVIEW note rides its OWN comment line directly ABOVE each `- name:` row (comment-ABOVE) -
 # the ratified format, because an inline comment after a quoted scalar tripped the vendored mini parser.
@@ -427,12 +427,12 @@ def test_people_no_op_round_trip_is_a_runner_no_op(tmp_path):
 
 
 # ==================================================================================================
-# A2 (LANE-CONTRACT-FORM-CREDIT): the legacy Convert flow and its _delete_keys directive are GONE
+# The legacy Convert flow and its _delete_keys directive are GONE
 # (D7), and the three ratified curated homes plus the designation mapping round-trip end to end.
 # ==================================================================================================
 
 def test_the_legacy_convert_surface_is_gone(tmp_path):
-    """D7: with the corpus migration run and the retired keys deleted, there is nothing left to
+    """With the corpus migration run and the retired keys deleted, there is nothing left to
     convert. The people_convert submit, the hidden legacy payload fields and the _delete_keys patch
     directive are all removed, so a hand-crafted convert POST contributes NOTHING and the runner has
     no delete surface at all. FAILS IF any part of the retired mechanism still functions."""
@@ -487,7 +487,7 @@ _MTCAT20_SECTION_FORM = {
 
 
 def test_the_new_sections_are_editable_and_save_through_the_runner(tmp_path):
-    """THE EDITABLE_KEYS GATE (the exact gap the related_identifiers and credit lanes each shipped
+    """THE EDITABLE_KEYS GATE (the exact gap the related_identifiers and credit workflows each shipped
     with): the editor assembles citation / identity_classification / organisations / acknowledgements,
     so all four MUST be patchable or run_merge_job refuses the curator's save as a non-editable field.
     RED before they join EDITABLE_MAPS/EDITABLE_LISTS."""

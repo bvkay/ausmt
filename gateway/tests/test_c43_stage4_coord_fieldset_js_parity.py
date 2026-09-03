@@ -17,7 +17,7 @@ covered) — so a JS↔engine key/vocab drift can never pass silently.
 
 Reds on pre-change code: buildOverrideControls / assembleOverrideMap / overrideMapChanged did not exist
 in STATIONS_JS (the extraction assert raises), so the interactive fieldset had no drivable core — the
-A2 stop-and-report gap this lane closes.
+A2 stop-and-report gap this module closes.
 """
 from __future__ import annotations
 
@@ -248,7 +248,7 @@ def test_js_orphan_override_survives_the_save(tmp_path):
     untouched Save must remain a no-op. The invariant is editor_form.py's own, mirrored client-side:
     a withheld/generalised station must NEVER silently un-mask.
 
-    RED against pre-lane code: buildOverrideControls built controls only from served rows, so
+    RED against earlier code: buildOverrideControls built controls only from served rows, so
     assembleOverrideMap posted a map WITHOUT the stored key (the withhold silently deleted) and
     overrideMapChanged reported 'changed', letting the deletion save even when the curator touched
     nothing."""

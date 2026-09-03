@@ -1,6 +1,6 @@
-"""Where the static pages' chrome actually points (findability lane, index pages).
+"""Where the static pages' chrome actually points (findability workflow, index pages).
 
-The static portal pages (about, releases, add-survey, and brand since the brand-assets lane) carry
+The static portal pages (about, releases, add-survey, and brand since the brand-assets workflow) carry
 the same header as index.html so the chrome reads identically across the site. Their LINKS did not
 follow: every primary nav item pointed at bare index.html, which meant
 
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = "https://ausmt.auscope.org.au"
 
 # page -> its canonical path, the URL a crawler must be told is the one true address for it.
-# brand.html joined them in the brand-assets lane: it is substantive, linked from About and
+# Brand.html joined them in the brand-assets workflow: it is substantive, linked from About and
 # advertised in sitemap.xml, so it answers to the same chrome rules as the other three.
 _STATIC_PAGES = {
     "about.html": f"{BASE}/about.html",
@@ -95,7 +95,7 @@ def test_the_404_page_recovers_to_the_surveys_index():
 
 
 def test_the_spa_header_surveys_and_collections_are_real_links():
-    """LANE-ADDENDUM-HUB-FEEDBACK.md R10, the owner's live review of /surveys.
+    """LANE-ADDENDUM-HUB-FEEDBACK.md R10, the live review of /surveys.
 
     The hub pages exist and are served at /surveys and /collections, so the SPA header's own Surveys
     and Collections controls stop being in-app view switches and become links to them, matching the

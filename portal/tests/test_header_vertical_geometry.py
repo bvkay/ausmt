@@ -55,8 +55,8 @@ status slot carries a live counter, and at 375px that one 15px line renders inde
 as intended, not a drift: the chrome is shared, the contents of the contextual slot are not.
 
 NO CARVE-OUT. about.html carried the AuScope symbol as its identity mark, under a rule of its own,
-while the owner ruled on that header; this file used to read the mark's height from whichever of the
-two rules a surface happened to use. The ruling put the AusMT mark in that slot like everywhere
+while the rule is on that header; this file used to read the mark's height from whichever of the
+two rules a surface happened to use. The rule put the AusMT mark in that slot like everywhere
 else, so there is one rule to read and every surface must carry it. The height is the only thing a
 mark contributes to the header's height, and every surface declares it as 30px.
 """

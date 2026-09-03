@@ -1,4 +1,4 @@
-"""M2 (code-health review §6): the ISO 7064 MOD 11-2 ORCID checksum is reimplemented three times
+"""The ISO 7064 MOD 11-2 ORCID checksum is reimplemented three times
 (gateway/orcid.py, portal/add-survey.html, the surveys validator). This is one of the three
 consumers of the SHARED vector file gateway/tests/fixtures/orcid_vectors.json — divergence in any
 copy goes red. Here we drive gateway.orcid.is_valid_orcid over every vector whose `applies_to`

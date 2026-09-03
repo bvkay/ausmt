@@ -1,5 +1,5 @@
 // Node test for the pure logic embedded in add-survey.html. REWRITTEN for the "files first, five minutes,
-// enrich later" contribution redesign (2026-07-24): the tiered form, the NEW emission shape (identifiers-
+// enrich later" contribution redesign: the tiered form, the NEW emission shape (identifiers-
 // by-level related_identifiers + publications[] + identifiers.instrument_pid, with the RETIRED flat
 // identifier model deleted), and the SOFTENED location + DATAID gates. Self-contained (synthetic EDIs, no
 // external data). Run via tests/test_add_survey_logic.py or:  node tests/add_survey_logic.test.js
@@ -44,7 +44,7 @@ ok(pn.coord_flag == null, "agreeing DMS blocks not flagged as a conflict");
 const base = { name: "X", slug: "x", organisation: "O", country: "Australia", license: "CC-BY-4.0", access: "open",
                uploader_name: "n", uploader_email: "a@b.co", authority_to_submit: true, license_declaration: true };
 
-// ============================ SOFTENED station-location gate (owner ruling 2026-07-24) ============================
+// ============================ SOFTENED station-location gate ===============================================
 // The location-confirm checkbox BLOCKS ONLY when the DMS resolver actually found a HEAD/INFO conflict.
 // A survey whose stations carry NO conflict never blocks, regardless of the confirmation state.
 const flaggedEdis = [{ name: "WG-1.edi", parsed: p }];
@@ -108,7 +108,7 @@ ok(!/repository workflow<\/b> \(CI\)|authoritative in the AusMT repository/i.tes
    "the advisory box no longer claims authoritative validation lives in the repository CI workflow");
 ok(/authoritative/i.test(html.slice(html.indexOf('class="advisory"'), html.indexOf('class="advisory"') + 600)),
    "the advisory box still names an authoritative validation stage");
-// no em dashes in the redesigned copy (owner ruling: "No em dashes anywhere").
+// no em dashes in the redesigned copy (the rule: "No em dashes anywhere").
 const mainCopy = html.slice(html.indexOf("<main>"), html.indexOf("</main>"));
 ok(!/—/.test(mainCopy), "no em dash (U+2014) anywhere in the page's <main> copy");
 
@@ -131,7 +131,7 @@ for (const v of VEC.vectors)
      "safeEdiComponent shared-vector [" + v.kind + "]: " + JSON.stringify(v.input) + " -> " + JSON.stringify(v.expected));
 ok(M.packagedEdiName("ROX000") === "ROX000.edi", "packagedEdiName: <sanitized-DATAID>.edi");
 
-// ============================ SOFTENED DATAID gate (owner ruling 2026-07-24) ============================
+// ============================ SOFTENED DATAID gate ==================================================
 // deriveDataId: a missing DATAID auto-derives from the FILENAME (extension stripped, then sanitised).
 ok(M.deriveDataId("ROX000.edi") === "ROX000", "deriveDataId strips the .edi extension");
 ok(M.deriveDataId("Line1__Station7_1.edi") === "Line1__Station7_1", "deriveDataId keeps a safe filename stem");
@@ -475,7 +475,7 @@ ok(/schema_version: "0.3"/.test(yAttr), "a package carrying attribution declares
 ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false })),
    "no attribution block when the licence declaration is not made");
 
-// ============================ ROUND 2 (owner-ruled 2026-07-24) ============================
+// ============================ ROUND 2 =================================================
 
 // ---- R1: slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
 //      stationCountsByName counts catalogue.json rows (index 1 = survey name) per survey. The chip warns
@@ -716,7 +716,7 @@ ok(!/Package \.zip to email \(fallback path\)/.test(html), "the old rewording of
 ok(/async function buildPackage/.test(html) && /function buildSubmissionMd/.test(html),
    "R2 is visibility-only: the zip packager code is kept intact");
 
-// ============================ EMTF XML as a first-class input (owner ruling 2026-08-03) ============================
+// ============================ EMTF XML as a first-class input ==================================================
 // The page must ADMIT EMTF XML the way it admits EDI and MTH5: in the file picker's accept list, in the
 // drop-zone copy, in the kind classification, and in the validation gate. Pre-fix the accept list was
 // ".edi,.h5,.mth5", so a submitter literally could not select their .xml files.
@@ -753,7 +753,7 @@ ok(badXml.items.some(i => i.check === "emtfxml" && i.level === "FAIL" && /EM_TF/
    "a .xml that is not an EMTF transfer function is a blocking FAIL, not a silent pass");
 ok(badXml.counts.FAIL > 0, "the masquerading .xml blocks submission");
 
-// ============================ SLUG LENGTH CAP (the 2026-08-11 MTH5 truncation) ============================
+// ============================ SLUG LENGTH CAP (the MTH5 truncation) =======================================
 // A slug over 45 characters is truncated to slug[:45] as the MTH5 survey group name, and the round-trip
 // gate then withholds every station .h5 in the survey — observed live on a real 54-character slug.
 // SLUG_MAX caps the DERIVED value and blocks a hand-typed one. These tests fail if either half regresses.

@@ -4,7 +4,7 @@ Three instrument/processing dialects (EDL/BIRRP, LEMI/BIRRP, Phoenix EMpower spe
 yield usable Z/rho under the sole mt_metadata engine — including the Phoenix spectra-section dialect
 (cross-power SPECTRA, no >FREQ/impedance section) that the retired regex reader needed _spectra for.
 
-Re-baselined 2026-06-16 from the regex reader onto mt_metadata. The Phoenix golden Z values were
+Re-baselined from the regex reader onto mt_metadata. The Phoenix golden Z values were
 always mt_metadata-derived, so they hold unchanged; the old regex-vs-mt_metadata parity test is
 removed (it would now compare mt_metadata to itself).
 """

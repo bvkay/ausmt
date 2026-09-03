@@ -1,4 +1,4 @@
-"""M6 (code-health review §6): pin the build_portal argv surface the surveys-repo consumer relies on.
+"""Pin the build_portal argv surface the surveys-repo consumer relies on.
 
 ausmt-surveys/_validation/contribute.py builds the engine preview by spawning
 `python -m extract.build_portal` with a HAND-BUILT argv. Nothing on the engine side notices when a
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 # The flags contribute.py passes to `python -m extract.build_portal` (contribute.py:148-151, read
-# 2026-07-07). VENDORED because CI has no surveys sibling; kept honest by
+# . VENDORED because CI has no surveys sibling; kept honest by
 # test_vendored_flags_match_live_contribute below whenever the sibling is present.
 CONTRIBUTE_BUILD_PORTAL_FLAGS = ("--surveys", "--out", "--extractor", "--no-validate")
 
@@ -32,7 +32,7 @@ _SIBLING_CONTRIBUTE = _ENGINE_DIR.parents[1] / "ausmt-surveys" / "_validation" /
 def _build_portal_help() -> str:
     """The real build_portal CLI surface via `-m extract.build_portal --help` (exit 0, all flags
     printed). Exercises the ACTUAL parser contribute.py invokes — no build_portal refactor needed, and
-    no clash with any lane editing build_portal's argparse (this reads whatever surface exists)."""
+    no clash with any workflow editing build_portal's argparse (this reads whatever surface exists)."""
     proc = subprocess.run(
         [sys.executable, "-m", "extract.build_portal", "--help"],
         cwd=str(_ENGINE_DIR), capture_output=True, text=True)

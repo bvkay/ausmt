@@ -132,8 +132,8 @@ def _self_test() -> int:
         )
 
     # (2) The two always-required vars MUST still be guarded (removing them must still abort). Prove
-    #     the guard scoping did not throw the baby out: AUSMT_DATA_DIR and the OWNER
-    #     variable stay :?.
+    #     the guard scoping did not throw the baby out: the AUSMT_DATA_DIR and OWNER variables
+    #     stay :?.
     for required in ("AUSMT_DATA_DIR", "OWNER"):
         env = dict(minimal)
         del env[required]

@@ -1,7 +1,7 @@
 """LINEAGE PIN: the program that WROTE a transfer-function file is not the program that PROCESSED it.
 
 The portal's lineage graph published "Processing software: Geotools / WinGLink / MTpy" — the EDI HEAD's
-PROGVERS, i.e. whatever SERIALISED the file. Measured over the GA AusLAMP holdings on 2026-08-14, 1743
+PROGVERS, i.e. whatever SERIALISED the file. Measured over the GA AusLAMP holdings, 1743
 files carry `PROGVERS="WINGLINK EDI 1.0.22"` and 337 carry `PROGVERS="Geotools 4.0.5.12583"`; none of those
 programs estimated a transfer function. The program that did is named ONLY in the >INFO free text
 ("Processing code: LEMIMT" on 296 of the Geotools files; "processing.software.name = ['Birrp 5.0', ' 5.2']"
@@ -209,11 +209,11 @@ def test_station_json_names_the_processor_and_the_writer_separately(tmp_path):
 
 
 def test_station_json_states_the_dimensionality_call_with_its_caveat(tmp_path):
-    """D1 (2026-08-23): the classification and its skew statistic are FOLDED INTO station.json's
+    """The classification and its skew statistic are FOLDED INTO station.json's
     diagnostics, and the method string and the screening caveat travel with them, so the qualification
     is beside the numbers rather than one file away. FAILS against the emitter one commit ago, which
     carried them in dimensionality.json alone; and against a fold that dropped the caveat, which is the
-    failure the 2026-08-14 removal was guarding against in the first place."""
+    failure the removal was guarding against in the first place."""
     pytest.importorskip("mt_metadata")
     base = _build(tmp_path)
     for st in ("EXAMPLE01", "EXAMPLE02"):

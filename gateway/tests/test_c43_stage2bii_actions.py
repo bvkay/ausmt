@@ -15,7 +15,7 @@ The D13 Stage-2 set carried here (each refusal proven able to fail by its passin
     a wrong typed id does NOT burn the code); a valid restore writes the intent AND consumes the code;
   * CSP-clean confirm pages (no inline JS/handlers under the strictPages script-src 'self').
 
-Async bodies run under conftest.run() (no pytest-asyncio), mirroring the sibling suites.
+Async bodies run under conftest.run (no pytest-asyncio), mirroring the sibling suites.
 """
 from __future__ import annotations
 
@@ -413,9 +413,9 @@ def test_write_intent_single_flight_raises(tmp_path):
 
 
 def test_audit_tail_reader_does_not_fabricate_lines_from_unicode_separators(tmp_path):
-    """S4 (gateway defence-in-depth). read_actions_audit_tail must split on '\n' ONLY, so a crafted
+    """Read_actions_audit_tail must split on '\n' ONLY, so a crafted
     line carrying a unicode line separator (U+2028) — even if one ever reached the host log — stays ONE
-    entry, not two. FAILS IF splitlines()-style splitting fabricates an extra tail entry from one line."""
+    entry, not two. FAILS IF splitlines-style splitting fabricates an extra tail entry from one line."""
     state = tmp_path / "state"
     state.mkdir()
     # One real line whose content embeds a U+2028; the host scrubs these, but the reader must not trust it.

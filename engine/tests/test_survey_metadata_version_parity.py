@@ -1,21 +1,21 @@
 """THE SURVEY-METADATA SCHEMA VERSION HAS ONE SOURCE, AND THIS IS THE PIN THAT KEEPS IT THAT WAY.
 
 The sibling of test_mtcat_version_parity.py for the second public contract, survey-metadata.json.
-The MTCAT lane learned the lesson the hard way (four version literals found one review round at a
+The MTCAT workflow learned the lesson the hard way (four version literals found one review round at a
 time); this contract starts with the machinery already in place, so no site ever holds a literal.
 
 SINGLE SOURCE: the SURVEY_METADATA_VERSION constant in contract/generate.py. The schema artifact's
 `title` DISPLAYS the version ("AusMT Survey Metadata <MAJOR.MINOR>[-draft]: ...") and is verified
-against the constant by contract/generate.py:survey_metadata_schema_version(), which also emits
+against the constant by contract/generate.py:survey_metadata_schema_version, which also emits
 SURVEY_METADATA_SCHEMA_VERSION into engine/extract/_contract.py (the generated constant the emitter
-reads), gated by `generate.py --check` in both CI lanes.
+reads), gated by `generate.py --check` in both CI workflows.
 
 THIS MODULE reads the version back off every surface that states one, INDEPENDENTLY of the shared
 function (its own regex over the generate.py source, so the pin cannot agree with itself vacuously):
 
   1. contract/generate.py SURVEY_METADATA_VERSION      (the authority, read raw from the source text)
   2. the schema title                                    (the DISPLAY, verified against the constant)
-  3. contract/generate.py:survey_metadata_schema_version()  (the one accessor)
+  3. contract/generate.py:survey_metadata_schema_version  (the one accessor)
   4. engine/extract/_contract.py                         (the generated engine constant)
   5. the schema $id                                      (the version-specific immutable URI)
   6. a REAL BUILD's served schema routes and every emitted document's `version`
@@ -114,7 +114,7 @@ def test_the_accessor_refuses_a_title_that_disagrees_with_the_constant(tmp_path,
 
 
 def test_the_schema_id_is_the_versioned_immutable_uri():
-    """D3 (ratified at GO): the $id IS a version surface, the version-specific immutable URI under
+    """The $id IS a version surface, the version-specific immutable URI under
     /data/schemas/ausmt-survey-metadata/<version>/, with the unversioned
     /data/ausmt-survey-metadata.schema.json as the latest-convenience route. The version segment must
     equal the single-source constant."""

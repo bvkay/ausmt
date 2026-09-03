@@ -59,7 +59,7 @@ def test_the_absolute_route_is_the_prefix_plus_the_encoded_path_and_nothing_else
 
 
 def test_every_encoded_vector_passes_the_gate_the_published_route_is_judged_by():
-    # The encoder writes what _stationcheck admits. If these two ever part company the lane publishes
+    # The encoder writes what _stationcheck admits. If these two ever part company the workflow publishes
     # routes its own semantic layer would reject, which is a build failure disguised as a vector file.
     for v in _load()["vectors"]:
         assert stcheck._TS_ENCODED.match(v["encoded_path"]), v["name"]
@@ -82,7 +82,7 @@ def test_the_expected_strings_carry_the_distinctive_escapes():
     # were regenerated from a broken encoder would still satisfy the round-trip above.
     by = {v["name"]: v["encoded_path"] for v in _load()["vectors"]}
     assert by["space_and_brackets"].endswith("C5%20%5BREMOTE%5D.zip")
-    # !'()* are the set encodeURIComponent leaves alone, which is why the JS mirror cannot delegate
+    # !'* are the set encodeURIComponent leaves alone, which is why the JS mirror cannot delegate
     # to it; + and & would otherwise be read as a space and a parameter separator.
     for esc in ("%21", "%27", "%28", "%29", "%2A", "%2B", "%26"):
         assert esc in by["sub_delims_are_escaped"], esc

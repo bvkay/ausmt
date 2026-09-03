@@ -3,7 +3,7 @@
 Those EDIs label their tipper data blocks plainly (>TXR, >TXI, >TX.VAR ...) while mt_metadata's
 EDI reader accepts ONLY the .EXP-suffixed spellings (_t_labels: txr.exp/txvar.exp/...), so a real
 24-period tipper was discarded wholesale at parse: 36 long-period stations catalogued comps "Z"
-against the owner's statement of fact (the LP sites recorded the vertical field) and against
+against the statement of fact (the LP sites recorded the vertical field) and against
 their own served bytes. The fix is the second application of the normalised-TEMPORARY-copy
 pattern (the >INFO delimiter precedent): when a parsed .edi carries no tipper and the label
 normalisation actually changes the bytes, the file is reparsed once from a conditioned scratch
@@ -101,7 +101,7 @@ def test_a_built_capricorn_shaped_station_carries_the_tipper_everywhere(tmp_path
 
 
 def test_a_channels_recorded_declaration_without_bz_masks_the_tipper_survey_wide(tmp_path):
-    """The owner mechanism for file-borne tipper that was never measured: survey.yaml declares
+    """The brief mechanism for file-borne tipper that was never measured: survey.yaml declares
     the recorded channels; no vertical coil means any tipper in the released files is a
     processing artifact, masked survey-wide - comps, type derivation and the tf tipper columns -
     while the served source bytes stay untouched. Uses the recovery fixture (a REAL tipper the

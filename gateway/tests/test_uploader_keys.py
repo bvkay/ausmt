@@ -1,6 +1,6 @@
 """Uploader keys (schema v2, feat/uploader-key-management): DB-backed, curator-managed submit keys.
 
-The lane moves the single shared AUSMT_SUBMIT_KEY out of env-only into the gateway's SQLite so a
+The workflow moves the single shared AUSMT_SUBMIT_KEY out of env-only into the gateway's SQLite so a
 curator with no shell can issue and revoke keys through the authenticated UI. This file proves both
 halves against independent observables:
 
@@ -12,7 +12,7 @@ halves against independent observables:
                  leave an audit record (created_by/revoked_by); the uploader email never leaks to the
                  public status page.
 
-Failing-first evidence is in each test's docstring. Async bodies run under conftest.run() (no
+Failing-first evidence is in each test's docstring. Async bodies run under conftest.run (no
 pytest-asyncio), the established gateway pattern.
 """
 from __future__ import annotations
@@ -269,7 +269,7 @@ def test_uploader_email_absent_from_public_status(tmp_path):
 
 
 # ---- H2 (C43-S2a-HOTFIX): keys-page layout — full width, short datetimes, usable note editor ----
-# Owner feedback (live box, 2026-07-11): "use the full width of the page, to spread out the issued
+# Feedback: "use the full width of the page, to spread out the issued
 # keys table to make it easier to tell what is going on." The shipped page rendered inside the
 # shell's 960px .wrap: the note textarea was a few characters wide and the Created/Last-used ISO
 # datetimes wrapped over three lines.
@@ -338,12 +338,11 @@ def test_keys_page_wide_layout_short_datetimes_and_note_width():
 
 
 def test_wide_by_default_narrow_by_exception():
-    """C43 FR2-1 SCOPE PIN (owner ruling, 2026-07-11: "all the curator pages should be like the
-    surveys-stations page — full width, intuitive"). The scope invariant FLIPPED from H2's per-page
+    """C43 FR2-1 SCOPE PIN. The scope invariant FLIPPED from H2's per-page
     opt-in to WIDE-BY-DEFAULT: every shelled working page (via _shell) fills the viewport; the ONLY
     narrow survivors are the chrome-less _page users — the login page and the terminal confirm pages
     (a centred form stays a centred form). The old H2 'queue must NOT be wide' assertion dies with this
-    ruling. FAILS IF a shelled working page reverts to the narrow measure, or a centred-form _page page
+    rule. FAILS IF a shelled working page reverts to the narrow measure, or a centred-form _page page
     silently goes wide."""
     from gateway.curatorpage import render_login, render_queue, render_uploader_created
     # Wide-by-default: the queue (a shelled working page) now fills the width — the exact assertion

@@ -25,8 +25,8 @@ Three layers:
      framing invariant 1 forbids. An xfail so the disagreement ships pinned instead of unwritten.
 
 Plus the corpus arm (dev box): when AUSMT_STATION_DATA names a full-corpus build output dir, the same
-identity and scan checks run over the REAL corpus documents. No CI lane has a corpus, so it skips
-there (allow-listed in ci_check_skips.py); it is the lane's full-corpus proof harness.
+identity and scan checks run over the REAL corpus documents. No CI workflow has a corpus, so it skips
+there (allow-listed in ci_check_skips.py); it is the module's full-corpus proof harness.
 """
 import copy
 import json
@@ -334,7 +334,7 @@ def test_the_built_records_carry_both_members_the_drawer_reads(built):
 
 
 # The two station-named test files that are NOT part of the promoted contract's family: the survey.yaml
-# station-id override and the stations GeoJSON emitter. Both predate the lane and neither gates this
+# Station-id override and the stations GeoJSON emitter. Both predate the workflow and neither gates this
 # contract. Naming them is what lets the glob below catch a NEW contract test file that goes unlisted.
 _NOT_CONTRACT_FAMILY = {"test_station_ids.py", "test_stations_geojson.py"}
 

@@ -9,7 +9,7 @@ carries ONE ok, ONE reserved, and ONE unknown identifier so all three code paths
 The resolution facets (doi_resolution / ts_pid_resolution / related_identifiers[].resolution) are exactly
 what build_portal.apply_pid_resolution attaches from the pid_status.json cache. Skips without Node (CI has it).
 
-SURFACE NOTE (survey-drawer lane, ruling 4, 2026-08-18): the identifiersHtml rollup - the "Dataset DOI",
+SURFACE NOTE: the identifiersHtml rollup - the "Dataset DOI",
 "Related identifiers:" and "Platform/instrument PID:" rows - no longer renders on the SURVEY story, which is
 now a six-slot data-level tile grid. That rollup is unchanged and still renders on the STATION drawer
 (its "Identifiers & instruments" expander), so the per-row resolution pins below assert against `station`.
@@ -79,7 +79,7 @@ def test_reserved_related_identifier_renders_as_text(tmp_path):
     # the live sibling row: still a doi.org anchor
     assert 'href="https://doi.org/10.25914/live-rel"' in station, \
         "an ok related identifier stopped linking:\n" + station
-    # SURVEY GRID (ruling 4): neither row carries an `identifies`, so both land as EXTRA tiles below the six
+    # SURVEY GRID: neither row carries an `identifies`, so both land as EXTRA tiles below the six
     # fixed slots - never dropped. The same reserved-vs-ok split must hold there, and a reserved tile must
     # carry no click ACTION either (data-prod would route its url into window.open).
     assert 'href="https://doi.org/10.25914/reserved-rel"' not in story, \

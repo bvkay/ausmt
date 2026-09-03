@@ -1,5 +1,4 @@
-"""C43-HUB server-side render pins — the survey hub's mockup treatment (contract C43-HUB,
-owner rulings 2026-07-11), driven through the real gateway HTTP surface with the in-process edit
+"""C43-HUB server-side render pins - the survey hub's mockup styling, driven through the real gateway HTTP surface with the in-process edit
 seam. The EXECUTABLE JS pins (clusterWarnings & co, producer-truth build_report) live in
 test_c43_hub_js_parity.py; this file pins what the SERVER renders and the JS source invariants.
 
@@ -17,7 +16,7 @@ Load-bearing pins:
   * SEVERITY CSS — .qa.fail/.qa.warn/.qa.info map to the dark palette's bad/warn/info hues
     (red fail / amber warn / blue info — the mockup's severity semantics).
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
 """
 from __future__ import annotations
 
@@ -63,7 +62,7 @@ publications:
     title: "Earlier interpretation"
 """
 
-# A2 (D19): the H4 email-author variant is retired with the heuristic that read it. What replaces it
+# The H4 email-author variant is retired with the heuristic that read it. What replaces it
 # as the "this survey carries curated MTCAT 2.0 homes" fixture is a survey that actually carries them,
 # so the new panels have real values to render.
 HUB_YAML_CURATED = HUB_YAML + """
@@ -177,7 +176,7 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# H2 — overview scaffold + citation-email stamp (Q3 ruling)
+# H2 - overview scaffold + citation-email stamp
 # --------------------------------------------------------------------------------------------------
 def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
     """A2 (D19) SCAFFOLD PIN, inverted. The Q3 citation-author email heuristic read ONLY the two
@@ -237,7 +236,7 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
 
 
 def test_station_panel_no_raw_json_outside_collapsed_details():
-    """GATE F1/F2 SOURCE PIN (2026-07-11 browser pass). The stations panel renders NO raw JSON
+    """GATE F1/F2 SOURCE PIN. The stations panel renders NO raw JSON
     outside a collapsed <details>: the ONLY <pre> in STATIONS_JS is the collapsed 'raw
     station.json' dump; the old visible 'Conditioning / QA notes' and 'Coordinate QC' pre blocks
     are gone; conditioning and coordinate QC render as ONE terse dl line each

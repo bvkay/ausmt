@@ -1,7 +1,7 @@
 """AusMT branding on the documentation site, and the table rule that made it readable.
 
 DOCS REFERENCE-GRADE, STAGE 2. The mkdocs readthedocs theme renders one bold line in the sidebar
-header, either config.site_name or, with theme.logo set, an image INSTEAD of the name. The owner's
+header, either config.site_name or, with theme.logo set, an image INSTEAD of the name. The
 layout is three lines, so docs/overrides/main.html replaces the theme's site_name block:
 
     line 1   the AuScope mark and the AusMT wordmark, side by side
@@ -81,7 +81,7 @@ def test_the_sidebar_lockup_carries_the_three_lines_in_order():
 
 
 def test_documentation_is_not_inside_the_wordmark_line():
-    """Owner rule, stated as markup: line 1 is the mark and the wordmark, and nothing else. If the
+    """The rule, stated as markup: line 1 is the mark and the wordmark, and nothing else. If the
     Documentation span moves inside .ausmt-lockup it renders beside the wordmark whatever the CSS
     says, because that element is the flex row."""
     block = _site_name_block()
@@ -104,9 +104,9 @@ def test_the_stylesheet_gives_the_last_two_lines_their_own_line():
 
 def test_the_mark_is_the_portals_own_asset_byte_for_byte():
     """The docs sidebar's AuScope symbol is a COPY of the portal's vendored file, so the two must not
-    drift. It is no longer the mark the portal HEADER carries: the brand-assets lane made the AusMT
+    drift. It is no longer the mark the portal HEADER carries: the brand-assets workflow made the AusMT
     dot mark the site identity everywhere except about.html and this sidebar, both of which are
-    waiting on the same owner ruling."""
+    waiting on the same the rule."""
     assert DOCS_MARK.exists(), (
         "docs/docs/img/auscope-icon-white.png is the only brand asset the built site can reference; "
         "mkdocs copies docs/docs/, not portal/vendor/")

@@ -1,4 +1,4 @@
-"""station.json emission semantics, pinned against the real emitter over BUILT output.
+"""Station.json emission semantics, pinned against the real emitter over BUILT output.
 
 PERMANENT TEST STAGE (the MTCAT 2.0 rule, inherited by the third public contract): this suite runs on
 every later emitter change, so a future feature can never silently move a frozen key, widen a branch,
@@ -6,7 +6,7 @@ split the dimensionality call across two surfaces or let a masked position reach
 
 What this module pins, all of it read off documents a REAL build wrote:
 
-  * THE KEY SETS, on both branches (lane contract section 2). The full record carries the fourteen
+  * THE KEY SETS, on both branches (workflow contract section 2). The full record carries the fourteen
     frozen keys, exactly three promotion markers, the new canonical model where the source supports it
     and the one conditional coordinate key; the withheld stub carries the nine frozen keys plus exactly
     three markers and nothing else. These are the pins that make byte-stability enforceable: before the
@@ -182,7 +182,7 @@ def test_every_record_opens_with_the_markers_and_survey_id_is_the_slug(built_acc
 # ---------------------------------------------------------------- D1: one call, two surfaces
 
 def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
-    """D1: `diagnostics` gains the call, the method string and the caveat, from the SAME computation the
+    """`diagnostics` gains the call, the method string and the caveat, from the SAME computation the
     sidecar reads. The sidecar keeps being written byte-unchanged through 1.x (D14), so the two must
     never be able to disagree.
 
@@ -241,7 +241,7 @@ def test_a_withheld_record_publishes_neither_block(built_access):
 # ---------------------------------------------------------------- the ratified leak rejections
 
 def _leaks():
-    """T13, T14 and T28a-d, as mutations of a BUILT stub. Each differs from the emitted document by
+    """T14 and T28a-d, as mutations of a BUILT stub. Each differs from the emitted document by
     exactly the field under test."""
     return [
         ("T13 injected runs[]", lambda d: d.update({"runs": [{"id": "001"}]})),
@@ -319,7 +319,7 @@ def _note_hits(out: Path, values):
 
 
 def test_no_non_exact_position_reaches_any_published_note(built_masked):
-    """D11. The coordinate mask is PER STATION: it withholds a masked station's own note, and nothing
+    """The coordinate mask is PER STATION: it withholds a masked station's own note, and nothing
     stops a different station's note from naming it (the corpus already publishes a remote station's
     gps_lat/gps_lon that way, in a pair where both stations are open). Fail-closed, ahead of the first
     survey where that pair is not both-open."""

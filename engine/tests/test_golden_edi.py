@@ -3,7 +3,7 @@
 Pins the sole engine's outputs so a parsing/science change is caught. Values frozen once; update
 deliberately and SAY WHY in the commit (Egbert lens: track exact outputs for known inputs).
 
-Re-baselined 2026-06-16 from the regex reader onto mt_metadata:
+Re-baselined from the regex reader onto mt_metadata:
   * remote-reference (rr) DROPPED from the golden — it is a best-effort *scraped* facet (the build
     supplies it from the EDI free text; raw mt_metadata leaves it 0), not a frozen contract.
   * Vulcan_A2 median-relative-error 0.017 -> 0.021 — mt_metadata reads the impedance ERROR fields

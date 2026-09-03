@@ -8,7 +8,7 @@ created_utc for the operator to eyeball. It EXITS NON-ZERO with a loud message i
 
 The drill's whole point is a real integrity_check + a schema probe, so a plain `cp` shim cannot stand
 in for sqlite3 — but requiring the sqlite3(1) BINARY would make these tests skip on a runner without
-it, and the gateway-ci skip tripwire (engine/tests/ci_check_skips.py) fails the lane on ANY skip not on
+it, and the gateway-ci skip tripwire (engine/tests/ci_check_skips.py) fails the workflow on ANY skip not on
 its one-entry allow-list. So instead of gating on the binary, the tests drive restore-drill.sh through
 a tiny PYTHON-BACKED sqlite3-CLI shim (AUSMT_BACKUP_SQLITE): it implements exactly the CLI surface the
 script uses — `sqlite3 <db> "<sql>"` (rows printed one per line, `|`-joined, the CLI default) and
@@ -212,11 +212,11 @@ def test_defaults_to_latest_symlink(tmp_path):
 # ---- section-5 review: the drill must LEAVE A RECORD, or nothing can alert on it -----------------
 
 def test_pass_writes_a_machine_readable_verdict_beside_the_snapshots(tmp_path):
-    """alert.sh already reads backups/latest-drill.json and publishes it as the ops dashboard's
+    """Alert.sh already reads backups/latest-drill.json and publishes it as the ops dashboard's
     'drill' field, but nothing ever wrote that file, so restorability read as permanently unproven
     while 'backup present and fresh' showed green. A PASS must record {verdict, at, snapshot}.
 
-    FAILS IF the drill only prints to stdout (pre-lane behaviour)."""
+    FAILS IF the drill only prints to stdout (earlier behaviour)."""
     snap = _snapshot(tmp_path, lambda p: _good_db(p, uploader_rows=4))
     r = _run(tmp_path, snap)
     assert r.returncode == 0, r.stderr

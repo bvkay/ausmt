@@ -1,6 +1,6 @@
 """The two tier-3 INDEX pages: /surveys and /collections.
 
-Until this lane the portal had no addressable index of any kind. The bare paths 301'd to the SPA
+Until this module the portal had no addressable index of any kind. The bare paths 301'd to the SPA
 root, the SPA's Surveys/Collections controls were buttons that set no hash, and every entity page's
 back-navigation pointed at a hash route that does not exist. So a crawler that reached a survey page
 found no hub above it, and a reader who followed "All surveys" landed on the map.
@@ -138,7 +138,7 @@ def test_surveys_index_marks_a_doi_only_where_the_rollup_carries_one(built):
 
 def test_index_pages_ride_the_sitemap_flag(tmp_path):
     """FAILS IF the index pages are emitted without --sitemap-base. They are tier 3 like every other
-    page: one flag governs the whole tier, so a flagless build stays byte-identical to a pre-lane
+    page: one flag governs the whole tier, so a flagless build stays byte-identical to a earlier
     build."""
     surveys = _make_survey(tmp_path, slug="idx-c", name="Index C")
     bare = _build(surveys, tmp_path / "bare", sitemap=False)
@@ -160,7 +160,7 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # stated in words, in the footer and in About's Who enables AusMT section), so the header's fetched
 # set is a single file.
 # The chrome's own fetched assets, in the order a page writes them: the header identity, then the
-# footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer ruling, which made the parent
+# footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer rule, which made the parent
 # organisation's acknowledgement the footer's right region on every surface; it is the same
 # same-origin, vendored, cached-once class of asset as the header mark and is allow-listed on
 # the same terms (see AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F1).
@@ -170,7 +170,7 @@ ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
 
 # The collection page draws the one thing in this tier that carries a mark in its BODY: the member
 # footprint map, which puts the AuScope mark in the panel's bottom-left corner. That mark is a
-# CAPTION on a figure, not chrome, and the ruling that withdrew the header mark did not reach it, so
+# CAPTION on a figure, not chrome, and the rule that withdrew the header mark did not reach it, so
 # the entry stays and is now the ONLY generated reference to the file. Keyed by the page's own path
 # so that no OTHER page kind can quietly grow a body mark.
 ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope-icon-white.png"]}
@@ -496,7 +496,7 @@ def test_the_hub_card_draws_a_dot_for_every_member_station():
 
 
 def test_no_collection_map_draws_the_single_survey_locator_ring():
-    """The ring the owner asked to be rid of: a large grey circle sitting mid-continent on a card.
+    """The ring the brief asked to be rid of: a large grey circle sitting mid-continent on a card.
 
     The ring is the minimap's stand-in for dots too small to draw, so it says "this one survey is
     here". A collection gathers many surveys and has no one location, and the ring was marking the
@@ -576,9 +576,9 @@ def test_the_hub_cards_print_ranges_licences_and_periods_the_way_the_entity_page
 # B9 R4 to R9: the hub as a place to browse, not a list to read
 # ==================================================================================================
 def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor():
-    """R4, the stretched-link pattern. A card is one destination, so the whole card should behave
+    """The stretched-link pattern. A card is one destination, so the whole card should behave
     like one target; but a card full of overlapping links is a screen-reader's nightmare and a
-    button in a row breaks the catalogue -> survey -> data hierarchy the owner set. So the TITLE
+    button in a row breaks the catalogue -> survey -> data hierarchy the brief set. So the TITLE
     stays the single real anchor and a ::after on it covers the card.
 
     FAILS IF the card stops being positioned (the overlay would escape to the page), if the overlay
@@ -623,7 +623,7 @@ def test_the_collections_card_keeps_its_explore_link_above_the_stretched_overlay
 
 
 def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
-    """R5. The hub's own words, verbatim from the owner's review, between the summary line and the
+    """The hub's own words, verbatim from the review, between the summary line and the
     list; and the map action carries the in-site forward arrow (R14 keeps U+2192 for actions that
     stay on the site and U+2197 for links that leave the page)."""
     pages = _pages_module()
@@ -660,7 +660,7 @@ def test_the_hub_locator_grows_and_its_container_steps_back():
 
 
 def test_the_card_names_its_organisation_more_loudly_than_its_location():
-    """R8. Organisation and location share one line with no labels, so the only thing that can tell
+    """Organisation and location share one line with no labels, so the only thing that can tell
     a reader which is which is weight: two muted shades, the organisation brighter. FAILS IF the two
     collapse back to one colour or a label is introduced."""
     pages = _pages_module()
@@ -682,7 +682,7 @@ def test_the_card_names_its_organisation_more_loudly_than_its_location():
 
 
 def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
-    """R9. The hub is a scanning surface, not a reading surface, so its column widens about ten
+    """The hub is a scanning surface, not a reading surface, so its column widens about ten
     percent past the 840px prose measure; and it stops near 920px rather than inheriting the entity
     pages' 1120px wide-screen measure, because a hub card stretched across a desktop is a row, not a
     card."""
@@ -702,7 +702,7 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # ==================================================================================================
 # The page kinds this tier emits, with the tab that must be active, the machine-readable link the
 # footer must resolve to, and whether the header's right status slot carries anything. The footer
-# column USED to differ per row, which is exactly what the owner's one-footer ruling ended; it is
+# column USED to differ per row, which is exactly what the one-footer rule ended; it is
 # kept as a column, one value repeated, so a re-divergence shows up here as rows that disagree.
 # LANE-ADDENDUM-HUB-FEEDBACK.md R11 to R13. The tokens asserted below are the SPA header's own
 # (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
@@ -713,7 +713,7 @@ _FOOTER_LINK = ("Machine-readable record (MTCAT JSON)", "/data/mtcat.json")
 # The parent organisation, as the footer states it on every page: the acknowledgement's URL text and
 # the lockup both navigate here, and the lockup itself is served from this site. The address is a
 # NAVIGATION target and nothing more; the src is the vendored file, and the src allow-list above is
-# what keeps it the only new fetch this ruling introduced.
+# what keeps it the only new fetch this rule introduced.
 AUSCOPE_URL = "https://www.auscope.org.au"
 ORG_LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
 # Both anchors to that address leave the site, so both open in a new tab and hand the opened page no
@@ -735,7 +735,7 @@ def _kinds(built):
 
 
 def test_every_static_page_carries_the_one_global_header(built):
-    """R11. The SPA header's three-part division becomes the site's ONE header: AusMT identity on
+    """The SPA header's three-part division becomes the site's ONE header: AusMT identity on
     the left linking the root, the three filled application tabs in the centre with the CURRENT
     page's tab active, and the two smaller outlined supporting controls beside them. The static
     pages had no header at all above their crumb line, so a reader who landed on a survey page from
@@ -770,7 +770,7 @@ def test_every_static_page_carries_the_one_global_header(built):
 
 
 def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(built):
-    """R12. The shell is identical everywhere; what rides in the right slot is not. The Map view
+    """The shell is identical everywhere; what rides in the right slot is not. The Map view
     keeps its live counter in the SPA; the surveys hub states the static catalogue counts; every
     other static page shows NOTHING, because a counter that cannot count the page it is on is
     decoration pretending to be data.
@@ -793,7 +793,7 @@ def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(bui
 
 
 def test_one_footer_of_three_regions_on_every_page_kind(built):
-    """R13, restated to the owner's ruling: ONE footer, three regions, byte-identical on every page.
+    """Restated to the rule: ONE footer, three regions, byte-identical on every page.
 
     The footer used to be contextual, so a reader could not learn it once. Left is the catalogue,
     the same document from every page; centre is the AuScope acknowledgement with the attribution
@@ -803,12 +803,12 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
 
     Releases and About this build left the footer on every surface. Nothing is lost: /about.html
     carries the running build's identity and the route to the citable releases in its own body,
-    which the portal lane pins (portal/tests/test_about_uniform_chrome.py). A per-page machine link
+    which the portal workflow pins (portal/tests/test_about_uniform_chrome.py). A per-page machine link
     is not lost either: a survey and a station page each carry their own record in the body under
     "Identifiers and provenance", which is asserted separately.
 
     FAILS IF the one-line footer survives anywhere, if the three regions are not present with the
-    owner's exact strings, if a region's links move or retarget, if the retired controls come back,
+    the exact strings, if a region's links move or retarget, if the retired controls come back,
     if the footer differs between page kinds, or if the removed build stamp comes back."""
     seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
@@ -827,7 +827,7 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         assert href.startswith("/data/") and (built / href[len("/data/"):]).is_file(), \
             f"{rel}: the footer advertises {href}, which this build did not write"
 
-        # CENTRE. The owner's string, carrying exactly one link: the AuScope address under its own
+        # CENTRE. The string, carrying exactly one link: the AuScope address under its own
         # URL text. The rest of the line is prose and stays prose.
         centre = foot.split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
         assert centre == ("AusMT is enabled by AuScope &#183; "
@@ -839,7 +839,7 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
             f"{rel}: the centre region carries exactly one link: {centre!r}"
 
         # RIGHT. The parent organisation's full lockup, linked where the centre's URL text links.
-        # Same-origin and vendored: the ruling adds a navigation anchor, not a runtime dependency.
+        # Same-origin and vendored: the rule adds a navigation anchor, not a runtime dependency.
         right = foot.split('<div class="fzone fright">', 1)[1].split("</div>", 1)[0]
         assert right == (f'<a class="orglogo" href="{AUSCOPE_URL}" {NEW_TAB}>'
                          f'<img src="{ORG_LOCKUP_SRC}" alt="AuScope and NCRIS" '
@@ -973,7 +973,7 @@ def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
 
 def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
     """The tier's determinism posture, re-asserted across EVERY page kind, with the one exception this
-    lane names. The pages share the site's identity mark with the SPA, as ONE same-origin file the
+    workflow names. The pages share the site's identity mark with the SPA, as ONE same-origin file the
     portal image serves and the browser caches once; every other asset stays inline and no build-time
     read or external fetch is introduced. FAILS IF the header smuggles in a script, an external
     stylesheet, or any src beyond the allow-list: an http, https, protocol-relative or data src
@@ -990,7 +990,7 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
 
 
 def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
-    """Brand-assets lane E4. This tier shipped no icon link at all, so every entity page asked for
+    """Brand-assets workflow E4. This tier shipped no icon link at all, so every entity page asked for
     /favicon.ico and got a 404 on every visit. FAILS IF a page kind loses either link, or if either
     href stops being a same-origin portal path (an absolute URL here would be an external fetch on
     2,655 documents, which is exactly what this tier forbids)."""
@@ -1023,8 +1023,8 @@ def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
 
 
 # The parent-organisation mark, WITHDRAWN. It used to close every header from the right zone; the
-# owner's ruling takes it off every surface of the site, so what this asserts is that the emitter
-# puts it on NO page kind, in no zone. The portal surface's half of the same ruling is held in
+# the rule takes it off every surface of the site, so what this asserts is that the emitter
+# puts it on NO page kind, in no zone. The portal surface's half of the same rule is held in
 # portal/tests/test_header_geometry_parity.py, character for character.
 ORG_MARK_IMG = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
 ORG_MARK_CLASS = 'class="orgmark"'
@@ -1035,7 +1035,7 @@ ORG_MARK_IMG_RULE = ".orgmark img{height:30px;width:auto;display:block}"
 def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
     """The withdrawal, on every page kind the tier emits. FAILS IF the anchor literal, the .orgmark
     class or either of its two CSS rules survives on any page: those four spellings are how the mark
-    would come back, and a header restored from a pre-ruling revision carries all four at once.
+    would come back, and a header restored from a pre-rule revision carries all four at once.
 
     The header is emitted from ONE literal, so this is really one assertion made 2,655 times; that
     is exactly the point, because the emitter is also the one place a revert would land."""
@@ -1059,20 +1059,20 @@ def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
 
 # The FILE, bounded per page kind, which is the portal surface's pin restated on this one. The mark
 # pin above counts the whole anchor literal and the src allow-list holds each kind's src attributes
-# exactly and in order; neither bounds how often the image is NAMED, so a url() in the inline CSS or
+# Exactly and in order; neither bounds how often the image is NAMED, so a url in the inline CSS or
 # a preload link would carry it a second time and pass both.
 ORG_ASSET = "auscope-icon-white.png"
 
 # The collection page is now the ONE kind that names it at all: the member-footprint map's corner
-# mark, which is a caption on that figure and outside the header ruling. Every other kind names the
+# mark, which is a caption on that figure and outside the header rule. Every other kind names the
 # file zero times, which is the withdrawal counted rather than spelled.
 ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 1}
 
 
-# The SPA map's watermark, which this tier must NOT grow. The owner's ruling puts the AuScope colour
+# The SPA map's watermark, which this tier must NOT grow. The rule puts the AuScope colour
 # icon in one place on the site, the Leaflet map container on portal/index.html, because that is the
 # surface people screenshot; the generated pages have no such surface, their collection figure draws
-# the WHITE icon, and the src allow-list above is deliberately unchanged by that ruling. Asserted
+# the WHITE icon, and the src allow-list above is deliberately unchanged by that rule. Asserted
 # rather than assumed, because a new brand file is exactly the kind of thing that spreads.
 COLOUR_ASSET = "auscope-icon-colour.png"
 
@@ -1323,7 +1323,7 @@ def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
 
 
 def test_the_centre_line_is_bold_on_every_page_kind(built):
-    """The owner's acknowledgement renders bold, the anchor included, as ONE declaration on the
+    """The acknowledgement renders bold, the anchor included, as ONE declaration on the
     centre zone. FAILS if the weight goes, if it is written per span in the markup, or if a second
     declaration appears for the two surfaces to drift on."""
     for rel in _kinds(built):

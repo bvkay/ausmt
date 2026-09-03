@@ -123,7 +123,7 @@ def test_aggregate_all_carriers_above_enum_limit_has_null_both_sides():
     stations=None AND except=None — the count equalling the survey total tells the story. FAILS IF:
     the empty absentee list slips through the small-complement branch as except=[] (empty array,
     truthy in JS), which rendered '[all except: ]' on every fleet-wide note in the first production
-    panel view (2026-07-08)."""
+    panel view."""
     n = bp.CONDITIONING_ENUM_LIMIT + 2
     notes = {f"S{i}": ["A"] for i in range(n)}
     entries = bp.aggregate_conditioning(notes)

@@ -184,7 +184,7 @@ def test_mtcat_formats_match_the_download_manifest(tmp_path):
         if want:
             assert s["formats"] == want, s["survey_id"]
         else:
-            # 2.0 (owner finding 62): a survey with nothing distributed OMITS the key - [] would
+            # 2.0: a survey with nothing distributed OMITS the key - [] would
             # falsely assert that no formats are KNOWN for withheld holdings.
             assert "formats" not in s, s["survey_id"]
     assert any(s.get("formats") for s in doc["surveys"]), "this build distributes something, so prove it"

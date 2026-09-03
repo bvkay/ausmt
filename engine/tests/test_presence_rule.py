@@ -80,7 +80,7 @@ def test_a_real_value_is_asserted():
 
 
 def test_remote_reference_channels_are_run_defaults():
-    """D9: the rr* channels are mt_metadata RUN DEFAULTS, not acquired channels - the corpus CHTYPE
+    """The rr* channels are mt_metadata RUN DEFAULTS, not acquired channels - the corpus CHTYPE
     census carries no RRHX at all, so DEFINEMEAS cannot be their source."""
     assert presence.is_run_default_component("rrhx") is True
     assert presence.is_run_default_component("RRHY") is True

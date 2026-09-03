@@ -2,7 +2,7 @@
 """Regenerate portal/tests/fixtures/station-products/ by RUNNING the real emitter.
 
 The three documents under station-products/ are emitted output, not hand-written JSON: the portal
-lane installs no engine stack, so its tests cannot run the emitter and instead read a committed tree
+workflow installs no engine stack, so its tests cannot run the emitter and instead read a committed tree
 the emitter really wrote. That only works while the tree is refreshed whenever the emitter changes
 what it writes, and until this script existed there was no way to refresh it - the tree went two
 behaviour changes stale with nothing red to say so.

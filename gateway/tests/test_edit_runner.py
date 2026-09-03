@@ -1,7 +1,7 @@
 """C31 runner-side edit tests (design §3.1/§3.2 + adversarial-review fixes). These exercise
 gateway.runner.edit DIRECTLY — the same in-suite-reaches-the-runner pattern as test_runner.py.
 ruamel.yaml is a runner (engine-image) dependency; these tests run wherever ruamel is installed
-(the ausmt env locally; the engine lock in CI's full lane).
+(the ausmt env locally; the engine lock in CI's full workflow).
 
 Load-bearing tests here:
   - the §3.1 round-trip fidelity proof (comments + unknown key byte-identical across an edit);
@@ -27,7 +27,7 @@ from gateway.runner.runner import RunnerConfig
 # quirks that no YAML round-tripper preserves (manual intra-flow-map column alignment, and a
 # pre-existing unquoted `LEMI (LC ISR, Lviv)` flow value whose internal comma any conformant parser —
 # ruamel AND the PyYAML the validator uses — splits into a spurious key). See the residual note in
-# edit._yaml() and the C31 report.
+# Edit._yaml and the C31 report.
 EXEMPLAR = """\
 schema_version: "0.2"
 slug: demo-survey-2026
@@ -105,8 +105,8 @@ def test_noop_round_trip_is_byte_identical():
 def test_round_trip_fidelity_edit_touches_only_field_version_notes(tmp_path):
     # §3.1: edit ONE field (region); the emitted diff touches ONLY region + version + the appended
     # release_notes entry. The comment lines and the unknown custom key are byte-identical.
-    # proven-failing 2026-07-06 (design phase): with ruamel defaults the no-op diff already showed
-    # spurious null->empty and re-wrap changes — the tuned _yaml() config is what makes this hold.
+    # Proven-failing (design phase): with ruamel defaults the no-op diff already showed
+    # Spurious null->empty and re-wrap changes - the tuned _yaml config is what makes this hold.
     _write_package(tmp_path / "surveys-live")
     result = _merge(_cfg(tmp_path))
     assert result["ok"] is True
@@ -146,7 +146,7 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 # [FC-4] C43 Stage-1 diff-minimality pins (record D13). The editor submits WHOLE sections as plain
 # JSON dicts; the pre-C43 apply_patch replaced the section's CommentedMap wholesale, so editing ONE
 # sub-field re-emitted every sibling line and dropped intra-section comments. These pin the surgical
-# in-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter 2026-07-10 (a
+# In-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter (a
 # single organisation.ror edit rewrote organisation.name and lost its trailing comment); see the C43
 # report's red-then-green evidence.
 # --------------------------------------------------------------------------------------------------
@@ -195,7 +195,7 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
     (organisation.ror null -> a URL) and the emitted survey.yaml diff must touch ONLY that field's
     line(s) plus the managed version/release_notes — never the untouched sibling (organisation.name)
     and never its comment. FAILS IF editing one sub-field re-emits a sibling line or strips an
-    intra-section comment (the pre-C43 wholesale-replace behaviour, proven RED 2026-07-10)."""
+    intra-section comment."""
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
     # A pure single-field edit: submit the WHOLE organisation section back with only `ror` changed
     # (name + legacy_code carried through unchanged, so nothing is deleted — the add/delete case is
@@ -281,7 +281,7 @@ def _body_diff_lines(diff: str) -> list[str]:
 # stated in its docstring so a future reader can reproduce the red.
 # --------------------------------------------------------------------------------------------------
 def test_added_subkey_with_ambiguous_value_is_quoted_no_sibling_moves(tmp_path):
-    """F3(a). Adding a sub-key whose value is FIX-3-ambiguous ('NO', a YAML-1.1 bool) must emit it
+    """Adding a sub-key whose value is FIX-3-ambiguous ('NO', a YAML-1.1 bool) must emit it
     DOUBLE-QUOTED (so the PyYAML readers downstream read the string 'NO', not False) AND move no
     sibling line. Failable by bypassing quote_ambiguous on the added-key branch of _merge_map_into
     (`node[subkey] = new_val` instead of `= quote_ambiguous(new_val)`): the added value then emits
@@ -313,7 +313,7 @@ def test_added_subkey_with_ambiguous_value_is_quoted_no_sibling_moves(tmp_path):
 
 
 def test_deleting_subkey_removes_only_that_line_neighbours_byte_stable(tmp_path):
-    """F3(b). Deleting a sub-key (advanced-JSON: the section is submitted without `legacy_code`)
+    """Deleting a sub-key (advanced-JSON: the section is submitted without `legacy_code`)
     removes ONLY that key's line; its neighbours' comments stay byte-stable. Failable via the F2
     mutation (deletion loop iterating the root document rather than the section node) — which deletes
     the wrong nodes and rewrites neighbouring lines; proven RED in the fix-round report."""
@@ -345,7 +345,7 @@ def test_deleting_subkey_removes_only_that_line_neighbours_byte_stable(tmp_path)
 
 
 def test_editing_nested_map_leaf_leaves_untouched_nested_leaf_comment(tmp_path):
-    """F3(c). Editing ONE leaf of a nested map-in-map (processing.software.name) must leave the
+    """Editing ONE leaf of a nested map-in-map (processing.software.name) must leave the
     UNTOUCHED nested leaf (processing.software.version) and its comment byte-stable. Failable by
     making the recursion replace the nested map wholesale (e.g. `node[subkey] = quote_ambiguous(
     new_val)` for a dict new_val instead of recursing) — which re-emits the whole software block and
@@ -372,7 +372,7 @@ def test_editing_nested_map_leaf_leaves_untouched_nested_leaf_comment(tmp_path):
 
 
 def test_scalar_edit_in_section_with_list_member_leaves_list_block_stable(tmp_path):
-    """F3(d). A scalar edit in a map section that ALSO carries a list-valued member (processing.steps)
+    """A scalar edit in a map section that ALSO carries a list-valued member (processing.steps)
     must leave the list block byte-stable — the list is not reassigned just because a sibling scalar
     changed. Failable by forcing list reassignment on an unchanged list (e.g. dropping the
     `_plain(old_val) == new_val` short-circuit so an equal list is reassigned via quote_ambiguous and
@@ -439,7 +439,7 @@ def test_access_edit_preserves_coordinate_overrides_end_to_end():
 # review FIX 3: the parser differential (ruamel emits, PyYAML reads)
 # --------------------------------------------------------------------------------------------------
 def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
-    # proven failing 2026-07-06 (pre-fix HEAD 4f4e999..a31fc8e): patched region "on" emitted as bare
+    # Proven failing (pre-fix HEAD 4f4e999..a31fc8e): patched region "on" emitted as bare
     # `region: on` -> PyYAML safe_load read True (bool); name "no" -> False; abstract "12:34:56" ->
     # 45296 (YAML-1.1 sexagesimal int). ruamel's own re-read kept them strings, so the diff, the
     # §0.6 sha pin, and the confirm re-run all agreed and NO guard fired — the portal would have
@@ -467,11 +467,11 @@ def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
 
 
 def test_patched_ambiguous_map_keys_reread_as_strings_under_pyyaml(tmp_path):
-    # Re-review finding (2026-07-06): quote_ambiguous recursed only over dict VALUES, so a curator-
+    # Re-review finding: quote_ambiguous recursed only over dict VALUES, so a curator-
     # supplied ambiguous KEY in a JSON-edited map ('on'/'no'/'12:34:56') emitted bare and PyYAML
     # retyped it (key True / False / 45296) while ruamel's re-read kept it a string — the same
     # differential as FIX 3, one axis over, with diff/sha-pin/confirm all self-consistently blind.
-    # proven failing 2026-07-06 on pre-fix HEAD 0b7d386 (evidence in the fix commit).
+    # Proven failing on pre-fix HEAD 0b7d386 (evidence in the fix commit).
     # FAILS IF the dict branch stops applying the quoting oracle to keys.
     import base64
 
@@ -516,7 +516,7 @@ def test_needs_quoting_semantics():
 # review FIX 2: scratch containment — nothing the merge does may touch the surveys tree
 # --------------------------------------------------------------------------------------------------
 def test_merge_scratch_never_touches_surveys_tree(tmp_path):
-    # proven failing 2026-07-06 (pre-fix HEAD): during validation the scratch copy lived at
+    # Proven failing (pre-fix HEAD): during validation the scratch copy lived at
     # surveys-live/surveys/_edit_patched/** (6 paths created inside the live tree; a concurrent
     # publish's `git add surveys` would stage them, and a leaked scratch would dirty every later
     # publish preflight — and the gw-runner's /srv/surveys mount is READ-ONLY, so it would also have
@@ -568,7 +568,7 @@ def test_scratch_under_surveys_tree_is_refused(tmp_path):
 
 
 def test_trailing_newline_slug_refused_at_edit_gate(tmp_path):
-    # Task #18: the single-slug edit gate uses FULLMATCH, not match — an anchored `$` matches before
+    # The single-slug edit gate uses FULLMATCH, not match - an anchored `$` matches before
     # a trailing newline, so `.match` let "slug\n" through and it became a path component. Proven
     # failing first against .match, where it reached "survey.yaml not found under demo-survey-2026\n".
     _write_package(tmp_path / "surveys-live")
@@ -697,8 +697,7 @@ def test_process_edit_job_writes_done_result(tmp_path):
 
 def test_process_edit_job_read_with_unquoted_embargo_date_writes_iso(tmp_path):
     """LIVE-crash pin (RED pre-fix: `TypeError: Object of type date is not JSON serializable` at
-    jobs._atomic_write_json). A published survey.yaml carrying an UNQUOTED ISO embargo
-    (`access.embargo_until: 2027-02-01`) loads that field as a datetime.date; the read job's
+    jobs._atomic_write_json). A published survey.yaml carrying an UNQUOTED ISO embargo loads that field as a datetime.date; the read job's
     editable_subset carries it into the result dict, and writing the done-file crash-looped the runner
     — the job never completed, was re-claimed on restart, and blocked ALL metadata reads. After the fix
     the done-file writer ISO-formats the date, so the job completes and the date round-trips as a
@@ -761,7 +760,7 @@ custom_note: "unknown key survives"
 """
 
 # C35b/D3 (review F7): resolve the validator UNCONDITIONALLY — sibling if present, else the committed
-# vendored pinned copy; require_validator_dir() FAILS (never skips) if neither is present.
+# Vendored pinned copy; require_validator_dir FAILS (never skips) if neither is present.
 from gateway.tests.conftest import require_validator_dir  # noqa: E402
 
 

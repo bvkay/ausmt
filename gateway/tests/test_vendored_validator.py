@@ -55,14 +55,14 @@ def test_vendored_validator_matches_pin():
 
 def test_sync_check_mode_agrees():
     # The CLI --check gate (a maintainer can run it by hand) must agree with the pytest assertion: the
-    # committed vendored copy is in sync, so do_check() returns 0. FAILS IF the two accounting paths
+    # Committed vendored copy is in sync, so do_check returns 0. FAILS IF the two accounting paths
     # disagree (a check that cannot fail when the file is corrupt would be vacuous).
     sync = _load_sync()
     assert sync.do_check() == 0
 
 
 def test_validator_orcid_checksum_matches_shared_vectors():
-    # M2 (code-health review §6): the validator's orcid_checksum_ok is the THIRD copy of the ISO 7064
+    # The validator's orcid_checksum_ok is the THIRD copy of the ISO 7064
     # MOD 11-2 checksum. Drive it over every validator-scoped vector in the SHARED oracle file — the
     # same file gateway/tests/test_orcid.py and the portal jsdom test consume. FAILS IF the validator's
     # copy diverges from the shared verdicts (the exact drift M2 closes). The validator's FORMAT

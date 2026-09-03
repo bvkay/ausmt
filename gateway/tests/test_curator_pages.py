@@ -127,7 +127,7 @@ def test_reject_records_actor_and_note(tmp_path):
 def test_empty_note_refused_every_action(tmp_path):
     # EVERY action requires a non-empty note (design §3 — no reject exemption, review #11). An empty
     # note on return OR reject => 400, no transition. Failure criterion: fails if either action
-    # transitions on an empty note. proven failing 2026-07-06: the `action != "reject"` exemption let
+    # Transitions on an empty note. proven failing: the `action != "reject"` exemption let
     # a reject with an empty note through, so a submission could be REJECTED with no recorded reason.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):
@@ -426,7 +426,7 @@ def test_pii_absent_from_served_preview(tmp_path):
 
 
 def test_reports_panel_renders_the_preflight_advisory_as_a_list():
-    # proven failing 2026-08-09 on abc82d2: the curator's report bundle rendered the >INFO pre-flight
+    # Proven failing on abc82d2: the curator's report bundle rendered the >INFO pre-flight
     # advisory as `_esc(the_list)`: one table cell holding a Python list repr, quote style flipping
     # mid-list wherever a sentence contained a double quote. Same defect as the submitter status page
     # and the same fix; the curator reads these sentences to decide whether to hold a package.

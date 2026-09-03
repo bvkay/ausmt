@@ -136,7 +136,7 @@ def test_a_tipper_corroborates_hz_where_no_note_excludes_it():
 
 
 def test_remote_reference_channels_never_enter_the_run():
-    """D9: the rr* channels are governed by the presence rule, not by corroboration. They are
+    """The rr* channels are governed by the presence rule, not by corroboration. They are
     mt_metadata run defaults and no corpus source declares them."""
     facts = _facts("enriched-dotted")
     facts["named_components"] = facts["named_components"] + ["rrhx", "rrhy"]

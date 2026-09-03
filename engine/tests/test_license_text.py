@@ -10,7 +10,7 @@ NON-VACUOUS failure criteria:
   * _license_text imports NOTHING from the heavy scientific stack (numpy/mt_metadata/PyYAML) — that
     is the whole point of the leaf (the runner must import it without the engine build stack). FAILS
     if an import of the leaf drags in a heavy module.
-  * recognised() accepts redistributable AND metadata-only ids, rejects typos/placeholders/None —
+  * recognised accepts redistributable AND metadata-only ids, rejects typos/placeholders/None -
     the fail-closed D3 gate for LICENSE.md generation (FAILS against a startswith or a too-broad gate).
 Stdlib only.
 """

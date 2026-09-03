@@ -1,4 +1,4 @@
-"""Station-id override for third-party released data (owner ruling 2026-08-08).
+"""Station-id override for third-party released data.
 
 The defect these tests encode is real, from the GSSA/BHP Roxby Downs 2018 delivery: the contractor
 reused 56 station numbers between two acquisition stages, so two DIFFERENT physical sites (the
@@ -126,7 +126,7 @@ def test_a_traversal_shaped_key_fails_closed(key):
 @pytest.mark.parametrize("value", ["", "RD18 092", "RD18/092", "-RD18", ".RD18", "RD18..092",
                                    "<img onerror=x>"])
 def test_a_value_the_sanitiser_would_mangle_fails_closed(value):
-    """The owner's ids are not ours to rewrite: a value safe_component would change is a FAILURE,
+    """A custodian's ids are not ours to rewrite: a value safe_component would change is a FAILURE,
     never a silent mangling into something the custodian did not declare."""
     with pytest.raises(stnids.StationIdError):
         stnids.parse_station_ids({"source": "filename", "map": {"92.edi": value}})
@@ -156,9 +156,9 @@ def test_an_unmapped_file_is_not_an_error():
 # --------------------------------------------------------------------------------------------
 
 def test_station_id_charset_is_the_safe_component_fixed_point():
-    """_stationids.station_id_is_safe() is DEFINED as 'safe_component would return this unchanged'.
+    """_stationids.station_id_is_safe is DEFINED as 'safe_component would return this unchanged'.
     It is implemented separately (stdlib-only leaf, no import cycle), so the two are pinned in
-    agreement over the shared vector fixture plus the owner's own id scheme. Divergence here is the
+    agreement over the shared vector fixture plus the id scheme. Divergence here is the
     bug class where a value passes validation and is then silently rewritten."""
     vectors = json.loads((HERE / "fixtures" / "safe_component_vectors.json").read_text(encoding="utf-8"))
     cases = [c["input"] for c in vectors["vectors"]]
@@ -172,7 +172,7 @@ def test_station_id_charset_is_the_safe_component_fixed_point():
 
 
 def test_the_owner_id_scheme_survives_safe_component_unchanged():
-    """Reported to the owner BEFORE the scheme was adopted: safe_component keeps [A-Za-z0-9._-], so
+    """Reported BEFORE the scheme was adopted: safe_component keeps [A-Za-z0-9._-], so
     hyphenated RD18 ids pass through untouched (no silent mangling to RD18092S1 in the catalogue)."""
     for sid in ("RD18-092", "RD18-092-S1", "RD18-106-S1-a", "RD18-000", "RD18-092-P2"):
         assert build_portal.safe_component(sid) == sid
@@ -195,7 +195,7 @@ def test_without_the_block_a_dataid_collision_becomes_false_variants(tmp_path):
 
 
 def test_the_override_publishes_the_declared_ids_and_creates_no_variants(tmp_path):
-    """THE lane's load-bearing assertion. With the block declared, the published ids are the
+    """THE module's load-bearing assertion. With the block declared, the published ids are the
     custodian's, and `_disambiguate` sees already-unique ids so it invents NO `.a`/`.b` tag.
 
     FAILS on unmodified code: the block is unknown there, both stations keep DATAID '92' and are
@@ -269,7 +269,7 @@ def test_the_override_reaches_the_manifest_and_the_served_edi_row(tmp_path):
 def test_the_override_reaches_the_served_emtf_xml(tmp_path):
     """The served XML is a DERIVED product, so it carries the published id: in its filename, in
     Site.id (alnum-stripped by the EMTF-XML pattern, as every AusMT id is) and, because that strip
-    is lossy, verbatim in the Site Name source-id marker normalize() already writes."""
+    is lossy, verbatim in the Site Name source-id marker normalize already writes."""
     surveys = _make_survey(tmp_path, yaml_extra=OVERRIDE_YAML)
     out = tmp_path / "out"
     assert _build(surveys, out) == 0
@@ -424,7 +424,7 @@ def test_a_survey_without_provenance_gains_no_station_json_key(tmp_path):
 def test_provenance_reaches_the_station_mth5(tmp_path):
     """MTH5 carries it in station_metadata.comments, the one station-level free-text slot MEASURED to
     survive the mth5 write/read round trip on the pinned stack (provenance.comments and
-    provenance.log do not; see the lane report)."""
+    provenance.log do not; see the workflow report)."""
     surveys = _make_survey(tmp_path, yaml_extra=PROVENANCE_YAML)
     out = tmp_path / "out"
     assert _build(surveys, out, extra=["--station-h5"]) == 0
@@ -444,7 +444,7 @@ def test_provenance_reaches_the_station_mth5(tmp_path):
 
 def test_provenance_reaches_the_served_emtf_xml(tmp_path):
     """EMTF XML has exactly one station-level free-text slot that survives its write/read round trip
-    on the pinned mt_metadata: the Site Name, which normalize() already uses for the source-id
+    on the pinned mt_metadata: the Site Name, which normalize already uses for the source-id
     marker. The source FILENAME rides the same convention so the served XML says which custodian file
     it was derived from; the rest of the provenance stays in AusMT's own records."""
     surveys = _make_survey(tmp_path, yaml_extra=PROVENANCE_YAML)
@@ -556,7 +556,7 @@ def test_a_pathologically_long_id_fails_closed_instead_of_killing_the_corpus(tmp
     """A declared id inside the charset but longer than any filesystem component aborted the WHOLE
     build with an unhandled OSError (ENAMETOOLONG) while writing that station's product directory:
     no catalogue.json was written at all, so every OTHER survey in the corpus was lost too. The
-    lane's posture is survey granularity, so this must drop ONE survey and leave the rest building."""
+    module's posture is survey granularity, so this must drop ONE survey and leave the rest building."""
     long_id = "R" * 300
     bad = _make_survey(tmp_path, slug="rd18-long", name="RD18 Long",
                        yaml_extra=f'station_ids:\n  source: filename\n  map:\n'
@@ -658,10 +658,10 @@ def test_the_mini_yaml_fallback_under_reads_an_unquoted_filename_key():
 
 
 def test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field(tmp_path):
-    """Default stability: a package with NO `station_ids` block builds as it did before the lane.
+    """Default stability: a package with NO `station_ids` block builds as it did before the workflow.
     The previous name claimed byte-identity and asserted only two catalogue ids, so nothing in the
     suite would have caught the feature leaking into a survey that never asked for it. The two
-    additive surfaces this lane created are named here: no record carries `source_provenance`, and
+    additive surfaces this module created are named here: no record carries `source_provenance`, and
     no station.json carries `provenance.source`."""
     surveys = _make_survey(tmp_path, slug="plain", name="Plain")
     out, prod = tmp_path / "out", tmp_path / "products"
@@ -719,7 +719,7 @@ def test_the_published_id_has_a_length_bound():
     """The charset predicate is the safe_component fixed point INTERSECTED with a length bound.
     safe_component has no bound, so an id of 300 legal characters passed validation and then hit the
     filesystem as a directory name: ENAMETOOLONG, unhandled, corpus gone. 96 is far beyond any real
-    station identifier (the owner's own scheme peaks at 13) and well inside the 255-byte component
+    station identifier (the RD18 scheme peaks at 13) and well inside the 255-byte component
     limit even after a product suffix is appended."""
     assert stnids.MAX_STATION_ID_LEN == 96
     assert stnids.station_id_is_safe("R" * stnids.MAX_STATION_ID_LEN)

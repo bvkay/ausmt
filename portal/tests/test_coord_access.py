@@ -1,4 +1,4 @@
-"""C42 lane 3 — portal handles masked coordinates (Invariant 10).
+"""Portal handles masked coordinates (Invariant 10).
 
 The engine masks a custodian-withheld station to null lat/lon and a generalised station to a 0.1deg
 cell, AND (C42 Amendment A1) emits an explicit coordinate-policy marker for the non-exact stations on a

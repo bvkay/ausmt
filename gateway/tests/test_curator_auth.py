@@ -26,7 +26,7 @@ from gateway.tests.conftest import (
 
 def test_parse_curator_keys_fail_closed_on_unset():
     # Failure criterion: this test fails if an unset/blank key string parses to anything but an error.
-    # proven failing 2026-07-06: an early parse returned {} for "" and the caller then treated a
+    # Proven failing: an early parse returned {} for "" and the caller then treated a
     # gateway with NO curators as "configured but no match" (401) instead of "unconfigured" (503).
     with pytest.raises(curator_auth.CuratorConfigError):
         curator_auth.parse_curator_keys("")
@@ -85,7 +85,7 @@ def test_rate_limiter_blocks_after_n_then_clears_on_success():
 
 def test_no_session_routes_redirect_or_401(tmp_path):
     # Failure criterion: fails if any curator route serves its content without a session.
-    # proven failing 2026-07-06: before _require_session gated the queue, GET /queue rendered the
+    # Proven failing: before _require_session gated the queue, GET /queue rendered the
     # list (with submitter names) to an unauthenticated caller.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):
@@ -104,7 +104,7 @@ def test_no_session_routes_redirect_or_401(tmp_path):
 
 def test_wrong_key_401_then_rate_limited(tmp_path):
     # Failure criterion: fails if a wrong key set a session, or if repeated wrong keys were not 429'd.
-    # proven failing 2026-07-06: without the limiter, the 6th wrong-key POST still returned 401 (no
+    # Proven failing: without the limiter, the 6th wrong-key POST still returned 401 (no
     # 429), i.e. brute force was unthrottled.
     async def _body():
         async with app_client(tmp_path, login_max_attempts=3, login_window_s=300) as (client, _app, _gw, _cfg):
@@ -120,7 +120,7 @@ def test_wrong_key_401_then_rate_limited(tmp_path):
 
 def test_valid_login_sets_httponly_samesite_cookie(tmp_path):
     # Failure criterion: fails if the session cookie is missing HttpOnly or SameSite=Strict.
-    # proven failing 2026-07-06: an early set_cookie omitted httponly, so the token was readable from
+    # Proven failing: an early set_cookie omitted httponly, so the token was readable from
     # page JS (defeating the HttpOnly rationale in design §2).
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):
@@ -137,7 +137,7 @@ def test_valid_login_sets_httponly_samesite_cookie(tmp_path):
 
 def test_expired_session_is_rejected(tmp_path):
     # Failure criterion: fails if a session past its absolute expiry still authenticates.
-    # proven failing 2026-07-06: without the expiry check in _session_curator, a row with
+    # Proven failing: without the expiry check in _session_curator, a row with
     # expires_utc in the past still resolved to the curator name and served the queue.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, _cfg):
@@ -172,7 +172,7 @@ def test_approve_without_csrf_403_no_transition_no_git(tmp_path):
     # THE core CSRF guarantee (design §8): a state-changing POST without the token => 403, NO
     # transition, NO git call.
     # Failure criterion: fails if the submission left VALIDATED, or if the fake git recorded ANY call.
-    # proven failing 2026-07-06: disabling the csrf_ok gate in handle_curator_action (if False:)
+    # Proven failing: disabling the csrf_ok gate in handle_curator_action (if False:)
     # made this approve POST return 303 (not 403) and proceed to PUBLISHING — verified by patching
     # the guard off and observing this exact assertion break.
     async def _body():
@@ -221,7 +221,7 @@ def test_login_actor_is_named_in_audit(tmp_path):
 def test_duplicate_key_value_rejected():
     # review #10: two curators sharing a KEY VALUE mis-attribute actions (match returns the last name).
     # Failure criterion: fails if two identical keys parse without error.
-    # proven failing 2026-07-06: parse only rejected duplicate NAMES; two names with the same key
+    # Proven failing: parse only rejected duplicate NAMES; two names with the same key
     # parsed fine, so an action by 'amy' would be logged as 'curator1' (whichever was configured last).
     import pytest
     with pytest.raises(curator_auth.CuratorConfigError):
@@ -229,11 +229,11 @@ def test_duplicate_key_value_rejected():
 
 
 def test_rate_limiter_evaluate_is_thread_safe():
-    # review #9: the login route is sync `def` (threadpool), so evaluate() must serialize the
+    # Review #9: the login route is sync `def` (threadpool), so evaluate must serialize the
     # blocked-check + key-match + record so a burst cannot slip past the cap. Failure criterion: fails
     # if MORE than max_attempts wrong-key evaluations return 'denied' (i.e. reached the key check)
     # within a window when hammered concurrently.
-    # proven failing 2026-07-06: with the pre-fix separate blocked()/record_failure() and no lock, a
+    # Proven failing: with the pre-fix separate blocked/record_failure and no lock, a
     # threaded burst of wrong keys nearly all read 'not blocked' and reached the key check before any
     # failure recorded — far more than max_attempts got through.
     import threading

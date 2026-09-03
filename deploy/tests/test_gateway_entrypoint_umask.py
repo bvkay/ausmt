@@ -1,4 +1,4 @@
-"""Gateway entrypoint umask seam (deploy/docker/gateway-entrypoint.sh) — #16, incident 2026-07-11.
+"""Gateway entrypoint umask seam (deploy/docker/gateway-entrypoint.sh) - #16, incident.
 
 The gateway runs as uid 10002 and opens its sqlite state DB in WAL mode, minting `-wal`/`-shm` sidecars
 fresh on every container recreate. The nightly HOST backup runs as the operator in the shared group
@@ -17,7 +17,7 @@ is missing/wrong), or — on POSIX — the created file is not group-writable. R
 PLATFORM: ubuntu-only (skipif nt). POSIX mode bits are not meaningful on a Windows/MSYS filesystem
 (a file always reports 0666), AND `exec python` on Windows resolves to python.exe rather than a
 PATH-placed shell stub, so the entrypoint cannot be exercised there. It RUNS on the gateway-ci ubuntu
-lane with nothing skipped — where the incident's group-write bit is a real, checkable observable.
+workflow with nothing skipped - where the incident's group-write bit is a real, checkable observable.
 """
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
-"""C3 (PII scrub): an email address in a source EDI's raw >INFO block must never survive into the
+"""An email address in a source EDI's raw >INFO block must never survive into the
 DERIVED, publicly-consumed processing_note (station.json processing.note is NOT licence-gated), and
 must be surfaced as a loud per-survey WARNING so a curator can look at the ORIGINAL upstream file
-(which this build never mutates -- D1). This is the build_portal.process_edis() integration point;
-the regex-only unit coverage for proc_note() itself lives in test_coords_of.py (stack-less lane).
+(which this build never mutates -- D1). This is the build_portal.process_edis integration point;
+the regex-only unit coverage for proc_note itself lives in test_coords_of.py (stack-less workflow).
 """
 import re
 import sys
@@ -46,7 +46,7 @@ def test_proc_note_email_redacted_in_build(tmp_path):
 
 
 def test_build_redacts_note_and_warns(tmp_path, capsys):
-    """Full process_edis() path: processing_note on the returned record is scrubbed, AND a per-survey
+    """Full process_edis path: processing_note on the returned record is scrubbed, AND a per-survey
     WARNING naming the offending source file is printed to stderr (curator signal; the source EDI
     itself is never modified -- checked via untouched bytes on disk)."""
     p = _with_email_in_info(tmp_path)

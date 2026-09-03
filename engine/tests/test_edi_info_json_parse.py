@@ -1,7 +1,6 @@
 """The >INFO JSON trailing-delimiter defect in mt_metadata 1.0.9, and the parse-only fallback.
 
-WHY THIS EXISTS (measured 2026-08-08 against the GSSA Western Gawler 2023 delivery, a Zonge job of
-312 EDIs). mt_metadata 1.0.9 cannot read 246 of them. The data is fine; the reader is wrong, and it
+WHY THIS EXISTS. mt_metadata 1.0.9 cannot read 246 of them. The data is fine; the reader is wrong, and it
 is wrong in three composing steps:
 
   1. `io/tools.py::_validate_edi_lines` strips `"`, `'`, `[` and `]` from EVERY line of the file
@@ -318,7 +317,7 @@ def test_garbage_edi_still_fails(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------
-# 4. THE MOST IMPORTANT TEST IN THE LANE -- the normalised copy can never be served or hashed
+# 4. THE MOST IMPORTANT TEST HERE -- the normalised copy can never be served or hashed
 # --------------------------------------------------------------------------------------------
 
 def test_source_file_bytes_are_untouched_by_a_fallback_parse():
@@ -356,7 +355,7 @@ def test_no_temp_artifact_survives_the_fallback_parse(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------
-# 5. THE LANE'S CENTRAL CLAIM, end to end through a REAL build: a station that needed the fallback
+# 5. THE CENTRAL CLAIM, end to end through a REAL build: a station that needed the fallback
 #    still serves the custodian's bytes, and the sha256 integrity gate still passes on it.
 #    If the normalised copy could ever be served, AusMT's no-editing guarantee for third-party data
 #    would be void; these tests are the proof that it cannot.
@@ -509,7 +508,7 @@ def test_a_json_info_survey_that_parses_stock_records_no_fallback(tmp_path):
 # --------------------------------------------------------------------------------------------
 
 def test_normalize_reads_a_source_that_needs_the_fallback(tmp_path):
-    """The unit form: normalize() itself must not raise on a file that only the fallback can read."""
+    """The unit form: normalize itself must not raise on a file that only the fallback can read."""
     from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
     res = normalize(DECL, tmp_path / "xml", survey_id="declfix", station_id="1039")
     assert Path(res.canonical_xml).exists(), "no canonical EMTF-XML was written"
@@ -531,7 +530,7 @@ def test_the_canonical_xml_carries_the_declination_the_custodian_wrote(tmp_path)
 
 
 def test_normalize_leaves_the_source_bytes_untouched(tmp_path):
-    """D1 through the SECOND seam too: normalize() reads the custodian's file, never rewrites it."""
+    """D1 through the SECOND seam too: normalize reads the custodian's file, never rewrites it."""
     from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
     before = hashlib.sha256(DECL.read_bytes()).hexdigest()
     normalize(DECL, tmp_path / "xml", survey_id="declfix", station_id="1039")

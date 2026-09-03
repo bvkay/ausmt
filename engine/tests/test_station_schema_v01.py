@@ -101,7 +101,7 @@ def test_the_full_branch_is_open_and_forbids_the_withheld_marker_outright():
 
 
 def test_the_embargo_date_is_string_or_null_but_conditional_on_the_level():
-    """D6: the null is metadata_only's alone; an embargoed level still requires a real date, so a
+    """The null is metadata_only's alone; an embargoed level still requires a real date, so a
     dropped or nulled date on the one live embargoed survey is rejected rather than accepted."""
     access = WITHHELD_BRANCH["properties"]["access"]
     assert access["properties"]["embargo_until"]["type"] == ["string", "null"]
@@ -111,7 +111,7 @@ def test_the_embargo_date_is_string_or_null_but_conditional_on_the_level():
 
 
 def test_the_station_vocabularies_are_closed():
-    """D5: processing_level and packaging are closed on the tokens the scope ratifies, so an
+    """Processing_level and packaging are closed on the tokens the scope ratifies, so an
     NCI-native or legacy-mtcat token cannot be inherited into the station vocabulary."""
     resource = SCHEMA["definitions"]["resource"]["properties"]
     assert resource["processing_level"]["enum"] == ["raw", "level0", "level1", "level2", "level3"]
@@ -132,8 +132,8 @@ def test_fixture_validates_with_format_checking(name):
 
 
 def test_t11_the_live_open_station_validates_on_the_full_branch_with_its_frozen_nulls():
-    """T11. The live record's legitimate nulls (remote_site, coordinate_qc, the rotation sources, the
-    convention detail, the emeas azimuths) are the reason the survey-metadata lane's document-wide
+    """The live record's legitimate nulls (remote_site, coordinate_qc, the rotation sources, the
+    convention detail, the emeas azimuths) are the reason the survey-metadata module's document-wide
     zero-null rule cannot be imported here: they are frozen bytes on a valid document."""
     doc = fixture("promoted-a23")
     assert not errors(doc), errors(doc)
@@ -147,7 +147,7 @@ def test_t11_the_live_open_station_validates_on_the_full_branch_with_its_frozen_
 
 
 def test_t12_the_live_withheld_stub_validates_on_the_withheld_branch():
-    """T12. The stub carries the nine frozen keys plus the three markers and nothing else: any twelfth
+    """The stub carries the nine frozen keys plus the three markers and nothing else: any twelfth
     key name would be rejected by the closed world, which is what the rejections below prove."""
     doc = fixture("promoted-vul24-13")
     assert not errors(doc), errors(doc)
@@ -157,7 +157,7 @@ def test_t12_the_live_withheld_stub_validates_on_the_withheld_branch():
 
 
 def test_t15_the_synthetic_full_record_carries_the_runs_and_resources_shape():
-    """T15. No live station instantiates runs[]/resources[] yet, so the canonical model's own shape is
+    """No live station instantiates runs[]/resources[] yet, so the canonical model's own shape is
     pinned on the ratified suite's synthetic record: a multi-run MTH5 that both represents and derives
     from its runs, an electric channel with electrodes and contact resistance, a magnetic one with a
     sensor."""
@@ -199,7 +199,7 @@ def test_withheld_branch_rejection(why, mutate):
 
 
 def test_t12b_a_metadata_only_stub_with_a_null_embargo_until_validates():
-    """T12b: the metadata_only stub's emitted bytes carry the key with a null value, and they must
+    """The metadata_only stub's emitted bytes carry the key with a null value, and they must
     validate as emitted; only the embargoed level forces a real date."""
     doc = fixture("promoted-vul24-13")
     doc["access"]["level"] = "metadata_only"

@@ -1,6 +1,6 @@
 """The served stations GeoJSON: the corpus as a vector layer a GIS can open from the URL.
 
-Owner ruling 2026-08-02: serve a stations GeoJSON so a user can load AusMT into QGIS and friends
+The rule: serve a stations GeoJSON so a user can load AusMT into QGIS and friends
 without first writing a script against the positional catalogue. The document is a plain RFC 7946
 FeatureCollection at `/data/stations.geojson`, mirrored under `/data/products/` like the other
 top-level documents.
@@ -21,7 +21,7 @@ and GIS-shape pins second:
     build that dropped them here would quietly contradict the access record.
 
 These drive the REAL pipeline (subprocess build) over the engine-produced coordinate fixtures the
-C42 lane already stages, so no catalogue row is ever hand-typed (house rule). Requires the
+C42 workflow already stages, so no catalogue row is ever hand-typed (house rule). Requires the
 mt_metadata/mth5 build stack; skips cleanly otherwise.
 """
 import json
@@ -38,9 +38,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "extract"))
 from _contract import CATALOGUE_COLUMNS   # noqa: E402  (the positional column map, never hand-counted)
-# The C42 lane's engine-produced coordinate fixtures: one EDI per station with distinctive, mutually
+# The C42 module's engine-produced coordinate fixtures: one EDI per station with distinctive, mutually
 # consistent HEAD/INFO/DEFINEMEAS positions, plus the survey.yaml writer that declares the access +
-# coordinate policy. Reused rather than re-typed so the two lanes can never disagree about what a
+# Coordinate policy. Reused rather than re-typed so the two workflows can never disagree about what a
 # generalised or withheld station looks like on the way in.
 from test_coord_access import EXACT, GEN, GEN_CELL, HID, _stage_survey   # noqa: E402
 
@@ -134,7 +134,7 @@ def test_the_products_mirror_carries_the_same_document(tmp_path):
 # --------------------------------------------------------------------------- coordinate access
 
 def test_a_withheld_station_is_absent_not_a_null_geometry(tmp_path):
-    """C42: a custodian-withheld position has no usable geometry. FAILS if the withheld station
+    """A custodian-withheld position has no usable geometry. FAILS if the withheld station
     appears at all (as a null-geometry feature or, far worse, with a position), and equally if the
     exact/generalised stations went missing with it."""
     _out, gj, _cat = _build(tmp_path)

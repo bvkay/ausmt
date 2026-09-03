@@ -16,7 +16,7 @@ def make_emtfxml_inputs(dest_dir, edis=None, survey_id="example-survey", survey_
 
     Generated rather than committed on purpose: the emitter and the reader are the same mt_metadata
     build, so the fixture is self-consistent BY CONSTRUCTION and cannot drift into testing stale
-    bytes when the pinned library moves. normalize() also writes a derived .edi beside each XML; it
+    bytes when the pinned library moves. normalize also writes a derived .edi beside each XML; it
     is removed here so the fixture directory holds EMTF XML and nothing else.
 
     Requires the mt_metadata stack (callers importorskip it, as the MTH5 input tests do)."""

@@ -54,7 +54,7 @@ def _load(tmp_path, rows_by_station, known=("EXAMPLE01", "EXAMPLE02")):
 
 
 def _build(surveys, out, *extra):
-    """--no-validate keeps this lane off the surveys validator: what is under test is the REGISTER
+    """--no-validate keeps this module off the surveys validator: what is under test is the REGISTER
     reader, and the package gate has its own suite."""
     return subprocess.run(
         [sys.executable, "-m", "extract.build_portal", "--surveys", str(surveys), "--out", str(out),
@@ -93,7 +93,7 @@ def test_the_flag_is_accepted_and_the_register_root_is_read_as_files(tmp_path):
 
 def test_a_flagless_build_carries_nothing_the_register_could_have_put_there(flagless):
     """The opt-in pin, over BUILT output: no register-derived row, and no remote route anywhere in
-    the served product tree. This holds for the whole lane, not only for the commit that adds it."""
+    the served product tree. This holds for the whole workflow, not only for the commit that adds it."""
     docs = _docs(flagless)
     assert docs, "non-vacuity: the flagless build wrote station documents"
     for key, doc in docs.items():
@@ -161,7 +161,7 @@ def test_a_malformed_match_method_is_a_curator_warning_and_not_a_build_stop(tmp_
 
 
 def test_a_retired_row_without_its_dated_reason_stops_the_load(tmp_path):
-    """D17: retirement is a dated curator act, not a deletion, and the row stays as evidence
+    """Retirement is a dated curator act, not a deletion, and the row stays as evidence
     recording when and why it was withdrawn."""
     with pytest.raises(tsindex.TsIndexError) as e:
         _load(tmp_path, {"EXAMPLE01": [{**GOOD, "review": "retired"}]})
@@ -191,7 +191,7 @@ def test_an_unknown_top_level_key_stops_the_load(tmp_path):
 
 
 def test_a_station_the_survey_does_not_publish_stops_the_load(tmp_path):
-    """The loud failure the lane contract names: the register states which remote file belongs to
+    """The loud failure the workflow contract names: the register states which remote file belongs to
     which station, so a row nothing in the corpus matches would publish a route under an identifier
     this build never assigned."""
     with pytest.raises(tsindex.TsIndexError) as e:

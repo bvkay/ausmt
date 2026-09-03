@@ -58,7 +58,7 @@ from typing import Optional
 # C46-W3a: the canonical licence tables (single-sourced in contract/licenses.json -> _contract via the
 # stdlib-only `extract._license_text` leaf) so the EMTF-XML Copyright truth fix builds its conditions_of_use
 # from the SAME id/URL/recognition maps as the LICENSE.txt instrument — no second licence vocabulary. This
-# resolves in every context normalize runs in: the engine test lane and the build both put engine/ on
+# resolves in every context normalize runs in: the engine test run and the build both put engine/ on
 # sys.path (so `extract` is an importable package); the fallback covers an extract/-only-on-path caller.
 try:
     from extract._license_text import canon_license, recognised, _LIC_URLS

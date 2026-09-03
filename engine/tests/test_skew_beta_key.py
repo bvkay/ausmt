@@ -3,13 +3,9 @@ not the mean. The emitted key name must say so: skew_beta_median_deg, never the 
 skew_beta_mean_deg.
 
 NON-VACUOUS failure criterion: this test FAILS against the pre-rename tree, because the build
-emitted "skew_beta_mean_deg" in both station.json and dimensionality.json.
-
-2026-08-14: station.json stopped RESTATING the dimensionality call and its skew statistic, because
+emitted "skew_beta_mean_deg" in both station.json and dimensionality.json.: station.json stopped RESTATING the dimensionality call and its skew statistic, because
 the copy beside it travelled without the "screening diagnostic, not an interpretation product"
-caveat that qualifies them.
-
-2026-08-23 (D1, the station promotion): the call is FOLDED BACK IN, and the caveat and the method
+caveat that qualifies them. (D1, the station promotion): the call is FOLDED BACK IN, and the caveat and the method
 string come with it, so the qualification travels with the numbers rather than sitting one file
 away. The sidecar keeps being written byte-unchanged through 1.x (D14) because deleting a served
 file is a deprecation, not a refactor. So the two surfaces now state the same thing, and the pin
@@ -71,7 +67,7 @@ def test_skew_beta_key_is_median_not_mean(tmp_path):
 
 
 def test_the_fold_omits_a_member_the_call_leaves_undetermined():
-    """R2, over the emitter directly because no fixture corpus carries an indeterminate station: when
+    """Over the emitter directly because no fixture corpus carries an indeterminate station: when
     most periods are unusable the classification is `indeterminate` and the skew statistic and the
     3-D percentage are UNDETERMINED. The sidecar states them as null and keeps doing so (D14); the
     fold OMITS them, because absence is the open-world statement and a null is a value. Four corpus

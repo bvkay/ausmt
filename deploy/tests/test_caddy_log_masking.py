@@ -94,7 +94,7 @@ def test_access_log_masks_client_address_at_edge():
     assert re.search(r"request>headers>Cookie\s+delete", block), "the Cookie header must be deleted"
     assert re.search(r"request>headers>Authorization\s+delete", block), \
         "the Authorization header must be deleted"
-    # S1: every header that can carry a FULL client address must be deleted — behind a proxy the real
+    # Every header that can carry a FULL client address must be deleted - behind a proxy the real
     # IP arrives unmasked in these, and the masked-at-edge promise would be false otherwise.
     for hdr in ("X-Forwarded-For", "X-Real-IP", "Forwarded", "Referer"):
         assert re.search(rf"request>headers>{re.escape(hdr)}\s+delete", block), \
@@ -301,7 +301,7 @@ def test_real_caddy_masks_forwarded_client_ip_in_the_log():
 
     text = _caddyfile_text()
     log_block = _extract_block(text, "\tlog")          # the shipped log {...}
-    # 2026-08-28 serve-path tuning split the servers options per listener (scoped blocks do not
+    #  serve-path tuning split the servers options per listener (scoped blocks do not
     # inherit, so each carries trusted_proxies). The reader listener (:8081) is the one behind the
     # front door, so its block is the shipped source of the trusted_proxies under test here.
     servers_block = _extract_block(text, "servers :8081")    # the shipped trusted_proxies {...}

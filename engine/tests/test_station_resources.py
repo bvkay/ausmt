@@ -1,19 +1,19 @@
-"""resources[] on the promoted station.json: what represents this station, and what merely contains it.
+"""Resources[] on the promoted station.json: what represents this station, and what merely contains it.
 
 D3: an open station's resources are the SERVED, ADDRESSABLE things - its transfer function as EDI,
 as canonical EMTF XML and as MTH5, plus the per-survey archives those files are bundled into. Each
 carries the path the download manifest records for the same bytes, and none carries `identifiers[]`,
 because a DOI identifying THIS EXACT file does not exist for anything AusMT serves today.
 
-D19 splits the role question in two, and the lane emits both axes only where they are mechanically
+D19 splits the role question in two, and the workflow emits both axes only where they are mechanically
 certain: the served EDI is the never-edited source in its original form; the EMTF XML and the MTH5
 are engine conversions of it, so they are derived alternates. The bundle archives carry NEITHER
-axis, because whether a zip of source EDIs is source or derived is a semantics call this lane must
+axis, because whether a zip of source EDIs is source or derived is a semantics call this module must
 not improvise.
 
 `related_collection_identifiers[]` is the containing-collection hook, and it is projected ONLY from
 rows whose ENTITY SCOPE the curation states, because placement verification is mandatory and this
-lane resolves no DOIs. A row carrying no `identifies`, a row that is not a DOI, and a DOI a survey
+workflow resolves no DOIs. A row carrying no `identifies`, a row that is not a DOI, and a DOI a survey
 declares at two different levels are all REFUSED and reported for curation instead: an unplaceable
 row would publish a wrong citation claim.
 

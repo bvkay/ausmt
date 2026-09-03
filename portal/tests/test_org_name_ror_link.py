@@ -1,4 +1,4 @@
-"""Owner-requested (2026-07-22): the organisation NAME is the ROR link — render pins.
+"""Requested: the organisation NAME is the ROR link - render pins.
 
 The separate little ROR logo badge (vendor/ror-logo.png, appended after the org name) was dropped. Instead,
 when a survey carries an org ROR the organisation NAME itself becomes an <a class="orglink"> to the canonical

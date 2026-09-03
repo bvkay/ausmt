@@ -19,7 +19,7 @@ The entries are keyed on the FILE because that is the only identity a curator ca
 third-party release it is neither the file name nor the published id.
 
 The rule-8 pin at the end reads .github/workflows/build-products.yml, which the engine image does
-not ship; it skips there on the allow-listed image-topology reason and asserts on every checkout lane.
+not ship; it skips there on the allow-listed image-topology reason and asserts on every checkout workflow.
 """
 import json
 import re
@@ -120,7 +120,7 @@ def test_a_pass_states_how_many_stations_the_build_actually_dropped(clean_build,
 
 
 def test_verify_fails_naming_the_survey_and_the_file(clean_build, tmp_path):
-    """R6, the defect itself. FAILS IF the deploy gate blesses a build that dropped a station nobody
+    """The defect itself. FAILS IF the deploy gate blesses a build that dropped a station nobody
     ruled on: that is what it does today, for every drop path the build has."""
     out, slug = _with_one_drop(clean_build, tmp_path)
     r = _verify(out)

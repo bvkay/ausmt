@@ -1,6 +1,6 @@
 """C6 licence instrument hardening (Invariant 10).
 
-The pre-C6 gate was `redistributable() = s.startswith("CC") or s in {PUBLIC DOMAIN, CC0, ODBL, ODC-BY}`
+The pre-C6 gate was `redistributable = s.startswith("CC") or s in {PUBLIC DOMAIN, CC0, ODBL, ODC-BY}`
 — so a TYPO'd 'CC-BY-4.O' (letter O) or any 'CC-nonsense' redistributed. C6 replaces the prefix test with
 an EXACT, case-insensitive-after-trim/whitespace/de-alias match against contract/licenses.json.
 

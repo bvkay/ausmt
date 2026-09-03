@@ -121,7 +121,7 @@ def test_a_tipper_only_station_publishes_no_completeness_smoothness_score(tmp_pa
 
 
 def test_the_score_is_withheld_whether_or_not_a_declaration_masks_the_station(tmp_path):
-    """The uniformity the ruling asks for, as one assertion over the two ways a station ends up with
+    """The uniformity the rule asks for, as one assertion over the two ways a station ends up with
     no impedance: a file that never carried one (no declaration to mask it) and a fabricated one the
     channels_recorded declaration masks. Same physical situation, same published row."""
     _survey(tmp_path, "never-had-one", TIPPER_ONLY, name="Never Had One")
@@ -176,7 +176,7 @@ def test_the_score_is_the_only_field_a_tipper_only_station_can_lose():
 
 def test_the_impedance_presence_test_is_the_components_columns_own():
     """The rule reuses the decision that fills the catalogue components column rather than making a
-    second one: _mtm.components_from_tf writes the Z series only under tf.has_impedance(), the same
+    second one: _mtm.components_from_tf writes the Z series only under tf.has_impedance, the same
     test that puts "Z" in components. Pinned in both directions over all four fixtures, so a change
     to either side that breaks the equivalence fails here rather than in a corpus diff."""
     for path in (TIPPER_ONLY, PLACEHOLDER, REAL_Z, REAL_ZT):

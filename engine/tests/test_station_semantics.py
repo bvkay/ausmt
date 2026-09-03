@@ -1,6 +1,6 @@
 """The station semantic layer: what JSON Schema cannot state, enforced in the build and again by verify.
 
-SCOPE:377-380 asks for emitter-side validation beyond the schema, and the lane contract names the set:
+SCOPE:377-380 asks for emitter-side validation beyond the schema, and the workflow contract names the set:
 referential integrity of a resource's run references, unique run and resource ids, `time_period.start
 <= end`, channel shape per component family, withheld-branch rejection, DOI syntax, and the 1.x pin
 that keeps `distribution.edi_path` and the served EDI resource row stating one path (SCOPE:71-73).
@@ -146,7 +146,7 @@ def _empty_channel_list(doc):
 
 
 def _null_fold_member(doc):
-    """R2: an `indeterminate` classification has no skew statistic, and the sidecar states that as
+    """An `indeterminate` classification has no skew statistic, and the sidecar states that as
     null. The fold OMITS the member; copying the null across is what this rejects."""
     doc["diagnostics"]["skew_beta_median_deg"] = None
 
@@ -293,7 +293,7 @@ def test_a_clean_full_record_and_a_clean_withheld_stub_have_no_violations():
 
 
 def test_the_null_scan_reaches_the_fold_and_stops_at_the_frozen_keys():
-    """Section 2 scopes the zero-null rule to what this lane ADDS, and the fold is one of those
+    """Section 2 scopes the zero-null rule to what this module ADDS, and the fold is one of those
     additions. The frozen keys beside it carry eight legitimate nulls, so a scan widened to the whole
     document would reject every record the corpus publishes. Both directions in one test, because
     each alone passes for the wrong reason."""
@@ -499,7 +499,7 @@ def test_verify_self_building_runs_the_station_gate(tmp_path):
     unconditional served-root write there would be no station.json for the gate to read.
 
     AUSMT_VALIDATOR_PATH is pinned through the C35b/D3.1 four-arm seam so the run is hermetic in
-    every lane: sibling checkout on the dev box, the vendored copy on a monorepo CI checkout, and
+    every workflow: sibling checkout on the dev box, the vendored copy on a monorepo CI checkout, and
     the engine image's designed topology (no gateway tree shipped) SKIPs with its allow-listed
     reason rather than tripping the never-fall-through error. The gate under proof is the STATION
     gate; the surveys validator's currency is the resync discipline's job, not this test's. And

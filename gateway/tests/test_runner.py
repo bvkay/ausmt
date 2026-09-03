@@ -43,7 +43,7 @@ _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
 def _has_real_engine() -> bool:
     """True when the real engine stack is importable (mt_metadata) and the sample survey + a validator
     (sibling or vendored) are present — the preconditions for the no-mocks preview e2e below. The
-    mt_metadata requirement is what legitimately skips this in the stack-less gateway lane."""
+    mt_metadata requirement is what legitimately skips this in the stack-less gateway workflow."""
     import importlib.util
     return (importlib.util.find_spec("mt_metadata") is not None
             and (_ENGINE_DIR / "data" / "sample-survey" / "survey.yaml").is_file()
@@ -51,7 +51,7 @@ def _has_real_engine() -> bool:
 
 
 def test_runner_upload_cap_default_tracks_gateway_config():
-    # M2 (code-health review §6): the runner's extraction byte cap default is derived from the SAME
+    # The runner's extraction byte cap default is derived from the SAME
     # 250 MB default the gateway config carries — they must not silently drift (the runner's cap must
     # match the gateway's upload-time 4x-total rule). Assert the RunnerConfig default (both the
     # dataclass default and the from_env default) equals the config constant in bytes.
@@ -67,14 +67,14 @@ def test_runner_upload_cap_default_tracks_gateway_config():
 
 
 # --------------------------------------------------------------------------------------------------
-# Preview diagnostics (Olympic Dam 2004 incident, 2026-07-06): the first real submission quarantined
+# Preview diagnostics: the first real submission quarantined
 # with the bare string 'preview build failed' while the build's OWN stderr said exactly why
 # ('SKIP Olympic-Dam-2004: validation FAILED (1 fails)' — the in-build validator re-run failed the
 # slug-charset gate and dropped the survey, so the empty-output guard exited rc=2 with 0 stations).
 # The runner discarded that stderr. These tests pin the loud-summary contract + the discovery guard.
 # --------------------------------------------------------------------------------------------------
 def test_preview_failure_summary_carries_build_diagnostics(tmp_path, monkeypatch):
-    # proven failing 2026-07-06 on main 8587866: summary warnings were exactly
+    # Proven failing on main 8587866: summary warnings were exactly
     # ['preview build failed'] — the SKIP line, the built-count line, and the empty-output guard
     # message (all present on the build's stdout/stderr, reproduced locally from the REAL Olympic
     # Dam zip) were discarded. FAILS IF _run_preview stops distilling the build output into the
@@ -115,7 +115,7 @@ def test_preview_failure_summary_carries_build_diagnostics(tmp_path, monkeypatch
 def test_preview_refuses_package_without_survey_folder(tmp_path, monkeypatch):
     # The discovery guard: a package with NO <slug>/survey.yaml anywhere reports the specific
     # 'no survey folder found in package' message — distinct from zero stations BUILT — and never
-    # spawns the engine. proven failing 2026-07-06 on main 8587866: the engine subprocess ran
+    # Spawns the engine. proven failing on main 8587866: the engine subprocess ran
     # anyway and the summary carried only the generic 'preview build failed'.
     cfg = _runner_cfg(tmp_path)
     pkg_root = tmp_path / "package"
@@ -259,7 +259,7 @@ def test_preview_end_to_end_real_engine(tmp_path):
     cfg = RunnerConfig(
         incoming_dir=tmp_path / "incoming", quarantine_dir=tmp_path / "quarantine",
         # Merge of c35b + C37 (both semantics): the validator resolves via c35b's
-        # require_validator_dir() (sibling -> vendored -> FAIL, never a bare skip), and the engine
+        # Require_validator_dir (sibling -> vendored -> FAIL, never a bare skip), and the engine
         # spawns with C37's EXPLICIT cwd (cfg.engine_dir) instead of inheriting the process cwd —
         # the dev-box analogue of the image's WORKDIR /app/engine. No monkeypatch.chdir: with
         # `extract` a real installed package, resolution no longer rides on the cwd at all.
@@ -277,7 +277,7 @@ def test_preview_end_to_end_real_engine(tmp_path):
                     reason="real engine stack / sample survey / validator not present")
 def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
     # NO MOCKS, and no assertion-by-assumption: EMTF XML became a first-class submission input
-    # (owner ruling 2026-08-03), so an EMTF-XML-ONLY upload must survive the REAL safe_extract and
+    # , so an EMTF-XML-ONLY upload must survive the REAL safe_extract and
     # build a REAL preview with stations in it. The engine change alone is not proof that the
     # gateway's path carries it, which is why this drives the actual gw-runner preview rather than
     # inspecting build_portal directly.
@@ -330,9 +330,9 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
     # of an EMTF-XML-only package builds no stations.
     #
     # FOLLOW-UP: after the surveys branch feat/validator-emtfxml-input is merged and the vendored copy
-    # + PIN are resynced, the stub can go and this test can run against require_validator_dir().
+    # + PIN are resynced, the stub can go and this test can run against require_validator_dir.
     # The stub honours BOTH contracts the real validate_survey.py serves, because both are exercised
-    # in this flow: build_portal IMPORTS it (validate(folder) -> report with worst()/counts()) while
+    # In this flow: build_portal IMPORTS it (validate(folder) -> report with worst/counts) while
     # the gw-runner SPAWNS it as a subprocess (folder positional + --json output file).
     stub_dir = tmp_path / "validator-stub"
     stub_dir.mkdir()
@@ -373,7 +373,7 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
 
 
 def test_real_validator_accepts_emtfxml_as_a_standard_input(tmp_path):
-    """END-STATE PIN, inverted from its honest-state predecessor on 2026-08-04 when the surveys-repo
+    """END-STATE PIN, inverted from its honest-state predecessor when the surveys-repo
     branch feat/validator-emtfxml-input merged (surveys main 7ab0a0d) and the vendored copy + PIN
     were resynced. An EMTF-XML-only package now validates as a standard input with no curator
     enablement: the accepted-extension table and the structural where-do-transfer-functions-live
@@ -406,8 +406,7 @@ def test_real_validator_accepts_emtfxml_as_a_standard_input(tmp_path):
 
 def _assert_engine_surveys_level(cmd) -> None:
     """Pin the --surveys DISCOVERY LEVEL inside every mocked engine invocation: the value must be a
-    directory whose CHILD dir carries survey.yaml (package/<slug>/survey.yaml — the empirically
-    established extraction layout, Olympic Dam incident 2026-07-06). A fake that accepted any path
+    directory whose CHILD dir carries survey.yaml. A fake that accepted any path
     could mask a level regression exactly the way the stdout-JSON fakes masked the validator argv."""
     surveys_val = Path(cmd[cmd.index("--surveys") + 1])
     assert surveys_val.is_dir(), f"--surveys is not a directory: {cmd}"
@@ -419,9 +418,7 @@ def _emulate_real_validator(cmd, report: dict) -> None:
     """Behave like the REAL validate_survey.py from inside a fake _run_subprocess: write `report` to
     the --json FILE the argv names (stdout carries only human [LEVEL] lines). Crucially, this ASSERTS
     the argv shape first — [python, .../validate_survey.py, <existing folder positional>, --json,
-    <report file>] — so no mocked test can ever again mask an argv regression (the 2026-07-06
-    ship-blocker: the folder was passed as the --json VALUE with no positional, argparse exited 2,
-    and every real submission quarantined while the stdout-JSON fakes kept the suite green).
+    <report file>] - so no mocked test can ever again mask an argv regression.
 
     M7 (code-health review §6): the EXPECTED shape is single-sourced from runner.validator_argv rather
     than re-encoded by hand here — the observed cmd must be exactly what the shared helper would build
@@ -462,10 +459,10 @@ def test_run_validator_against_the_real_validator(tmp_path):
     # {counts, items, ...} report and a True (no-FAIL) verdict on a minimal valid package.
     #
     # C35b/D3 (review F7): UNCONDITIONAL now — resolves the sibling validator if present, else the
-    # committed vendored copy; require_validator_dir() FAILS (never skips) if neither is present. The
-    # validator is stdlib+yaml so this runs in the stack-less gateway lane too.
+    # Committed vendored copy; require_validator_dir FAILS (never skips) if neither is present. The
+    # Validator is stdlib+yaml so this runs in the stack-less gateway workflow too.
     #
-    # proven failing 2026-07-06 on main d645743: the argv was
+    # Proven failing on main d645743: the argv was
     #   [python, validate_survey.py, --json, <package-root>]
     # — the package root was consumed as the --json FILE value and the REQUIRED `folder` positional
     # was missing, so argparse exited 2 before any validation (usage on stderr, stdout empty),
@@ -513,7 +510,7 @@ def test_corrupt_deflate_quarantines_not_crashes(tmp_path):
     # corrupted raises zlib.error/BadZipFile at extraction — NONE of which are OSError. process_job
     # must catch it and write a 'quarantined' done-file, NOT let the exception kill the runner and
     # leave a stale running-file with no done-file (fix #3).
-    # proven failing 2026-07-06: with the narrow (UnsafeMember, OSError) catch, process_job raised
+    # Proven failing: with the narrow (UnsafeMember, OSError) catch, process_job raised
     # zlib.error, no done-file was written, and the running-file was left behind.
     cfg = _runner_cfg(tmp_path)
     jobs.ensure_dirs(cfg.jobs_dir)
@@ -541,7 +538,7 @@ def test_safe_extract_byte_cap_on_actual_bytes(tmp_path):
     # Byte accounting (design §5.1, review #10): the extraction cap is enforced on BYTES READ, not on
     # the central-directory file_size, so a member whose real inflated size exceeds the cap is caught
     # even if its header lied small. Build a 3 MiB STORED member; cap at 1 MiB -> UnsafeMember.
-    # proven failing 2026-07-06: with the old safe_extract (no byte counter, trusting file_size) the
+    # Proven failing: with the old safe_extract (no byte counter, trusting file_size) the
     # 3-MiB member extracted fully with no raise.
     import io
     import zipfile as _zf
@@ -611,7 +608,7 @@ def test_heartbeat_keeps_running_file_fresh(tmp_path):
 
 def test_safe_extract_refuses_traversal(tmp_path):
     # A member with a '..' segment must be refused at extraction (design §5.1 re-check), and NOTHING
-    # is written outside target. proven failing 2026-07-05: with check_member removed from
+    # Is written outside target. proven failing: with check_member removed from
     # safe_extract, the member wrote to the parent dir (escape) and no UnsafeMember was raised.
     zpath = tmp_path / "evil.zip"
     zpath.write_bytes(make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/../escape.edi": b"x"}))
@@ -638,7 +635,7 @@ def test_process_job_timeout_quarantines(tmp_path, monkeypatch):
     # A deadline already in the past makes _run_subprocess raise JobTimeout before spawning; the job
     # must produce a 'quarantined' done-file with a 'could not complete' reason — NOT an unhandled
     # exception (that is the crash path, distinct from a handled timeout).
-    # proven failing 2026-07-05: an early process_job let JobTimeout propagate, leaving a running
+    # Proven failing: an early process_job let JobTimeout propagate, leaving a running
     # file and no done-file.
     cfg = _runner_cfg(tmp_path)
     jobs.ensure_dirs(cfg.jobs_dir)
@@ -803,7 +800,7 @@ def test_done_file_atomic_no_partial(tmp_path):
 
 def test_atomic_write_json_serialises_dates(tmp_path):
     """Regression pin (RED pre-fix: `TypeError: Object of type date is not JSON serializable`). A
-    survey.yaml with an unquoted ISO date (`embargo_until: 2027-02-01`) loads that field as a
+    survey.yaml with an unquoted ISO date loads that field as a
     datetime.date, which flows into an edit-job RESULT dict; the plain json.dump used to crash the
     done-file write, crash-looping the runner and blocking every metadata read. The encoder ISO-formats
     date/datetime (nested too — the real embargo lives under result['fields']['access']) and the result
@@ -830,7 +827,7 @@ def test_atomic_write_json_serialises_dates(tmp_path):
 
 
 def test_atomic_write_json_still_rejects_genuinely_unserialisable(tmp_path):
-    """The encoder is a precise date/Decimal handler, NOT a blind str() catch-all: a genuinely
+    """The encoder is a precise date/Decimal handler, NOT a blind str catch-all: a genuinely
     unexpected object must still surface as a TypeError (a bug), never be silently coerced into a
     persisted job file."""
     class Weird:
@@ -896,7 +893,7 @@ def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeyp
 # C35b/D4 (code-health review M4): run_forever's loop contracts, pinned at the poll_once seam.
 # run_forever's body is now poll_once(cfg); these tests enforce the ordering + crash-recovery
 # contracts the M4 finding said were enforced NOWHERE (the old run_forever docstring falsely claimed
-# compose-e2e coverage in a lane where the runner never boots).
+# Compose-e2e coverage in a workflow where the runner never boots).
 # --------------------------------------------------------------------------------------------------
 def test_poll_once_drains_edit_jobs_before_submission_jobs(tmp_path, monkeypatch):
     # D4(i) — FAILS IF a submission job is processed before a pending edit job in the same pass. Edit
@@ -981,13 +978,13 @@ def _package_with(tmp_path, edi_bytes: bytes | None) -> Path:
 def _reach_preflight(monkeypatch):
     """Put engine/extract on sys.path so runner._import_preflight resolves through its documented
     sibling-checkout fallback. On the engine image `extract` is an installed package and the first
-    branch wins; the gateway test lane has no engine installed, which is precisely the case the
+    branch wins; the gateway test workflow has no engine installed, which is precisely the case the
     fallback exists for."""
     monkeypatch.syspath_prepend(str(_ENGINE_DIR / "extract"))
 
 
 def test_preflight_advisories_reach_the_submitter_and_the_curator(tmp_path, monkeypatch):
-    # proven failing 2026-08-09 on main beb3373: a package of EDIs that a stock mt_metadata reader
+    # Proven failing on main beb3373: a package of EDIs that a stock mt_metadata reader
     # cannot open produced a preview summary with NO warnings at all, and nothing anywhere told the
     # submitter or the curator. FAILS IF the pre-flight stops riding into preview-summary.json, which
     # is the single surface both pages already render.
@@ -1070,7 +1067,7 @@ def test_preflight_is_advice_and_can_never_fail_a_submission(tmp_path, monkeypat
 
 
 def test_a_package_that_will_not_read_still_reaches_validated(tmp_path, monkeypatch):
-    # End to end, with the whole point of the lane stated as an assertion: a delivery whose EDIs a
+    # End to end, with the whole point of the workflow stated as an assertion: a delivery whose EDIs a
     # stock reader refuses is VALIDATED, not quarantined, and the person is TOLD. A trailing comma in
     # a metadata field must never block a submission.
     _reach_preflight(monkeypatch)
@@ -1111,7 +1108,7 @@ def test_a_package_that_will_not_read_still_reaches_validated(tmp_path, monkeypa
 
 
 def test_the_persisted_preflight_report_is_bounded_and_says_so(tmp_path, monkeypatch):
-    # proven failing 2026-08-09 on abc82d2: the JSON written into the quarantine volume stored EVERY
+    # Proven failing on abc82d2: the JSON written into the quarantine volume stored EVERY
     # damaged value for every file, with no ceiling at all, while the sentences beside it were capped
     # at twelve. Measured on the Western Gawler 312: 1.68 MB holding 35,880 records, about 5.4 KB a
     # file. The upload cap (DEFAULT_MAX_UPLOAD_MB x MAX_TOTAL_UNCOMPRESSED_FACTOR) allows roughly

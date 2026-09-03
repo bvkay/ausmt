@@ -7,7 +7,7 @@ is non-zero iff any check FAILs, the config check PASSES on a hash match and FAI
 stale-config trap), and the zombie kit NAMES the top leaker by parent PID.
 
 Skips on Windows / no POSIX sh (platform reason, same as the reconcile/preflight suites); RUNS with
-nothing skipped on the gateway-ci ubuntu lane, so the skip tripwire needs no allow entry.
+nothing skipped on the gateway-ci ubuntu workflow, so the skip tripwire needs no allow entry.
 """
 from __future__ import annotations
 
@@ -202,7 +202,7 @@ def test_config_hash_mismatch_fails_and_exits_nonzero(tmp_path):
 
 
 def test_zombie_kit_names_top_leaker_by_parent(tmp_path):
-    """O3: the zombie kit must count Z-state procs and group them by PARENT PID with the heaviest parent
+    """The zombie kit must count Z-state procs and group them by PARENT PID with the heaviest parent
     at the top (the named leaker). Fixture: ppid 4242 has two zombies, ppid 9001 has one, so 4242 must
     lead. FAILS IF the kit does not aggregate by parent or does not surface the top parent first."""
     cf = _caddyfile(tmp_path)
@@ -237,7 +237,7 @@ def test_upstream_down_fails(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Canonical-name lane: the legacy-name legs (certificate for BOTH names; the legacy 301; skip-clean).
+# Canonical-name workflow: the legacy-name legs (certificate for BOTH names; the legacy 301; skip-clean).
 # --------------------------------------------------------------------------------------------------
 def _hash_env(tmp_path, cf, **extra):
     return _env(tmp_path, cf, FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest(), **extra)
@@ -365,7 +365,7 @@ def test_config_check_agrees_with_the_installers_rendering(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Path-URL contract lane (2026-08-18): the /surveys/<slug> 301 leg.
+# Path-URL contract workflow: the /surveys/<slug> 301 leg.
 # --------------------------------------------------------------------------------------------------
 def test_pathurl_leg_passes_on_the_contract_301(tmp_path):
     """GREEN side (proves the FAIL pins below are non-vacuous): with the edge answering the pinned
@@ -488,7 +488,7 @@ def test_pathurl_leg_probes_the_pinned_slug_over_https(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Time-series hand-off routes (THREDDS lane): the ts-routes leg. Three facts, one leg - the mounted
+# Time-series hand-off routes (THREDDS workflow): the ts-routes leg. Three facts, one leg - the mounted
 # table hashes equal to the repo copy, an OPEN route 302s to the table's own NCI Location, and a route
 # the table does NOT name 404s. The last one is the R5 suppression, so it is a FAIL, not a WARN.
 # --------------------------------------------------------------------------------------------------
@@ -600,8 +600,7 @@ def test_ts_routes_leg_skips_cleanly_when_unreachable_and_warns_with_no_table(tm
 
 
 def test_tailnet_path_direct_passes_and_derp_fails(tmp_path):
-    """The relay tripwire (2026-08-28 diagnosis: the VPS-box path silently regressed to DERP Sydney,
-    with multi-second TTFB outliers and relay throughput caps). A direct pong PASSES; a pong `via
+    """The relay tripwire. A direct pong PASSES; a pong `via
     DERP(...)` must FAIL the run and name both the relay and the remediation. FAILS IF the leg is
     missing, mislabelled, or a relayed path exits zero."""
     ok = _work(tmp_path, "direct")

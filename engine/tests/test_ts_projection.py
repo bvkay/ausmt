@@ -23,7 +23,7 @@ def test_the_flag_follows_the_register_for_a_withheld_station():
     rows = [_row()]
     assert station_flag(rows) is True
     # ...while the route detail is EMPTY for the same station: existence survives withholding,
-    # the route does not (R13 vs R5, the sharpest seam in the lane)
+    # The route does not (R13 vs R5, the sharpest seam in the workflow)
     assert route_rows(rows, station_open=False) == {}
 
 
@@ -97,7 +97,7 @@ def test_the_resource_emitter_ASKS_the_projection_rather_than_restating_it(monke
 
     The vocabulary pin above forbids the LEVEL SETS from diverging; it cannot see the other half,
     which is the publication predicate itself. While the emitter restated `review == verified`, a
-    change to which review states publish had to be made in two places, and a lane that made it in
+    change to which review states publish had to be made in two places, and a workflow that made it in
     one would still pass every vocabulary check in this file. So the emitter is driven here by
     REPLACING the projection's answer: a row the projection declines emits nothing, however the
     register reads.
@@ -116,7 +116,7 @@ def test_the_resource_row_ASKS_the_one_encoder_rather_than_restating_it(monkeypa
     """The same rule for the other half of a published route. Three surfaces render an NCI address
     from one `url_path` and only one of them may be the implementation: `_stationcheck` holds it, the
     front-door generator calls it, and the JS mirror is held to its bytes by a shared vector file.
-    A second `quote()` in the emitter is what would let station.json publish a working route beside
+    A second `quote` in the emitter is what would let station.json publish a working route beside
     a dead one in the redirect table."""
     import _stationcheck as stcheck  # noqa: PLC0415
     import build_portal as bp  # noqa: PLC0415

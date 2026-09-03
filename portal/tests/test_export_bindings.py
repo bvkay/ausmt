@@ -25,7 +25,7 @@ def test_filters_disabled_loop_is_guarded():
 
 
 def test_select_all_clears_drawn_shapes():
-    # 'Select all filtered' replaces a shape selection, but refresh() re-derives the selection from
+    # 'Select all filtered' replaces a shape selection, but refresh re-derives the selection from
     # any drawn shape, so a stale shape silently discards the select-all on the next filter change.
     # The handler must clear the shapes when it takes over the selection. A source pin (the jsdom
     # harness stubs Leaflet, so the shape path is not drivable there): the selAll handler's own line

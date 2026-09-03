@@ -24,8 +24,8 @@ Three layers:
      curated extent is never station-derived, so no exact station coordinate reaches a non-served
      survey's document) and the projection chains on real emitted values (organisation, raid).
   3. the corpus arm (dev box): when AUSMT_SURVEY_METADATA_DATA names a full-corpus build output dir,
-     the same scans run over the REAL corpus documents. No CI lane has a corpus, so it skips there
-     (allow-listed in ci_check_skips.py); it is the lane's full-corpus proof harness.
+     the same scans run over the REAL corpus documents. No CI workflow has a corpus, so it skips there
+     (allow-listed in ci_check_skips.py); it is the module's full-corpus proof harness.
 
 The chain checkers are TEST-TIME assertions (the validator enforces citation designation at the
 entry gates; the build refuses an undesignated preferred identifier); each is proven non-vacuous
@@ -63,7 +63,7 @@ corpus_arm = pytest.mark.skipif(
 # ---------------------------------------------------------------- reference chain implementations
 
 def doi_chain_ok(mtcat_survey, doc):
-    """T31 (ported): when mtcat emits a doi, it is one of the survey-metadata identifiers[] (scheme
+    """When mtcat emits a doi, it is one of the survey-metadata identifiers[] (scheme
     DOI) AND the preferred citation identifier; a collection / report / file DOI planted as the mtcat
     doi is caught. Vacuously true when mtcat emits no doi."""
     doi = mtcat_survey.get("doi")
@@ -403,7 +403,7 @@ def test_d8_corpus_documents_validate_and_hold_every_chain(built_d8):
 
 
 def test_d8_no_exact_station_coordinate_reaches_a_non_served_document(built_d8):
-    """C1c: the curated extent is never station-derived, so no exact catalogue coordinate string of a
+    """The curated extent is never station-derived, so no exact catalogue coordinate string of a
     non-served survey appears in its document (the test_access_gate.py sweep, applied here)."""
     sys.path.insert(0, str(ROOT / "extract"))
     from _contract import CATALOGUE_COLUMNS  # noqa: PLC0415

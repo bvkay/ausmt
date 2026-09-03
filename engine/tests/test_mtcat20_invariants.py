@@ -5,7 +5,7 @@ change, forever - a future feature can never silently break identity, migration,
 zero-null/zero-empty posture. Sources:
 
   * AusMT_2026/schemas-draft/run-fixture-suite.py - the ratified executable fixture suite. Its
-    migrate_12_to_20() IS the 1.2 -> 2.0 emitter-change specification and is carried here
+    migrate_12_to_20 IS the 1.2 -> 2.0 emitter-change specification and is carried here
     VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example (T3/T4) and a
     corpus-shaped 1.2 migration input (T2a/T2b).
   * the schema-level accept/reject checks live in test_mtcat_schema_v20.py; the emitter-behaviour
@@ -26,8 +26,8 @@ Three layers:
      migrate_12_to_20(baseline) must equal the built document after stripping the new-in-2.0 keys
      (surveys[].description/subjects/sample_rates_hz/coordinates_state, plus the THREDDS projection
      pair stations[].has_time_series / surveys[].n_stations_time_series_verified) and
-     portal.{version,generated_at}. No CI lane has a corpus, so these skip there (allow-listed in
-     ci_check_skips.py); they are the lane's full-corpus proof harness and stay runnable forever.
+     portal.{version,generated_at}. No CI workflow has a corpus, so these skip there (allow-listed in
+     ci_check_skips.py); they are the module's full-corpus proof harness and stay runnable forever.
 """
 import copy
 import json
@@ -82,7 +82,7 @@ def migrate_12_to_20(doc):
     for sv in out.get('surveys', []):
         for row in sv.pop('sources', None) or []:
             # sources rows MAP to relationship rows (spec 6.9); statement/licence/retrieved
-            # detail moves to survey-metadata - the lane must capture it, so its presence
+            # Detail moves to survey-metadata - the workflow must capture it, so its presence
             # here is a hard stop, not a silent deletion. Live corpus: zero occurrences.
             if any(row.get(k) for k in ('statement', 'licence', 'retrieved', 'profile')):
                 raise NotImplementedError(
@@ -111,7 +111,7 @@ def migrate_12_to_20(doc):
 # ---------------------------------------------------------------- reference invariant implementations
 
 def count_invariant(survey, stations):
-    """T35: n_stations_time_series_verified equals the count of has_time_series true rows."""
+    """N_stations_time_series_verified equals the count of has_time_series true rows."""
     n = survey.get('n_stations_time_series_verified')
     if n is None:
         return True
@@ -146,7 +146,7 @@ def projection_shape_ok(doc):
 
 
 def ordering_ok(sv):
-    """T36: period and year bounds are ordered wherever both exist."""
+    """Period and year bounds are ordered wherever both exist."""
     a, b = sv.get('period_min_s'), sv.get('period_max_s')
     if a is not None and b is not None and a > b:
         return False
@@ -157,7 +157,7 @@ def ordering_ok(sv):
 
 
 def collection_rollups_ok(doc):
-    """T37: every collection's counts equal its members' facts."""
+    """Every collection's counts equal its members' facts."""
     for c in doc.get('collections', []):
         members = [sv for sv in doc['surveys'] if sv.get('collection_id') == c['collection_id']]
         if c.get('n_surveys') is not None and c['n_surveys'] != len(members):
@@ -169,7 +169,7 @@ def collection_rollups_ok(doc):
 
 
 def coord_state_consistent(survey, stations):
-    """T38a: a withheld coordinates_state means every station position is unpublished."""
+    """A withheld coordinates_state means every station position is unpublished."""
     st_rows = [x for x in stations if x.get('survey_id') == survey['survey_id']]
     if survey.get('coordinates_state') == 'withheld':
         return all(x.get('latitude') is None and x.get('longitude') is None for x in st_rows)

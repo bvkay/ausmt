@@ -1,4 +1,4 @@
-"""C42 coordinate-access engine lane (Invariant 10 — every pin states its failure criterion).
+"""C42 coordinate-access engine workflow (Invariant 10 - every pin states its failure criterion).
 
 The custodian chooses exact / generalised (0.1deg) / withheld per station. This suite drives the REAL
 pipeline (subprocess build) over ENGINE-PRODUCED fixtures — a survey built from real broadband EDIs
@@ -663,7 +663,7 @@ def test_coord_policy_marker_never_co_occurs_with_true_coords(tmp_path):
 
 
 def test_station_json_carries_policy_for_non_exact_only(tmp_path):
-    """A1 (secondary surface). products/station.json carries coordinate_policy for a non-exact station and
+    """Products/station.json carries coordinate_policy for a non-exact station and
     NOT for an exact one (an exact station.json gains no coordinate_policy key; the three promotion
     markers are the separate D8 exception, pinned key-for-key in test_access_gate.py). FAILS IF the exact
     station.json gains a coordinate_policy key, or a non-exact one lacks/mislabels it."""
@@ -724,7 +724,7 @@ def test_fail_closed_override_names_no_station_drops_survey(tmp_path):
 
 
 def test_fail_closed_override_typo_drops_only_that_survey(tmp_path):
-    """F2 (survey granularity): a corpus of TWO surveys, one healthy and one whose coordinate_overrides
+    """A corpus of TWO surveys, one healthy and one whose coordinate_overrides
     names a station that does not exist. The typo must drop ONLY the offending survey — loudly — while
     the healthy survey builds and serves in full, rc=0.
 
@@ -985,7 +985,7 @@ def test_unit_parse_reads_default_and_overrides():
 def test_unit_published_id_resolver_is_a_conservative_superset_of_the_matcher():
     """THE READER-SIDE HALF of the shared matcher, for a caller holding a PUBLISHED station id and
     no `variant` field: the front door's route table is generated from the registers by a tool that
-    must not import the ingest stack, so it cannot call station_policy().
+    must not import the ingest stack, so it cannot call station_policy.
 
     The PROPERTY, not an example. Over every (record id, variant) shape the engine emits, whatever
     station_policy byte-gates, station_policy_by_published_id byte-gates too. That direction is the
@@ -1040,7 +1040,7 @@ def test_unit_apply_mask_in_place_and_validates_override_ids():
     assert stations[0][1]["lat"] == -31.234567, "exact station unchanged"
     assert stations[1][1]["lat"] == -32.9 and stations[1][1]["lon"] == 136.9, "generalised to the cell"
     assert stations[1][1]["elev_m"] is None, "generalised elevation nulled (defensive invariant)"
-    # A1: the mask stamps the resolved policy on the NON-EXACT record (reused by coord_policy.json /
+    # The mask stamps the resolved policy on the NON-EXACT record (reused by coord_policy.json /
     # station.json — never re-derived) and leaves the exact record unstamped (zero-change default).
     assert stations[1][1].get("coord_policy") == "generalised", "non-exact record must carry the stamped policy"
     assert "coord_policy" not in stations[0][1], "exact record must NOT be stamped (byte-stable)"
@@ -1066,7 +1066,7 @@ def test_base_id_surface_emitted_and_engine_true_for_variant_stations(tmp_path):
     """A2 EMISSION + PARITY PIN. A survey with a processing-variant pair emits base_ids.json — a boot map
     ausmt_id -> BASE station id — containing EXACTLY the variant records mapped to their shared base, and
     NOT the non-variant station (whose base is its own catalogue id). The emitted base ids equal
-    base_station_id() over the REAL parsed records (engine truth, never a hand-typed map). FAILS IF the
+    base_station_id over the REAL parsed records (engine truth, never a hand-typed map). FAILS IF the
     surface is missing, a variant record is absent/mis-based, a non-variant station is listed, or the
     emitted base diverges from the mask seam's own base_station_id derivation."""
     out, r = _build(tmp_path, [EXACT, _VAR_A, _VAR_B], coordinates_default="exact", overrides={})

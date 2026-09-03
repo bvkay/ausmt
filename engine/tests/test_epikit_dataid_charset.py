@@ -6,7 +6,7 @@ survives that rewrite and raises, and io/edi/metadata/header.py::read_header cal
 OUTSIDE the try/except that guards the assignment, so the read stops before anything else is
 attempted. The file is well formed; the reader's identifier policy is what refuses it.
 
-Measured on the GSSA/BHP Roxby Downs 2018 release (2026-09-03): nine of the 764 served files carry
+Measured on the GSSA/BHP Roxby Downs 2018 release: nine of the 764 served files carry
 such a DATAID, the build prints PARSE FAIL for each, emits no SKIP, exits 0, and publishes 755
 stations. Nine transfer functions with declared ids, coordinates and run ids never reach the
 catalogue at all. The four space-only unsafe DATAIDs in the same release ("222 ", "222 error",
@@ -83,7 +83,7 @@ def test_normalisation_replaces_only_the_characters_the_reader_refuses():
 # --------------------------------------------------------------------------------------------
 
 def test_the_refused_file_reads_and_says_so():
-    """R2. FAILS IF the read raises, which is what it does today for all nine of the release's files."""
+    """FAILS IF the read raises, which is what it does today for all nine of the release's files."""
     tf, reason, facts = mtm.read_with_parse_facts(CHARSET)
     assert tf.has_impedance(), "the parse returned no impedance"
     assert facts["dataid_normalised"] == {"original": "53(RR)", "read_as": "53_RR_"}
@@ -91,7 +91,7 @@ def test_the_refused_file_reads_and_says_so():
 
 
 def test_the_source_file_is_never_edited(tmp_path):
-    """D1, for this fallback too: the conditioning is on a temporary copy destroyed inside the read."""
+    """For this fallback too: the conditioning is on a temporary copy destroyed inside the read."""
     work = tmp_path / CHARSET.name
     shutil.copy2(CHARSET, work)
     before = work.read_bytes()

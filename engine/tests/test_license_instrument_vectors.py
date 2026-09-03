@@ -1,4 +1,4 @@
-"""C46-W2: pin _license_text.license_instrument_text against the shared vector file that the JS mirror
+"""Pin _license_text.license_instrument_text against the shared vector file that the JS mirror
 (portal/src/exports.js licenseInstrumentText) also consumes, so the two implementations of the licence
 INSTRUMENT text cannot drift. Each vector's `expected` is this leaf's own output (the single-source
 oracle); portal/tests/license_text_vectors.test.js asserts the JS mirror reproduces the SAME bytes.
@@ -64,7 +64,7 @@ def test_expected_strings_carry_the_distinctive_wording():
     # asserted by the byte-for-byte vector match on both mirrors. Year is the retrieved year (2016).
     assert "Commonwealth of Australia (Geoscience Australia) 2016" in att
     assert "AusMT serves derived renditions" not in att
-    # C46-W3a: the GA profile's s.5 DISCLAIMER renders as the final Source-datasets paragraph — even in
+    # The GA profile's s.5 DISCLAIMER renders as the final Source-datasets paragraph - even in
     # the no-changes vector, and even when a source supplies a verbatim statement; a generic-only source
     # never carries it. This is the mutation target for the disclaimer render (flip a word and it reds).
     assert "Geoscience Australia has not evaluated the data" in att

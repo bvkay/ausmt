@@ -1,9 +1,9 @@
-"""M7 (code-health review §6): the ONE canonical validator argv is single-sourced.
+"""The ONE canonical validator argv is single-sourced.
 
 Both the C10 submission runner (runner._run_validator) and the C31 metadata-edit runner
 (edit._run_validator) invoke `validate_survey.py` as a subprocess. Before M7 each assembled its own
 argv — one positional-first, one --json-first — the exact class of seam whose argv bug quarantined
-every real submission on 2026-07-06. M7 routes both through runner.validator_argv().
+every real submission. M7 routes both through runner.validator_argv.
 
 These tests pin:
   1. the canonical SHAPE (positional-first: <folder> then --json <file>);
@@ -25,7 +25,7 @@ from gateway.runner import edit, runner
 def test_validator_argv_canonical_shape():
     # FAILS IF the canonical argv shape changes: [python, <validator>, <folder positional>, --json,
     # <report file>]. This is the positional-first form argparse pins the `folder` positional to; the
-    # 2026-07-06 ship-blocker was exactly a wrong order (folder consumed as the --json value, the
+    #  ship-blocker was exactly a wrong order (folder consumed as the --json value, the
     # required positional missing, argparse exit 2, every submission quarantined).
     vfile = Path("/srv/surveys/_validation/validate_survey.py")
     target = Path("/gw/quarantine/abc/package/demo-survey")

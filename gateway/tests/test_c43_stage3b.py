@@ -3,12 +3,12 @@
 Every write-path pin states its failure criterion and is mutation-proof (shown able to fail). The
 gate-scrutinised four — atomicity (#1), rollback (#2), single-flight/re-validate-under-lock (#3),
 diff-minimality/N-commits (#4) — are proven RED-then-GREEN (the RED capture is documented in the
-lane report; each assertion below genuinely fails if its gate is removed).
+workflow report; each assertion below genuinely fails if its gate is removed).
 
 Two seams (conftest): the in-process edit runner (the runner's REAL job dispatch, no yaml in the
 gateway process) and FakeGit (an in-memory surveys-live model that RAISES on any unmodeled verb and
 tracks branch/ref/rollback so the atomicity + rollback guarantees are observable without real git).
-The real-git lane (test_publish_real_git.py) proves byte-level diff-minimality + byte-restoration.
+The real-git workflow (test_publish_real_git.py) proves byte-level diff-minimality + byte-restoration.
 """
 from __future__ import annotations
 
@@ -924,7 +924,7 @@ def test_r2_publish_gate_mirrors_start_year_check(tmp_path):
 def test_r2_coercion_is_total_and_never_rewrites_literals():
     """The emission coercion (unit): "2003" -> plain int; "2003²" (isdigit-True!) never raises and
     stays a string; "0000"/"007" round-trip-unstable -> stay strings (no silent literal rewrite);
-    a year range stays a string. FAILS IF int() can raise out of the emission path or a literal is
+    a year range stays a string. FAILS IF int can raise out of the emission path or a literal is
     rewritten."""
     from gateway.runner.edit import _coerce_collection_value
     assert _coerce_collection_value("start_year", "2003") == 2003

@@ -1,6 +1,6 @@
-"""about.html carries the SAME header/footer chrome as index.html (fix/about-uniform-chrome).
+"""About.html carries the SAME header/footer chrome as index.html (fix/about-uniform-chrome).
 
-The owner's ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and
+The ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and
 the site's one footer, so chrome is uniform across pages. These are STRUCTURAL assertions parsed
 from the real DOM (stdlib html.parser, so no jsdom / node dependency and no substring-vs-comment false
 positives — HTML comments are not surfaced as elements by the parser).
@@ -15,7 +15,7 @@ Each assertion states its failure criterion:
   * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
     (nVis/nSel/nTot). Those three report the current map's filter and selection state, and About has
     neither. Non-vacuous: index.html HAS these ids, so a naive copy-the-whole-header would trip this.
-    NARROWED by the api-docs lane, deliberately: the ban used to extend to the class "counts" as well,
+    NARROWED by the The API docs section, deliberately: the ban used to extend to the class "counts" as well,
     on the reasoning that a static page has no counts to state. That reasoning covered app state only.
     About now carries a CORPUS-totals block (total stations / total surveys, read from the catalogue at
     load time) in index's right zone, reusing index's .counts styling so the two headers render
@@ -23,8 +23,8 @@ Each assertion states its failure criterion:
     the half of the old assertion that was actually about honesty; the class ban was about styling.
   * NO version chip, anywhere. FAILS if any element carrying data-ver-chip survives on any of the
     four documents. The chip was the last of the About-this-build popover's copy: the popover left
-    every footer with the one-footer ruling, the chip followed it into about.html's #build section,
-    and the owner has now deleted that section too. Zero on every surface, held from both ends: the
+    every footer with the one-footer rule, the chip followed it into about.html's #build section,
+    and the brief has now deleted that section too. Zero on every surface, held from both ends: the
     attribute is gone and so is the version.js load that filled it, on EVERY document the portal
     ships rather than on about.html alone. A script whose whole job is to fill an element no page
     carries is a request that changes nothing a reader can see, and a page that still loads it reads
@@ -164,12 +164,12 @@ def test_no_portal_document_carries_a_ver_chip():
 
 
 def test_about_references_no_nonexistent_federation_doc():
-    """C22 citation honesty (2026-07-07). FAILS if about.html references FEDERATION.md — no such file
+    """C22 citation honesty. FAILS if about.html references FEDERATION.md - no such file
     exists anywhere in the repository (verified repo-wide before this test was written), so the pre-C22
     line 236 ("see the MTCAT v1.0 specification and FEDERATION.md in the project repositories") pointed
-    readers at a fabricated document. Chief-architect ruling: REMOVE the claim, do not repoint (federation
+    readers at a fabricated document. Chief-architect rule: REMOVE the claim, do not repoint (federation
     is documented as a property of MTCAT itself, and docs/docs/developer/data-files.md describes
-    mtcat.json as the discovery/federation document). UX6 Wave F (#17): the restructured About now DOES link
+    mtcat.json as the discovery/federation document). the restructured About now DOES link
     docs-site pages (the "Detailed documentation" answer points at real mkdocs pages, incl. the MTCAT page),
     but the fabricated FEDERATION.md filename must still never reappear here — that is what this guards.
 
@@ -186,8 +186,8 @@ def test_about_references_no_nonexistent_federation_doc():
 
     Docs-consolidation round: the pinned URL moved from /data-model/mtcat/ to
     /reference/mtcat-schema/. The two pages were a stub and its own reference, saying the same thing
-    twice; the stub was merged into the reference under the one-owner-per-topic pass, and About's
-    bullet now points at the surviving owner. The pin is still a URL rather than a version, for the
+    twice; the stub was merged into the reference under the one-page-per-topic pass, and About's
+    bullet now points at the surviving page. The pin is still a URL rather than a version, for the
     reason given above."""
     raw = ABOUT.read_text(encoding="utf-8")
     assert "FEDERATION.md" not in raw, (
@@ -200,7 +200,7 @@ def test_about_references_no_nonexistent_federation_doc():
 
 
 def test_mtcat_link_in_footer_not_header_across_pages():
-    """UX7a (A5). The machine-readable MTCAT link moved from the header's right zone into the footer's
+    """The machine-readable MTCAT link moved from the header's right zone into the footer's
     bottom-left, applied identically across index / about / add-survey. Each page must carry EXACTLY ONE
     apilink (a.apilink -> data/mtcat.json) INSIDE <footer>, and NONE inside <header>.
 
@@ -281,24 +281,24 @@ def _header_shape(path):
 
 
 def test_header_parity_about_matches_index():
-    """api-docs lane. About's header used to differ from the SPA's in two visible ways: its primary nav
+    """Api-docs workflow. About's header used to differ from the SPA's in two visible ways: its primary nav
     items carried none of index's ids, and its right zone was empty while index's carried a mono stats
     block. Both are now aligned, and this pins the alignment structurally (parsed DOM, so comments and
     raw-text coincidences cannot pass it).
 
     Failure criteria:
       * NAV ID ORDER: FAILS if the ids of the elements inside <nav> are not exactly
-        [navMap, navSurveys, navCollections], in that order, on BOTH pages. Non-vacuous: before the lane
+        [navMap, navSurveys, navCollections], in that order, on BOTH pages. Non-vacuous: before the workflow
         about.html's nav items were bare <a href="index.html"> with no ids at all, so About failed this.
         The TAG is deliberately not compared: index's are <button>s that switch app views in place, About
         is static so its must be links. Ids + order + placement are the parity that matters.
       * CENTRE-ZONE ORDER: FAILS if the five primary items are not in the same order on both pages:
-        Map, Surveys, Collections, About, Contribute. It was six until the docs wave, when the owner cut
+        Map, Surveys, Collections, About, Contribute. It was six until the docs wave, when the brief cut
         "How to use AusMT" from every header (the welcome tour and About cover it). The sixth slot is
         pinned SHUT below, so a header that grows a sixth centre item fails here rather than drifting
         back.
       * STATS BLOCK: FAILS if either page's right zone lacks a single .counts element. Non-vacuous: the
-        pre-lane about.html had an empty .hright, so it failed this half.
+        earlier about.html had an empty .hright, so it failed this half.
       * ACTIVE-PAGE HIGHLIGHT NOT REGRESSED: FAILS if adding the ids also made a view button active on
         About (only the current page may be highlighted) or dropped index's active Map button."""
     idx, abt = _header_shape(INDEX), _header_shape(ABOUT)
@@ -347,7 +347,7 @@ def test_header_parity_about_matches_index():
 
 
 def test_no_page_header_keeps_the_retired_how_to_use_entry():
-    """Docs wave, stage 2 (owner ruling): the "How to use AusMT" header entry is gone from every page.
+    """Docs wave, stage 2: the "How to use AusMT" header entry is gone from every page.
     On index it was a <button id="howToUse"> that opened the #introOverlay help panel; on About it was an
     <a href="#howto">, and releases.html arrived on main with an <a href="about.html#howto"> copy of the
     same item. All are pinned absent, by id and by visible text, on all four shipped pages. Non-vacuous:
@@ -408,12 +408,12 @@ def test_index_still_has_the_count_ids_the_about_guard_forbids():
 
 
 def test_no_page_keeps_an_about_this_build_control_in_the_footer():
-    """The one-footer ruling took Releases and About this build out of the footer on every surface, so
+    """The one-footer rule took Releases and About this build out of the footer on every surface, so
     the disclosure popover goes with them: what a reader saw on opening it was the software licence
     and the build's identity, and about.html carries both in its own body now.
 
     FAILS if a <details class="aboutbuild"> comes back to any of these four footers. Non-vacuous
-    against the pre-ruling tree, where all four carried one."""
+    against the pre-rule tree, where all four carried one."""
     for path in (INDEX, ABOUT, ADD, RELEASES):
         els = _footer_els(path)
         details = [a for (tag, a) in els if tag == "details" and "aboutbuild" in _classes(a)]
@@ -423,7 +423,7 @@ def test_no_page_keeps_an_about_this_build_control_in_the_footer():
 
 
 def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_it():
-    """The colophon's deletion, held from every end it could come back through. The owner's ruling is
+    """The colophon's deletion, held from every end it could come back through. The rule is
     that about.html states what AusMT IS, what it licenses and where the documentation lives; the
     running build's identity is not one of those, and a chip that has to be kept in step with a
     config file is a maintenance cost for a fact no reader asked for.
@@ -476,7 +476,7 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 # its nav will move the wrap points. Anything that changes the header's height must re-measure the
 # ladder. What this file CAN hold, and does, is that the offset is a variable rather than a constant,
 # that the ladder descends, and that it resolves to the measured header height at the two widths the
-# lane pins.
+# Workflow pins.
 ANCHOR_VAR = "--about-anchor-offset"
 
 # The measured header height at each pinned width, from the same run the ladder was built from.
@@ -626,7 +626,7 @@ def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is()
 
 
 def test_the_about_button_carries_the_contribute_button_treatment_on_every_page():
-    """Owner ruling (about-polish lane): the header's About link wears the same outlined-button style as
+    """The header's About link wears the same outlined-button style as
     "Contribute a survey", on every page that renders it, so the two header actions read as siblings.
     FAILS IF any page's .about rule drops the border (the old muted borderless style creeping back) or
     the pages drift apart from each other."""

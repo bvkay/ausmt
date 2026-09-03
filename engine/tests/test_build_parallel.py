@@ -1,6 +1,6 @@
 """Build parallelism (the MTH5 worker pool) -- serial==parallel product equivalence.
 
-The 2026-08-27 profile (AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md) attributed ~68% of a cold
+The profile attributed ~68% of a cold
 build and ~99% of a warm rebuild to _write_tf_mth5. The pool parallelises exactly that seam: the
 tier-1 per-station fan-out (emit_station_mth5) and the tier-2 survey bundle (emit_survey_mth5),
 each task a self-contained _write_tf_mth5 call that re-reads its source EDI in the worker. The
@@ -122,12 +122,12 @@ def _assert_h5_equal(a, b, rel):
 
 
 def _norm_manifest(out):
-    """sha256 is normalised ONLY on mth5 rows, whose bytes legitimately carry HDF5 write clocks; the
+    """Sha256 is normalised ONLY on mth5 rows, whose bytes legitimately carry HDF5 write clocks; the
     EDI, EMTF XML and both zip rows keep their digests compared, because those digests are the
     cross-build invariant the download reference publishes. Every size, h5 included, is a
     deterministic pin and stays compared.
 
-    KNOWN LIMIT of the h5 size pin, adjudicated at corpus scale 2026-08-27: a MULTI-TF bundle's
+    KNOWN LIMIT of the h5 size pin, adjudicated at corpus scale: a MULTI-TF bundle's
     size can wiggle a few KB with the writing process's accumulated history (serial corpus main
     process vs anything with a shorter history), because channel_summary's hdf5_reference columns
     encode internal file addresses; every value column stays identical and fresh single-survey

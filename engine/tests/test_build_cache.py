@@ -62,7 +62,7 @@ def clean_salt(monkeypatch):
 
     A4 (the C18c flake): ALSO pin the engine commit and clear the cache-relevant env vars. The commit
     used to be re-resolved via a live `git rev-parse` inside every in-process build, so concurrent git
-    activity on the machine (2026-07-07: the force-push/merge-queue day) between a test's two builds
+    activity on the machine between a test's two builds
     flipped the salt and full-missed the 'warm' build — a nondeterministic counter failure that passed
     on rerun. Pinned here so no cache test's counters can ever depend on ambient git or shell state;
     the salt tests below patch this NAME themselves when they need a moving commit."""
@@ -107,8 +107,7 @@ def _digest(p: Path) -> str:
 
 def _forensics(cache_dir: Path, *outs: Path) -> str:
     """Failure-time context for counter asserts (A4): every build's FULL counters block (salt_fp,
-    degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. The
-    2026-07-07 C18c failures were undiagnosable afterwards because none of this was captured; with
+    degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. The C18c failures were undiagnosable afterwards because none of this was captured; with
     it, one glance discriminates the classes — degenerate/salt_fp drift -> salt instability;
     write_errors/read_errors -> environmental I/O; plain counter drift -> content. Evaluated only
     when an assert actually fails (Python's assert-message lazy evaluation)."""
@@ -218,7 +217,7 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     Pairing note (the CI tripwire this test once fell into): the mutation target is sorted[0] and the
     served XML is looked up BY THE STATION'S FILENAME derived from that same EDI's DATAID — never by
     index. The original version chose the target via UNSORTED rglob (platform-dependent readdir order)
-    but compared sorted _served_xml()[0]: green on NTFS (rglob happened to yield Vulcan_A1.edi first),
+    but compared sorted _served_xml[0]: green on NTFS (rglob happened to yield Vulcan_A1.edi first),
     red on the Linux runner (yielded Vulcan_A2.edi -> mutated A2, compared A1 -> false 'STALE CACHE'
     with hits=3 misses=2, i.e. the edit HAD missed and re-derived correctly)."""
     import re
@@ -254,7 +253,7 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
 
     # Exact counter arithmetic (deterministic, §4.6): the edited station misses parse + xml (2) and
     # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each). On failure, dump
-    # both builds' full counters + the cache listing (A4 — the 2026-07-07 C18c failures left nothing
+    # Both builds' full counters + the cache listing (A4 - the C18c failures left nothing
     # to diagnose from; salt_fp/degenerate/write_errors in the dump now name the class directly).
     assert counters["misses"] == 2, \
         f"the byte-changed EDI did not miss exactly (parse+xml): {counters}\n{_forensics(cache, out1, out2)}"
@@ -354,7 +353,7 @@ def _verify_data_dir(data_dir: Path) -> int:
 
 
 def _verify_data_dir_surveys(data_dir: Path, surveys_root):
-    """C18b: invoke scripts/verify.py --data-dir with (or without) --surveys, returning
+    """Invoke scripts/verify.py --data-dir with (or without) --surveys, returning
     (returncode, combined_output) so a test can assert BOTH the exit code and the gate message.
     surveys_root=None omits --surveys (the loud-skip path)."""
     argv = [sys.executable, str(REPO / "scripts" / "verify.py"), "--data-dir", str(data_dir)]
@@ -366,7 +365,7 @@ def _verify_data_dir_surveys(data_dir: Path, surveys_root):
 
 
 # --------------------------------------------------------------------------------------------------
-# C18b (A3): the cache-INDEPENDENT digest-consistency gate — the 2026-07-07 incident replay
+# The cache-INDEPENDENT digest-consistency gate - the incident replay
 # --------------------------------------------------------------------------------------------------
 
 def _sidecar(out: Path) -> dict:
@@ -407,7 +406,7 @@ def test_c18b_gate_skips_loudly_without_surveys_arg(tmp_path, clean_salt):
 
 def test_c18b_incident_replay_doctored_sidecar_stamp_goes_red(tmp_path, clean_salt):
     """★ THE INCIDENT REPLAY (sidecar-doctoring form). FAILS IF: a served product stamped with a STALE
-    (pre-edit) survey.yaml digest — the 2026-07-07 build 20260707T002709Z shape — is NOT caught by the
+    (pre-edit) survey.yaml digest - the build 20260707T002709Z shape - is NOT caught by the
     armed gate. Build; then doctor ONE station's xml_digest_stamped to a fabricated OLD digest
     (simulating a served product that flowed from a stale cache entry) and confirm the gate goes RED
     with the exact incident message (slug, station count, both digests, the tar-before-clear forensics
@@ -500,7 +499,7 @@ def test_c18b_incident_replay_stale_cache_meta_forces_stale_stamp(tmp_path, clea
 def test_c18b_unstamped_cache_meta_reads_as_suspect_not_current(tmp_path, clean_salt):
     """★ FAILS IF: a valid v3 cache meta entry MISSING the survey_digest field is blessed with the
     CURRENT digest on a warm hit (gate stays green over an unstamped product). An entry without a
-    stamp must surface as SUSPECT at the gate — the incident this lane answers was itself a
+    stamp must surface as SUSPECT at the gate - the incident this module answers was itself a
     'theoretically unreachable' state, so the defensive fallback must fail closed, not open.
     Construction mirrors the stale-meta replay, but DELETES the field (re-signing the payload so the
     entry stays valid and HITS)."""
@@ -544,8 +543,7 @@ def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypat
 
     Proven failing on pre-fix HEAD: survey.yaml was read TWICE per build — metadata at
     discover_work, the cache-key digest at the per-survey loop top, a window spanning every
-    preceding survey's work (minutes on the production corpus, where the 2026-07-07 build
-    20260707T002709Z warm-served a stale Olympic Dam citation at hits=3017/misses=0). The fix
+    preceding survey's work. The fix
     derives meta AND digest from ONE read in discovery — coherent by construction. The seam here
     (edit fired right after discover_work returns) is fix-agnostic, so this test still fails if a
     loop-time re-read is ever reintroduced."""
@@ -735,7 +733,7 @@ def test_torn_entry_xml_without_meta_is_a_miss_not_a_phantom_hit(tmp_path, clean
 
 
 # --------------------------------------------------------------------------------------------------
-# A4: environment-induced I/O failures are survived AND attributable (the Windows AV/indexer class)
+# Environment-induced I/O failures are survived AND attributable (the Windows AV/indexer class)
 # --------------------------------------------------------------------------------------------------
 
 def test_transient_write_lock_is_retried_persistent_failure_is_counted(tmp_path, monkeypatch):
@@ -798,7 +796,7 @@ def test_unreadable_entry_counts_read_error_absent_stays_plain_miss(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# C18b (A3): per-survey instrumentation — one stderr line per served survey; deltas sum to the total
+# Per-survey instrumentation - one stderr line per served survey; deltas sum to the total
 # --------------------------------------------------------------------------------------------------
 
 def test_per_survey_instrumentation_sums_to_corpus_total(tmp_path, clean_salt, capsys):
@@ -946,7 +944,7 @@ def test_degenerate_salt_dirty_checkout_no_reads_or_writes(tmp_path, monkeypatch
 
 
 # --------------------------------------------------------------------------------------------------
-# A4: salt stability across in-process builds (the C18c flake class) + its injection companions
+# Salt stability across in-process builds (the C18c flake class) + its injection companions
 # --------------------------------------------------------------------------------------------------
 
 def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
@@ -971,7 +969,7 @@ def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
 def test_salt_instability_is_observable_via_salt_fp(tmp_path, clean_salt, monkeypatch):
     """Injection companion (Invariant 10: proves the stability observable CAN fail). FAILS IF: an
     engine commit that CHANGES between two in-process builds does not surface as differing salt_fp
-    values plus a full-miss 'warm' build — the exact 2026-07-07 C18c mechanism, deterministic here."""
+    values plus a full-miss 'warm' build - the exact C18c mechanism, deterministic here."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     monkeypatch.setattr(build_portal, "_git_commit_at",

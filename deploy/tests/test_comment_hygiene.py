@@ -35,7 +35,7 @@ DENY = (
     # OWNER in capitals is a shell variable the compose files carry, so a comment naming it beside
     # another AUSMT_ variable, or calling it a variable, is naming an identifier rather than
     # recording who decided something. Everywhere else the word is prose and is caught.
-    (re.compile(r"\b(?!(?-i:OWNER)\b(?=[^\n]*(?:AUSMT_|variable)))owner(?:'s|s)?\b", re.I),
+    (re.compile(r"\b(?!(?-i:OWNER)\b(?=[\s\S]*(?:AUSMT_|variable)))owner(?:'s|s)?\b(?!@)", re.I),
      "decision-owner language"),
     (re.compile(r"\brulings?\b", re.I), "ruling language"),
     # Approval OF A DESIGN DECISION, which is what may not be recorded here. The bare word is
@@ -46,7 +46,9 @@ DENY = (
     (re.compile(r"\bwave\s+[a-z]\b", re.I), "wave identifier"),
     (re.compile(r"\bux\d", re.I), "work-item identifier"),
     (re.compile(r"\btask\s*#", re.I), "work-item identifier"),
-    (re.compile(r"\blanes?\b", re.I), "lane name"),
+    # A pin may cite the contract it holds, and those documents are named LANE-CONTRACT-*.md and
+    # LANE-ADDENDUM-*.md, so a citation is not a lane name. Everything else that says lane is.
+    (re.compile(r"\blanes?\b(?!-[A-Z])", re.I), "lane name"),
     (re.compile(r"\btreatments?\b", re.I), "design-history vocabulary"),
     (re.compile(r"old\s*->\s*new", re.I), "old-to-new history"),
     (re.compile(r"\b20\d\d-[01]\d-[0-3]\d\b"), "dated note"),
@@ -57,7 +59,7 @@ DENY = (
 
 # A commented-out CALL, not prose that happens to name the function: the argument list is what
 # tells "fetch(url).then(...)" from "fetch() is the scripted probe".
-CODE_LINE = re.compile(r"^(?:<script\b|(?:L\.map|fetch)\(\s*['\"`\w$])")
+CODE_LINE = re.compile(r"^(?:<script\b[^>]*>\s*(?:</script>)?\s*$|(?:L\.map|fetch)\(\s*['\"`\w$])")
 LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
 
 
@@ -238,3 +240,31 @@ def test_the_commented_out_code_rule_needs_a_call_not_a_mention(tmp_path):
     code = tmp_path / "code.js"
     code.write_text('// fetch("/api/x").then(r => r.json())\nvar a = 1;\n', encoding="utf-8")
     assert offences([code]), "the rule missed a commented-out call"
+
+
+def test_a_pin_may_cite_the_contract_it_holds(tmp_path):
+    """The contract this module enforces says a pin traces itself by naming its contract, and those
+    documents are named LANE-CONTRACT-*.md. The citation is allowed; a lane is not."""
+    cite = tmp_path / "cite.py"
+    cite.write_text("# Ranges take the spaced hyphen (LANE-ADDENDUM-HUB-FEEDBACK.md R1).\na = 1\n", encoding="utf-8")
+    assert not offences([cite]), "the lane rule flagged a contract citation"
+    name = tmp_path / "name.py"
+    name.write_text("# The download lane reshaped this panel.\na = 1\n", encoding="utf-8")
+    assert offences([name]), "the lane rule missed a lane name"
+
+
+def test_an_address_is_not_a_person(tmp_path):
+    f = tmp_path / "fixture.py"
+    f.write_text('# The DB says Owner@Private.Test and the artifact carries owner@private.test.\na = 1\n',
+                 encoding="utf-8")
+    assert not offences([f]), "the decision-owner rule flagged an email address in a fixture"
+
+
+def test_a_tag_named_in_prose_is_not_commented_out_markup(tmp_path):
+    prose = tmp_path / "prose.py"
+    prose.write_text('def f():\n    """The screen must ship no inline\n    <script> block without src=.\n    """\n',
+                     encoding="utf-8")
+    assert not offences([prose]), "the rule flagged a tag named in a sentence"
+    markup = tmp_path / "markup.html"
+    markup.write_text('<!--\n<script defer src="https://example.invalid/x.js"></script>\n-->\n', encoding="utf-8")
+    assert offences([markup]), "the rule missed a commented-out tag"

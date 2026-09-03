@@ -8,7 +8,7 @@ This is where the release tier was missed. `/data/releases/<tag>/bundles/<file>`
 matcher as `/releases/<tag>/bundles/<file>`, which none of the four original patterns cover, so the
 frozen citable copy of a bundle rendered inline while its mutable twin under `/data/bundles/`
 downloaded. Same missing-prefix root cause as the analytics gap in the same tier, so it is fixed and
-pinned in the same lane.
+pinned in the same workflow.
 
 The two listeners (`:8080` tailnet reader, `:8081` public subset) carry the SAME matcher by design and
 the second one's comment says so, so the pin holds them equal rather than checking one and trusting
@@ -25,8 +25,8 @@ _BOX_CADDY = _REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
 # The families a browser must never render inline: original EDI, derived EMTF-XML, the packaged
 # bundles, the per-station MTH5 files under /h5, and the frozen release bundles.
 #
-# /h5/* carried the word "latent" here for as long as it had no producer. The tier-1 lane (owner
-# ruling 2026-08-02) made it a real served family, so the description is a live one now: an .h5 that
+# /h5/* carried the word "latent" here for as long as it had no producer. The tier-1 work
+# Rule made it a real served family, so the description is a live one now: an .h5 that
 # rendered inline instead of downloading would be a browser handed a binary container.
 _REQUIRED_PATTERNS = ("/edi/*", "/xml/*", "/bundles/*", "/h5/*", "/releases/*/bundles/*")
 

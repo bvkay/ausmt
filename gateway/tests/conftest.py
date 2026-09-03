@@ -53,7 +53,7 @@ def resolve_validator_dir() -> Path | None:
 
 
 def require_validator_dir() -> Path:
-    """resolve_validator_dir() or FAIL loudly (never skip). The vendored copy is committed, so a None
+    """Resolve_validator_dir or FAIL loudly (never skip). The vendored copy is committed, so a None
     result means a broken checkout — an assert, not a skip (F7: no more silent same-author-mock fallback)."""
     d = resolve_validator_dir()
     assert d is not None, (
@@ -286,7 +286,7 @@ class FakeGit:
 
     STRICT (C35b/D2): every git verb this fake serves is enumerated in __call__; an unmodeled verb
     RAISES AssertionError naming the argv instead of returning a silent rc=0. Extending the fake to a
-    new verb must be a conscious act, with the real-git lane (test_publish_real_git.py) as the
+    new verb must be a conscious act, with the real-git workflow (test_publish_real_git.py) as the
     reference for honest behaviour. The verbs modeled today: status, rev-parse, checkout, add, commit,
     merge, push, reset, clean, branch.
 
@@ -335,14 +335,14 @@ class FakeGit:
         # every verb this fake serves is enumerated below; the final `else` RAISES on any unmodeled
         # verb rather than returning a silent rc=0 (the old behaviour, which made push/merge/a typo'd
         # flag look like unconditional success). Extending the fake is now a deliberate act — add an
-        # explicit branch here, with the REAL-git lane (test_publish_real_git.py) as the reference for
+        # Explicit branch here, with the REAL-git workflow (test_publish_real_git.py) as the reference for
         # what honest behaviour is.
         if verb == "checkout":
             # -B <branch> creates+switches; -f <branch> / <branch> switches. NOTE (nit #8): the branch
             # target is modeled as args[-1], correct for the forms publish.py actually issues
             # (`checkout -B <b>`, `checkout -f <b>`, `checkout main`). A bare `checkout -f` with no
             # branch is never issued by the publish code, so it is intentionally NOT modeled — the
-            # real-git lane covers the true checkout semantics.
+            # Real-git workflow covers the true checkout semantics.
             target = args[-1]
             self.branch = target
         elif verb == "commit":
@@ -378,7 +378,7 @@ class FakeGit:
             # The leading `--` and any flags are skipped; the rest are repo-relative paths. C41: `git rm
             # -r -- surveys/<slug>` retires a WHOLE survey (a DIRECTORY), so when `-r`/`-rf` is present a
             # directory target is removed recursively (rmtree) — modeled explicitly (C35b strict-fake:
-            # extending the fake to survey-scope removal is a deliberate act, with the real-git lane in
+            # Extending the fake to survey-scope removal is a deliberate act, with the real-git workflow in
             # test_publish_real_git.py as the reference for the true recursive-rm semantics).
             import shutil
             recursive = any(a.startswith("-") and "r" in a for a in args[1:] if a != "--")
@@ -393,7 +393,7 @@ class FakeGit:
         elif verb in ("add", "merge", "push", "branch"):
             # No modeled state change, but these ARE verbs the publish/edit sequence legitimately
             # drives, so they get an explicit rc=0 (the fake does not model push ARRIVAL — the real-git
-            # lane asserts the push reaches the bare origin; here `push` in fail_on is how a rejection
+            # Workflow asserts the push reaches the bare origin; here `push` in fail_on is how a rejection
             # is simulated, handled above).
             pass
         else:
@@ -418,7 +418,7 @@ def _git_verb(args) -> str:
 async def app_client(tmp_path: Path, *, scanner=None, run_poll: bool = False,
                      git_runner=None, edit_runner=None, mailer=None, **cfg_overrides):
     """In-process app + httpx client. When run_poll is False the poll-loop task is NOT started (the
-    tests drive gw.poll_once() explicitly for determinism); the app object is still returned so a
+    tests drive gw.poll_once explicitly for determinism); the app object is still returned so a
     test can reach gw = app.state.gw. git_runner injects the publish seam (there is no rebuild seam
     in the v2 commit-and-push model); edit_runner injects the C31 metadata-editor seam (an in-process
     call to the runner edit bodies, so no subprocess/yaml enters the gateway process during tests);
@@ -460,8 +460,7 @@ async def settle_publish(gw, sid, *, tries: int = 800, require: bool = True):
     """Yield control until the background publish task for `sid` leaves PUBLISHING.
 
     require=True (the default) FAILS the test on exhaustion instead of falling through: the old
-    silent 500 ms fall-through made a slow real-git publish read as a fail-closed defect (RED at
-    'PUBLISHING' == 'PUBLISH_FAILED' under load, reproduced 2026-08-25), which trains re-running
+    silent 500 ms fall-through made a slow real-git publish read as a fail-closed defect, which trains re-running
     over investigating. The bound is wall-clock generous (~8 s) because the publish runs real git
     via asyncio.to_thread and the loop must wait for the executor thread's done-callback - a bare
     sleep(0) yields one iteration and misses it, hence the small REAL sleep. The reconciliation
@@ -554,7 +553,7 @@ async def submit_zip(client, zip_bytes: bytes, *, email: str = GOOD_EMAIL, name:
 
 
 def run(coro):
-    """Drive an async test body to completion. Every test function is sync and calls run(_body())."""
+    """Drive an async test body to completion. Every test function is sync and calls run(_body)."""
     return asyncio.run(coro)
 
 

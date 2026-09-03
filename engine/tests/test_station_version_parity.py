@@ -1,21 +1,21 @@
 """THE STATION SCHEMA VERSION HAS ONE SOURCE, AND THIS IS THE PIN THAT KEEPS IT THAT WAY.
 
 The sibling of test_survey_metadata_version_parity.py for the third public contract, station.json.
-The machinery is the one the MTCAT lane learned the hard way and the survey-metadata lane reused, so
+The machinery is the one the MTCAT workflow learned the hard way and the survey-metadata workflow reused, so
 no site ever holds a literal.
 
 SINGLE SOURCE: the STATION_VERSION constant in contract/generate.py. The schema artifact's `title`
 DISPLAYS the version ("AusMT Station Metadata <MAJOR.MINOR>[-draft]: ...") and is verified against the
-constant by contract/generate.py:station_schema_version(), which also emits STATION_SCHEMA_VERSION
+constant by contract/generate.py:station_schema_version, which also emits STATION_SCHEMA_VERSION
 into engine/extract/_contract.py (the generated constant the emitter reads), gated by
-`generate.py --check` in both CI lanes.
+`generate.py --check` in both CI workflows.
 
 THIS MODULE reads the version back off every surface that states one, INDEPENDENTLY of the shared
 function (its own regex over the generate.py source, so the pin cannot agree with itself vacuously):
 
   1. contract/generate.py STATION_VERSION                 (the authority, read raw from the source text)
   2. the schema title                                     (the DISPLAY, verified against the constant)
-  3. contract/generate.py:station_schema_version()        (the one accessor)
+  3. contract/generate.py:station_schema_version        (the one accessor)
   4. engine/extract/_contract.py                          (the generated engine constant)
   5. the schema $id                                       (the version-specific immutable URI)
   6. a REAL BUILD's served schema routes and every emitted document's `version`

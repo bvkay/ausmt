@@ -98,7 +98,7 @@ def test_an_unparseable_unit_keeps_the_source_and_gains_no_number():
 
 
 def test_the_exclusion_rule_beats_any_corroboration():
-    """D9: a source assertion contradicting the channel list wins. A1.edi states that its HZ/RX/RY
+    """A source assertion contradicting the channel list wins. A1.edi states that its HZ/RX/RY
     channel declarations are exporter template artifacts, so those three are excluded by name."""
     d = facts("enriched-dotted")
     assert d["excluded_components"] == ["hz", "rx", "ry"]
@@ -128,7 +128,7 @@ def test_lemimt_site_reads_the_instrument_and_leaves_the_rate_where_none_is_stat
 
 
 def test_the_lemimt_band_token_is_never_read_as_an_acquisition_rate():
-    """OWNER RULING: the `S-<rate>Hz` token in the SITE line records the MERGING OF DOWNSAMPLED EDI
+    """The `S-<rate>Hz` token in the SITE line records the MERGING OF DOWNSAMPLED EDI
     FILES, not the rate the station was acquired at, so nothing in the site string reaches `run` and
     the token qualifies no station. Reading it as a rate published a processing parameter as a
     measurement on 178 records."""
@@ -148,7 +148,7 @@ def test_the_band_token_qualifies_nothing_even_beside_a_real_fact():
 
 
 def test_empower_json_takes_the_highest_rate_as_the_run_nominal_rate():
-    """D10: the 24 kHz sampleRate is the run's nominal rate and the lower ones are the decimation
+    """The 24 kHz sampleRate is the run's nominal rate and the lower ones are the decimation
     ladder riding the transfer-function product, not extra runs."""
     d = facts("empower-json")
     assert d["dialects"] == ["empower-json"]

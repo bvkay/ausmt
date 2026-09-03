@@ -3,7 +3,7 @@
 The committed test_empty_portal_smoke only exercises the EMPTY branch; the contract-converted dereferences
 (r[C.*], sc[SC.*], t[T.*]) live exclusively in the POPULATED path and shipped untested. This boots the
 real portal (tools/smoke.js) against a tiny dataset whose values are KNOWN and distinctive, then asserts
-(a) the fields buildState() derives THROUGH the contract maps (STATION0: r[C.*] + sc[SC.q/dim]) and
+(a) the fields buildState derives THROUGH the contract maps (STATION0: r[C.*] + sc[SC.q/dim]) and
 (b) the columns exports.js builds at its OWN sc[SC.*] call site (EXPORT0: q/qb/rr/dim/sw) equal the
 source. So a wrong call-site index (r[C.lon] where lat was meant, or a swapped sc[SC.sw]->sc[SC.alg])
 makes a value wrong and FAILS here — a crash is not required. NOT exhaustive: drawer.js has further
@@ -50,8 +50,8 @@ def test_populated_portal_value_binding(tmp_path):
     (data / "tf.json").write_text(json.dumps([tf_row]))
     (data / "surveys.json").write_text(json.dumps(
         {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}}))
-    # C12: build.json — a KNOWN, distinctive build_id/generated so the footer's VALUE binding
-    # (BUILDID -> buildIdText()) can be asserted against the source, not just "didn't crash".
+    # Build.json - a KNOWN, distinctive build_id/generated so the footer's VALUE binding
+    # (BUILDID -> buildIdText) can be asserted against the source, not just "didn't crash".
     (data / "build.json").write_text(json.dumps(
         {"build_id": "eng1234-src5678-2026-07-05T01:02:03+00:00",
          "engine_commit": "eng1234", "source_commit": "src5678",
@@ -77,7 +77,7 @@ def test_populated_portal_value_binding(tmp_path):
     assert st["q"] == 4.2, st                          # sc[SC.q]
     assert st["dim"] == "2-D", st                      # sc[SC.dim]
 
-    # (b) exports.js CSV row for ST0 — value-binds the EXPORT call site. UX8 (W3b, owner directive) DROPPED
+    # (b) exports.js CSV row for ST0 - value-binds the EXPORT call site. DROPPED
     # six columns from the station CSV (quality, quality_basis, remote_ref, dimensionality, software, file),
     # leaving a lean identity/geometry/rights row of 19 columns. Column order per the exports.js header:
     #   0 ausmt_id 1 station 2 country 3 organisation 4 survey 5 lat 6 lon 7 type 8 components 9 n_periods
@@ -89,10 +89,10 @@ def test_populated_portal_value_binding(tmp_path):
     assert len(ex) == 19, ("expected 19 CSV columns after the W3b drop, got %d: %r" % (len(ex), ex))
     assert ex[12] == "", ex                             # source_doi (Demo Survey has no DOI)
     assert ex[13] == "10.25914/mtjg-jp22", ex           # timeseries_collection_doi <- TS_COLLECTION.doi
-    # C6: the licence column travels with the exported row (sourced from SMETA[survey].lic). A
+    # The licence column travels with the exported row (sourced from SMETA[survey].lic). A
     # wrong/missing SMETA.lic deref (or dropping the column) makes this FAIL, not just crash.
     assert ex[16] == "CC-BY-4.0", ex                    # license        <- SMETA["Demo Survey"].lic
-    # C46: the deed URL (resolved via the canonical LICENSES.urls table, not a startsWith guess) and the
+    # The deed URL (resolved via the canonical LICENSES.urls table, not a startsWith guess) and the
     # rendered attribution line ride at the END so rights travel with a shared CSV. Demo Survey declares
     # no attribution.statement and no dates, so the attribution falls back to the org with no year.
     assert ex[17] == "https://creativecommons.org/licenses/by/4.0/", ex  # license_url <- canonical table
@@ -103,7 +103,7 @@ def test_populated_portal_value_binding(tmp_path):
         assert gone not in ex, ("dropped CSV field %r still present: %r" % (gone, ex))
 
     # (c) C12: the footer's build-id text is a pure function of BUILDID (loaded from build.json) —
-    # value-binds main.js's buildIdText() against the KNOWN fixture build_id/generated above, so a
+    # Value-binds main.js's buildIdText against the KNOWN fixture build_id/generated above, so a
     # wrong slice/format (or a dropped build.json fetch) fails here, not just "no crash".
     mb = re.search(r"^BUILDID_TEXT (\".*\")\s*$", out, re.M)
     assert mb, "smoke.js did not emit BUILDID_TEXT:\n" + out

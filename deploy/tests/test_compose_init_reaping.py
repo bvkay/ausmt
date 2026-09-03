@@ -1,8 +1,8 @@
 """Every compose service that runs a healthcheck must set `init: true`.
 
-Real incident (2026-08-18, VPS front door): the frontdoor container's 30-second BusyBox-wget
+Real incident: the frontdoor container's 30-second BusyBox-wget
 healthcheck left exactly one Z-state process per interval, because Caddy runs as PID 1 and
-never wait()s for orphaned children. Measured live: container up 48 minutes = 96 intervals =
+never waits for orphaned children. Measured live: container up 48 minutes = 96 intervals =
 97 zombies, tripping doctor.sh's zombie threshold (warn at 50). `init: true` puts Docker's
 tini in front as PID 1, which reaps; nothing else about the service changes.
 

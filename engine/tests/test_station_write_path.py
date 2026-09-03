@@ -1,4 +1,4 @@
-"""D7: where the promoted station.json is published, and why it lands in BOTH trees.
+"""Where the promoted station.json is published, and why it lands in BOTH trees.
 
 station.json is a public contract served at /data/products/<slug>/<station>/station.json, so it must
 exist at the served root of every build, exactly as survey-metadata.json does. Until the promotion it

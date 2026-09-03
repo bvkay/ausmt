@@ -1,4 +1,4 @@
-"""C7: PID chain completion. survey.yaml -> SMETA must carry the organisation ROR, project RAiD,
+"""PID chain completion. survey.yaml -> SMETA must carry the organisation ROR, project RAiD,
 the time-series collection PID, and a non-'(n.d.)' citation year/version.
 
 FAILS IF (pre-fix): SMETA has no 'raid' key;
@@ -28,7 +28,7 @@ def _load():
 
 
 def test_smeta_carries_no_investigators_facet():
-    """A1 (reader retirement): the pid-survey fixture still carries the retired lead_investigator key on
+    """The pid-survey fixture still carries the retired lead_investigator key on
     disk, and the SMETA it produces carries NO investigators facet at all. Pre-change the facet was built
     from the retired key, so this key was present and populated."""
     sm = bp.survey_meta_from_yaml(_load())
@@ -88,7 +88,7 @@ def test_citation_version_from_smeta_version():
 
 
 def test_smeta_year_start_end_from_dates():
-    """S3: modeller year-range filter. FAILS IF (pre-fix): SMETA has no 'year_start'/'year_end' keys
+    """Modeller year-range filter. FAILS IF (pre-fix): SMETA has no 'year_start'/'year_end' keys
     at all (KeyError) -- the pid-survey fixture declares dates: {start: 2020, end: 2021}."""
     sm = bp.survey_meta_from_yaml(_load())
     assert sm["year_start"] == 2020, sm

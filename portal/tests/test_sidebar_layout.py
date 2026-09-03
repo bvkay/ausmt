@@ -1,20 +1,20 @@
-"""UX7a rail-layout STRUCTURE pins (Invariant 10) for index.html.
+"""Rail-layout STRUCTURE pins (Invariant 10) for index.html.
 
 jsdom does no layout, so the runtime interaction driver cannot observe scroll geometry; these are static
 STYLE + DOM-order assertions parsed from index.html. Each states its failure criterion, and each is proven
-non-vacuous against the pre-UX7a source (the exact thing it forbids USED to be present):
+non-vacuous against the pre-source (the exact thing it forbids USED to be present):
 
   * A4 tree flex-fill/scroll — the base .tree rule must flex-grow and scroll internally, with NO fixed
-    height and NO resize handle. Pre-UX7a it was `height:300px;max-height:60vh;resize:vertical` and had no
+    height and NO resize handle. Pre-it was `height:300px;max-height:60vh;resize:vertical` and had no
     `flex:` — so this rule FAILS on the old CSS.
   * A4 flex chain — #browseMode and #treeSection must carry `min-height:0` (so the tree can shrink below
-    its content and scroll instead of pushing the rail into an outer scrollbar). Pre-UX7a neither selector
+    its content and scroll instead of pushing the rail into an outer scrollbar). Pre-neither selector
     existed — FAILS on the old CSS.
   * A2 collapse anchored bottom — #sidebarCollapse must be the LAST child of <aside class="filters">
-    (after both mode panes) and .railcollapse must carry `margin-top:auto`. Pre-UX7a the button was the
+    (after both mode panes) and .railcollapse must carry `margin-top:auto`. Pre-the button was the
     FIRST child and had no margin-top — FAILS on the old markup/CSS.
   * A3 collections above the tree — #collGroup must appear BEFORE #treeSection/#tree in source order.
-    Pre-UX7a there was no #collGroup at all — FAILS on the old markup.
+    Pre-there was no #collGroup at all - FAILS on the old markup.
 """
 import re
 from pathlib import Path
@@ -60,8 +60,8 @@ def test_tree_flex_fills_and_scrolls_internally():
 
 
 def test_tree_has_no_fixed_height_or_resize_handle():
-    # FAILS if the retired fixed-height / resizable-box treatment reappears (it would break flex-fill and
-    # could reintroduce the outer rail scrollbar). Non-vacuous: pre-UX7a .tree carried both.
+    # FAILS if the retired fixed-height / resizable-box styling reappears (it would break flex-fill and
+    # Could reintroduce the outer rail scrollbar). Non-vacuous: pre-tree carried both.
     body = _rule(_style(_html()), ".tree")
     # a fixed/capped height (height:300px, max-height:60vh, ...) must be gone; min-height:0 is allowed.
     assert re.search(r"(?<!min-)height:\s*[0-9]", body) is None, \
@@ -84,7 +84,7 @@ def test_browse_and_tree_flex_chain_has_min_height_zero():
 
 def test_collapse_control_is_last_child_of_the_rail():
     # FAILS if #sidebarCollapse is not the LAST element in the rail (i.e. anchored below both mode panes).
-    # Non-vacuous: pre-UX7a the button was the FIRST child, ahead of #modeSeg.
+    # Non-vacuous: pre-the button was the FIRST child, ahead of #modeSeg.
     aside = _aside_block(_html())
     i_btn = aside.find('id="sidebarCollapse"')
     i_sel = aside.find('id="selectMode"')
@@ -110,7 +110,7 @@ def test_collapse_control_css_anchors_to_bottom():
 
 def test_collections_block_is_above_the_tree_in_source():
     # Complements the runtime driver pin (interaction_test.js C2): statically, #collGroup must appear
-    # BEFORE #treeSection/#tree. Non-vacuous: pre-UX7a there was no #collGroup element at all.
+    # BEFORE #treeSection/#tree. Non-vacuous: pre-there was no #collGroup element at all.
     html = _html()
     i_cg = html.find('id="collGroup"')
     i_ts = html.find('id="treeSection"')
@@ -119,12 +119,12 @@ def test_collections_block_is_above_the_tree_in_source():
     assert i_cg < i_ts, "#collGroup must appear before #treeSection (collections render above the tree)"
 
 
-# ---- UX9 item 3: equal-width nav min-width token ----------------------------------------------------
+# ---- equal-width nav min-width token ----------------------------------------------------
 
 def test_nav_button_min_width_fits_collections_label_across_pages():
-    """UX9 (item 3). The equal-width header nav (nav button on index, nav a on about) must reserve
+    """The equal-width header nav (nav button on index, nav a on about) must reserve
     min-width:112px so the widest label ("Collections", ~109.7px) is not clipped, mirrored across both
-    pages. FAILS if either page falls back below 112px. Non-vacuous: the pre-UX9 token was 92px, which
+    pages. FAILS if either page falls back below 112px. Non-vacuous: the pre-token was 92px, which
     this asserts against — a red-proof on the old CSS trips here."""
     idx = _rule(_style(_html()), "nav button")
     assert idx is not None, "index.html lost its `nav button{...}` rule"

@@ -6,8 +6,8 @@ divergence and slug pins are mutation-provable (the red-then-green evidence is i
 report). The rollup/near-dup PARITY pins import the engine's own _group_collections /
 _near_duplicate_collection_ids and assert the runner AGREES with them for a real fixture tree — so the
 console can never disagree with the portal. Importing the engine pulls the mt_metadata extractor
-stack, so those two pins skipif on a stack-less env (the gateway CI lane), with the one skip reason the
-gateway lane's tripwire allows; every OTHER pin here is engine-free and RUNS in that lane.
+stack, so those two pins skipif on a stack-less env (the gateway CI workflow), with the one skip reason the
+gateway module's tripwire allows; every OTHER pin here is engine-free and RUNS in that module.
 """
 from __future__ import annotations
 
@@ -26,8 +26,8 @@ _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
 
 def _has_engine_stack() -> bool:
     """True when the engine's build_portal is importable — it needs the mt_metadata extractor stack
-    (the module imports _mtm at load). The stack-less gateway CI lane legitimately lacks it, so the
-    two parity pins skip there with the gateway lane's one allowed reason."""
+    (the module imports _mtm at load). The stack-less gateway CI workflow legitimately lacks it, so the
+    two parity pins skip there with the gateway workflow's one allowed reason."""
     return importlib.util.find_spec("mt_metadata") is not None and _ENGINE_DIR.is_dir()
 
 
@@ -100,7 +100,7 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
     _mk(sroot, "lone", name="Lone Survey", collection=None)  # no block -> absent from the rollup
 
     group_collections, _ = _engine_collections()
-    # Build surveys_meta EXACTLY as build_portal does: sorted(iterdir()) order, keyed by y['name'].
+    # Build surveys_meta EXACTLY as build_portal does: sorted(iterdir) order, keyed by y['name'].
     surveys_meta = {}
     for d in sorted((sroot / "surveys").iterdir()):
         y = pyyaml.safe_load((d / "survey.yaml").read_text(encoding="utf-8"))

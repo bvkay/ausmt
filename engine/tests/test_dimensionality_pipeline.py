@@ -72,7 +72,7 @@ def test_provenance_params_match_science_source_of_truth():
 def test_provenance_names_extractor_version():
     """Named software carries its version: the provenance block cites mt_metadata as the
     extractor, so it must also state WHICH mt_metadata (and mth5, when importable) — from
-    lib_versions(), the C32 single source, so station.json provenance can never disagree with
+    lib_versions, the C32 single source, so station.json provenance can never disagree with
     mtcat.json's mt_metadata_version. FAILS if the software dict regresses to python-only."""
     import build_portal as bp   # noqa: PLC0415
     sw = bp._build_prov("mt_metadata")["software"]

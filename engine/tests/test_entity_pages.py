@@ -1,4 +1,4 @@
-"""Tier-3 entity landing pages (the discoverability lane).
+"""Tier-3 entity landing pages (the discoverability workflow).
 
 The path-URL contract published /surveys/<slug>, /stations/<ausmt_id> and /collections/<id> as the
 permanent URL shapes; tier 1 301'd them into the SPA's hash routes, which crawlers cannot see, so
@@ -12,7 +12,7 @@ whole-tree sweep audits the pages like every other emitter.
 Emission rides --sitemap-base exactly as the sitemap does: same flag, same URL base, and the two
 outputs must agree (every sitemap URL has a page; no orphan pages), so the sitemap can never
 advertise a 404. Without the flag no pages directory exists and the build is byte-identical to a
-pre-lane build.
+earlier build.
 """
 import json
 import re
@@ -68,7 +68,7 @@ def _build(surveys, out, *, sitemap=True, extra=()):
 
 def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     """FAILS IF pages are emitted without --sitemap-base (a flagless build must stay byte-identical
-    to a pre-lane build), a sitemap URL lacks a page (an advertised 404), a station URL appears in
+    to a earlier build), a sitemap URL lacks a page (an advertised 404), a station URL appears in
     the sitemap (station pages exist for the URL contract but are deliberately unadvertised: 2,625
     templated documents would read as thin content and dilute the pages that carry the ranking),
     or a station PAGE goes missing (the served /stations/<id> shape would 404)."""
@@ -86,7 +86,7 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     # The hub URLs resolve to pages/<kind>/index.html; the static portal pages are shipped with
     # the portal image, not built here, so they are checked against the portal tree WHERE ONE IS
     # VISIBLE. The engine image ships /app/portal holding only src/contract.js (designed topology,
-    # engine.Dockerfile), so this leg mirrors the build's own _portal_dir() gate: no checkout, no
+    # Engine.Dockerfile), so this leg mirrors the build's own _portal_dir gate: no checkout, no
     # static-page assertions, exactly as the build reconciliation behaves.
     portal_dir = build_portal._portal_dir()
     for u in entity_locs:
@@ -107,7 +107,7 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
 
 
 def test_the_sitemap_advertises_the_hubs_and_the_static_pages(tmp_path):
-    """The sitemap is the crawler's map of the site, and until this lane it carried only the root
+    """The sitemap is the crawler's map of the site, and until this module it carried only the root
     and the entity pages: the two hub pages did not exist, and about/releases/add-survey were
     substantive linked documents that no crawler was pointed at. FAILS IF any of the five is
     missing, or if one of them carries a <lastmod> (none of them has an honest change signal, and
@@ -148,7 +148,7 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     the two, so an advertised 404 could leave the build silently. This drives a synthetic mismatch
     (the emitter writes every page, then one survey page is removed behind the build's back) and
     requires the build to REFUSE. FAILS IF the build completes with a sitemap URL that has no
-    page - on the pre-lane engine it completes with rc=0."""
+    page - on the earlier engine it completes with rc=0."""
     surveys = _make_survey(tmp_path)
     real = build_portal.pages.emit_pages
 
@@ -162,7 +162,7 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
     # The house convention for a self-check the build fails: ERROR lines on stderr, then return 2.
     # An operator running `make rebuild-data` gets a message rather than a traceback, and the
-    # reconciliation now reads like every other gate in main() (LANE-CONTRACT-PAGE-HIERARCHY.md B8,
+    # Reconciliation now reads like every other gate in main (LANE-CONTRACT-PAGE-HIERARCHY.md B8,
     # which flags the RuntimeError this test used to require as the odd one out).
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
                             "--bundle-edi", "--no-validate",
@@ -247,7 +247,7 @@ def test_the_engine_image_layout_is_not_read_as_a_portal_checkout(tmp_path, monk
 
 def test_a_visible_portal_checkout_still_has_its_static_pages_reconciled(tmp_path, monkeypatch):
     """The other side of the same gate: where a REAL portal checkout IS visible (CI, a dev box,
-    the build-products lane), a sitemap URL for a static page the portal does not ship is still a
+    the build-products workflow), a sitemap URL for a static page the portal does not ship is still a
     hard error. FAILS IF the image-layout fix turns the static-page leg into a permanent no-op."""
     checkout = tmp_path / "checkout"
     (checkout / "portal").mkdir(parents=True)
@@ -377,13 +377,13 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert "Cite as:" in page and "Kay, B.; Heinson, G." in page, "cite box with initials"
     assert "Magnetotelluric survey &#183; South Australia &#183; Test Org" in page, \
         "the subtitle carries region and organisation"
-    # page nav replaces the CTA (owner ruling: no portal button)
+    # Page nav replaces the CTA: no portal button
     assert "All surveys" in page and "View all stations on the main map" in page
     assert "Open in the interactive portal" not in page
     # maps: the shared-outline minimap always; the footprint zoom for this compact extent
     assert 'aria-label="Survey location in Australia"' in page
     assert 'aria-label="Station grid detail"' in page
-    # stat tiles from the served documents and the ingested runs (owner rulings: a zero tipper
+    # stat tiles from the served documents and the ingested runs (rules: a zero tipper
     # count shows the channels-recorded tile instead; the sample rate is a tile; the dipole
     # summary is gone - the station table carries dipoles)
     assert "period coverage" in page
@@ -426,7 +426,7 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
         card = out / "pages" / "og" / "pages-r.png"
         assert card.is_file() and card.read_bytes()[:2] == b"\x89P", "referenced card must exist"
 
-    # NO dash glyphs and NO ticks anywhere on the page (owner rulings)
+    # NO dash glyphs and NO ticks anywhere on the page
     assert "–" not in page and "—" not in page, "no en/em dashes"
     assert "✓" not in page and "&#10003;" not in page, "no tick glyphs"
 
@@ -995,7 +995,7 @@ def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations
 
 
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
-    """The entity link graph, all of it at once. Before this lane a survey page had NO way back to
+    """The entity link graph, all of it at once. Before this module a survey page had NO way back to
     the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
     site-wide, including the 404 page's own recovery link), and nothing on any survey page named
     the collection it belongs to - so the graph ran collection -> surveys only and the collection
@@ -1055,7 +1055,7 @@ def test_the_embargoed_survey_page_says_so(tmp_path):
     out = _build(surveys, tmp_path / "out")
     page = (out / "pages" / "surveys" / "pages-e.html").read_text(encoding="utf-8")
     assert "under embargo" in page and "2027-02-01" in page
-    # The DISCOVERY layer still renders (owner ruling): the catalogue is discovery-universal, so
+    # The DISCOVERY layer still renders: the catalogue is discovery-universal, so
     # an embargoed survey's page shows its station locations and band even while the science
     # products are withheld.
     minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S)
@@ -1201,7 +1201,7 @@ def _pages_module():
 
 
 def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
-    """No placeholder panels (owner ruling): a survey with raw archives gets the packed-raw card and
+    """No placeholder panels: a survey with raw archives gets the packed-raw card and
     per-station sizes; levels the register does not carry render nothing at all.
 
     Level names and badges follow portal/src/state.js TS_LEVELS as of the download-cards commit
@@ -1399,7 +1399,7 @@ def test_bundle_labels_speak_the_manifest_vocabulary():
 
 
 def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
-    """The maps pass (owner rulings 2026-08-28): the footprint zoom carries a scale bar, dots
+    """The maps pass: the footprint zoom carries a scale bar, dots
     speak the portal's type palette, a sub-degree survey's minimap draws the ring only, and the
     collection page carries the member-coloured scatter with its legend.
 
@@ -1536,7 +1536,7 @@ def test_activity_scope_identifiers_render_as_project_links():
 # B9 R1 to R3: how a period, a range and a licence PRINT (presentation only)
 # ==================================================================================================
 def test_the_period_display_helper_holds_the_owners_worked_examples():
-    """The owner's worked examples, verbatim, as the specification of ONE shared display helper.
+    """The worked examples, verbatim, as the specification of ONE shared display helper.
 
     A period is a stored float and a printed string, and the two are not the same object. The stored
     value stays exactly as the served documents carry it; what a reader sees is rounded to two
@@ -1552,7 +1552,7 @@ def test_the_period_display_helper_holds_the_owners_worked_examples():
 
 
 def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
-    """The owner's revised range separator: the word "to" becomes a spaced hyphen-minus, and the
+    """The revised range separator: the word "to" becomes a spaced hyphen-minus, and the
     glyph ban is unchanged (no en dash, no em dash, no tick glyphs). Asserted on a REAL page across
     the three range slots a survey renders: acquisition years, the period-coverage tile and the
     station table's own period cell, plus the station page's period row."""
@@ -1582,7 +1582,7 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
 
 
 def test_the_licence_reads_in_human_form_in_chrome_and_keeps_its_identifier_in_json_ld():
-    """R3. The SPDX identifier is the machine's name for the licence and "CC BY 4.0" is the
+    """The SPDX identifier is the machine's name for the licence and "CC BY 4.0" is the
     reader's; the page owes the reader the second and the machine the first.
 
     R3's second clause is "the same pattern for the other recognised CC ids", so the coverage owed
@@ -1686,7 +1686,7 @@ def test_collection_prose_renders_as_paragraphs_with_a_subheading(tmp_path):
 
 
 def test_collection_prose_wraps_the_generated_member_cards(tmp_path):
-    """FAULT 3. The owner's marker '[Survey cards/list]' sits INSIDE Member surveys, so the prose
+    """FAULT 3. The marker '[Survey cards/list]' sits INSIDE Member surveys, so the prose
     wraps the generated roll-call rather than replacing it: what a member survey is comes BEFORE the
     cards, and the classification list comes AFTER them.
 

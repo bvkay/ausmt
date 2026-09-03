@@ -162,7 +162,7 @@ def test_access_level_flip_lands_in_yaml(tmp_path):
             assert r.status_code == 200
             after = (pkg / "survey.yaml").read_text(encoding="utf-8")
             assert "level: embargoed" in after
-            # FIX 3: the ISO date is double-quoted (a bare 2027-01-01 would be retyped to
+            # FIX 3: the ISO date is double-quoted (a bare would be retyped to
             # datetime.date by the PyYAML readers downstream).
             assert 'embargo_until: "2027-01-01"' in after
     run(_body())
@@ -283,7 +283,7 @@ def test_preflight_dirty_tree_refuses(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# graceful 500 (this lane): an OSError below the PublishError layer inside _commit_edit returns a clean,
+# Graceful 500 (this module): an OSError below the PublishError layer inside _commit_edit returns a clean,
 # actionable 500 instead of an uncaught exception / raw stack trace, and nothing commits.
 # --------------------------------------------------------------------------------------------------
 def test_commit_edit_oserror_returns_clean_500(tmp_path):
@@ -314,7 +314,7 @@ def test_commit_edit_oserror_returns_clean_500(tmp_path):
 
 
 def test_commit_edit_oserror_inside_publish_rolls_surveys_live_back(tmp_path, monkeypatch):
-    """Lane H / G5 at the app seam. The test above replaces _commit_edit_blocking wholesale, so it never
+    """G5 at the app seam. The test above replaces _commit_edit_blocking wholesale, so it never
     enters publish.commit_metadata_edit and never asks whether the working tree was restored. This drives
     the REAL blocking commit with a failing survey.yaml write. FAILS IF the OSError escapes publish.py:
     write_bytes truncates before it writes, so surveys-live is left with a half-written survey.yaml and
@@ -445,7 +445,7 @@ def test_curator_queue_links_to_editor(tmp_path):
 # exact ModuleNotFoundError ship-blocker the review caught).
 # --------------------------------------------------------------------------------------------------
 def test_default_seam_flows_through_the_file_queue(tmp_path):
-    # proven failing 2026-07-06 (pre-fix HEAD): the default seam spawned
+    # Proven failing (pre-fix HEAD): the default seam spawned
     # `sys.executable -m gateway.runner.edit` — in deployment that child runs on the GATEWAY image's
     # Python, which has no ruamel, so every real edit 500'd. Here the app is built with
     # edit_runner=None (the DEFAULT seam) and a background thread runs the runner's claim/process

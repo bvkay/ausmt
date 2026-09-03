@@ -1,6 +1,6 @@
 """The static data API, documented in depth, and the death of the fictional REST design.
 
-DOCS WAVE, STAGE 3. Until this lane, docs/docs/interoperability/api-overview.md and api-reference.md
+DOCS WAVE, STAGE 3. Until this module, docs/docs/interoperability/api-overview.md and api-reference.md
 specified a REST service that has never existed at any AusMT deployment: `/v1/collections`,
 `/v1/surveys`, `/v1/stations`, an authentication section, a "Future Directions" section. Both pages
 carried an "Implementation status" callout admitting the whole design was unbuilt, and then spent
@@ -16,14 +16,14 @@ Four groups of claim.
 
 (1) NO FICTION SURVIVES. The `/v1` resource list, the `/api/...` paths and the "planned interface /
     not yet implemented" framing must be gone from all three pages. Scanning for them is cheap and it
-    is the one regression that would undo the whole lane. RED-proven: run against HEAD~1 and both
+    is the one regression that would undo the whole workflow. RED-proven: run against HEAD~1 and both
     api-overview.md and api-reference.md report hits.
 
 (2) THE FORMAT VOCABULARIES MATCH THE MANIFEST SCHEMA. Docs that name a format the build cannot emit
     send a reader looking for artifacts that do not exist. The per-station formats and the bundle
     formats are compared against engine/schema/manifest.schema.json's own enums, both directions, so
     adding a format to the schema without documenting it fails here too. The comparison is over
-    (token, granularity) PAIRS because `mth5` is in both enums since the tier-1 lane: a files[] row is
+    (token, granularity) PAIRS because `mth5` is in both enums since the tier-1 workflow: a files[] row is
     one station, a bundles[] row is the whole survey, and a token-keyed check could not tell the two
     apart or notice that only one of them had been documented.
 
@@ -31,7 +31,7 @@ Four groups of claim.
     that documents them reproduces the column table. A stale table is the worst kind of documentation
     bug: a reader takes an index, gets the wrong column, and the result looks plausible. The table is
     compared name-by-name and index-by-index against contract/columns.json, which is the single
-    source the generated maps come from. Public-surface audit (2026-08-22): catalogue.json is
+    source the generated maps come from. Public-surface audit: catalogue.json is
     portal-internal, not a contract, so the table lives on developer/data-files.md (the engine-to-
     portal positional contract) and the public data reference no longer carries it; the pin follows
     the table.
@@ -63,7 +63,7 @@ MANIFEST_SCHEMA = REPO / "engine" / "schema" / "manifest.schema.json"
 MTCAT_SCHEMA = REPO / "engine" / "schema" / "mtcat.schema.json"
 COLUMNS = REPO / "contract" / "columns.json"
 # A per-station products tree the REAL build emitted (an open survey with an exact and a generalised
-# station, plus an embargoed one), committed so this stackless lane can pin the docs against emitted
+# Station, plus an embargoed one), committed so this stackless workflow can pin the docs against emitted
 # DOCUMENTS rather than against emitter source text.
 STATION_PRODUCTS = ROOT / "tests" / "fixtures" / "station-products"
 STATION_SCHEMA = REPO / "engine" / "schema" / "ausmt-station.schema.json"
@@ -219,7 +219,7 @@ def test_the_data_files_page_says_the_rows_are_positional_and_names_the_map():
 
 
 def test_the_public_reference_documents_no_portal_internal_document():
-    """Public-surface audit (2026-08-22): the only public metadata contracts are mtcat.json (with its
+    """Public-surface audit: the only public metadata contracts are mtcat.json (with its
     schema routes) and station.json, with survey-metadata.json to come; manifest.json is the download
     index. catalogue.json, sci.json, tf.json, surveys.json, collections.json, build.json,
     build_provenance.json and coord_policy.json are portal-internal and documented only under
@@ -269,12 +269,12 @@ def test_embargo_is_documented_as_omission_not_as_an_access_error():
 
 
 def test_the_withheld_station_record_is_documented_as_the_emitter_writes_it():
-    """station.json IS written for a withheld station (a stub carrying the access state), and
+    """Station.json IS written for a withheld station (a stub carrying the access state), and
     dimensionality.json is NOT written at all. Both halves are pinned to EMITTED DOCUMENTS, because a
     doc that swapped them would send a consumer's loop into a 404 it treats as a transport failure.
 
     The evidence is fixtures/station-products/, a per-station products tree the REAL build emitted. This
-    lane installs no engine stack, so the emitter cannot run here; a grep for a source literal pinned
+    workflow installs no engine stack, so the emitter cannot run here; a grep for a source literal pinned
     the emitter's TEXT, which survives no refactor. The emitter's own live gate is the engine suite's
     C1c build (engine/tests/test_access_gate.py), which asserts the same two facts over a real build."""
     held = STATION_PRODUCTS / "withheld-survey" / "SPHELD"
@@ -297,7 +297,7 @@ def test_the_withheld_station_record_is_documented_as_the_emitter_writes_it():
 def test_the_committed_products_tree_still_matches_the_station_contract():
     """Emitted output can go stale against the contract it illustrates, so the fixture is tied to the
     artifact: each document carries the required set its own branch declares in
-    engine/schema/ausmt-station.schema.json. A plain-JSON read, since this lane installs no validator;
+    engine/schema/ausmt-station.schema.json. A plain-JSON read, since this module installs no validator;
     portal-ci triggers on engine/schema/**, so a schema change that renamed a required key fails here
     rather than leaving the pins above resting on a stale tree."""
     branches = {b["title"]: b["required"]
@@ -400,7 +400,7 @@ def test_the_documented_mtcat_facets_exist_in_the_schema():
 # ---------------------------------------------------------------- voice charter
 
 def test_no_absolute_portal_host_on_the_pages_this_lane_wrote():
-    """Owner ruling (reference-grade lane): every reference to the portal becomes a path under the
+    """Every reference to the portal becomes a path under the
     portal root, so a page cannot go stale when the public name moves. Runnable examples set a BASE
     variable and join the site-relative path onto it. FAILS if an absolute portal URL comes back on any
     of the three pages, which is exactly the regression the DNS cutover would expose.

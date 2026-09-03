@@ -1,4 +1,4 @@
-"""C12: scripts/verify.py --data-dir mode — validate an EXISTING build output dir's mtcat.json +
+"""Scripts/verify.py --data-dir mode - validate an EXISTING build output dir's mtcat.json +
 manifest.json against their schemas + the manifest's on-disk integrity, WITHOUT rebuilding. This is
 what deploy/Makefile's rebuild-data runs inside the container after build-runner writes a fresh
 builds/<timestamp> dir: the default (self-building) verify.py invocation would just re-build a SECOND

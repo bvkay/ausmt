@@ -13,7 +13,7 @@ Load-bearing pins here:
   * SHELL PRESENCE: the rail (Stage-1 surfaces only, no Collections) + context bar (drift chip with
     the server-rendered published HEAD + Request-rebuild) render on every curator page.
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ custom_local_note: "keep me byte-for-byte"
 """
 
 
-# SIDEBARMERGE (owner ruling 2026-07-24): a survey carrying EVERY merged-away section (organisation +
+# SIDEBARMERGE: a survey carrying EVERY merged-away section (organisation +
 # instruments under Core fields; lead + principal under Investigators; identifiers + related_identifiers +
 # time_series under Identifiers & PIDs), each with intra-section comments and a RETIRED/legacy key
 # (instruments[].pid, time_series.collection_pid) so a merged-form edit's diff-minimality and the
@@ -109,7 +109,7 @@ def _diff_changed(text: str) -> list[str]:
 
 
 def _section_html(body: str, key: str) -> str:
-    """The rendered HTML of ONE hub Metadata section block. HUB-SINGLE-SAVE (2026-08-14): the sections
+    """The rendered HTML of ONE hub Metadata section block. HUB-SINGLE-SAVE: the sections
     are <section> blocks inside ONE form, so a block ends at </section> (it used to end at </form>).
     Splitting on the wrong terminator would swallow every following section and quietly hollow out the
     per-section assertions built on this helper."""
@@ -386,7 +386,7 @@ def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
             assert 'name="l_related_identifiers_0_identifier"' in form_html
             assert "10.25914/existing-doi" in form_html                          # existing typed row prefilled
             assert 'name="o_identifiers"' in form_html and 'name="o_related_identifiers"' in form_html
-            # Plain-language guidance (the heart of the owner complaint) is present in the panel.
+            # Plain-language guidance is present in the panel.
             assert "Where does it go?" in form_html
             assert "Derived from (this data was processed from it)" in form_html  # human relation label
             assert 'value="IsDerivedFrom"' in form_html                          # exact vocab still POSTed
@@ -434,7 +434,7 @@ def test_hub_consolidated_section_round_trips_both_groups(tmp_path):
 
 
 def test_hub_metadata_tab_single_form_all_sections(tmp_path):
-    """HUB-SINGLE-SAVE STRUCTURE PIN (2026-08-14). The Metadata tab renders a section TOC + ONE form
+    """HUB-SINGLE-SAVE STRUCTURE PIN. The Metadata tab renders a section TOC + ONE form
     carrying EVERY section as a <section> block + ONE commit tray. FAILS IF the tab reverts to a form
     per section (that is exactly what cost the curator a merge job / version bump / preview / confirm
     per section), or drops the TOC / the single tray. RED against the pre-change hub, which rendered
@@ -478,7 +478,7 @@ def test_hub_metadata_tab_single_form_all_sections(tmp_path):
 
 
 def test_hub_enter_key_defaults_to_an_unnamed_save(tmp_path):
-    """IMPLICIT-SUBMISSION PIN (2026-08-14). A form's default button — the one Enter in a text field
+    """IMPLICIT-SUBMISSION PIN. A form's default button - the one Enter in a text field
     activates, is the FIRST submit button in tree order. With every section folded into ONE form, any
     NAMED submit anywhere on the tab would become that default and Enter in a text field would post an
     extra field nobody asked for. (The retired legacy Convert action was exactly such a button; A2/D7
@@ -492,7 +492,7 @@ def test_hub_enter_key_defaults_to_an_unnamed_save(tmp_path):
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             body = (await client.get("/gateway/curator/survey/hub-survey-2026?tab=metadata")).text
-            # A2 (D7): no named submit is rendered anywhere on the tab any more.
+            # No named submit is rendered anywhere on the tab any more.
             assert "people_convert" not in body
             form = _one_form_html(body)
             first = re.search(r'<button[^>]*type="submit"[^>]*>', form)
@@ -510,7 +510,7 @@ def test_hub_enter_key_defaults_to_an_unnamed_save(tmp_path):
 def test_hub_per_section_submit_is_section_scoped(tmp_path):
     """SECTION-SCOPED PATCH PIN (flow). Submit ONLY the organisation section's widgets (name unchanged,
     ror set) and the preview diff changes organisation WITHOUT rewriting the untouched
-    lead_investigator section. HUB-SINGLE-SAVE (2026-08-14): still the load-bearing pin under the one
+    lead_investigator section. HUB-SINGLE-SAVE: still the load-bearing pin under the one
     combined form — a save now carries every section, and the no-clobber promise rests entirely on
     assemble_section returning _OMIT for a section that round-trips to its o_<section> snapshot.
     FAILS IF a submit leaks a section the curator did not touch into the patch/diff."""
@@ -547,11 +547,11 @@ def test_hub_per_section_submit_is_section_scoped(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# SIDEBARMERGE (owner ruling 2026-07-24) — M1/M2/M3 merged sidebar entries
+# SIDEBARMERGE - M1/M2/M3 merged sidebar entries
 # --------------------------------------------------------------------------------------------------
 def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
     """SIDEBARMERGE IA PIN (M1/M2/M3). The Metadata sidebar collapses to ONE entry per merged group in
-    the owner-ruled order: Core fields (scalars + Organisation + Instruments) / Investigators (Lead +
+    the settled order: Core fields (scalars + Organisation + Instruments) / Investigators (Lead +
     Principal) / Identifiers & PIDs (now incl. Time series levels) / Publications / Funding / Access /
     Attribution & rights / Processing / Collection / CARE governance. The retired standalone entries
     (Organisation, Instruments, Lead investigator, Principal investigators, Time series) are GONE as
@@ -605,7 +605,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
                            'name="l_people_0_role_ProjectLeader"', "Cited authors form the citation"):
                 assert needle in people, f"People & credit form missing {needle}"
             assert ("When a lead investigator is set the portal credits the lead") not in people
-            # A2 (D7): the legacy Convert notices are GONE. The survey still carries both retired flat
+            # The legacy Convert notices are GONE. The survey still carries both retired flat
             # keys on disk; the editor models them with NOTHING, so they are never shown and never
             # patched (byte-preserved as unmodelled keys).
             assert "people_convert" not in people
@@ -821,7 +821,7 @@ def test_hub_identifiers_edit_preserves_time_series_legacy_key(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# HUB-SINGLE-SAVE (2026-08-14) — one save across every section; the JS-hidden spare rows
+# HUB-SINGLE-SAVE - one save across every section; the JS-hidden spare rows
 # --------------------------------------------------------------------------------------------------
 def _hub_form_fields(body: str) -> dict:
     """The exact name/value pairs a browser would submit for the hub's ONE metadata form. Isolated by
@@ -840,7 +840,7 @@ def _one_form_html(body: str) -> str:
 
 
 def test_hub_single_save_spans_two_sections_in_one_merge_job(tmp_path):
-    """HUB-SINGLE-SAVE COMBINED-SAVE PIN (2026-08-14). The curator edits TWO sidebar sections — Core
+    """HUB-SINGLE-SAVE COMBINED-SAVE PIN. The curator edits TWO sidebar sections - Core
     fields (a top-level scalar) and Access (the access map) — and clicks Save ONCE. The whole hub form
     is submitted as a browser would submit it, producing exactly ONE merge job whose patch carries BOTH
     sections and exactly ONE version bump (1.0.0 -> 1.0.1).
@@ -911,7 +911,7 @@ def test_hub_single_save_spans_two_sections_in_one_merge_job(tmp_path):
 
 
 def test_hub_spare_rows_carry_the_marker_and_editor_js_hides_them(tmp_path):
-    """SPARE-ROW MARKER PIN (2026-08-14). The server still renders the no-JS spare blank rows (a
+    """SPARE-ROW MARKER PIN. The server still renders the no-JS spare blank rows (a
     deliberate degradation invariant) but stamps them data-spare-row="1", and editor.js hides exactly
     those on init. The rows a curator actually has — and the template editor.js clones for +Add — must
     NOT carry the marker, or a real row (or every JS-added row) would render invisible.
@@ -964,7 +964,7 @@ def test_hub_spare_rows_carry_the_marker_and_editor_js_hides_them(tmp_path):
 
 
 def test_hub_combined_save_field_error_keeps_other_sections_values(tmp_path):
-    """COMBINED-SAVE ERROR PIN (2026-08-14). A per-field parse failure in section B (a malformed ORCID
+    """COMBINED-SAVE ERROR PIN. A per-field parse failure in section B (a malformed ORCID
     in People & credit) re-renders the HUB Metadata tab with the error beside its owning section AND
     section A's typed-but-unsaved values intact — nothing the curator entered anywhere in the one form
     is discarded, and they stay on the tab they were editing.

@@ -1,4 +1,4 @@
-"""The serve-path tuning pins (2026-08-28 load analysis, AusMT_2026/PORTAL-LOAD-PERF-2026-08-28.md).
+"""The serve-path tuning pins.
 
 The measured defects these pins guard against coming back:
 
@@ -174,7 +174,7 @@ def test_frontdoor_snippet_validates(tmp_path):
 # ---- doctor: the relay tripwire -------------------------------------------------------------------
 
 def test_doctor_has_the_tailnet_path_leg():
-    """FAILS IF doctor.sh loses the DERP-relay tripwire. The 2026-08-28 diagnosis found the VPS-box
+    """FAILS IF doctor.sh loses the DERP-relay tripwire. The diagnosis found the VPS-box
     path silently relaying through DERP Sydney (multi-second TTFB outliers, throughput caps); the
     path regressing again must fail the routine doctor run, with the remediation named."""
     text = _DOCTOR.read_text(encoding="utf-8")

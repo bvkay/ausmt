@@ -72,7 +72,7 @@ def _make_tree(tmp_path: Path, *, source_commit: str | None, build_id: str = "bi
 
     # build.json lives at the BUILD ROOT (current/build.json): the engine writes `out/build.json`
     # and Caddy's handle_path strips the /data URL prefix before the filesystem. The first install
-    # (2026-07-08) failed because BOTH the script and this fixture assumed current/data/build.json —
+    #  failed because BOTH the script and this fixture assumed current/data/build.json -
     # a self-consistent test that validated the script against its own wrong assumption. The layout
     # here is now pinned to the ENGINE's write site by test_build_json_path_matches_engine_layout.
     site = data / "site-data" / "current"
@@ -158,8 +158,7 @@ def _commit_tracked_survey(tree: dict, name: str = "tracked-survey") -> None:
 
 
 def _leave_untracked_survey(tree: dict, name: str = "test-2026") -> Path:
-    """Leave an UNTRACKED survey dir under surveys-live/surveys/<name>/ (the incident-2026-07-11 leftover:
-    never `git add`ed, so a push can never remove it, yet the filesystem-enumerating build serves it)."""
+    """Leave an UNTRACKED survey dir under surveys-live/surveys/<name>/."""
     d = tree["surveys"] / "surveys" / name
     d.mkdir(parents=True, exist_ok=True)
     (d / "survey.yaml").write_text("version: 1\n", encoding="utf-8")
@@ -167,17 +166,16 @@ def _leave_untracked_survey(tree: dict, name: str = "test-2026") -> Path:
 
 
 # --------------------------------------------------------------------------------------------------
-# Untracked-survey-dir guard (#15, incident 2026-07-11). The build enumerates the FILESYSTEM under
+# Untracked-survey-dir guard. The build enumerates the FILESYSTEM under
 # surveys/, so a leftover UNTRACKED dir is served though git can never remove it. reconcile.sh must
 # REFUSE the rebuild and record a distinct, dir-naming refusal state. RED-then-green pins.
 # --------------------------------------------------------------------------------------------------
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_untracked_survey_dir_refuses_rebuild(tmp_path):
-    """surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is NOT
+    """Surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is NOT
     invoked (no build), the status action is 'untracked_blocked' naming the offending dir, and the
-    script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway (shim marker appears — the
-    exact 2026-07-11 'served for a day' bug), or the refusal state does not name the dir, or it exits 0
+    script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway, or the refusal state does not name the dir, or it exits 0
     and hides the misconfiguration."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")  # built != HEAD => would otherwise rebuild
     _commit_tracked_survey(tree)
@@ -401,7 +399,7 @@ def test_ff_pull_advances_then_rebuilds(tmp_path):
 
 
 def test_build_json_path_matches_engine_layout():
-    """CROSS-ARTIFACT PIN (the 2026-07-08 incident): the script's BUILD_JSON path and the engine's
+    """CROSS-ARTIFACT PIN: the script's BUILD_JSON path and the engine's
     write site must agree. The engine writes build.json at the BUILD ROOT (`out / "build.json"` in
     build_portal.py); Caddy's handle_path strips /data before the filesystem, so the /data/build.json
     URL maps to that same root file. FAILS IF: the script re-grows a data/ segment, or the engine
@@ -480,8 +478,8 @@ def test_missing_data_dir_fails_early(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="directory write-deny not enforceable via chmod on Windows")
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_log_dir_exists_but_unwritable_fails_before_building(tmp_path):
-    """logs/ EXISTS but is not writable (an ownership regression — `mkdir -p` alone would pass) =>
-    fail before invoking the build, action=failed, rc=1, with the ownership-prep hint. FAILS IF: the
+    """logs/ EXISTS but is not writable (aship regression - `mkdir -p` alone would pass) =>
+    fail before invoking the build, action=failed, rc=1, with the briefship-prep hint. FAILS IF: the
     writability probe is dropped and the failure only surfaces at the build redirect with no hint
     (review L1)."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
@@ -504,7 +502,7 @@ def test_log_dir_exists_but_unwritable_fails_before_building(tmp_path):
 def test_state_dir_unwritable_fails_early_and_loud(tmp_path):
     """An unwritable gateway state dir (the missing one-time ownership prep) => the run fails EARLY
     with one actionable message and rc=1, BEFORE any sync/build. FAILS IF: the pass half-runs (shim
-    invoked) or exits 0, hiding the misconfiguration (the 2026-07-08 scattered-errors symptom)."""
+    invoked) or exits 0, hiding the misconfiguration."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     state = tree["state"]
     state.chmod(0o555)
@@ -564,8 +562,7 @@ def test_lock_held_second_run_is_silent_noop(tmp_path):
 def test_status_file_readable_by_gateway_uid(tmp_path):
     """The status file must be group/other-readable: its CONSUMER is the gateway container (uid
     10002) reading through the shared state dir, not the operator who wrote it. FAILS IF: the
-    symlink-safe mktemp write ships its 0600 default again (the 2026-07-08 panel regression — the
-    file existed but the panel said 'no reconcile status yet')."""
+    symlink-safe mktemp write ships its 0600 default again."""
     tree = _make_tree(tmp_path, source_commit="placeholder")
     head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
     (tree["site"] / "build.json").write_text(json.dumps(
@@ -693,7 +690,7 @@ def test_force_full_rebuild_flag_sets_cache_refresh(tmp_path):
 
 
 # ===================================================================================================
-# 2026-08-11 incident: systemd's TimeoutStartSec SIGTERMed a 60-minute-plus rebuild once an hour.
+#  incident: systemd's TimeoutStartSec SIGTERMed a 60-minute-plus rebuild once an hour.
 # The script had no signal handler and the Makefile prunes only after a SUCCESSFUL swap, so every
 # killed attempt (a) wrote no status, leaving the curator panel showing the last CLEAN outcome and the
 # loop guard unarmed, and (b) abandoned its half-written builds/<ts> forever.
@@ -724,7 +721,7 @@ def _seed_builds(tree: dict, names: list[str], served: str) -> Path:
 
 def test_prune_runs_on_entry_even_when_the_pass_fails(tmp_path):
     """PRUNE-ON-ENTRY. Stale build dirs are collected at the START of every pass, so a RUN OF FAILURES
-    cannot leak disk — the exact 2026-08-11 shape, where an hourly killed rebuild left ~0.5 GB behind
+    cannot leak disk - the exact shape, where an hourly killed rebuild left ~0.5 GB behind
     each time and the Makefile's own prune (inside the swap step) was never reached.
     FAILS IF a failing pass leaves more than KEEP_BUILDS build dirs behind, or prunes nothing at all."""
     tree = _make_tree(tmp_path, source_commit="aaaaaaa")
@@ -785,7 +782,7 @@ def test_sigterm_mid_build_records_failed_status(tmp_path):
     """SIGNAL TRAP. A pass killed mid-build (systemd TimeoutStartSec, or an operator stop) must still
     write reconcile-status.json with action=failed, naming the log and saying it was terminated.
     Without it the panel keeps showing the last clean outcome and the loop guard never arms, which is
-    how the 2026-08-11 hourly retry loop stayed invisible for hours.
+    how the hourly retry loop stayed invisible for hours.
     FAILS IF no status is written, if the action is not `failed`, or if the detail does not say the run
     was terminated. Driven through a shell wrapper so a REAL SIGTERM is delivered on this box too,
     rather than skipping to CI."""
@@ -824,7 +821,7 @@ def test_sigterm_mid_build_records_failed_status(tmp_path):
     assert "TimeoutStartSec" in tail, "the detail must point at the likely cause (the unit's timeout)"
 
 
-# ---- kernel OOM kill named by name (incident 2026-08-15) --------------------------------------------
+# ---- kernel OOM kill named by name --------------------------------------------
 # The engine build was OOM-killed by the kernel five nights running and every one reached the operator
 # as "rebuild FAILED, see log tail" while the cause sat in `journalctl -k`. A failed rebuild must ask
 # the kernel journal for ITS OWN build window and, when a kill is there, say so by name. Driven through

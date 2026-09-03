@@ -293,7 +293,7 @@ def test_placeholders_are_absent_and_nothing_is_null_or_empty():
 
 
 def test_served_flag_withholds_no_class(monkeypatch):
-    """D8: the emitter gates nothing class-wise on the serve state; the two documents are identical."""
+    """The emitter gates nothing class-wise on the serve state; the two documents are identical."""
     y = _full_yaml(access={"level": "embargoed", "embargo_until": "2027-02-01"})
     open_doc, held_doc = _doc(y, served=True), _doc(y, served=False)
     assert open_doc == held_doc
@@ -338,7 +338,7 @@ def test_inferred_review_and_confirm_markers_never_reach_the_document(tmp_path):
     doc = _doc(y)
     text = bp._jdump(doc)
     assert "INFERRED-REVIEW" not in text and "[CONFIRM]" not in text
-    # D11: the marked values are curated facts and emit as such
+    # The marked values are curated facts and emit as such
     assert doc["subjects"] == [{"code": "370602", "scheme": "ANZSRC-FoR-2020"}]
     assert doc["creators"] == [{"name": "A. Person", "name_type": "person"}]
     assert doc["relationships"] == [{"identifier": "10.25914/bzd5-n780", "identifier_type": "DOI",
@@ -521,7 +521,7 @@ def test_defaults_build_emits_exactly_the_minimal_key_set_under_the_served_root(
 
 
 def test_d8_every_class_is_emitted_for_open_embargoed_and_metadata_only_alike(tmp_path):
-    """D8: no new withholding. The 3-survey corpus (open + embargoed + metadata_only), each curating
+    """No new withholding. The 3-survey corpus (open + embargoed + metadata_only), each curating
     every class: documents for all three, every class present on all three, no formats or distribution
     key anywhere, and the slug set equals mtcat's surveys[].survey_id."""
     pytest.importorskip("mt_metadata")
@@ -598,7 +598,7 @@ _BAD_ACCESS_YAML = _MIN_YAML.replace("slug: min-survey", "slug: bad-survey").rep
 
 
 def test_loud_skip_records_the_slug_and_verify_fails(tmp_path):
-    """D20: a survey the REAL validator FAILs is skipped by the build (exit 0, the rest builds), the
+    """A survey the REAL validator FAILs is skipped by the build (exit 0, the rest builds), the
     slug is recorded in build_report.json surveys_skipped_validation, and scripts/verify.py FAILs on
     the non-empty list so `make rebuild-data` never swaps a build that silently lost a survey."""
     pytest.importorskip("mt_metadata")

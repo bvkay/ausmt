@@ -5,7 +5,7 @@ second always-on bundle (EMTF-XML zip) beside the EDI zip, and re-labels the fla
 TRANSFER FUNCTIONS ONLY (it holds TFs, never time series — matching the engine's <slug>-tf.h5 file).
 
 This boots the REAL portal modules in jsdom (tools/bundle_tiles_test.js) against a synthetic MANIFEST
-and drives surveyBundleTiles(). It FAILS if:
+and drives surveyBundleTiles. It FAILS if:
 - a served survey does not render all three tiles with the right urls/labels;
 - the MTH5 tile does not say "transfer functions" (or implies "time series");
 - a survey with no bundle rows (embargoed/withheld) renders anything but the empty state;

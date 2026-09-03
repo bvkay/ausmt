@@ -88,7 +88,7 @@ def test_curator_survey_related_block_and_doi_badge(tmp_path):
                                       "relation": "IsDerivedFrom", "custodian": "NCI"}],
              "instrument_pid": "10.82388/bt6orvhn"}
     station, story, card = _render(tmp_path, extra)
-    # SURFACE MOVED (survey-drawer lane, ruling 4): the identifiersHtml rollup left the survey story, which
+    # SURFACE MOVED: the identifiersHtml rollup left the survey story, which
     # is now the six-slot data-level grid. The rollup itself is UNCHANGED and still renders on the STATION
     # drawer, so its pins assert there; the survey-side pins below assert the grid carries the same facts.
     assert "Related identifiers:" in station, "the Related identifiers block did not render:\n" + station
@@ -108,13 +108,13 @@ def test_curator_survey_related_block_and_doi_badge(tmp_path):
     assert 'href="https://doi.org/10.25914/sv5r-zw68"' in story, \
         "the unmapped identifier lost its link on the survey grid:\n" + story
     assert "NCI" in story, "the custodian repository tag is missing from the survey grid:\n" + story
-    # The instruments stay on the survey drawer as ONE compact footer line under the grid (owner ruling 4).
+    # The instruments stay on the survey drawer as ONE compact footer line under the grid.
     assert 'class="dl-instr"' in story, "the instruments footer line is missing from the survey drawer:\n" + story
     assert 'href="https://doi.org/10.82388/bt6orvhn"' in story, \
         "the platform PID is missing from the instruments footer line:\n" + story
     # The six fixed slots are present and unrecorded (this fixture records no levelled identifier at all).
     assert "0 of 6 recorded" in story, "the survey grid header count is wrong:\n" + story
-    # R8: the station format-availability DOI badge is dropped (dataset-DOI presence is conveyed by the
+    # The station format-availability DOI badge is dropped (dataset-DOI presence is conveyed by the
     # maturity star + identifiers block). The survey-card DOI badge remains and lights "ok" for a
     # typed-DOI-only survey (the typed DOI satisfies the provenance-chain reading).
     assert "✓ DOI" in card, "survey-card DOI badge is not 'ok' for a typed-DOI-only survey:\n" + card
@@ -143,7 +143,7 @@ def test_no_identifier_survey_no_block_no_doi(tmp_path):
     station, story, card = _render(tmp_path, {})   # no dataset_doi, no related_identifiers
     assert "Related identifiers:" not in story, "the block rendered for a survey with no typed relations:\n" + story
     assert "Platform/instrument PID:" not in story, "the instrument PID line rendered when absent:\n" + story
-    # R8: no station DOI badge at all; the survey-card DOI badge still reads "no" for a DOI-less survey.
+    # No station DOI badge at all; the survey-card DOI badge still reads "no" for a DOI-less survey.
     assert "✗ DOI" in card, "survey-card DOI badge is not 'no' for a survey with no DOI anywhere:\n" + card
     assert "✓ DOI" not in station and "✗ DOI" not in station, \
         "R8: the station Format availability block must no longer carry a DOI badge:\n" + station

@@ -1,6 +1,6 @@
 """Deploy preflight (deploy/scripts/preflight.sh) — the untracked-survey-dir guard (#15).
 
-Incident 2026-07-11: an UNTRACKED leftover dir (`test-2026`) under the box's surveys-live checkout was
+Incident: an UNTRACKED leftover dir (`test-2026`) under the box's surveys-live checkout was
 SERVED for a day, because the engine build enumerates the FILESYSTEM under surveys/, not git — so a
 `git rm`/push can never remove what was never tracked, and the reconcile drift chip read "current"
 honestly-but-misleadingly. preflight now catches the same drift on a hand-inspection, LOUDLY, before a
@@ -72,7 +72,7 @@ def _run_preflight(data_dir: Path) -> subprocess.CompletedProcess:
     import os
     env = dict(os.environ)
     env["AUSMT_DATA_DIR"] = str(data_dir)
-    # OWNER etc. unset — the other sections FAIL harmlessly; we only read the untracked line. Portal
+    # The OWNER variable and its siblings unset - the other sections FAIL harmlessly; we only read the untracked line. Portal
     # profile (the default): the untracked check runs for BOTH profiles, so no need to pass "gateway".
     return subprocess.run([_SH, str(_SCRIPT)], capture_output=True, text=True, env=env)
 
@@ -80,7 +80,7 @@ def _run_preflight(data_dir: Path) -> subprocess.CompletedProcess:
 def test_preflight_reds_on_untracked_survey_dir(tmp_path):
     """RED PIN. A surveys-live/surveys/ with an UNTRACKED leftover dir must make preflight print the
     incident-naming FAIL line and name the dir — a rebuild would SERVE it though git cannot remove it.
-    FAILS IF: preflight passes an untracked leftover (the shipped-blind 2026-07-11 state), or the FAIL
+    FAILS IF: preflight passes an untracked leftover, or the FAIL
     line does not name the offending dir."""
     data = _make_tree(tmp_path, leave_untracked=True)
     r = _run_preflight(data)

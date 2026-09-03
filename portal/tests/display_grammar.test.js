@@ -37,7 +37,7 @@ ok(typeof fmtPeriod === "function", "fmtPeriod loaded from state.js");
 ok(typeof fmtRange === "function", "fmtRange loaded from state.js");
 ok(typeof licHuman === "function", "licHuman loaded from state.js");
 
-// ---- R1: the period display helper, the owner's worked examples VERBATIM -----------------------
+// ---- R1: the period display helper, the worked examples VERBATIM -----------------------
 // The same seven pairs the engine suite asserts on _fmt_period. Under 100 a period reads to two
 // significant figures with trailing zeros stripped; at or above 100 it is a thousands-separated
 // integer; it is NEVER an exponent, whatever the magnitude.
@@ -46,7 +46,7 @@ for (const [value, shown] of [[5.33333, "5.3"], [0.005012, "0.005"], [9.6e-05, "
   eq(fmtPeriod(value), shown, "R1 worked example " + JSON.stringify(value));
 ok(fmtPeriod(9.6e-05).indexOf("e") < 0, "R1: exponent notation must never reach a rendered slot");
 
-// TIE VECTORS. Not in the owner's list, and the reason the JS twin cannot simply call toFixed:
+// TIE VECTORS. Not in the list, and the reason the JS twin cannot simply call toFixed:
 // Python rounds an exact .5 tie to the EVEN neighbour and JS rounds it away from zero, so a 1.25 s
 // period printed "1.3" in the workspace beside "1.2" on the survey page. These are the values where
 // the two runtimes' default tie rules disagree, pinned as literals on both sides of the parity.
@@ -61,7 +61,7 @@ eq(fmtPeriod("not a number"), "-", "R1: an unparseable period is a plain hyphen"
 eq(fmtPeriod(0), "0", "R1: zero prints as zero");
 
 // ---- R2: the range separator ------------------------------------------------------------------
-// The owner's revised ruling: a numeric range in UI chrome reads as a SPACED HYPHEN-MINUS. Not an
+// The revised rule: a numeric range in UI chrome reads as a SPACED HYPHEN-MINUS. Not an
 // en dash, not an em dash, not the word "to".
 eq(fmtRange(2016, 2021), "2016 - 2021", "R2: a year range takes the spaced hyphen");
 eq(fmtRange(fmtPeriod(5), fmtPeriod(100000)), "5 - 100,000", "R2: a period range takes the spaced hyphen");

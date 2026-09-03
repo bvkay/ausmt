@@ -3,15 +3,15 @@
 The portal's multi-file export marks its own file requests with a query flag so the server-log
 aggregator can tell a drag-selected bulk export from a single station download. That flag is a
 CROSS-SUBSYSTEM CONSTANT: portal/src/exports.js writes it and deploy/scripts/aggregate_stats.py reads
-it, and the two lanes of CI never run each other's suites. Change the token on one side and the split
+it, and the two workflows of CI never run each other's suites. Change the token on one side and the split
 degenerates silently -- every bulk export starts counting as single, forever, with nothing red.
 
-So the token is pinned HERE, in the portal lane (which gates portal/** and docs/docs/**), and mirrored
-in deploy/tests (which gates deploy/** and gateway/**). Whichever side is edited, its own lane fails.
+So the token is pinned HERE, in the portal workflow (which gates portal/** and docs/docs/**), and mirrored
+in deploy/tests (which gates deploy/** and gateway/**). Whichever side is edited, its own workflow fails.
 
 The disclosure is pinned in the same module for the same reason: the flag is the ONE thing the portal
 deliberately puts into the access log, the public analytics page is where that is disclosed, and
-docs/docs/** triggers this lane. A change that adds a label without disclosing it, or removes the
+docs/docs/** triggers this module. A change that adds a label without disclosing it, or removes the
 disclosure while the label stays, fails here.
 
 Pure stdlib + a regex over committed sources. No Node, no network, no skip.

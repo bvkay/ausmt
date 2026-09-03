@@ -82,7 +82,7 @@ def test_a_head_latitude_sign_run_is_silent_not_fatal(tmp_path):
 # --------------------------------------------------------------------------------------------
 
 def test_the_custodian_file_reads_and_yields_the_coordinate_it_states():
-    """R5, the whole point. FAILS IF the reader still refuses the doubled minus: that is what keeps
+    """The whole point. FAILS IF the reader still refuses the doubled minus: that is what keeps
     this station out of the corpus today."""
     tf = mtm.read(REFLAT)
     loc = tf.station_metadata.location
@@ -101,7 +101,7 @@ def test_the_collapse_is_recorded_as_parse_provenance():
 
 
 def test_the_custodian_bytes_are_never_touched():
-    """D1: the conditioning lives on a temporary copy that is destroyed inside the read."""
+    """The conditioning lives on a temporary copy that is destroyed inside the read."""
     before = REFLAT.read_bytes()
     mtm.read(REFLAT)
     assert REFLAT.read_bytes() == before

@@ -94,7 +94,7 @@ def test_published_status_pages_say_not_yet_served(tmp_path):
 
 def test_commit_carries_no_submitter_email(tmp_path):
     # THE PII guarantee for publish (house rule / design §8): the submitter email appears in NO git
-    # argument. proven failing 2026-07-06: injecting the submitter email into the commit body made
+    # Argument. proven failing: injecting the submitter email into the commit body made
     # this assertion break (verified by patching a leak in).
     async def _body():
         git = FakeGit()
@@ -111,9 +111,9 @@ def test_commit_carries_no_submitter_email(tmp_path):
 
 def test_git_runner_env_scrubs_secrets(tmp_path, monkeypatch):
     # review #6: the env handed to git must NOT carry AUSMT_SUBMIT_KEY / AUSMT_CURATOR_KEYS (a hook
-    # could read them). Failure criterion: fails if either secret var is present in scrubbed_env().
-    # proven failing 2026-07-06: real_git_runner passed env=None → git inherited os.environ including
-    # both secrets; scrubbed_env() drops them.
+    # Could read them). Failure criterion: fails if either secret var is present in scrubbed_env.
+    # Proven failing: real_git_runner passed env=None → git inherited os.environ including
+    # Both secrets; scrubbed_env drops them.
     monkeypatch.setenv("AUSMT_SUBMIT_KEY", "submit-secret")
     monkeypatch.setenv("AUSMT_CURATOR_KEYS", "curator1:curator-secret")
     monkeypatch.setenv("PATH", "/usr/bin")  # a benign var that MUST survive
@@ -124,7 +124,7 @@ def test_git_runner_env_scrubs_secrets(tmp_path, monkeypatch):
 
 
 def test_blocking_fail_refuses_approve_409(tmp_path):
-    # proven failing 2026-07-06: disabling has_blocking_fail (if False:) let an approve on a FAIL
+    # Proven failing: disabling has_blocking_fail (if False:) let an approve on a FAIL
     # submission transition to PUBLISHING and run git (verified earlier).
     async def _body():
         git = FakeGit()
@@ -155,7 +155,7 @@ def test_pii_in_preview_blocks_approve(tmp_path):
 def test_foreign_email_in_preview_blocks_approve(tmp_path):
     # review #5: the PII sweep must ALSO fire on a DIFFERENT person's email via the generic pattern,
     # not only the submitter's own. Failure criterion: fails if a package containing a stranger's
-    # email is approvable. proven failing 2026-07-06: the generic _EMAIL_RE was defined but never
+    # Email is approvable. proven failing: the generic _EMAIL_RE was defined but never
     # used — only the submitter-email needle was checked, so a co-author's email sailed through.
     async def _body():
         git = FakeGit()
@@ -173,7 +173,7 @@ def test_foreign_email_in_preview_blocks_approve(tmp_path):
 def test_dirty_checkout_aborts_before_staging(tmp_path):
     # review #2 / design §5 step 1: a dirty surveys-live checkout => pre-flight ABORT, PUBLISH_FAILED,
     # NOTHING staged. Failure criterion: fails if a survey was staged, or if the state is not
-    # PUBLISH_FAILED. proven failing 2026-07-06: with no pre-flight, staging proceeded on a dirty tree
+    # PUBLISH_FAILED. proven failing: with no pre-flight, staging proceeded on a dirty tree
     # and the survey dir appeared under surveys-live before the (unrelated) later steps.
     async def _body():
         git = FakeGit(dirty=True)
@@ -194,7 +194,7 @@ def test_commit_fail_rolls_back_and_fails_closed(tmp_path):
     # review #1: a failure at the COMMIT step (e.g. a commit-hook rejection) — which was OUTSIDE the
     # old try/except — must roll surveys-live back and land PUBLISH_FAILED. Failure criterion: fails
     # if the state is not PUBLISH_FAILED or no rollback reset happened.
-    # proven failing 2026-07-06: with checkout/add/commit outside the guard, a commit failure raised
+    # Proven failing: with checkout/add/commit outside the guard, a commit failure raised
     # straight out of _publish_blocking → the staged tree stayed and no reset was issued.
     async def _body():
         git = FakeGit(fail_on={"commit": (1, "pre-commit hook rejected the change")})
@@ -227,7 +227,7 @@ def test_rollback_restores_original_branch(tmp_path):
     # so a naive rollback that reset the current branch would corrupt it. Pre-flight requires main —
     # so we start on main but assert the rollback checked out the captured branch explicitly.
     # Failure criterion: fails if _rollback did not force-checkout the captured branch.
-    # proven failing 2026-07-06: the old _rollback only reset; it never re-checked-out the captured
+    # Proven failing: the old _rollback only reset; it never re-checked-out the captured
     # branch, so a mid-publish branch switch (checkout main then a failed push) left HEAD on main
     # rather than the captured pre-branch.
     async def _body():
@@ -272,7 +272,7 @@ def test_retry_from_publish_failed(tmp_path):
 def test_confirm_overwrite_exact_token(tmp_path):
     # review #7: confirm_overwrite must be an EXACT affirmative token, default DENY. "0" must NOT
     # enable overwrite. Failure criterion: fails if confirm_overwrite=0 overwrote an existing survey.
-    # proven failing 2026-07-06: with bool(confirm_overwrite), the string "0" was truthy → the guard
+    # Proven failing: with bool(confirm_overwrite), the string "0" was truthy → the guard
     # was bypassed and the existing survey was replaced.
     async def _body():
         git = FakeGit()
@@ -306,7 +306,7 @@ def test_overwrite_requires_confirmation(tmp_path):
 
 
 def test_reconciliation_moves_stuck_publishing(tmp_path):
-    # proven failing 2026-07-06: without _reconcile_publishing in poll_once, a hand-set PUBLISHING row
+    # Proven failing: without _reconcile_publishing in poll_once, a hand-set PUBLISHING row
     # sat at PUBLISHING across poll passes forever (verified by disabling the reconcile step).
     async def _body():
         async with app_client(tmp_path) as (_client, _app, gw, cfg):
@@ -320,7 +320,7 @@ def test_reconciliation_moves_stuck_publishing(tmp_path):
 
 
 def test_slug_charset_validation():
-    # The trailing-newline cases pin task #18: an anchored `$` matches before a final newline, so a
+    # The trailing-newline cases pin an anchored `$` matches before a final newline, so a
     # `.match` gate accepted "slug\n" and it reached a path/branch name — `.fullmatch` rejects it.
     for bad in ("../evil", "a/b", "with space", "", ".hidden", "a" * 200,
                 "good-slug_1.2\n", "good-slug_1.2\n\n"):

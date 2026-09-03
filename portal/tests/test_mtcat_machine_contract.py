@@ -6,7 +6,7 @@ nothing here checks that the copy reads well; every assertion checks that a stat
 TRUE of the artifact it describes:
 
   * the schema a page links must be the one the build actually copies beside the data (a documented path
-    nobody serves is the failure mode this whole lane exists to avoid);
+    nobody serves is the failure mode this whole workflow exists to avoid);
   * the version and the metadata licence About states must equal the values their single sources produce
     (the MTCAT_VERSION constant in contract/generate.py, which the schema's displayed title must match,
     and the emitter's metadata_license default), not values typed by hand;
@@ -152,7 +152,7 @@ def _emitter_default(key: str) -> str:
 
     schema_version is deliberately NOT one of these any more, and asking for it here now fails: it is
     read from the schema (see _schema_version) because a literal default is exactly the defect this
-    lane kept re-finding. schema_url and metadata_license stay literals because neither is derived from
+    workflow kept re-finding. schema_url and metadata_license stay literals because neither is derived from
     anything, so a literal is where they honestly live."""
     m = re.search(rf'p\.get\(\s*"{re.escape(key)}"\s*,\s*"([^"]+)"\s*\)',
                   BUILDER.read_text(encoding="utf-8"))
@@ -187,7 +187,7 @@ def _constant_schema_version() -> str:
 # ---------------------------------------------------------------- About's surviving paragraph
 
 def test_about_keeps_the_machine_contract_paragraph_with_its_schema_link():
-    """The owner's stage-2 ruling: About keeps the quickstart plus the machine-contract line with its
+    """The stage-2 rule: About keeps the quickstart plus the machine-contract line with its
     schema link. FAILS if the paragraph is dropped, if it stops linking the served schema, or if it stops
     linking the catalogue document the schema describes."""
     para = _about_contract()
@@ -211,7 +211,7 @@ def test_about_points_at_the_field_guide_it_no_longer_carries():
 
 
 def test_the_documented_schema_path_is_the_one_the_build_serves():
-    """The failure mode this lane exists to prevent: a documented path nobody serves. About links
+    """The failure mode this module exists to prevent: a documented path nobody serves. About links
     data/mtcat.schema.json, so (a) that file must exist in the repo and (b) the build must copy it to the
     served data directory under exactly that name."""
     assert SCHEMA.is_file(), f"{SCHEMA} does not exist, so the documented link resolves to nothing"

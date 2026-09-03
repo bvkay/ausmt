@@ -11,7 +11,7 @@ differs:
   * it nulls the impedance-derived SCIENCE row too, which the tipper mask has no equivalent for,
     because _edi_science back-derives rho/phase FROM Z when the source carries no RHO/PHS blocks -
     so an unmasked flat placeholder publishes a smooth power law, a flat 45-degree phase and a
-    non-zero quality score, which is the thing the ruling exists to stop;
+    non-zero quality score, which is the thing the rule exists to stop;
   * and part of it has to run at READ time, because a fabricated impedance block whose length
     disagrees with the section's NFREQ makes the whole file unreadable, tipper and all.
 
@@ -86,7 +86,7 @@ def _rows(out):
 
 
 # ---------------------------------------------------------------------------------------------
-# 1. what the placeholder publishes with NO declaration: the state the ruling is about.
+# 1. what the placeholder publishes with NO declaration: the state the rule is about.
 # ---------------------------------------------------------------------------------------------
 
 def test_an_undeclared_placeholder_publishes_derived_science_from_a_fabricated_impedance(tmp_path):

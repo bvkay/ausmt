@@ -2,7 +2,7 @@
 
 WHY THE MAP AND NOT THE CHROME. The header's AuScope org-mark left every surface: the relationship
 is stated in words, in the footer and in About's "Who enables AusMT" section, and a symbol repeated
-in a corner said nothing either of those does not. The map is the exception the owner ruled, for a
+in a corner said nothing either of those does not. The map is the exception the rule is, for a
 reason the chrome could not give: it is the surface people screenshot into talks and reports, and a
 screenshot carries no footer with it. A corner mark is attribution that travels with the image.
 
@@ -166,7 +166,7 @@ def test_the_mark_sits_below_leaflets_controls_and_popups():
 
 
 def test_no_other_surface_on_the_site_draws_the_colour_icon():
-    """The ruling is map-only, and every surface that could grow a copy is named. FAILS IF another
+    """The rule is map-only, and every surface that could grow a copy is named. FAILS IF another
     portal document, the engine's pages sheet (which draws the generated collection page's own
     footprint mark) or the SPA's collection scatter starts naming the file.
 

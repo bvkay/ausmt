@@ -1,6 +1,6 @@
 """Deploy preflight (deploy/scripts/preflight.sh) — the shared-group permissions time-bomb check.
 
-C43 S2b-i (B7): preflight gained a gateway-profile check that catches the incident-2026-07-11
+C43 S2b-i (B7): preflight gained a gateway-profile check that catches the incident-
 lockout BEFORE it happens — a `surveys-live/.git` whose entries have lost the group-write bit means
 the gateway (uid 10002) is creating foreign-owned, non-g+w object dirs the operator can no longer
 `git pull`/gc, so the checkout silently rots behind GitHub.
@@ -11,7 +11,7 @@ FAIL/PASS line in stdout (an independent observable), never the overall exit cod
 failure criterion (Invariant 10).
 
 POSIX mode bits: the whole file skips on Windows (no meaningful group-write bit — the existing
-reconcile/backup suites use the same platform reason). On the gateway-ci ubuntu lane it RUNS with
+reconcile/backup suites use the same platform reason). On the gateway-ci ubuntu workflow it RUNS with
 nothing skipped, so the skip-tripwire needs no allow-list entry. git is NOT required: the fixtures
 build a bare `.git/` dir by hand and set `core.sharedRepository` via `.git/config` text, so the pin
 drives the perm-bit logic without a git binary.
@@ -72,7 +72,7 @@ def _make_tree(tmp_path: Path, *, git_entries_group_writable: bool,
 def _run_preflight(data_dir: Path) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["AUSMT_DATA_DIR"] = str(data_dir)
-    # OWNER etc. are unset — the other sections FAIL harmlessly; we only read the .git-perm line.
+    # The OWNER variable and its siblings are unset - the other sections FAIL harmlessly; we only read the .git-perm line.
     return subprocess.run([_SH, str(_SCRIPT), "gateway"], capture_output=True, text=True, env=env)
 
 

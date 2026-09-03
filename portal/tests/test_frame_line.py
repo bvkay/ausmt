@@ -2,8 +2,8 @@
 
 The station drawer shows a terse, honest frame line when the engine served a station's impedances AS
 STORED in a declared acquisition frame (frame policy v3: the engine never de-rotates). This boots the
-REAL portal modules in jsdom (tools/frame_line_test.js) and drives the pure frameLineText() plus the
-lazy loadStationFrameLine() fetch/inject/stale-guard path.
+REAL portal modules in jsdom (tools/frame_line_test.js) and drives the pure frameLineText plus the
+lazy loadStationFrameLine fetch/inject/stale-guard path.
 
 It FAILS if:
 - a non-zero declared angle does not render (or a zero/absent/null frame is not silent);

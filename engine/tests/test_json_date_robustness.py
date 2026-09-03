@@ -2,7 +2,7 @@
 
 Root cause: the add-survey form emitted attribution.declared_date as a BARE unquoted ISO date; PyYAML
 safe_load implicit-types a bare ISO date to datetime.date; survey_meta_from_yaml threads the attribution
-block VERBATIM into SMETA; main() serialised surveys.json/mtcat via _jdump (json.dumps with NO default
+block VERBATIM into SMETA; main serialised surveys.json/mtcat via _jdump (json.dumps with NO default
 hook) -> `TypeError: Object of type date is not JSON serializable` -> the whole build crashed and the
 gateway preview quarantined the submission with station_count 0. The served corpus never hit it because
 curator yamls quote their dates; it was UNIVERSAL to form submissions (the licence tick is effectively
@@ -76,7 +76,7 @@ def test_jdump_serialises_date_as_isostring():
 
 
 def test_jdump_still_raises_on_a_genuinely_alien_type():
-    """A non-date/decimal object is a real bug and must still surface as TypeError (never blind-str()ed
+    """A non-date/decimal object is a real bug and must still surface as TypeError (never blind-stred
     into a served product) — that raise is exactly what LAYER 2's per-survey dry-run catches."""
     with pytest.raises(TypeError):
         bp._jdump({"x": object()})
@@ -84,7 +84,7 @@ def test_jdump_still_raises_on_a_genuinely_alien_type():
 
 def test_build_with_unquoted_declared_date_is_green(tmp_path):
     """End-to-end: a survey.yaml carrying a BARE unquoted attribution.declared_date (the exact form
-    emission) builds GREEN and surveys.json carries the date as the STRING "2026-07-25". On origin/main
+    emission) builds GREEN and surveys.json carries the date as the STRING "". On origin/main
     this crashed the entire build (SystemExit) and the gateway quarantined the submission."""
     surveys = tmp_path / "surveys"
     _make_package(surveys, "date-survey",

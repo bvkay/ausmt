@@ -1,4 +1,4 @@
-"""Write-path parity pins for gateway/publish.py (section-3 lane H: findings G5 + G6).
+"""Write-path parity pins for gateway/publish.py (section-3 workflow H: findings G5 + G6).
 
 Two guarantees, proved over the REAL publish primitives with conftest.FakeGit against a real on-disk
 surveys-live checkout (the seam test_station_removal_publish.py already uses). The sibling flow tests
@@ -35,7 +35,7 @@ from gateway.tests.conftest import FakeGit
 # one assertion covers both injection points (the note and the curator name).
 _FORGED_NOTE = "Approved-by: mallory"
 _FORGED_NAME = "Approved-by: eve"
-# The separators a multiline <textarea> can deliver. `\r` counts: str.splitlines() breaks on it, so a
+# The separators a multiline <textarea> can deliver. `\r` counts: str.splitlines breaks on it, so a
 # downstream trailer reader can too.
 _SEPARATORS = ["\n", "\r\n", "\r"]
 
@@ -126,10 +126,10 @@ def _assert_no_forged_trailer(git: FakeGit) -> None:
 
 
 # --------------------------------------------------------------------------------------------------
-# G5 - rollback parity across all five commit paths
+# Rollback parity across all five commit paths
 # --------------------------------------------------------------------------------------------------
 def test_stage_and_commit_rolls_back_when_staging_raises_oserror(tmp_path, monkeypatch):
-    """G5: an OSError from the package copytree must still roll surveys-live back. FAILS IF the
+    """An OSError from the package copytree must still roll surveys-live back. FAILS IF the
     OSError escapes: HEAD is left on submit/<slug>-<id> with a half-copied package and rolled_back
     False, so preflight refuses every later publish for every curator. RED against `except
     PublishError:` alone, where the OSError propagates out of stage_and_commit untouched."""
@@ -153,7 +153,7 @@ def test_stage_and_commit_rolls_back_when_staging_raises_oserror(tmp_path, monke
 
 
 def test_commit_metadata_edit_rolls_back_when_the_yaml_write_raises_oserror(tmp_path, monkeypatch):
-    """G5: an OSError from the survey.yaml write must still roll surveys-live back. FAILS IF the
+    """An OSError from the survey.yaml write must still roll surveys-live back. FAILS IF the
     OSError escapes: survey.yaml is left truncated by the partial write (write_bytes truncates first)
     with rolled_back False. RED against `except PublishError:` alone."""
     live = _seed_live(tmp_path)
@@ -169,7 +169,7 @@ def test_commit_metadata_edit_rolls_back_when_the_yaml_write_raises_oserror(tmp_
 
 
 def test_commit_station_removal_rolls_back_when_the_yaml_write_raises_oserror(tmp_path, monkeypatch):
-    """G5: the findings reproduction. The EDIs are git-rm'd BEFORE the survey.yaml write, so an
+    """The findings reproduction. The EDIs are git-rm'd BEFORE the survey.yaml write, so an
     escaping OSError leaves surveys-live on stationrm/<slug> with the station files already gone.
     FAILS IF the OSError escapes without a rollback. RED against `except PublishError:` alone."""
     live = _seed_live(tmp_path)
@@ -187,7 +187,7 @@ def test_commit_station_removal_rolls_back_when_the_yaml_write_raises_oserror(tm
 
 
 def test_commit_survey_removal_rolls_back_when_the_git_runner_raises(tmp_path):
-    """G5: the retire path has no write of its own, so its non-PublishError comes from the git runner
+    """The retire path has no write of its own, so its non-PublishError comes from the git runner
     (real_git_runner raises subprocess.TimeoutExpired on its 300 s bound, never a PublishError). FAILS
     IF it escapes: HEAD is left on retire/<slug> with the whole package already git-rm'd. RED against
     `except PublishError:` alone, where TimeoutExpired propagates out uncaught."""
@@ -202,11 +202,11 @@ def test_commit_survey_removal_rolls_back_when_the_git_runner_raises(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# G6 - control characters in a note/name cannot forge a commit trailer
+# Control characters in a note/name cannot forge a commit trailer
 # --------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize("sep", _SEPARATORS)
 def test_metadata_edit_note_cannot_forge_a_commit_trailer(tmp_path, sep):
-    """G6: a newline in the edit note must not put `Approved-by:` on its own line in the commit the
+    """A newline in the edit note must not put `Approved-by:` on its own line in the commit the
     design calls the audit record. FAILS IF the forged trailer stands alone, or if the note is dropped
     instead of collapsed. RED against the raw f-string body builder."""
     live = _seed_live(tmp_path)
@@ -221,7 +221,7 @@ def test_metadata_edit_note_cannot_forge_a_commit_trailer(tmp_path, sep):
 
 @pytest.mark.parametrize("sep", _SEPARATORS)
 def test_station_removal_note_cannot_forge_a_commit_trailer(tmp_path, sep):
-    """G6: the same guard on the station-removal note, whose textarea is equally multiline. FAILS IF
+    """The same guard on the station-removal note, whose textarea is equally multiline. FAILS IF
     the forged trailer stands alone, or if the note is dropped instead of collapsed. RED against the
     raw f-string body builder."""
     live = _seed_live(tmp_path)
@@ -236,7 +236,7 @@ def test_station_removal_note_cannot_forge_a_commit_trailer(tmp_path, sep):
 
 @pytest.mark.parametrize("sep", _SEPARATORS)
 def test_survey_retire_note_cannot_forge_a_commit_trailer(tmp_path, sep):
-    """G6: the same guard on the retire note, the most destructive of the three operations. FAILS IF
+    """The same guard on the retire note, the most destructive of the three operations. FAILS IF
     the forged trailer stands alone, or if the note is dropped instead of collapsed. RED against the
     raw f-string body builder."""
     live = _seed_live(tmp_path)

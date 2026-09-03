@@ -4,7 +4,7 @@ The consumer side of the ops floor: the gateway reads ops-status.json SERVER-sid
 reconcile-status.json seam — serve_state.read_ops_status) and renders the first-class serve screen +
 the read-only build-detail view. These pins prove the load-bearing behaviours against INDEPENDENT
 OBSERVABLES (the rendered HTML, the staleness function's boolean, the response status), mirroring
-test_serve_reconcile.py. Async bodies run under conftest.run() (no pytest-asyncio).
+test_serve_reconcile.py. Async bodies run under conftest.run (no pytest-asyncio).
 
 Failure criterion in each docstring (Invariant 10). No new skips — pure gateway stack.
 """
@@ -305,7 +305,7 @@ def test_serve_page_and_build_detail_have_no_inline_js(tmp_path):
 
 
 def test_freshness_chip_is_earned_never_defaulted():
-    """FRESHNESS-CHIP FAIL-CLOSED PIN (architect gate finding, 2026-07-11). 'current' must be
+    """FRESHNESS-CHIP FAIL-CLOSED PIN. 'current' must be
     EARNED — both repos carrying a comparable sha — never reached by fallthrough. With freshness
     data absent/unparseable (schema skew, broken checkout) the chip pills 'unknown', because a
     floor that cannot see the repos must never claim they are current (the incident class was a
@@ -326,7 +326,7 @@ def test_freshness_chip_is_earned_never_defaulted():
 
 
 def test_ops_status_stale_future_timestamp_is_stale():
-    """FUTURE-TIMESTAMP FAIL-CLOSED PIN (verifier finding, 2026-07-11). A generated_at in the
+    """FUTURE-TIMESTAMP FAIL-CLOSED PIN. A generated_at in the
     FUTURE (forward clock step on the box, then the timer dies) must be STALE — a negative age is
     doubt, not freshness; without this, the ops floor would render FRESH cards for the whole skew
     window, the exact silent-staleness the mechanism exists to prevent. FAILS IF a future-dated
@@ -376,7 +376,7 @@ def test_paused_and_pinned_states_render_their_detail():
 
 
 # --------------------------------------------------------------------------------------------------
-# Build memory on the ops floor (incident 2026-08-15: five kernel OOM kills at 13.7 GB, surfaced only as
+# Build memory on the ops floor (incident: five kernel OOM kills at 13.7 GB, surfaced only as
 # "rebuild FAILED"). Two pins: the failed-status block NAMES an OOM kill when reconcile flagged one, and
 # the build inventory shows each build's own high-water mark (build_report.json peak_rss_mib via
 # alert.sh) so the trend is visible before the box runs out.
