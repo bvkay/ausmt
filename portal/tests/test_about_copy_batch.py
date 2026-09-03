@@ -302,20 +302,26 @@ def test_the_submission_section_drops_the_browser_side_reassurances():
 # ---------------------------------------------------------------- (i) documentation, one line
 
 
-def test_the_documentation_section_is_a_single_pointer():
+def test_the_documentation_section_is_two_pointers_and_no_list():
     """The five-bullet topic list is retired: it duplicated the documentation site's own navigation and
-    went stale every time a page was renamed. FAILS if a list comes back, or if the one remaining
-    sentence is not the dictated one."""
+    went stale every time a page was renamed. FAILS if a list comes back, or if the dictated sentence
+    is not the one there.
+
+    IT IS TWO POINTERS NOW, not one. The section took in the route to the citable releases when the
+    #build colophon that had inherited it from the footer was deleted; that page has no other way in
+    from the site. The pin still holds the link set EXACTLY and in order, so a third pointer, or
+    either of these two moving, still fails here."""
     docs = _section("docs")
     flat = _flat(docs)
     assert "<ul>" not in flat and "<li>" not in flat, (
-        "the Documentation section must carry no list; it is a single pointer now")
+        "the Documentation section must carry no list; it is a pair of pointers now")
     assert ("<p>For further information, see the" in flat
             and "AusMT documentation</a>.</p>" in flat), (
-        "the Documentation section must carry the dictated single sentence")
+        "the Documentation section must carry the dictated documentation sentence")
     links = _links(docs)
-    assert links == [("https://ausmt.readthedocs.io/en/latest/", "AusMT documentation")], (
-        f"the Documentation section must carry exactly one link, to the documentation root, got {links}")
+    assert links == [("https://ausmt.readthedocs.io/en/latest/", "AusMT documentation"),
+                     ("releases.html", "releases page")], (
+        f"the Documentation section must carry the documentation root then the releases page, got {links}")
     for retired in ("Standards", "Survey Package", "Download Manifest Schema", "Glossary"):
         assert retired not in flat, f"the retired topic bullet is back: {retired!r}"
 
@@ -378,7 +384,7 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
     docs = _section("docs")
     assert 'href="releases.html"' in docs, (
         "section 8 must link releases.html; it is the page's one entry point")
-    flat = _flat(docs)
+    flat = _flat(re.sub(r"<[^>]+>", "", docs))
     assert ("Quarterly citable snapshots of the corpus are listed on the releases page; each one is "
             "a frozen tree with its own identifier") in flat, (
         "section 8 must say what the releases page holds, in the words the ruling gives")

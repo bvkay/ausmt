@@ -158,12 +158,6 @@
   @container (max-width:1330px){footer .foot-main{order:1;flex:1 1 100%}}
   @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
-  /* The running build's identity. It was the footer's About-this-build popover on five pages until
-     the one-footer ruling; it belongs to the page the popover pointed at, so it is a section here
-     and nowhere else. This page loads config.js and version.js, which is what fills the chip; it
-     deliberately carries NO #buildId, because main.js and data/build.json are not loaded here and
-     that span would sit permanently empty. */
-  #build .ver{display:inline-block;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -233,7 +227,6 @@
     <a href="#howto">What you can do</a><a href="#access">Licence and access</a>
     <a href="#cite">Citing and credit</a><a href="#contribute">Contributing</a>
     <a href="#api">Fetching data via API</a><a href="#docs">Documentation</a>
-    <a href="#build">This build</a>
   </div>
 
   <section id="what">
@@ -242,6 +235,13 @@
     collaborations, supplementary files and ageing legacy archives. AusMT exists to fix that: one national
     catalogue where every transfer function can be found, cited and downloaded with its provenance
     attached.</p>
+    <!-- The colophon's opening paragraph, which was never build identity: it says what AusMT is, so
+         it belongs in the section a reader opens to ask that. The hand-off half is the claim
+         tests/test_about_copy_batch.py holds by this section (a 302 is not hosting, and stating the
+         no-hosting half alone reads as a dead end). -->
+    <p>AusMT is a national MT research infrastructure. It indexes processed transfer functions and
+    their provenance. It doesn't host raw time series; where an archive has verified an openly
+    accessible file, it routes you straight to the archive that does.</p>
     <p>A magnetotelluric transfer function is a processed estimate of the Earth's electromagnetic
     response at a site, derived from measured electric and magnetic field variations. It's the result most
     MT work reuses, and it's what AusMT indexes. For each one the catalogue records which file it came
@@ -316,6 +316,11 @@
       itself freely.</li>
       <li><b>Portal and engine software</b> is Apache-2.0.</li>
     </ul>
+    <!-- The colophon's licence paragraph, in the section that owns the subject. Its trailing "(see
+         Licence and access)" is dropped: the sentence now sits inside Licence and access, so the
+         parenthetical would link this section to itself. -->
+    <p>The portal software is licensed under Apache-2.0. Survey data stays licensed by its
+    custodians.</p>
     <p>Every survey carries one of three access levels:</p>
     <ul>
       <li><code>open</code>: the record and the data files are both served.</li>
@@ -426,23 +431,13 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
     <h2>8 · Documentation</h2>
     <p>For further information, see the
     <a class="link" href="https://ausmt.readthedocs.io/en/latest/">AusMT documentation</a>.</p>
-  </section>
-
-  <!-- The copy the footer's About-this-build popover carried, in the page that popover pointed at.
-       The one-footer ruling took Releases and About this build out of the footer on every surface,
-       so this section is where a reader now answers both of the questions they asked: which build am
-       I looking at, and which frozen snapshots can I cite. The chip is filled by version.js from
-       config.js, both loaded at the foot of this page. -->
-  <section id="build">
-    <h2>This build</h2>
-    <p>AusMT is a national MT research infrastructure. It indexes processed transfer functions and
-    their provenance. It doesn't host raw time series; where an archive has verified an openly
-    accessible file, it routes you straight to the archive that does.</p>
-    <p>The portal software is licensed under Apache-2.0. Survey data stays licensed by its custodians
-    (see <a class="link" href="#access">Licence and access</a>).</p>
-    <p>You are reading the build <span class="ver" data-ver-chip></span>. Quarterly citable snapshots
-    of the corpus are listed on the <a class="link" href="releases.html">releases page</a>; each one
-    is a frozen tree with its own identifier, and the chip above describes the live site instead.</p>
+    <!-- The releases page's ONLY route in. The Releases link left every footer with the one-footer
+         ruling and the #build colophon that inherited it is deleted, so this sentence is what keeps
+         the citable snapshots reachable, and the releases-page pins hold it here. No version chip:
+         the route is what section 8 inherited, not the running build's identity. -->
+    <p>Quarterly citable snapshots of the corpus are listed on the
+    <a class="link" href="releases.html">releases page</a>; each one is a frozen tree with its own
+    identifier.</p>
   </section>
 
 </main>
@@ -460,7 +455,6 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
     <span class="foot-right"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></span>
   </footer>
 <script src="config.js"></script>
-<script src="version.js"></script>
 <!-- api-docs lane: fills the header's corpus-totals block. A SEPARATE FILE, not an inline block: the
      deployed CSP for every page except add-survey.html is script-src 'self' with no 'unsafe-inline'
      (deploy/docker/caddy/Caddyfile, @strictPages), so an inline script here would be blocked in
