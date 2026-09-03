@@ -129,25 +129,14 @@
   .size{color:var(--muted);white-space:nowrap}
   .detail-warn{font-size:13px;color:var(--part)}
 
-  /* One footer, three regions, the grammar index.html carries and every page here repeats: the
-     MTCAT machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
-     AuScope-NCRIS lockup on the RIGHT. The portal ships as classic static pages with no template
-     step and no shared sheet, so these rules are copied rather than shared, the same bargain every
-     other block on this page makes.
+  /* One footer, three regions, the same here as on every other surface: the MTCAT
+     machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
+     AuScope-NCRIS lockup on the RIGHT.
 
-     BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, so a footer set inside a reading
-     column answers for the column it sits in. Below the width the three regions need, the centre
-     takes a row of its own UNDER the two side regions, where it is centred on the footer's axis
-     rather than in the space left over beside the machine-readable link. Below 520px the two side
-     regions no longer share a row either, so every region takes one and aligns left.
-
-     The regions align on their CENTRES, not on a baseline: the lockup is a 28px block beside a line
-     of 12.5px text, and a baseline would hang it off that text's baseline and put its whole height
-     above the row.
-
-     The lockup's width follows its height, so the committed file's own 1919px raster never reaches
-     the page. max-width caps it at its zone in the stacked state; object-fit keeps the mark's
-     proportions wherever the cap bites.
+     THE RULE SET BELOW IS index.html's, character for character with the four colour tokens this page shares. The zone geometry, the two
+     container states and the measured numbers behind them are stated there, once, and
+     tests/test_footer_regions.py holds all seven surfaces identical: an edit here that is not an
+     edit there fails.
 
      THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
      it keeps its own box in flow, so the last line of the page is never hidden under it and the
@@ -158,13 +147,13 @@
      cover most of a phone screen, so it returns to ordinary flow there. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
-  footer .apilink{flex:0 0 auto}
-  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0;font-weight:700}
-  footer .foot-right{flex:1 0 auto;text-align:right}
-  footer .orglogo{display:inline-block;line-height:0}
-  footer .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
-  @container (max-width:1330px){footer .foot-main{order:1;flex:1 1 100%}}
-  @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
+  .fleft{flex:1 1 0;min-width:0}
+  .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
+  .fright{flex:1 1 0;min-width:0;text-align:right}
+  .orglogo{display:inline-block;line-height:0}
+  .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
+  @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
+  @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
 </style>
 </head>
@@ -252,14 +241,14 @@
        body-level footer is a contentinfo landmark. -->
   <footer>
     <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
-    <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a>
+    <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a></div>
     <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the
          one link in the line. The year is a literal, the mechanism every page uses. -->
-    <span class="foot-main">AusMT is enabled by AuScope &middot; <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> &middot; &copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey</span>
+    <div class="fzone fcenter">AusMT is enabled by AuScope &middot; <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> &middot; &copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey</div>
     <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
          image is same-origin and vendored, so stating the relationship takes no runtime dependency
          on the organisation's own host. -->
-    <span class="foot-right"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></span>
+    <div class="fzone fright"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
   </footer>
 <script src="config.js"></script>
 <!-- Separate files, not inline blocks: the deployed CSP for every page except add-survey.html is

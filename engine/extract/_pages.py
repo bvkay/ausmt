@@ -445,7 +445,7 @@ def _footprint_svg(points, *, width=230) -> str:
 
 _CSS = """
   body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
-  main{max-width:840px;width:min(100% - 2.5rem,840px);margin:0 auto;padding:1.6rem 1.25rem 0;flex:1 0 auto}
+  main{max-width:840px;width:min(100% - 2.5rem,840px);margin:0 auto;padding:1.6rem 1.25rem 2.2rem;flex:1 0 auto}
   @media(min-width:1180px){main{max-width:1120px;width:min(100% - 2.5rem,1120px)}}
   a{color:#EF7256}
   code{overflow-wrap:anywhere}
@@ -569,15 +569,32 @@ _CSS = """
      THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and the footer spans the page
      rather than the reading column: it is the page's bottom edge, the same band the Map carries,
      and a footer set inside the 840px measure could not fit the bold acknowledgement on one line
-     at any viewport. Measured, the three regions want 1249px of footer; below that the centre
-     takes a row of its own UNDER the two side regions, where it is centred on the footer's axis
-     rather than in the space left over beside the machine-readable link. Below 500px the two side
-     regions no longer share a row either, so every region takes one and aligns left.
+     at any viewport.
 
-     The regions align on their CENTRES, not on a baseline: the lockup is a 28px block beside two
-     lines of 12.8px text, and a baseline would hang it off the text's baseline and add its whole
-     height above the row. The overrides follow the rules they override; the two tie on specificity
-     and source order wins.
+     THIS IS ONE RULE SET WITH portal/index.html, character for character with the four colour
+     tokens resolved to the literals this tier writes; portal/tests/test_footer_regions.py holds
+     the two halves identical and 404.html with them. Nothing here may be tuned for this tier
+     alone: the numbers below are the widest surface's, and a change to any of them is a change to
+     every surface.
+
+     THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what puts the acknowledgement on the page's
+     axis. Zones that size to their own content leave it centred in the space LEFT OVER beside
+     them, which at 2560px put it 274.66px off the axis on this tier. Two zones of the same width
+     need twice the WIDER one, so one row wants 1457.18px of footer; the query asks the content
+     box, 36px narrower, and fires at or below 1421px. Below 520px of content the two side regions
+     no longer share a row either, so every region takes one and aligns left. min-width:0 is what
+     lets a side zone go under its own content between those two states instead of forcing a wrap;
+     measured across that band the overflow runs into empty space and no zone's ink reaches
+     another's.
+
+     The separation above the footer belongs to main's bottom padding, not to a margin here: the
+     Map's footer is the last child of a column whose body does not scroll, so a margin there would
+     take height from the map itself.
+
+     The regions align on their CENTRES, not on a baseline: the lockup is a block beside two lines
+     of text, and a baseline would hang it off the text's baseline and add its whole height above
+     the row. The overrides follow the rules they override; the two tie on specificity and source
+     order wins.
 
      The lockup's width follows its height, so the committed file's own 1919px raster never reaches
      the page. max-width caps it at the zone in the stacked state, where the row is the footer's
@@ -591,21 +608,22 @@ _CSS = """
      order is stated because a station table's frozen first column declares z-index:2.
 
      Below 560px of VIEWPORT the footer returns to ordinary flow: that is where the three regions
-     stop sharing rows on the widest-footered surface, and a three-row footer would sit over most
-     of a phone screen. It is a viewport query because a container query cannot ask about the
-     container it is declared on.
+     stop sharing rows on the widest-footered surface (measured: the stack engages at a footer of
+     556px), and a three-row footer would sit over most of a phone screen. It is a viewport query
+     because a container query cannot ask about the container it is declared on.
 
      The centre's weight is one declaration on the zone: the whole acknowledgement is bold, the
      anchor with it, and 700 is the sans family's bold. */
-  footer{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding:.7rem 1.25rem 0;font-size:.8rem;color:#8FA3B0;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
-  .fleft{flex:0 0 auto}
-  .fcenter{flex:1 1 auto;min-width:0;text-align:center;font-weight:700}
-  .fright{flex:1 0 auto;text-align:right}
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid #2B3557;font-size:12.5px;color:#8FA3B0;line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
+  footer a{color:#EF7256;text-decoration:none}
+  .fleft{flex:1 1 0;min-width:0}
+  .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
+  .fright{flex:1 1 0;min-width:0;text-align:right}
   .orglogo{display:inline-block;line-height:0}
   .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
-  @container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}
-  @container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}
-  @media(max-width:560px){footer{position:static}}
+  @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
+  @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
+  @media (max-width:560px){footer{position:static}}
 """
 
 
