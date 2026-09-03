@@ -51,3 +51,15 @@ pages to stop the browser's automatic /favicon.ico 404.
 - `protomaps-leaflet.js` (BSD-3-Clause) renders the self-hosted PMTiles basemap inside Leaflet.
   Upstream keeps it in maintenance mode for Leaflet-based projects (their new-project path is
   MapLibre); that suits this portal, which is deliberately Leaflet-based and vendors its stack.
+
+## auscope-ncris-white.png
+
+The AuScope-NCRIS white lockup, the parent-organisation logo the site footer carries on every
+surface. Committed VERBATIM from the AuScope brand kit ("2025 AuScope Logos", file
+`2025 AuScope-NCRIS Logo - White.png`); it is a third-party trademark asset, so it is never
+resized, re-encoded or recoloured here. Display size is CSS alone (`height:28px;width:auto`), which
+is why the committed file keeps its full 1919x325 resolution.
+
+| File | Source | Dimensions | SHA-256 | Size |
+|---|---|---|---|---|
+| `auscope-ncris-white.png` | AuScope brand kit, `2025 AuScope-NCRIS Logo - White.png` | 1919x325 RGBA | `595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6` | 35628 B |
