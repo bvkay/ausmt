@@ -163,6 +163,33 @@
      than it buys attribution, so it is not drawn rather than shrunk. */
   .mapmark{position:absolute;top:32px;right:32px;height:32px;width:auto;z-index:500;pointer-events:none}
   @media(max-width:560px){.mapmark{display:none}}
+  /* THE MAP'S ATTRIBUTION, COLLAPSED TO ONE GLYPH. What the owner asked off the map was the corner
+     LINE and the Leaflet flag and word beside it; the credit itself is a licence term and stays
+     where the map is, because only the layer that is drawing knows which provider to name.
+     src/mapattrib.js wraps Leaflet's own control, mounted with prefix:false, and these rules are
+     the whole of its appearance.
+
+     THE GLYPH IS THE WHOLE CONTROL until a reader asks for the text. It is a real button, so it
+     takes keyboard focus and is announced, and the credit opens on hover, on focus and on click
+     alike; the focus ring is the one every other control on this page carries.
+
+     ABOVE ANYTHING SHARING ITS CORNER when it opens. Leaflet's corner is a stacking context of its
+     own above the legend and the watermark, so those two are already clear of it; the 900 here
+     orders the expanded text above another control placed in the same corner later.
+
+     THE CAP IS WHAT KEEPS IT OFF THE LEGEND. The legend sits bottom-left with a 210px cap and a
+     10px inset, so at 560px of map (the narrowest width this map is drawn at, below which the
+     watermark is not drawn either) 240px of credit plus the glyph still leaves the two apart.
+
+     RULE SET SHARED with add-survey.html character for character, because its three maps wear this
+     same control; tests/test_map_attribution.py holds the two identical. */
+  .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-end;gap:4px}
+  .mapattrib-toggle{flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--text);font-family:var(--sans);font-size:12px;font-style:italic;line-height:1;cursor:pointer}
+  .mapattrib-toggle:hover{border-color:var(--copper)}
+  .mapattrib-toggle:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
+  .mapattrib .leaflet-control-attribution{display:none;float:none;clear:none;margin:0;max-width:240px;padding:3px 7px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--muted);font-size:11px;line-height:1.45;text-shadow:none;box-shadow:none}
+  .mapattrib .leaflet-control-attribution a{color:var(--copper)}
+  .mapattrib.mapattrib-open .leaflet-control-attribution{display:block}
   .hidden{display:none!important}
   h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:8px}
   fieldset{border:0}
@@ -1134,6 +1161,7 @@
 <script src="src/state.js"></script>
 <script src="src/data.js"></script>
 <script src="src/plots.js"></script>
+<script src="src/mapattrib.js"></script>
 <script src="src/map.js"></script>
 <script src="src/filters.js"></script>
 <script src="src/drawer.js"></script>

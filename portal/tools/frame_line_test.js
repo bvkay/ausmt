@@ -45,7 +45,7 @@ win.fetch = (url) => {
 
 // Only the modules the frame line transitively needs (security -> esc/escAttr, state -> SMETA,
 // data -> dataUrl, drawer -> frameLineText/loadStationFrameLine). Match bundle_tiles_test's subset.
-const MODULES = ["contract", "security", "state", "data", "plots", "map", "filters", "drawer"];
+const MODULES = ["contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer"];
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={line:(f)=>frameLineText(f),load:(s)=>loadStationFrameLine(s),setSmeta:(m)=>{SMETA=m;},"
       + "fwb:(f)=>fileWrittenByText(f),knownWriter:(n)=>isKnownWriter(n)};";

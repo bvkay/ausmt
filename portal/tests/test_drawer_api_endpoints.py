@@ -53,7 +53,7 @@ FICTIONAL = "/" + "api" + "/"
 DRIVER = r"""
 const fs=require("fs"),vm=require("vm"),path=require("path");
 const SRC=process.argv[2];
-const MODULES=["contract","security","state","data","plots","map","filters","drawer","exports","main","tour"];
+const MODULES=["contract","security","state","data","plots","mapattrib","map","filters","drawer","exports","main","tour"];
 let code=MODULES.map(f=>fs.readFileSync(path.join(SRC,f+".js"),"utf8")).join("\n");
 code+="\nglobalThis.__api={boot,hydrationDone:()=>HYDRATION_DONE,openStation,nST:()=>ST.length};";
 const stub=()=>new Proxy(function(){},{get:(t,p)=>{if(p==="then")return undefined;if(p===Symbol.iterator)return function*(){};return stub();},apply:()=>stub(),construct:()=>stub()});

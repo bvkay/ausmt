@@ -133,7 +133,12 @@ def test_the_toggle_is_a_real_button_a_keyboard_can_reach():
     assert src.count('setAttribute("aria-expanded"') >= 2, (
         "aria-expanded is written on construction and on every change; one write is a state that "
         "goes stale the first time the control opens")
-    for event in ("click", "mouseenter", "mouseleave", "focusin", "focusout"):
+    assert '"pointerdown"' in src, (
+        "a click toggles from the state the POINTER found: a mouse click arrives after the hover "
+        "that already opened the control, and a tap arrives after the focus that did, so a toggle "
+        "reading the state at click time closes what the pointer just opened and makes a tap do "
+        "nothing at all")
+    for event in ("pointerdown", "click", "mouseenter", "mouseleave", "focusin", "focusout"):
         assert f'"{event}"' in src, (
             f"the control opens on hover, on focus and on click and closes the same three ways; "
             f"no {event} handler")
@@ -168,9 +173,11 @@ def test_the_spa_map_mounts_the_collapsed_control_and_credits_the_layer_it_draws
     assert "attribution:" in carto, (
         "the CARTO fallback states its OWN credit; it is the branch a footer line naming Protomaps "
         "would have mis-credited")
-    credits = re.findall(r'_[A-Z_]*CREDIT\s*=\s*"([^"]*)"', src)
-    assert credits, "the credits are named constants, so each is stated once"
-    joined = " ".join(credits)
+    credits = dict(re.findall(r"(?m)^const (_[A-Z_]+CREDIT)\s*=\s*(.+);\s*$", src))
+    assert set(credits) >= {"_OSM_CREDIT", "_PM_CREDIT", "_CARTO_CREDIT"}, (
+        f"the credits are named constants, so the OpenStreetMap half is stated once and each "
+        f"provider adds its own to it; found {sorted(credits)}")
+    joined = " ".join(credits.values())
     assert _OSM_LINK in joined, "every credit links OpenStreetMap's copyright page"
     assert _PMTILES_CREDIT in joined and _CARTO_CREDIT in joined, (
         f"both providers are credited by name: {credits}")

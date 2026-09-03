@@ -5241,6 +5241,25 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ok(!_wrap.classList.contains("mapattrib-open"),
       "map-chrome: the control must collapse again when focus leaves");
 
+    // THE POINTER PATH, in the order a real mouse produces it: hover, pointerdown, focus, click.
+    // Measured in Chrome, a toggle reading the state at CLICK time collapsed a control the hover
+    // had just opened, so the click read as doing nothing at all.
+    _wrap.dispatchEvent(new win.Event("mouseenter"));
+    _glyph.dispatchEvent(new win.Event("pointerdown", { bubbles: true }));
+    _glyph.dispatchEvent(new win.Event("focusin", { bubbles: true }));
+    _glyph.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    ok(!_wrap.classList.contains("mapattrib-open"),
+      "map-chrome: clicking a control the pointer already opened must collapse it");
+    // AND THE TAP PATH, which brings no hover: pointerdown, focus, click, and it must end OPEN.
+    _wrap.dispatchEvent(new win.Event("mouseleave"));
+    _glyph.dispatchEvent(new win.Event("focusout", { bubbles: true }));
+    _glyph.dispatchEvent(new win.Event("pointerdown", { bubbles: true }));
+    _glyph.dispatchEvent(new win.Event("focusin", { bubbles: true }));
+    _glyph.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    ok(_wrap.classList.contains("mapattrib-open"),
+      "map-chrome: a tap, which brings no hover, must leave the control open");
+    _glyph.dispatchEvent(new win.Event("focusout", { bubbles: true }));
+
     // THE FOOTER CREDITS NO BASEMAP. It is the same box on seven surfaces, and a line only this one
     // carried made it a taller box here (90.80px against 74.30px at 1280, measured in Chrome); and a
     // fixed line of prose cannot follow the tile source, because map.js keeps a CARTO fallback that a

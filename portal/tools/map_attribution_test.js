@@ -60,12 +60,18 @@ function makeLeaflet(win) {
 
   const makeMap = (id, opts) => {
     const m = { id, opts: opts || {}, layers: [], control: null };
+    // The map's own methods CHAIN back to the map, the way Leaflet's do: the page writes
+    // `L.map(...).setView(...)` and holds what that returns, so a stub that answered setView with a
+    // fresh stub would hand every later call a different object and nothing could be recorded.
+    const CHAIN = ["setView", "fitBounds", "invalidateSize", "on", "off", "removeLayer",
+      "addControl", "removeControl", "eachLayer", "setMaxBounds"];
     m.api = new Proxy(function () { }, {
       get: (t, p) => {
         if (p === "then") return undefined;
         if (p === Symbol.iterator) return function* () { };
         if (p === "__rec") return m;
         if (p === "addLayer") return (l) => { m.layers.push(l); return m.api; };
+        if (CHAIN.indexOf(p) >= 0) return () => m.api;
         return stub();
       },
       apply: () => stub(), construct: () => stub(),
@@ -266,6 +272,26 @@ function assertControl(win, mapId, expectedCredit) {
   ok(p.wrap.classList.contains("mapattrib-open"), `#${mapId}: hovering must expand the control`);
   fire(win, p.wrap, "mouseleave");
   ok(!p.wrap.classList.contains("mapattrib-open"), `#${mapId}: leaving must collapse it again`);
+
+  // THE POINTER PATH, in the order a real mouse produces it: hover, then pointerdown, then focus,
+  // then click. Measured in Chrome, a toggle reading the state at CLICK time collapsed a control the
+  // hover had just opened, so the click read as doing nothing.
+  fire(win, p.wrap, "mouseenter");
+  fire(win, p.btn, "pointerdown");
+  fire(win, p.btn, "focusin");
+  p.btn.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  ok(!p.wrap.classList.contains("mapattrib-open"),
+    `#${mapId}: clicking a control the pointer already opened must collapse it`);
+  // AND THE TAP PATH, which has no hover at all: pointerdown, focus, click, and the control must be
+  // OPEN at the end of it. A toggle that read the state at click time left a tap doing nothing.
+  fire(win, p.wrap, "mouseleave");
+  fire(win, p.btn, "focusout");
+  fire(win, p.btn, "pointerdown");
+  fire(win, p.btn, "focusin");
+  p.btn.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  ok(p.wrap.classList.contains("mapattrib-open"),
+    `#${mapId}: a tap, which brings no hover, must leave the control open`);
+  fire(win, p.btn, "focusout");
 }
 
 (async () => {

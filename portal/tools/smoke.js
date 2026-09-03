@@ -12,7 +12,7 @@ const TOOLS = __dirname;
 const SRC = path.resolve(TOOLS, "..", "src");
 const DATA = path.resolve(process.argv[2] || path.join(TOOLS, "..", "data"));
 
-const MODULES = ["contract", "security", "state", "data", "plots", "map", "filters", "drawer", "exports", "main", "tour"];
+const MODULES = ["contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer", "exports", "main", "tour"];
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 // A citation author with an apostrophe AND an ampersand: the pack's plain-text/.bib/.ris files must
 // carry both verbatim (no HTML entities in text files; & LaTeX-escaped in .bib).
