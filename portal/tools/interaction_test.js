@@ -824,15 +824,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // VER CHIP OFF EVERY SURFACE. The one-footer ruling took Releases and About this build out of the
   // footer, and the version chip rode inside the About-this-build popover; it landed in about.html's
   // #build section, and the owner has now deleted that section too. NO page on this site carries a
-  // chip. version.js is a standalone page script (not in MODULES), so run it here against the real
-  // DOM exactly as index.html's <script src="version.js"> would, then assert:
+  // chip, and no page loads the script either. version.js is a standalone page script (not in
+  // MODULES), so run it here against the real DOM as a page that loaded it would, then assert:
   //   (a) this document carries NO [data-ver-chip], in the header, the footer or anywhere else;
   //   (b) version.js still DERIVES a correct label and POPULATES a chip wherever one is supplied,
   //       driven in its own jsdom because no shipped page supplies the node the fill would land in.
-  //       The file is kept rather than deleted: index.html, add-survey.html, brand.html and
-  //       releases.html still load it, and the label logic and its config-missing sentinel are the
-  //       contract a future chip would be held to. portal/tests/test_about_uniform_chrome.py holds
-  //       the zero-chips-anywhere half across the four documents.
+  //       The file is kept rather than deleted even though nothing loads it: the label logic and
+  //       its config-missing sentinel are the contract a future build page would be held to, and
+  //       this is the only place they are exercised. portal/tests/test_about_uniform_chrome.py
+  //       holds both zero-everywhere halves, the chips and the loads, across every document.
   vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), dom.getInternalVMContext());
   const spaChips = [...doc.querySelectorAll("[data-ver-chip]")];
   ok(spaChips.length === 0,
