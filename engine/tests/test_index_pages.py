@@ -1210,3 +1210,66 @@ def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
         assert len(nodes) == 2, f"{rel}: entity node plus breadcrumb, got {len(nodes)}"
         assert nodes[0]["@type"] == entity, f"{rel}: the entity node must come first, got {nodes}"
         assert nodes[1]["@type"] == "BreadcrumbList", nodes
+
+
+# THE CONSTANT FOOTER, over BUILT pages: the emitted document's own structure and CSS, where the
+# portal half of this pin (portal/tests/test_footer_regions.py) reads _pages.py's source text.
+# AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F5 and F6.
+_FLOW_BELOW = 560
+_FLOW_RULE = f"@media(max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
+
+
+def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
+    """The footer is at the bottom of the VIEWPORT on every page kind, not at the end of the scroll:
+    the document is a viewport-tall column, the block above the footer takes the free space, and the
+    footer itself is sticky to the bottom edge over the page's own opaque ground.
+
+    A sticky box is never pushed DOWN from its place in flow, so the column and the growing block
+    are not decoration around the sticky rule: without them the Collections hub, which is shorter
+    than a screen, would show its footer halfway up the page. And because a sticky box keeps that
+    place in flow, the last line of a long survey page is never left underneath the footer.
+
+    FAILS if any of the three goes, if the footer stops painting an opaque ground (the content
+    passing beneath would show through), or if it stops naming a stacking order above the frozen
+    first column of a station table."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        assert '<div class="pagebody">' in page and page.index('<div class="pagebody">') < \
+            page.index("<footer>"), \
+            f"{rel}: the page's content must sit in the growing block ABOVE the footer"
+        body = re.search(r"(?m)^\s*body\{([^}]*)\}", css)
+        assert body, f"{rel}: no body rule"
+        for decl in ("min-height:100vh", "display:flex", "flex-direction:column"):
+            assert decl in body.group(1), \
+                f"{rel}: the page must be a viewport-tall column, missing {decl}: {body.group(1)!r}"
+        grow = re.search(r"(?m)^\s*\.pagebody\{([^}]*)\}", css)
+        assert grow and "flex:1 0 auto" in grow.group(1), \
+            f"{rel}: the block above the footer must take the column's free space"
+        foot = re.search(r"(?m)^\s*footer\{([^}]*)\}", css)
+        assert foot, f"{rel}: no footer rule"
+        for decl in ("position:sticky", "bottom:0", "background:#11182D"):
+            assert decl in foot.group(1), \
+                f"{rel}: the footer must declare {decl}: {foot.group(1)!r}"
+        assert re.search(r"z-index:[1-9]", foot.group(1)), \
+            f"{rel}: the footer must name its stacking order: {foot.group(1)!r}"
+        assert _FLOW_RULE in css and css.index(_FLOW_RULE) > foot.start(), \
+            f"{rel}: below {_FLOW_BELOW}px of viewport the footer returns to flow, in a rule that " \
+            f"FOLLOWS the sticky one; the two tie on specificity"
+        assert "padding:1.6rem 1.25rem 0" in css or "padding:4rem 1.25rem 0" in css, \
+            f"{rel}: main must carry no bottom padding, or the footer comes to rest ABOVE the " \
+            f"document's bottom edge and lifts off the viewport at the end of the scroll"
+
+
+def test_the_centre_line_is_bold_on_every_page_kind(built):
+    """The owner's acknowledgement renders bold, the anchor included, as ONE declaration on the
+    centre zone. FAILS if the weight goes, if it is written per span in the markup, or if a second
+    declaration appears for the two surfaces to drift on."""
+    for rel in _kinds(built):
+        css = (built / "pages" / rel).read_text(
+            encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
+        centre = re.search(r"(?m)^\s*\.fcenter\{([^}]*)\}", css)
+        assert centre and "font-weight:700" in centre.group(1), \
+            f"{rel}: the centre zone must declare font-weight:700: {centre and centre.group(1)!r}"
+        assert css.count("font-weight:700") == 1, \
+            f"{rel}: the weight is one declaration on the zone, not one per surface it reaches"

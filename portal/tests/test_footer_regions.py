@@ -64,6 +64,8 @@ THE OWN-ROW BREAKPOINT IS A MEASUREMENT OF THE CONTENT, not a design constant. M
 with the ruled strings, the three regions want 1254px of footer on the portal and 1200px on the
 static tier; the rules fire just above each, as they did at the shorter numbers this footer carried
 before the AuScope acknowledgement lengthened the centre.
+
+The ruling and every number this module holds it to: AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md.
 """
 import hashlib
 import re
@@ -603,3 +605,164 @@ def test_every_portal_page_sizes_the_lockup_the_same_way():
         rule = " ".join(rules[0].split())
         for decl in ("height:28px", "width:auto", "max-width:100%", "object-fit:contain"):
             assert decl in rule, f"{name}: the lockup rule must declare {decl}: {rule!r}"
+
+
+# THE CONSTANT FOOTER and THE BOLD CENTRE, held on every surface at once.
+#
+# The footer is always at the bottom of the VIEWPORT, not at the end of the scroll: content passes
+# beneath it and the last line of that content is never left under it, because a sticky box keeps
+# its own place in flow and simply comes to rest there. That needs three things together and each is
+# pinned below, because any one of them alone is a footer that floats mid-page on a short document:
+# a page-height column, a growing block above the footer, and the sticky rule itself.
+#
+# WHY STICKY AND NOT FIXED: a fixed footer leaves no box in flow, so every page would owe it a
+# body padding-bottom equal to a height that changes with the wrap state and with the viewport. The
+# sticky box reserves exactly its own height, so the guarantee holds without a second number to keep
+# in step with the first.
+#
+# THE RETURN TO FLOW IS A MEASUREMENT. Measured in Chrome across all eleven surfaces, the three
+# regions stop sharing rows at a viewport of 540px on the static tier and 556px to 560px on the
+# portal (the container queries ask 500px and 520px of FOOTER width, and the surfaces reach that at
+# different viewports because their columns and paddings differ). At 560px and below at least one
+# surface is a three-row footer of 113px to 136px, which on a phone would sit over most of the
+# screen; above it every surface is at most two rows. So 560px is where the pin puts the switch:
+# the constant footer holds above it, and below it the footer is an ordinary block at the end of the
+# document.
+_FLOW_BELOW = 560
+_STICKY = ("position:sticky", "bottom:0")
+
+# The block that GROWS to fill the column, per surface. Where the footer sits inside main the page
+# wraps its content so main has exactly two children and the wrapper takes the free space; where the
+# footer is already a sibling of main, main takes it. Either way the footer lands on the viewport's
+# bottom edge on a document shorter than the screen.
+_GROWS = {
+    "404.html": (".pagebody", "flex:1 0 auto"),
+    "about.html": (".pagebody", "flex:1 0 auto"),
+    "add-survey.html": ("main", "flex:1 0 auto"),
+    "brand.html": ("main", "flex:1 0 auto"),
+    "index.html": ("main", "flex:1"),
+    "releases.html": ("main", "flex:1 0 auto"),
+}
+_ENGINE_GROWS = (".pagebody", "flex:1 0 auto")
+
+# The opaque ground each surface paints under the footer. A sticky footer with a transparent
+# background shows the content sliding under it; these are each page's own body colour, so the
+# footer reads as the page's own bottom edge rather than as a panel over it.
+_INK = {
+    "404.html": "background:#11182D",
+    "about.html": "background:var(--ink)",
+    "add-survey.html": "background:var(--ink)",
+    "brand.html": "background:var(--ink)",
+    "index.html": "background:var(--ink)",
+    "releases.html": "background:var(--ink)",
+}
+_ENGINE_INK = "background:#11182D"
+
+# The centre line's weight, as ONE declaration on the zone rather than a span around the sentence:
+# the owner ruled the whole line bold, the anchor included, and a single declaration is what lets
+# these pins hold it as one fact. 700 is the sans family's bold, the weight the word names; the
+# header wordmark's 800 is a display weight for a 22px mark and would smear at 12.5px.
+_CENTRE_WEIGHT = "font-weight:700"
+
+_FOOTER_RULE = r"(?m)^\s*footer\{([^}]*)\}"
+_PORTAL_FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
+_ENGINE_FLOW_RULE = f"@media(max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
+
+
+def _footer_rule(where, text):
+    rules = re.findall(_FOOTER_RULE, _outside_queries(text))
+    assert len(rules) == 1, f"{where}: expected exactly one footer rule, found {len(rules)}"
+    return " ".join(rules[0].split())
+
+
+def test_every_surface_pins_the_footer_to_the_viewport_bottom():
+    """THE CONSTANT FOOTER. FAILS if any surface's footer stops being sticky to the bottom edge, if
+    it loses the opaque ground that keeps scrolling content from showing through it, or if it loses
+    the stacking order that keeps a frozen table column from painting over it."""
+    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8"), _INK[name])
+                for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text(), _ENGINE_INK))
+    for where, text, ink in surfaces:
+        rule = _footer_rule(where, text)
+        for decl in _STICKY:
+            assert decl in rule, (
+                f"{where}: the footer must declare {decl}, or it only appears at the end of the "
+                f"scroll instead of staying on screen: {rule!r}")
+        assert ink in rule, (
+            f"{where}: a sticky footer needs the page's own opaque ground under it, or the content "
+            f"passing beneath shows through the text: expected {ink!r} in {rule!r}")
+        assert re.search(r"z-index:[1-9]", rule), (
+            f"{where}: the footer must name its own stacking order; a table's frozen first column "
+            f"declares z-index:2 and would otherwise paint over it: {rule!r}")
+
+
+def test_every_surface_makes_the_page_a_full_height_column():
+    """THE COLUMN THE STICKY FOOTER NEEDS. A sticky box is never pushed DOWN from where it sits in
+    flow, so on a document shorter than the screen the footer would sit halfway up the page unless
+    the page itself is a viewport-tall column with a growing block above the footer.
+
+    FAILS if any surface stops being that column, or if the block above the footer stops growing:
+    either one alone leaves the Collections hub's footer floating mid-page."""
+    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8"), _GROWS[name])
+                for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text(), _ENGINE_GROWS))
+    for where, text, (selector, growth) in surfaces:
+        base = _outside_queries(text)
+        body = re.findall(r"(?m)^\s*body\{([^}]*)\}", base)
+        assert len(body) == 1, f"{where}: expected exactly one body rule, found {len(body)}"
+        body = " ".join(body[0].split())
+        for decl in ("display:flex", "flex-direction:column"):
+            assert decl in body, (
+                f"{where}: the page must be a column, or the footer cannot be pushed to the "
+                f"bottom of a short one: {body!r}")
+        assert "min-height:100vh" in body or re.search(r"(?m)^\s*html,body\{[^}]*height:100%", base), (
+            f"{where}: the column must be at least a viewport tall, or a short page ends above the "
+            f"screen's bottom edge and the footer with it: {body!r}")
+        grows = re.findall(rf"(?m)^\s*{re.escape(selector)}\{{([^}}]*)\}}", base)
+        assert len(grows) == 1, (
+            f"{where}: expected exactly one {selector} rule to take the column's free space, "
+            f"found {len(grows)}")
+        assert growth in grows[0], (
+            f"{where}: {selector} must declare {growth} so the free space above the footer is "
+            f"taken by content and not left under it: {grows[0]!r}")
+
+
+def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
+    """THE NARROW-WIDTH RETURN TO FLOW, on both sides of the measured breakpoint. Below it the
+    footer is three rows on at least one surface, which on a phone would cover most of the screen,
+    so it goes back to being an ordinary block at the end of the document.
+
+    FAILS if a surface loses the rule, if the breakpoint drifts off the measured width, or if the
+    rule is placed where source order lets the sticky rule win it back (the two tie on
+    specificity)."""
+    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8"), _PORTAL_FLOW_RULE)
+                for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text(), _ENGINE_FLOW_RULE))
+    for where, text, flow in surfaces:
+        at = text.find(flow)
+        assert at > 0, f"{where}: expected the return-to-flow rule {flow!r}"
+        assert text.count(flow) == 1, f"{where}: the return-to-flow rule must be declared once"
+        assert at > re.search(_FOOTER_RULE, text).start(), (
+            f"{where}: the return-to-flow rule must FOLLOW the footer's own rule, or the sticky "
+            f"declaration wins at equal specificity and the narrow-width footer stays pinned")
+
+
+def test_the_centre_line_is_bold_on_every_surface():
+    """THE BOLD CENTRE, as ONE declaration on the zone. The owner ruled the whole acknowledgement
+    bold, the anchor included; a span around part of the sentence would put the fact in the markup
+    of six documents and the engine's emitter instead of in one rule per surface.
+
+    FAILS if any surface's centre zone loses the weight, if it is written somewhere other than the
+    zone rule, or if the anchor is given a weight of its own."""
+    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8"),
+                 r"(?m)^\s*footer \.foot-main\{([^}]*)\}") for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text(), r"(?m)^\s*\.fcenter\{([^}]*)\}"))
+    for where, text, pattern in surfaces:
+        base = _outside_queries(text)
+        rules = re.findall(pattern, base)
+        assert len(rules) == 1, f"{where}: expected exactly one centre zone rule, found {len(rules)}"
+        assert _CENTRE_WEIGHT in rules[0], (
+            f"{where}: the centre zone must declare {_CENTRE_WEIGHT}: {rules[0]!r}")
+        assert base.count(_CENTRE_WEIGHT) == 1, (
+            f"{where}: the weight is one declaration on the zone; a second one is a second place "
+            f"for the two surfaces to drift")
