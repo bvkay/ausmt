@@ -235,7 +235,7 @@ def _range(lo, hi) -> str:
 #
 # Derived rather than listed because a hand-kept map covering only the ids today's corpus declares
 # goes wrong silently: the instrument recognises fourteen CC ids, so the first third-party release
-# under a 3.0, -AU, NC or ND id would have printed "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on
+# under a 3.0, -AU, NC or ND id prints "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on
 # the next, which is the inconsistency this rule exists to remove. The grammar is the deed's own:
 # the prefix, the clause letters (which keep their internal hyphens: BY-NC-SA), the version, and a
 # jurisdiction port where one exists.
@@ -794,7 +794,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     # `jsonld` is ONE node or a list of nodes, emitted in order as one script element each. Order is
     # load-bearing: the entity node stays first on every page that carries one, so anything reading
     # "the page's structured data" gets the record the page is about and not its breadcrumb. A
-    # @graph wrapper would have collapsed the two into a node no first-block reader can follow.
+    # @graph wrapper collapses the two into a node no first-block reader can follow.
     nodes = [n for n in (jsonld if isinstance(jsonld, list) else [jsonld]) if n]
     ld = "".join(f'<script type="application/ld+json">{_jsonld(n)}</script>\n' for n in nodes)
     # noindex: the page exists for the URL contract and for humans following published links, but
@@ -1190,9 +1190,9 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                                     + ([size] if size else []))
         bundle_items.append(f"<tr><td>{_e(lbl)}</td><td>{meta_bits}</td>"
                             f'<td><a href="/data/{_e(rel)}">Download &#8595;</a></td></tr>')
-        # The COMPLETE digest, from the manifest row the page already reads. The page used to carry
-        # an 8-character prefix, which is not enough to verify anything; the whole value belongs on
-        # the page but not in competition with format and size, so it sits behind a disclosure.
+        # The COMPLETE digest, from the manifest row the page already reads. An 8-character prefix
+        # is not enough to verify anything; the whole value belongs on the page but not in
+        # competition with format and size, so it sits behind a disclosure.
         if sha:
             integrity_items.append(f"<tr><td>{_e(lbl)}</td>"
                                    f'<td class="shacell">sha256 {_e(sha)}</td></tr>')
@@ -1210,7 +1210,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                 doi_line = (f'<div class="doi">Published release: <a href="{_e(u)}">'
                             f'{_e(_bare_doi(related["level2"].get("identifier")) or u)}</a></div>')
         # Host attribution from the manifest's own tier, and only where every row agrees: a mixed
-        # card would have to name a host per row, and the tier is the manifest's word, not ours.
+        # card has to name a host per row, and the tier is the manifest's word, not ours.
         tiers = {(r or {}).get("tier") for r in (bundle_rows or [])}
         host = {"repo": "Hosted by AusMT", "nci": "Hosted at NCI"}.get(
             next(iter(tiers)) if len(tiers) == 1 else None, "")
@@ -1445,8 +1445,8 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
             p for p in ('<h2 id="contributors">Contributors and organisations</h2>',
                         people_html, facts_html) if p)
     # Slots that render nothing leave NOTHING behind: joining the non-empty ones means a survey with
-    # no collection, no citation record or no publications does not carry a stray blank line where
-    # that block would have been (13 of the 27 served pages carried one).
+    # no collection, no citation record or no publications does not carry a stray blank line in
+    # that block's place.
     body = "\n".join(part.rstrip("\n") for part in (
         crumb,
         nav,
@@ -1754,7 +1754,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     `member_facts` ({slug: row}), `level_counts` ({level: n stations}) and `formats` are rollups the
     emitter computes from the SAME served documents the member survey pages render from. All three
     are optional: a caller that supplies none gets the hero, the map and the member list, and the
-    sections those rollups would have filled are simply not written.
+    sections those rollups fill are simply not written.
 
     `og_image` is the absolute URL of the card the emitter has already written for this collection,
     or None for the portal's root card. A collection whose members disclose no position gets no card
