@@ -110,9 +110,13 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
         f"the watermark must carry the shared placement {PLACEMENT!r}")
     assert NARROW in text, (
         "the mark must not be drawn below the 560px breakpoint the footer uses")
-    assert "#map{position:relative" in text, (
+    # Read as a DECLARATION rather than as a prefix: the rule also carries the flex and background
+    # the map has always had, and the order they are written in is not the assertion.
+    container = re.search(r"#map\{([^}]*)\}", text)
+    assert container and "position:relative" in container.group(1), (
         "the map container must establish the positioning context; without it the absolutely "
-        "positioned mark escapes to the nearest positioned ancestor and lands anywhere at all")
+        f"positioned mark escapes to the nearest positioned ancestor and lands anywhere at all: "
+        f"{container.group(0) if container else None!r}")
     # The clear space, read back off the rule rather than restated: the inset on each edge the mark
     # is near must be at least the mark's own height.
     height = int(re.search(r"height:(\d+)px", PLACEMENT).group(1))

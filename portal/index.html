@@ -145,9 +145,24 @@
   .resizer{width:6px;flex:none;cursor:col-resize;background:var(--line);transition:background .12s}
   .resizer:hover,.resizer.drag{background:var(--copper)}
   .content{flex:1;min-width:0;position:relative;display:flex}
-  #map{flex:1;background:#dfe6e9}
+  #map{flex:1;background:#dfe6e9;position:relative}
   /* Mute the basemap only: station overlays render outside the tile pane, so they keep full colour. */
   #map .leaflet-tile-pane{filter:saturate(.35) brightness(1.04)}
+  /* The AuScope mark, top right of the MAP and nowhere else on the site. The map is what people
+     screenshot into talks and reports and a screenshot carries no footer, so this is the attribution
+     that travels with the image.
+
+     THE 32px INSET IS THE BRAND GUIDE'S CLEAR SPACE, not Leaflet's 10px control inset: the guide asks
+     for at least the full height of the logo of breathing space on all sides, and 32px is the mark's
+     own height. Full opacity and no tint for the same reason, that the guide permits neither.
+
+     It can intercept nothing. pointer-events:none takes it out of hit testing, so a zoom, a draw, a
+     popup and the tour all reach the map through it; the z-index is below Leaflet's control (800) and
+     popup (700) layers as well, so a stacking change cannot paint it over a control either. Below
+     560px, the footer's own breakpoint, the map is a phone-width strip and the mark costs more map
+     than it buys attribution, so it is not drawn rather than shrunk. */
+  .mapmark{position:absolute;top:32px;right:32px;height:32px;width:auto;z-index:500;pointer-events:none}
+  @media(max-width:560px){.mapmark{display:none}}
   #map .leaflet-control-attribution{opacity:.7}
   .hidden{display:none!important}
   h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:8px}
@@ -970,7 +985,7 @@
 </aside>
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
-  <div id="map"></div>
+  <div id="map"><img class="mapmark" src="/vendor/auscope-icon-colour.png" alt="AuScope" width="31" height="32"></div>
   <div id="surveysview">
     <!-- Discovery controls: a surveys-view search (name/org/region/blurb; cleanup wave B, replaces the
          rail #find here), sort, live result count, facet chips (Open licence + data-type BBMT/LPMT/AMT/GDS),
