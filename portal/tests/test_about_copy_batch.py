@@ -340,7 +340,13 @@ def test_section_one_states_the_hand_off_beside_the_no_hosting_claim():
     holding it by its section. It left the footer's popover for about.html's #build section under the
     one-footer ruling; the owner has now deleted that section, and the two claims are not build
     identity, so they land in section 1, which is where a reader asks what AusMT is. Same two claims,
-    read from the section that carries them now."""
+    read from the section that carries them now.
+
+    AND STATED ONCE. The relocation left the section carrying the claim twice in adjacent paragraphs,
+    in two wordings ("doesn't host raw time series ... routes you straight to the archive that does"
+    and "doesn't hold raw time series ... links to the archive that holds them"). Two wordings of one
+    fact are two things a reader has to reconcile and two things an editor has to keep in step, so
+    the section states it once. FAILS if a second telling comes back."""
     flat = _flat(_section("what"))
     assert "It doesn't host raw time series" in flat, (
         "the no-hosting claim must survive: AusMT hands off, it does not host, and a redirect is not hosting")
@@ -348,6 +354,12 @@ def test_section_one_states_the_hand_off_beside_the_no_hosting_claim():
         "the section must state the hand-off beside the no-hosting claim, or it reads as a dead end")
     assert "hosts raw time series" not in flat.replace("doesn't host raw time series", ""), (
         "nothing here may claim AusMT hosts time series")
+    assert flat.count("raw time series") == 1, (
+        f"section 1 states the no-hosting claim once; found {flat.count('raw time series')} tellings "
+        f"of it, which is two wordings of one fact for a reader to reconcile")
+    assert "the archive that holds them" not in flat, (
+        "the hand-off is stated once, in the wording this pin holds; the second paragraph's "
+        "restatement of it merged into that sentence")
 
 
 def test_the_software_licence_sentence_lives_in_the_licence_section():
@@ -359,19 +371,32 @@ def test_the_software_licence_sentence_lives_in_the_licence_section():
     THE SELF-REFERENCE IS DROPPED, DELIBERATELY. The sentence carried "(see Licence and access)"
     while it sat in the colophon. It now sits IN Licence and access, so that parenthetical would be
     a link from a section to itself; the claim survives, the pointer to where the claim already is
-    does not."""
-    access = _flat(_section("access"))
-    assert "The portal software is licensed under Apache-2.0." in access, (
-        "section 4 must carry the software-licence sentence the colophon gave up")
-    assert "Survey data stays licensed by its custodians." in access, (
-        "the custodian half of the sentence must survive the move with it")
-    assert 'href="#access"' not in _section("access"), (
-        "the relocated sentence must not link the section it now lives in")
+    does not.
+
+    AND IT MERGED INTO THE BULLETS IT RESTATED. Section 4's whole subject is that three things are
+    licensed separately, and it lists them; the relocated paragraph then said two of the three over
+    again in different words. The paragraph is gone and its wording is the bullets' wording, so each
+    licence is stated exactly once, in the list a reader came to the section for. FAILS if either
+    fact goes, if either is stated twice in the section, or if the software licence turns up in
+    another section."""
+    raw = _section("access")
+    access = _flat(re.sub(r"<[^>]+>", " ", raw))
+    assert "Portal and engine software is licensed under Apache-2.0." in access, (
+        "section 4 must carry the software licence in the bullet that owns the subject")
+    assert access.count("Apache-2.0") == 1, (
+        f"section 4 states the software licence once; found {access.count('Apache-2.0')}")
+    assert "Survey data is licensed by its custodian, survey by survey." in access, (
+        "the custodian half must be stated, once, in the bullet that owns it")
+    assert access.count("licensed by its custodian") == 1, (
+        f"section 4 states the custodian licence once; found "
+        f"{access.count('licensed by its custodian')}")
+    assert 'href="#access"' not in raw, (
+        "the relocated claim must not link the section it now lives in")
     for sid, _h in NUMBERED:
         if sid == "access":
             continue
-        assert "The portal software is licensed under Apache-2.0." not in _flat(_section(sid)), (
-            f"the software-licence sentence belongs to section 4 alone; found a copy in #{sid}")
+        assert "Apache-2.0" not in _flat(_section(sid)), (
+            f"the software licence belongs to section 4 alone; found it in #{sid}")
 
 
 def test_section_eight_keeps_the_only_route_to_the_releases_page():
