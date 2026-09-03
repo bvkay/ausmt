@@ -148,7 +148,10 @@ solution of record and then the per-frequency realisations that produced it.
 
 `source_parse_failures` is a GATE, not a note. It lists the files the reader refused outright, and
 `scripts/verify.py` FAILS on any entry not named in the curator's allow file
-(`engine/scripts/parse-failures-allowed.txt`, one `<survey slug>/<file name>` per line, empty today).
+(`engine/scripts/parse-failures-allowed.txt`, one `<survey slug>/<file name>` per line, each with
+its reason). It holds one entry: `capricorn-2010/CP3B21.edi`, whose `>=DEFINEMEAS` reference latitude
+is written with a doubled minus that mt_metadata refuses and that no temporary-copy conditioning can
+repair without inventing a coordinate.
 The build itself still exits 0 on a refused file, so one malformed legacy file costs its own station
 and never the whole corpus; the verifier is what stops a build that lost a station reaching a swap.
 

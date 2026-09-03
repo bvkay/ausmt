@@ -8,5 +8,12 @@
 #
 # The BUILD is unaffected: a corpus build still exits 0 on a refused file, because one malformed
 # legacy file must not take the whole corpus down. This file governs the DEPLOY gate alone.
-#
-# Empty. Every source file in the corpus reads.
+
+# capricorn-2010 CP3B21.edi: the DEFINEMEAS reference latitude is written "--26.0322667", a doubled
+# minus, and mt_metadata's position validator refuses it. The HEAD carries the same coordinate
+# correctly, so the file is one typed character away from readable, but the character is the
+# custodian's and AusMT does not edit source bytes. Nothing AusMT can condition on a temporary copy
+# rescues a malformed number without inventing the value, so this station is lost until the
+# custodian reissues the file; edi_preflight reports it will_not_read, and this is the one entry in
+# the whole 55-package corpus. Measured on origin/main 13d4644 over surveys 831b21e, 2026-09-03.
+capricorn-2010/CP3B21.edi

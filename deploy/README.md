@@ -147,7 +147,8 @@ verify had already passed).
 The verify gate FAILS when the build refused any source file (`build_report.json`'s
 `source_parse_failures`), so a lost station can never reach a swap unnoticed; a loss the curator has
 deliberately accepted is recorded, one `<survey slug>/<file name>` per line, in the reviewed in-repo
-allow file `engine/scripts/parse-failures-allowed.txt`, which is empty.
+allow file `engine/scripts/parse-failures-allowed.txt`, which holds one: capricorn-2010's
+`CP3B21.edi`, whose reference latitude the reader has always refused.
 
 ### Time-series hand-off routes: the table goes out BEFORE the data
 
