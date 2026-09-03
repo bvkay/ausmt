@@ -535,7 +535,11 @@
 
      The lockup's width follows its height, so the committed file's own 1919px raster never reaches
      the page. max-width caps it at its zone in the stacked state, where that zone is the footer's
-     whole width; object-fit keeps the mark's proportions wherever the cap bites. */
+     whole width; object-fit keeps the mark's proportions wherever the cap bites.
+
+     The Map holds its footer on screen by its own layout: the body never scrolls, so the footer is
+     simply the last child of a full-height column. The sticky declarations are stated anyway, and
+     are inert here, so one rule covers every surface and the parity pins hold one fact. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}footer a{color:var(--copper);text-decoration:none}
   footer .apilink{flex:0 0 auto}
   footer .foot-main{flex:1 1 auto;text-align:center;min-width:0;font-weight:700}

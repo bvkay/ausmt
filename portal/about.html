@@ -127,7 +127,15 @@
 
      The lockup's width follows its height, so the committed file's own 1919px raster never reaches
      the page. max-width caps it at its zone in the stacked state; object-fit keeps the mark's
-     proportions wherever the cap bites. */
+     proportions wherever the cap bites.
+
+     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
+     it keeps its own box in flow, so the last line of the page is never hidden under it and the
+     page owes it no padding-bottom that would have to track the wrap state. A sticky box is never
+     pushed DOWN from where it sits in flow, so body is a viewport-tall column and main takes its
+     free space; remove either and a short page shows its footer halfway up. The ground is opaque
+     because content passes beneath it. Below 560px of viewport the footer is three rows and would
+     cover most of a phone screen, so it returns to ordinary flow there. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding:16px 20px 0;margin-top:30px;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
   footer .apilink{flex:0 0 auto}
