@@ -147,6 +147,24 @@ def test_a_malformed_reference_position_is_still_refused(tmp_path):
         mtm.read(work)
 
 
+@pytest.mark.parametrize("value", ["--26.0322667#-30:12:58.4", "--500.5", "--30:8"])
+def test_a_sign_run_the_collapse_cannot_rescue_is_left_alone(tmp_path, value):
+    """The fourth guard, and the one the suite caught. A repeated sign in front of something that is
+    STILL not a position (trailing corruption, a value out of range, a truncated DD:MM:SS) must not be
+    conditioned: the read has to fail with mt_metadata's own error about the bytes the custodian
+    wrote, not about a string that appears nowhere in the file. Asserted against stock behaviour
+    rather than against a hand-written message."""
+    work = _rewrite(tmp_path / "unrescuable.edi", SAMPLE, "REFLAT", value)
+    _cond, facts, _reasons = mtm._pre_read_conditioning(work, work.read_bytes())
+    assert "coordinate_signs_collapsed" not in facts
+    with pytest.raises(Exception) as stock:
+        mtm._read_once(work)
+    with pytest.raises(Exception) as through:
+        mtm.read(work)
+    assert type(through.value) is type(stock.value)
+    assert str(through.value) == str(stock.value)
+
+
 # --------------------------------------------------------------------------------------------
 # the preflight vocabulary
 # --------------------------------------------------------------------------------------------

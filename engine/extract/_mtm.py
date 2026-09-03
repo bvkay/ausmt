@@ -539,9 +539,13 @@ def rewrite_head_dataid(raw: bytes, dataid: str) -> bytes:
 # THE COLLAPSE RULE: a run of two or more IDENTICAL leading sign characters becomes one of that
 # character, and nothing else on the line is touched. A repeated keystroke is the whole class this
 # repairs. A MIXED run (`-+`) is deliberately left refused: it is not a repeated keystroke, and
-# picking either of its signs would choose a hemisphere the custodian did not write. Nor does this
-# touch a value that is unreadable for any other reason -- a coordinate written as a word still fails
-# with the reader's own error.
+# picking either of its signs would choose a hemisphere the custodian did not write.
+#
+# And the collapse only happens where it WORKS: the single-sign form is offered to the reader's own
+# position validator first, and a value that is still not a position is left exactly as the custodian
+# wrote it. Without that test a coordinate carrying a repeated sign AND some other corruption would
+# fail with an error message about a string the file does not contain, which is the reader lying
+# about the bytes it read. A file this cannot rescue fails byte for byte as it does today.
 #
 # Applied ON A TEMPORARY COPY, exactly like the >INFO delimiter repair and the section selection: the
 # served bytes keep the custodian's own characters.
@@ -560,9 +564,39 @@ _COORD_SIGN_RUN_RE = re.compile(
     re.IGNORECASE)
 
 
+def _position_kind(key: str) -> str:
+    """Which of the validator's two ranges this EDI key is measured against."""
+    bare = key.upper().removeprefix("REF")
+    return "latitude" if bare.startswith("LAT") else "longitude"
+
+
+def position_reads(value: str, kind: str) -> bool:
+    """Does the PINNED reader accept this position string? Measured by calling mt_metadata's own
+    utils/location_helpers.validate_position -- the function both the header and the measurement
+    parsers reach -- rather than mirroring its parsing and its range checks here. Asking the library
+    is what keeps this from conditioning a value the library would refuse anyway.
+
+    No library means no rescue: nothing can read the file at all, so the bytes are left alone."""
+    if not HAVE_MTM:
+        return False
+    try:
+        from mt_metadata.utils.location_helpers import validate_position  # noqa: PLC0415
+    except Exception:  # noqa: BLE001  (no validator to consult: nothing is conditioned on speculation)
+        return False
+    try:
+        validate_position(value, kind)
+    except Exception:  # noqa: BLE001  (any refusal, by whatever class the library raises)
+        return False
+    return True
+
+
 def collapse_coordinate_sign_runs(raw: bytes):
-    """(bytes, rows): `raw` with every doubled coordinate sign collapsed to one, and a row per
-    collapse naming the key, what the file says and what the reader is given.
+    """(bytes, rows): `raw` with every REPAIRABLE doubled coordinate sign collapsed to one, and a row
+    per collapse naming the key, what the file says and what the reader is given.
+
+    Repairable means the collapsed value is one the reader's own validator accepts; a line that fails
+    that test is left untouched and takes no row, so a file this cannot rescue raises the error stock
+    mt_metadata raises, about the bytes the custodian actually wrote.
 
     Returns the ORIGINAL object and an empty list when there is nothing to collapse, which is what
     lets the caller refuse to condition a file that does not need it. Operates on BYTES, keeps each
@@ -575,9 +609,13 @@ def collapse_coordinate_sign_runs(raw: bytes):
         if m is None:
             continue
         one = m.group("sign") + m.group("rest")
-        rows.append({"field": m.group("key").decode("utf-8", "replace").upper(),
+        field = m.group("key").decode("utf-8", "replace").upper()
+        read_as = one.decode("utf-8", "replace")
+        if not position_reads(read_as, _position_kind(field)):
+            continue
+        rows.append({"field": field,
                      "value": body[m.start("sign"):m.end("rest")].decode("utf-8", "replace"),
-                     "read_as": one.decode("utf-8", "replace")})
+                     "read_as": read_as})
         lines[i] = body[:m.start("sign")] + one + body[m.end("rest"):] + line[len(body):]
     return (b"".join(lines), rows) if rows else (raw, [])
 
