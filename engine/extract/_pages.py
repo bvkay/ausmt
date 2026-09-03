@@ -572,29 +572,18 @@ _CSS = """
      at any viewport.
 
      THIS IS ONE RULE SET WITH portal/index.html, character for character with the four colour
-     tokens resolved to the literals this tier writes; portal/tests/test_footer_regions.py holds
-     the two halves identical and 404.html with them. Nothing here may be tuned for this tier
-     alone: the numbers below are the widest surface's, and a change to any of them is a change to
-     every surface.
+     tokens resolved to the literals this tier writes. Nothing here may be tuned for this tier
+     alone; the numbers are the widest surface's, and portal/tests/test_footer_regions.py holds
+     all seven surfaces identical. The side zones take an equal ZERO basis, which is what puts the
+     acknowledgement on the page's axis rather than in the space left over beside them, and
+     min-width:0 lets a side zone go under its own content instead of forcing a wrap. The
+     separation above the footer is main's bottom padding, not a margin here: the Map's footer is
+     the last child of a column whose body does not scroll.
 
-     THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what puts the acknowledgement on the page's
-     axis. Zones that size to their own content leave it centred in the space LEFT OVER beside
-     them, which at 2560px put it 274.66px off the axis on this tier. Two zones of the same width
-     need twice the WIDER one, so one row wants 1457.18px of footer; the query asks the content
-     box, 36px narrower, and fires at or below 1421px. Below 520px of content the two side regions
-     no longer share a row either, so every region takes one and aligns left. min-width:0 is what
-     lets a side zone go under its own content between those two states instead of forcing a wrap;
-     measured across that band the overflow runs into empty space and no zone's ink reaches
-     another's.
-
-     The separation above the footer belongs to main's bottom padding, not to a margin here: the
-     Map's footer is the last child of a column whose body does not scroll, so a margin there would
-     take height from the map itself.
-
-     The regions align on their CENTRES, not on a baseline: the lockup is a block beside two lines
-     of text, and a baseline would hang it off the text's baseline and add its whole height above
-     the row. The overrides follow the rules they override; the two tie on specificity and source
-     order wins.
+     The regions align on their CENTRES, not on a baseline: the lockup is a block beside a line of
+     text, and a baseline would hang it off that text's baseline and add its whole height above the
+     row. The overrides follow the rules they override; the two tie on specificity and source order
+     wins.
 
      The lockup's width follows its height, so the committed file's own 1919px raster never reaches
      the page. max-width caps it at the zone in the stacked state, where the row is the footer's
@@ -608,9 +597,9 @@ _CSS = """
      order is stated because a station table's frozen first column declares z-index:2.
 
      Below 560px of VIEWPORT the footer returns to ordinary flow: that is where the three regions
-     stop sharing rows on the widest-footered surface (measured: the stack engages at a footer of
-     556px), and a three-row footer would sit over most of a phone screen. It is a viewport query
-     because a container query cannot ask about the container it is declared on.
+     stop sharing rows on the widest-footered surface, and a three-row footer would sit over most
+     of a phone screen. It is a viewport query because a container query cannot ask about the
+     container it is declared on.
 
      The centre's weight is one declaration on the zone: the whole acknowledgement is bold, the
      anchor with it, and 700 is the sans family's bold. */
