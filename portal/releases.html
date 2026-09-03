@@ -12,6 +12,19 @@
      now advertised in sitemap.xml, so it must say which address it is served at (index.html
      has carried its own canonical since the head-hygiene lane; these three had none). -->
 <link rel="canonical" href="https://ausmt.auscope.org.au/releases.html">
+<!-- Search snippet and link preview, on the same rule as about.html: the description is this
+     page's own lede verbatim. It runs past what a result row displays, and is left whole anyway,
+     because cutting it would mean writing a sentence this page does not say. -->
+<meta name="description" content="Quarterly citable snapshots of the AusMT corpus. Each release freezes one build's catalogue and its survey bundles at a fixed path, so a citation resolves to the same bytes years later even though the live portal keeps moving.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AusMT">
+<meta property="og:title" content="Releases - AusMT">
+<meta property="og:description" content="Quarterly citable snapshots of the AusMT corpus. Each release freezes one build's catalogue and its survey bundles at a fixed path, so a citation resolves to the same bytes years later even though the live portal keeps moving.">
+<meta property="og:url" content="https://ausmt.auscope.org.au/releases.html">
+<meta property="og:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   /* Treatment D+ palette, the same five surface/accent tokens declared verbatim on index.html,
      about.html and add-survey.html (portal/tests/test_theme_tokens.py pins those three against each

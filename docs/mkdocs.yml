@@ -51,6 +51,7 @@ nav:
       - Build lifecycle: developer/build-lifecycle.md
       - Portal data files (contract): developer/data-files.md
       - Portal-internal documents: developer/portal-documents.md
+      - Discoverability (pages, cards, sitemap): developer/discoverability.md
       - How to extend: developer/extending.md
       - Conventions: developer/conventions.md
       - Collection IDs: developer/collection-ids.md

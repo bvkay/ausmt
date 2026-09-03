@@ -25,7 +25,7 @@
         "position": 1.0
       }
     ],
-    "derivation": "Sampled once from portal/vendor/social-card.png, the established pixelated-Australia artwork. Its dot centres were recovered on the artwork's own 7.3 px lattice and sorted by hue: blue is the median of the coolest two per cent (#3953DC), purple the median of the middle (#9444CE), pink the median of the warmest two per cent (#E44696). Coral is the card's own accent literal (#FF6655), the colour of the rule under the wordmark and of the URL line. The stops are hardcoded here as the declared truth; nothing re-reads the artwork at build time.",
+    "derivation": "Sampled once from portal/vendor/social-card-source.png, the established pixelated-Australia artwork. Its dot centres were recovered on the artwork's own 7.3 px lattice and sorted by hue: blue is the median of the coolest two per cent (#3953DC), purple the median of the middle (#9444CE), pink the median of the warmest two per cent (#E44696). Coral is the card's own accent literal (#FF6655), the colour of the rule under the wordmark and of the URL line. The stops are hardcoded here as the declared truth; nothing re-reads the artwork at build time.",
     "backgrounds": {
       "dark": "#07162F",
       "light": "#FFFFFF"
@@ -1434,6 +1434,11 @@
       "path": "portal/vendor/brand/ausmt-mark.png",
       "kind": "png",
       "variant": "standalone mark"
+    },
+    {
+      "path": "portal/vendor/brand/ausmt-mark-168.png",
+      "kind": "png",
+      "variant": "standalone mark, link-preview card corner"
     },
     {
       "path": "portal/vendor/favicon.svg",

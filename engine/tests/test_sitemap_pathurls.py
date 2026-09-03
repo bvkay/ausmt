@@ -103,16 +103,18 @@ def test_sitemap_advertises_surveys_and_collections_never_stations(tmp_path):
     assert not any("#/" in u for u in locs), (
         f"the hash-fragment forms must leave the sitemap (the path form is the contract): {locs}")
     # The two HUB pages and the static portal pages joined the sitemap with the index-pages lane:
-    # they are served, canonical and indexable, and were advertised to no crawler at all. brand.html
-    # is the FOURTH static page, added by the brand-assets lane (LANE-CONTRACT-BRAND-ASSETS.md E5):
-    # it carries the downloadable logo files and their usage terms, and it is linked from About.
+    # they are served, canonical and indexable, and were advertised to no crawler at all.
     for extra in (f"{BASE}surveys", f"{BASE}collections",
-                  f"{BASE}about.html", f"{BASE}releases.html", f"{BASE}add-survey.html",
-                  f"{BASE}brand.html"):
+                  f"{BASE}about.html", f"{BASE}releases.html", f"{BASE}add-survey.html"):
         assert extra in locs, f"{extra} must be advertised: {locs}"
-    # One URL per entity + the base + the two hubs + the four static pages, nothing else silently
+    # brand.html is the one static page held OUT. It is an asset shelf reached from About by anyone
+    # who needs a logo file, and it declares its own robots noindex; advertising a page that tells
+    # the crawler not to index it asks for work the crawler must then throw away.
+    assert f"{BASE}brand.html" not in locs, \
+        f"brand.html declares noindex and must not be advertised: {locs}"
+    # One URL per entity + the base + the two hubs + the three static pages, nothing else silently
     # added (the count is the point: this pin is what catches a URL creeping in unreviewed).
-    assert len(locs) == 1 + 2 + 2 + 1 + 4, locs
+    assert len(locs) == 1 + 2 + 2 + 1 + 3, locs
     # The emitted file's own comment describes TIER 3 honestly: every path form below is served as
     # a prerendered page at that exact URL. It said tier 1 (301s into the SPA, prerender still to
     # come) until the index-pages lane rewrote it, and a comment that outlives its own behaviour is

@@ -54,7 +54,11 @@ and the output is byte-identical to a build from before the flag existed.
    resolutions applied; station-id variants disambiguated.
 6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings go to `qc_report.json`.
 7. Emit: the JSON product set, per-station products, canonical EMTF XML, bundles, the SHA-256 manifest
-   and the digest sidecar that verify reads (operator-only, never a served surface).
+   and the digest sidecar that verify reads (operator-only, never a served surface). With
+   `--sitemap-base`, the same step also writes the tier-3 entity pages, their link-preview cards and
+   `sitemap.xml`; every sitemap URL is reconciled against a page this build actually wrote, and a
+   mismatch fails the build. See [Discoverability](discoverability.md) for the page kinds, the
+   structured data each carries, the sitemap's membership rule and the card families.
 8. Verify (`scripts/verify.py`, run separately by the deployment Makefile): schema checks plus the
    cache-independent consistency check of served XML against current survey.yaml, read off the digest
    sidecar.

@@ -68,9 +68,11 @@ from _au_outline import COAST, EXTENT  # noqa: E402  (sibling engine module, std
 GRID_COLS = 21
 GRID_ROWS = 18
 
-# The palette. FOUR stops, sampled ONCE from the established artwork (portal/vendor/social-card.png,
-# the pixelated-Australia hero) and then hardcoded here as the declared truth, so the mark never
-# depends on re-reading a PNG at build time. Derivation, recorded so the sampling can be repeated:
+# The palette. FOUR stops, sampled ONCE from the established artwork and then hardcoded here as the
+# declared truth, so the mark never depends on re-reading a PNG at build time. The artwork is
+# vendor/social-card-source.png: the served root card is now a composite of it (tools/gen_social_card.py
+# adds the AuScope mark to its signature row), and the sampling was done on the artwork itself.
+# Derivation, recorded so the sampling can be repeated:
 # the card's dot centres were recovered from its own lattice (7.3 px pitch), sorted by hue, and the
 # cool end, the median and the warm end of that distribution taken as blue, purple and pink; coral is
 # the card's own accent literal (#FF6655, the rule under the wordmark and the URL line).
@@ -79,7 +81,7 @@ PALETTE_STOPS = (("blue", "#3953DC", 0.00),
                  ("pink", "#E44696", 0.76),
                  ("coral", "#FF6655", 1.00))
 PALETTE_DERIVATION = (
-    "Sampled once from portal/vendor/social-card.png, the established pixelated-Australia artwork. "
+    "Sampled once from portal/vendor/social-card-source.png, the established pixelated-Australia artwork. "
     "Its dot centres were recovered on the artwork's own 7.3 px lattice and sorted by hue: blue is the "
     "median of the coolest two per cent (#3953DC), purple the median of the middle (#9444CE), pink the "
     "median of the warmest two per cent (#E44696). Coral is the card's own accent literal (#FF6655), "
@@ -174,6 +176,13 @@ TAGLINE = "Australia's Magnetotelluric Data Portal"
 # Export sizes. Presentation resolution for the logos, a square mark for reuse at any size.
 PNG_LOGO_WIDTH = 2400
 PNG_MARK_SIZE = 1024
+# The small mark the engine's link-preview cards carry in their corner. The cards draw it at
+# CARD_MARK_DRAWN_PX, and this export is a whole multiple of that height so the card's resample is a
+# clean 4:1 box rather than an arbitrary ratio. It exists because the engine image ships no portal
+# tree and so must carry its own copy of whatever it draws with: a copy of the 1024 px mark would
+# put a third of a megabyte in that image to be shown at 42 px.
+PNG_CARD_MARK_SIZE = 168
+CARD_MARK_DRAWN_PX = 42
 # Rendering is supersampled and then resampled down, which is what gives the dots and the wordmark
 # clean edges at every size. The factor is capped so the working canvas stays a sane size.
 SUPERSAMPLE_TARGET = 6000
@@ -551,6 +560,7 @@ _OUTPUT_INDEX = (
     ("portal/vendor/brand/ausmt-logo-light-extended.png", "png", "logo with tagline, light background"),
     ("portal/vendor/brand/ausmt-mark.svg", "svg", "standalone mark"),
     ("portal/vendor/brand/ausmt-mark.png", "png", "standalone mark"),
+    ("portal/vendor/brand/ausmt-mark-168.png", "png", "standalone mark, link-preview card corner"),
     ("portal/vendor/favicon.svg", "svg", "browser tab icon"),
     ("portal/vendor/brand/ausmt-icon-180.png", "png", "apple-touch-icon"),
     ("portal/vendor/brand/ausmt-icon-192.png", "png", "app icon"),
@@ -577,6 +587,8 @@ def artefacts():
             items.append((BRAND_DIR / f"{stem}.png", "image", png_logo(dark, extended)))
     items.append((BRAND_DIR / "ausmt-mark.svg", "bytes", svg_mark().encode("utf-8")))
     items.append((BRAND_DIR / "ausmt-mark.png", "image", png_mark(PNG_MARK_SIZE)))
+    items.append((BRAND_DIR / f"ausmt-mark-{PNG_CARD_MARK_SIZE}.png", "image",
+                  png_mark(PNG_CARD_MARK_SIZE)))
     items.append((ROOT / "vendor" / "favicon.svg", "bytes", svg_favicon().encode("utf-8")))
     for size in APP_ICON_SIZES:
         items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", png_mark(size)))

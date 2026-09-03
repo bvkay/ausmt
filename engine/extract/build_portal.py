@@ -663,9 +663,11 @@ def build_feed_xml(surveys_meta: dict, base_url: str = None):
 
 # The static portal documents the sitemap advertises beside the generated pages. They are
 # substantive, indexable and linked from the root, and were previously in no sitemap at all.
-# brand.html joins them with the brand-assets lane: it is where anyone outside the project gets a
-# usable AusMT logo file, with the usage terms beside it, and it is linked from About.
-_SITEMAP_STATIC_PAGES = ("about.html", "releases.html", "add-survey.html", "brand.html")
+# brand.html is deliberately NOT among them: it is an asset shelf, reached from About by anyone who
+# needs a logo file, and it carries its own robots noindex. A sitemap entry for a page that declares
+# itself unindexable asks the crawler for work it must then discard, and the three pages left here
+# are the ones the site actually wants found.
+_SITEMAP_STATIC_PAGES = ("about.html", "releases.html", "add-survey.html")
 
 
 def _portal_dir():

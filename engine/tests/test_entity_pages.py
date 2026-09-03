@@ -115,15 +115,16 @@ def test_the_sitemap_advertises_the_hubs_and_the_static_pages(tmp_path):
     surveys = _make_rich_survey(tmp_path)
     out = _build(surveys, tmp_path / "out")
     sitemap = (out / "sitemap.xml").read_text(encoding="utf-8").replace("\n", "")
-    # brand.html joins the list with the brand-assets lane: it is a substantive page, linked from
-    # About, and it is where anyone outside the project gets a usable logo file.
-    for rel in ("surveys", "collections", "about.html", "releases.html", "add-survey.html",
-                "brand.html"):
+    for rel in ("surveys", "collections", "about.html", "releases.html", "add-survey.html"):
         u = f"{BASE}/{rel}"
         row = re.search(rf"<url><loc>{re.escape(u)}</loc>(.*?)</url>", sitemap)
         assert row, f"the sitemap must advertise {u}"
         assert "<lastmod>" not in row.group(1), \
             f"{u} has no honest change signal, so it must carry no lastmod"
+    # brand.html is the one static page deliberately held out: it declares its own robots noindex,
+    # and a sitemap entry for a page that refuses indexing spends crawl budget on nothing.
+    assert f"{BASE}/brand.html" not in sitemap, \
+        "brand.html declares noindex and must not be advertised in the sitemap"
 
 
 def test_the_build_report_records_the_page_count(tmp_path):
