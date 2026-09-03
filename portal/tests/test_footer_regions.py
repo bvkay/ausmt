@@ -54,6 +54,9 @@ Each assertion states its failure criterion:
     regions, or drifts on a string, a target or a separator.
   * THE RETIRED CONTROLS STAY RETIRED - FAILS if Releases, About this build or the disclosure
     popover (markup or CSS) comes back to any footer.
+  * THE TWO EXTERNAL ANCHORS OPEN IN A NEW TAB - FAILS if either AuScope anchor on any surface
+    loses target="_blank" or rel="noopener noreferrer", spells the pair differently, or if an
+    in-site footer link takes a target of its own.
 
 BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's. On the static tier main is 840px on an
 entity page, 920px on a hub and 1120px above 1180px of viewport, and on the portal the sibling pages
@@ -95,6 +98,15 @@ MTCAT = "/data/mtcat.json"
 # outage or a compromise of a third-party host can tamper with a fetched byte; it cannot tamper with
 # an <a href>, which is why the two are separate rules rather than one host list.
 _EXTERNAL_NAV = ("https://www.auscope.org.au",)
+
+# HOW THE TWO EXTERNAL ANCHORS OPEN. Both leave the site, so both open in a new tab and neither
+# hands the opened page a handle on this one: target="_blank" gives the opened document
+# window.opener, from which it can navigate the tab it was opened from to a look-alike, and the
+# referrer would leak the reader's path through the catalogue to a third party. The pair is asserted
+# as ONE literal string in ONE order so six documents and the engine's emitter cannot each spell it
+# differently; it is the spelling the header's own external anchor already carries. In-site links
+# keep the same tab, which is why this is a per-anchor rule and not a document-wide base target.
+_NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
 # The lockup, as the file the footer promises. Recorded from the AuScope brand kit's own bytes; see
 # portal/vendor/README.md, which carries the same four facts beside the file.
@@ -229,11 +241,12 @@ def test_both_surfaces_carry_the_same_three_regions_with_the_owners_strings():
 
         right = regions["right"]
         assert re.fullmatch(
-            r'<a class="orglogo" href="' + re.escape(_EXTERNAL_NAV[0]) + r'" rel="[^"]*noopener[^"]*">'
+            r'<a class="orglogo" href="' + re.escape(_EXTERNAL_NAV[0]) + r'" ' + re.escape(_NEW_TAB)
+            + r'>'
             r'<img src="[^"]*auscope-ncris-white\.png" alt="' + re.escape(LOGO_ALT) + r'"[^>]*></a>',
             right, re.S), (
             f"{where}: the right region is the AuScope-NCRIS lockup, linked where the centre's URL "
-            f"text links and carrying rel=noopener, and nothing else: {right!r}")
+            f"text links and carrying {_NEW_TAB}, and nothing else: {right!r}")
 
 
 def test_the_two_surfaces_agree_on_where_the_footer_points():
@@ -446,7 +459,8 @@ def test_every_portal_page_carries_the_one_footer():
             f"{name}: the third region is the AuScope-NCRIS lockup, got <{rtag} "
             f"class={rattrs.get('class')!r}>")
         assert re.fullmatch(
-            r'<a class="orglogo" href="' + re.escape(_EXTERNAL_NAV[0]) + r'" rel="[^"]*noopener[^"]*">'
+            r'<a class="orglogo" href="' + re.escape(_EXTERNAL_NAV[0]) + r'" ' + re.escape(_NEW_TAB)
+            + r'>'
             r'<img src="[^"]*auscope-ncris-white\.png" alt="' + re.escape(LOGO_ALT) + r'"[^>]*></a>',
             rinner.strip(), re.S), (
             f"{name}: the right region is the lockup anchor and nothing else: {rinner!r}")
@@ -798,3 +812,58 @@ def test_the_centre_line_is_bold_on_every_surface():
                 assert "font-weight" not in rule, (
                     f"{where}: the weight belongs to the centre zone alone; a second declaration "
                     f"in {sibling!r} is a second place for the surfaces to drift: {rule!r}")
+
+
+def _footer_html(name):
+    """A portal page's footer, comments stripped, so prose inside it cannot satisfy a pin."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    foot = text.split("<footer>", 1)[1].split("</footer>", 1)[0]
+    return re.sub(r"<!--.*?-->", "", foot, flags=re.S)
+
+
+def _anchors(where, footer_html):
+    """(href, whole opening tag) for every anchor in a footer, in source order.
+
+    The opening tag is carried whole rather than parsed into attributes so a caller can assert the
+    target/rel pair as the one literal string it must be on every surface."""
+    out = []
+    for tag in re.findall(r"<a\b[^>]*>", footer_html):
+        href = re.search(r'href="([^"]*)"', tag)
+        assert href, f"{where}: a footer anchor carries no href: {tag!r}"
+        out.append((href.group(1), tag))
+    assert out, f"{where}: the footer carries no anchor at all"
+    return out
+
+
+def test_the_two_auscope_anchors_open_in_a_new_tab_on_every_surface():
+    """THE TWO EXTERNAL ANCHORS LEAVE THE TAB, and hand the opened page nothing. Both footer links
+    to the AuScope address, the centre sentence's URL text and the lockup, carry
+    target="_blank" rel="noopener noreferrer" in that one spelling on all six documents the portal
+    ships and in the footer the engine emits.
+
+    WHY rel IS NOT OPTIONAL BESIDE target: a document opened with target="_blank" is given
+    window.opener unless rel says otherwise, and can navigate the tab it came from; noreferrer also
+    keeps the reader's path through the catalogue off a third party's logs.
+
+    FAILS if a surface loses either attribute, spells the pair differently, adds the target to only
+    one of the two anchors, or gives an IN-SITE footer link a target of its own: the machine-readable
+    record is this site's own document and opening it in a new tab would be a second behaviour for a
+    reader to learn. Non-vacuous: at the tip before this pin, neither anchor carried a target on any
+    of the seven surfaces and the lockup's rel was noopener alone."""
+    surfaces = [(name, _footer_html(name)) for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _engine_footer()))
+    for where, foot in surfaces:
+        anchors = _anchors(where, foot)
+        external = [tag for href, tag in anchors if href in _EXTERNAL_NAV]
+        assert len(external) == 2, (
+            f"{where}: the footer carries exactly two anchors to {_EXTERNAL_NAV[0]}, the centre "
+            f"sentence's URL text and the lockup; found {len(external)}: {external!r}")
+        for tag in external:
+            assert _NEW_TAB in tag, (
+                f"{where}: an anchor that leaves the site opens in a new tab and hands it no "
+                f"opener; expected {_NEW_TAB!r} in {tag!r}")
+        for href, tag in anchors:
+            if href in _EXTERNAL_NAV:
+                continue
+            assert "target=" not in tag, (
+                f"{where}: an in-site footer link stays in this tab, got {tag!r}")

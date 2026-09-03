@@ -713,6 +713,11 @@ _FOOTER_LINK = ("Machine-readable record (MTCAT JSON)", "/data/mtcat.json")
 # what keeps it the only new fetch this ruling introduced.
 AUSCOPE_URL = "https://www.auscope.org.au"
 ORG_LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
+# Both anchors to that address leave the site, so both open in a new tab and hand the opened page no
+# handle on this one: target="_blank" grants window.opener, from which the opened document can
+# navigate the tab it came from. One literal in one order, the spelling the header's own external
+# anchor carries, so the generated tier cannot drift from the portal's six documents.
+NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
 
 def _kinds(built):
@@ -823,7 +828,7 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         # URL text. The rest of the line is prose and stays prose.
         centre = foot.split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
         assert centre == ("AusMT is enabled by AuScope &#183; "
-                          f'<a href="{AUSCOPE_URL}">www.auscope.org.au</a> &#183; '
+                          f'<a href="{AUSCOPE_URL}" {NEW_TAB}>www.auscope.org.au</a> &#183; '
                           "&#169; 2026 AuScope and the AusMT contributors &#183; "
                           "Data licences vary by survey"), \
             f"{rel}: centre region is not the owner's acknowledgement line: {centre!r}"
@@ -833,10 +838,15 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         # RIGHT. The parent organisation's full lockup, linked where the centre's URL text links.
         # Same-origin and vendored: the ruling adds a navigation anchor, not a runtime dependency.
         right = foot.split('<div class="fzone fright">', 1)[1].split("</div>", 1)[0]
-        assert right == (f'<a class="orglogo" href="{AUSCOPE_URL}" rel="noopener">'
+        assert right == (f'<a class="orglogo" href="{AUSCOPE_URL}" {NEW_TAB}>'
                          f'<img src="{ORG_LOCKUP_SRC}" alt="AuScope and NCRIS" '
                          'width="1919" height="325"></a>'), \
             f"{rel}: right region is not the AuScope-NCRIS lockup: {right!r}"
+
+        # The MTCAT record is this site's own document: it stays in the tab the reader is in, so
+        # the new-tab behaviour reads as "this link leaves AusMT" and nothing else.
+        assert "target=" not in left, \
+            f"{rel}: an in-site footer link stays in this tab: {left!r}"
 
         for gone in (">Releases<", "About this build", "aboutbuild", "/releases.html"):
             assert gone not in foot, \
