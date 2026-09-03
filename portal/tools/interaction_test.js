@@ -1511,6 +1511,40 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "H0b: the header carries no outbound AuScope anchor; the footer and About section 2 do");
   ok(_hdr.querySelector(".hright"), "H0b: the right zone stays; the mark left it, the zone did not");
 
+  // H0c. THE MAP WATERMARK. The AuScope colour icon is the one place on the site the symbol survives,
+  // and it is there for a reason the chrome could not give: the map is what people screenshot into
+  // talks and reports, and a screenshot carries no footer. Driven off the REAL index.html DOM, so a
+  // mark that moved out of the map container, grew a link around it or lost its alt text fails here
+  // rather than in a source-literal pin that a re-indentation could break.
+  const _mapEl = doc.getElementById("map");
+  ok(_mapEl, "H0c: index.html must carry the Leaflet map container");
+  const _marks = [..._mapEl.querySelectorAll("img.mapmark")];
+  ok(_marks.length === 1,
+    "H0c: the map must carry exactly one watermark inside its own container, found " + _marks.length);
+  ok(_marks[0].getAttribute("src") === "/vendor/auscope-icon-colour.png",
+    "H0c: the watermark must be the vendored AuScope colour icon, got " + JSON.stringify(_marks[0].getAttribute("src")));
+  ok(_marks[0].getAttribute("alt") === "AuScope",
+    "H0c: the watermark is attribution and must name the organisation in its alt text, got " +
+    JSON.stringify(_marks[0].getAttribute("alt")));
+  ok(!_marks[0].closest("a"),
+    "H0c: the watermark must not be a link; the footer carries the link and a link here takes a tab " +
+    "stop in the middle of the map");
+  // The two properties that make it unable to intercept a zoom, a draw, a popup or the tour. Read
+  // from the document's OWN stylesheet text and compared as numbers against Leaflet's, because
+  // jsdom does not run a full cascade for these properties.
+  const _sheet = [...doc.querySelectorAll("style")].map(s => s.textContent).join("\n");
+  const _mapmarkRule = (_sheet.match(/\.mapmark\{[^}]*\}/) || [""])[0];
+  ok(/pointer-events:\s*none/.test(_mapmarkRule),
+    "H0c: the watermark must be out of hit testing entirely (pointer-events:none), got " + JSON.stringify(_mapmarkRule));
+  const _mine = parseInt((_mapmarkRule.match(/z-index:\s*(\d+)/) || [0, "0"])[1], 10);
+  const _leaflet = fs.readFileSync(path.join(PORTAL, "vendor", "leaflet.css"), "utf8");
+  const _ctlZ = parseInt((_leaflet.match(/\.leaflet-control \{[^}]*?z-index: (\d+)/) || [0, "0"])[1], 10);
+  const _popZ = parseInt((_leaflet.match(/\.leaflet-popup-pane\s*\{ z-index: (\d+); \}/) || [0, "0"])[1], 10);
+  ok(_ctlZ > 0 && _popZ > 0, "H0c: could not read Leaflet's own control/popup z-indices to compare against");
+  ok(_mine > 0 && _mine < _ctlZ && _mine < _popZ,
+    "H0c: the watermark's z-index (" + _mine + ") must stay below Leaflet's control (" + _ctlZ +
+    ") and popup (" + _popZ + ") layers");
+
   // H. TOUR v4 (UX rounds 1/2 + UX4 D5): 10 steps now. Opens from the welcome popup's "Take the 2-minute
   // tour" button (#welcomeTour), which is the only tour BUTTON left; index.html?tour=1 is the other entry
   // and is pinned in G3. Step 1 text matches the verbatim design copy, ArrowRight advances to step 2, Esc

@@ -1059,6 +1059,24 @@ ORG_ASSET = "auscope-icon-white.png"
 ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 1}
 
 
+# The SPA map's watermark, which this tier must NOT grow. The owner's ruling puts the AuScope colour
+# icon in one place on the site, the Leaflet map container on portal/index.html, because that is the
+# surface people screenshot; the generated pages have no such surface, their collection figure draws
+# the WHITE icon, and the src allow-list above is deliberately unchanged by that ruling. Asserted
+# rather than assumed, because a new brand file is exactly the kind of thing that spreads.
+COLOUR_ASSET = "auscope-icon-colour.png"
+
+
+def test_no_page_kind_draws_the_spa_maps_colour_watermark(built):
+    """FAILS IF any generated page names the colour icon, in any slot. It would also fail the src
+    allow-list, but only as an unexplained count; this says which file and why it may not be here."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        assert COLOUR_ASSET not in page, (
+            f"{rel}: the AuScope colour icon is the SPA map's watermark and belongs to no page in "
+            "this tier; the collection figure draws the white icon")
+
+
 def test_no_page_kind_names_the_auscope_image_beyond_the_one_figure_that_keeps_it(built):
     """FAILS IF a page kind names the AuScope image more often than the figures it is entitled to,
     or loses the one figure that keeps it. The map mark is drawn into a panel and the retired header
