@@ -8,11 +8,11 @@ const tree=document.getElementById("tree");
 const SEL_HINT_EMPTY=(document.getElementById("selHint")||{textContent:""}).textContent;
 let findActive=-1;   // UX6 Wave F (F3): index of the keyboard-highlighted Find option (-1 = none). Declared
                      // up here so renderFind() (which resets it) is never in its temporal dead zone.
-// The period-window control is retired (Lane B); the predicate is HEADLESS like qMin below - the
+// The period-window control is retired; the predicate is HEADLESS like qMin below - the
 // bounds live in state.js (periodLo/periodHi, full-range by default) and are drivable by harnesses.
 // A revival note: the old heading said "cover this period window" while the predicate is an OVERLAP
 // test; any returning control must state the overlap semantics.
-// S3: year-range predicate. A station passes when its SURVEY's [year_start,year_end] overlaps the
+// Year-range predicate. A station passes when its SURVEY's [year_start,year_end] overlaps the
 // typed [from,to] range; either input may be blank (an open end on that side). Unknown years
 // (survey declares no dates) PASS when both inputs are empty (no filter in effect) but FAIL as soon
 // as either is set — a modeller who typed a year range is asking for DATED data, so silently
@@ -49,12 +49,12 @@ function passesCore(s){
   // screening rule is a curation decision, not a rail-layout one.
   if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
   if(!passesYearRange(s))return false;
-  // C6: "Downloadable here" is the s.ediAvail licence predicate (the retired tickbox's, then the Data
+  // "Downloadable here" is the s.ediAvail licence predicate (the retired tickbox's, then the Data
   // available dropdown's "tf" option, the same flag the selection exports read for their not-included
   // honesty). The CONTROL was promoted to the discovery bar and the predicate stayed exactly here, so
   // the map filters on it as it always did; only where a reader sets it has changed.
   if(typeof surveyFacetOn==="function"&&surveyFacetOn("dl")&&!s.ediAvail)return false;
-  // Data available (Lane B, D1): the single-select TIME-SERIES level chooser in Browse. A level token
+  // Data available: the single-select TIME-SERIES level chooser in Browse. A level token
   // filters on ts_access.json membership and is INERT until the index has landed: a route that has not
   // arrived is not a missing one, and filtering on it would empty the map over data the portal does not
   // have. paintAvailSelect disables the level options across the same window (belt and braces), and
@@ -72,7 +72,7 @@ function passes(s){if(!passesCore(s))return false;
   // survey's stations on the map instead of blanking it; the dropdown still offers the collection/survey jumps.
   if(q&&!(s.id.toLowerCase().includes(q)||s.file.toLowerCase().includes(q)||s.survey.toLowerCase().includes(q)))return false;
   return true;}
-// Surveys-view search (cleanup wave B): a case-insensitive substring across the survey name, org,
+// Surveys-view search: a case-insensitive substring across the survey name, org,
 // region and blurb. Reads the discovery-bar #surveySearch input (NOT the rail #find; the rail is
 // hidden on the Surveys view, so the discovery search REPLACES #find as that view's search). Empty
 // query (or no input present, e.g. a bare fixture) matches everything.
@@ -105,7 +105,7 @@ function renderFind(){const box=document.getElementById("findResults");
   if(sts.length)h+=`<div class="fgroup">Stations${sts.length>=8?" (first 8)":""}</div>`+sts.map(s=>`<div class="fitem" data-find="station" data-i="${s.i}">${esc(s.id)}<span class="fmeta">${esc(s.survey)}</span></div>`).join("");
   if(!h)h=`<div class="fitem fnone">no matches</div>`;
   box.innerHTML=h;box.style.display="block";
-  // UX6 Wave F (F3): make the live results keyboard-usable. The container is role="listbox" (index.html);
+  // Make the live results keyboard-usable. The container is role="listbox" (index.html);
   // tag each REAL result (a data-find row, not the "no matches" filler) as an option with a stable id so
   // the input can point aria-activedescendant at the highlighted one. Matching logic above is untouched.
   findOptions().forEach((el,i)=>{el.setAttribute("role","option");el.id="find-opt-"+i;el.setAttribute("aria-selected","false");});
@@ -121,7 +121,7 @@ function inShapes(s){if(!hasPosition(s))return false;
   const rings=layer.getLatLngs();const ring=Array.isArray(rings[0])?rings[0]:rings;let inn=false;
   for(let a=0,b=ring.length-1;a<ring.length;b=a++){const yi=ring[a].lat,xi=ring[a].lng,yj=ring[b].lat,xj=ring[b].lng;
     if(((yi>s.lat)!==(yj>s.lat))&&(s.lon<(xj-xi)*(s.lat-yi)/(yj-yi)+xi))inn=!inn;}if(inn)inside=true;});return inside;}
-// C5 (owner R12, the SPA half). The header counter is ONE shell with a CONTEXTUAL slot. It used to read
+// The header counter is ONE shell with a CONTEXTUAL slot. It used to read
 // "N shown / M selected / T total" on every view, and only on the map was that a description of what the
 // reader was looking at: on the Surveys view it counted stations while the screen showed survey cards,
 // and on the Collections views it counted something not on screen at all. The shell never moves; only
@@ -160,10 +160,10 @@ function refresh(){visible=ST.filter(passes);
   if(curView==="surveys")renderCards();
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("selBig").textContent=selected.size;
-  // C5: the selection is half the workspace line, so a selection change repaints the header slot. The
+  // The selection is half the workspace line, so a selection change repaints the header slot. The
   // map form's #nSel is rebuilt by the same call, which is why it is no longer set directly here.
   updateCounts();
-  // Lane B: downloads follow the SCOPE (scopeStations), so the metadata buttons enable whenever the
+  // Downloads follow the SCOPE (scopeStations), so the metadata buttons enable whenever the
   // scope is non-empty - with nothing selected they act on the filtered corpus, and the scope line
   // says so. Guarded per element: a renamed button must not abort every later line of this function
   // on each selection change (the bind-time console.error is the loud signal).
@@ -176,7 +176,7 @@ function updateSel(){document.getElementById("selBig").textContent=selected.size
   if(typeof paintDownloadRows==="function")paintDownloadRows();
   document.getElementById("selHint").textContent=selected.size?"Downloads below cover exactly these stations, with provenance pointers.":SEL_HINT_EMPTY;}
 
-// UX5 (D7): tree disclosure state. Collapse is IN-MEMORY only (no persistence — polish item), keyed
+// Tree disclosure state. Collapse is IN-MEMORY only (no persistence - polish item), keyed
 // "c:<country>" / "o:<country||org>" / "k:<collection id>" (the || separator is the tree's existing
 // org-namespacing convention). Visibility is applied by WALKING the flat rows: a row hides when ANY
 // ancestor key is collapsed, so re-expanding a country keeps a collapsed org's surveys hidden.
@@ -193,7 +193,7 @@ function applyTreeVisibility(){
     row.classList.toggle("hidden",treeIsCollapsed("c:"+inp.dataset.country)||treeIsCollapsed("o:"+inp.dataset.org));});
   tree.querySelectorAll(".caret").forEach(c=>{c.textContent=treeIsCollapsed(c.dataset.key)?"▸":"▾";});   // ▸ / ▾, single source (O1 2026-07-12: collection carets removed — only country/org carets remain)
 }
-// UX5 (D7): caret factory — its OWN click target INSIDE the label-wrapped row. preventDefault stops
+// Caret factory - its OWN click target INSIDE the label-wrapped row. preventDefault stops
 // the label from activating its checkbox (the click-target hazard, test-pinned); stopPropagation
 // keeps the click out of any delegated handlers. Glyph is synced by applyTreeVisibility above.
 function _caret(key){const c=document.createElement("span");c.className="caret";c.dataset.key=key;c.textContent="▾";
@@ -204,15 +204,15 @@ function _caret(key){const c=document.createElement("span");c.className="caret";
 // hierarchy tree: country -> org -> survey (all names escaped)
 function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hier[s.country]||{});(hier[s.country][s.org]=hier[s.country][s.org]||{});
   (hier[s.country][s.org][s.survey]=(hier[s.country][s.org][s.survey]||0)+1);svCount[s.survey]=(svCount[s.survey]||0)+1;});
-  // UX5 (D6): Collections toggle group — FIRST, above all countries, only when the boot data has
+  // Collections toggle group - FIRST, above all countries, only when the boot data has
   // collections (same non-empty gating as the Collections tab). Collections are CROSS-CUTTING (a
   // programme can span orgs) so this is NOT a nesting level: the checkbox is a PUSH-ONLY bulk toggle
   // with the country/org semantics — on change it sets every MEMBER survey's checkbox (matched by
   // LABEL: COLL[cid].surveys holds labels and survey checkboxes use value=<label>) and refreshes. No
-  // derived/indeterminate state (country/org don't either — future polish). O1 (2026-07-12): the row is
+  // Derived/indeterminate state (country/org don't either - future polish). O1: the row is
   // just name + survey count + station count now — no nested member list, no caret (per-survey toggling
   // lives in the org hierarchy). Org rows/counts below are untouched: member surveys still live under their orgs.
-  // UX7a (A3): the Collections group is mounted in its OWN block (#collGroup) ABOVE the country/org/survey
+  // The Collections group is mounted in its OWN block (#collGroup) ABOVE the country/org/survey
   // tree, not first-within #tree. Only the mount point changed — the heading, the row label, the push-only
   // bulk-toggle semantics and the member-survey sync (still matched against #tree's value checkboxes) are
   // unchanged. Fallback to `tree` keeps any harness without the #collGroup element working as before.
@@ -224,7 +224,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
     const gh=document.createElement("div");gh.className="treegroup";gh.textContent="Collections";collGroup.appendChild(gh);
     _cids.forEach(cid=>{const c=_coll[cid],members=c.surveys||[];
       const nSt=members.reduce((a,sv)=>a+(svCount[sv]||0),0);
-      // O1 (owner, 2026-07-12): a collection row shows ONLY name + member-survey count + station count —
+      // A collection row shows ONLY name + member-survey count + station count -
       // no nested member-survey list and no disclosure caret (nothing left to disclose). Member surveys
       // stay fully reachable via the org/country tree below and the collection page, so nothing is lost.
       const row=document.createElement("label");row.className="coll";
@@ -276,7 +276,7 @@ document.getElementById("typeBoxes").addEventListener("change",()=>{
 tree.addEventListener("change",e=>{if(e.target.value!==undefined&&e.target.value!=="")refresh();});
 document.getElementById("find").addEventListener("input",()=>{refresh();renderFind();});
 document.getElementById("find").addEventListener("focus",renderFind);
-// UX6 Wave F (F3): activation is shared between a mouse click and a keyboard Enter (below), so both take
+// Activation is shared between a mouse click and a keyboard Enter (below), so both take
 // the identical path. `it` is a .fitem option element (has data-find). Kept verbatim from the old click
 // handler body — no routing change, only extracted so Enter can reuse it.
 function activateFindItem(it){if(!it||!it.dataset.find)return;
@@ -289,10 +289,10 @@ document.getElementById("findResults").addEventListener("click",e=>{const it=e.t
 // click-away closes the Find dropdown (the data-act delegated handler in drawer.js ignores .fitem)
 document.addEventListener("click",e=>{if(!e.target.closest("#find")&&!e.target.closest("#findResults")){const fr=document.getElementById("findResults");if(fr){fr.style.display="none";findCloseState();}}});
 
-// UX6 Wave F (F3): keyboard path for the Find dropdown. ArrowUp/Down move an active-descendant highlight,
+// Keyboard path for the Find dropdown. ArrowUp/Down move an active-descendant highlight,
 // Enter activates the highlighted option (same activateFindItem as a click), Esc clears the query. No CSS
-// rule is added to index.html for the highlight (out of this lane's file scope) — the active option is
-// styled inline to match the existing :hover treatment (copper fill, dark ink), and un-styled on move-off.
+// Rule is added to index.html for the highlight - the active option is
+// styled inline to match the existing :hover look (copper fill, dark ink), and un-styled on move-off.
 // (findActive is declared at the top of this file to avoid a temporal-dead-zone hazard in renderFind.)
 function findOptions(){return [...document.getElementById("findResults").querySelectorAll(".fitem[data-find]")];}
 function findIsOpen(){const fr=document.getElementById("findResults");return fr&&fr.style.display==="block";}
@@ -315,7 +315,7 @@ document.getElementById("find").addEventListener("keydown",e=>{
   else if(e.key==="ArrowUp"){e.preventDefault();setFindActive(findActive<0?findOptions().length-1:findActive-1);}
   else if(e.key==="Enter"){if(findActive>=0){e.preventDefault();activateFindItem(findOptions()[findActive]);}}});
 // One-time ARIA wiring so the input advertises the listbox it drives (combobox pattern). Attributes are
-// set here (not in index.html) to keep this lane's edits inside filters.js.
+// set here rather than in index.html, so this behaviour stays inside filters.js.
 (function(){const find=document.getElementById("find");if(!find)return;
   find.setAttribute("role","combobox");find.setAttribute("aria-autocomplete","list");
   find.setAttribute("aria-controls","findResults");find.setAttribute("aria-expanded","false");})();
@@ -348,11 +348,11 @@ function paintAvailSelect(){
 // about the build), so each surface names which it is in.
 const TS_PENDING_HINT="Time-series availability is still loading";
 const TS_NONE_HINT="this deployment publishes no download index";
-// The current DOWNLOAD SCOPE (Lane B): the selection when one exists, else the filtered corpus -
+// The current DOWNLOAD SCOPE: the selection when one exists, else the filtered corpus -
 // exactly what "Select all filtered" would take. One rule, no modes; the scope line in the Download
 // block states which. exports.js reads this for every download and every priced row.
 function scopeStations(){return selected.size?ST.filter(s=>selected.has(s.i)):visible;}
-// UX6 Wave D (D2), reshaped in Lane B: rail Browse / Select & download mode. Browse (default) is
+// Rail Browse and Select-and-download mode. Browse (default) is
 // every map filter (find, data type, Data available, year, tree); Select & download is the
 // map-selection box and the Download/Metadata blocks
 // (advanced). It is a pure show/hide of the two mode panes — it never touches data-views (view/mode are
@@ -397,14 +397,14 @@ document.getElementById("modeSeg").addEventListener("click",e=>{const b=e.target
 document.getElementById("selAll").onclick=()=>{drawn.clearLayers();selected=new Set(visible.map(s=>s.i));updateSel();setSidebarMode("select");};
 document.getElementById("clearSel").onclick=()=>{selected.clear();drawn.clearLayers();updateSel();};
 
-// S3: Year range filter — two plain number inputs; either change re-filters (refresh() re-reads
+// Year range filter - two plain number inputs; either change re-filters (refresh() re-reads
 // passesYearRange() each call, so no extra plumbing needed beyond a re-render trigger).
 const yearFrom=document.getElementById("yearFrom"),yearTo=document.getElementById("yearTo");
 if(yearFrom)yearFrom.addEventListener("input",refresh);
 if(yearTo)yearTo.addEventListener("input",refresh);
 
 // Availability > Transfer functions: the #tfAvail CHECKBOX is gone, folded into the Browse
-// "Data available" single-select (#availSel, its "tf" option) by the Lane B / D1 panel redesign.
+// "Data available" single-select (#availSel, its "tf" option).
 // The PREDICATE s.ediAvail outlived the control exactly as this comment always said it would: it is
 // read in passesCore() above and by the selection exports' three-way not-included honesty.
 

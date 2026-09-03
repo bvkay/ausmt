@@ -75,23 +75,31 @@ def bare(line):
     return s
 
 
+# One left-to-right scan per file, so every comment is counted once and only once. A separate pass
+# per syntax double-counts twice over: a // line inside a /* */ block is read by both, and so is a
+# /* that a line comment happens to contain, such as the glob contract/*.json. Both overstate the
+# bytes, which would let a cap pass on an artefact instead of on the sweep.
+SYNTAX = {
+    ".html": r"(?s:<!--.*?-->)|(?s:/\*.*?\*/)",
+    ".js": r"(?s:/\*.*?\*/)|(?m:^[ \t]*//.*$)",
+    ".css": r"(?s:/\*.*?\*/)",
+    ".py": r'(?s:"""(?:.|\n)*?""")|(?m:^[ \t]*#.*$)',
+}
+
+
 def comments(path, text):
-    """Every comment in one file, as (line number, text)."""
-    suffix = path.suffix
-    patterns = []
-    if suffix == ".html":
-        patterns = [r"(?s)<!--.*?-->", r"(?s)/\*.*?\*/"]
-    elif suffix == ".js":
-        patterns = [r"(?s)/\*.*?\*/", r"(?m)^[ \t]*//.*$"]
-    elif suffix == ".css":
-        patterns = [r"(?s)/\*.*?\*/"]
-    elif suffix == ".py":
-        patterns = [r'(?s)"""(?:.|\n)*?"""', r"(?m)^[ \t]*#.*$"]
-    out = []
-    for pattern in patterns:
-        for match in re.finditer(pattern, text):
-            out.append((text.count("\n", 0, match.start()) + 1, match.group(0)))
-    return sorted(out)
+    """Every comment in one file, as (line number, text), each counted once."""
+    pattern = SYNTAX.get(path.suffix)
+    if not pattern:
+        return []
+    scanner = re.compile(pattern)
+    out, pos = [], 0
+    while True:
+        match = scanner.search(text, pos)
+        if not match:
+            return out
+        out.append((text.count("\n", 0, match.start()) + 1, match.group(0)))
+        pos = match.end()
 
 
 def offences(files, shipped=False):
@@ -139,7 +147,7 @@ SHIPPED_HTML_CAPS = {
     "brand.html": 3_000,
     "404.html": 1_500,
 }
-SHIPPED_JS_CAP = 240_000
+SHIPPED_JS_CAP = 232_000
 
 
 def shipped_html():
@@ -286,3 +294,13 @@ def test_the_work_item_rule_does_not_flag_ordinary_prose(tmp_path):
     f = tmp_path / "prose.css"
     f.write_text("/* IPv4 addresses are truncated to /24; WCAG AA (4.5:1) is the floor. */\na{color:red}\n", encoding="utf-8")
     assert not offences([f], shipped=True), "the work-item rule flagged ordinary prose"
+
+
+def test_a_comment_is_counted_once(tmp_path):
+    """The two overlaps a per-syntax scan double-counts, each counted once here."""
+    f = tmp_path / "overlap.js"
+    f.write_text("/* a block\n// a line inside it\n*/\n// a glob such as contract/*.json\nvar a = 1;\n",
+                 encoding="utf-8")
+    found = comments(f, f.read_text(encoding="utf-8"))
+    assert len(found) == 2, f"expected two comments, got {len(found)}: {found}"
+    assert comment_bytes(f) == sum(len(c.encode('utf-8')) for _, c in found)

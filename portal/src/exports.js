@@ -6,7 +6,7 @@
 // sc[SC.qb]=qb, sc[SC.rr]=rr, sc[SC.sw]=sw, sc[SC.dim]=dim) — see the legend in data.js / data-files.md before
 // reordering export columns.
 const sel=()=>ST.filter(s=>selected.has(s.i));
-// Lane B: every download acts on the SCOPE - the selection when one exists, else the filtered
+// Every download acts on the SCOPE - the selection when one exists, else the filtered
 // corpus (filters.js scopeStations; the scope line in the Download block states which). sel() stays
 // for callers that mean the literal selection.
 function scopeSel(){return (typeof scopeStations==="function")?scopeStations():sel();}
@@ -31,7 +31,7 @@ function save(n,t,m){const a=document.createElement("a");a.href=URL.createObject
 // as a stall. Every packaging path ends in a completion or nothing-to-package toast, which clears it.
 function toast(m,opts){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";clearTimeout(toast._h);
   toast._h=(opts&&opts.sticky)?null:setTimeout(()=>t.style.display="none",7000);}
-// ---- the hand-off snackbar (owner UX ruling 2026-08-23) ------------------------------------------
+// ---- the hand-off snackbar ------------------------------------------
 // PROGRESS BELONGS TO THE BROWSER: a hand-off is a 302, the bytes travel browser-to-archive, and
 // CORS forbids fetching the payload in-page. No progress bar, no download panel, no completion
 // claim - the page says only what it handed over. It differs from toast() in exactly one way, which is why it is a second element and not a
@@ -49,7 +49,7 @@ function snack(msg,note,action){
   clearTimeout(snack._h);
   // An offer with an action gets long enough to reach for it; a plain hand-off note is transient.
   snack._h=setTimeout(()=>{el.classList.add("hidden");el.textContent="";},action?25000:9000);}
-// Above this the wait is worth naming. 5 GB is the owner's threshold; the corpus has single archives
+// Above this the wait is worth naming. 5 GB is the threshold; the corpus has single archives
 // of 9.87 GB, and a reader who clicked expecting a file is owed the warning before the browser goes
 // quiet for a quarter of an hour.
 var HANDOFF_LARGE_BYTES=5*1024*1024*1024;
@@ -67,7 +67,7 @@ function csvRows(stations){
   // rendered attribution line — the custodian's verbatim statement when declared, else the org(year)
   // synthesis) travel with the exported rows so the rights don't get stripped when a CSV of the selection
   // is shared.
-  // UX8 (W3b, owner directive): the station CSV DROPS six columns — quality, quality_basis, remote_ref,
+  // The station CSV DROPS six columns - quality, quality_basis, remote_ref,
   // dimensionality, software and file — leaving a lean identity/geometry/rights row. (These derived-screen
   // and per-station-file fields stay in the GeoJSON export; the smoke test's column value-binds moved to
   // the reduced set.) The rights columns license/license_url/attribution stay.
@@ -75,10 +75,10 @@ function csvRows(stations){
   stations.forEach(s=>{const m=SMETA[s.survey]||{};rows.push([s.ausmt_id,s.id,s.country,s.org,s.survey,s.lat,s.lon,s.type,s.comps,s.nper,s.pmin,s.pmax,m.doi||"",TS_COLLECTION.doi,m.version||"",(m.collection||{}).id||"",m.lic||"",licenseUrl(m.lic),attributionLine(m)]);});
   return rows;
 }
-// C46: the licence deed URL for a raw licence string, via the canonical PROFILES/LICENSES tables (never a
+// The licence deed URL for a raw licence string, via the canonical PROFILES/LICENSES tables (never a
 // startsWith guess); "" when the id has no single canonical URL (e.g. PUBLIC DOMAIN) or is unrecognised.
 function licenseUrl(lic){return (LICENSES.urls||{})[canonLic(lic)]||"";}
-// C46: the rendered attribution line for a survey — the custodian's verbatim attribution.statement when
+// The rendered attribution line for a survey - the custodian's verbatim attribution.statement when
 // declared, else the org(year) synthesis (the same default the LICENSE instrument uses when no statement).
 function attributionLine(m){m=m||{};
   const st=((m.attribution||{}).statement||"").toString().trim();
@@ -90,7 +90,7 @@ function attributionLine(m){m=m||{};
 // engine's _license_text.license_instrument_text EXACTLY — the two implementations are pinned to a shared
 // vector file (engine/tests/fixtures/license_instrument_vectors.json), consumed by both an engine pytest
 // AND portal/tests/license_text_vectors.test.js, so they cannot drift silently. Deed URLs + attribution
-// PROFILES come from the generated LICENSES/PROFILES tables (contract/*.json), keyed by the canonical id.
+// PROFILES come from the generated LICENSES and PROFILES tables, keyed by the canonical id.
 // Signature MIRRORS the Python leaf (lic, licensor, year, attribution, sources, changes) so the shared
 // vectors drive both sides with identical inputs; the m -> (who, yr, attn) derivation lives at the call
 // site below (as it does in build_portal), not inside the renderer.
@@ -140,7 +140,7 @@ function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
     }
     for(const s0 of srcs){const slic=canonLic((s0||{}).licence);
       if(slic&&slic!==cid)L.push("The upstream dataset was obtained under "+slic+"; this AusMT release is published by the custodian under "+cid+".","");}
-    // C46-W3a: each custodian profile's s.5 disclaimer once (dedup, first-seen), the final paragraph(s)
+    // Each custodian profile's s.5 disclaimer once (dedup, first-seen), the final paragraph(s)
     // of the Source-datasets block — a profile-level legal notice, so it renders even under a verbatim
     // statement. Byte-inert when no source's profile carries a disclaimer. Pinned to the Python leaf.
     const seenDisc=[];
@@ -185,7 +185,7 @@ bindClick("dlGeo",async()=>{track("DownloadGenerated",{format:"geojson",n:scopeS
   const sciOk=hydrUsable("sci");
   if(!sciOk)toast("The screening data could not be loaded, so quality, dimensionality and remote reference are left out of this GeoJSON; the file says so.");
   save("ausmt-selection-"+tsUTC()+".geojson",JSON.stringify(geoFeatureCollection(scopeSel(),sciOk),null,1),"application/geo+json");});
-// POINTERS (Lane B, D2): the merged provenance-and-hand-off document, one per scope station. It is
+// POINTERS: the merged provenance-and-hand-off document, one per scope station. It is
 // the union of the two files it replaces: EVERY station in scope appears (the archive-pointers
 // rule), and stations with verified open files carry actionable levels[] rows (the fetch-list
 // rule), including explicit gap rows where a route could not be built. source_doi is the survey's
@@ -313,16 +313,16 @@ function tsCurlCommand(rows,exe){
     parts.push("-o "+o+' "'+l.url+'"');}));
   return parts.join(" ");}
 // One level's hand-off for the current scope, from the Download block's time-series rows. The row
-// names its own level, so no hidden chooser state can narrow it (the pre-Lane-B defect: a collapsed
+// names its own level, so no hidden chooser state can narrow it (the defect it replaced: a collapsed
 // accordion's level toggles silently scoped the old Time-series list export).
 //
-// A SMALL scope gets its FILES, not a file about them (owner rulings 2026-08-25): each route is
+// A SMALL scope gets its FILES, not a file about them: each route is
 // handed to the browser exactly as the drawer's single-station tile hands one, and the browser
-// owns the downloads and their progress (the 2026-08-23 ruling; AusMT still hosts and fetches
-// nothing - the 302s do the pointing). The gate is the TOTAL SIZE, not the file count (owner,
-// same day): up to the gate the browser is the best tool; beyond it the offer is the TERMINAL
+// Owns the downloads and their progress; AusMT still hosts and fetches nothing, because the
+// 302s do the pointing. The gate is the TOTAL SIZE, not the file count: up to the gate the
+// browser is the best tool, and beyond it the offer is the TERMINAL
 // COMMAND, which is resumable and verifiable at a scale where browser downloads quietly are not.
-// 5 GB, lowered from 10 (owner, 2026-08-26): raw_packed files run 0.2-1.2 GB each, so 10 GB could
+// 5 GB, lowered from 10: raw_packed files run 0.2-1.2 GB each, so 10 GB could
 // hand a browser two dozen large transfers at once, which is where the browser stops being the
 // better tool. 5 GB keeps the direct path to a handful of files.
 var TS_DIRECT_MAX_BYTES=5*1024*1024*1024;
@@ -331,7 +331,7 @@ var TS_DIRECT_MAX_BYTES=5*1024*1024*1024;
 // pre-selected (detection only picks the default tab; researchers copy commands for other
 // machines, so all three stay one click away). Guarded binds like every other control.
 // One line per platform: what to run it with, and nothing the shared instructions above already say
-// (owner, 2026-08-26 - the subfolder and resume behaviour is stated once, not three times over).
+// .
 var WGET_OS_NOTES={
   linux:"wget is preinstalled on most Linux distributions.",
   mac:"curl is preinstalled on macOS.",
@@ -420,20 +420,20 @@ async function tsLevelList(tok){
   // behind a snackbar action: an intermediate "Show terminal command" step is a click between the
   // reader and the only thing that can serve them at this size. No standalone list file either -
   // the metadata pack already carries the same document as handoff.json, so saving it twice put an
-  // unwanted .json at the head of the reader's downloads (owner, 2026-08-26).
+  // Unwanted .json at the head of the reader's downloads.
   await tsMetadataPack(_fetched,built.doc);
   showWgetDialog(cmds);
   snack("Download list ready - "+built.files+" files, "+fmtBigBytes(built.bytes)+".",
         "Too large to hand a browser at once, so the terminal command is shown instead: it fetches one file at a time and a re-run resumes where it stopped. The metadata & citation pack downloads beside it.",act);}
-// C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
-// pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
-// ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
+// The human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
+// pack SAYS SO explicitly - "[no DOI assigned]" - rather than silently omitting the field, because a
+// reference pack should state the absence. The .bib/.ris twins simply OMIT their doi=/DO/UR
 // fields (drawer.js apa/bibtex/ris already guard on a falsy doi, d2bc616); emitting placeholder text there
 // would be ingested by reference managers as real bibliographic data — the pre-C22 defect, where
 // AUSMT_SELF.pb carried "(DOI to be minted per release via Zenodo)" into every no-DOI publisher field.
 function citeLine(c,doi){return "  "+apaPlain(c,doi)+(doi?"":"  [no DOI assigned]");}
 // The citation files for a station set, extracted from the click handler so every data download
-// can carry them (owner, 2026-08-25): the selection zips embed these beside LICENSE.txt, and the
+// Can carry them: the selection zips embed these beside LICENSE.txt, and the
 // time-series hand-offs travel with a metadata pack. Output is byte-identical to the pack the
 // Citation pack button always built.
 function buildCitationFiles(_scope){
@@ -441,7 +441,7 @@ function buildCitationFiles(_scope){
 
   let txt=["AusMT citation pack — generated "+today,"Stations: "+_scope.length+" across "+svs.length+" survey release(s).","","== Survey source releases =="];let bib="",risT="";
   svs.forEach(sv=>{const m=SMETA[sv]||{};const c=m.cite||AUSMT_SELF;
-    // C46: an EXPLICIT fallback — a survey with no custodian cite block is no longer SILENTLY rendered as
+    // An EXPLICIT fallback - a survey with no custodian cite block is no longer SILENTLY rendered as
     // the AusMT brand (the pre-C46 `m.cite||AUSMT_SELF` masquerade). The human line SAYS the custodian
     // citation is unrecorded and points at the AusMT package citation instead; the .bib/.ris twins keep
     // the package fallback but under a survey-slug key, never claiming to BE the custodian's own citation.
@@ -450,7 +450,7 @@ function buildCitationFiles(_scope){
     bib+=bibtex(sv.toLowerCase().replace(/[^a-z0-9]+/g,"_"),c,m.doi)+"\n\n";risT+=ris(c,m.doi)+"\n\n";});
   txt.push("","== Time-series collection ==",citeLine(NCI_CITE,TS_COLLECTION.doi));bib+=bibtex("nci_auscope_mt",NCI_CITE,TS_COLLECTION.doi)+"\n\n";risT+=ris(NCI_CITE,TS_COLLECTION.doi)+"\n\n";
   txt.push("","== Curated catalogue metadata (suggested) ==",citeLine(AUSMT_SELF,null));bib+=bibtex("ausmt_catalogue",AUSMT_SELF,null)+"\n";risT+=ris(AUSMT_SELF,null)+"\n";
-  // C46: source-dataset citations chained — one line per UNIQUE upstream source across the selection
+  // Source-dataset citations chained - one line per UNIQUE upstream source across the selection
   // (identifier + custodian + licence + title), so a derived release credits the dataset it was built from.
   const srcSeen={},srcLines=[];
   svs.forEach(sv=>{((SMETA[sv]||{}).sources||[]).forEach(s=>{if(!s)return;
@@ -458,11 +458,11 @@ function buildCitationFiles(_scope){
     const ident=(s.identifier||"").toString().trim(),cust=(s.custodian||"").toString().trim(),slic=canonLic(s.licence),title=(s.title||"").toString().trim();
     srcLines.push("  "+[ident||"[no identifier]",cust?"— "+cust:"",slic?"("+slic+")":"",title?"["+title+"]":""].filter(Boolean).join(" "));});});
   if(srcLines.length)txt.push("","== Source datasets ==",...srcLines);
-  // C7: organisation ROR(s) — one line per custodian org that declared one, so the acknowledgement can
+  // Organisation ROR(s) - one line per custodian org that declared one, so the acknowledgement can
   // cite the organisation by its persistent identifier, not just its free-text name.
   const rors=[...new Set(svs.map(sv=>{const m=SMETA[sv]||{};return m.org_ror?`${m.org} (ROR: ${m.org_ror})`:null;}).filter(Boolean))];
   txt.push("","== Custodian organisation identifiers ==",...(rors.length?rors.map(r=>"  "+r):["  none recorded"]));
-  // C46: the acknowledgement is DATA-DRIVEN, assembled from the ACTUAL selection — the custodians of
+  // The acknowledgement is DATA-DRIVEN, assembled from the ACTUAL selection - the custodians of
   // record (attribution.custodian, else the organisation) plus each unique source-dataset attribution
   // (verbatim statement, else the profile-rendered form). The AusLAMP/AuScope/NCI sentence is included
   // ONLY when the selection references that archive (a survey's ts_pid or a source pointing at NCI/AuScope
@@ -484,7 +484,7 @@ function buildCitationFiles(_scope){
   if(usesNci)ack.push("  AusLAMP is a collaboration between AuScope, Geoscience Australia, state and territory","  geological surveys and university partners, with instruments supplied through the AuScope","  NCRIS program. Time series were accessed from the NCI-AuScope Magnetotelluric Collection","  (doi:"+TS_COLLECTION.doi+").");
   txt.push(...ack);
   return {txt:txt.join("\n"),bib:bib,ris:risT};}
-// Every data download travels with its metadata (owner, 2026-08-25): the citation files, the
+// Every data download travels with its metadata: the citation files, the
 // station table and the geometry for the SAME station set, written beside the data - the C6
 // rights-travel principle extended from LICENSE.txt to citation and context. Awaits the sci gate
 // so the GeoJSON keeps its honesty rules (the omission note when screening never loaded).
@@ -499,7 +499,7 @@ bindClick("dlCite",async()=>{const _scope=scopeSel();track("DownloadGenerated",{
   const c=buildCitationFiles(_scope);
   const z=new JSZip();z.file("CITATIONS.txt",c.txt);z.file("citations.bib",c.bib);z.file("citations.ris",c.ris);
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-citation-pack-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);});
-// The BULK-EXPORT LABEL (owner ruling 2026-08-01). The multi-file export below marks each file fetch it
+// The BULK-EXPORT LABEL. The multi-file export below marks each file fetch it
 // issues with this query flag, so the server-log aggregator can tell a drag-selected bulk export from a
 // single station download. It is a LABEL on a request that already happens: no extra request, no beacon,
 // nothing about who is asking. The flag rides the QUERY and never the path, because the aggregator strips
@@ -567,7 +567,7 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   await metadataSidecarInto(z,chosen);
   if(unavail.length){const lines=["These selected stations are NOT redistributable via AusMT (licence/embargo).",
     "Request them from the source archive, or contact the custodian where no DOI is recorded:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
-    // C7: m.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
+    // M.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
     // when it is absent (TS_COLLECTION is the raw time-series collection, not a TF source archive, and
     // citing it here would mislabel a different dataset as "the source archive", the pre-C7 defect); so
     // when no DOI is recorded we state the ACTUAL access reason (embargo vs licence) via withheldReason().
@@ -579,7 +579,7 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-selection-edis-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);
   toast(`Zipped ${ok} EDI(s)`+(unavail.length?`; ${unavail.length} not redistributable (archive pointers included).`:"."));});
 
-// ---- selection exports for the two AusMT-derived formats (owner ask 2026-08-04) ------------------
+// ---- selection exports for the two AusMT-derived formats ------------------
 // A reader who has drawn a box around forty stations can take their EDIs in one click. AusMT also serves
 // a per-station EMTF XML and a per-station MTH5, and until now the only way to collect those over a
 // selection was forty visits to forty drawers. These two flows are the EDI flow over a different format:
@@ -605,7 +605,7 @@ function selArtifact(s,fmt){
 // The three selection zips, in the order the panel renders them: element id, button base label, and the
 // manifest `format` each one packages.
 var SEL_ZIP_BUTTONS=[["dlZip","EDI (zip)","edi","dlZipMeta"],["dlZipXml","EMTF XML (zip)","emtfxml","dlZipXmlMeta"],["dlZipH5","MTH5 (zip)","mth5","dlZipH5Meta"]];
-// Size honesty (owner, 2026-08-04): each zip button states what THIS selection would cost before it is
+// Size honesty: each zip button states what THIS selection would cost before it is
 // clicked, so nobody starts a multi-hundred-megabyte MTH5 pull to find out. It counts only the rows the
 // export will actually fetch, so it is the estimate for the archive that will arrive, not for the
 // selection: an EDI whose station has no manifest row (the legacy flat path) contributes no size, which

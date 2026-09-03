@@ -1,5 +1,5 @@
 "use strict";
-// tour.js - 11-step spotlight tour (UX feedback rounds 1 + 2 + UX4 D5). Classic script, zero deps,
+// Tour.js - 11-step spotlight tour. Classic script, zero deps,
 // loads LAST (after main.js) so it can call setView()/openStation()/other globals, but nothing in
 // main.js depends on it (a missing/broken tour.js must never break the intro panel or the app — see
 // the typeof guard in main.js).
@@ -19,13 +19,13 @@
 // mid-Surveys — returns to the map and closes only tour-opened drawers, never state the visitor had
 // open before starting.
 //
-// UX4 D5 (owner, 2026-07-07): two DEMO steps after the filter-rail overview — Find (types "AusLAMP"
+// Two DEMO steps after the filter-rail overview - Find (types "AusLAMP"
 // with a real input event so the live dropdown + map filter run) and tree browse (scrolls one survey
 // row into view; kalkaroo-2022 preferred, first survey otherwise). Demo steps get an EXIT hook, run
 // on ALL three ways of leaving a step (Next, Back, and stopTour for close/Esc/Done), so demo state
 // (the typed query, the tree scroll) never leaks past the step — the same restore discipline as
 // _tourOpened, extended per-step.
-// UX7b U11 (owner, 2026-07-13): shortened step copy — the visible text is the architect-authored deck,
+// Short step copy - the visible text is the authored deck,
 // VERBATIM. Selectors + enter/exit hooks are UNCHANGED (the Find demo still types "AusLAMP", the selbox
 // step still switches rail mode, etc. — only the visible copy changed).
 const TOUR_STEPS=[
@@ -50,7 +50,7 @@ const TOUR_STEPS=[
    enter:_tourEnterMap}
 ];
 
-// U10: overlay dim, raised from 0.65 to 0.78 (+13pp). Single source of truth, applied inline by
+// Overlay dim, raised from 0.65 to 0.78 (+13pp). Single source of truth, applied inline by
 // _tourLayout — on a targeted step it colours the spot's box-shadow (leaving the backdrop transparent so
 // the cutout shows the element fully); on a no-target step it colours the centred backdrop directly.
 const TOUR_DIM=0.78;
@@ -72,7 +72,7 @@ function _tourEnterMapView(){
 function _tourEnterSurveysView(){
   if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
 }
-// UX6 Wave D (D2 follow-up): the .selbox step's target lives in the rail's Select & download mode pane,
+// The .selbox step's target lives in the rail's Select & download mode pane,
 // which is hidden in the default Browse mode (zero rect => the step would fall back to the centred
 // no-spotlight card). Enter: force the map view, save the visitor's rail mode, and switch to
 // Select & download so the target is visible and spotlit. Exit (Next/Back/close - the same three-path
@@ -90,7 +90,7 @@ function _tourExitSelbox(){
   if(typeof setSidebarMode==="function")setSidebarMode(_tourSelPrevMode);
   _tourSelPrevMode=null;
 }
-// UX4 D5 Find demo. Enter: save the visitor's own query (restore discipline — only undo what the
+// Find demo. Enter: save the visitor's own query (restore discipline - only undo what the
 // tour did), type "AusLAMP" and dispatch a REAL bubbling input event so the live wiring in filters.js
 // (refresh() + renderFind()) filters the map and renders the actual dropdown — the demo is the real
 // code path, not a mock. Exit: restore the saved value with another input event (so the filter state
@@ -115,7 +115,7 @@ function _tourExitFindDemo(){
   const fr=document.getElementById("findResults");
   if(fr){fr.style.display="none";fr.innerHTML="";}   // dropdown closed on exit even if a query was restored (click-away state)
 }
-// UX4 D5 tree browse demo (+ UX5 D8: rides the disclosure carets). Enter: save the tree scroll AND
+// Tree browse demo. Enter: save the tree scroll AND
 // the expand/collapse state, EXPAND the target row's ancestors (country + org, via the same
 // treeSetCollapsed API the carets use — a collapsed rail must never hide the demo), then bring the
 // row into view — kalkaroo-2022 preferred (via SLUG_TO_SURVEY, the authoritative slug->label map),
@@ -188,7 +188,7 @@ function _tourRestore(){
 function _tourBuild(){
   const backdrop=document.createElement("div");backdrop.className="tourbackdrop";backdrop.id="tourBackdrop";
   const spot=document.createElement("div");spot.className="tourspot";spot.id="tourSpot";
-  // UX9 (owner): the LEADER is an SVG overlay spanning the viewport; a line + arrowhead connect the centred
+  // The LEADER is an SVG overlay spanning the viewport; a line + arrowhead connect the centred
   // card to the spotlight. Its z-order sits BETWEEN the spot (which carries the dim) and the card (see CSS),
   // so the line reads over the dim and the card stays on top. The line element is held directly (not looked
   // up) so it is robust in jsdom, which does not render SVG; the arrowhead marker is browser-only cosmetics.
@@ -206,7 +206,7 @@ function _tourBuild(){
     '<div class="tourtext" id="tourText"></div>'+
     '<div class="tourbtns">'+
       '<button type="button" id="tourBack" aria-label="Previous tour step">Back</button>'+
-      // U9: the primary advance button carries .tourprimary (copper fill, dark text).
+      // The primary advance button carries .tourprimary (copper fill, dark text).
       '<button type="button" id="tourNext" class="tourprimary" aria-label="Next tour step">Next</button>'+
       '<button type="button" id="tourClose" aria-label="Close tour">Close</button>'+
     '</div>';
@@ -219,11 +219,11 @@ function _tourBuild(){
   window.addEventListener("resize",_tourOnResize);                     // UX9: re-centre + redraw the leader on resize
   return{backdrop,spot,leader,line,card};
 }
-// UX9: re-run only the LAYOUT (not the step's enter hook) when the viewport changes while the tour is open —
+// Re-run only the LAYOUT (not the step's enter hook) when the viewport changes while the tour is open -
 // the card re-centres and the leader is recomputed; the card never re-anchors (it is always centred).
 function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 
-// SETTLE-UNTIL-STABLE re-layout (owner, 2026-07-22). Some steps' enter hooks trigger layout changes on their
+// SETTLE-UNTIL-STABLE re-layout. Some steps' enter hooks trigger layout changes on their
 // OWN target that keep going AFTER _tourLayout first measures it. The station-drawer step (index 4) is the
 // worst case: openStation (a) renders the facts panel synchronously, then adds .open, which (b) SLIDES the
 // drawer in via a CSS transform transition (index.html: transform translateX(102%) -> none, .16s ease) so its
@@ -231,7 +231,7 @@ function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 // frame line (drawer.js loadStationFrameLine) and reflows the drawer's HEIGHT; and (d) the deferred map home
 // re-fit can reflow the map column under it. The drawer box therefore MOVES and RESIZES several times across
 // ~1s. A single transitionend re-measure fires after the SLIDE only (stage b) and leaves the spotlight on a
-// stale early box (the owner-observed "highlight lands where the panel first appeared, now empty"). The robust
+// Stale early box. The robust
 // fix: after entering a step, POLL the target rect each animation frame; on ANY change — position OR size (a
 // size-only ResizeObserver misses the slide, which MOVES the box) — re-run _tourLayout so the spotlight tracks
 // the box; stop once the rect has held STABLE for _TOUR_SETTLE_STABLE_MS, or after a hard _TOUR_SETTLE_CAP_MS.
@@ -292,7 +292,7 @@ function _tourKeydown(e){
   else if(e.key==="ArrowLeft"){_tourPrev();}
 }
 
-// UX9 (owner): the tour card is CENTRED for EVERY step (the pattern formerly used only as the no-target
+// The tour card is CENTRED for EVERY step (the pattern formerly used only as the no-target
 // fallback, now generalised). This PURE fn returns the card's fixed-position box. Base = the viewport
 // centre. OVERLAP RULE: when a target rect would sit under the centred card, nudge the card by the MINIMAL
 // vertical offset so it clears the target by _TOUR_CLEAR — deterministically DOWNWARD when that still fits
@@ -315,7 +315,7 @@ function _tourCardBox(cardW,cardH,vpW,vpH,targetRect){
   }
   return{left,top,right:left+cardW,bottom:top+cardH,nudged:top!==baseTop};
 }
-// UX9 (owner): geometry of the LEADER from the centred card to the spotlight. PURE — the endpoints are the
+// Geometry of the LEADER from the centred card to the spotlight. PURE - the endpoints are the
 // boundary points where the card-centre<->spot-centre axis crosses each rect, so the line leaves the card
 // edge nearest the target and lands on the spot edge nearest the card (arrowhead at the spot end). visible
 // is false when suppressed — the map steps (the spotlight over the map IS the cue) and the no-target
@@ -393,7 +393,7 @@ function _tourLayout(){
   document.getElementById("tourNext").textContent=(_tourStep===TOUR_STEPS.length-1)?"Done":"Next";
 }
 
-// UX4 D5: run the CURRENT step's exit hook (if any) before leaving it — called on Next, Back and
+// Run the CURRENT step's exit hook (if any) before leaving it - called on Next, Back and
 // stopTour, so a demo step's cleanup runs on every possible way out (forward, backward, close/Esc).
 function _tourExitCurrent(){
   const s=TOUR_STEPS[_tourStep];

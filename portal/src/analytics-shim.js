@@ -1,5 +1,5 @@
 // Analytics no-op shim — EXTERNAL file so no page needs an inline <script> for it (inline script
-// on index.html was the only thing forcing CSP 'unsafe-inline' there; extracted 2026-07-05 so the
+// On index.html was the only thing forcing CSP 'unsafe-inline' there; extracted so the
 // deployed Caddy policy can be strict script-src 'self' everywhere except add-survey.html, whose
 // application code is still one intentional inline block).
 // Safe no-op queue so track() calls never error when analytics is disabled (the default).

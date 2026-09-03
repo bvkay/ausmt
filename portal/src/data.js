@@ -52,7 +52,7 @@ async function loadPhase1(){
     fetchJson("surveys.json"),
     fetchOptional("build_provenance.json",null),
     fetchOptional("collections.json",{}),
-    // C12: build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence
+    // Build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence
     // (older builds predate it); the footer only renders the "data build …" line when this resolves.
     // No skew-handshake check here yet (comparing this against a contract hash the portal itself
     // carries); that is C16, once the contract-hash plumbing exists.

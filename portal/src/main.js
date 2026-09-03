@@ -4,12 +4,12 @@
 function buildState(){
   ST=CAT.map((r,i)=>({i,id:r[C.id],survey:r[C.survey],lat:r[C.lat],lon:r[C.lon],pmin:r[C.period_min_s],pmax:r[C.period_max_s],nper:r[C.n_periods],comps:r[C.comps],type:r[C.type],region:r[C.region],file:r[C.file],fixed:r[C.coord_flag],
     ediAvail:r[C.edi_available]===1, sha:r[C.sha256]||null,
-    // R4: original pre-sanitisation station/site name (engine emits it only when it differs from id);
+    // Original pre-sanitisation station/site name (engine emits it only when it differs from id);
     // null for the common clean-id case, so the drawer's Station summary shows the row only when it differs.
     site_name:r[C.site_name]||null,
     org:(SMETA[r[C.survey]]||{}).org||"Unknown",country:(SMETA[r[C.survey]]||{}).country||"Australia",
     slug:(SMETA[r[C.survey]]||{}).slug||null,
-    // S3: the survey's declared year range (ints|null), read straight off SMETA (engine-parsed —
+    // The survey's declared year range (ints|null), read straight off SMETA (engine-parsed -
     // the portal never re-parses date strings). null when the survey.yaml declares no dates.
     yearStart:(SMETA[r[C.survey]]||{}).year_start??null,yearEnd:(SMETA[r[C.survey]]||{}).year_end??null,
     // Two-phase boot: sci.json is a PHASE 2 product, so at first paint these are undefined and are folded
@@ -28,7 +28,7 @@ function buildState(){
   ST.forEach(s=>{s.coordPolicy=_cp[s.ausmt_id]||null;});
   surveys=[...new Set(ST.map(s=>s.survey))].sort();
   // slug -> survey label, for the #/survey/<slug> route (the published /surveys/<slug> path URLs
-  // the sitemap now emits 301 into this route at the front door - path-URL contract 2026-08-18;
+  // The sitemap now emits 301 into this route at the front door - path-URL contract;
   // ausmt_id is
   // au.<slug>.<station> — mirrors the engine's own slug_of derivation in extract/build_portal.py
   // rather than re-slugifying the label, so it stays correct even if a label's slugification is
@@ -51,7 +51,7 @@ function applySciToStations(){
   if(!Array.isArray(ST))return;
   ST.forEach(s=>{const sc=sciRow(s.i);s.q=sc[SC.q];s.dim=sc[SC.dim];});
 }
-// UX4 (D1/D2): build AUSLAMP_SET (survey SLUGS in the `auslamp` collection) from the boot data. The
+// Build AUSLAMP_SET (survey SLUGS in the `auslamp` collection) from the boot data. The
 // collections.json member list (COLL.auslamp.surveys) holds survey LABELS, not slugs (the engine keys
 // _group_collections by the survey.yaml name; see build_portal.py); the portal's partition/colour
 // predicates key off s.slug, so each label is resolved through SMETA[label].slug here — the SAME
@@ -167,7 +167,7 @@ function setView(v){
   // nested inside one (selector kept generic rather than section-only for that one sub-case).
   document.querySelectorAll('#filterPane [data-views]').forEach(sec=>{
     const a=sec.getAttribute("data-views");sec.classList.toggle("hidden",!(a==="both"||a===v));});
-  // UX6 Wave D (D6): the map legend sits over the map, so it belongs to the map view only. (The UX7b
+  // The map legend sits over the map, so it belongs to the map view only. (The
   // first-visit welcome popup is a modal dismissed by user action, not tied to the view — no toggle here.)
   const _leg=document.getElementById("mapLegend");if(_leg)_leg.classList.toggle("hidden",v!=="map");
   // Cleanup wave (C): the left filter rail (+ its resize handle) belong to the MAP view. On Surveys and
@@ -180,13 +180,13 @@ function setView(v){
   if(v==="surveys"){closeDrawer();renderCards();}
   else if(v==="collections"){closeDrawer();renderCollections();}
   else setTimeout(()=>{map.invalidateSize();
-    // UX9 item 2: after the size is reclaimed, run the one-shot home-fit corrector (map.js) — it repairs the
+    // After the size is reclaimed, run the one-shot home-fit corrector (map.js) - it repairs the
     // off-centre-on-load case (a degenerate primary fit) and stands down without fighting a user's own view.
     if(typeof _mapCorrectHomeFit==="function")_mapCorrectHomeFit();},60);
   if(typeof ST!=="undefined"&&ST.length)renderRecentlyAdded();
   updateCounts();
 }
-// Only Map switches a view in place. R10 (LANE-ADDENDUM-HUB-FEEDBACK.md) made Surveys and
+// Only Map switches a view in place. Surveys and
 // Collections real links to the served hub pages, and a click handler on a control that is
 // navigating away would run a view switch the page is about to leave: a visible flash of the wrong
 // view on a slow load, and dead work otherwise. setView("surveys"/"collections") stays the way IN to
@@ -226,7 +226,7 @@ function routeFromHash(){
   if(curView==="collection")setView("map");}
 window.addEventListener("hashchange",routeFromHash);
 
-// UX6 Wave E (E6): "View all stations on main map" from a collection page — switch to the map view and
+// "View all stations on main map" from a collection page - switch to the map view and
 // fit the map to the collection's extent. Prefers the collection's declared bbox; falls back to the
 // bounds of its member stations' positions. Uses the same setView/map seams the rest of the app does.
 function viewCollectionOnMap(cid){
@@ -255,7 +255,7 @@ function setSidebar(px){const{min,max}=sbLimits();sidebar.style.width=Math.round
   window.addEventListener("resize",()=>{if(window.innerWidth>760)setSidebar(parseInt(sidebar.style.width||"363",10));});
 })();
 
-// UX6 Wave D (D5, #24): collapse the filter rail to a ~36px icon strip. Class toggle only (CSS forces the
+// Collapse the filter rail to a ~36px icon strip. Class toggle only (CSS forces the
 // width with !important, beating the resizer's inline width), invalidateSize so the map reclaims the
 // space, and the state persists in localStorage.
 const SB_COLLAPSE_KEY="ausmt_sidebar_collapsed";
@@ -275,7 +275,7 @@ function setSidebarCollapsed(collapsed){
   if(sidebarCollapsed())setSidebarCollapsed(true);   // apply the persisted state on load
 })();
 
-// UX6 Wave D (D5, #24): drawer left-edge drag handle. It reuses the resizer pattern but is created HERE
+// Drawer left-edge drag handle. It reuses the resizer pattern but is created HERE
 // (never in drawer.js) and parented to .content — NOT #drawer, whose innerHTML drawer.js rewrites on every
 // open (which would wipe a child handle). A MutationObserver mirrors the drawer's open state onto the
 // handle's visibility + left-edge position, so drawer.js internals stay untouched. min 420px, max 60vw;
@@ -329,14 +329,14 @@ function showEmptyState(){
   }
   var sv=document.getElementById("surveysview");if(sv)sv.innerHTML=html;
 }
-// --- First-visit welcome popup (UX7b U7) -----------------------------------------------------------
-// U7 (owner, 2026-07-13): the first-visit surface is a small centred MODAL popup (#introWelcome),
-// successor to the Wave D corner strip. It offers exactly: "Take the 2-minute tour" (starts the tour),
+// --- First-visit welcome popup -----------------------------------------------------------
+// The first-visit surface is a small centred MODAL popup (#introWelcome).
+// It offers exactly: "Take the 2-minute tour" (starts the tour),
 // "Browse immediately" (close), and a "Don't show this again" checkbox that
 // GATES persistence — ticked, every close path (tour / browse / Esc / click-out) persists the dismissal
 // via the existing localStorage key; unticked, the popup may return next visit. Esc and click-out behave
 // as "Browse immediately". First-visit show fires from runInit() (populated AND empty-data paths).
-// Docs wave, stage 2 (owner ruling): the header's "How to use AusMT" item and the #introOverlay
+// Docs wave, stage 2: the header's "How to use AusMT" item and the #introOverlay
 // "How AusMT works" panel it opened are both retired, which took the on-demand tour button with them.
 // The replacement is the ?tour=1 query parameter handled in maybeShowIntro() below, which About links as
 // "start the guided tour". It is checked BEFORE the seen flag on purpose: someone who ticked "don't show
@@ -386,25 +386,25 @@ function maybeShowIntro(){if(tourRequested()){startTourSafe();dropTourParam();re
   }
 })();
 
-// UX6 Wave D (D6): static map legend (bottom-left): a coloured dot per data type, and nothing else, since
+// Static map legend (bottom-left): a coloured dot per data type, and nothing else, since
 // a dot is the only thing the map draws. The dots read the LIVE --lpmt/--bbmt/--amt/--gds tokens via var(),
 // so they track any future colour change automatically. Built once (idempotent). Collapsible on small
 // widths (the toggle only shows there via CSS); starts collapsed on a narrow viewport.
-// UX8 (X2, bug): the legend is parented INTO the Leaflet map container (#map), not to .content. As a
+// The legend is parented INTO the Leaflet map container (#map), not to .content. As a
 // child of #content it was a sibling of #map in that flex row — an absolutely-positioned box, but living
 // in the same positioned/flex context as the map, so it participated in that layout and could nudge the
 // map's framing at load. Inside #map (which Leaflet keeps position:relative) it is an overlay that can
 // NEVER affect the map container's own size or centre: #map's box is measured before this child is
 // appended and an absolute child adds nothing to it. It also rides #map's display toggle for free.
 //
-// INTERACTIVE LEGEND (owner ruling): a visitor tried to CLICK the data-type rows to show/hide sites, which
+// INTERACTIVE LEGEND: a visitor tried to CLICK the data-type rows to show/hide sites, which
 // is the reasonable reading - the rail's DATA TYPE checkboxes use the identical dot+label visual language
 // and ARE toggles, and mapping tools conventionally make a legend a layer switch. So the four TYPE rows are
 // real toggle buttons that PROXY the rail's #typeBoxes checkboxes. There is deliberately NO second state
 // store: a legend click flips the SAME checkbox the rail owns and dispatches its change event, so the one
 // existing #typeBoxes path (filters.js) runs every consumer - passesCore, the map redraw, the header
 // counts, the surveys-view decoupling and the select-lens semantics - exactly as a rail click does.
-// The survey-badge row is GONE with the badges (owner, 2026-08-24): the legend may not key an object the
+// The survey-badge row is GONE with the badges: the legend may not key an object the
 // map does not draw, and there is no longer anything on the map but the four data types.
 //
 // Resolve a rail type checkbox by its type key (LPMT / BBMT / AMT / GDS - the keys passesCore compares
@@ -425,7 +425,7 @@ function syncLegendTypes(){
     const box=legendTypeBox(btn.dataset.type),on=box?!!box.checked:true;
     btn.setAttribute("aria-pressed",String(on));
     btn.classList.toggle("legoff",!on);});}
-// R12: the metric scale bar, RE-PARENTED into the legend body. Leaflet drops a control into one of the
+// The metric scale bar, RE-PARENTED into the legend body. Leaflet drops a control into one of the
 // map's own corners, where a scale would sit apart from the key it belongs with and over the dots;
 // moving its container is the smallest change that puts it where a reader already looks. Constructing a
 // Leaflet control deliberately has one precedent here, map.js's layer control.
@@ -481,7 +481,7 @@ function runInit(){
   if(portalIsEmpty()){buildTree();buildLegend();setView("map");updateCounts();showEmptyState();maybeShowIntro();renderRecentlyAdded();return;}
   buildMarkers();buildFootprints();buildTree();buildLegend();setView("map");refresh();routeFromHash();maybeShowIntro();renderRecentlyAdded();
 }
-// C12: "data build <short id> · <date>" footer text, or "" when build.json didn't resolve (older
+// "data build <short id> · <date>" footer text, or "" when build.json didn't resolve (older
 // builds predate it — BUILDID is null — so the placeholder must stay empty, not show stale/undefined
 // text). Split from the DOM write below so a test can assert the VALUE binding (BUILDID -> text)
 // without needing a real DOM (mirrors buildState()'s station0/export0 value-binding pattern).

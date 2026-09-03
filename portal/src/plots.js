@@ -7,7 +7,7 @@
 //   t[T.rho_xy_err]/t[T.rho_yx_err] ρ errors · t[T.phs_xy_err]/t[T.phs_yx_err] φ errors (°) ·
 //   t[T.tzx_re]/t[T.tzx_im] Tx (Hz/Hx) · t[T.tzy_re]/t[T.tzy_im] Ty (Hz/Hy)   (C20)
 // Source-data frame: x = north, y = east (so Tx couples Hz to the north field, Ty to the east field).
-// UX6 Wave C (evolved 2026-07-28): the SVG builders are viewBox-responsive. svgOpen emits the DESIGN size
+// The SVG builders are viewBox-responsive. svgOpen emits the DESIGN size
 // as width/height AND the same design coordinates as the viewBox, so ONE plotter serves both surfaces: the
 // drawer renders it at 1:1 and the expand modal CSS-stretches the identical markup to fill its capped
 // content column. No geometry is recomputed and every pinned <line/rect/path> signature is untouched. The
@@ -18,18 +18,18 @@ const W=372,PADL=40,PADR=8;
 const xScale=per=>{const lo=Math.log10(per[0]),hi=Math.log10(per[per.length-1]);return v=>PADL+(Math.log10(v)-lo)/(hi-lo||1)*(W-PADL-PADR);};
 function decades(per){const o=[];const lo=Math.ceil(Math.log10(per[0])),hi=Math.floor(Math.log10(per[per.length-1]));for(let d=lo;d<=hi;d++)o.push(10**d);return o;}
 function supTen(d){const m={"-":"⁻","0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶"};return "10"+String(d).split("").map(c=>m[c]||c).join("");}
-// UX6 Wave C: open an <svg> whose viewBox carries the design coordinates and whose width/height carry that
+// Open an <svg> whose viewBox carries the design coordinates and whose width/height carry that
 // SAME design size (the viewBox is purely additive, so every pinned coordinate signature still matches).
 // Consumers do the resizing in CSS: the drawer leaves it at 1:1, the expand modal stretches it to
 // width:100% of a capped column, and the viewBox keeps the render crisp at whatever size it lands on.
 function svgOpen(w,h){return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img">`;}
 function path(per,vals,x,y){let d="",pen=false;per.forEach((p,i)=>{const v=vals[i];if(v==null||!isFinite(y(v))){pen=false;return;}d+=(pen?"L":"M")+x(p).toFixed(1)+","+y(v).toFixed(1);pen=true;});return d;}
 function dots(per,vals,x,y,c){return per.map((p,i)=>vals[i]==null||!isFinite(y(vals[i]))?"":`<circle cx="${x(p).toFixed(1)}" cy="${y(vals[i]).toFixed(1)}" r="2.1" fill="${c}"/>`).join("");}
-// UX6 Wave C: square markers for the yx series (xy keeps circles) — a shape difference so the two curves
+// Square markers for the yx series (xy keeps circles) - a shape difference so the two curves
 // stay distinguishable without relying on the copper/teal colour pair alone. Same 3.8px extent centred on
 // the sample so it reads at the circle's visual weight.
 function sqs(per,vals,x,y,c){return per.map((p,i)=>vals[i]==null||!isFinite(y(vals[i]))?"":`<rect x="${(x(p)-1.9).toFixed(1)}" y="${(y(vals[i])-1.9).toFixed(1)}" width="3.8" height="3.8" fill="${c}"/>`).join("");}
-// C20 (D4): vertical error bars. For each period draw a whisker between y(lo(v,e)) and y(hi(v,e)),
+// Vertical error bars. For each period draw a whisker between y(lo(v,e)) and y(hi(v,e)),
 // only where BOTH the value and its error are present. `lo`/`hi` let the caller clip the low end
 // (rho lives in the log domain and cannot go <=0, so it clips at a small positive floor). No bar is
 // emitted for absent errors, so a survey without errors renders exactly as before.
@@ -42,7 +42,7 @@ function frame(H,x,per,yl){let g=`<rect x="${PADL}" y="4" width="${W-PADL-PADR}"
 function rhoSvg(t){const per=t[T.periods];if(!per.length)return"";const vals=[...t[T.rho_xy],...t[T.rho_yx]].filter(v=>v!=null&&v>0);if(!vals.length)return"";
   const H=118,x=xScale(per);let lo=Math.floor(Math.log10(Math.min(...vals))),hi=Math.ceil(Math.log10(Math.max(...vals)));if(hi<=lo)hi=lo+1;
   const y=v=>4+(hi-Math.log10(v))/(hi-lo)*(H-26);const yl=[];for(let d=lo;d<=hi;d++)yl.push([y(10**d),supTen(d)]);
-  // C20 (D4): rho error bars in the LOG domain — the low end is clipped at the axis floor (10**lo) so a
+  // Rho error bars in the LOG domain - the low end is clipped at the axis floor (10**lo) so a
   // large error can never drive the endpoint to <=0 (which log() cannot map). Bars only where present.
   const rfloor=10**lo,rlo=(v,e)=>Math.max(v-e,rfloor),rhi=(v,e)=>v+e;
   return svgOpen(W,H)+frame(H,x,per,yl)+
@@ -52,7 +52,7 @@ function rhoSvg(t){const per=t[T.periods];if(!per.length)return"";const vals=[..
    `<text x="${W-10}" y="14" fill="#EF7256" font-size="11" text-anchor="end" font-family="monospace">○ xy</text><text x="${W-10}" y="25" fill="#2E8FA3" font-size="11" text-anchor="end" font-family="monospace">□ yx</text></svg>`;}
 function phaseSvg(t){const per=t[T.periods];if(!per.length)return"";if(!t[T.phs_xy].some(v=>v!=null)&&!t[T.phs_yx_adj].some(v=>v!=null))return"";
   const H=92,x=xScale(per);const y=v=>4+(105-v)/120*(H-22);
-  // C20 (D4): phase error bars in DEGREES (symmetric ± the propagated error). The yx error rides its
+  // Phase error bars in DEGREES (symmetric ± the propagated error). The yx error rides its
   // +180°-adjusted value (the error is orientation-independent). Bars only where the error is present.
   const plo=(v,e)=>v-e,phi=(v,e)=>v+e;
   return svgOpen(W,H)+frame(H,x,per,[[y(0),"0"],[y(45),"45"],[y(90),"90"]])+
@@ -60,7 +60,7 @@ function phaseSvg(t){const per=t[T.periods];if(!per.length)return"";if(!t[T.phs_
    ebars(per,t[T.phs_xy],t[T.phs_xy_err],x,y,"#EF7256",plo,phi)+ebars(per,t[T.phs_yx_adj],t[T.phs_yx_err],x,y,"#2E8FA3",plo,phi)+
    `<path d="${path(per,t[T.phs_xy],x,y)}" fill="none" stroke="#EF7256" stroke-width="1.1"/>`+dots(per,t[T.phs_xy],x,y,"#EF7256")+
    `<path d="${path(per,t[T.phs_yx_adj],x,y)}" fill="none" stroke="#2E8FA3" stroke-width="1.1"/>`+sqs(per,t[T.phs_yx_adj],x,y,"#2E8FA3")+`</svg>`;}
-// C20 (D3): induction-arrow panel — REPLACES the |T|-magnitude plot, rendered below the phase tensor.
+// Induction-arrow panel - REPLACES the |T|-magnitude plot, rendered below the phase tensor.
 // One vector arrow pair per thinned period, from a baseline on the log-period axis:
 //   REAL (Parkinson convention): (east, north) = (-tzy_re, -tzx_re), solid copper — real arrows point
 //     TOWARD conductors.
@@ -107,7 +107,7 @@ function ptSvg(t){const per=t[T.periods];if(!per.length||!t[T.pt_min].some(v=>v!
    decades(per).map(d=>`<text x="${x(d)}" y="${H-6}" fill="#8FA3B0" font-size="11" text-anchor="middle" font-family="monospace">${supTen(Math.round(Math.log10(d)))}</text>`).join("")+ell+
    `<rect x="${PADL}" y="2" width="8" height="8" fill="#3B82C4"/><text x="${PADL+11}" y="9" fill="#8FA3B0" font-size="10">β≤−3</text><rect x="${PADL+48}" y="2" width="8" height="8" fill="#D8CFC0"/><text x="${PADL+59}" y="9" fill="#8FA3B0" font-size="10">|β|&lt;3</text><rect x="${PADL+96}" y="2" width="8" height="8" fill="#C44B3B"/><text x="${PADL+107}" y="9" fill="#8FA3B0" font-size="10">β≥3</text></svg>`;}
 
-// UX6 Wave C — plot kind registry. Each kind has a heading, an always-visible subline (the convention /
+// Plot kind registry. Each kind has a heading, an always-visible subline (the convention /
 // axis-key text that must survive VISIBLY, not hover-only — C4 for the arrows), and an svg builder that
 // takes only the TF row. plotBlock renders the always-shown in-drawer form (all four panels); plotCollapsible
 // renders the collapsed-by-default <details> form (phase tensor + induction arrows) with the heading +
@@ -116,10 +116,10 @@ const PLOT_META={
   rho:  {title:"apparent resistivity ρ (Ω·m)", sub:"", svg:rhoSvg},
   phase:{title:"phase φ (°, yx +180°)",        sub:"", svg:phaseSvg},
   pt:   {title:"phase tensor",                 sub:"axis = azimuth, fill = skew β", svg:ptSvg},
-  // C4 (owner decision D4 / C20 Amendment A1): short heading + always-visible convention subline.
+  // Short heading + always-visible convention subline.
   arrow:{title:"Induction arrows (Parkinson)", sub:"Real arrows point toward conductors; imaginary unreversed.", svg:arrowSvg},
 };
-// Owner directive (2026-07-28): ONE expand control for the WHOLE response section. Every plot block used to
+// ONE expand control for the WHOLE response section. Every plot block used to
 // carry its own ⤢ button and all four opened the SAME full-station modal, so the drawer showed four controls
 // for one action. The per-plot buttons are gone; the drawer puts this single control on the "Response
 // functions" section heading row instead (same affordance style, section-level label). It is a real
@@ -134,13 +134,13 @@ function plotBlock(kind,t){const m=PLOT_META[kind];if(!m)return"";const svg=m.sv
     (m.sub?`<div class="psubline">${m.sub}</div>`:"")+svg+_paxis+`</div>`;}
 // Collapsed <details> block: the heading + subline sit in the summary (always visible); the svg + axis unit
 // are the collapsible body. Empty svg -> "". Retained as the reversible collapsed form; unused since the
-// owner ruled pt + arrows always-shown.
+// pt and arrows are always shown.
 function plotCollapsible(kind,t,open){const m=PLOT_META[kind];if(!m)return"";const svg=m.svg(t);if(!svg)return"";
   return `<details class="plot plotcollapse" data-plot="${kind}"${open?" open":""}>`+
     `<summary><span class="ptitle">${m.title}</span>${m.sub?`<span class="psubline">${m.sub}</span>`:""}</summary>`+
     `<div class="plotbody">${svg}${_paxis}</div></details>`;}
 
-// UX6 Wave C (evolved): the expand affordance opens ONE full-station RESPONSE modal, not a single-plot
+// The expand affordance opens ONE full-station RESPONSE modal, not a single-plot
 // popup. It carries a station-identity header (built by the drawer, which owns the honest coordCellHtml /
 // orgNameLink) plus ALL response panels: apparent resistivity, phase, phase tensor, and the induction
 // arrows ONLY when the station carries tipper (arrowSvg returns "" otherwise, so that panel is simply
@@ -149,7 +149,7 @@ function plotCollapsible(kind,t,open){const m=PLOT_META[kind];if(!m)return"";con
 // handler yields while the modal is open (it checks for #plotmodal) so Esc closes the modal, not the
 // drawer. All data is already client-side (the stashed TF row); no fetches.
 //
-// SIZING (owner directive 2026-07-28). The panels used to be rendered at a fixed STATION_MODAL_SCALE=2
+// SIZING. The panels used to be rendered at a fixed STATION_MODAL_SCALE=2
 // pixel blow-up, which sized the modal to the MONITOR rather than to the layout. That constant is gone.
 // The panels are now emitted at design size and stretched by CSS to FILL a CAPPED content column
 // (.plotmodal-capw in index.html: max-width min(92vw,760px), centred, with the overlay's viewport margin;

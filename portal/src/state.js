@@ -39,16 +39,16 @@ function hydrUsable(k){return HYDR[k]==="ready";}
 function sciRow(i){return (SCI&&SCI[i])||[];}
 function tfRow(i){return (TFD&&TFD[i])||null;}
 let ST=[],surveys=[],visible=[],selected=new Set(),curView="map",qMin=0;
-// Lane B: the period-window predicate is HEADLESS (the slider control is retired; passesCore reads
+// The period-window predicate is HEADLESS (the slider control is retired; passesCore reads
 // these bounds, harnesses set them). Full-range defaults = the filter is off.
 let periodLo=0.001,periodHi=100000;
 let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState(); backs the #/survey/<slug> route
-// UX4 (D1/D2): the set of survey SLUGS that belong to the `auslamp` collection, built once at boot
+// The set of survey SLUGS that belong to the `auslamp` collection, built once at boot
 // (buildAuslampSet, main.js) from COLL[auslamp].surveys (which holds survey LABELS) resolved through
 // SMETA[label].slug. Empty when collections.json is absent or has no auslamp collection, in which case
-// isAuslampSurvey() returns false for everything. NO MAP PATH READS IT since the 2026-08-24 dots-only
-// ruling: its one consumer was the badge rule's never-collapse privilege, and nothing collapses now. Kept
-// because it is collection membership rather than map furniture; retiring it is an owner call (see map.js).
+// IsAuslampSurvey() returns false for everything. NO MAP PATH READS IT since the dots-only
+// Its one consumer was the badge rule's never-collapse privilege, and nothing collapses now. Kept
+// because it is collection membership rather than map furniture; retiring it is a separate decision.
 let AUSLAMP_SET=new Set();
 // C42 Amendment A1: ausmt_id -> coordinate policy ('generalised' | 'withheld') for NON-EXACT stations,
 // loaded at boot from the OPTIONAL coord_policy.json (absent for an all-exact corpus => empty => no
@@ -63,10 +63,10 @@ let COORD_POLICY={};
 // the access rule: a withheld or coordinate-gated station is simply not in it.
 let TSACC=null;
 
-// UX6 Wave B (B2 colour de-collision): BBMT moved off the copper action hex (#EF7256), and GDS off the
+// BBMT moved off the copper action hex (#EF7256), and GDS off the
 // ok/status green (#5BAE6A), so a data-type marker can no longer be mistaken for the selection accent or a
 // "good" status. LPMT teal is pinned (interaction test).
-// UX8 (X1, owner-delegated): the four data-type hues are pulled further apart. BBMT #3F6FC4 -> #5E5ED6
+// The four data-type hues are pulled further apart. BBMT #3F6FC4 -> #5E5ED6
 // (indigo) and AMT #A85CC4 -> #CDA1EC (light violet); LPMT teal and GDS magenta unchanged. The old AMT
 // purple sat only ΔE00≈10 from the GDS magenta (confusable); the new pair is ΔE00≈21 with a ~20 L*
 // lightness gap, and every data-type pair is now ΔE00≥21 (the four types are the four most mutually
@@ -75,12 +75,12 @@ let TSACC=null;
 // byte-for-byte. (plots.js TF-curve colours are independent and unchanged.) DIM_COL is a NON-STATUS
 // palette (a cool→warm violet/magenta ramp): dimensionality (1-D/2-D/3-D) is not a quality ranking, so it
 // must not borrow the red/amber/green status colours.
-// LP/BB SEPARABILITY (owner, 2026-08-19, on the deployed map): "Long Period and Broadband icon colours are
-// too similar". UX8's pair was ΔE00 26.1 on paper and still unreadable at site-dot size, because it
+// LP/BB SEPARABILITY: "Long Period and Broadband icon colours are
+// too similar". The earlier pair was ΔE00 26.1 on paper and still unreadable at site-dot size, because it
 // separated almost entirely by HUE (teal 222° vs indigo 299°) across only 9 L* - and small marks are
 // discriminated by VALUE, not hue. BBMT #5E5ED6 -> #3730B8: deeper and more saturated, which buys a 24.6 L*
 // gap and a 55.7 C* gap and lifts the pair to ΔE00 34.2. LPMT is deliberately UNCHANGED - the teal is the
-// established fabric colour across this portal and the owner's atlases, so the other one moves.
+// established fabric colour across this portal and its atlases, so the other one moves.
 // The number that actually mattered is the DEUTAN one: simulated deuteranopia collapsed the old pair to
 // ΔE00 15.3 (protan 19.2); the new pair holds 25.3 / 30.1. That is the point of separating by lightness
 // and along the blue-yellow axis rather than by hue - a red-green deficient reader loses the hue argument
@@ -100,7 +100,7 @@ const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric 
 // THREDDS D8: the time-series level vocabulary, [token, label, gloss], IN THE ORDER IT RENDERS.
 // These tokens ARE ts_access.json's keys, so the chooser, the drawer rows and the hand-off pointer
 // file all name a level the same way and none of them re-derives the list. `level2` is absent BY
-// RULING, not by omission (D19, 2026-08-24): the archive's level_2 tree holds transfer functions,
+// BY DESIGN, not by omission: the archive's level_2 tree holds transfer functions,
 // not time series, so it opens no route, takes no button and gets no row here.
 const TS_LEVELS=[
   ["raw_packed","Packed raw","as recorded, packed by the custodian"],
@@ -110,9 +110,9 @@ const TS_LEVELS=[
 ];
 // UX feedback round 1: "Go to place" (+ its AU_PLACES quick-zoom list) was removed as redundant —
 // operator decision from the first live session; see index.html/filters.js for the rest of the removal.
-// C22 (2026-07-07): pb is the HONEST plain "AusMT". The pre-C22 value — "AusMT (DOI to be minted per
+// Pb is the HONEST plain "AusMT". The pre-C22 value - "AusMT (DOI to be minted per
 // release via Zenodo)" — leaked into EVERY no-DOI citation's publisher/PB field of the exported .bib/.ris
-// packs (hostile review 2026-07-06: reference managers ingest that placeholder as real bibliographic
+// Packs (hostile review: reference managers ingest that placeholder as real bibliographic
 // data). Absence of a DOI is expressed by OMISSION in .bib/.ris (drawer.js apa/bibtex/ris guard on a
 // falsy doi, since d2bc616) and EXPLICITLY in CITATIONS.txt ("[no DOI assigned]", exports.js citeLine) —
 // never by placeholder text in a bibliographic field.
@@ -152,7 +152,7 @@ function fmtPeriod(v){
   // from the magnitude, so 0.005012 rounds at the fourth place and 9.6e-05 at the sixth.
   const out=_fixedHalfEven(n,Math.max(0,1-Math.floor(Math.log10(Math.abs(n)))));
   return out.indexOf(".")>=0?out.replace(/0+$/,"").replace(/\.$/,""):out;}
-// The range separator, one place. Owner ruling R2: a numeric range in UI chrome reads as a SPACED
+// The range separator, one place: a numeric range in UI chrome reads as a SPACED
 // HYPHEN-MINUS rather than an en dash or the word "to". Curator prose is not chrome and keeps its
 // own glyph freedoms.
 function fmtRange(lo,hi){return lo+" - "+hi;}
@@ -219,7 +219,7 @@ function licHuman(lic){
 function clamp(x){return Math.max(0,Math.min(1,x));}
 function lerp(a,b,t){const pa=[1,3,5].map(i=>parseInt(a.substr(i,2),16)),pb=[1,3,5].map(i=>parseInt(b.substr(i,2),16));
   return "#"+pa.map((v,k)=>Math.round(v+(pb[k]-v)*t).toString(16).padStart(2,"0")).join("");}
-// UX8 CVD amendment (supersedes the W3b red→amber→green re-shade): the completeness ramp is a CVD-safe
+// CVD amendment: the completeness ramp is a CVD-safe
 // SEQUENTIAL dark→light progression (viridis principle) — dark slate-blue #2A3B66 → olive #6E7F46 → pale
 // warm yellow #F2E27E — because the old red→green endpoints measured dE76≈9.6 under a deuteranopia
 // simulation (indistinguishable for red-green CVD readers). LIGHTNESS carries the signal (relative

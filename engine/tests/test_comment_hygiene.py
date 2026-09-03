@@ -69,15 +69,31 @@ def bare(line):
     return s
 
 
+# One left-to-right scan per file, so every comment is counted once and only once. A separate pass
+# per syntax double-counts twice over: a // line inside a /* */ block is read by both, and so is a
+# /* that a line comment happens to contain, such as the glob contract/*.json. Both overstate the
+# bytes, which would let a cap pass on an artefact instead of on the sweep.
+SYNTAX = {
+    ".html": r"(?s:<!--.*?-->)|(?s:/\*.*?\*/)",
+    ".js": r"(?s:/\*.*?\*/)|(?m:^[ \t]*//.*$)",
+    ".css": r"(?s:/\*.*?\*/)",
+    ".py": r'(?s:"""(?:.|\n)*?""")|(?m:^[ \t]*#.*$)',
+}
+
+
 def comments(path, text):
-    """Every comment in one file, as (line number, text)."""
-    if path.suffix != ".py":
+    """Every comment in one file, as (line number, text), each counted once."""
+    pattern = SYNTAX.get(path.suffix)
+    if not pattern:
         return []
-    out = []
-    for pattern in (r'(?s)"""(?:.|\n)*?"""', r"(?m)^[ \t]*#.*$"):
-        for match in re.finditer(pattern, text):
-            out.append((text.count("\n", 0, match.start()) + 1, match.group(0)))
-    return sorted(out)
+    scanner = re.compile(pattern)
+    out, pos = [], 0
+    while True:
+        match = scanner.search(text, pos)
+        if not match:
+            return out
+        out.append((text.count("\n", 0, match.start()) + 1, match.group(0)))
+        pos = match.end()
 
 
 def offences(files, served=False):

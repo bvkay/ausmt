@@ -5,9 +5,9 @@
 // UX feedback round 1: default to a fixed Australia extent on load (was an arbitrary centre/zoom pair
 // that didn't reliably frame the continent on typical viewport sizes). Bounds: [[south,west],[north,east]]
 // chosen to cover the AU mainland + Tasmania with a small margin.
-// Owner round 2 (2026-07-22): buildMarkers() USED to re-fit to the tight station-marker extent once data
+// BuildMarkers() USED to re-fit to the tight station-marker extent once data
 // loaded — but because no station sits north of ~-22.5 lat, that fit dropped the view SOUTH (centre ~-33.6)
-// and clipped northern Australia (the "off-centre after load" the owner saw). The owner LIKES this fixed
+// And clipped northern Australia. This fixed
 // Australia framing, so the home view is now ALWAYS this box (below): every station (lon 115.85..148.17,
 // lat -43.44..-22.48) falls inside it, so it shows all dots AND frames the whole continent. Defined ONCE
 // here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_BOUNDS so the two frames
@@ -15,7 +15,7 @@
 const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
 // THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here. Leaflet's default control is the one that
 // carries the flag and the word "Leaflet", which is a courtesy to a library rather than a licence
-// term and is what the owner asked off the map, so the map is created without one and
+// term and is what came off the map, so the map is created without one and
 // src/mapattrib.js mounts a control with prefix:false in its place, collapsed behind a small (i).
 // The CREDIT itself stays on the map: it is a licence obligation, and only the layer that is
 // actually drawing knows which provider to name.
@@ -51,10 +51,10 @@ if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
 // context where window is an object of their own rather than the global, and a bare identifier
 // would resolve in the browser and nowhere else.
 window.AusmtMapAttrib.mount(map,"Map data attribution");
-// Owner ruling (2026-08-24): SITE LOCATIONS ONLY, at every zoom. The per-survey badge bubbles that
+// SITE LOCATIONS ONLY, at every zoom. The per-survey badge bubbles that
 // replaced proximity clustering are removed with it - no badge, no leader tail, no decoration pane, no
 // zoom threshold. A compact survey now overlaps into a tight group of dots at national zoom and the
-// click-to-open-survey affordance the badge carried is gone; both were accepted at the ruling. The
+// click-to-open-survey affordance the badge carried is gone. The
 // drawer's own survey route (#/survey/<slug>) and a dot click are what remain.
 // ONE dot container (change 6's own simplification, kept). There used to be two - a never-clustered plain
 // layer for AusLAMP members and a markerClusterGroup for everything else - purely because clustering had to
@@ -62,14 +62,14 @@ window.AusmtMapAttrib.mount(map,"Map data attribution");
 // map the same way.
 const dotLayer=L.layerGroup();
 map.addLayer(dotLayer);
-// UX4 (D1): AusLAMP membership is COLLECTION membership, not a data type — a station is AusLAMP iff its
+// AusLAMP membership is COLLECTION membership, not a data type - a station is AusLAMP iff its
 // survey slug is a member of the collection with id `auslamp` in collections.json. AUSLAMP_SET (a Set of
 // member SLUGS) is built once at boot from COLL/SMETA (buildAuslampSet, main.js); the pure predicate here
 // takes it explicitly so it stays Leaflet-free and unit-testable (jsdom can't load Leaflet).
-// NO MAP PATH READS IT since the 2026-08-24 dots-only ruling: its one consumer was the badge rule's
+// NO MAP PATH READS IT now the map is dots-only: its one consumer was the badge rule's
 // never-collapse privilege, and nothing collapses now. Kept (with AUSLAMP_SET and buildAuslampSet) because
-// it is collection membership rather than map furniture; retiring the three is an owner call, not this
-// lane's, and the boot resolution of labels to slugs is pinned on its own.
+// it is collection membership rather than map furniture; retiring the three is a separate decision,
+// and the boot resolution of labels to slugs is pinned on its own.
 function isAuslampSurvey(slug,auslampSet){return !!(slug&&auslampSet&&auslampSet.has(slug));}
 // C42 coordinate access: a station whose custodian WITHHELD its coordinates carries null lat/lon in the
 // served catalogue — the engine masks the VALUE (there is no separate policy field; withheld => null,
@@ -92,7 +92,7 @@ function routeVisibleToLayers(){
   return {dots};
 }
 const drawn=new L.FeatureGroup().addTo(map);
-// UX6 Wave D (D3, #20): plain-language labels for the draw toolbar buttons. These override the generic
+// Plain-language labels for the draw toolbar buttons. These override the generic
 // leaflet.draw defaults ("Draw a polygon" etc.) and MUST be set BEFORE the control is constructed — the
 // control reads L.drawLocal at build time to set each button's title (its accessible name).
 L.drawLocal.draw.toolbar.buttons.polygon="Draw polygon selection";
@@ -103,7 +103,7 @@ L.drawLocal.edit.toolbar.buttons.remove="Clear drawn shapes";
 const drawControl=new L.Control.Draw({draw:{polyline:false,circle:false,circlemarker:false,marker:false,
   polygon:{shapeOptions:{color:"#EF7256",weight:2}},rectangle:{shapeOptions:{color:"#EF7256",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}});
 map.addControl(drawControl);
-// UX6 Wave D (D3, #20): explicit aria-labels on the draw + zoom toolbar anchors, set AFTER the controls
+// Explicit aria-labels on the draw + zoom toolbar anchors, set AFTER the controls
 // are on the map (their DOM exists by then). leaflet.draw already writes the title from L.drawLocal above;
 // the aria-label makes the accessible name unambiguous for AT. No-op where the anchors aren't rendered
 // (e.g. the jsdom/smoke harness, which stubs Leaflet) — querySelectorAll simply returns nothing.
@@ -117,7 +117,7 @@ function labelToolbar(){
 }
 labelToolbar();
 
-// Discoverability (owner, 2026-07-21): the SELECTION panel gained "Draw rectangle"/"Draw polygon"
+// Discoverability: the SELECTION panel gained "Draw rectangle"/"Draw polygon"
 // buttons that ARM the SAME leaflet.draw handlers the map's top-left toolbar icons arm — the panel used
 // to point users to a tool at the opposite corner. We REUSE the control's own mode handlers
 // (drawControl._toolbars.draw._modes[mode].handler — the exact object each toolbar icon enables), never
@@ -149,17 +149,17 @@ const _drawRect=document.getElementById("drawRect"),_drawPoly=document.getElemen
 if(_drawRect)_drawRect.onclick=()=>armDraw("rectangle");
 if(_drawPoly)_drawPoly.onclick=()=>armDraw("polygon");
 
-// UX4 Amendment A1 (owner, 2026-07-07): the D1 colour split was REMOVED — all LPMT renders the
+// The LPMT colour split was REMOVED - all LPMT renders the
 // flagship teal (TYPE_COL.LPMT) in type mode regardless of AusLAMP membership, and every colour mode
-// is membership-blind. Since the 2026-08-24 dots-only ruling NO map surface carries the AusLAMP/legacy
+// Is membership-blind. Now the map is dots-only NO map surface carries the AusLAMP/legacy
 // distinction at all: it was last held by the D2 clustering split, which the badge rule inherited and
-// which is now gone (not by colour, and since O4 2026-07-12 not by the hover tooltip either).
-// Lane B (owner D4): the colour-by control is retired; markers carry the data-type colour, a
+// Which is now gone.
+// The colour-by control is retired; markers carry the data-type colour, a
 // phase-1 fact (the legend is the surviving colour surface). qColor lives on for the drawer's
 // completeness dot.
 function markerColor(s){return TYPE_COL[s.type]||"#999";}
 function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // C42: withheld-coord stations have no marker
-// ---- survey-drawer lane (ruling 2, Option A): the survey FOCUS DIM ------------------------------------
+// ---- the survey FOCUS DIM --------------------------------------------------------
 // "View on map" with a survey open frames that survey while the rest of the catalogue STAYS ON THE MAP,
 // dimmed. The rejected alternative (what shipped before) filtered every other survey out of the layers, so
 // the reader lost the national context that makes a survey's position meaningful, and the map stayed
@@ -184,22 +184,22 @@ function applySurveyDim(){
   ST.forEach(s=>{if(s.marker&&s.marker.setStyle)s.marker.setStyle(dimStyleFor(s.survey,_dimFocusSurvey));});}
 function setSurveyDim(sv){_dimFocusSurvey=sv||null;applySurveyDim();}
 function clearSurveyDim(){if(_dimFocusSurvey===null)return;_dimFocusSurvey=null;applySurveyDim();}
-// O4 (owner, 2026-07-12): the station hover tooltip is SLIMMED to station name + survey name ONLY —
+// The station hover tooltip is SLIMMED to station name + survey name ONLY -
 // the TF completeness/smoothness diagnostic (Q) and the type/AusLAMP label were removed; the diagnostic
 // stays in the click drawer. PURE + Leaflet-free so the jsdom driver tests the exact string shipped.
 function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
-// UX4 (D4): zoom-scaled marker geometry. PURE step functions (unit-tested, monotone non-decreasing in z),
+// Zoom-scaled marker geometry. PURE step functions (unit-tested, monotone non-decreasing in z),
 // the SINGLE source for both the initial draw (buildMarkers) and the zoomend restyle below — markers read
-// too large at national zoom but right when zoomed in, so they grow with zoom. Values are UX4 starting
+// too large at national zoom but right when zoomed in, so they grow with zoom. Values are the starting
 // points; the final table is recorded in the design doc.
-// O5 (owner, 2026-07-12): every radius tier shifted ONE STEP SMALLER — each tier takes the next-smaller
+// Every radius tier shifted ONE STEP SMALLER - each tier takes the next-smaller
 // tier's old value (z5 4.5->3.5, z6 5->4.5, z>=7 6->5) and the smallest tier drops by the bottom step
 // (z<=4 3.5->2.5, the 1.0 gap that separated it from the z5 tier). Still monotone non-decreasing in z.
 // weightForZoom left as-is: a 1.0 stroke does not overwhelm a 2.5 fill.
 // Change 6: CONTINUOUS dot radii, replacing the four-step ladder (2.5 / 3.5 / 4.5 / 5). A step ladder
 // jumps: a zoom notch changed every dot's size by a visible 1px in one frame. A linear ramp in zoom is
 // continuous across the range and monotone non-decreasing (the pinned property).
-// UNIFORM SITE DOT SIZE (owner, 2026-08-19): "the same size as the icons set for the AusLAMP sites". The
+// UNIFORM SITE DOT SIZE: "the same size as the icons set for the AusLAMP sites". The
 // per-type base split change 6 introduced (LP 2.0 / everything else 3.0) is REMOVED, because it cost the map
 // a second visual variable encoding the same fact as colour. Data type is carried by COLOUR; size carries
 // ZOOM. One variable, one meaning. The surviving base is the LP one, so BB/AMT/GDS come DOWN to the AusLAMP
@@ -226,8 +226,8 @@ function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFi
 // needed it.
 function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z);
   ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
-// UX9 item 2: the home frame buildMarkers fits to, remembered module-level so the setView("map") 60ms
-// corrector can re-fit to it (null until data is in). Owner round 2: this is now the FIXED Australia frame
+// The home frame buildMarkers fits to, remembered module-level so the setView("map") 60ms
+// corrector can re-fit to it (null until data is in). This is the FIXED Australia frame
 // (AU_HOME_BOUNDS), NOT the tight station extent — see buildMarkers. _fitWasDegenerate records whether that
 // primary fit landed at a degenerate container size (see buildMarkers).
 let HOME_BOUNDS=null,_fitWasDegenerate=false;
@@ -243,7 +243,7 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z),weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
   s.marker._survey=s.survey;   // UX8 (X3): the per-survey cluster facade buckets markers by this stamp
-  // Survey-drawer lane (ruling 5): a marker click OPENS that station and must never ALSO read as a
+  // A marker click OPENS that station and must never ALSO read as a
   // background click that closes the drawer. L.Path defaults bubblingMouseEvents to TRUE, so without this
   // a marker click would fire the marker handler and then bubble to the map's click handler below - the
   // drawer would open and immediately close. DOM-target discrimination cannot do this job here: the map is
@@ -252,7 +252,7 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
   s.marker.options.bubblingMouseEvents=false;
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // O4: hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
-  // Home frame once data is in. Owner round 2 (2026-07-22): re-fit to the FIXED Australia box
+  // Home frame once data is in: re-fit to the FIXED Australia box
   // (AU_HOME_BOUNDS), NOT the tight positioned-station extent. The tight extent dropped the view south and
   // clipped northern Australia; every station falls inside AU_HOME_BOUNDS, so this frames the continent AND
   // shows every dot. Guarded on there being at least one positioned station so an all-withheld catalogue
@@ -273,7 +273,7 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
     _scheduleDeferredHomeRefit();
   }
 }
-// UX9 item 2: one-shot corrector, called from the setView("map") 60ms timer AFTER invalidateSize has
+// One-shot corrector, called from the setView("map") 60ms timer AFTER invalidateSize has
 // repaired the container size. Re-fits HOME_BOUNDS when the gate allows (user hasn't taken control and the
 // primary fit was degenerate), then clears the flag so it runs at most once — a later return to the map, or
 // a programmatic fit like E6, is never clobbered.
@@ -309,7 +309,7 @@ function _scheduleDeferredHomeRefit(){
 // movestart is deliberately NOT used — it also fires on the app's own programmatic moves.
 let _mapUserInteracted=false;
 function _mapMarkInteracted(){_mapUserInteracted=true;}
-// Survey-drawer lane (ruling 5): a click on the MAP BACKGROUND closes an open drawer (survey OR station).
+// A click on the MAP BACKGROUND closes an open drawer (survey OR station).
 // Leaflet only routes a click here when its hit-testing found no interactive layer under the pointer:
 // station markers set bubblingMouseEvents:false (buildMarkers) and a drawn shape is an L.Path target that
 // consumes its own click, so "reached this handler" IS "landed on the background". PURE decision split
@@ -328,7 +328,7 @@ if(_mapCont&&_mapCont.addEventListener){
   _mapCont.addEventListener("wheel",_mapMarkInteracted,{passive:true});
   _mapCont.addEventListener("touchstart",_mapMarkInteracted,{passive:true});
 }
-// UX4 (D4): restyle every marker on each zoom step so radius/weight track the tier. preferCanvas is on
+// Restyle every marker on each zoom step so radius/weight track the tier. preferCanvas is on
 // (map creation) so a full restyle of ~1200 circleMarkers per step is acceptable; registered once here.
 map.on("zoomend",restyleForZoom);
 
@@ -345,7 +345,7 @@ const userLayers={};
 // Leaflet renders an attribution as HTML, and the source half of this line is FILE CONTENT (a fetched
 // layers/*.geojson), so both halves are escaped. The guard is here while the path is DORMANT (the layer
 // control below is not mounted, so the fetch never runs) precisely so re-enabling the control cannot
-// re-open the sink by omission: the later lane must not have to rediscover this.
+// re-open the sink by omission: a later change must not have to rediscover this.
 // The guard on the control existing stays: a document that failed to load src/mapattrib.js draws a
 // map with no control at all, and a layer added there must toast rather than throw.
 function _layerAttribution(name,src){return esc(name)+": "+esc(src);}
@@ -357,7 +357,7 @@ function userLayer(name,file,color){const grp=L.featureGroup();grp._loaded=false
       if(src&&map.attributionControl)map.attributionControl.addAttribution(_layerAttribution(name,src));grp._loaded=true;}
     catch(e){toast(`Layer "${name}" not found; place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
   userLayers[name]=grp;return grp;}
-// layer control hidden pending owner revisit (2026-07-12) — overlay definitions (footprints + the user
+// Layer control hidden pending a decision - overlay definitions (footprints + the user
 // GeoJSON layers) are kept and still constructed; the control is simply NOT added to the map.
 L.control.layers(null,{"Survey footprints":footprints,
   "States / territories":userLayer("States","states.geojson","#8FA3B0"),
@@ -365,7 +365,7 @@ L.control.layers(null,{"Survey footprints":footprints,
   "Cratons":userLayer("Cratons","cratons.geojson","#D9A23B"),
   "Major crustal boundaries":userLayer("Crustal boundaries","crustal_boundaries.geojson","#A85CC4")},{collapsed:true});
 
-// UX6 Wave D (D3, #20): the selection-feedback toast copy. PURE (unit-tested) so the exact string —
+// The selection-feedback toast copy. PURE (unit-tested) so the exact string -
 // proper singular/plural, the word "stations" (never "sites"), and the shape word — is pinned. Any
 // layerType other than "rectangle" reads as "polygon" (the only two draw modes enabled above).
 function drawSelectionMsg(n,layerType){const shape=layerType==="rectangle"?"rectangle":"polygon";
