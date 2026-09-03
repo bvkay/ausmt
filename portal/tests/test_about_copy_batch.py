@@ -19,8 +19,13 @@ pass. Parsed structurally where structure is the claim (section 1 ending on the 
 to a single link, the acknowledgement being one copyable line), and by exact string where the exact
 words are the owner's.
 
+A SECOND OWNER BATCH follows it at the foot of this module. That one adds a section rather than
+editing one, so the page's SHAPE is pinned with the words: eight numbered answers in a fixed order,
+the colophon after them, and a contents box that lists exactly those sections in exactly that order.
+A renumbering that leaves the contents box behind is the failure that shape exists to catch.
+
 NOT COVERED HERE (deliberately, and pinned elsewhere): the #api section and its machine-contract
-paragraph, which this batch does not touch (tests/test_api_docs_section.py,
+paragraph, which neither batch touches (tests/test_api_docs_section.py,
 tests/test_mtcat_machine_contract.py).
 """
 import re
@@ -264,9 +269,7 @@ def test_the_citation_placement_advice_and_the_copyable_acknowledgement():
     ack = m.group(1)
     assert "\n" not in ack, (
         "the acknowledgement is copied verbatim out of a <pre>, so it must be a single line")
-    assert ack == ("Magnetotelluric transfer functions were accessed through AusMT, Australia's "
-                   "Magnetotelluric Data Portal (https://ausmt.auscope.org.au), an AuScope-funded "
-                   "initiative."), (
+    assert ack == ACKNOWLEDGEMENT, (
         f"the acknowledgement must read exactly as dictated, got: {ack!r}")
 
 
@@ -336,3 +339,202 @@ def test_this_build_states_the_hand_off_beside_the_no_hosting_claim():
         "the section must state the hand-off beside the no-hosting claim, or it reads as a dead end")
     assert "hosts raw time series" not in flat.replace("doesn't host raw time series", ""), (
         "nothing here may claim AusMT hosts time series")
+
+
+# ============================================================ the second owner batch (2026-09-03)
+#
+# The page gains a section rather than losing one, so what it needs held is its SHAPE as well as its
+# words: a reader who follows contents entry N expects heading N, and a renumbering that leaves the
+# contents box behind is silent on the page and obvious to the reader.
+
+# The page in order: eight numbered answers, then the colophon. The number is part of the heading a
+# reader sees and part of what the contents box promises, so it is pinned WITH the title rather than
+# beside it.
+#
+# "This build" closes the page WITHOUT a number. It is the running build's identity and the route to
+# the citable releases, which is a colophon rather than a ninth answer to "what is this site", and
+# the owner's enumeration of the page's sections ends at Documentation. It keeps its id, its version
+# chip and its place in the contents box; only the number is gone.
+NUMBERED = [
+    ("what", "1 \u00b7 What AusMT is"),
+    ("who", "2 \u00b7 Who enables AusMT"),
+    ("howto", "3 \u00b7 What you can do here"),
+    ("access", "4 \u00b7 Licence and access"),
+    ("cite", "5 \u00b7 Citing and credit"),
+    ("contribute", "6 \u00b7 Contributing a survey"),
+    ("api", "7 \u00b7 Fetching data via API"),
+    ("docs", "8 \u00b7 Documentation"),
+]
+COLOPHON = ("build", "This build")
+
+# The lede, carried three times and identically: the page's own subtitle, the meta description and
+# og:description. tests/test_page_metadata.py holds the description to being the lede; this holds
+# what the lede says.
+LEDE = ("Australia's national discovery and access portal for magnetotelluric data, connecting "
+        "transfer functions with their provenance, licences, citations and source archives.")
+
+# The acknowledgement a reader copies. It is the AusMT access statement, and there is exactly one of
+# it: the engine prints the same sentence on every survey page, held equal in
+# test_the_page_and_the_engine_print_one_acknowledgement.
+ACKNOWLEDGEMENT = (
+    "Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric "
+    "Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government "
+    "via the National Collaborative Research Infrastructure Strategy (NCRIS).")
+
+LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
+LOCKUP_ALT = "AuScope and NCRIS"
+
+
+def _sections():
+    """(id, heading text) for every top-level section, in document order. The heading is taken as a
+    reader sees it: tags stripped, entities resolved, spaces collapsed."""
+    out = []
+    for sid, body in re.findall(r'<section id="([^"]+)">(.*?)</section>', RAW, re.S):
+        m = re.search(r"<h2[^>]*>(.*?)</h2>", body, re.S)
+        assert m, f"about.html's #{sid} section carries no h2"
+        out.append((sid, _flat(re.sub(r"<[^>]+>", "", m.group(1))).strip()))
+    return out
+
+
+def test_the_page_is_eight_numbered_sections_then_the_colophon():
+    """The page's shape, id and heading together, in document order. FAILS IF a section is added,
+    removed, reordered, renamed or renumbered without the rest of the page following it: the numbers
+    are consecutive by construction here, because they are pinned inside the heading strings rather
+    than derived from them, so a page that inserts an answer and forgets to renumber the ones after
+    it fails on the first heading that moved."""
+    got = _sections()
+    assert got == NUMBERED + [COLOPHON], (
+        "about.html's sections have drifted from the ruled order:\n"
+        + "".join(f"  want {w!r}\n  got  {g!r}\n"
+                 for w, g in zip(NUMBERED + [COLOPHON], got + [None] * 9)
+                 if w != g))
+
+
+def test_the_contents_box_lists_every_section_in_order():
+    """The contents box is a promise about the page below it. FAILS IF it names a section that is
+    not there, omits one that is, or lists them in a different order from the document: a reader who
+    follows entry N and lands on a different heading has been told the page is something it is not.
+
+    The entry TEXT is deliberately not compared with the heading: the box abbreviates on purpose
+    ("Contributing" for "6 Contributing a survey"), which is a contents box doing its job. What must
+    match is the set, the order and that every entry says something."""
+    box = RAW.split('<div class="toc">', 1)
+    assert len(box) == 2, "about.html must carry a contents box"
+    entries = _links(box[1].split("</div>", 1)[0])
+    want = [f"#{sid}" for sid, _h in _sections()]
+    assert [h for h, _t in entries] == want, (
+        f"the contents box must list every section once, in document order: want {want}, "
+        f"got {[h for h, _t in entries]}")
+    assert all(text for _h, text in entries), (
+        f"every contents entry must carry visible text, got {entries}")
+
+
+def test_the_lede_says_what_the_portal_is_for():
+    """The subtitle is rewritten from a description of a CATALOGUE to one of a PORTAL: what a reader
+    can do here, and what the transfer functions are connected to. FAILS on a revert, and FAILS if
+    the three places that carry the lede stop carrying the same words (the head's two meta tags are
+    copies of it, and a description nobody maintains is the defect
+    tests/test_page_metadata.py exists to prevent)."""
+    assert "A national catalogue of Australian magnetotelluric transfer functions" not in FLAT, (
+        "the retired catalogue lede is back")
+    assert FLAT.count(LEDE) == 3, (
+        "the lede must be carried three times and identically, as the page's own subtitle, the "
+        f"meta description and og:description; found {FLAT.count(LEDE)}")
+
+
+def test_the_transfer_function_sentence_says_what_it_is_derived_from():
+    """A reader who does not already know what a transfer function is learns it here, and the
+    replacement says where the estimate comes from rather than only what it is not. FAILS on a
+    revert to the instrument-independence wording, which described the property and never the
+    measurement."""
+    what = _flat(_section("what"))
+    assert "the processed, instrument-independent response of the Earth at" not in what, (
+        "the retired instrument-independence sentence is back")
+    assert ("A magnetotelluric transfer function is a processed estimate of the Earth's "
+            "electromagnetic response at a site, derived from measured electric and magnetic field "
+            "variations.") in what, "the dictated transfer-function sentence is missing"
+
+
+def test_section_two_states_who_enables_ausmt():
+    """The new section's prose, in the dictated order: who enables AusMT and through which national
+    programme, then what each of the two organisations provides. FAILS if either sentence is
+    missing or reworded. The page said AusMT was AuScope-funded in one line of a citation block and
+    nowhere else; this is the section that states the relationship as a fact about the service."""
+    flat = _flat(_section("who"))
+    assert ("AusMT is enabled by AuScope and the Australian Government via the National "
+            "Collaborative Research Infrastructure Strategy (NCRIS).") in flat, (
+        "section 2 must open on who enables AusMT and through which programme")
+    assert ("AuScope is Australia's national provider of research infrastructure for the geoscience "
+            "community. AusMT provides national digital research infrastructure for discovering, "
+            "accessing and reusing Australian magnetotelluric data and its provenance.") in flat, (
+        "section 2 must say what each of the two provides")
+    assert "Learn more about" in flat, "section 2 must offer the route to AuScope's own site"
+    assert ("https://www.auscope.org.au", "AuScope") in _links(_section("who")), (
+        "the route to AuScope must be an anchor on the organisation's name")
+
+
+def test_section_two_carries_the_official_lockup_the_footer_already_ships():
+    """The lock-up in the body is the SAME committed file every footer on this site carries, named
+    by the same root-relative path. FAILS if it points at a second copy or at a different artwork
+    (two files are two things to keep in step, and the official mark is not ours to redraw), if it
+    loses the alt text, or if it drops the intrinsic size attributes that reserve its box before it
+    loads.
+
+    The width is capped in the page rather than in the file: the committed raster is 1919px wide, so
+    without a cap the mark would be five times the reading column. max-width:100% is what keeps it
+    inside a narrow column once the declared width no longer fits."""
+    who = _section("who")
+    m = re.search(r'<img class="orglockup"[^>]*>', who)
+    assert m, "section 2 must carry the AuScope-NCRIS lock-up"
+    tag = m.group(0)
+    assert f'src="{LOCKUP_SRC}"' in tag, (
+        f"the body lock-up must name the committed file at {LOCKUP_SRC}, got {tag!r}")
+    assert f'alt="{LOCKUP_ALT}"' in tag, f"the lock-up must carry its alt text, got {tag!r}"
+    assert 'width="1919" height="325"' in tag, (
+        f"the lock-up must declare the committed file's own dimensions, got {tag!r}")
+    assert (ROOT / LOCKUP_SRC.lstrip("/")).is_file(), (
+        f"section 2 names {LOCKUP_SRC}, which the portal does not ship")
+    foot = RAW.split("<footer>", 1)[1].split("</footer>", 1)[0]
+    assert LOCKUP_SRC in foot, (
+        "the body lock-up and the footer's must be the same file; the footer no longer names it")
+    rule = re.search(r"(?m)^\s*\.orglockup\{([^}]*)\}", RAW)
+    assert rule, "the body lock-up must carry its own sizing rule"
+    body = rule.group(1)
+    assert re.search(r"(?:^|;)width:\d+px", body), (
+        f"the lock-up must declare a body width; the file is 1919px wide, got {body!r}")
+    assert "max-width:100%" in body, (
+        f"the lock-up must not outgrow a narrow reading column, got {body!r}")
+
+
+def test_section_two_closes_on_operation_and_governance():
+    """The sub-heading the owner dictated, and the three facts under it: who maintains AusMT, what
+    custodians keep, and where the arrangements are written down. FAILS if the sub-heading goes, if
+    a fact is dropped, or if the Governance link stops being the page it names.
+
+    Section 4 links the same document from its own closing paragraph; that is not a duplicate to
+    remove, because the two answer different questions (what happens to my data, and who runs
+    this)."""
+    who = _section("who")
+    assert "<h3>Operation and governance</h3>" in who, (
+        "section 2 must close on the Operation and governance sub-heading")
+    flat = _flat(who)
+    assert ("AusMT is maintained by AuScope with contributions from Australia's magnetotelluric "
+            "community.") in flat, "the maintenance sentence is missing"
+    assert ("Data custodians retain authority over their survey data, licences and "
+            "attribution.") in flat, "the custodian-authority sentence is missing"
+    assert "governance, correction and preservation arrangements are documented in" in flat, (
+        "the sentence naming the governance document is missing")
+    assert (("https://ausmt.readthedocs.io/en/latest/introduction/governance/",
+             "Governance & Operation") in _links(who)), (
+        "Governance & Operation must be an anchor on the documented arrangements")
+
+
+def test_the_citing_section_asks_for_both_the_citation_and_the_acknowledgement():
+    """Cite the survey, not the portal told a reader what NOT to do and left the acknowledgement
+    to a paragraph four down. The replacement states both duties in one line, in the order they are
+    performed. FAILS on a revert, and FAILS if the acknowledgement half is dropped."""
+    cite = _flat(_section("cite"))
+    assert "Cite the survey, not the portal." not in cite, (
+        "the retired cite-not-the-portal sentence is back")
+    assert "Cite the survey; acknowledge AusMT." in cite, (
+        "the citing section must open on both duties")
