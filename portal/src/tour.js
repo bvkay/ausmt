@@ -70,8 +70,9 @@ const TOUR_STEPS=[
   {sel:"#drawer",
    text:"Open a survey for its full record: abstract, stations, downloads and citation. View survey leads to its shareable page.",
    enter:_tourEnterSurveyStory,exit:_tourExitSurveyStory},
-  {sel:"#collectionsGrid .scard",
-   text:"Collections gather related surveys: {collection} here. Open one to explore its members on the map."},
+  {sel:"#collectionsGrid .scard",el:_tourCollectionCard,
+   text:"Collections gather related surveys: {collection} here. Open one to explore its members on the map.",
+   enter:_tourEnterCollections},
   {sel:"#navMap",
    text:"Map brings you back to the stations."},
   {sel:"#map",
@@ -89,6 +90,8 @@ function _tourInSelectGroup(i){return _TOUR_SELECT_GROUP.indexOf(i)>=0;}
 // step opens.
 const _TOUR_SURVEYS_GROUP=[10,11,12];
 function _tourInSurveysGroup(i){return _TOUR_SURVEYS_GROUP.indexOf(i)>=0;}
+// The collections step is a group of one: it owns the collections view.
+const _TOUR_COLLECTIONS_STEP=13;
 
 // Overlay dim. Single source of truth, applied inline by _tourLayout: on a targeted step it colours the
 // spot's box-shadow (the backdrop stays transparent so the cutout shows the element fully); on a
@@ -235,6 +238,23 @@ function _tourEnterSurveyStory(){
   _tourSv.story=true;
 }
 function _tourExitSurveyStory(){_tourCloseStory();}
+// The collections step OWNS the collections view: it establishes it on arrival and drops it on leaving in
+// either direction, so the nav step after it needs no view change of its own and the step before it lands
+// on the view its own enter establishes.
+function _tourCollectionCard(){
+  const cid=_tourDemoCollection();
+  if(!cid)return null;
+  const cards=[...document.querySelectorAll("#collectionsGrid .scard")];
+  return cards.find(c=>{const h=c.querySelector("[data-coll]");return h&&h.dataset.coll===cid;})||null;
+}
+function _tourEnterCollections(){
+  if(typeof curView!=="undefined"&&curView!=="collections"&&typeof setView==="function")setView("collections");
+  const card=_tourCollectionCard();
+  if(card&&typeof card.scrollIntoView==="function"){try{card.scrollIntoView({block:"center"});}catch(e){}}
+}
+function _tourLeaveCollections(){
+  if(typeof curView!=="undefined"&&curView==="collections"&&typeof setView==="function")setView("map");
+}
 // The select group's shared state: the rail mode, the demo rectangle and the demo selection. The visitor's
 // own mode is captured ONCE on entering the group and restored when the walk leaves it, so a move inside
 // the group never touches it. `created` records whether the tour made a selection of its own, so the
@@ -932,6 +952,7 @@ function _tourExitCurrent(){
 function _tourCrossGroups(from,to){
   if(_tourInSelectGroup(from)&&!_tourInSelectGroup(to))_tourLeaveSelectGroup();
   if(_tourInSurveysGroup(from)&&!_tourInSurveysGroup(to))_tourLeaveSurveysGroup();
+  if(from===_TOUR_COLLECTIONS_STEP&&to!==_TOUR_COLLECTIONS_STEP)_tourLeaveCollections();
 }
 function _tourGo(to){
   const from=_tourStep;

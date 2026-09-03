@@ -1972,6 +1972,40 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(_layoutNow() === "compact", "surveys group: closing the tour must leave the visitor's layout alone");
   doc.querySelector('#layoutSeg [data-layout="cards"]').click();   // hand the world back to the sections below
 
+  // H9. THE COLLECTIONS STEP (LANE-CONTRACT-TOUR-REVISION.md T1 step 14, T2). Collections are a first-class
+  // way into the corpus and the tour never mentioned them, so a reader learnt the tree and the surveys grid
+  // and never saw that related surveys are gathered. The step shows the collections view with the resolved
+  // collection's own card spotlit and its name in the copy. The step OWNS that view: leaving it in either
+  // direction drops it, so the nav step after it needs no view change of its own and the reader is back on
+  // the map where its copy says they are.
+  _stepTo(13);
+  ok(A.tourStep() === 13, "collections: could not reach the collections step, at " + A.tourStep());
+  ok(A.curView() === "collections", "collections: the step must show the Collections view, on " + A.curView());
+  const _cid = A.tourDemoCollection();
+  ok(_cid === "auslamp",
+    "collections: the fixture carries one collection, so that is what must resolve, got " + JSON.stringify(_cid));
+  const _collCard = [...doc.querySelectorAll("#collectionsGrid .scard")]
+    .find(c => { const h = c.querySelector("[data-coll]"); return h && h.dataset.coll === _cid; });
+  ok(_collCard, "collections: the resolved collection must have a card in the grid");
+  ok(A.tourTargetIs(_collCard),
+    "collections: the step must spotlight the RESOLVED collection's card, not whichever card is first");
+  const _collCopy = doc.getElementById("tourText").textContent;
+  ok(_collCopy.indexOf("AusLAMP") >= 0,
+    "collections: the copy must name the resolved collection, got " + JSON.stringify(_collCopy));
+  ok(_collCopy.indexOf("{") < 0,
+    "collections: no placeholder may survive into the rendered copy, got " + JSON.stringify(_collCopy));
+  _arrow("ArrowRight");
+  ok(A.tourStep() === 14 && A.curView() === "map",
+    "collections: leaving the step FORWARD must drop the collections view, on " + A.curView());
+  _arrow("ArrowLeft");
+  ok(A.tourStep() === 13 && A.curView() === "collections",
+    "collections: stepping BACK must re-establish the view, on " + A.curView());
+  _arrow("ArrowLeft");
+  ok(A.tourStep() === 12 && A.curView() === "surveys",
+    "collections: stepping BACK past the step must land on the view the story step establishes, on " + A.curView());
+  _arrow("Escape");
+  ok(A.tourStep() === -1, "collections: could not close the tour after the collections checks");
+
   // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
   // (forward, back, close). The collapse set is real state (treeCollapsedKeys), not a proxy.
