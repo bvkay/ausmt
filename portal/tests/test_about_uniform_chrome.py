@@ -480,14 +480,43 @@ ANCHOR_VAR = "--about-anchor-offset"
 MEASURED_HEADER = {375: 220, 1280: 74}
 
 
+# EVERY DECLARATION OF THE VARIABLE IS ACCOUNTED FOR, because a reader that matches only the shape
+# it expects turns a band it cannot parse into a band that is not there. A browser honours a `2rem`
+# band and this module would drop it: the ladder pins below would all pass while a heading landed
+# 115px behind the header at 400px. So the declarations are COUNTED first and the count is asserted
+# against what the two shapes below recognise; an unparseable value then fails on its own line,
+# naming the value, instead of vanishing.
+_DECL = re.compile(re.escape(ANCHOR_VAR) + r"\s*:")
+_BASE = re.compile(r":root\{\s*" + re.escape(ANCHOR_VAR) + r"\s*:\s*([^;}]+)\}")
+_BAND = re.compile(r"@media\s*\(min-width:\s*([^)]+?)\s*\)\s*\{\s*:root\{\s*"
+                   + re.escape(ANCHOR_VAR) + r"\s*:\s*([^;}]+)\}\s*\}")
+
+
+def _px(where, raw):
+    """A whole-pixel length, or a loud failure naming what was written instead."""
+    m = re.fullmatch(r"(\d+)px", raw.strip())
+    assert m, (
+        f"{where}: the anchor offset is a clearance measured against the header in device pixels, "
+        f"so every value in the ladder is a whole px; got {raw.strip()!r}, which this reader cannot "
+        f"compare with a measured header height")
+    return int(m.group(1))
+
+
 def _anchor_ladder(text):
     """The ladder as (min-width, px) pairs in source order, base first at min-width 0."""
-    base = re.search(r":root\{[^}]*" + re.escape(ANCHOR_VAR) + r":(\d+)px", text)
+    base = _BASE.search(text)
     assert base, "about.html must declare the anchor offset on :root as the base of the ladder"
-    out = [(0, int(base.group(1)))]
-    for m in re.finditer(r"@media\s*\(min-width:(\d+)px\)\{:root\{"
-                         + re.escape(ANCHOR_VAR) + r":(\d+)px\}\}", text):
-        out.append((int(m.group(1)), int(m.group(2))))
+    bands = _BAND.findall(text)
+    declared = len(_DECL.findall(text))
+    assert declared == 1 + len(bands), (
+        f"about.html declares {ANCHOR_VAR} {declared} time(s) and this reader recognises "
+        f"{1 + len(bands)} of them (the :root base and {len(bands)} min-width band(s)); a "
+        f"declaration it cannot read would drop out of the ladder silently and leave every pin "
+        f"below green while an in-page anchor lands behind the header")
+    out = [(0, _px("the :root base", base.group(1)))]
+    for width, value in bands:
+        out.append((_px(f"the min-width:{width} band's breakpoint", width),
+                    _px(f"the min-width:{width} band", value)))
     return out
 
 
