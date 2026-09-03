@@ -410,6 +410,23 @@ def _sections(lines: list[bytes]) -> list[tuple]:
     return out
 
 
+def _ident(value: str) -> str:
+    """One EDI identifier in comparable form: runs of non-alphanumeric characters collapse to a
+    single `_`, the ends are trimmed of it, and case is dropped.
+
+    Comparing the raw strings is not enough, and the reason is measured rather than imagined. Two of
+    the 764 files in the GSSA Roxby Downs 2018 release carry `DATAID="222 "` and `DATAID="245 "`
+    against `SECTID="222 _avg"` and `SECTID="245 _avg"`: the writer put the trailing space inside the
+    section name, so `<DATAID>_avg` built from the trimmed DATAID misses by one character. Both files
+    happen to put the averaged block first, so a raw comparison still publishes the right section
+    through the rule's last clause -- but by accident, and the next delivery that orders its sections
+    differently would silently publish a realisation. Collapsing separators is what makes the NAME
+    decide it. Two sections whose names differ only in punctuation would now compare equal; the first
+    match wins and the fallback is the first section either way, so the worst case is the answer the
+    rule already gives."""
+    return re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").lower()
+
+
 def section_of_record(raw: bytes) -> tuple:
     """(sectid, index, total) for `raw` under SECTION_OF_RECORD_RULE. `total` is how many data
     sections the file carries, so a caller can tell "one section, nothing to choose" from "chose the
@@ -420,10 +437,9 @@ def section_of_record(raw: bytes) -> tuple:
         return (None, -1, 0)
     dataid = _head_dataid(lines)
     if dataid:
-        wanted = dataid.strip().lower()
-        for preferred in (wanted + "_avg", wanted):
+        for preferred in (_ident(dataid + "_avg"), _ident(dataid)):
             for i, (sectid, _a, _b) in enumerate(sections):
-                if sectid is not None and sectid.strip().lower() == preferred:
+                if sectid is not None and _ident(sectid) == preferred:
                     return (sectid, i, len(sections))
     return (sections[0][0], 0, len(sections))
 

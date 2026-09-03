@@ -148,3 +148,12 @@ def test_the_selection_rule_prefers_avg_then_the_dataid_then_the_first():
     assert pick("MT01", ["XPR-0", "MT01", "XPR-1"]) == ("MT01", 1, 3)
     assert pick("MT01", ["XPR-0", "XPR-1"]) == ("XPR-0", 0, 2)
     assert pick("MT01", ["MT01_avg"]) == ("MT01_avg", 0, 1)
+
+    # The measured shape that makes the comparison collapse separators: two of the 764 files in the
+    # GSSA Roxby Downs 2018 release write DATAID="222 " against SECTID="222 _avg", so the trailing
+    # space lands INSIDE the section name. Both put the averaged block first, so a raw comparison
+    # still lands on it through the last clause; ordered the other way it would publish a
+    # realisation, silently, which is the whole defect this lane exists to remove.
+    assert pick("222 ", ["XPR-0", "222 _avg", "XPR-1"]) == ("222 _avg", 1, 3)
+    assert pick("222 ", ["222 _avg", "XPR-0"]) == ("222 _avg", 0, 2)
+    assert pick("500/4759", ["XPR-0", "500/4759_avg"]) == ("500/4759_avg", 1, 2)
