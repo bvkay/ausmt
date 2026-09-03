@@ -58,10 +58,16 @@ def _build(surveys, out):
                           cwd=str(ROOT), capture_output=True, text=True)
 
 
-def _verify(data_dir, allow=None):
+def _verify(data_dir, allow=None, dropped=None):
+    """`dropped` is the sibling gate's allow file. A refused source file is BOTH a parse failure and a
+    dropped station, and the two ledgers are gated independently, so a curator giving up on a file
+    rules in both places; the cases below that mean to exercise the parse-failure gate alone hand the
+    drop gate its own entry rather than letting it decide the exit code."""
     argv = [sys.executable, str(VERIFY), "--data-dir", str(data_dir)]
     if allow is not None:
         argv += ["--allow-parse-failures", str(allow)]
+    if dropped is not None:
+        argv += ["--allow-stations-dropped", str(dropped)]
     return subprocess.run(argv, cwd=str(ROOT), capture_output=True, text=True)
 
 
@@ -85,9 +91,12 @@ def test_verify_fails_naming_the_file_the_reader_refused(tmp_path):
     surveys, broken = _survey_with_one_unreadable_file(tmp_path)
     out = tmp_path / "out"
     assert _build(surveys, out).returncode == 0
-    r = _verify(out)
+    dropped = tmp_path / "dropped.txt"
+    dropped.write_text(f"parse-fail-probe/{broken}\n", encoding="utf-8")
+    r = _verify(out, dropped=dropped)
     assert r.returncode != 0, r.stdout + r.stderr
     assert "VERIFY: FAIL" in r.stdout, r.stdout
+    assert "source_parse_failures: FAIL" in r.stdout, r.stdout
     assert broken in r.stdout and "parse-fail-probe" in r.stdout, r.stdout
 
 
@@ -111,12 +120,12 @@ def test_the_curator_can_allow_a_named_file_and_only_that_file(tmp_path):
     allowed = tmp_path / "allowed.txt"
     allowed.write_text(f"# curator ruling, with its reason\nparse-fail-probe/{broken}\n",
                        encoding="utf-8")
-    r = _verify(out, allow=allowed)
+    r = _verify(out, allow=allowed, dropped=allowed)
     assert r.returncode == 0, r.stdout + r.stderr
 
     other = tmp_path / "other.txt"
     other.write_text("parse-fail-probe/not-this-one.edi\n", encoding="utf-8")
-    assert _verify(out, allow=other).returncode != 0
+    assert _verify(out, allow=other, dropped=allowed).returncode != 0
 
 
 def test_the_shipped_allow_file_is_empty():

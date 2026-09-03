@@ -289,12 +289,15 @@ def _check_build_report(rep, man, jsonschema, rep_schema):
 
 
 DEFAULT_PARSE_FAILURE_ALLOW = ROOT / "scripts" / "parse-failures-allowed.txt"
+DEFAULT_STATIONS_DROPPED_ALLOW = ROOT / "scripts" / "stations-dropped-allowed.txt"
 
 
-def _parse_failure_allow_list(path: Path) -> set:
+def _curator_allow_list(path: Path) -> set:
     """The curator's allow list: one `<survey slug>/<source file name>` per line, `#` comments and
-    blank lines ignored. A MISSING file is an EMPTY list, not a pass: the gate below is the point,
-    and a deployment that has deleted the file must not thereby allow everything."""
+    blank lines ignored. A MISSING file is an EMPTY list, not a pass: the gates below are the point,
+    and a deployment that has deleted the file must not thereby allow everything.
+
+    Shared by both lost-station gates, which is what keeps their rules the same rule."""
     if not path.is_file():
         return set()
     return {ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()
@@ -321,7 +324,7 @@ def _check_source_parse_failures(rep, allow_path: Path):
     if not isinstance(rep, dict):
         return False, ["   source_parse_failures: FAIL - build_report.json is absent, so the build "
                        "cannot vouch that no source file was refused"]
-    allow = _parse_failure_allow_list(allow_path)
+    allow = _curator_allow_list(allow_path)
     missing, offenders = [], []
     for slug, entry in sorted((rep.get("surveys") or {}).items()):
         rows = entry.get("source_parse_failures") if isinstance(entry, dict) else None
@@ -347,6 +350,59 @@ def _check_source_parse_failures(rep, allow_path: Path):
             lines.append(f"      ... and {len(offenders) - 20} more")
         return False, lines
     return True, [f"   source_parse_failures: PASS (none refused; {len(allow)} allowed by "
+                  f"{allow_path.name})"]
+
+
+def _check_stations_dropped(rep, allow_path: Path):
+    """THE LOST-STATION GATE, over the ledger that answers the whole question. `source_parse_failures`
+    names the files the READER refused; `stations_dropped` names every station this corpus does not
+    publish, whatever refused it: the convention-gate FAILs, the records with no coordinates or no
+    periods, the MTH5 read failures, and the parse failures too. Only the first was gated, so a
+    station dropped at a gate still reached a green verify with nothing standing in its way.
+
+    Same rule as its sibling, deliberately: any row FAILs this run unless the curator has written
+    `<slug>/<file>` into the allow file, and the BUILD still exits 0 either way, because the decision
+    belongs to the verifier and not to a build that must survive one bad legacy file.
+
+    Keyed on the FILE. The row's `station` is the id the build settled on BEFORE any station_ids
+    override applies, so for a third-party release it is neither the file name nor the published id;
+    it is echoed beside the file instead, which is what a curator needs to match a finding to a row.
+    A row carrying no file at all comes from an engine older than the field and cannot be allow-listed
+    by name; it is reported as an offender rather than passed.
+
+    Returns (ok, lines). A build predating the field cannot vouch for itself and FAILS, exactly as the
+    surveys_skipped_validation and surveys_dropped gates do."""
+    lines = []
+    if not isinstance(rep, dict):
+        return False, ["   stations_dropped: FAIL - build_report.json is absent, so the build cannot "
+                       "vouch that no station was dropped"]
+    allow = _curator_allow_list(allow_path)
+    missing, offenders = [], []
+    for slug, entry in sorted((rep.get("surveys") or {}).items()):
+        rows = entry.get("stations_dropped") if isinstance(entry, dict) else None
+        if rows is None:
+            missing.append(slug)
+            continue
+        for row in rows:
+            key = f"{slug}/{row.get('file')}" if row.get("file") else f"{slug}/<file not recorded>"
+            if key not in allow:
+                offenders.append((key, str(row.get("station", "")), str(row.get("reason", ""))))
+    if missing:
+        return False, [f"   stations_dropped: FAIL - {len(missing)} survey(s) carry no "
+                       f"stations_dropped list ({', '.join(missing[:8])}"
+                       f"{', ...' if len(missing) > 8 else ''}); the build predates the field, or the "
+                       f"report was not emitted, so it cannot vouch that no station was lost"]
+    if offenders:
+        lines.append(f"   stations_dropped: FAIL - the build DROPPED {len(offenders)} station(s) that "
+                     f"this corpus does not publish, and none is named in {allow_path}. Fix the file "
+                     f"or the gate, or record the loss deliberately in that allow file; never swap "
+                     f"this build in.")
+        lines.extend(f"      {key} (station {station}): {reason}"
+                     for key, station, reason in offenders[:20])
+        if len(offenders) > 20:
+            lines.append(f"      ... and {len(offenders) - 20} more")
+        return False, lines
+    return True, [f"   stations_dropped: PASS (none dropped; {len(allow)} allowed by "
                   f"{allow_path.name})"]
 
 
@@ -524,7 +580,8 @@ def _check_station_metadata(base_dir: Path, mtc, jsonschema, st_schema):
 
 
 def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
-                       allow_parse_failures: Path = DEFAULT_PARSE_FAILURE_ALLOW) -> bool:
+                       allow_parse_failures: Path = DEFAULT_PARSE_FAILURE_ALLOW,
+                       allow_stations_dropped: Path = DEFAULT_STATIONS_DROPPED_ALLOW) -> bool:
     """The --data-dir check: mtcat.json schema-conformance + manifest.json integrity/schema, against an
     EXISTING build dir's own files — the same two checks the self-building path runs post-build (via
     _check_mtcat_and_manifest), minus the build step itself. Returns True (PASS) / False (FAIL).
@@ -563,6 +620,10 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
     for ln in pf_lines:
         print(ln)
     ok &= pf_ok
+    sd_ok, sd_lines = _check_stations_dropped(rep, allow_stations_dropped)
+    for ln in sd_lines:
+        print(ln)
+    ok &= sd_ok
     sm_ok, sm_lines = _check_survey_metadata(data_dir, mtc, rep, jsonschema, sm_schema)
     for ln in sm_lines:
         print(ln)
@@ -603,6 +664,11 @@ def main(argv=None):
                          "`<survey slug>/<file name>` per line, '#' comments ignored. A refusal not "
                          "named there FAILS this run (the build itself still exits 0). Defaults to "
                          "the reviewed in-repo file, which is empty.")
+    ap.add_argument("--allow-stations-dropped", default=str(DEFAULT_STATIONS_DROPPED_ALLOW),
+                    help="the curator's allow file for stations the build DROPPED, whatever refused "
+                         "them: one `<survey slug>/<file name>` per line, '#' comments ignored. A drop "
+                         "not named there FAILS this run (the build itself still exits 0). Defaults "
+                         "to the reviewed in-repo file.")
     ap.add_argument("--data-dir", default=None,
                     help="C12: validate an EXISTING build output dir in place (mtcat.json schema + "
                          "manifest.json integrity/schema) instead of running pytest + a fresh build. "
@@ -618,11 +684,13 @@ def main(argv=None):
         # --surveys is now MEANINGFUL in --data-dir mode (arms the C18b consistency gate); pass it through.
         surveys_root = Path(a.surveys) if a.surveys is not None else None
         return 0 if _validate_data_dir(Path(a.data_dir), surveys_root,
-                                       Path(a.allow_parse_failures)) else 1
+                                       Path(a.allow_parse_failures),
+                                       Path(a.allow_stations_dropped)) else 1
 
     ok = True
     self_surveys = a.surveys if a.surveys is not None else str(ROOT / "data")
     allow_parse_failures = Path(a.allow_parse_failures)
+    allow_stations_dropped = Path(a.allow_stations_dropped)
 
     if not a.skip_tests:
         print("== pytest ==")
@@ -667,6 +735,10 @@ def main(argv=None):
     for ln in pf_lines:
         print(ln)
     ok &= pf_ok
+    sd_ok, sd_lines = _check_stations_dropped(rep, allow_stations_dropped)
+    for ln in sd_lines:
+        print(ln)
+    ok &= sd_ok
     sm_ok, sm_lines = _check_survey_metadata(out, mtc, rep, jsonschema, sm_schema)
     for ln in sm_lines:
         print(ln)

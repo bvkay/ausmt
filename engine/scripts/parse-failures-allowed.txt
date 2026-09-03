@@ -11,4 +11,8 @@
 # The BUILD is unaffected: a corpus build still exits 0 on a refused file, because one malformed
 # legacy file must not take the whole corpus down. This file governs the DEPLOY gate alone.
 #
+# A refused file is BOTH a parse failure and a dropped station: the build writes a row in each ledger,
+# and stations-dropped-allowed.txt gates the other one independently. Giving up on a file therefore
+# means writing it into both files, which is two deliberate acts for one lost station.
+#
 # EMPTY, and meant to stay that way.

@@ -149,9 +149,9 @@ solution of record and then the per-frequency realisations that produced it.
 `source_parse_failures` is a GATE, not a note. It lists the files the reader refused outright, and
 `scripts/verify.py` FAILS on any entry not named in the curator's allow file
 (`engine/scripts/parse-failures-allowed.txt`, one `<survey slug>/<file name>` per line, each with
-its reason). It holds one entry: `capricorn-2010/CP3B21.edi`, whose `>=DEFINEMEAS` reference latitude
-is written with a doubled minus that mt_metadata refuses and that no temporary-copy conditioning can
-repair without inventing a coordinate.
+its reason). It is EMPTY: the one entry it ever carried was `capricorn-2010/CP3B21.edi`, whose
+`>=DEFINEMEAS` reference latitude repeats its sign character, and the pre-read conditioning now
+collapses that run on a temporary copy so the station publishes.
 The build itself still exits 0 on a refused file, so one malformed legacy file costs its own station
 and never the whole corpus; the verifier is what stops a build that lost a station reaching a swap.
 
@@ -162,6 +162,19 @@ is the id the build settled on, which for a third-party release is neither the f
 usually a substring of it. `file` is not a required property: `scripts/verify.py --data-dir`
 validates a report that is already on disk, and during a rollback that report is one an older engine
 wrote without it.
+
+It is a GATE too, on the same terms as its narrower sibling and against a second allow file,
+`engine/scripts/stations-dropped-allowed.txt`. Entries are keyed on `<survey slug>/<source file
+name>`, with the station the build wrote and the reason on comment lines above; a missing allow file
+is an EMPTY list rather than a pass, a survey carrying no `stations_dropped` list at all predates the
+field and FAILS, and `--allow-stations-dropped` points the gate at another file exactly as
+`--allow-parse-failures` does. The file is seeded from the corpus as it stands, so a rebuild does not
+go red on a pre-existing condition: capricorn-2010's five sign-convention refusals, and
+`roxby-downs-2018/188_S__2.edi`, named ahead of that package's merge. The key is the FILE because the
+row's `station` is settled BEFORE any `station_ids` override applies, so the Roxby row reads `188`
+where the package would have published `RD18-188e`. The two gates are independent, and a file the
+reader refused writes a row in both ledgers, so giving up on such a file means naming it in both allow
+files: two deliberate acts for one lost station.
 
 An `xml_failures` entry means different things by source. An `edi`-sourced station falls back to its
 custodian EDI and loses only its XML download; an `emtfxml`-sourced station has no custodian file
