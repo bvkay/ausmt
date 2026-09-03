@@ -524,6 +524,45 @@ def test_section_two_states_who_enables_ausmt():
         "the route to AuScope must be an anchor on the organisation's name")
 
 
+# HOW EVERY OUTBOUND ANCHOR TO AuScope OPENS, as ONE literal in ONE order. It is the spelling
+# tests/test_footer_regions.py holds on the two footer anchors across six documents and the engine's
+# emitter; section 2's link is the site's third and last one, and three spellings of the same rule
+# is how one of them silently loses half of it.
+NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
+
+
+def test_the_route_to_auscope_opens_the_way_every_other_auscope_link_does():
+    """The owner's new-tab ruling reaches this anchor too. FAILS if section 2's link to AuScope
+    loses target="_blank" or rel="noopener noreferrer", or spells the pair in a different order from
+    the footer's.
+
+    BOTH HALVES MATTER AND FOR DIFFERENT REASONS. target="_blank" keeps the reader's place in the
+    catalogue rather than navigating the page out from under them, which is the ruling. rel is what
+    makes that safe: without noopener the opened document gets window.opener and can navigate this
+    tab to a look-alike, and without noreferrer the reader's path through the catalogue leaks to a
+    third party. The anchor carried rel alone, which is the half that is useless on its own: rel
+    guards a new tab, and there was no new tab."""
+    who = _section("who")
+    m = re.search(r'<a[^>]*href="https://www\.auscope\.org\.au"[^>]*>', who)
+    assert m, f"section 2 must carry the anchor to AuScope's own site: {_flat(who)[:300]!r}"
+    tag = m.group(0)
+    assert NEW_TAB in tag, (
+        f"section 2's AuScope link must open in a new tab with the same pair every other outbound "
+        f"AuScope anchor on this site carries, spelled {NEW_TAB!r}; got {tag!r}")
+
+
+def test_no_auscope_anchor_on_this_page_is_left_half_paired():
+    """The guard over the pin above and over the footer's own: a page-wide sweep, so a fourth
+    AuScope anchor arriving anywhere on About cannot be the one that carries a bare rel or a bare
+    target. FAILS if any anchor on this page reaching auscope.org.au is missing either half."""
+    hits = re.findall(r'<a[^>]*href="https://www\.auscope\.org\.au"[^>]*>', RAW)
+    assert hits, "about.html must carry at least one anchor to AuScope"
+    for tag in hits:
+        assert NEW_TAB in tag, (
+            f"every auscope.org.au anchor on about.html opens in a new tab with the full pair; "
+            f"got {tag!r}")
+
+
 def test_section_two_carries_the_official_lockup_the_footer_already_ships():
     """The lock-up in the body is the SAME committed file every footer on this site carries, named
     by the same root-relative path. FAILS if it points at a second copy or at a different artwork
