@@ -25,7 +25,10 @@ Each assertion states its failure criterion:
     four documents. The chip was the last of the About-this-build popover's copy: the popover left
     every footer with the one-footer ruling, the chip followed it into about.html's #build section,
     and the owner has now deleted that section too. Zero on every surface, held from both ends: the
-    attribute is gone and so is the version.js load that filled it.
+    attribute is gone and so is the version.js load that filled it, on EVERY document the portal
+    ships rather than on about.html alone. A script whose whole job is to fill an element no page
+    carries is a request that changes nothing a reader can see, and a page that still loads it reads
+    as a page that still has a chip.
 """
 import re
 from html.parser import HTMLParser
@@ -572,14 +575,25 @@ def test_the_ladder_resolves_to_the_measured_header_height_at_the_pinned_widths(
             f"in-page anchor lands {header - got}px under it")
 
 
-def test_about_no_longer_loads_the_script_that_filled_the_chip():
-    """The other end of the deletion. version.js exists to fill [data-ver-chip]; with no chip on the
-    page its load is a request that changes nothing a reader can see. FAILS if the tag comes back,
-    and FAILS in the other direction if config.js went with it: corpus-stats.js reads
-    AUSMT_CONFIG.data_base_url from it to find the catalogue this header's totals come from."""
+def test_no_portal_document_loads_the_script_that_filled_the_chip():
+    """The other end of the deletion, on EVERY document rather than on about.html alone. version.js
+    exists to fill [data-ver-chip]; the pin above proves no surface carries one, so on every surface
+    the load is a request that changes nothing a reader can see. Nothing else reads what the file
+    defines: window.AUSMT_VERSION has no consumer in the shipped portal, so the load is inert and
+    not merely invisible.
+
+    THE FILE IS KEPT, and that is not a contradiction: its label logic and its config-missing
+    sentinel are the contract a future /build page would be held to, and tools/interaction_test.js
+    drives it in its own jsdom for exactly that reason.
+
+    FAILS if the tag comes back on any document, and FAILS in the other direction if config.js or
+    corpus-stats.js went with it on about.html: corpus-stats.js reads AUSMT_CONFIG.data_base_url
+    from config.js to find the catalogue the header's totals come from."""
+    for path in sorted(ROOT.glob("*.html")):
+        assert '<script src="version.js">' not in path.read_text(encoding="utf-8"), (
+            f"{path.name}: no surface carries a version chip, so the script that fills one is a "
+            f"dead load")
     text = ABOUT.read_text(encoding="utf-8")
-    assert '<script src="version.js">' not in text, (
-        "about.html carries no version chip, so the script that fills one is a dead load")
     assert '<script src="config.js">' in text, (
         "config.js stays: corpus-stats.js reads AUSMT_CONFIG.data_base_url from it")
     assert '<script src="corpus-stats.js">' in text, (
