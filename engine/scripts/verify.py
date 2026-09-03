@@ -377,7 +377,7 @@ def _check_stations_dropped(rep, allow_path: Path):
         return False, ["   stations_dropped: FAIL - build_report.json is absent, so the build cannot "
                        "vouch that no station was dropped"]
     allow = _curator_allow_list(allow_path)
-    missing, offenders = [], []
+    missing, offenders, allowed_seen = [], [], 0
     for slug, entry in sorted((rep.get("surveys") or {}).items()):
         rows = entry.get("stations_dropped") if isinstance(entry, dict) else None
         if rows is None:
@@ -385,7 +385,9 @@ def _check_stations_dropped(rep, allow_path: Path):
             continue
         for row in rows:
             key = f"{slug}/{row.get('file')}" if row.get("file") else f"{slug}/<file not recorded>"
-            if key not in allow:
+            if key in allow:
+                allowed_seen += 1
+            else:
                 offenders.append((key, str(row.get("station", "")), str(row.get("reason", ""))))
     if missing:
         return False, [f"   stations_dropped: FAIL - {len(missing)} survey(s) carry no "
@@ -402,8 +404,11 @@ def _check_stations_dropped(rep, allow_path: Path):
         if len(offenders) > 20:
             lines.append(f"      ... and {len(offenders) - 20} more")
         return False, lines
-    return True, [f"   stations_dropped: PASS (none dropped; {len(allow)} allowed by "
-                  f"{allow_path.name})"]
+    # The count of drops this build actually made is stated, never just "none unlisted": a PASS that
+    # reads like "nothing was lost" over a build that lost six stations is the silence this gate exists
+    # to end.
+    return True, [f"   stations_dropped: PASS ({allowed_seen} dropped, each named in "
+                  f"{allow_path.name}, which carries {len(allow)} entry(s))"]
 
 
 def _scan_nulls_and_empties(doc):

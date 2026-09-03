@@ -105,7 +105,18 @@ def test_a_clean_build_passes_and_says_the_gate_ran(clean_build):
     about a build with no drops, and it says so rather than staying quiet."""
     r = _verify(clean_build)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "stations_dropped: PASS" in r.stdout, r.stdout
+    assert "stations_dropped: PASS (0 dropped" in r.stdout, r.stdout
+
+
+def test_a_pass_states_how_many_stations_the_build_actually_dropped(clean_build, tmp_path):
+    """A PASS over a build that lost a station must not read like nothing was lost. The allow file
+    makes the loss acceptable, not invisible, so the line states the count it let through."""
+    out, slug = _with_one_drop(clean_build, tmp_path)
+    allowed = tmp_path / "allowed.txt"
+    allowed.write_text(f"{slug}/MT99.edi\n", encoding="utf-8")
+    r = _verify(out, allow=allowed)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "stations_dropped: PASS (1 dropped" in r.stdout, r.stdout
 
 
 def test_verify_fails_naming_the_survey_and_the_file(clean_build, tmp_path):
