@@ -895,53 +895,63 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
 
     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and that is the point of them. main
     is 840px on an entity page, 920px on a hub and 1120px above 1180px of viewport, so a viewport
-    number answers the question wrongly on two page kinds out of three: measured in Chrome, an
-    entity page at a 1000px viewport gives the footer the page's width, the three regions want
-    1249px of it, and a
-    760px viewport rule leaves the right region alone on a second row with the acknowledgement
-    centred in what is left beside the machine-readable link, 135px off the footer's axis.
+    number answers the question wrongly on two page kinds out of three.
 
-    Below 1280px of footer the centre therefore takes a row of its own UNDER the two side regions,
-    where it spans the footer and is centred on its axis. Below 500px the side phrases no longer
-    share a row either, so every region takes one and aligns left, which is the 375px stack.
+    THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what page-centres the acknowledgement. Zones that
+    size to their own content leave the centre centred in the space LEFT OVER beside them: measured
+    in Chrome at 2560px before this, the sentence's midpoint sat 274.66px left of the viewport's on
+    this tier. flex:1 1 0 on both sides makes them the same width whatever they hold; min-width:0
+    lets a side zone go under its own content rather than force a wrap.
 
-    FAILS IF the footer stops being a wrapping flex row or stops being a query container, if the
-    left link becomes shrinkable (it is then broken mid-phrase at the reading measure), if the right
-    zone stops growing (on a wrapped row its links fall under the left ones instead of against the
-    right edge), if either state below one row goes, if one stops following the rules it overrides
-    (they tie on specificity, so an override placed above them does nothing at all), or if a
-    viewport rule comes back in their place."""
+    Below 1421px of footer CONTENT the centre takes a row of its own UNDER the two side regions,
+    where it spans the footer and is centred on its axis. Below 520px the side phrases no longer
+    share a row either, so every region takes one and aligns left, which is the 375px stack. Both
+    numbers are the portal's, because this tier and the portal now carry ONE rule set: the wider
+    surface sets the number and portal/tests/test_footer_regions.py holds the two sides identical.
+
+    FAILS IF the footer stops being a wrapping flex row or stops being a query container, if a side
+    zone stops taking the equal zero basis, if the centre stops being content-sized or stops
+    centring its text, if either state below one row goes, if one stops following the rules it
+    overrides (they tie on specificity, so an override placed above them does nothing at all), or if
+    a viewport rule comes back in their place."""
     page = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
     rule = re.search(r"\bfooter\{([^}]*)\}", css)
     assert rule and "display:flex" in rule.group(1) and "flex-wrap:wrap" in rule.group(1), \
         f"the footer must be a wrapping flex row: {rule and rule.group(1)!r}"
+    assert "align-items:center" in rule.group(1), (
+        f"one vertical alignment on every surface: {rule.group(1)!r}")
     assert "container-type:inline-size" in rule.group(1), (
         f"the footer must establish the query container the two states below one row ask about; "
         f"without it neither @container rule can ever match: {rule.group(1)!r}")
-    for zone, decls in ((".fleft", ("flex:0 0 auto",)),
-                        (".fcenter", ("flex:1 1 auto", "min-width:0", "text-align:center")),
-                        (".fright", ("flex:1 0 auto", "text-align:right"))):
+    for zone, decls in ((".fleft", ("flex:1 1 0", "min-width:0")),
+                        (".fcenter", ("flex:0 1 auto", "min-width:0", "text-align:center")),
+                        (".fright", ("flex:1 1 0", "min-width:0", "text-align:right"))):
         m = re.search(re.escape(zone) + r"\{([^}]*)\}", css)
         assert m, f"{zone} carries no rule"
         for decl in decls:
             assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
 
-    centre_row = css.find("@container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}")
+    centre_row = css.find("@container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}")
     assert centre_row > 0, (
-        "below 1280px of footer the centre must take a full row of its own, or it is centred in the "
-        "space left over beside the machine-readable link instead of on the footer's axis")
-    stack = css.find("@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
+        "below 1421px of footer content the centre must take a full row of its own, or it is "
+        "centred in the space left over beside the machine-readable link instead of on the axis")
+    stack = css.find("@container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
     assert stack > centre_row, (
-        "below 500px of footer every region must take a full row and align left, in a rule that "
-        "FOLLOWS the centre's own-row rule: the two tie on specificity, so placed above it the "
+        "below 520px of footer content every region must take a full row and align left, in a rule "
+        "that FOLLOWS the centre's own-row rule: the two tie on specificity, so placed above it the "
         "stack would not restore the reading order at 375px")
     assert css.index(".fright{") < centre_row, (
         "both states below one row must follow the zone rules they override; the selectors tie on "
         "specificity and source order alone decides")
-    assert "@media(max-width:760px){.fzone" not in css, (
-        "the footer's width is not the viewport's on this tier, so the stacking rule must not go "
-        "back to asking the viewport")
+    for gone in ("@media(max-width:760px){.fzone", "@media (max-width:760px){.fzone"):
+        assert gone not in css, (
+            "the footer's width is not the viewport's on this tier, so the stacking rule must not "
+            "go back to asking the viewport")
+    assert re.search(r"\bmain\{[^}]*padding:1\.6rem 1\.25rem 2\.2rem", css), (
+        "the separation above the footer belongs to the reading column, not to the footer: the "
+        "footer's own margin-top left the rule set with the ruling (the SPA's footer cannot carry "
+        "one, its body does not scroll), so main states the space it used to provide")
 
 
 def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
