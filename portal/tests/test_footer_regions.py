@@ -42,12 +42,11 @@ Each assertion states its failure criterion:
   * THE LOCKUP IS A COMMITTED FILE - FAILS if portal/vendor/auscope-ncris-white.png is missing or
     has been resized, re-encoded or recoloured. A footer image is a promise about a file, and this
     one is a third-party trademark asset that must ship as its owner published it.
-  * GEOMETRY - FAILS if either surface stops being a wrapping flex row or stops being a query
-    container, if the left link becomes shrinkable (it is then broken mid-phrase at the static
-    pages' 840px reading measure, where the three regions do not all fit on one row), if the right
-    zone stops growing (on a wrapped row its lockup falls under the left one instead of against the
-    right edge), if either state below one row goes and the acknowledgement is left centred in the
-    space beside the machine-readable link, or a 375px viewport collides instead of stacking.
+  * GEOMETRY - FAILS if any surface stops being a wrapping flex row or stops being a query
+    container, if a side zone stops taking the equal zero basis, if the centre stops being
+    content-sized or stops centring its text, if either state below one row goes and the
+    acknowledgement is left centred in the space beside the machine-readable link, or a 375px
+    viewport collides instead of stacking.
   * THE LOCKUP NEVER OUTGROWS ITS ZONE - FAILS if the image loses its max-width cap, which is what
     keeps it inside the stacked 375px row whatever the committed file's own width becomes.
   * PARITY ACROSS THE PORTAL - FAILS if any HTML document the portal ships stops carrying the three
@@ -60,17 +59,35 @@ Each assertion states its failure criterion:
   * ONE FOOTER RULE - FAILS if the five documents that share the portal's token layer stop
     declaring the IDENTICAL footer rule, or if a second document leaves that layer. The content
     pins cannot see the footer's box, which is where the surfaces drifted apart on height.
+  * ONE FOOTER RULE SET, ON ALL SEVEN SURFACES - FAILS if any surface's footer rule set drifts from
+    portal/index.html's by a character, once the token layer is resolved to the colours it carries.
+    The rule above held the box across the five token surfaces and could not reach 404.html or the
+    generated tier, which write the same colours as literals; those two carried a rule set of their
+    own in rem units with no bottom padding, and that is what the owner saw as the footers sitting
+    differently and aligning differently between the Map, the hubs and About. Measured in Chrome
+    before this pin, at 2560px the centre sentence's midpoint sat 245.55px left of the viewport's on
+    the portal and 274.66px left of it on the generated tier; the footer stood 48.75px on one tier
+    and 46.02px on the other, with the text baseline 4.69px apart.
+  * THE SIDE ZONES TAKE EQUAL ZERO BASIS - FAILS if either side zone stops declaring flex:1 1 0 with
+    min-width:0, or if the centre stops being content-sized. This is the C9 header lesson restated:
+    zones that size to their content leave the centre centred in the LEFTOVER space, not on the
+    page. With both sides growing from the same zero basis they are always the same width, so the
+    centre is page-centred whatever the machine-readable link and the lockup happen to measure.
+    After it, the midpoint delta is 0.00px on all six surfaces at 2560, 1280 and 1024.
 
 BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's. On the static tier main is 840px on an
 entity page, 920px on a hub and 1120px above 1180px of viewport, and on the portal the sibling pages
 set their footers inside reading columns of 760px to 980px, so no single viewport number describes
 "the three regions do not fit" on more than one page kind at a time.
 
-THE OWN-ROW BREAKPOINT IS A MEASUREMENT OF THE CONTENT, not a design constant. Measured in Chrome
-with the ruled strings at the ruled weight, the three regions want 1301px of footer on the portal
-and 1249px on the static tier; the rules fire just above each, as they did at every shorter number
-this footer has carried. The acknowledgement lengthened the centre once when it replaced the bare
-copyright line and again when it went bold.
+THE OWN-ROW BREAKPOINT IS A MEASUREMENT OF THE CONTENT, not a design constant, and there is now ONE
+of it because there is one rule set. Two side zones of the same width need twice the WIDER one, so
+the equal zero basis lengthened what the row wants: measured in Chrome, the widest surface's centre
+is 813.22px and its machine-readable link 285.98px, which puts one row at 1457.18px of footer. The
+number is stated as the CONTENT width the query actually asks (1421px, 36px of padding narrower) and
+verified either side of it. The acknowledgement lengthened the centre once when it replaced the bare
+copyright line and again when it went bold; anything that changes a region's content moves this
+number and it has to be re-measured.
 
 The ruling and every number this module holds it to: AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md.
 """
@@ -102,13 +119,33 @@ MTCAT = "/data/mtcat.json"
 # an <a href>, which is why the two are separate rules rather than one host list.
 _EXTERNAL_NAV = ("https://www.auscope.org.au",)
 
+# NO FOOTER CARRIES A MAP CREDIT, on any surface. The basemap's attribution is a licence obligation
+# (OpenStreetMap data under ODbL, tiles rendered from Protomaps' build) and it is met where the map
+# is: in the map's own attribution control, collapsed behind an (i) in the corner. It cannot be met
+# in the footer, for two reasons the owner ruled on.
+#
+# ONE: the footer is the same box on seven surfaces, and a line only the SPA carries makes it a
+# different box there. Measured in Chrome with the credit in place, the SPA's footer stood 90.80px
+# against 74.30px everywhere else at 1280 and 1024, and its acknowledgement's baseline sat 21.64px
+# from the footer's top against 29.89px elsewhere at 2560.
+#
+# TWO: a fixed line of prose cannot follow the tile source. map.js keeps a CARTO fallback for the
+# case where the pmtiles files are absent or the renderer fails to load, and a footer naming
+# Protomaps would credit the wrong provider on that branch. The control reads each layer's own
+# attribution, so the credit is whatever is actually drawing the map.
+#
+# Held as a negative on every surface, by the class AND by the two hrefs: a page could drop the class
+# and still be making the claim.
+_NO_CREDIT_MARKS = ("mapcredit", "https://www.openstreetmap.org/copyright", "https://protomaps.com")
+
 # HOW THE TWO EXTERNAL ANCHORS OPEN. Both leave the site, so both open in a new tab and neither
 # hands the opened page a handle on this one: target="_blank" gives the opened document
 # window.opener, from which it can navigate the tab it was opened from to a look-alike, and the
 # referrer would leak the reader's path through the catalogue to a third party. The pair is asserted
 # as ONE literal string in ONE order so six documents and the engine's emitter cannot each spell it
-# differently; it is the spelling the header's own external anchor already carries. In-site links
-# keep the same tab, which is why this is a per-anchor rule and not a document-wide base target.
+# differently; it is the spelling every outbound anchor on this site carries, About's route to
+# AuScope included. In-site links keep the same tab, which is why this is a per-anchor rule and not
+# a document-wide base target.
 _NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
 # The lockup, as the file the footer promises. Recorded from the AuScope brand kit's own bytes; see
@@ -162,7 +199,12 @@ def _outside_queries(text):
 
 
 def _index_footer():
-    """index.html's <footer> with HTML comments stripped, so prose inside it cannot satisfy a pin."""
+    """index.html's <footer> with HTML comments stripped, so prose inside it cannot satisfy a pin.
+
+    NOTHING ELSE IS STRIPPED. This footer used to have the SPA's basemap credit removed before any
+    comparison, which is what let one surface carry a line the other six did not while every
+    "identical everywhere" pin still passed. The credit is gone from every footer, so the readers
+    compare what is there."""
     raw = _index_text().split("\n<footer>", 1)[1].split("</footer>", 1)[0]
     return re.sub(r"<!--.*?-->", "", raw, flags=re.S)
 
@@ -199,7 +241,7 @@ def _entity(text):
 
 
 def _regions(footer, classes):
-    """{region: inner html} for the three zone divs/spans, each required exactly once."""
+    """{region: inner html} for the three zone divs, each required exactly once."""
     out = {}
     for name, cls in classes.items():
         hits = re.findall(r'class="' + re.escape(cls) + r'"[^>]*>(.*?)</(?:div|span)>', footer, re.S)
@@ -209,18 +251,19 @@ def _regions(footer, classes):
     return out
 
 
+_ZONE_CLASSES = {"left": "fzone fleft", "centre": "fzone fcenter", "right": "fzone fright"}
+
+
 def _index_regions():
     foot = _index_footer()
     left = re.findall(r'<a class="apilink"[^>]*>(.*?)</a>', foot, re.S)
     assert len(left) == 1, f"index.html's footer must carry exactly one MTCAT link; found {len(left)}"
-    zones = _regions(foot, {"centre": "foot-main", "right": "foot-right"})
+    zones = _regions(foot, _ZONE_CLASSES)
     return {"left": left[0].strip(), "centre": zones["centre"], "right": zones["right"]}
 
 
 def _engine_regions():
-    foot = _engine_footer()
-    return _regions(foot, {"left": "fzone fleft", "centre": "fzone fcenter",
-                           "right": "fzone fright"})
+    return _regions(_engine_footer(), _ZONE_CLASSES)
 
 
 def test_both_surfaces_carry_the_same_three_regions_with_the_owners_strings():
@@ -434,19 +477,26 @@ def test_every_portal_page_carries_the_one_footer():
             f"{[(t, a.get('class')) for t, a, _ in kids]}")
         (ltag, lattrs, linner), (ctag, cattrs, cinner), (rtag, rattrs, rinner) = kids
 
-        # LEFT. One machine-readable link, the whole catalogue, with the leaves-this-page arrow.
-        assert ltag == "a" and "apilink" in lattrs.get("class", "").split(), (
-            f"{name}: the first region is the MTCAT link, got <{ltag} class={lattrs.get('class')!r}>")
-        label = " ".join(_entity(linner).split())
+        # LEFT. One zone, carrying one machine-readable link to the whole catalogue, with the
+        # leaves-this-page arrow. The zone is an element of its own on every surface: the equal
+        # zero basis that page-centres the acknowledgement is a rule on a BOX, and a bare anchor
+        # gave the portal no box to put it on where the generated tier had one.
+        assert ltag == "div" and lattrs.get("class") == _ZONE_CLASSES["left"], (
+            f"{name}: the first region is the MTCAT link's zone, got <{ltag} "
+            f"class={lattrs.get('class')!r}>")
+        link = re.fullmatch(r'<a class="apilink" href="([^"]+)" title="[^"]*">(.*)</a>',
+                            linner.strip(), re.S)
+        assert link, f"{name}: the left zone holds the MTCAT link and nothing else: {linner!r}"
+        label = " ".join(_entity(link.group(2)).split())
         assert label == f"{LEFT_LABEL} ↗", (
             f"{name}: the left region must read {LEFT_LABEL!r} with the leaves-this-page arrow, "
             f"got {label!r}")
-        assert _root_relative(lattrs.get("href", ""), name) == MTCAT, (
-            f"{name}: the left link must resolve to {MTCAT}, got {lattrs.get('href')!r}")
+        assert _root_relative(link.group(1), name) == MTCAT, (
+            f"{name}: the left link must resolve to {MTCAT}, got {link.group(1)!r}")
 
         # CENTRE. The owner's acknowledgement line, carrying exactly one link: the AuScope address
         # under its own URL text. The rest is prose and stays prose.
-        assert ctag == "span" and cattrs.get("class") == "foot-main", (
+        assert ctag == "div" and cattrs.get("class") == _ZONE_CLASSES["centre"], (
             f"{name}: the second region is the acknowledgement, got <{ctag} "
             f"class={cattrs.get('class')!r}>")
         centre = " ".join(_entity(re.sub(r"<[^>]+>", "", cinner)).split())
@@ -458,7 +508,7 @@ def test_every_portal_page_carries_the_one_footer():
             f"own URL text: {cinner!r}")
 
         # RIGHT. The AuScope-NCRIS lockup, linked where the centre's URL text links.
-        assert rtag == "span" and rattrs.get("class") == "foot-right", (
+        assert rtag == "div" and rattrs.get("class") == _ZONE_CLASSES["right"], (
             f"{name}: the third region is the AuScope-NCRIS lockup, got <{rtag} "
             f"class={rattrs.get('class')!r}>")
         assert re.fullmatch(
@@ -507,122 +557,87 @@ def test_releases_and_about_this_build_have_left_every_footer():
     assert "aboutbuild" not in _pages_text(), "engine/extract/_pages.py: the popover class is retired"
 
 
-def test_both_footers_are_wrapping_flex_rows_that_give_at_the_centre():
-    """GEOMETRY. The centre is the region that yields: the left link and the right lockup are each a
-    fixed-width object that reads badly broken, and the acknowledgement line is prose that does not.
+def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_basis():
+    """GEOMETRY, on every surface at once. The centre is the region that yields: the left link and
+    the right lockup are each a fixed-width object that reads badly broken, and the acknowledgement
+    line is prose that does not.
+
+    THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what page-centres the acknowledgement. Zones
+    that size to their own content leave the centre centred in the LEFTOVER space: measured in
+    Chrome at 2560px before this, the sentence's midpoint sat 245.55px left of the viewport's on
+    the portal and 274.66px left of it on the generated tier, because the machine-readable link is
+    285.98px wide and the lockup 165.33px. flex:1 1 0 on both sides makes them the same width
+    whatever they hold, so the centre sits on the page's axis; min-width:0 lets a side zone go
+    under its own content rather than force a wrap, and the two states below one row are what stop
+    that overflow reaching the next zone (measured: no zone's ink overlaps another's at any width).
 
     There are two states below one row and each is pinned. Below the width the three regions need,
     the centre takes a row of its own UNDER the left link and the lockup, where it spans the footer
     and is centred on its axis; below the width those two need, every region takes a row and aligns
-    left, which is the 375px stack. Measured in Chrome, the state that was missing left the
-    acknowledgement 135px off the axis on an entity page at any viewport under 1180px.
+    left, which is the 375px stack.
 
-    FAILS if either footer stops being a wrapping flex row or stops establishing the query container
-    its own rules ask about, if the left link becomes shrinkable, if the right zone stops growing,
-    if either state below one row goes, if one stops following the rules it overrides, or if a
-    viewport rule comes back in their place."""
-    surfaces = (
-        ("portal/index.html", _index_text(), r"footer\{([^}]*)\}",
-         {"left": r"(?m)^\s*footer \.apilink\{([^}]*)\}",
-          "centre": r"(?m)^\s*footer \.foot-main\{([^}]*)\}",
-          "right": r"(?m)^\s*footer \.foot-right\{([^}]*)\}"},
-         "@container (max-width:1330px){footer .foot-main{order:1;flex:1 1 100%}}",
-         "@container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right"
-         "{order:0;flex:1 1 100%;text-align:left}}",
-         "@media(max-width:760px){footer .apilink"),
-        ("engine/extract/_pages.py", _pages_text(), r"\n  footer\{([^}]*)\}",
-         {"left": r"(?m)^\s*\.fleft\{([^}]*)\}",
-          "centre": r"(?m)^\s*\.fcenter\{([^}]*)\}",
-          "right": r"(?m)^\s*\.fright\{([^}]*)\}"},
-         "@container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}",
-         "@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}",
-         "@media(max-width:760px){.fzone"),
-    )
-    for where, text, row_re, zone_res, centre_rule, stack_rule, retired in surfaces:
-        # The narrower-width overrides restate these selectors, so the base rules are read with the
-        # query blocks removed; the two overrides are then read from the full text.
-        base = _outside_queries(text)
-        rows = re.findall(row_re, base)
-        assert len(rows) == 1, f"{where}: expected exactly one footer rule, found {len(rows)}"
-        for decl in ("display:flex", "flex-wrap:wrap"):
-            assert decl in rows[0], f"{where}: the footer must declare {decl}: {rows[0]!r}"
-
-        zones = {}
-        for name, pattern in zone_res.items():
-            hits = re.findall(pattern, base)
-            assert len(hits) == 1, (
-                f"{where}: expected exactly one {name} zone rule, found {len(hits)} "
-                f"(a second declaration would override the pinned geometry at equal specificity)")
-            zones[name] = hits[0]
-        assert "flex:0 0 auto" in zones["left"], (
-            f"{where}: the left link is content-sized and must not shrink, or it is broken "
-            f"mid-phrase wherever the three regions do not all fit: {zones['left']!r}")
-        assert "flex:1 1 auto" in zones["centre"] and "text-align:center" in zones["centre"], (
-            f"{where}: the centre takes the remaining space and centres its text in it, got "
-            f"{zones['centre']!r}")
-        assert "min-width:0" in zones["centre"], (
-            f"{where}: the centre is the region that gives when the row is tight, so it must be "
-            f"allowed below its content: {zones['centre']!r}")
-        assert "flex:1 0 auto" in zones["right"] and "text-align:right" in zones["right"], (
-            f"{where}: the right zone grows, so on a WRAPPED row the lockup still sits against the "
-            f"right edge rather than under the left link: {zones['right']!r}")
-        for side in ("left", "right"):
-            assert "min-width:0" not in zones[side], (
-                f"{where}: the {side} zone must NOT shrink under its own content; the row wraps "
-                f"instead: {zones[side]!r}")
-
-        assert "container-type:inline-size" in rows[0], (
+    FAILS if a footer stops being a wrapping flex row or stops establishing the query container its
+    own rules ask about, if either side zone stops taking the zero basis, if the centre stops being
+    content-sized or stops centring its text, if either state below one row goes, if one stops
+    following the rules it overrides, or if a viewport rule comes back in their place."""
+    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8")) for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text()))
+    for where, text in surfaces:
+        rules = _rule_set(where, text)
+        box = rules["footer"]
+        for decl in ("display:flex", "flex-wrap:wrap", "align-items:center"):
+            assert decl in box, f"{where}: the footer must declare {decl}: {box!r}"
+        assert "container-type:inline-size" in box, (
             f"{where}: the footer must establish the query container its own rules ask about; "
-            f"without it neither @container rule can ever match: {rows[0]!r}")
+            f"without it neither @container rule can ever match: {box!r}")
 
-        centre_row = text.find(centre_rule)
-        assert centre_row > 0, (
-            f"{where}: below the width the three regions need, the centre must take a full row of "
-            f"its own, or it is centred in the space left over beside the machine-readable link "
-            f"instead of on the footer's axis: expected {centre_rule!r}")
-        stacked = text.find(stack_rule)
-        assert stacked > centre_row, (
+        for side in (".fleft", ".fright"):
+            assert "flex:1 1 0" in rules[side], (
+                f"{where}: {side} must grow from a zero basis, or it sizes to its own content and "
+                f"the acknowledgement is centred in what is left over rather than on the page: "
+                f"{rules[side]!r}")
+            assert "min-width:0" in rules[side], (
+                f"{where}: {side} must be allowed under its own content, or the equal basis it "
+                f"takes above forces a wrap instead: {rules[side]!r}")
+        assert "text-align:right" in rules[".fright"], (
+            f"{where}: the lockup sits against the right edge of its zone: {rules['.fright']!r}")
+        assert "flex:0 1 auto" in rules[".fcenter"], (
+            f"{where}: the centre is content-sized between the two equal side zones; growing it "
+            f"too would take a third of the free space and push the axis: {rules['.fcenter']!r}")
+        for decl in ("min-width:0", "text-align:center"):
+            assert decl in rules[".fcenter"], (
+                f"{where}: the centre zone must declare {decl}: {rules['.fcenter']!r}")
+
+        centre_row, stacked = text.find(_CENTRE_ROW_RULE), text.find(_STACK_RULE)
+        assert centre_row > 0 and stacked > centre_row, (
             f"{where}: every region must take a full row and align left once the left link and the "
             f"lockup cannot share one, in a rule that FOLLOWS the centre's own-row rule: the two "
             f"tie on specificity, so placed above it the stack would not restore the 375px order")
-        assert re.search(zone_res["right"], text).start() < centre_row, (
-            f"{where}: both states below one row must follow the zone rules they override; the "
-            f"selectors tie on specificity and source order alone decides")
-        assert retired not in text, (
-            f"{where}: the footer's width is not the viewport's on either surface, so the rules "
-            f"below one row must not go back to asking the viewport: found {retired!r}")
+        for zone in (".fleft{", ".fcenter{", ".fright{"):
+            assert 0 < text.index(zone) < centre_row, (
+                f"{where}: both states below one row must follow the zone rules they override, {zone}"
+                f" included; the selectors tie on specificity and source order alone decides")
+        for retired in ("@media(max-width:760px){.fzone", "@media (max-width:760px){.fzone",
+                        "footer .apilink{", "footer .foot-main{", "footer .foot-right{"):
+            assert retired not in text, (
+                f"{where}: the footer's width is not the viewport's on any surface and its zones "
+                f"are named the same everywhere: found the retired {retired!r}")
 
 
 def test_the_lockup_is_sized_in_css_and_never_outgrows_its_zone():
     """THE LOCKUP NEVER OUTGROWS ITS ZONE. The committed file is 1919px wide because it is the brand
-    kit's own raster; what a reader sees is a 28px-high mark, and the width follows from the height.
+    kit's own raster; what a reader sees is a 30.8px-high mark, and the width follows from the height.
 
     FAILS if the height rule goes (the page would then paint the file at full size), if the width
     stops following it, or if the max-width cap is lost. The cap is what holds the mark inside the
     stacked 375px row whatever the committed file's own width becomes, and object-fit keeps its
     proportions in the state where the cap bites."""
-    for where, text, pattern in (
-            ("portal/index.html", _index_text(), r"(?m)^\s*footer \.orglogo img\{([^}]*)\}"),
-            ("engine/extract/_pages.py", _pages_text(), r"(?m)^\s*\.orglogo img\{([^}]*)\}")):
-        rules = re.findall(pattern, _outside_queries(text))
-        assert len(rules) == 1, f"{where}: expected exactly one lockup sizing rule, found {len(rules)}"
-        rule = " ".join(rules[0].split())
-        for decl in ("height:28px", "width:auto", "max-width:100%", "object-fit:contain"):
+    for where, text in ([(name, (ROOT / name).read_text(encoding="utf-8"))
+                         for name in _portal_pages()]
+                        + [("engine/extract/_pages.py", _pages_text())]):
+        rule = _rule_set(where, text)[".orglogo img"]
+        for decl in (LOCKUP_HEIGHT, "width:auto", "max-width:100%", "object-fit:contain"):
             assert decl in rule, f"{where}: the lockup rule must declare {decl}: {rule!r}"
-
-
-def test_every_portal_page_sizes_the_lockup_the_same_way():
-    """PARITY, the CSS half. The six documents each carry their own stylesheet, so a rule added to
-    one and forgotten on another is exactly how the footer diverged before. FAILS if any page ships
-    the lockup markup without the rule that sizes it."""
-    for name in _portal_pages():
-        text = (ROOT / name).read_text(encoding="utf-8")
-        rules = re.findall(r"(?m)^\s*footer \.orglogo img\{([^}]*)\}", _outside_queries(text))
-        assert len(rules) == 1, (
-            f"{name}: expected exactly one footer .orglogo img rule, found {len(rules)}")
-        rule = " ".join(rules[0].split())
-        for decl in ("height:28px", "width:auto", "max-width:100%", "object-fit:contain"):
-            assert decl in rule, f"{name}: the lockup rule must declare {decl}: {rule!r}"
 
 
 # THE CONSTANT FOOTER and THE BOLD CENTRE, held on every surface at once.
@@ -683,9 +698,80 @@ _ENGINE_INK = "background:#11182D"
 # header wordmark's 800 is a display weight for a 22px mark and would smear at 12.5px.
 _CENTRE_WEIGHT = "font-weight:700"
 
+# The lockup's rendered height, as ONE declaration in the master rule. The committed raster is
+# 1919x325, so the width follows from the height. The owner asked for it 10 percent taller: it stood
+# 28.00px (measured, matching the declaration) and now stands 30.80px, which carries the width from
+# 165.33px to 181.86px. The number is written exactly, not rounded: a rounded 31px is a different
+# ratio, and the ratio is what the owner ruled.
+LOCKUP_HEIGHT = "height:30.8px"
+
 _FOOTER_RULE = r"(?m)^\s*footer\{([^}]*)\}"
-_PORTAL_FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
-_ENGINE_FLOW_RULE = f"@media(max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
+_FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
+
+# ---------------------------------------------------------------- the footer's ONE rule set
+#
+# THE OWN-ROW BREAKPOINT IS A MEASUREMENT, and it moved with the equal zero basis. Two side zones of
+# the same width need twice the WIDER one, not one of each, so the three regions want more footer
+# than they did: measured in Chrome with the ruled strings at the ruled weight, the widest surface's
+# centre is 813.22px and its machine-readable link 285.98px, so one row needs
+# 813.22 + 2x285.98 + two 18px gaps + two 18px paddings = 1457.18px of footer. A container query
+# asks the CONTENT box, which is 36px narrower, so the rule fires at or below 1421px and the three
+# regions share a row from a footer of 1458px up. Verified at 1456/1457 (two rows) and 1458/1459
+# (one row, no zone over its box) on about.html, a survey page and 404.html.
+#
+# THE STACK BREAKPOINT DID NOT MOVE. Below 520px of CONTENT (556px of footer) every region takes a
+# row and aligns left. Between 557px and 643px the left link is wider than its equal-basis box and
+# overflows it, which is why min-width:0 is stated: measured across those widths the overflow runs
+# into empty space and no zone's ink ever reaches another's, so the row does not have to break
+# earlier than the reading order wants it to.
+_CENTRE_ROW_RULE = "@container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}"
+_STACK_RULE = "@container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}"
+
+# The seven selectors that ARE the footer's rule set, longest first so the alternation cannot take
+# the short form of a longer selector.
+_SET_RE = re.compile(r"(?m)(?:^[ \t]*|(?<=\}))"
+                     r"(footer a|footer|\.orglogo img|\.orglogo|\.fleft|\.fcenter|\.fright)"
+                     r"\{([^}]*)\}")
+_RULE_SET = ("footer", "footer a", ".fleft", ".fcenter", ".fright", ".orglogo", ".orglogo img")
+
+# THE TOKEN LAYER, RESOLVED. Five documents write these colours as var() and two cannot: 404.html is
+# served by Caddy for any unmatched path at any depth and carries no token layer, and the generated
+# tier's shell writes literals throughout. Comparing the rule sets with the tokens resolved is what
+# lets "identical everywhere" be asserted across all seven rather than across the five that happen
+# to share a spelling. The values are index.html's own :root, and a drift in them fails here.
+_TOKEN_VALUES = {"--ink": "#11182D", "--line": "#2B3557", "--muted": "#8FA3B0",
+                 "--copper": "#EF7256"}
+
+
+def _resolved(rule):
+    for name, value in _TOKEN_VALUES.items():
+        rule = rule.replace(f"var({name})", value)
+    assert "var(--" not in rule, (
+        f"the footer rule set may only reach for the four colour tokens this pin resolves; "
+        f"an unresolved one cannot be compared with the two surfaces that have no token layer: "
+        f"{rule!r}")
+    return rule
+
+
+def _rule_set(where, text):
+    """{selector: declarations} for the footer's whole rule set, tokens resolved, queries removed.
+
+    The two @container states and the return-to-flow rule restate these selectors, so the base
+    rules are read with the query blocks stripped and the three queries are then required, once
+    each, from the full text."""
+    out = {}
+    for sel, body in _SET_RE.findall(_outside_queries(text)):
+        assert sel not in out, (
+            f"{where}: {sel} is declared twice; a second declaration overrides the pinned rule at "
+            f"equal specificity and is exactly how the surfaces drifted apart")
+        out[sel] = _resolved(" ".join(body.split()))
+    missing = [s for s in _RULE_SET if s not in out]
+    assert not missing, (
+        f"{where}: the footer rule set is one set on every surface; this one is missing {missing}")
+    for query in (_CENTRE_ROW_RULE, _STACK_RULE, _FLOW_RULE):
+        assert text.count(query) == 1, (
+            f"{where}: expected exactly one {query!r}, found {text.count(query)}")
+    return out
 
 
 def _footer_rule(where, text):
@@ -776,10 +862,10 @@ def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
     FAILS if a surface loses the rule, if the breakpoint drifts off the measured width, or if the
     rule is placed where source order lets the sticky rule win it back (the two tie on
     specificity)."""
-    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8"), _PORTAL_FLOW_RULE)
-                for name in _portal_pages()]
-    surfaces.append(("engine/extract/_pages.py", _pages_text(), _ENGINE_FLOW_RULE))
-    for where, text, flow in surfaces:
+    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8")) for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text()))
+    for where, text in surfaces:
+        flow = _FLOW_RULE
         at = text.find(flow)
         assert at > 0, f"{where}: expected the return-to-flow rule {flow!r}"
         assert text.count(flow) == 1, f"{where}: the return-to-flow rule must be declared once"
@@ -795,30 +881,23 @@ def test_the_centre_line_is_bold_on_every_surface():
 
     FAILS if any surface's centre zone loses the weight, if it is written somewhere other than the
     zone rule, or if the anchor is given a weight of its own."""
-    portal_siblings = (r"(?m)^\s*footer\{([^}]*)\}", r"(?m)^\s*footer a\{([^}]*)\}",
-                       r"(?m)^\s*footer \.apilink\{([^}]*)\}",
-                       r"(?m)^\s*footer \.foot-right\{([^}]*)\}")
-    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8"),
-                 r"(?m)^\s*footer \.foot-main\{([^}]*)\}", portal_siblings)
-                for name in _portal_pages()]
-    surfaces.append(("engine/extract/_pages.py", _pages_text(), r"(?m)^\s*\.fcenter\{([^}]*)\}",
-                     (r"(?m)^\s*footer\{([^}]*)\}", r"(?m)^\s*\.fleft\{([^}]*)\}",
-                      r"(?m)^\s*\.fright\{([^}]*)\}")))
-    for where, text, pattern, siblings in surfaces:
-        base = _outside_queries(text)
-        rules = re.findall(pattern, base)
-        assert len(rules) == 1, f"{where}: expected exactly one centre zone rule, found {len(rules)}"
-        assert _CENTRE_WEIGHT in rules[0], (
-            f"{where}: the centre zone must declare {_CENTRE_WEIGHT}: {rules[0]!r}")
-        for sibling in siblings:
-            for rule in re.findall(sibling, base):
-                assert "font-weight" not in rule, (
-                    f"{where}: the weight belongs to the centre zone alone; a second declaration "
-                    f"in {sibling!r} is a second place for the surfaces to drift: {rule!r}")
+    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8")) for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text()))
+    for where, text in surfaces:
+        rules = _rule_set(where, text)
+        assert _CENTRE_WEIGHT in rules[".fcenter"], (
+            f"{where}: the centre zone must declare {_CENTRE_WEIGHT}: {rules['.fcenter']!r}")
+        for sibling in (s for s in _RULE_SET if s != ".fcenter"):
+            assert "font-weight" not in rules[sibling], (
+                f"{where}: the weight belongs to the centre zone alone; a second declaration "
+                f"in {sibling!r} is a second place for the surfaces to drift: "
+                f"{rules[sibling]!r}")
 
 
 def _footer_html(name):
-    """A portal page's footer, comments stripped, so prose inside it cannot satisfy a pin."""
+    """A portal page's footer with comments stripped, so prose inside it cannot satisfy a pin.
+
+    Nothing else is removed: every surface's footer is compared as the whole of what it carries."""
     text = (ROOT / name).read_text(encoding="utf-8")
     foot = text.split("<footer>", 1)[1].split("</footer>", 1)[0]
     return re.sub(r"<!--.*?-->", "", foot, flags=re.S)
@@ -880,10 +959,11 @@ def test_the_token_surfaces_declare_one_footer_rule():
     kept a padding and a margin of their own (16px 20px 0 and margin-top:30px) where the other three
     carried the SPA's 7px 18px.
 
-    404.html IS THE ONE SURFACE OUTSIDE THE COMPARISON, and its exclusion is asserted rather than
+    404.html IS THE ONE SURFACE OUTSIDE THIS COMPARISON, and its exclusion is asserted rather than
     assumed. Caddy serves it for any unmatched path at any depth, so it carries no token layer and
-    writes its footer in literal colours and rem units; there is no character-for-character form it
-    could share. If it is ever brought onto the tokens this pin picks it up on its own.
+    writes its footer in literal colours; there is no character-for-character form of the VAR
+    SPELLING it could share. The pin below reaches it, and the generated tier, by resolving the
+    tokens to the colours they carry.
 
     FAILS if any token surface's footer rule drifts by a single character, or if a second document
     leaves the token layer."""
@@ -901,3 +981,107 @@ def test_the_token_surfaces_declare_one_footer_rule():
     assert len(set(shared.values())) == 1, (
         "the token surfaces must declare the IDENTICAL footer rule; found "
         + "\n".join(f"  {n}: {r}" for n, r in sorted(shared.items())))
+
+
+def test_every_surface_declares_the_one_footer_rule_set():
+    """ONE FOOTER MEANS ONE RULE SET, on ALL SEVEN surfaces, not one rule on the five that share a
+    spelling. portal/index.html is the master; every other document and the engine's _CSS carry the
+    same seven rules, character for character once the four colour tokens are resolved, plus the
+    same two @container states and the same return-to-flow rule.
+
+    THIS IS THE PIN THE OWNER'S REVIEW ASKED FOR. The rule above could only see the five token
+    surfaces, so 404.html and the generated tier kept a rule set of their own: rem units, a
+    12.8px face, .7rem of top padding and NO bottom padding, and a 2.2rem margin above. That is
+    what the Map, the hubs and About were being compared across when the footers were reported as
+    sitting and aligning differently. Measured in Chrome at 2560px before this: footer height
+    48.75px on the portal against 46.02px on the generated tier, with the text baseline 4.69px
+    apart; after it, height, baseline and midpoint agree to 0.00px at 2560, 1280 and 1024.
+
+    THE SEPARATION ABOVE THE FOOTER BELONGS TO THE COLUMN, not to the footer. The generated tier
+    and 404.html carried it as the footer's own margin-top, which the SPA cannot have (its body
+    does not scroll, so a margin there takes height from the map). It moves to main's bottom
+    padding on those two surfaces, where the portal's own content pages already keep it.
+
+    FAILS if any surface's footer rule set drifts by a character, if a surface declares one of the
+    seven rules twice, if a rule goes missing, or if either query or the flow rule drifts."""
+    surfaces = [(name, (ROOT / name).read_text(encoding="utf-8")) for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text()))
+    assert len(surfaces) == 7, f"seven surfaces wear this footer, found {len(surfaces)}"
+    master = _rule_set("portal/index.html", _index_text())
+    for where, text in surfaces:
+        got = _rule_set(where, text)
+        for sel in _RULE_SET:
+            assert got[sel] == master[sel], (
+                f"{where}: {sel} must be portal/index.html's rule, character for character once "
+                f"the token layer is resolved.\n  master: {master[sel]!r}\n  {where}: {got[sel]!r}")
+
+
+def test_no_footer_on_any_surface_carries_a_map_credit():
+    """NO FOOTER CREDITS A BASEMAP, on any of the seven surfaces.
+
+    THE OBLIGATION IS NOT WAIVED, it is met where the map is. The corner control is back, collapsed
+    behind an (i), reading each tile layer's own attribution, which is what makes the credit follow
+    whichever provider is actually drawing the map: map.js keeps a CARTO fallback for the case where
+    the pmtiles files are absent or the renderer fails to load, and a fixed footer line naming
+    Protomaps would credit the wrong source on that branch. portal/tests/test_map_attribution.py
+    holds that half.
+
+    THE FOOTER IS ONE BOX ON SEVEN SURFACES, which is the other half of the reason. A line only the
+    SPA carried made it a different box there: measured in Chrome with the credit in place, the
+    SPA's footer stood 90.80px against 74.30px on every other surface at 1280 and 1024, and its
+    acknowledgement's baseline sat 21.64px from the footer's top against 29.89px elsewhere at 2560.
+
+    HELD BY THE LINKS AS WELL AS THE CLASS: a surface could drop the class name and still carry the
+    copyright href, and still be making the claim. FAILS if any portal document or the engine's
+    emitter reintroduces either.
+
+    Non-vacuous: at the tip before this pin, portal/index.html carried all three marks."""
+    for name in _portal_pages():
+        text = (ROOT / name).read_text(encoding="utf-8")
+        for mark in _NO_CREDIT_MARKS:
+            assert mark not in text, (
+                f"{name}: the basemap credit belongs to the map's own attribution control, not to a "
+                f"footer that seven surfaces share; found {mark!r}")
+    eng = _pages_text()
+    for mark in _NO_CREDIT_MARKS:
+        assert mark not in eng, (
+            f"engine/extract/_pages.py: the generated tier draws no map and credits no basemap; "
+            f"found {mark!r}")
+
+
+def test_the_centre_zone_holds_the_same_markup_on_every_surface():
+    """ONE FOOTER MEANS ONE BOX, and a box is its rules AND its contents. The rule set is held
+    identical two pins above; this holds the acknowledgement's own markup identical, which is the
+    half the SPA's basemap credit broke while every other pin stayed green.
+
+    WHY THIS IS THE HEIGHT AND BASELINE PIN. Height and baseline are browser measurements and no
+    module here can take one. The centre zone is what sets both: it is the tallest zone below the
+    one-row breakpoint, it is the zone whose first line the baseline is measured from, and it is
+    where a second line would go. With the rule set identical and this markup identical, the seven
+    footers are the same box by construction and a measurement confirms rather than guarantees it.
+    Measured in Chrome with the credit in place, the SPA stood 90.80px against 74.30px on every
+    other surface at 1280 and 1024, with the baseline 21.64px from the footer's top against
+    29.89px; after this pin the spread is under 1px at 2560, 1280 and 1024.
+
+    THE THREE SPELLINGS ARE RESOLVED FIRST: the separator is written literally on four documents,
+    as &middot; on two and as a numeric reference by the engine.
+
+    THE CENTRE ZONE AND NOT ALL THREE. The left zone's link carries class="apilink" and a title on
+    the six portal documents and neither on the generated tier, which predates this ruling and is
+    held as it stands by the two region pins above; the right zone's lockup src is necessarily
+    written differently by a page served from the root and a page served from /surveys. Widening
+    this pin to those two would restate what they already hold and would fail on a difference the
+    owner has not ruled on.
+
+    FAILS if any surface adds, drops or reorders anything inside the acknowledgement: a second
+    line, a span, a wrapper, a stray nbsp. Non-vacuous: at the tip before this pin, index.html's
+    centre zone carried the basemap credit's <span> and the other six did not."""
+    surfaces = [(name, _footer_html(name)) for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _engine_footer()))
+    assert len(surfaces) == 7, f"seven surfaces wear this footer, found {len(surfaces)}"
+    master = " ".join(_entity(_regions(_index_footer(), _ZONE_CLASSES)["centre"]).split())
+    for where, foot in surfaces:
+        got = " ".join(_entity(_regions(foot, _ZONE_CLASSES)["centre"]).split())
+        assert got == master, (
+            f"{where}: the acknowledgement must hold portal/index.html's markup once the "
+            f"separator's spelling is resolved.\n  master: {master!r}\n  {where}: {got!r}")

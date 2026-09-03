@@ -21,10 +21,14 @@ Each assertion states its failure criterion:
     load time) in index's right zone, reusing index's .counts styling so the two headers render
     identically (see test_header_parity_about_matches_index). The app-state ids remain banned, which is
     the half of the old assertion that was actually about honesty; the class ban was about styling.
-  * one version chip — FAILS if the number of real elements carrying data-ver-chip is not exactly 1
-    (must survive the reverse case too: zero chips, or a duplicated chip, both fail). It sits in
-    about.html's own #build section since the one-footer ruling emptied the footer's right region;
-    the pins below hold it there and hold the other pages to carrying none.
+  * NO version chip, anywhere. FAILS if any element carrying data-ver-chip survives on any of the
+    four documents. The chip was the last of the About-this-build popover's copy: the popover left
+    every footer with the one-footer ruling, the chip followed it into about.html's #build section,
+    and the owner has now deleted that section too. Zero on every surface, held from both ends: the
+    attribute is gone and so is the version.js load that filled it, on EVERY document the portal
+    ships rather than on about.html alone. A script whose whole job is to fill an element no page
+    carries is a request that changes nothing a reader can see, and a page that still loads it reads
+    as a page that still has a chip.
 """
 import re
 from html.parser import HTMLParser
@@ -148,10 +152,15 @@ def test_about_has_no_live_counts_elements():
         "not index's live map state, and the two must stay distinguishable at a glance")
 
 
-def test_about_carries_exactly_one_ver_chip():
-    els = _parse(ABOUT)
-    chips = [a for (tag, a, inh) in els if "data-ver-chip" in a]
-    assert len(chips) == 1, f"about.html must carry exactly one data-ver-chip element; found {len(chips)}"
+def test_no_portal_document_carries_a_ver_chip():
+    """FAILS if a version chip survives on any of the four documents. about.html held the last one;
+    with its #build section deleted there is no chip on the site, which is what makes the version.js
+    load below dead code rather than a spare."""
+    for path in (ABOUT, INDEX, ADD, RELEASES):
+        chips = [a for (tag, a, _inh) in _parse(path) if "data-ver-chip" in a]
+        assert not chips, (
+            f"{path.name}: no surface carries a version chip; the section that held the last one is "
+            f"deleted, found {len(chips)}")
 
 
 def test_about_references_no_nonexistent_federation_doc():
@@ -187,7 +196,7 @@ def test_about_references_no_nonexistent_federation_doc():
         "the honest MTCAT specification reference must survive the FEDERATION.md removal (over-deletion)")
     assert "MTCAT v1.0" not in raw, (
         "about.html must not hard-code an MTCAT version that the served schema has moved past; the "
-        "document declares its own version and version.js renders it from config")
+        "served document declares its own version, which is the only copy that cannot go stale")
 
 
 def test_mtcat_link_in_footer_not_header_across_pages():
@@ -210,8 +219,8 @@ def test_mtcat_link_in_footer_not_header_across_pages():
     a document that had already been 1.1 and is now 1.2. Pinning it "verbatim" made this test the thing
     KEEPING the wrong number on the page. The title is now version-free on all three, and the pin also
     asserts NO version number appears in it, so nobody re-introduces a hard-coded one. The version a
-    reader needs is already on screen: version.js renders the data-ver-chip from config.js, whose
-    schema_version is generated from the single-source MTCAT_VERSION constant in contract/generate.py."""
+    reader needs is in the document itself: mtcat.json declares its own schema_version, generated
+    from the single-source MTCAT_VERSION constant in contract/generate.py."""
     for path in (INDEX, ABOUT, ADD):
         header_hits = [a for (tag, a, inh) in _parse(path)
                        if tag == "a" and inh and "apilink" in _classes(a)]
@@ -230,7 +239,7 @@ def test_mtcat_link_in_footer_not_header_across_pages():
             f"{path.name}: the footer MTCAT link title must be kept verbatim, got {title!r}")
         assert not re.search(r"\bv?\d+\.\d+\b", title), (
             f"{path.name}: the footer MTCAT link title must not hard-code a schema version (it goes stale "
-            f"on every bump; the data-ver-chip already renders the live one), got {title!r}")
+            f"on every bump, and the served document declares its own), got {title!r}")
         assert "Machine-readable record (MTCAT JSON) ↗" in path.read_text(encoding="utf-8"), (
             f"{path.name}: the verbatim MTCAT link text must be preserved")
 
@@ -344,7 +353,7 @@ def test_no_page_header_keeps_the_retired_how_to_use_entry():
     same item. All are pinned absent, by id and by visible text, on all four shipped pages. Non-vacuous:
     run against the pre-wave HTML, index.html, about.html and releases.html all fail.
 
-    The #howto ANCHOR survives on About (answer 2 keeps that id, so an inbound deep link still lands) and
+    The #howto ANCHOR survives on About (answer 3 keeps that id, so an inbound deep link still lands) and
     is deliberately not what this asserts against; the assertion is about the HEADER entry.
 
     Comments are stripped before the text check on purpose: both headers carry a comment explaining what
@@ -413,33 +422,182 @@ def test_no_page_keeps_an_about_this_build_control_in_the_footer():
             f"{len(details)}")
 
 
-def test_the_running_build_identity_lives_in_about_s_body_and_nowhere_else():
-    """The ruling's own justification for taking About this build out of the footer: about.html still
-    carries the running build's identity and the route to the citable releases, so nothing is lost.
-    That is only true if about.html actually carries them, and only ONE page should: a chip on four
-    pages is four things to keep in step.
+def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_it():
+    """The colophon's deletion, held from every end it could come back through. The owner's ruling is
+    that about.html states what AusMT IS, what it licenses and where the documentation lives; the
+    running build's identity is not one of those, and a chip that has to be kept in step with a
+    config file is a maintenance cost for a fact no reader asked for.
 
-    FAILS if about.html's single [data-ver-chip] is inside <footer> rather than the page body, if the
-    #build section that carries it stops offering the route to releases.html, or if any of the other
-    three pages grows a chip of its own."""
-    els = _footer_els(ABOUT)
-    assert not [a for (tag, a) in els if "data-ver-chip" in a], (
-        "about.html's version chip belongs in the page body, not in the footer the ruling emptied")
+    FAILS if the #build section, its heading, its contents entry or its chip returns, and FAILS in
+    the other direction if the deletion took the releases page down with it: releases.html has no
+    other route in since the footer gave the link up, so a sentence in section 8 must still point
+    at it. The chip pin above covers all four documents; this one covers the section that held it."""
     text = ABOUT.read_text(encoding="utf-8")
-    section = text.split('<section id="build">', 1)
-    assert len(section) == 2, "about.html must carry a #build section for the running build identity"
-    section = section[1].split("</section>", 1)[0]
-    assert "data-ver-chip" in section, (
-        "about.html's #build section must carry the version chip: it is the page the footer's "
-        "retired About-this-build control used to point at")
-    assert 'href="releases.html"' in section, (
-        "about.html's #build section must offer the route to the citable releases, which left the "
-        "footer with the rest of the right region")
+    assert '<section id="build">' not in text, (
+        "the #build colophon is deleted; about.html carries no running-build section")
+    assert "This build" not in text, (
+        "the colophon's heading and its contents entry go with the section")
+    assert 'href="#build"' not in text, (
+        "the contents box must not promise a section the page no longer has")
+    assert "data-ver-chip" not in text, "the version chip went with the section that held it"
+    assert "You are reading the build" not in text, (
+        "the build-identity sentence went with the section that held it")
 
-    for path in (INDEX, ADD, RELEASES):
-        chips = [a for (tag, a, _inh) in _parse(path) if "data-ver-chip" in a]
-        assert not chips, (
-            f"{path.name}: the version chip lives on about.html alone; found {len(chips)} here")
+    docs = text.split('<section id="docs">', 1)
+    assert len(docs) == 2, "about.html must carry the Documentation section"
+    docs = docs[1].split("</section>", 1)[0]
+    assert 'href="releases.html"' in docs, (
+        "section 8 must keep the route to the citable releases: the footer gave the link up and the "
+        "colophon that inherited it is deleted, so this is the page's one way in")
+
+
+# ------------------------------------------------- the in-page anchor offset follows the header
+#
+# about.html is the one chrome surface that SCROLLS under its own header, so it is the one that has
+# to clear it: the header is position:sticky;top:0, and an in-page anchor that scrolls its section
+# to y=0 puts the heading underneath it. scroll-margin-top is the clearance, and it was ONE number,
+# 74px, measured at 1280px and applied at every width.
+#
+# That number is only right above about 1096px. The header WRAPS as the viewport narrows, in two
+# ways at once (the identity block drops its tagline onto a second line, the tab group stacks into
+# more rows, and under 760px the three zones each take a full-width row), and it does not shrink
+# monotonically: measured on this document in Chrome at a device scale factor of 1, its height runs
+# 220px below 388, 147px to 614, 111px to 760, 142px to 872 (the zones stop stacking and the tab
+# group takes two rows on a shared line), 104px to 957, 89px to 1095, 74px to 1345 and 57px above
+# that. At 375px a 74px clearance left a heading 146px under the header, which is off the screen.
+#
+# THE LADDER IS THE MAXIMUM PER BAND, NOT THE EXACT HEIGHT. Overshooting drops the heading a few
+# pixels lower than it needs to be, which a reader will not notice; undershooting hides it, which is
+# the defect. So each band carries the tallest header in its own range, which is why the 615 band
+# reads 142px rather than the 111px the header measures at 615 itself.
+#
+# THE FAILURE MODE OF DRIFT IS STATED because it cannot be pinned from source alone: these are
+# measurements of THIS header's content at THIS font stack, and a change to the header's wording or
+# its nav will move the wrap points. Anything that changes the header's height must re-measure the
+# ladder. What this file CAN hold, and does, is that the offset is a variable rather than a constant,
+# that the ladder descends, and that it resolves to the measured header height at the two widths the
+# lane pins.
+ANCHOR_VAR = "--about-anchor-offset"
+
+# The measured header height at each pinned width, from the same run the ladder was built from.
+MEASURED_HEADER = {375: 220, 1280: 74}
+
+
+# EVERY DECLARATION OF THE VARIABLE IS ACCOUNTED FOR, because a reader that matches only the shape
+# it expects turns a band it cannot parse into a band that is not there. A browser honours a `2rem`
+# band and this module would drop it: the ladder pins below would all pass while a heading landed
+# 115px behind the header at 400px. So the declarations are COUNTED first and the count is asserted
+# against what the two shapes below recognise; an unparseable value then fails on its own line,
+# naming the value, instead of vanishing.
+_DECL = re.compile(re.escape(ANCHOR_VAR) + r"\s*:")
+_BASE = re.compile(r":root\{\s*" + re.escape(ANCHOR_VAR) + r"\s*:\s*([^;}]+)\}")
+_BAND = re.compile(r"@media\s*\(min-width:\s*([^)]+?)\s*\)\s*\{\s*:root\{\s*"
+                   + re.escape(ANCHOR_VAR) + r"\s*:\s*([^;}]+)\}\s*\}")
+
+
+def _px(where, raw):
+    """A whole-pixel length, or a loud failure naming what was written instead."""
+    m = re.fullmatch(r"(\d+)px", raw.strip())
+    assert m, (
+        f"{where}: the anchor offset is a clearance measured against the header in device pixels, "
+        f"so every value in the ladder is a whole px; got {raw.strip()!r}, which this reader cannot "
+        f"compare with a measured header height")
+    return int(m.group(1))
+
+
+def _anchor_ladder(text):
+    """The ladder as (min-width, px) pairs in source order, base first at min-width 0."""
+    base = _BASE.search(text)
+    assert base, "about.html must declare the anchor offset on :root as the base of the ladder"
+    bands = _BAND.findall(text)
+    declared = len(_DECL.findall(text))
+    assert declared == 1 + len(bands), (
+        f"about.html declares {ANCHOR_VAR} {declared} time(s) and this reader recognises "
+        f"{1 + len(bands)} of them (the :root base and {len(bands)} min-width band(s)); a "
+        f"declaration it cannot read would drop out of the ladder silently and leave every pin "
+        f"below green while an in-page anchor lands behind the header")
+    out = [(0, _px("the :root base", base.group(1)))]
+    for width, value in bands:
+        out.append((_px(f"the min-width:{width} band's breakpoint", width),
+                    _px(f"the min-width:{width} band", value)))
+    return out
+
+
+def _resolve(ladder, width):
+    """The value a browser would use at this viewport width: the last matching min-width band."""
+    val = ladder[0][1]
+    for bp, px in ladder:
+        if width >= bp:
+            val = px
+    return val
+
+
+def test_the_in_page_anchor_offset_is_a_variable_and_not_one_number():
+    """FAILS if the retired static 74px comes back, or if the sections stop reading the ladder.
+    One number cannot follow a header that is 220px tall at 375px and 57px tall at 1440px, and the
+    direction it is wrong in at the narrow end is the one that hides the heading."""
+    text = ABOUT.read_text(encoding="utf-8")
+    assert "scroll-margin-top:74px" not in text, (
+        "the single-number anchor offset is retired; it was right only above about 1096px")
+    assert f"scroll-margin-top:var({ANCHOR_VAR})" in text, (
+        "every section's anchor offset must read the ladder rather than a constant")
+
+
+def test_the_anchor_offset_ladder_descends_and_is_declared_in_px():
+    """The ladder's shape. FAILS if a band is out of order, if the base is not the tallest (the
+    narrowest viewport has the tallest header), if a band repeats a breakpoint, or if a value stops
+    being an absolute length: a percentage or an em here would be measured against something that is
+    not the header."""
+    ladder = _anchor_ladder(ABOUT.read_text(encoding="utf-8"))
+    assert len(ladder) >= 3, f"the ladder must carry a base and at least two bands, got {ladder}"
+    widths = [bp for bp, _px in ladder]
+    assert widths == sorted(widths) and len(set(widths)) == len(widths), (
+        f"the ladder's breakpoints must ascend and not repeat: {widths}")
+    values = [px for _bp, px in ladder]
+    assert values == sorted(values, reverse=True), (
+        f"the offset must shrink as the viewport widens, because the header does: {ladder}")
+    assert values[0] == max(values), (
+        f"the base band carries the tallest header, at the narrowest viewport: {ladder}")
+
+
+def test_the_ladder_resolves_to_the_measured_header_height_at_the_pinned_widths():
+    """The ladder against the ruler. FAILS if the value a browser would use at 375px or at 1280px is
+    smaller than the header measured there: at 375px that is a heading scrolled under 220px of
+    header, and the reader sees the section below the one they asked for.
+
+    Held as ">=" and not "==" on purpose, for the reason the ladder is a per-band maximum: a band
+    that overshoots is doing its job."""
+    ladder = _anchor_ladder(ABOUT.read_text(encoding="utf-8"))
+    for width, header in MEASURED_HEADER.items():
+        got = _resolve(ladder, width)
+        assert got >= header, (
+            f"at {width}px the header measures {header}px and the ladder offers {got}px, so an "
+            f"in-page anchor lands {header - got}px under it")
+
+
+def test_no_portal_document_loads_the_script_that_filled_the_chip():
+    """The other end of the deletion, on EVERY document rather than on about.html alone. version.js
+    exists to fill [data-ver-chip]; the pin above proves no surface carries one, so on every surface
+    the load is a request that changes nothing a reader can see. Nothing else reads what the file
+    defines: window.AUSMT_VERSION has no consumer in the shipped portal, so the load is inert and
+    not merely invisible.
+
+    THE FILE IS KEPT, and that is not a contradiction: its label logic and its config-missing
+    sentinel are the contract a future /build page would be held to, and tools/interaction_test.js
+    drives it in its own jsdom for exactly that reason.
+
+    FAILS if the tag comes back on any document, and FAILS in the other direction if config.js or
+    corpus-stats.js went with it on about.html: corpus-stats.js reads AUSMT_CONFIG.data_base_url
+    from config.js to find the catalogue the header's totals come from."""
+    for path in sorted(ROOT.glob("*.html")):
+        assert '<script src="version.js">' not in path.read_text(encoding="utf-8"), (
+            f"{path.name}: no surface carries a version chip, so the script that fills one is a "
+            f"dead load")
+    text = ABOUT.read_text(encoding="utf-8")
+    assert '<script src="config.js">' in text, (
+        "config.js stays: corpus-stats.js reads AUSMT_CONFIG.data_base_url from it")
+    assert '<script src="corpus-stats.js">' in text, (
+        "the header's corpus totals are filled by corpus-stats.js and must keep their script")
 
 
 def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is():

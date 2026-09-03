@@ -19,10 +19,16 @@ pass. Parsed structurally where structure is the claim (section 1 ending on the 
 to a single link, the acknowledgement being one copyable line), and by exact string where the exact
 words are the owner's.
 
+A SECOND OWNER BATCH follows it at the foot of this module. That one adds a section rather than
+editing one, so the page's SHAPE is pinned with the words: eight numbered answers in a fixed order,
+the colophon after them, and a contents box that lists exactly those sections in exactly that order.
+A renumbering that leaves the contents box behind is the failure that shape exists to catch.
+
 NOT COVERED HERE (deliberately, and pinned elsewhere): the #api section and its machine-contract
-paragraph, which this batch does not touch (tests/test_api_docs_section.py,
+paragraph, which neither batch touches (tests/test_api_docs_section.py,
 tests/test_mtcat_machine_contract.py).
 """
+import ast
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -32,6 +38,7 @@ REPO = ROOT.parent
 ABOUT = ROOT / "about.html"
 STATE_JS = ROOT / "src" / "state.js"
 BUILDER = REPO / "engine" / "extract" / "build_portal.py"
+PAGES_PY = REPO / "engine" / "extract" / "_pages.py"
 
 RAW = ABOUT.read_text(encoding="utf-8")
 FLAT = re.sub(r"\s+", " ", RAW)
@@ -89,14 +96,19 @@ def _links(html):
 
 
 def test_the_raw_timeseries_archive_is_named_by_link_not_in_passing():
-    """FAILS if the third paragraph of section 1 still names the collection as plain text, or if the
-    link is not there. 'usually the NCI-AuScope MT collection' overstated a single archive as the
-    default; 'such as' makes it an example, and the link makes it findable."""
+    """FAILS if section 1 names the collection as plain text, or if the link is not there.
+    'usually the NCI-AuScope MT collection' overstated a single archive as the default; 'such as'
+    makes it an example, and the link makes it findable.
+
+    THE SENTENCE IT QUALIFIES MERGED, and this pin follows it there: the section used to make the
+    hand-off claim twice, and the surviving telling is the one holding the THREDDS A7 wording
+    verbatim. What is asserted is unchanged, the archive named as an example rather than as the
+    usual case, and named by an anchor on its collection DOI."""
     what = _flat(_section("what"))
     assert "usually the NCI-AuScope MT collection" not in what, (
         "the raw-time-series sentence must no longer name one archive as the usual case")
-    assert "it links to the archive that holds them, such as the" in what, (
-        "the sentence must read 'such as the <linked collection>'")
+    assert "routes you straight to the archive that does, such as the" in what, (
+        "the hand-off sentence must read 'such as the <linked collection>'")
     assert ("https://doi.org/10.25914/mtjg-jp22", "NCI-AuScope MT collection") in _links(_section("what")), (
         "the NCI-AuScope MT collection must be an anchor on its collection DOI")
 
@@ -264,9 +276,7 @@ def test_the_citation_placement_advice_and_the_copyable_acknowledgement():
     ack = m.group(1)
     assert "\n" not in ack, (
         "the acknowledgement is copied verbatim out of a <pre>, so it must be a single line")
-    assert ack == ("Magnetotelluric transfer functions were accessed through AusMT, Australia's "
-                   "Magnetotelluric Data Portal (https://ausmt.auscope.org.au), an AuScope-funded "
-                   "initiative."), (
+    assert ack == ACKNOWLEDGEMENT, (
         f"the acknowledgement must read exactly as dictated, got: {ack!r}")
 
 
@@ -297,20 +307,26 @@ def test_the_submission_section_drops_the_browser_side_reassurances():
 # ---------------------------------------------------------------- (i) documentation, one line
 
 
-def test_the_documentation_section_is_a_single_pointer():
+def test_the_documentation_section_is_two_pointers_and_no_list():
     """The five-bullet topic list is retired: it duplicated the documentation site's own navigation and
-    went stale every time a page was renamed. FAILS if a list comes back, or if the one remaining
-    sentence is not the dictated one."""
+    went stale every time a page was renamed. FAILS if a list comes back, or if the dictated sentence
+    is not the one there.
+
+    IT IS TWO POINTERS NOW, not one. The section took in the route to the citable releases when the
+    #build colophon that had inherited it from the footer was deleted; that page has no other way in
+    from the site. The pin still holds the link set EXACTLY and in order, so a third pointer, or
+    either of these two moving, still fails here."""
     docs = _section("docs")
     flat = _flat(docs)
     assert "<ul>" not in flat and "<li>" not in flat, (
-        "the Documentation section must carry no list; it is a single pointer now")
+        "the Documentation section must carry no list; it is a pair of pointers now")
     assert ("<p>For further information, see the" in flat
             and "AusMT documentation</a>.</p>" in flat), (
-        "the Documentation section must carry the dictated single sentence")
+        "the Documentation section must carry the dictated documentation sentence")
     links = _links(docs)
-    assert links == [("https://ausmt.readthedocs.io/en/latest/", "AusMT documentation")], (
-        f"the Documentation section must carry exactly one link, to the documentation root, got {links}")
+    assert links == [("https://ausmt.readthedocs.io/en/latest/", "AusMT documentation"),
+                     ("releases.html", "releases page")], (
+        f"the Documentation section must carry the documentation root then the releases page, got {links}")
     for retired in ("Standards", "Survey Package", "Download Manifest Schema", "Glossary"):
         assert retired not in flat, f"the retired topic bullet is back: {retired!r}"
 
@@ -318,21 +334,355 @@ def test_the_documentation_section_is_a_single_pointer():
 # ------------------------------------------- (j) the raw-time-series sentence (THREDDS A7)
 
 
-def test_this_build_states_the_hand_off_beside_the_no_hosting_claim():
+def test_section_one_states_the_hand_off_beside_the_no_hosting_claim():
     """The "About this build" popover said only that AusMT doesn't host raw time series. That was the
     WHOLE story until a verified per-station route existed; it is now half of one, and a reader who
     stops there concludes the portal cannot help them get the files. FAILS in both directions: the
     no-hosting claim must survive verbatim (a 302 is not hosting, and this lane never claims it is),
     and the hand-off half must be there beside it.
 
-    The sentence moved WITH the popover's other copy into about.html's own #build section when the
-    one-footer ruling took About this build out of the footer; it is the same two claims, read from
-    the section that carries them now. It had NO coverage before the hand-off landed, which is
-    exactly how it would have gone stale silently: nothing in portal/tests read it."""
-    flat = _flat(_section("build"))
+    THE SENTENCE HAS MOVED TWICE and the pin has followed it both times, which is the point of
+    holding it by its section. It left the footer's popover for about.html's #build section under the
+    one-footer ruling; the owner has now deleted that section, and the two claims are not build
+    identity, so they land in section 1, which is where a reader asks what AusMT is. Same two claims,
+    read from the section that carries them now.
+
+    AND STATED ONCE. The relocation left the section carrying the claim twice in adjacent paragraphs,
+    in two wordings ("doesn't host raw time series ... routes you straight to the archive that does"
+    and "doesn't hold raw time series ... links to the archive that holds them"). Two wordings of one
+    fact are two things a reader has to reconcile and two things an editor has to keep in step, so
+    the section states it once. FAILS if a second telling comes back."""
+    flat = _flat(_section("what"))
     assert "It doesn't host raw time series" in flat, (
         "the no-hosting claim must survive: AusMT hands off, it does not host, and a redirect is not hosting")
     assert "routes you straight to the archive that does" in flat, (
         "the section must state the hand-off beside the no-hosting claim, or it reads as a dead end")
     assert "hosts raw time series" not in flat.replace("doesn't host raw time series", ""), (
         "nothing here may claim AusMT hosts time series")
+    assert flat.count("raw time series") == 1, (
+        f"section 1 states the no-hosting claim once; found {flat.count('raw time series')} tellings "
+        f"of it, which is two wordings of one fact for a reader to reconcile")
+    assert "the archive that holds them" not in flat, (
+        "the hand-off is stated once, in the wording this pin holds; the second paragraph's "
+        "restatement of it merged into that sentence")
+
+
+def test_the_software_licence_sentence_lives_in_the_licence_section():
+    """The colophon's other non-identity paragraph. It is about what is licensed and under what, so
+    it belongs with the rest of that answer rather than in a build note at the foot of the page.
+    FAILS if it is missing from section 4, and FAILS if it turns up anywhere else on the page:
+    a licence stated twice is two things to keep in step.
+
+    THE SELF-REFERENCE IS DROPPED, DELIBERATELY. The sentence carried "(see Licence and access)"
+    while it sat in the colophon. It now sits IN Licence and access, so that parenthetical would be
+    a link from a section to itself; the claim survives, the pointer to where the claim already is
+    does not.
+
+    AND IT MERGED INTO THE BULLETS IT RESTATED. Section 4's whole subject is that three things are
+    licensed separately, and it lists them; the relocated paragraph then said two of the three over
+    again in different words. The paragraph is gone and its wording is the bullets' wording, so each
+    licence is stated exactly once, in the list a reader came to the section for. FAILS if either
+    fact goes, if either is stated twice in the section, or if the software licence turns up in
+    another section."""
+    raw = _section("access")
+    access = _flat(re.sub(r"<[^>]+>", " ", raw))
+    assert "Portal and engine software is licensed under Apache-2.0." in access, (
+        "section 4 must carry the software licence in the bullet that owns the subject")
+    assert access.count("Apache-2.0") == 1, (
+        f"section 4 states the software licence once; found {access.count('Apache-2.0')}")
+    assert "Survey data is licensed by its custodian, survey by survey." in access, (
+        "the custodian half must be stated, once, in the bullet that owns it")
+    assert access.count("licensed by its custodian") == 1, (
+        f"section 4 states the custodian licence once; found "
+        f"{access.count('licensed by its custodian')}")
+    assert 'href="#access"' not in raw, (
+        "the relocated claim must not link the section it now lives in")
+    for sid, _h in NUMBERED:
+        if sid == "access":
+            continue
+        assert "Apache-2.0" not in _flat(_section(sid)), (
+            f"the software licence belongs to section 4 alone; found it in #{sid}")
+
+
+def test_section_eight_keeps_the_only_route_to_the_releases_page():
+    """releases.html has no other way in. The Releases link left every footer with the one-footer
+    ruling and the colophon that inherited it is now deleted, so a page of citable snapshots would
+    be unreachable from the site unless the Documentation section carried the route.
+
+    FAILS if the sentence or its link is missing, and FAILS if it grows a version chip: the route is
+    what section 8 inherited, not the running build's identity, which the owner ruled off the page."""
+    docs = _section("docs")
+    assert 'href="releases.html"' in docs, (
+        "section 8 must link releases.html; it is the page's one entry point")
+    flat = _flat(re.sub(r"<[^>]+>", "", docs))
+    assert ("Quarterly citable snapshots of the corpus are listed on the releases page; each one is "
+            "a frozen tree with its own identifier") in flat, (
+        "section 8 must say what the releases page holds, in the words the ruling gives")
+    assert "data-ver-chip" not in docs, (
+        "section 8 inherited the route, not the chip")
+
+
+# ============================================================ the second owner batch (2026-09-03)
+#
+# The page gains a section rather than losing one, so what it needs held is its SHAPE as well as its
+# words: a reader who follows contents entry N expects heading N, and a renumbering that leaves the
+# contents box behind is silent on the page and obvious to the reader.
+
+# The page in order: eight numbered answers, then the colophon. The number is part of the heading a
+# reader sees and part of what the contents box promises, so it is pinned WITH the title rather than
+# beside it.
+#
+# The page is eight sections and nothing else. "This build" used to close it WITHOUT a number, as a
+# colophon rather than a ninth answer to "what is this site"; the owner has deleted it. Its two
+# paragraphs that were not build identity moved into the numbered sections that own their subjects,
+# and the route to the citable releases moved into section 8, so nothing the colophon carried is
+# lost except the running build's identity, which is what the owner ruled out.
+NUMBERED = [
+    ("what", "1 \u00b7 What AusMT is"),
+    ("who", "2 \u00b7 Who enables AusMT"),
+    ("howto", "3 \u00b7 What you can do here"),
+    ("access", "4 \u00b7 Licence and access"),
+    ("cite", "5 \u00b7 Citing and credit"),
+    ("contribute", "6 \u00b7 Contributing a survey"),
+    ("api", "7 \u00b7 Fetching data via API"),
+    ("docs", "8 \u00b7 Documentation"),
+]
+# The lede, carried three times and identically: the page's own subtitle, the meta description and
+# og:description. tests/test_page_metadata.py holds the description to being the lede; this holds
+# what the lede says.
+LEDE = ("Australia's national discovery and access portal for magnetotelluric data, connecting "
+        "transfer functions with their provenance, licences, citations and source archives.")
+
+# The acknowledgement a reader copies. It is the AusMT access statement, and there is exactly one of
+# it: the engine prints the same sentence on every survey page, held equal in
+# test_the_page_and_the_engine_print_one_acknowledgement.
+ACKNOWLEDGEMENT = (
+    "Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric "
+    "Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government "
+    "via the National Collaborative Research Infrastructure Strategy (NCRIS).")
+
+LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
+LOCKUP_ALT = "AuScope and NCRIS"
+
+
+def _sections():
+    """(id, heading text) for every top-level section, in document order. The heading is taken as a
+    reader sees it: tags stripped, entities resolved, spaces collapsed."""
+    out = []
+    for sid, body in re.findall(r'<section id="([^"]+)">(.*?)</section>', RAW, re.S):
+        m = re.search(r"<h2[^>]*>(.*?)</h2>", body, re.S)
+        assert m, f"about.html's #{sid} section carries no h2"
+        out.append((sid, _flat(re.sub(r"<[^>]+>", "", m.group(1))).strip()))
+    return out
+
+
+def test_the_page_is_exactly_eight_numbered_sections():
+    """The page's shape, id and heading together, in document order. FAILS IF a section is added,
+    removed, reordered, renamed or renumbered without the rest of the page following it: the numbers
+    are consecutive by construction here, because they are pinned inside the heading strings rather
+    than derived from them, so a page that inserts an answer and forgets to renumber the ones after
+    it fails on the first heading that moved. FAILS too if the deleted colophon returns as a ninth
+    section, numbered or not: the list is the whole page and not a prefix of it."""
+    got = _sections()
+    assert got == NUMBERED, (
+        "about.html's sections have drifted from the ruled order:\n"
+        + "".join(f"  want {w!r}\n  got  {g!r}\n"
+                 for w, g in zip(NUMBERED, got + [None] * 9)
+                 if w != g))
+
+
+def test_the_contents_box_lists_every_section_in_order():
+    """The contents box is a promise about the page below it. FAILS IF it names a section that is
+    not there, omits one that is, or lists them in a different order from the document: a reader who
+    follows entry N and lands on a different heading has been told the page is something it is not.
+
+    The entry TEXT is deliberately not compared with the heading: the box abbreviates on purpose
+    ("Contributing" for "6 Contributing a survey"), which is a contents box doing its job. What must
+    match is the set, the order and that every entry says something."""
+    box = RAW.split('<div class="toc">', 1)
+    assert len(box) == 2, "about.html must carry a contents box"
+    entries = _links(box[1].split("</div>", 1)[0])
+    want = [f"#{sid}" for sid, _h in _sections()]
+    assert [h for h, _t in entries] == want, (
+        f"the contents box must list every section once, in document order: want {want}, "
+        f"got {[h for h, _t in entries]}")
+    assert all(text for _h, text in entries), (
+        f"every contents entry must carry visible text, got {entries}")
+
+
+def test_the_lede_says_what_the_portal_is_for():
+    """The subtitle is rewritten from a description of a CATALOGUE to one of a PORTAL: what a reader
+    can do here, and what the transfer functions are connected to. FAILS on a revert, and FAILS if
+    the three places that carry the lede stop carrying the same words (the head's two meta tags are
+    copies of it, and a description nobody maintains is the defect
+    tests/test_page_metadata.py exists to prevent)."""
+    assert "A national catalogue of Australian magnetotelluric transfer functions" not in FLAT, (
+        "the retired catalogue lede is back")
+    assert FLAT.count(LEDE) == 3, (
+        "the lede must be carried three times and identically, as the page's own subtitle, the "
+        f"meta description and og:description; found {FLAT.count(LEDE)}")
+
+
+def test_the_transfer_function_sentence_says_what_it_is_derived_from():
+    """A reader who does not already know what a transfer function is learns it here, and the
+    replacement says where the estimate comes from rather than only what it is not. FAILS on a
+    revert to the instrument-independence wording, which described the property and never the
+    measurement."""
+    what = _flat(_section("what"))
+    assert "the processed, instrument-independent response of the Earth at" not in what, (
+        "the retired instrument-independence sentence is back")
+    assert ("A magnetotelluric transfer function is a processed estimate of the Earth's "
+            "electromagnetic response at a site, derived from measured electric and magnetic field "
+            "variations.") in what, "the dictated transfer-function sentence is missing"
+
+
+def test_section_two_states_who_enables_ausmt():
+    """The new section's prose, in the dictated order: who enables AusMT and through which national
+    programme, then what each of the two organisations provides. FAILS if either sentence is
+    missing or reworded. The page said AusMT was AuScope-funded in one line of a citation block and
+    nowhere else; this is the section that states the relationship as a fact about the service."""
+    flat = _flat(_section("who"))
+    assert ("AusMT is enabled by AuScope and the Australian Government via the National "
+            "Collaborative Research Infrastructure Strategy (NCRIS).") in flat, (
+        "section 2 must open on who enables AusMT and through which programme")
+    assert ("AuScope is Australia's national provider of research infrastructure for the geoscience "
+            "community. AusMT provides national digital research infrastructure for discovering, "
+            "accessing and reusing Australian magnetotelluric data and its provenance.") in flat, (
+        "section 2 must say what each of the two provides")
+    assert "Learn more about" in flat, "section 2 must offer the route to AuScope's own site"
+    assert ("https://www.auscope.org.au", "AuScope") in _links(_section("who")), (
+        "the route to AuScope must be an anchor on the organisation's name")
+
+
+# HOW EVERY OUTBOUND ANCHOR TO AuScope OPENS, as ONE literal in ONE order. It is the spelling
+# tests/test_footer_regions.py holds on the two footer anchors across six documents and the engine's
+# emitter; section 2's link is the site's third and last one, and three spellings of the same rule
+# is how one of them silently loses half of it.
+NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
+
+
+def test_the_route_to_auscope_opens_the_way_every_other_auscope_link_does():
+    """The owner's new-tab ruling reaches this anchor too. FAILS if section 2's link to AuScope
+    loses target="_blank" or rel="noopener noreferrer", or spells the pair in a different order from
+    the footer's.
+
+    BOTH HALVES MATTER AND FOR DIFFERENT REASONS. target="_blank" keeps the reader's place in the
+    catalogue rather than navigating the page out from under them, which is the ruling. rel is what
+    makes that safe: without noopener the opened document gets window.opener and can navigate this
+    tab to a look-alike, and without noreferrer the reader's path through the catalogue leaks to a
+    third party. The anchor carried rel alone, which is the half that is useless on its own: rel
+    guards a new tab, and there was no new tab."""
+    who = _section("who")
+    m = re.search(r'<a[^>]*href="https://www\.auscope\.org\.au"[^>]*>', who)
+    assert m, f"section 2 must carry the anchor to AuScope's own site: {_flat(who)[:300]!r}"
+    tag = m.group(0)
+    assert NEW_TAB in tag, (
+        f"section 2's AuScope link must open in a new tab with the same pair every other outbound "
+        f"AuScope anchor on this site carries, spelled {NEW_TAB!r}; got {tag!r}")
+
+
+def test_no_auscope_anchor_on_this_page_is_left_half_paired():
+    """The guard over the pin above and over the footer's own: a page-wide sweep, so a fourth
+    AuScope anchor arriving anywhere on About cannot be the one that carries a bare rel or a bare
+    target. FAILS if any anchor on this page reaching auscope.org.au is missing either half."""
+    hits = re.findall(r'<a[^>]*href="https://www\.auscope\.org\.au"[^>]*>', RAW)
+    assert hits, "about.html must carry at least one anchor to AuScope"
+    for tag in hits:
+        assert NEW_TAB in tag, (
+            f"every auscope.org.au anchor on about.html opens in a new tab with the full pair; "
+            f"got {tag!r}")
+
+
+def test_section_two_carries_the_official_lockup_the_footer_already_ships():
+    """The lock-up in the body is the SAME committed file every footer on this site carries, named
+    by the same root-relative path. FAILS if it points at a second copy or at a different artwork
+    (two files are two things to keep in step, and the official mark is not ours to redraw), if it
+    loses the alt text, or if it drops the intrinsic size attributes that reserve its box before it
+    loads.
+
+    The width is capped in the page rather than in the file: the committed raster is 1919px wide, so
+    without a cap the mark would be five times the reading column. max-width:100% is what keeps it
+    inside a narrow column once the declared width no longer fits."""
+    who = _section("who")
+    m = re.search(r'<img class="orglockup"[^>]*>', who)
+    assert m, "section 2 must carry the AuScope-NCRIS lock-up"
+    tag = m.group(0)
+    assert f'src="{LOCKUP_SRC}"' in tag, (
+        f"the body lock-up must name the committed file at {LOCKUP_SRC}, got {tag!r}")
+    assert f'alt="{LOCKUP_ALT}"' in tag, f"the lock-up must carry its alt text, got {tag!r}"
+    assert 'width="1919" height="325"' in tag, (
+        f"the lock-up must declare the committed file's own dimensions, got {tag!r}")
+    assert (ROOT / LOCKUP_SRC.lstrip("/")).is_file(), (
+        f"section 2 names {LOCKUP_SRC}, which the portal does not ship")
+    foot = RAW.split("<footer>", 1)[1].split("</footer>", 1)[0]
+    assert LOCKUP_SRC in foot, (
+        "the body lock-up and the footer's must be the same file; the footer no longer names it")
+    rule = re.search(r"(?m)^\s*\.orglockup\{([^}]*)\}", RAW)
+    assert rule, "the body lock-up must carry its own sizing rule"
+    body = rule.group(1)
+    assert re.search(r"(?:^|;)width:\d+px", body), (
+        f"the lock-up must declare a body width; the file is 1919px wide, got {body!r}")
+    assert "max-width:100%" in body, (
+        f"the lock-up must not outgrow a narrow reading column, got {body!r}")
+
+
+def test_section_two_closes_on_operation_and_governance():
+    """The sub-heading the owner dictated, and the three facts under it: who maintains AusMT, what
+    custodians keep, and where the arrangements are written down. FAILS if the sub-heading goes, if
+    a fact is dropped, or if the Governance link stops being the page it names.
+
+    Section 4 links the same document from its own closing paragraph; that is not a duplicate to
+    remove, because the two answer different questions (what happens to my data, and who runs
+    this)."""
+    who = _section("who")
+    assert "<h3>Operation and governance</h3>" in who, (
+        "section 2 must close on the Operation and governance sub-heading")
+    flat = _flat(who)
+    assert ("AusMT is maintained by AuScope with contributions from Australia's magnetotelluric "
+            "community.") in flat, "the maintenance sentence is missing"
+    assert ("Data custodians retain authority over their survey data, licences and "
+            "attribution.") in flat, "the custodian-authority sentence is missing"
+    assert "governance, correction and preservation arrangements are documented in" in flat, (
+        "the sentence naming the governance document is missing")
+    assert (("https://ausmt.readthedocs.io/en/latest/introduction/governance/",
+             "Governance & Operation") in _links(who)), (
+        "Governance & Operation must be an anchor on the documented arrangements")
+
+
+def test_the_citing_section_asks_for_both_the_citation_and_the_acknowledgement():
+    """Cite the survey, not the portal told a reader what NOT to do and left the acknowledgement
+    to a paragraph four down. The replacement states both duties in one line, in the order they are
+    performed. FAILS on a revert, and FAILS if the acknowledgement half is dropped."""
+    cite = _flat(_section("cite"))
+    assert "Cite the survey, not the portal." not in cite, (
+        "the retired cite-not-the-portal sentence is back")
+    assert "Cite the survey; acknowledge AusMT." in cite, (
+        "the citing section must open on both duties")
+
+
+def test_the_page_and_the_engine_print_one_acknowledgement():
+    """ONE acknowledgement, on both surfaces that print one. About carries the copyable block a
+    reader is asked to use; the engine prints the same sentence in the Cite disclosure of every
+    survey page it emits. FAILS IF the two drift, which is the defect this pin exists for: two
+    wordings of one statement leave a reader nothing to say which is current, and the engine's copy
+    reaches thousands of pages while About's reaches one.
+
+    The engine half is read from _pages.py's SOURCE, parsed rather than imported: the module
+    sibling-imports the engine's own path-dependent helpers and cannot simply be loaded from here,
+    and ast.literal_eval reads the constant exactly however it is line-wrapped.
+
+    WHY IT LIVES HERE rather than in engine/tests, the same reason the header parity pin's engine
+    half does: portal-ci runs on portal/** AND on engine/extract/_pages.py, so an edit to either
+    half fires this lane. The engine lane triggers on engine/** alone and cannot see about.html."""
+    tree = ast.parse(PAGES_PY.read_text(encoding="utf-8"))
+    found = [node.value for node in tree.body
+             if isinstance(node, ast.Assign)
+             and any(isinstance(x, ast.Name) and x.id == "_ACKNOWLEDGEMENT" for x in node.targets)]
+    assert len(found) == 1, (
+        f"engine/extract/_pages.py must declare _ACKNOWLEDGEMENT exactly once, found {len(found)}")
+    engine = ast.literal_eval(found[0])
+    assert engine == ACKNOWLEDGEMENT, (
+        "the acknowledgement has drifted between the page a reader copies it from and the survey "
+        "pages the engine prints it on:\n"
+        f"  portal/about.html          {ACKNOWLEDGEMENT!r}\n"
+        f"  engine/extract/_pages.py   {engine!r}")

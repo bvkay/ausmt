@@ -13,7 +13,13 @@
 // here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_BOUNDS so the two frames
 // cannot drift apart.
 const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
-const map=L.map("map",{preferCanvas:true}).fitBounds(AU_HOME_BOUNDS);
+// THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here. Leaflet's default control is the one that
+// carries the flag and the word "Leaflet", which is a courtesy to a library rather than a licence
+// term and is what the owner asked off the map, so the map is created without one and
+// src/mapattrib.js mounts a control with prefix:false in its place, collapsed behind a small (i).
+// The CREDIT itself stays on the map: it is a licence obligation, and only the layer that is
+// actually drawing knows which provider to name.
+const map=L.map("map",{preferCanvas:true,attributionControl:false}).fitBounds(AU_HOME_BOUNDS);
 // The basemap is config-driven. provider "pmtiles" serves OUR OWN files through the vendored
 // protomaps-leaflet renderer, ending the portal's last runtime third party: the world file
 // carries low zooms globally (zoomed out still shows the whole globe) and the region file
@@ -21,15 +27,30 @@ const map=L.map("map",{preferCanvas:true}).fitBounds(AU_HOME_BOUNDS);
 // bbox has data the world file lacks. "carto" is the hosted fallback while the files roll out
 // (or if the renderer failed to load); CARTO watermarks un-keyed raster requests, so the
 // deployment's key (config, public by nature) rides the tile URL when set.
+// EACH BRANCH STATES ITS OWN CREDIT, and the control prints whichever layer is on the map. This is
+// what a single fixed line of prose elsewhere on the page could not do: a deployment running on the
+// fallback would have been served CARTO tiles under a Protomaps credit. Both are rendered from
+// OpenStreetMap data, so both name OSM; the second name is the provider that built the tiles.
+// The links open the way every outbound anchor on this site opens.
+const _OSM_CREDIT='\u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
+const _PM_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://protomaps.com" target="_blank" rel="noopener noreferrer">Protomaps</a>';
+const _CARTO_CREDIT=_OSM_CREDIT+', \u00a9 <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>';
 var _bmCfg=(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.basemap)||{};
 if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
-  var _bmAttr="&copy; OpenStreetMap contributors &copy; Protomaps";
-  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",attribution:_bmAttr,maxZoom:7,maxDataZoom:6}).addTo(map);
-  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",attribution:_bmAttr,minZoom:7,maxZoom:18,maxDataZoom:15}).addTo(map);
+  // The two pmtiles layers state the SAME credit and Leaflet prints it once: they are one basemap
+  // split at the z7 crossover, not two sources.
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",maxZoom:7,maxDataZoom:6,attribution:_PM_CREDIT}).addTo(map);
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15,attribution:_PM_CREDIT}).addTo(map);
 }else{
   var _bmKey=_bmCfg.carto_api_key?("?api_key="+encodeURIComponent(_bmCfg.carto_api_key)):"";
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:18}).addTo(map);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{maxZoom:18,attribution:_CARTO_CREDIT}).addTo(map);
 }
+// Mounted after the basemap so the control collects the layer already on the map, which is the
+// order Leaflet's own default control is created in. Reached through window, the way every shared
+// module on this site is (src/doi_harvest.js sets the precedent): the headless harnesses build a
+// context where window is an object of their own rather than the global, and a bare identifier
+// would resolve in the browser and nowhere else.
+window.AusmtMapAttrib.mount(map,"Map data attribution");
 // Owner ruling (2026-08-24): SITE LOCATIONS ONLY, at every zoom. The per-survey badge bubbles that
 // replaced proximity clustering are removed with it - no badge, no leader tail, no decoration pane, no
 // zoom threshold. A compact survey now overlaps into a tight group of dots at national zoom and the
@@ -325,13 +346,15 @@ const userLayers={};
 // layers/*.geojson), so both halves are escaped. The guard is here while the path is DORMANT (the layer
 // control below is not mounted, so the fetch never runs) precisely so re-enabling the control cannot
 // re-open the sink by omission: the later lane must not have to rediscover this.
+// The guard on the control existing stays: a document that failed to load src/mapattrib.js draws a
+// map with no control at all, and a layer added there must toast rather than throw.
 function _layerAttribution(name,src){return esc(name)+": "+esc(src);}
 function userLayer(name,file,color){const grp=L.featureGroup();grp._loaded=false;
   grp.on("add",async()=>{if(grp._loaded)return;
     try{const r=await fetch("layers/"+file);if(!r.ok)throw 0;const gj=await r.json();
       L.geoJSON(gj,{style:{color,weight:1.3,fillOpacity:.03},interactive:false}).addTo(grp);
       const src=gj.source||(gj.features&&gj.features[0]&&gj.features[0].properties&&gj.features[0].properties.source);
-      if(src)map.attributionControl.addAttribution(_layerAttribution(name,src));grp._loaded=true;}
+      if(src&&map.attributionControl)map.attributionControl.addAttribution(_layerAttribution(name,src));grp._loaded=true;}
     catch(e){toast(`Layer "${name}" not found; place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
   userLayers[name]=grp;return grp;}
 // layer control hidden pending owner revisit (2026-07-12) — overlay definitions (footprints + the user

@@ -30,7 +30,7 @@ win.fetch = () => Promise.resolve({ ok: false });
 // Only the modules surveyBundleTiles() transitively needs (security -> esc/escAttr, state -> MANIFEST,
 // data -> bundlesForSlug/fmtBytes, drawer -> surveyBundleTiles). Loading the full chain would also boot
 // map/main which want more DOM; this focused subset is enough and faster.
-const MODULES = ["contract", "security", "state", "data", "plots", "map", "filters", "drawer"];
+const MODULES = ["contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer"];
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={setManifest:(m)=>{MANIFEST=m;},tiles:(slug)=>surveyBundleTiles(slug)};";
 

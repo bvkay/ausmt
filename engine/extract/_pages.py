@@ -445,7 +445,7 @@ def _footprint_svg(points, *, width=230) -> str:
 
 _CSS = """
   body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
-  main{max-width:840px;width:min(100% - 2.5rem,840px);margin:0 auto;padding:1.6rem 1.25rem 0;flex:1 0 auto}
+  main{max-width:840px;width:min(100% - 2.5rem,840px);margin:0 auto;padding:1.6rem 1.25rem 2.2rem;flex:1 0 auto}
   @media(min-width:1180px){main{max-width:1120px;width:min(100% - 2.5rem,1120px)}}
   a{color:#EF7256}
   code{overflow-wrap:anywhere}
@@ -551,8 +551,6 @@ _CSS = """
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .brandmark{height:30px;width:30px;display:block;flex:none}
-  .orgmark{display:flex;align-items:center;flex:none;margin-left:16px}
-  .orgmark img{height:30px;width:auto;display:block}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:#E8EDF1;text-decoration:none}
   .tagline{color:#8FA3B0;font-size:12.5px}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -571,15 +569,21 @@ _CSS = """
      THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and the footer spans the page
      rather than the reading column: it is the page's bottom edge, the same band the Map carries,
      and a footer set inside the 840px measure could not fit the bold acknowledgement on one line
-     at any viewport. Measured, the three regions want 1249px of footer; below that the centre
-     takes a row of its own UNDER the two side regions, where it is centred on the footer's axis
-     rather than in the space left over beside the machine-readable link. Below 500px the two side
-     regions no longer share a row either, so every region takes one and aligns left.
+     at any viewport.
 
-     The regions align on their CENTRES, not on a baseline: the lockup is a 28px block beside two
-     lines of 12.8px text, and a baseline would hang it off the text's baseline and add its whole
-     height above the row. The overrides follow the rules they override; the two tie on specificity
-     and source order wins.
+     THIS IS ONE RULE SET WITH portal/index.html, character for character with the four colour
+     tokens resolved to the literals this tier writes. Nothing here may be tuned for this tier
+     alone; the numbers are the widest surface's, and portal/tests/test_footer_regions.py holds
+     all seven surfaces identical. The side zones take an equal ZERO basis, which is what puts the
+     acknowledgement on the page's axis rather than in the space left over beside them, and
+     min-width:0 lets a side zone go under its own content instead of forcing a wrap. The
+     separation above the footer is main's bottom padding, not a margin here: the Map's footer is
+     the last child of a column whose body does not scroll.
+
+     The regions align on their CENTRES, not on a baseline: the lockup is a block beside a line of
+     text, and a baseline would hang it off that text's baseline and add its whole height above the
+     row. The overrides follow the rules they override; the two tie on specificity and source order
+     wins.
 
      The lockup's width follows its height, so the committed file's own 1919px raster never reaches
      the page. max-width caps it at the zone in the stacked state, where the row is the footer's
@@ -599,15 +603,16 @@ _CSS = """
 
      The centre's weight is one declaration on the zone: the whole acknowledgement is bold, the
      anchor with it, and 700 is the sans family's bold. */
-  footer{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding:.7rem 1.25rem 0;font-size:.8rem;color:#8FA3B0;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
-  .fleft{flex:0 0 auto}
-  .fcenter{flex:1 1 auto;min-width:0;text-align:center;font-weight:700}
-  .fright{flex:1 0 auto;text-align:right}
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid #2B3557;font-size:12.5px;color:#8FA3B0;line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
+  footer a{color:#EF7256;text-decoration:none}
+  .fleft{flex:1 1 0;min-width:0}
+  .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
+  .fright{flex:1 1 0;min-width:0;text-align:right}
   .orglogo{display:inline-block;line-height:0}
-  .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
-  @container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}
-  @container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}
-  @media(max-width:560px){footer{position:static}}
+  .orglogo img{height:30.8px;width:auto;max-width:100%;object-fit:contain;display:block}
+  @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
+  @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
+  @media (max-width:560px){footer{position:static}}
 """
 
 
@@ -662,24 +667,6 @@ _NAV_TABS = (("navMap", "Map", "/"),
              ("navSurveys", "Surveys", "/surveys"),
              ("navCollections", "Collections", "/collections"))
 
-# The parent-organisation mark, top right on every surface of the site. It is NOT the header's
-# identity: the identity is the AusMT mark in the left zone, and this states whose service AusMT is,
-# the same relationship the footer already puts in words. It closes the header, so it follows the
-# primary nav in the tab order while staying focusable.
-#
-# Same-origin, and the same vendored file the documentation site's sidebar carries. It is stated
-# character-identically in portal/index.html and in every portal document wearing this chrome, and
-# pinned pairwise there (portal/tests/test_header_geometry_parity.py) for the reason the zone rules
-# are: an edit to one surface must not leave the others on a different mark.
-#
-# The image is white with an alpha channel, which is the whole reason it can sit on this chrome
-# untreated: every surface carrying it is dark, and the site declares no light theme.
-#
-# One unbroken source literal, like the header markup it joins: the pin reads this file's SOURCE and
-# holds it character-identical against the portal documents' own.
-_ORG_MARK = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
-
-
 def _site_header(active="", status="") -> str:
     """The ONE header, everywhere: the SPA header's three-part division rendered as static links.
 
@@ -689,14 +676,17 @@ def _site_header(active="", status="") -> str:
     around it, and the owner kept that distinction and their wording. The right zone is the status
     slot, which is CONTEXTUAL (see the callers) while the shell around it is identical.
 
-    THE FETCHED ASSETS, WHICH ARE TWO AND NAMED. The identity zone opens with the AusMT mark, the
-    same file and the same markup the SPA header carries, so a reader arriving on a survey page from a
-    search result meets the site's own identity rather than a wordmark alone. The right zone closes
-    with the AuScope mark, which states whose service this is and is not an identity. Both are
-    SAME-ORIGIN paths served by the portal image beside these pages: not a build-time read, not an
-    external fetch, and not 180 circles inlined into 2,655 documents. Everything else on the page
-    stays inline, and the src allow-list in engine/tests/test_index_pages.py names these paths and
-    nothing else.
+    THE FETCHED ASSET, WHICH IS ONE AND NAMED. The identity zone opens with the AusMT mark, the same
+    file and the same markup the SPA header carries, so a reader arriving on a survey page from a
+    search result meets the site's own identity rather than a wordmark alone. It is a SAME-ORIGIN
+    path served by the portal image beside these pages: not a build-time read, not an external fetch,
+    and not 180 circles inlined into 2,655 documents. Everything else in this header stays inline,
+    and the src allow-list in engine/tests/test_index_pages.py names this path and nothing else.
+
+    The AuScope parent mark used to close the right zone. It is withdrawn from every header on the
+    site: the relationship is stated in words, in the footer this sheet also emits and in About's
+    "Who enables AusMT" section, and a symbol repeated in a corner said nothing either of those does
+    not. The right zone keeps the contextual status slot alone.
 
     VERSION SKEW, STATED HONESTLY FOR THE FIRST DEPLOY. /vendor/* is served from the portal image and
     the pages tree from the data volume, so the two can be a deploy apart. Once both carry the mark
@@ -704,14 +694,13 @@ def _site_header(active="", status="") -> str:
     nothing else in this tier. On the FIRST deploy it is worse than that, because the file is new: a
     pages tree rebuilt from this commit against a portal image that predates it asks for a mark the
     image does not serve, and every page renders the alt text instead. So the portal image and the
-    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg,
-    /vendor/auscope-icon-white.png and the footer's /vendor/auscope-ncris-white.png each answering
-    200 with an image type is the check before the pages tree is swapped.
+    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg and the
+    footer's /vendor/auscope-ncris-white.png each answering 200 with an image type is the check
+    before the pages tree is swapped.
 
-    The AusMT mark is a fixed 30x30 box inside the zero-basis .hleft zone and the AuScope mark a
-    fixed-height box inside the zero-basis .hright zone, so neither identity block can move the
-    centre tab group: a zero-basis side hands its leftover space out evenly whatever it holds
-    (tests/test_header_geometry_parity.py)."""
+    The AusMT mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the identity block
+    cannot move the centre tab group: a zero-basis side hands its leftover space out evenly whatever
+    it holds (tests/test_header_geometry_parity.py)."""
     tabs = "".join(
         f'<a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>"
         for i, lbl, h in _NAV_TABS)
@@ -727,7 +716,7 @@ def _site_header(active="", status="") -> str:
             '<a class="about" href="/about.html">About</a>'
             f'<a class="contribute" href="/add-survey.html">Contribute a survey {_ARROW_FWD}</a>'
             "</div>\n"
-            f'<div class="hzone hright">{status}{_ORG_MARK}</div>\n'
+            f'<div class="hzone hright">{status}</div>\n'
             "</header>\n")
 
 
@@ -932,10 +921,18 @@ def _related_by_identifies(smeta):
     return out
 
 
-# The AusMT access acknowledgement, verbatim from AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md
-# section 9. It is a SEPARATE statement from the citation and is never folded into it: providing
-# access does not make AusMT the cited object.
-_ACKNOWLEDGEMENT = ("Data were accessed through the AusMT national magnetotelluric data portal.")
+# The AusMT access acknowledgement. It is a SEPARATE statement from the citation and is never
+# folded into it (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md section 9): providing access does
+# not make AusMT the cited object.
+#
+# ONE WORDING, not one per surface. about.html carries the same sentence as the block a reader is
+# asked to copy, and portal/tests/test_about_copy_batch.py holds the two equal by reading this
+# constant, so a change here that the page does not follow fails the portal lane rather than
+# shipping two versions of one statement.
+_ACKNOWLEDGEMENT = (
+    "Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric "
+    "Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government "
+    "via the National Collaborative Research Infrastructure Strategy (NCRIS).")
 
 # The related-identifier scopes that name THIS SURVEY RECORD rather than something near it. Only
 # `entire` qualifies. A collection row names the parent, a raw_packed row names the time-series

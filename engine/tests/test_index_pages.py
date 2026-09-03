@@ -155,21 +155,24 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # ever appear as a src, and no OTHER path may either. The lists below are EXACT and ORDERED, so a
 # third asset, or the same asset in the wrong slot, fails here.
 #
-# Two marks, in the order the header emits them: the AusMT identity opening the left zone, the
-# AuScope parent mark closing the right one.
-# The chrome's own fetched assets, in the order a page writes them: the two header marks, then the
+# ONE mark in the header now: the AusMT identity opening the left zone. The AuScope parent mark
+# that used to close the right zone is withdrawn from every header on the site (the relationship is
+# stated in words, in the footer and in About's Who enables AusMT section), so the header's fetched
+# set is a single file.
+# The chrome's own fetched assets, in the order a page writes them: the header identity, then the
 # footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer ruling, which made the parent
 # organisation's acknowledgement the footer's right region on every surface; it is the same
-# same-origin, vendored, cached-once class of asset as the two header marks and is allow-listed on
+# same-origin, vendored, cached-once class of asset as the header mark and is allow-listed on
 # the same terms (see AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F1).
-ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg", "/vendor/auscope-icon-white.png"]
+ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg"]
 ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-white.png"]
 ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
 
-# The collection page draws the one thing in this tier that carries a mark in its BODY as well: the
-# member footprint map, which repeats the AuScope mark in the panel's bottom-left corner. It is the
-# same file the header already asked for, so it costs the reader no second request. Keyed by the
-# page's own path so that no OTHER page kind can quietly grow a body mark.
+# The collection page draws the one thing in this tier that carries a mark in its BODY: the member
+# footprint map, which puts the AuScope mark in the panel's bottom-left corner. That mark is a
+# CAPTION on a figure, not chrome, and the ruling that withdrew the header mark did not reach it, so
+# the entry stays and is now the ONLY generated reference to the file. Keyed by the page's own path
+# so that no OTHER page kind can quietly grow a body mark.
 ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope-icon-white.png"]}
 
 # RESTATED, WHICH MEANS THE SAME SURFACE. The old rule was `"src=" not in page`: a raw substring
@@ -892,58 +895,68 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
 
     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and that is the point of them. main
     is 840px on an entity page, 920px on a hub and 1120px above 1180px of viewport, so a viewport
-    number answers the question wrongly on two page kinds out of three: measured in Chrome, an
-    entity page at a 1000px viewport gives the footer the page's width, the three regions want
-    1249px of it, and a
-    760px viewport rule leaves the right region alone on a second row with the acknowledgement
-    centred in what is left beside the machine-readable link, 135px off the footer's axis.
+    number answers the question wrongly on two page kinds out of three.
 
-    Below 1280px of footer the centre therefore takes a row of its own UNDER the two side regions,
-    where it spans the footer and is centred on its axis. Below 500px the side phrases no longer
-    share a row either, so every region takes one and aligns left, which is the 375px stack.
+    THE SIDE ZONES TAKE EQUAL ZERO BASIS, which is what page-centres the acknowledgement. Zones that
+    size to their own content leave the centre centred in the space LEFT OVER beside them: measured
+    in Chrome at 2560px before this, the sentence's midpoint sat 274.66px left of the viewport's on
+    this tier. flex:1 1 0 on both sides makes them the same width whatever they hold; min-width:0
+    lets a side zone go under its own content rather than force a wrap.
 
-    FAILS IF the footer stops being a wrapping flex row or stops being a query container, if the
-    left link becomes shrinkable (it is then broken mid-phrase at the reading measure), if the right
-    zone stops growing (on a wrapped row its links fall under the left ones instead of against the
-    right edge), if either state below one row goes, if one stops following the rules it overrides
-    (they tie on specificity, so an override placed above them does nothing at all), or if a
-    viewport rule comes back in their place."""
+    Below 1421px of footer CONTENT the centre takes a row of its own UNDER the two side regions,
+    where it spans the footer and is centred on its axis. Below 520px the side phrases no longer
+    share a row either, so every region takes one and aligns left, which is the 375px stack. Both
+    numbers are the portal's, because this tier and the portal now carry ONE rule set: the wider
+    surface sets the number and portal/tests/test_footer_regions.py holds the two sides identical.
+
+    FAILS IF the footer stops being a wrapping flex row or stops being a query container, if a side
+    zone stops taking the equal zero basis, if the centre stops being content-sized or stops
+    centring its text, if either state below one row goes, if one stops following the rules it
+    overrides (they tie on specificity, so an override placed above them does nothing at all), or if
+    a viewport rule comes back in their place."""
     page = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
     rule = re.search(r"\bfooter\{([^}]*)\}", css)
     assert rule and "display:flex" in rule.group(1) and "flex-wrap:wrap" in rule.group(1), \
         f"the footer must be a wrapping flex row: {rule and rule.group(1)!r}"
+    assert "align-items:center" in rule.group(1), (
+        f"one vertical alignment on every surface: {rule.group(1)!r}")
     assert "container-type:inline-size" in rule.group(1), (
         f"the footer must establish the query container the two states below one row ask about; "
         f"without it neither @container rule can ever match: {rule.group(1)!r}")
-    for zone, decls in ((".fleft", ("flex:0 0 auto",)),
-                        (".fcenter", ("flex:1 1 auto", "min-width:0", "text-align:center")),
-                        (".fright", ("flex:1 0 auto", "text-align:right"))):
+    for zone, decls in ((".fleft", ("flex:1 1 0", "min-width:0")),
+                        (".fcenter", ("flex:0 1 auto", "min-width:0", "text-align:center")),
+                        (".fright", ("flex:1 1 0", "min-width:0", "text-align:right"))):
         m = re.search(re.escape(zone) + r"\{([^}]*)\}", css)
         assert m, f"{zone} carries no rule"
         for decl in decls:
             assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
 
-    centre_row = css.find("@container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}")
+    centre_row = css.find("@container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}")
     assert centre_row > 0, (
-        "below 1280px of footer the centre must take a full row of its own, or it is centred in the "
-        "space left over beside the machine-readable link instead of on the footer's axis")
-    stack = css.find("@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
+        "below 1421px of footer content the centre must take a full row of its own, or it is "
+        "centred in the space left over beside the machine-readable link instead of on the axis")
+    stack = css.find("@container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
     assert stack > centre_row, (
-        "below 500px of footer every region must take a full row and align left, in a rule that "
-        "FOLLOWS the centre's own-row rule: the two tie on specificity, so placed above it the "
+        "below 520px of footer content every region must take a full row and align left, in a rule "
+        "that FOLLOWS the centre's own-row rule: the two tie on specificity, so placed above it the "
         "stack would not restore the reading order at 375px")
     assert css.index(".fright{") < centre_row, (
         "both states below one row must follow the zone rules they override; the selectors tie on "
         "specificity and source order alone decides")
-    assert "@media(max-width:760px){.fzone" not in css, (
-        "the footer's width is not the viewport's on this tier, so the stacking rule must not go "
-        "back to asking the viewport")
+    for gone in ("@media(max-width:760px){.fzone", "@media (max-width:760px){.fzone"):
+        assert gone not in css, (
+            "the footer's width is not the viewport's on this tier, so the stacking rule must not "
+            "go back to asking the viewport")
+    assert re.search(r"\bmain\{[^}]*padding:1\.6rem 1\.25rem 2\.2rem", css), (
+        "the separation above the footer belongs to the reading column, not to the footer: the "
+        "footer's own margin-top left the rule set with the ruling (the SPA's footer cannot carry "
+        "one, its body does not scroll), so main states the space it used to provide")
 
 
 def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
     """The committed lockup is 1919px wide because it is the brand kit's own raster; what a reader
-    sees is a 28px-high mark, and the width follows from the height.
+    sees is a 30.8px-high mark, and the width follows from the height.
 
     FAILS IF the height rule goes (every page would then paint the file at full size and the footer
     would be taller than the document above it), if the width stops following the height, or if the
@@ -954,7 +967,7 @@ def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
             encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
         m = re.search(r"\.orglogo img\{([^}]*)\}", css)
         assert m, f"{rel}: the footer lockup carries no sizing rule"
-        for decl in ("height:28px", "width:auto", "max-width:100%", "object-fit:contain"):
+        for decl in ("height:30.8px", "width:auto", "max-width:100%", "object-fit:contain"):
             assert decl in m.group(1), f"{rel}: the lockup rule must declare {decl}: {m.group(1)!r}"
 
 
@@ -1009,39 +1022,39 @@ def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
             f"{rel}: the mark must carry the shared sizing rule the SPA header uses"
 
 
-# The parent-organisation mark, RENDERED. It is the same string the portal documents carry and the
-# character-for-character parity across surfaces is held in the portal lane
-# (portal/tests/test_header_geometry_parity.py); what is asserted here is that the emitter actually
-# puts it on every page kind, once, in the right zone, at a height matched to the identity mark.
+# The parent-organisation mark, WITHDRAWN. It used to close every header from the right zone; the
+# owner's ruling takes it off every surface of the site, so what this asserts is that the emitter
+# puts it on NO page kind, in no zone. The portal surface's half of the same ruling is held in
+# portal/tests/test_header_geometry_parity.py, character for character.
 ORG_MARK_IMG = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
+ORG_MARK_CLASS = 'class="orgmark"'
+ORG_MARK_RULE = ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}"
+ORG_MARK_IMG_RULE = ".orgmark img{height:30px;width:auto;display:block}"
 
 
-def test_every_page_kind_closes_its_header_with_the_auscope_mark(built):
-    """Whose service this is, on every page the tier emits. FAILS IF a page kind renders without the
-    mark, renders it twice (it is APPENDED to a zone, so a careless edit adds rather than replaces),
-    puts it anywhere but the header's right zone, or sizes it off the shared rule.
+def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
+    """The withdrawal, on every page kind the tier emits. FAILS IF the anchor literal, the .orgmark
+    class or either of its two CSS rules survives on any page: those four spellings are how the mark
+    would come back, and a header restored from a pre-ruling revision carries all four at once.
 
-    Once per page is the assertion that costs something: the header is emitted from one literal, so
-    a second copy would mean a second emission site, and the tier's whole posture is one header."""
+    The header is emitted from ONE literal, so this is really one assertion made 2,655 times; that
+    is exactly the point, because the emitter is also the one place a revert would land."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        assert page.count(ORG_MARK_IMG) == 1, \
-            f"{rel}: the AuScope mark must appear exactly once, got {page.count(ORG_MARK_IMG)}"
         head = page.split("<header", 1)[1].split("</header>", 1)[0]
-        right = head.split('class="hzone hright"', 1)[1]
-        assert ORG_MARK_IMG in right, \
-            f"{rel}: the mark belongs to the header's RIGHT zone: {head[:400]!r}"
-        # The nav lives in the centre zone, so a mark in the right zone follows every primary
-        # control in the document order the keyboard walks.
-        assert head.index('class="hzone hcenter"') < head.index(ORG_MARK_IMG), \
-            f"{rel}: the mark must follow the primary nav rather than take a tab stop ahead of it"
         css = page.split("<style>", 1)[1].split("</style>", 1)[0]
-        assert ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}" in css, \
-            f"{rel}: the mark must carry the shared header rule"
-        # Matched to the identity mark's 30px box, so the two read as siblings across the header
-        # rather than as a mark and a banner.
-        assert ".orgmark img{height:30px;width:auto;display:block}" in css, \
-            f"{rel}: the mark's height must match the identity mark's"
+        for label, needle, where in (("the anchor", ORG_MARK_IMG, page),
+                                     ("the class", ORG_MARK_CLASS, head),
+                                     ("the zone rule", ORG_MARK_RULE, css),
+                                     ("the sizing rule", ORG_MARK_IMG_RULE, css)):
+            assert needle not in where, (
+                f"{rel}: the header's AuScope org-mark is withdrawn from every surface; {label} is "
+                f"back as {needle!r}")
+        # The right zone survives the withdrawal and keeps the contextual status slot. FAILS IF the
+        # zone itself went with the mark: the geometry pins read three zones, and a header with two
+        # re-floats the centre tab group on every page in the tier.
+        assert 'class="hzone hright"' in head, (
+            f"{rel}: the right zone stays; the mark left it, the zone did not")
 
 
 # The FILE, bounded per page kind, which is the portal surface's pin restated on this one. The mark
@@ -1050,20 +1063,39 @@ def test_every_page_kind_closes_its_header_with_the_auscope_mark(built):
 # a preload link would carry it a second time and pass both.
 ORG_ASSET = "auscope-icon-white.png"
 
-# The collection page is the one kind that legitimately names it twice: the header's parent mark and
-# the member-footprint map's own corner mark, which is the same file and so costs no second request.
-# Every other kind carries the header mark alone.
-ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 2}
+# The collection page is now the ONE kind that names it at all: the member-footprint map's corner
+# mark, which is a caption on that figure and outside the header ruling. Every other kind names the
+# file zero times, which is the withdrawal counted rather than spelled.
+ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 1}
 
 
-def test_no_page_kind_names_the_auscope_image_beyond_the_marks_it_carries(built):
-    """FAILS IF a page kind names the AuScope image more often than the marks it is entitled to, or
-    loses one of them. The header mark is appended to a zone and the map mark is drawn into a panel,
-    so on either surface a careless edit adds rather than replaces, and a page holding the same image
-    twice over reads as a mistake while satisfying every slot-scoped pin above."""
+# The SPA map's watermark, which this tier must NOT grow. The owner's ruling puts the AuScope colour
+# icon in one place on the site, the Leaflet map container on portal/index.html, because that is the
+# surface people screenshot; the generated pages have no such surface, their collection figure draws
+# the WHITE icon, and the src allow-list above is deliberately unchanged by that ruling. Asserted
+# rather than assumed, because a new brand file is exactly the kind of thing that spreads.
+COLOUR_ASSET = "auscope-icon-colour.png"
+
+
+def test_no_page_kind_draws_the_spa_maps_colour_watermark(built):
+    """FAILS IF any generated page names the colour icon, in any slot. It would also fail the src
+    allow-list, but only as an unexplained count; this says which file and why it may not be here."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        want = ORG_ASSET_PER_KIND.get(rel, 1)
+        assert COLOUR_ASSET not in page, (
+            f"{rel}: the AuScope colour icon is the SPA map's watermark and belongs to no page in "
+            "this tier; the collection figure draws the white icon")
+
+
+def test_no_page_kind_names_the_auscope_image_beyond_the_one_figure_that_keeps_it(built):
+    """FAILS IF a page kind names the AuScope image more often than the figures it is entitled to,
+    or loses the one figure that keeps it. The map mark is drawn into a panel and the retired header
+    mark was appended to a zone, so on either surface a careless edit adds rather than replaces, and
+    a page naming the file again is the header mark returning by some other markup while every
+    spelling-scoped pin above still passes."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        want = ORG_ASSET_PER_KIND.get(rel, 0)
         assert page.count(ORG_ASSET) == want, (
             f"{rel}: the AuScope image may be named {want} time(s) on this page kind; "
             f"found {page.count(ORG_ASSET)}")
@@ -1227,7 +1259,7 @@ def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
 # portal half of this pin (portal/tests/test_footer_regions.py) reads _pages.py's source text.
 # AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F5 and F6.
 _FLOW_BELOW = 560
-_FLOW_RULE = f"@media(max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
+_FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 
 
 def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
@@ -1268,9 +1300,26 @@ def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
         assert _FLOW_RULE in css and css.index(_FLOW_RULE) > foot.start(), \
             f"{rel}: below {_FLOW_BELOW}px of viewport the footer returns to flow, in a rule that " \
             f"FOLLOWS the sticky one; the two tie on specificity"
-        assert "padding:1.6rem 1.25rem 0" in css or "padding:4rem 1.25rem 0" in css, \
-            f"{rel}: main must carry no bottom padding, or the footer comes to rest ABOVE the " \
-            f"document's bottom edge and lifts off the viewport at the end of the scroll"
+        # THE SEPARATION ABOVE THE FOOTER IS main'S, not the footer's own margin. This tier used to
+        # give it as footer{margin-top:2.2rem}, which the one rule set cannot carry: the Map's
+        # footer is the last child of a column whose body does not scroll, so a margin there takes
+        # height from the map itself. It moves to main's bottom padding, where the portal's content
+        # pages already keep it. The failure this replaces (a bottom padding lifting the footer off
+        # the viewport at the end of the scroll) does not reproduce and is not what guarantees the
+        # footer rests on the document's bottom edge; what guarantees it is that the footer is the
+        # LAST box in a body with no bottom padding of its own. Measured in Chrome at 900x500,
+        # scrolled to the end: the footer's bottom sits at 499.61px of a 500px viewport on a survey
+        # page, a hub and 404.html, the 0.39px being the sub-pixel the scroll height rounds.
+        assert "padding:1.6rem 1.25rem 2.2rem" in css, (
+            f"{rel}: main states the separation above the footer, because the footer no longer "
+            f"carries a margin of its own")
+        assert "margin-top" not in foot.group(1) and "margin:" not in foot.group(1), (
+            f"{rel}: the footer takes no margin; it is not in the one rule set and on the Map it "
+            f"would take height from the map: {foot.group(1)!r}")
+        assert "padding-bottom" not in body.group(1) and not re.search(
+                r"padding:[^;]*\s\S", body.group(1)), (
+            f"{rel}: body carries no bottom padding, which is what makes the footer's flow "
+            f"position the document's own bottom edge: {body.group(1)!r}")
 
 
 def test_the_centre_line_is_bold_on_every_page_kind(built):

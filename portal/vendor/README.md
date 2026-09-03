@@ -57,9 +57,29 @@ pages to stop the browser's automatic /favicon.ico 404.
 The AuScope-NCRIS white lockup, the parent-organisation logo the site footer carries on every
 surface. Committed VERBATIM from the AuScope brand kit ("2025 AuScope Logos", file
 `2025 AuScope-NCRIS Logo - White.png`); it is a third-party trademark asset, so it is never
-resized, re-encoded or recoloured here. Display size is CSS alone (`height:28px;width:auto`), which
-is why the committed file keeps its full 1919x325 resolution.
+resized, re-encoded or recoloured here. Display size is CSS alone (`height:30.8px;width:auto`, one
+declaration in portal/index.html's footer rule set and copied from there to every other surface),
+which is why the committed file keeps its full 1919x325 resolution.
 
 | File | Source | Dimensions | SHA-256 | Size |
 |---|---|---|---|---|
 | `auscope-ncris-white.png` | AuScope brand kit, `2025 AuScope-NCRIS Logo - White.png` | 1919x325 RGBA | `595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6` | 35628 B |
+
+## auscope-icon-colour.png
+
+The AuScope icon in its brand colours, drawn as a watermark in the top-right corner of the SPA's
+Leaflet map (portal/index.html) and nowhere else on the site. The map is the surface people
+screenshot into talks and reports, and a screenshot carries no footer with it, so the mark is the
+attribution that travels with the image. Committed VERBATIM from the AuScope brand kit ("2025
+AuScope Logos", file `2025 AuScope Logo Icon - Colour.png`); it is a third-party trademark asset, so
+it is never resized, re-encoded, recoloured or faded. Display size is CSS alone
+(`height:32px;width:auto`) at full opacity, which is why the committed file keeps its full 281x288
+resolution.
+
+The 32px inset from the map's top and right edges is the style guide's clear space, not a taste
+call: the guide asks for at least the full height of the logo of breathing space on all sides, and
+32px is the mark's own height. It is the reason the mark does not take Leaflet's 10px control inset.
+
+| File | Source | Dimensions | SHA-256 | Size |
+|---|---|---|---|---|
+| `auscope-icon-colour.png` | AuScope brand kit, `2025 AuScope Logo Icon - Colour.png` | 281x288 RGBA | `edfe057070656636011977270e4d4ba60461937add2f36048626e161c81aa132` | 7392 B |

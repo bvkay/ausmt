@@ -10,6 +10,7 @@
 <script src="src/security.js"></script>   <!-- canonical esc/escAttr/escUrl, shared with the portal (single source) -->
 <script src="src/contract.js"></script>   <!-- C46: generated licence vocab (LICENSES), single source for the licence <select>s (never hand-copied) -->
 <script src="src/doi_harvest.js"></script> <!-- DOI citation-harvest core (window.AusmtDoiHarvest); single source, shared byte-for-byte with the curator editor -->
+<script src="src/mapattrib.js"></script>  <!-- the collapsed map attribution control, shared with the portal map (single source) -->
 
 <!-- Privacy-respecting analytics OFF by default (see ANALYTICS.md). To enable, uncomment + set your domain:
 <script defer data-domain="YOUR-DOMAIN" src="https://YOUR-PLAUSIBLE-HOST/js/script.js"></script> -->
@@ -51,8 +52,6 @@
      site. Same file, same markup and character-identical rule on index.html, brand.html and the
      generated pages (engine/extract/_pages.py). */
   .brandmark{height:30px;width:30px;display:block;flex:none}
-  .orgmark{display:flex;align-items:center;flex:none;margin-left:16px}
-  .orgmark img{height:30px;width:auto;display:block}
   .tagline{color:var(--muted);font-size:12.5px}
   header a.back{margin-left:auto;color:var(--muted);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
   header a.back:hover{color:var(--text)}
@@ -139,25 +138,14 @@
   .modal .bar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
   .modal .bar .spacer{margin-left:auto}
   .leaflet-container{background:#0e1822}
-  /* One footer, three regions, the grammar index.html carries and every page here repeats: the
-     MTCAT machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
-     AuScope-NCRIS lockup on the RIGHT. The portal ships as classic static pages with no template
-     step and no shared sheet, so these rules are copied rather than shared, the same bargain every
-     other block on this page makes.
+  /* One footer, three regions, the same here as on every other surface: the MTCAT
+     machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
+     AuScope-NCRIS lockup on the RIGHT.
 
-     BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, so a footer set inside a reading
-     column answers for the column it sits in. Below the width the three regions need, the centre
-     takes a row of its own UNDER the two side regions, where it is centred on the footer's axis
-     rather than in the space left over beside the machine-readable link. Below 520px the two side
-     regions no longer share a row either, so every region takes one and aligns left.
-
-     The regions align on their CENTRES, not on a baseline: the lockup is a 28px block beside a line
-     of 12.5px text, and a baseline would hang it off that text's baseline and put its whole height
-     above the row.
-
-     The lockup's width follows its height, so the committed file's own 1919px raster never reaches
-     the page. max-width caps it at its zone in the stacked state; object-fit keeps the mark's
-     proportions wherever the cap bites.
+     THE RULE SET BELOW IS index.html's, character for character with the four colour tokens this page shares. The zone geometry, the two
+     container states and the measured numbers behind them are stated there, once, and
+     tests/test_footer_regions.py holds all seven surfaces identical: an edit here that is not an
+     edit there fails.
 
      THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
      it keeps its own box in flow, so the last line of the page is never hidden under it and the
@@ -170,13 +158,13 @@
   footer a{color:var(--copper);text-decoration:none}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
   .apilink:hover{color:var(--copper)}
-  footer .apilink{flex:0 0 auto}
-  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0;font-weight:700}
-  footer .foot-right{flex:1 0 auto;text-align:right}
-  footer .orglogo{display:inline-block;line-height:0}
-  footer .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
-  @container (max-width:1330px){footer .foot-main{order:1;flex:1 1 100%}}
-  @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
+  .fleft{flex:1 1 0;min-width:0}
+  .fcenter{flex:0 1 auto;min-width:0;text-align:center;font-weight:700}
+  .fright{flex:1 1 0;min-width:0;text-align:right}
+  .orglogo{display:inline-block;line-height:0}
+  .orglogo img{height:30.8px;width:auto;max-width:100%;object-fit:contain;display:block}
+  @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
+  @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
   /* C13 direct-upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes. */
   #gatewayBlock{display:none}
@@ -218,6 +206,33 @@
   .slugchip input:focus{outline:1px solid var(--copper)}
   #t0mapwrap{margin-top:12px;display:none}
   #t0map{height:300px;border-radius:8px;border:1px solid var(--line)}
+  /* THE MAP'S ATTRIBUTION, COLLAPSED TO ONE GLYPH. What the owner asked off the map was the corner
+     LINE and the Leaflet flag and word beside it; the credit itself is a licence term and stays
+     where the map is, because only the layer that is drawing knows which provider to name.
+     src/mapattrib.js wraps Leaflet's own control, mounted with prefix:false, and these rules are
+     the whole of its appearance.
+
+     THE GLYPH IS THE WHOLE CONTROL until a reader asks for the text. It is a real button, so it
+     takes keyboard focus and is announced, and the credit opens on hover, on focus and on click
+     alike; the focus ring is the one every other control on this page carries.
+
+     ABOVE ANYTHING SHARING ITS CORNER when it opens. Leaflet's corner is a stacking context of its
+     own above the legend and the watermark, so those two are already clear of it; the 900 here
+     orders the expanded text above another control placed in the same corner later.
+
+     THE CAP IS WHAT KEEPS IT OFF THE LEGEND. The legend sits bottom-left with a 210px cap and a
+     10px inset, so at 560px of map (the narrowest width this map is drawn at, below which the
+     watermark is not drawn either) 240px of credit plus the glyph still leaves the two apart.
+
+     RULE SET SHARED with add-survey.html character for character, because its three maps wear this
+     same control; tests/test_map_attribution.py holds the two identical. */
+  .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-end;gap:4px}
+  .mapattrib-toggle{flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--text);font-family:var(--sans);font-size:12px;font-style:italic;line-height:1;cursor:pointer}
+  .mapattrib-toggle:hover{border-color:var(--copper)}
+  .mapattrib-toggle:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
+  .mapattrib .leaflet-control-attribution{display:none;float:none;clear:none;margin:0;max-width:240px;padding:3px 7px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--muted);font-size:11px;line-height:1.45;text-shadow:none;box-shadow:none}
+  .mapattrib .leaflet-control-attribution a{color:var(--copper)}
+  .mapattrib.mapattrib-open .leaflet-control-attribution{display:block}
   .t0count{font-family:var(--mono);font-size:13px;color:var(--text);margin-top:8px}
   .t0count b{color:var(--copper)}
   .locnudge{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5}
@@ -232,15 +247,14 @@
 </head>
 <body>
 <header>
-  <!-- The AusMT mark, not the AuScope symbol: AusMT is the thing this header IDENTIFIES, so it
-       opens the header. The AuScope mark states whose service this is and closes the header from
-       the right; it never stands in for the identity. Same file, same markup and same rule on
-       every surface wearing this chrome. -->
+  <!-- The AusMT mark, not an organisation mark: AusMT is the thing this header IDENTIFIES, so it
+       opens the header and no header on this site carries a second mark of any kind. The AuScope
+       relationship is stated in the footer and in About's Who enables AusMT, which is where a
+       reader asks it. Same file, same markup and same rule on every surface wearing this chrome. -->
   <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
   <div class="wordmark">AusMT</div>
   <div class="tagline">Contribute a survey</div>
   <a class="back" href="/">← Back to portal</a>
-  <a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>
 </header>
 <main>
   <h1>Contribute a survey</h1>
@@ -598,14 +612,14 @@
 </main>
 <footer>
   <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
-  <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
+  <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a></div>
   <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one
        link in the line. The year is a literal, the mechanism every page uses. -->
-  <span class="foot-main">AusMT is enabled by AuScope · <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> · © 2026 AuScope and the AusMT contributors · Data licences vary by survey</span>
+  <div class="fzone fcenter">AusMT is enabled by AuScope · <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> · © 2026 AuScope and the AusMT contributors · Data licences vary by survey</div>
   <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
        image is same-origin and vendored, so stating the relationship takes no runtime dependency on
        the organisation's own host. -->
-  <span class="foot-right"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></span>
+  <div class="fzone fright"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
 </footer>
 
 <div class="modal" id="modal"><div class="box">
@@ -1997,13 +2011,18 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   ["m_w","m_e","m_s","m_n"].forEach(id=>$(id).addEventListener("input",updateReadout));
   function clearPick(){ corners=[]; if(rect&&pmap){pmap.removeLayer(rect);} rect=null; $("pickHint").textContent="Click two corners to set a bounding box. Your loaded stations are shown as dots."; }
+  // THE THREE MAPS ON THIS PAGE WEAR THE PORTAL MAP'S ATTRIBUTION CONTROL: Leaflet's default one
+  // carries the flag and the word, which the owner asked off every map, so each map is created
+  // without one and src/mapattrib.js mounts a collapsed control in its place. The credit itself is
+  // the tile layer's own and is unchanged: these three draw OpenStreetMap raster tiles directly.
   function openPicker(){
     if(typeof L==="undefined"){ $("locReadout").textContent="Map unavailable, use 'Edit extent values manually'."; return; }
     $("modal").classList.add("show");
     if(!pmap){
-      pmap=L.map("pickmap",{worldCopyJump:true}).setView([-25.6,134.4],4);
+      pmap=L.map("pickmap",{worldCopyJump:true,attributionControl:false}).setView([-25.6,134.4],4);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {maxZoom:18, attribution:"© OpenStreetMap contributors"}).addTo(pmap);
+      window.AusmtMapAttrib.mount(pmap,"Map data attribution");
       pmap.on("click",ev=>{
         if(corners.length>=2) clearPick();
         corners.push(ev.latlng);
@@ -2039,8 +2058,9 @@ if(typeof document!=="undefined"&&document.getElementById){
     if(typeof L==="undefined") return;
     if(!withCoords.length) return;
     if(!t0map){
-      t0map=L.map("t0map",{worldCopyJump:true}).setView([-25.6,134.4],4);
+      t0map=L.map("t0map",{worldCopyJump:true,attributionControl:false}).setView([-25.6,134.4],4);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:"© OpenStreetMap contributors"}).addTo(t0map);
+      window.AusmtMapAttrib.mount(t0map,"Map data attribution");
     }
     setTimeout(()=>t0map.invalidateSize(),60);
     t0markers.forEach(m=>t0map.removeLayer(m)); t0markers=[];
@@ -2091,8 +2111,9 @@ if(typeof document!=="undefined"&&document.getElementById){
     if(!pf.length){ $("confReadout").textContent="Add EDI files with coordinates first."; return; }
     $("cmodal").classList.add("show");
     if(!cmap){
-      cmap=L.map("confirmmap",{worldCopyJump:true}).setView([-25.6,134.4],4);
+      cmap=L.map("confirmmap",{worldCopyJump:true,attributionControl:false}).setView([-25.6,134.4],4);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:"© OpenStreetMap contributors"}).addTo(cmap);
+      window.AusmtMapAttrib.mount(cmap,"Map data attribution");
     }
     setTimeout(()=>cmap.invalidateSize(),60);
     cmarkers.forEach(m=>cmap.removeLayer(m)); cmarkers=[];
@@ -2438,6 +2459,5 @@ if(typeof document!=="undefined"&&document.getElementById){
 }
 </script>
 <script src="config.js"></script>
-<script src="version.js"></script>
 </body>
 </html>

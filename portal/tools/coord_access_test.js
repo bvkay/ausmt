@@ -97,7 +97,7 @@ win.fetch = (url) => {
   return Promise.resolve({ ok: false });
 };
 
-const MODULES = ["contract", "security", "state", "data", "plots", "map", "filters", "drawer", "exports", "main"];
+const MODULES = ["contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer", "exports", "main"];
 let code = MODULES.map((f) => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={" +
   "setup:(c,t,s,sv,coll,cp)=>{CAT=c;TFD=t;SCI=s;SMETA=sv;COLL=coll;MANIFEST=null;COORD_POLICY=cp||{};buildState();buildTree();}," +
