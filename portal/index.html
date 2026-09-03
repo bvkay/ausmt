@@ -163,7 +163,6 @@
      than it buys attribution, so it is not drawn rather than shrunk. */
   .mapmark{position:absolute;top:32px;right:32px;height:32px;width:auto;z-index:500;pointer-events:none}
   @media(max-width:560px){.mapmark{display:none}}
-  #map .leaflet-control-attribution{opacity:.7}
   .hidden{display:none!important}
   h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:8px}
   fieldset{border:0}
@@ -571,6 +570,12 @@
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
+  /* THE BASEMAP CREDIT, on this document alone: it is the only surface that draws a map. It reads
+     as a credit rather than as part of the acknowledgement, so it takes its own line under it and
+     drops the zone's bold; it takes no colour of its own, so it is the footer's muted colour by
+     inheritance and its two links are the footer's copper like every other. 11px is small enough
+     to recede and large enough to read, which is what a licence obligation has to be. */
+  .mapcredit{display:block;font-size:11px;font-weight:400}
   .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px}
   .leaflet-tooltip.qtip::before{display:none}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
@@ -1109,7 +1114,7 @@
        without a title attribute. The year is a literal here and in the engine's page shell, one
        mechanism for both surfaces; a copyright year that moved on rebuild would differ across the
        tree for a reason no reader could see. The separators are U+00B7. -->
-  <div class="fzone fcenter">AusMT is enabled by AuScope · <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> · © 2026 AuScope and the AusMT contributors · Data licences vary by survey</div>
+  <div class="fzone fcenter">AusMT is enabled by AuScope · <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> · © 2026 AuScope and the AusMT contributors · Data licences vary by survey<span class="mapcredit">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors, tiles © <a href="https://protomaps.com" target="_blank" rel="noopener noreferrer">Protomaps</a></span></div>
   <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links: a
        reader who clicks either has asked the same question. The image is same-origin and vendored,
        so stating the relationship takes no runtime dependency on the organisation's own host. -->

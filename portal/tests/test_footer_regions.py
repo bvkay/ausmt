@@ -898,10 +898,11 @@ def test_the_centre_line_is_bold_on_every_surface():
 
 
 def _footer_html(name):
-    """A portal page's footer, comments stripped, so prose inside it cannot satisfy a pin."""
+    """A portal page's footer, comments and the SPA's basemap credit stripped, so prose inside it
+    cannot satisfy a pin and the shared footer is compared as the one thing it is."""
     text = (ROOT / name).read_text(encoding="utf-8")
     foot = text.split("<footer>", 1)[1].split("</footer>", 1)[0]
-    return re.sub(r"<!--.*?-->", "", foot, flags=re.S)
+    return _without_credit(re.sub(r"<!--.*?-->", "", foot, flags=re.S))
 
 
 def _anchors(where, footer_html):
@@ -1086,7 +1087,7 @@ def test_the_map_carries_no_attribution_control():
         "the SPA map must be created with attributionControl:false")
     assert "attribution:" not in map_js, (
         "no tile layer states an attribution of its own; the credit is the footer's")
-    assert "map.attributionControl &&" in map_js or "&& map.attributionControl" in map_js, (
+    assert re.search(r"&&\s*map\.attributionControl\b", map_js), (
         "the dormant user-layer path must guard the control it can no longer assume exists")
     assert "leaflet-control-attribution" not in _index_text(), (
         "index.html must not style a control the map no longer mounts")

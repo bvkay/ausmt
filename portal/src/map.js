@@ -13,7 +13,13 @@
 // here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_BOUNDS so the two frames
 // cannot drift apart.
 const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
-const map=L.map("map",{preferCanvas:true}).fitBounds(AU_HOME_BOUNDS);
+// NO ATTRIBUTION CONTROL. The owner asked for the corner attribution off the map, and
+// attributionControl:false is what takes the control itself rather than hiding it: with no
+// control there is no Leaflet prefix either, which was a courtesy to the library and not a
+// licence term. The CREDIT does not go with it. The basemap is OpenStreetMap data under ODbL
+// and the tiles are rendered from Protomaps' build, so it is stated in the SPA footer, which
+// sits directly beneath the map and is always on screen because this body does not scroll.
+const map=L.map("map",{preferCanvas:true,attributionControl:false}).fitBounds(AU_HOME_BOUNDS);
 // The basemap is config-driven. provider "pmtiles" serves OUR OWN files through the vendored
 // protomaps-leaflet renderer, ending the portal's last runtime third party: the world file
 // carries low zooms globally (zoomed out still shows the whole globe) and the region file
@@ -21,14 +27,18 @@ const map=L.map("map",{preferCanvas:true}).fitBounds(AU_HOME_BOUNDS);
 // bbox has data the world file lacks. "carto" is the hosted fallback while the files roll out
 // (or if the renderer failed to load); CARTO watermarks un-keyed raster requests, so the
 // deployment's key (config, public by nature) rides the tile URL when set.
+// No layer states an attribution of its own: with no control to render it, the option would be
+// dead configuration reading as if the corner still carried the credit. The footer states it.
+// CONSTRAINT for the carto fallback below: the footer's credit names Protomaps, so a deployment
+// that flips basemap.provider to carto is crediting the wrong tile source and needs the footer
+// line changed with it.
 var _bmCfg=(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.basemap)||{};
 if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
-  var _bmAttr="&copy; OpenStreetMap contributors &copy; Protomaps";
-  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",attribution:_bmAttr,maxZoom:7,maxDataZoom:6}).addTo(map);
-  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",attribution:_bmAttr,minZoom:7,maxZoom:18,maxDataZoom:15}).addTo(map);
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",maxZoom:7,maxDataZoom:6}).addTo(map);
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",minZoom:7,maxZoom:18,maxDataZoom:15}).addTo(map);
 }else{
   var _bmKey=_bmCfg.carto_api_key?("?api_key="+encodeURIComponent(_bmCfg.carto_api_key)):"";
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:18}).addTo(map);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{maxZoom:18}).addTo(map);
 }
 // Owner ruling (2026-08-24): SITE LOCATIONS ONLY, at every zoom. The per-survey badge bubbles that
 // replaced proximity clustering are removed with it - no badge, no leader tail, no decoration pane, no
@@ -325,13 +335,15 @@ const userLayers={};
 // layers/*.geojson), so both halves are escaped. The guard is here while the path is DORMANT (the layer
 // control below is not mounted, so the fetch never runs) precisely so re-enabling the control cannot
 // re-open the sink by omission: the later lane must not have to rediscover this.
+// The map now mounts NO attribution control, so the call is guarded on one existing; a lane that
+// re-enables the layer control owes this line a home, and the footer's credit is where it belongs.
 function _layerAttribution(name,src){return esc(name)+": "+esc(src);}
 function userLayer(name,file,color){const grp=L.featureGroup();grp._loaded=false;
   grp.on("add",async()=>{if(grp._loaded)return;
     try{const r=await fetch("layers/"+file);if(!r.ok)throw 0;const gj=await r.json();
       L.geoJSON(gj,{style:{color,weight:1.3,fillOpacity:.03},interactive:false}).addTo(grp);
       const src=gj.source||(gj.features&&gj.features[0]&&gj.features[0].properties&&gj.features[0].properties.source);
-      if(src)map.attributionControl.addAttribution(_layerAttribution(name,src));grp._loaded=true;}
+      if(src&&map.attributionControl)map.attributionControl.addAttribution(_layerAttribution(name,src));grp._loaded=true;}
     catch(e){toast(`Layer "${name}" not found; place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
   userLayers[name]=grp;return grp;}
 // layer control hidden pending owner revisit (2026-07-12) — overlay definitions (footprints + the user

@@ -44,6 +44,11 @@ if (!Array.isArray(_cat) || _cat.length === 0) {
 // `L.map(...)` returns this same stub) — general instrumentation for any test that needs to assert
 // on map navigation calls actually made, with real arguments, not just "something happened".
 const mapCalls = [];
+// The options L.map is CONSTRUCTED with. Leaflet is stubbed here, so "the control is
+// absent" is proven at the one place this harness can see it: the option that stops
+// Leaflet mounting one. The rendered-DOM half of that proof is a browser measurement,
+// recorded with the round's screenshots.
+const mapMade = [];
 const stub = () => new Proxy(function () {}, {
   get: (t, p) => {
     if (p === "then") return undefined;
@@ -165,7 +170,7 @@ win.L = new Proxy(function () { }, {
   get: (t, p) => {
     if (p === "then") return undefined;
     if (p === Symbol.iterator) return function* () { };
-    if (p === "map") return () => mapFacade;
+    if (p === "map") return (id, opts) => { mapMade.push({ id, opts: opts || {} }); return mapFacade; };
     if (p === "circleMarker") return (ll, o) => recLayer("circleMarker", ll, o, true);
     if (p === "marker") return (ll, o) => recLayer("marker", ll, o, false);
     if (p === "polyline") return (lls, o) => recLayer("polyline", lls, o, true);
@@ -5036,8 +5041,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "basemap: the pmtiles branch must render through the vendored protomaps-leaflet");
     ok(/pmtiles_world/.test(_mapSrc) && /pmtiles_region/.test(_mapSrc),
       "basemap: both pmtiles paths must come from config, never hardcoded");
-    ok(/OpenStreetMap contributors/.test(_mapSrc) && /Protomaps/.test(_mapSrc),
-      "basemap: the pmtiles layers must carry the OSM + Protomaps attribution");
+    // THE CREDIT MOVED, so this half moved with it rather than being dropped. The layers used to
+    // carry it as a Leaflet attribution option; with no attribution control there is nothing to
+    // render one, and an option feeding a control that does not exist reads as if the map corner
+    // still carried the credit. The obligation is met in the SPA footer and asserted in the
+    // map-chrome block below, against the DRIVEN document. Here the negative: no layer restates it.
+    ok(!/attribution\s*:/.test(_mapSrc),
+      "basemap: no layer may state an attribution of its own; the footer carries the credit");
     const _vendored = fs.readFileSync(path.join(PORTAL, "vendor", "protomaps-leaflet.js"), "utf8");
     ok(_vendored.startsWith('"use strict";var protomapsL='),
       "basemap: vendor/protomaps-leaflet.js must be the verbatim upstream UMD (protomapsL global)");
@@ -5111,18 +5121,19 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ok(!/leaflet-control-attribution/.test(html),
       "map-chrome: index.html must not style an attribution control the map no longer mounts");
 
-    // The map RENDERS: a Leaflet container with its pane stack, and the station dots this fixture
-    // supplies drawn into it. Without this the assertion below would pass on a map that failed to
-    // build at all, which is the one way "no attribution control" is true and worthless.
-    const _mapEl = doc.getElementById("map");
-    ok(_mapEl && _mapEl.classList.contains("leaflet-container"),
-      "map-chrome: the map must still build a Leaflet container");
-    ok(doc.querySelectorAll("#map .leaflet-map-pane").length === 1 &&
-       doc.querySelectorAll("#map .leaflet-tile-pane").length === 1 &&
-       doc.querySelectorAll("#map .leaflet-overlay-pane").length === 1,
-      "map-chrome: the rendered map must carry its pane stack");
-    ok(doc.querySelectorAll("#map .leaflet-control-attribution").length === 0,
-      "map-chrome: the rendered map must mount NO attribution control, and so print no Leaflet prefix");
+    // The map is STILL BUILT, and built with the control switched off. Proving the absence without
+    // proving the build would pass on a map that never came up at all, which is the one way "no
+    // attribution control" is true and worthless. Leaflet is stubbed in this harness, so the build
+    // is proven by what the app asked it for: one L.map on #map, the home extent fitted, and the
+    // station dots added.
+    ok(mapMade.length === 1 && mapMade[0].id === "map",
+      "map-chrome: the app must build exactly one map, on #map, got " + JSON.stringify(mapMade.map(m => m.id)));
+    ok(mapMade[0].opts.attributionControl === false,
+      "map-chrome: the map must be built with attributionControl:false, so Leaflet mounts no control " +
+      "and prints no Leaflet prefix; got " + JSON.stringify(mapMade[0].opts));
+    ok(mapCalls.some(c => c.fn === "fitBounds") && layersAdded.length > 0,
+      "map-chrome: the map must still come up: the home extent fitted and layers added, got " +
+      mapCalls.length + " map calls and " + layersAdded.length + " layers");
 
     // The credit, in the footer, under the acknowledgement, with both sources linked and both links
     // leaving the tab the way every other outbound anchor on this site does.
