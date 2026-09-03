@@ -260,20 +260,19 @@
     collaborations, supplementary files and ageing legacy archives. AusMT exists to fix that: one national
     catalogue where every transfer function can be found, cited and downloaded with its provenance
     attached.</p>
-    <!-- The colophon's opening paragraph, which was never build identity: it says what AusMT is, so
-         it belongs in the section a reader opens to ask that. The hand-off half is the claim
-         tests/test_about_copy_batch.py holds by this section (a 302 is not hosting, and stating the
-         no-hosting half alone reads as a dead end). -->
-    <p>AusMT is a national MT research infrastructure. It indexes processed transfer functions and
-    their provenance. It doesn't host raw time series; where an archive has verified an openly
-    accessible file, it routes you straight to the archive that does.</p>
+    <!-- The no-hosting claim and the hand-off are ONE statement in this section: the no-hosting
+         half alone reads as a dead end (a 302 is not hosting, and this page never claims it is),
+         and stating the pair twice gives a reader two wordings of one fact to reconcile.
+         tests/test_about_copy_batch.py holds both halves, and holds them to being said once. -->
+    <p>AusMT is a national MT research infrastructure: a discovery and provenance layer over work
+    that other people own, indexing processed transfer functions and their provenance. It doesn't
+    host raw time series; where an archive has verified an openly accessible file, it routes you
+    straight to the archive that does, such as the
+    <a class="link" href="https://doi.org/10.25914/mtjg-jp22">NCI-AuScope MT collection</a>.</p>
     <p>A magnetotelluric transfer function is a processed estimate of the Earth's electromagnetic
     response at a site, derived from measured electric and magnetic field variations. It's the result most
     MT work reuses, and it's what AusMT indexes. For each one the catalogue records which file it came
     from, who produced it, which licence applies and how to cite it.</p>
-    <p>AusMT is a discovery and provenance layer over work that other people own. It doesn't hold raw time
-    series; where they exist, it links to the archive that holds them, such as the
-    <a class="link" href="https://doi.org/10.25914/mtjg-jp22">NCI-AuScope MT collection</a>.</p>
     <div class="card in">
       <h3>In the catalogue</h3>
       <ul>
@@ -339,13 +338,8 @@
       record and travels with the bytes as a <code>LICENSE.txt</code> inside each download.</li>
       <li><b>Catalogue metadata</b> is <code>CC0-1.0</code>, so you can harvest and republish the catalogue
       itself freely.</li>
-      <li><b>Portal and engine software</b> is Apache-2.0.</li>
+      <li><b>Portal and engine software</b> is licensed under Apache-2.0.</li>
     </ul>
-    <!-- The colophon's licence paragraph, in the section that owns the subject. Its trailing "(see
-         Licence and access)" is dropped: the sentence now sits inside Licence and access, so the
-         parenthetical would link this section to itself. -->
-    <p>The portal software is licensed under Apache-2.0. Survey data stays licensed by its
-    custodians.</p>
     <p>Every survey carries one of three access levels:</p>
     <ul>
       <li><code>open</code>: the record and the data files are both served.</li>
