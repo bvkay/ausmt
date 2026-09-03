@@ -6,8 +6,7 @@ served at the path-URL contract's own shapes (/surveys/<slug>, /stations/<ausmt_
 Every page is rendered ONLY from the already-served public documents (surveys.json entries,
 survey-metadata.json, station.json, the collections rollup, the manifest's bundle rows and the
 time-series register), so a page can never disclose anything the gated products do not already
-publish; the C42 posture is inherited, and the coord-access whole-tree sweep audits pages/ like
-every other emitter. All free text is HTML-escaped (curator-authored YAML is still a public
+publish, and the coord-access whole-tree sweep audits pages/ like every other emitter. All free text is HTML-escaped (curator-authored YAML is still a public
 serving surface), and the JSON-LD block escapes "</" so document text can never close the
 script element.
 
@@ -18,8 +17,8 @@ per-level download panels with manifest sizes and checksums, grouped contributor
 and the five-column station table (station, lat, lon, T max, time series) whose rows link to the
 station pages that carry the deployment and instrument metadata. Time-series panels and cells
 render ONLY the levels the served register carries. NO em/en dashes and NO tick glyphs anywhere:
-numeric ranges take a spaced hyphen, absent cells are plain hyphens, availability is stated as data
-(sizes), per the owner's rulings.
+numeric ranges take a spaced hyphen, absent cells are plain hyphens, and availability is stated as
+data (sizes).
 
 Per-survey AND per-collection link-preview cards (og:image) are rendered when Pillow is importable;
 without it every entity page falls back to the portal's root card. Both paths emit the og/twitter
@@ -178,9 +177,9 @@ def _fmt_period(v) -> str:
     return out.rstrip("0").rstrip(".") if "." in out else out
 
 
-# The range separator, one place. The owner's revised ruling: numeric ranges in UI chrome read as a
-# SPACED HYPHEN-MINUS rather than as the word "to", and the glyph ban is untouched (no en dash, no
-# em dash, no tick glyphs anywhere in engine chrome). Curator prose is not chrome and is not touched.
+# The range separator, one place: a numeric range in UI chrome reads as a SPACED HYPHEN-MINUS, and
+# no en dash, em dash or tick glyph may appear anywhere in engine chrome. Curator prose is not chrome
+# and is not touched.
 def _range(lo, hi) -> str:
     return f"{lo} - {hi}"
 
@@ -468,11 +467,9 @@ _CSS = """
   .typebadge{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
   .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
   .prose{max-width:70ch}
-  /* The collection page reads at the width of its own hero map, not at the 70ch reading measure
-     the survey pages keep: its prose runs beside a map and a metric rail, and a column narrower
-     than the graphic above it reads as a mistake. One token carries the map width so the two
-     cannot drift, and below the hero's own collapse breakpoint the rail is gone and the prose
-     takes the full column. .prose is NOT widened: it is shared with the survey pages. */
+  /* The collection page reads at the width of its own hero map, not the 70ch measure the survey pages
+     keep: a narrower column under a wider graphic reads as a mistake. One token carries the map
+     width so the two cannot drift; .prose is shared with the survey pages and is NOT widened. */
   main{--collw:820px;--railw:230px;--railgap:1.2rem}
   .collprose{max-width:min(var(--collw), 100% - var(--railgap) - var(--railw))}
   @media(max-width:860px){.collprose{max-width:var(--collw)}}
@@ -563,46 +560,14 @@ _CSS = """
   .counts b{color:#E8EDF1}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
   /* The centre is the region that gives: the machine-readable link and the lockup are each a fixed
-     object that reads badly broken or badly scaled, the acknowledgement is prose that does not. The
-     right grows so a wrapped row keeps the lockup against the right edge.
-
-     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and the footer spans the page
-     rather than the reading column: it is the page's bottom edge, the same band the Map carries,
-     and a footer set inside the 840px measure could not fit the bold acknowledgement on one line
-     at any viewport.
-
-     THIS IS ONE RULE SET WITH portal/index.html, character for character with the four colour
-     tokens resolved to the literals this tier writes. Nothing here may be tuned for this tier
-     alone; the numbers are the widest surface's, and portal/tests/test_footer_regions.py holds
-     all seven surfaces identical. The side zones take an equal ZERO basis, which is what puts the
-     acknowledgement on the page's axis rather than in the space left over beside them, and
-     min-width:0 lets a side zone go under its own content instead of forcing a wrap. The
-     separation above the footer is main's bottom padding, not a margin here: the Map's footer is
-     the last child of a column whose body does not scroll.
-
-     The regions align on their CENTRES, not on a baseline: the lockup is a block beside a line of
-     text, and a baseline would hang it off that text's baseline and add its whole height above the
-     row. The overrides follow the rules they override; the two tie on specificity and source order
-     wins.
-
-     The lockup's width follows its height, so the committed file's own 1919px raster never reaches
-     the page. max-width caps it at the zone in the stacked state, where the row is the footer's
-     whole width; object-fit keeps its proportions in the state where that cap bites.
-
-     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
-     a sticky box keeps its own place in flow, so the last line of a long page is never left
-     underneath it and no page owes the footer a padding-bottom that would have to track the wrap
-     state. A sticky box is never pushed DOWN from that place, so the column above supplies the
-     free space instead. The ground is opaque because content passes beneath it, and the stacking
-     order is stated because a station table's frozen first column declares z-index:2.
-
-     Below 560px of VIEWPORT the footer returns to ordinary flow: that is where the three regions
-     stop sharing rows on the widest-footered surface, and a three-row footer would sit over most
-     of a phone screen. It is a viewport query because a container query cannot ask about the
-     container it is declared on.
-
-     The centre's weight is one declaration on the zone: the whole acknowledgement is bold, the
-     anchor with it, and 700 is the sans family's bold. */
+     object that reads badly broken or badly scaled, and the acknowledgement is prose that does not.
+     THIS IS ONE RULE SET WITH portal/index.html, character for character with the four colour tokens
+     resolved to the literals this tier writes, so nothing may be tuned for this tier alone;
+     portal/tests/test_footer_regions.py holds all seven surfaces identical. The equal zero-basis side
+     zones, the queries on the FOOTER's own width, the centre-aligned regions and the lockup's
+     max-width cap are each load-bearing. The footer is STICKY rather than fixed, so it keeps its own
+     place in flow and no page owes it a padding-bottom; its stacking order is stated because a
+     station table's frozen first column declares z-index:2, and below 560px it returns to flow. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid #2B3557;font-size:12.5px;color:#8FA3B0;line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
   footer a{color:#EF7256;text-decoration:none}
   .fleft{flex:1 1 0;min-width:0}
@@ -672,9 +637,9 @@ def _site_header(active="", status="") -> str:
 
     Left is the AusMT identity and links the root. The centre carries the three filled application
     tabs with the CURRENT page's tab in the active state, and beside them the two smaller outlined
-    supporting controls: the three tabs are the application, About and Contribute are functions
-    around it, and the owner kept that distinction and their wording. The right zone is the status
-    slot, which is CONTEXTUAL (see the callers) while the shell around it is identical.
+    supporting controls: the three tabs are the application and About and Contribute are functions
+    around it, which is why the two groups look different. The right zone is the status slot, which is
+    CONTEXTUAL (see the callers) while the shell around it is identical.
 
     THE FETCHED ASSET, WHICH IS ONE AND NAMED. The identity zone opens with the AusMT mark, the same
     file and the same markup the SPA header carries, so a reader arriving on a survey page from a
@@ -728,13 +693,10 @@ _MTCAT_HREF = "/data/mtcat.json"
 def _site_footer(build=None) -> str:
     """The site's ONE footer, three regions, identical on every page in this tier and on the SPA.
 
-    It was contextual: the left link handed over the machine-readable document for the page you
-    were standing on, and every page kind therefore wore a different footer. The owner's ruling is
-    one footer everywhere, so the left link is the catalogue itself. Nothing is lost by that: a
-    survey and a station page each carry their own record under "Identifiers and provenance" in the
-    body, which is where a per-page document belongs, and the collection and hub footers already
-    pointed at MTCAT. The arrow is the leaves-this-page one; the link hands over a JSON document,
-    not another page of the site.
+    The left link is the catalogue itself, not the machine-readable document for the page a reader
+    is standing on: a per-page document belongs in the body, and a survey and a station page each
+    carry their own record under "Identifiers and provenance". The arrow is the leaves-this-page one,
+    because the link hands over a JSON document rather than another page of the site.
 
     The centre states who enables AusMT and then carries the attribution and the licence note. The
     URL text is the only link in the line: it is the reader-legible form of the address, so it says
@@ -755,9 +717,8 @@ def _site_footer(build=None) -> str:
     party's logs. The MTCAT link takes no target, so a new tab means one thing here: the link leaves
     AusMT. The pair is spelt exactly as the portal's six documents spell it.
 
-    Releases and About this build left this region with the ruling. Neither is lost: /about.html
-    carries the running build's identity, the software licence and the route to the citable
-    releases in its own body, which is the page the retired control pointed at anyway.
+    Neither Releases nor About this build belongs in this region: /about.html carries the running
+    build's identity, the software licence and the route to the citable releases in its own body.
 
     The year is a literal, the one the SPA's own footer carries. It is deliberately not a build-time
     value: a copyright year that moves when a page is rebuilt makes every page in the tree differ
@@ -819,11 +780,10 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f"<title>{_e(title)}</title>\n"
         f'<meta name="description" content="{_e(description)}">\n'
         f'<link rel="canonical" href="{_e(canonical)}">\n'
-        # ICON LINKS (brand-assets lane E4). This tier shipped none, so every one of the entity pages
-        # asked the server for /favicon.ico on every visit and got a 404. Both are same-origin portal
-        # paths served beside these pages, and both are absolute because a page served at
-        # /surveys/<slug> cannot resolve a relative vendor path. The favicon is transparent, so the one
-        # file serves a light and a dark browser chrome.
+        # ICON LINKS. Without them every entity page asks the server for /favicon.ico and gets a 404.
+        # Both are same-origin portal paths served beside these pages, and both must be ABSOLUTE,
+        # because a page served at /surveys/<slug> cannot resolve a relative vendor path. The favicon
+        # is transparent, so the one file serves a light and a dark browser chrome.
         '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
         '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">\n'
         f"{og}"
@@ -927,7 +887,7 @@ def _related_by_identifies(smeta):
 #
 # ONE WORDING, not one per surface. about.html carries the same sentence as the block a reader is
 # asked to copy, and portal/tests/test_about_copy_batch.py holds the two equal by reading this
-# constant, so a change here that the page does not follow fails the portal lane rather than
+# constant, so a change here that the page does not follow fails the portal workflow rather than
 # shipping two versions of one statement.
 _ACKNOWLEDGEMENT = (
     "Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric "
@@ -1345,8 +1305,8 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         facts.append(f"<dt>Licence</dt><dd>{_e(_fmt_licence(lic))}</dd>")
     if len(rates) > 1:
         facts.append(f"<dt>Sample rates</dt><dd>{', '.join(f'{r:,.0f}' for r in sorted(rates))} Hz</dd>")
-    # The dipole summary and the survey-level instrument PID are gone by ruling: dipoles live in
-    # the station table, and the platform-PID registry is retired (per-station PIDs remain).
+    # No dipole summary and no survey-level instrument PID here: dipoles live in the station table,
+    # and only per-station platform PIDs exist.
     if smeta.get("instrument_model"):
         instruments = "<br>".join(_e(part.strip())
                                   for part in str(smeta["instrument_model"]).split(";") if part.strip())
@@ -1929,9 +1889,8 @@ _COLLECTIONS_LEDE = ("Collections group related surveys for discovery and explor
                      "may be a field programme, a data release, an institutional holding, or a "
                      "compilation of related surveys.")
 
-# The surveys hub's own lede, the owner's wording verbatim. It sits between the summary line (the
-# headline numbers) and the list, and it answers the question a hub page has to answer before its
-# cards can: what IS this list, and what is it for.
+# The surveys hub's own lede. It sits between the summary line and the list, and answers the question
+# a hub page has to answer before its cards can: what IS this list, and what is it for.
 _SURVEYS_LEDE = ("Discover magnetotelluric surveys from across Australia. Browse survey coverage, "
                  "acquisition periods and available data.")
 
