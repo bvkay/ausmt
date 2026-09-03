@@ -21,10 +21,11 @@ Each assertion states its failure criterion:
     load time) in index's right zone, reusing index's .counts styling so the two headers render
     identically (see test_header_parity_about_matches_index). The app-state ids remain banned, which is
     the half of the old assertion that was actually about honesty; the class ban was about styling.
-  * one version chip — FAILS if the number of real elements carrying data-ver-chip is not exactly 1
-    (must survive the reverse case too: zero chips, or a duplicated chip, both fail). It sits in
-    about.html's own #build section since the one-footer ruling emptied the footer's right region;
-    the pins below hold it there and hold the other pages to carrying none.
+  * NO version chip, anywhere. FAILS if any element carrying data-ver-chip survives on any of the
+    four documents. The chip was the last of the About-this-build popover's copy: the popover left
+    every footer with the one-footer ruling, the chip followed it into about.html's #build section,
+    and the owner has now deleted that section too. Zero on every surface, held from both ends: the
+    attribute is gone and so is the version.js load that filled it.
 """
 import re
 from html.parser import HTMLParser
@@ -148,10 +149,15 @@ def test_about_has_no_live_counts_elements():
         "not index's live map state, and the two must stay distinguishable at a glance")
 
 
-def test_about_carries_exactly_one_ver_chip():
-    els = _parse(ABOUT)
-    chips = [a for (tag, a, inh) in els if "data-ver-chip" in a]
-    assert len(chips) == 1, f"about.html must carry exactly one data-ver-chip element; found {len(chips)}"
+def test_no_portal_document_carries_a_ver_chip():
+    """FAILS if a version chip survives on any of the four documents. about.html held the last one;
+    with its #build section deleted there is no chip on the site, which is what makes the version.js
+    load below dead code rather than a spare."""
+    for path in (ABOUT, INDEX, ADD, RELEASES):
+        chips = [a for (tag, a, _inh) in _parse(path) if "data-ver-chip" in a]
+        assert not chips, (
+            f"{path.name}: no surface carries a version chip; the section that held the last one is "
+            f"deleted, found {len(chips)}")
 
 
 def test_about_references_no_nonexistent_federation_doc():
@@ -187,7 +193,7 @@ def test_about_references_no_nonexistent_federation_doc():
         "the honest MTCAT specification reference must survive the FEDERATION.md removal (over-deletion)")
     assert "MTCAT v1.0" not in raw, (
         "about.html must not hard-code an MTCAT version that the served schema has moved past; the "
-        "document declares its own version and version.js renders it from config")
+        "served document declares its own version, which is the only copy that cannot go stale")
 
 
 def test_mtcat_link_in_footer_not_header_across_pages():
@@ -210,8 +216,8 @@ def test_mtcat_link_in_footer_not_header_across_pages():
     a document that had already been 1.1 and is now 1.2. Pinning it "verbatim" made this test the thing
     KEEPING the wrong number on the page. The title is now version-free on all three, and the pin also
     asserts NO version number appears in it, so nobody re-introduces a hard-coded one. The version a
-    reader needs is already on screen: version.js renders the data-ver-chip from config.js, whose
-    schema_version is generated from the single-source MTCAT_VERSION constant in contract/generate.py."""
+    reader needs is in the document itself: mtcat.json declares its own schema_version, generated
+    from the single-source MTCAT_VERSION constant in contract/generate.py."""
     for path in (INDEX, ABOUT, ADD):
         header_hits = [a for (tag, a, inh) in _parse(path)
                        if tag == "a" and inh and "apilink" in _classes(a)]
@@ -230,7 +236,7 @@ def test_mtcat_link_in_footer_not_header_across_pages():
             f"{path.name}: the footer MTCAT link title must be kept verbatim, got {title!r}")
         assert not re.search(r"\bv?\d+\.\d+\b", title), (
             f"{path.name}: the footer MTCAT link title must not hard-code a schema version (it goes stale "
-            f"on every bump; the data-ver-chip already renders the live one), got {title!r}")
+            f"on every bump, and the served document declares its own), got {title!r}")
         assert "Machine-readable record (MTCAT JSON) ↗" in path.read_text(encoding="utf-8"), (
             f"{path.name}: the verbatim MTCAT link text must be preserved")
 
@@ -413,33 +419,47 @@ def test_no_page_keeps_an_about_this_build_control_in_the_footer():
             f"{len(details)}")
 
 
-def test_the_running_build_identity_lives_in_about_s_body_and_nowhere_else():
-    """The ruling's own justification for taking About this build out of the footer: about.html still
-    carries the running build's identity and the route to the citable releases, so nothing is lost.
-    That is only true if about.html actually carries them, and only ONE page should: a chip on four
-    pages is four things to keep in step.
+def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_it():
+    """The colophon's deletion, held from every end it could come back through. The owner's ruling is
+    that about.html states what AusMT IS, what it licenses and where the documentation lives; the
+    running build's identity is not one of those, and a chip that has to be kept in step with a
+    config file is a maintenance cost for a fact no reader asked for.
 
-    FAILS if about.html's single [data-ver-chip] is inside <footer> rather than the page body, if the
-    #build section that carries it stops offering the route to releases.html, or if any of the other
-    three pages grows a chip of its own."""
-    els = _footer_els(ABOUT)
-    assert not [a for (tag, a) in els if "data-ver-chip" in a], (
-        "about.html's version chip belongs in the page body, not in the footer the ruling emptied")
+    FAILS if the #build section, its heading, its contents entry or its chip returns, and FAILS in
+    the other direction if the deletion took the releases page down with it: releases.html has no
+    other route in since the footer gave the link up, so a sentence in section 8 must still point
+    at it. The chip pin above covers all four documents; this one covers the section that held it."""
     text = ABOUT.read_text(encoding="utf-8")
-    section = text.split('<section id="build">', 1)
-    assert len(section) == 2, "about.html must carry a #build section for the running build identity"
-    section = section[1].split("</section>", 1)[0]
-    assert "data-ver-chip" in section, (
-        "about.html's #build section must carry the version chip: it is the page the footer's "
-        "retired About-this-build control used to point at")
-    assert 'href="releases.html"' in section, (
-        "about.html's #build section must offer the route to the citable releases, which left the "
-        "footer with the rest of the right region")
+    assert '<section id="build">' not in text, (
+        "the #build colophon is deleted; about.html carries no running-build section")
+    assert "This build" not in text, (
+        "the colophon's heading and its contents entry go with the section")
+    assert 'href="#build"' not in text, (
+        "the contents box must not promise a section the page no longer has")
+    assert "data-ver-chip" not in text, "the version chip went with the section that held it"
+    assert "You are reading the build" not in text, (
+        "the build-identity sentence went with the section that held it")
 
-    for path in (INDEX, ADD, RELEASES):
-        chips = [a for (tag, a, _inh) in _parse(path) if "data-ver-chip" in a]
-        assert not chips, (
-            f"{path.name}: the version chip lives on about.html alone; found {len(chips)} here")
+    docs = text.split('<section id="docs">', 1)
+    assert len(docs) == 2, "about.html must carry the Documentation section"
+    docs = docs[1].split("</section>", 1)[0]
+    assert 'href="releases.html"' in docs, (
+        "section 8 must keep the route to the citable releases: the footer gave the link up and the "
+        "colophon that inherited it is deleted, so this is the page's one way in")
+
+
+def test_about_no_longer_loads_the_script_that_filled_the_chip():
+    """The other end of the deletion. version.js exists to fill [data-ver-chip]; with no chip on the
+    page its load is a request that changes nothing a reader can see. FAILS if the tag comes back,
+    and FAILS in the other direction if config.js went with it: corpus-stats.js reads
+    AUSMT_CONFIG.data_base_url from it to find the catalogue this header's totals come from."""
+    text = ABOUT.read_text(encoding="utf-8")
+    assert '<script src="version.js">' not in text, (
+        "about.html carries no version chip, so the script that fills one is a dead load")
+    assert '<script src="config.js">' in text, (
+        "config.js stays: corpus-stats.js reads AUSMT_CONFIG.data_base_url from it")
+    assert '<script src="corpus-stats.js">' in text, (
+        "the header's corpus totals are filled by corpus-stats.js and must keep their script")
 
 
 def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is():

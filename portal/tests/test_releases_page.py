@@ -31,9 +31,10 @@ Each assertion states its failure criterion:
   * NO DEAD LINK - FAILS if the pending-DOI marker is ever emitted as an anchor.
   * SAFE RENDERING - FAILS if releases.js reaches the DOM through innerHTML: every value it renders
     (tags, notes, commits, file paths) comes from a served JSON document.
-  * THE ENTRY POINT - FAILS if about.html's #build section stops linking this page, or if a Releases
-    link comes back to index.html's footer. The ruling took the link out of every footer, so #build
-    is the page's one route in.
+  * THE ENTRY POINT - FAILS if about.html's Documentation section stops linking this page, or if a
+    Releases link comes back to index.html's footer. The ruling took the link out of every footer
+    and the #build colophon that first inherited it is deleted, so section 8 is the page's one
+    route in.
 """
 import re
 import shutil
@@ -203,8 +204,8 @@ def test_footer_chrome_matches_the_other_pages():
 
     chips = [a for (t, a, _ab) in els if "data-ver-chip" in a]
     assert not chips, (
-        "the version chip left the footer with the popover; about.html carries the running build's "
-        "identity now")
+        "the version chip left the footer with the popover, and the about.html section that "
+        "inherited it is deleted; no surface on this site carries one")
 
     apilinks = [a for (t, a, _ab) in els if "apilink" in _classes(a)]
     assert len(apilinks) == 1 and apilinks[0].get("href") == "data/mtcat.json", (
@@ -348,18 +349,21 @@ def test_releases_js_does_not_parse_the_catalogue():
 
 def test_about_carries_the_entry_point_the_footer_gave_up():
     """The Releases link was in every footer until the one-footer ruling; the page still needs ONE
-    entry point or it is unreachable from the site. It is about.html's #build section, the section
-    that also carries the running build's identity, which is the answer to the neighbouring question
-    (which build am I looking at now, and which frozen snapshots can I cite).
+    entry point or it is unreachable from the site. It was about.html's #build colophon, which also
+    carried the running build's identity; the owner has deleted that section and ruled the identity
+    off the page, so the route alone survives in section 8, Documentation, beside the other places
+    a reader is sent for more.
 
-    FAILS if about.html's #build section stops linking releases.html, or if a Releases link comes
-    back to index.html's footer."""
+    FAILS if about.html's Documentation section stops linking releases.html, if the deleted colophon
+    comes back to hold the link instead, or if a Releases link comes back to index.html's footer."""
     about = ABOUT.read_text(encoding="utf-8")
-    section = about.split('<section id="build">', 1)
-    assert len(section) == 2, "about.html must carry the #build section that holds this entry point"
+    assert '<section id="build">' not in about, (
+        "the #build colophon is deleted; the entry point lives in section 8 now")
+    section = about.split('<section id="docs">', 1)
+    assert len(section) == 2, "about.html must carry the Documentation section that holds this entry point"
     assert 'href="releases.html"' in section[1].split("</section>", 1)[0], (
-        "about.html's #build section must link releases.html, the page's only entry point since the "
-        "footer gave the link up")
+        "about.html's Documentation section must link releases.html, the page's only entry point "
+        "since the footer gave the link up and the colophon that inherited it was deleted")
     els = _footer(INDEX)
     links = [a for (t, a, _ab) in els if t == "a" and a.get("href") == "releases.html"]
     assert not links, (

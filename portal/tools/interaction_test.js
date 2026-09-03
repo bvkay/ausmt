@@ -821,15 +821,18 @@ async function bootFreshWindow(dataMap, url, preBoot) {
      _gjOk.features[0].properties.remote_ref === true,
     "a healthy sci.json must write the three screening properties exactly as before");
 
-  // VER CHIP OFF THE SPA. The one-footer ruling took Releases and About this build out of the footer
-  // on every surface, and the version chip rode inside the About-this-build popover, so the SPA now
-  // carries no chip at all: about.html's #build section is the one place on the site that states the
-  // running build's identity, which is the page the retired control pointed at. version.js is a
-  // standalone page script (not in MODULES), so run it here against the real DOM exactly as
-  // index.html's <script src="version.js"> would, then assert:
+  // VER CHIP OFF EVERY SURFACE. The one-footer ruling took Releases and About this build out of the
+  // footer, and the version chip rode inside the About-this-build popover; it landed in about.html's
+  // #build section, and the owner has now deleted that section too. NO page on this site carries a
+  // chip. version.js is a standalone page script (not in MODULES), so run it here against the real
+  // DOM exactly as index.html's <script src="version.js"> would, then assert:
   //   (a) this document carries NO [data-ver-chip], in the header, the footer or anywhere else;
-  //   (b) version.js still POPULATES a chip wherever a page supplies one, driven in its own jsdom
-  //       because index.html no longer supplies the node the fill would land in.
+  //   (b) version.js still DERIVES a correct label and POPULATES a chip wherever one is supplied,
+  //       driven in its own jsdom because no shipped page supplies the node the fill would land in.
+  //       The file is kept rather than deleted: index.html, add-survey.html, brand.html and
+  //       releases.html still load it, and the label logic and its config-missing sentinel are the
+  //       contract a future chip would be held to. portal/tests/test_about_uniform_chrome.py holds
+  //       the zero-chips-anywhere half across the four documents.
   vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), dom.getInternalVMContext());
   const spaChips = [...doc.querySelectorAll("[data-ver-chip]")];
   ok(spaChips.length === 0,

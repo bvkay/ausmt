@@ -323,24 +323,67 @@ def test_the_documentation_section_is_a_single_pointer():
 # ------------------------------------------- (j) the raw-time-series sentence (THREDDS A7)
 
 
-def test_this_build_states_the_hand_off_beside_the_no_hosting_claim():
+def test_section_one_states_the_hand_off_beside_the_no_hosting_claim():
     """The "About this build" popover said only that AusMT doesn't host raw time series. That was the
     WHOLE story until a verified per-station route existed; it is now half of one, and a reader who
     stops there concludes the portal cannot help them get the files. FAILS in both directions: the
     no-hosting claim must survive verbatim (a 302 is not hosting, and this lane never claims it is),
     and the hand-off half must be there beside it.
 
-    The sentence moved WITH the popover's other copy into about.html's own #build section when the
-    one-footer ruling took About this build out of the footer; it is the same two claims, read from
-    the section that carries them now. It had NO coverage before the hand-off landed, which is
-    exactly how it would have gone stale silently: nothing in portal/tests read it."""
-    flat = _flat(_section("build"))
+    THE SENTENCE HAS MOVED TWICE and the pin has followed it both times, which is the point of
+    holding it by its section. It left the footer's popover for about.html's #build section under the
+    one-footer ruling; the owner has now deleted that section, and the two claims are not build
+    identity, so they land in section 1, which is where a reader asks what AusMT is. Same two claims,
+    read from the section that carries them now."""
+    flat = _flat(_section("what"))
     assert "It doesn't host raw time series" in flat, (
         "the no-hosting claim must survive: AusMT hands off, it does not host, and a redirect is not hosting")
     assert "routes you straight to the archive that does" in flat, (
         "the section must state the hand-off beside the no-hosting claim, or it reads as a dead end")
     assert "hosts raw time series" not in flat.replace("doesn't host raw time series", ""), (
         "nothing here may claim AusMT hosts time series")
+
+
+def test_the_software_licence_sentence_lives_in_the_licence_section():
+    """The colophon's other non-identity paragraph. It is about what is licensed and under what, so
+    it belongs with the rest of that answer rather than in a build note at the foot of the page.
+    FAILS if it is missing from section 4, and FAILS if it turns up anywhere else on the page:
+    a licence stated twice is two things to keep in step.
+
+    THE SELF-REFERENCE IS DROPPED, DELIBERATELY. The sentence carried "(see Licence and access)"
+    while it sat in the colophon. It now sits IN Licence and access, so that parenthetical would be
+    a link from a section to itself; the claim survives, the pointer to where the claim already is
+    does not."""
+    access = _flat(_section("access"))
+    assert "The portal software is licensed under Apache-2.0." in access, (
+        "section 4 must carry the software-licence sentence the colophon gave up")
+    assert "Survey data stays licensed by its custodians." in access, (
+        "the custodian half of the sentence must survive the move with it")
+    assert 'href="#access"' not in _section("access"), (
+        "the relocated sentence must not link the section it now lives in")
+    for sid, _h in NUMBERED:
+        if sid == "access":
+            continue
+        assert "The portal software is licensed under Apache-2.0." not in _flat(_section(sid)), (
+            f"the software-licence sentence belongs to section 4 alone; found a copy in #{sid}")
+
+
+def test_section_eight_keeps_the_only_route_to_the_releases_page():
+    """releases.html has no other way in. The Releases link left every footer with the one-footer
+    ruling and the colophon that inherited it is now deleted, so a page of citable snapshots would
+    be unreachable from the site unless the Documentation section carried the route.
+
+    FAILS if the sentence or its link is missing, and FAILS if it grows a version chip: the route is
+    what section 8 inherited, not the running build's identity, which the owner ruled off the page."""
+    docs = _section("docs")
+    assert 'href="releases.html"' in docs, (
+        "section 8 must link releases.html; it is the page's one entry point")
+    flat = _flat(docs)
+    assert ("Quarterly citable snapshots of the corpus are listed on the releases page; each one is "
+            "a frozen tree with its own identifier") in flat, (
+        "section 8 must say what the releases page holds, in the words the ruling gives")
+    assert "data-ver-chip" not in docs, (
+        "section 8 inherited the route, not the chip")
 
 
 # ============================================================ the second owner batch (2026-09-03)
@@ -353,10 +396,11 @@ def test_this_build_states_the_hand_off_beside_the_no_hosting_claim():
 # reader sees and part of what the contents box promises, so it is pinned WITH the title rather than
 # beside it.
 #
-# "This build" closes the page WITHOUT a number. It is the running build's identity and the route to
-# the citable releases, which is a colophon rather than a ninth answer to "what is this site", and
-# the owner's enumeration of the page's sections ends at Documentation. It keeps its id, its version
-# chip and its place in the contents box; only the number is gone.
+# The page is eight sections and nothing else. "This build" used to close it WITHOUT a number, as a
+# colophon rather than a ninth answer to "what is this site"; the owner has deleted it. Its two
+# paragraphs that were not build identity moved into the numbered sections that own their subjects,
+# and the route to the citable releases moved into section 8, so nothing the colophon carried is
+# lost except the running build's identity, which is what the owner ruled out.
 NUMBERED = [
     ("what", "1 \u00b7 What AusMT is"),
     ("who", "2 \u00b7 Who enables AusMT"),
@@ -367,8 +411,6 @@ NUMBERED = [
     ("api", "7 \u00b7 Fetching data via API"),
     ("docs", "8 \u00b7 Documentation"),
 ]
-COLOPHON = ("build", "This build")
-
 # The lede, carried three times and identically: the page's own subtitle, the meta description and
 # og:description. tests/test_page_metadata.py holds the description to being the lede; this holds
 # what the lede says.
@@ -398,17 +440,18 @@ def _sections():
     return out
 
 
-def test_the_page_is_eight_numbered_sections_then_the_colophon():
+def test_the_page_is_exactly_eight_numbered_sections():
     """The page's shape, id and heading together, in document order. FAILS IF a section is added,
     removed, reordered, renamed or renumbered without the rest of the page following it: the numbers
     are consecutive by construction here, because they are pinned inside the heading strings rather
     than derived from them, so a page that inserts an answer and forgets to renumber the ones after
-    it fails on the first heading that moved."""
+    it fails on the first heading that moved. FAILS too if the deleted colophon returns as a ninth
+    section, numbered or not: the list is the whole page and not a prefix of it."""
     got = _sections()
-    assert got == NUMBERED + [COLOPHON], (
+    assert got == NUMBERED, (
         "about.html's sections have drifted from the ruled order:\n"
         + "".join(f"  want {w!r}\n  got  {g!r}\n"
-                 for w, g in zip(NUMBERED + [COLOPHON], got + [None] * 9)
+                 for w, g in zip(NUMBERED, got + [None] * 9)
                  if w != g))
 
 
