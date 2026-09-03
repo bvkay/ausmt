@@ -353,6 +353,9 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // which is what an interrupt has to leave empty.
   "tourDemoBounds:()=>_tourDemoBounds(),tourRectMembers:(b)=>_tourRectMembers(b)," +
   "tourAnimPending:()=>_tourAnimPending()," +
+  // Whether the current step spotlights a GIVEN element. The two card steps resolve their target from
+  // the corpus (one card among many), so a pin has to compare the element itself, not a selector.
+  "tourTargetIs:(el)=>_tourTarget(TOUR_STEPS[_tourStep])===el," +
   "tourStepText:(i)=>_tourText(TOUR_STEPS[i]),tourStepSel:(i)=>TOUR_STEPS[i].sel," +
   // Settle-until-stable re-layout (owner 2026-07-22): the drawer step opens a target that keeps reflowing
   // after open (slide, then the async station.json frame-line inject, then a possible map re-fit), so the
@@ -1928,6 +1931,46 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.tourStepSel(8) === "#dlLevel2" && A.tourStepSel(9) === "#dlTimeSeries",
     "download split: the two download steps must point at one wrapper each, got " +
     JSON.stringify([A.tourStepSel(8), A.tourStepSel(9)]));
+
+  // H8. THE SURVEYS GROUP (LANE-CONTRACT-TOUR-REVISION.md T1 steps 11-13, T2). Two things the tour could
+  // not previously guarantee. The card step's copy is about a CARD, so the grid must be showing cards: a
+  // visitor who chose the compact list saw a step describing something that was not on screen. And the
+  // step after it opens the survey's own record, because "open it for the full record" was an instruction
+  // the tour never carried out. Both belong to the GROUP: the forced layout is established on entering it
+  // and the visitor's own choice is restored only when the walk leaves it, never on a move inside.
+  const _layoutNow = () => (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout;
+  doc.querySelector('#layoutSeg [data-layout="compact"]').click();
+  ok(_layoutNow() === "compact", "surveys group setup: the visitor's layout must start as the compact list");
+  _stepTo(11);
+  ok(A.tourStep() === 11, "surveys group: could not reach the card step, at " + A.tourStep());
+  ok(A.curView() === "surveys", "surveys group: the card step must show the Surveys view, on " + A.curView());
+  ok(_layoutNow() === "cards",
+    "surveys group: the card step must force the Cards layout; its copy is about a card, on " + _layoutNow());
+  const _demoCard = [...doc.querySelectorAll("#cardGrid .scard")]
+    .find(c => { const b = c.querySelector("[data-survey]"); return b && b.dataset.survey === A.tourDemoSurvey(); });
+  ok(_demoCard, "surveys group: the demo survey must have a card in the grid");
+  ok(A.tourTargetIs(_demoCard),
+    "surveys group: the card step must spotlight the DEMO survey's card, not whichever card happens to be first");
+  _arrow("ArrowRight");
+  ok(A.tourStep() === 12, "surveys group: could not reach the story step, at " + A.tourStep());
+  ok(doc.getElementById("drawer").classList.contains("open"),
+    "surveys group: the story step must actually open the survey's record");
+  ok(JSON.stringify(A.drawerSubject()) === JSON.stringify({ kind: "survey", sv: A.tourDemoSurvey() }),
+    "surveys group: the story step must open the DEMO survey's record, got " + JSON.stringify(A.drawerSubject()));
+  ok(_layoutNow() === "cards", "surveys group: a move inside the group must not restore the visitor's layout");
+  _arrow("ArrowLeft");
+  ok(A.tourStep() === 11 && !doc.getElementById("drawer").classList.contains("open"),
+    "surveys group: stepping BACK off the story step must close the record it opened");
+  ok(_layoutNow() === "cards", "surveys group: stepping back inside the group must not restore the layout either");
+  _arrow("ArrowRight"); _arrow("ArrowRight");
+  ok(A.tourStep() === 13, "surveys group: could not step forward out of the group, at " + A.tourStep());
+  ok(!doc.getElementById("drawer").classList.contains("open"),
+    "surveys group: leaving the story step FORWARD must close the record it opened");
+  ok(_layoutNow() === "compact",
+    "surveys group: leaving the group must restore the visitor's own layout, on " + _layoutNow());
+  _arrow("Escape");
+  ok(_layoutNow() === "compact", "surveys group: closing the tour must leave the visitor's layout alone");
+  doc.querySelector('#layoutSeg [data-layout="cards"]').click();   // hand the world back to the sections below
 
   // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths

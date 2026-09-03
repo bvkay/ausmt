@@ -67,7 +67,10 @@ DECK = [
      "Contribute a survey."),
 ]
 
-STEP_RE = re.compile(r'\{sel:"([^"]*)",\s*text:"((?:[^"\\]|\\.)*)"')
+# A step is {sel, text, ...}. Two steps sit on one card among many and add an `el` resolver between the
+# two, which picks the live element to spotlight and falls back to `sel`; the selector itself stays static
+# and pinned, so the resolver is skipped here rather than allowed to hide a changed selector.
+STEP_RE = re.compile(r'\{sel:"([^"]*)",(?:el:[A-Za-z_$][\w$]*,)?\s*text:"((?:[^"\\]|\\.)*)"')
 
 
 def _deck_source():

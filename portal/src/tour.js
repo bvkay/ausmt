@@ -64,12 +64,12 @@ const TOUR_STEPS=[
   {sel:"#navSurveys",
    text:"Surveys lists every survey. Let's look.",
    enter:_tourEnterMapView},
-  {sel:"#cardGrid .scard",
+  {sel:"#cardGrid .scard",el:_tourSurveyCard,
    text:"Each card is a survey at a glance. Switch to Compact for a denser list.",
-   enter:_tourEnterSurveysView},
+   enter:_tourEnterSurveyCards},
   {sel:"#drawer",
    text:"Open a survey for its full record: abstract, stations, downloads and citation. View survey leads to its shareable page.",
-   enter:_tourEnterSurveysView},
+   enter:_tourEnterSurveyStory,exit:_tourExitSurveyStory},
   {sel:"#collectionsGrid .scard",
    text:"Collections gather related surveys: {collection} here. Open one to explore its members on the map."},
   {sel:"#navMap",
@@ -85,6 +85,10 @@ const TOUR_STEPS=[
 // it would tear the shared state down on every move inside the group and rebuild it on the next arrival.
 const _TOUR_SELECT_GROUP=[6,7,8,9];
 function _tourInSelectGroup(i){return _TOUR_SELECT_GROUP.indexOf(i)>=0;}
+// The SURVEYS group, on the same terms: it owns the forced Cards layout and the survey record the story
+// step opens.
+const _TOUR_SURVEYS_GROUP=[10,11,12];
+function _tourInSurveysGroup(i){return _TOUR_SURVEYS_GROUP.indexOf(i)>=0;}
 
 // Overlay dim. Single source of truth, applied inline by _tourLayout: on a targeted step it colours the
 // spot's box-shadow (the backdrop stays transparent so the cutout shows the element fully); on a
@@ -180,6 +184,57 @@ function _tourEnterFilters(){
 function _tourEnterSurveysView(){
   if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
 }
+// The surveys group's shared state: the forced Cards layout and the survey record the story step opens.
+// The card step's copy is about a CARD, so a visitor who chose the compact list would otherwise be shown a
+// step describing something that is not on screen. Their own choice is captured on entering the group and
+// restored only when the walk leaves it.
+let _tourSv={layout:null,story:false};
+function _tourEnterCards(){
+  if(_tourSv.layout===null)_tourSv.layout=_tourCardLayout();
+  _tourSetCardLayout("cards");
+}
+function _tourCloseStory(){
+  if(!_tourSv.story)return;
+  _tourSv.story=false;
+  if(typeof closeDrawer==="function")closeDrawer();
+}
+function _tourLeaveSurveysGroup(){
+  _tourCloseStory();
+  if(_tourSv.layout!==null){_tourSetCardLayout(_tourSv.layout);_tourSv.layout=null;}
+}
+// The demo survey's own card in the grid, so the step spotlights the survey the tour has been narrating
+// rather than whichever card happens to be first. Null falls back to the step's static selector.
+function _tourSurveyCard(){
+  const sv=_tourDemoSurvey();
+  if(!sv)return null;
+  const cards=[...document.querySelectorAll("#cardGrid .scard")];
+  return cards.find(c=>{const b=c.querySelector("[data-survey]");return b&&b.dataset.survey===sv;})||null;
+}
+function _tourEnterSurveyCards(){
+  _tourEnterSurveysView();
+  _tourEnterCards();
+  _tourCloseStory();                    // arriving BACK from the story step leaves the grid on show
+  const card=_tourSurveyCard();
+  if(card&&typeof card.scrollIntoView==="function"){try{card.scrollIntoView({block:"center"});}catch(e){}}
+}
+// The story step opens the survey's own record, because "open it for the full record" was an instruction
+// the tour never carried out. Idempotent on the same subject, and closed on leaving in either direction.
+function _tourEnterSurveyStory(){
+  _tourEnterSurveysView();
+  _tourEnterCards();
+  const sv=_tourDemoSurvey();
+  if(!sv||typeof openSurvey!=="function")return;
+  const dr=document.getElementById("drawer");
+  const onSubject=!!(dr&&dr.classList.contains("open")&&typeof _drawerSubject!=="undefined"&&_drawerSubject&&
+                     _drawerSubject.kind==="survey"&&_drawerSubject.sv===sv);
+  if(!onSubject){
+    const prevHash=location.hash;
+    openSurvey(sv);
+    if(_tourOpened.hash===null&&prevHash!==location.hash)_tourOpened.hash=prevHash;
+  }
+  _tourSv.story=true;
+}
+function _tourExitSurveyStory(){_tourCloseStory();}
 // The select group's shared state: the rail mode, the demo rectangle and the demo selection. The visitor's
 // own mode is captured ONCE on entering the group and restored when the walk leaves it, so a move inside
 // the group never touches it. `created` records whether the tour made a selection of its own, so the
@@ -876,6 +931,7 @@ function _tourExitCurrent(){
 // `to` is -1 for stopTour, which leaves every group.
 function _tourCrossGroups(from,to){
   if(_tourInSelectGroup(from)&&!_tourInSelectGroup(to))_tourLeaveSelectGroup();
+  if(_tourInSurveysGroup(from)&&!_tourInSurveysGroup(to))_tourLeaveSurveysGroup();
 }
 function _tourGo(to){
   const from=_tourStep;
@@ -897,7 +953,7 @@ function startTour(){
   if(!TOUR_STEPS.length)return;
   _tourOpened={drawer:false,hash:null};
   _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;
-  _tourSel={mode:null,created:false,bounds:null,dimmed:false};
+  _tourSel={mode:null,created:false,bounds:null,dimmed:false};_tourSv={layout:null,story:false};
   _tourDemoSv=undefined;_tourDemoIdx=undefined;   // resolve the demo subjects afresh against the loaded corpus
   _tourTakeSnapshot();                 // the workspace the visitor is handed back on close, from any step
   // A COLLAPSED rail hides every child but the collapse button, so the rail steps would spotlight nothing
