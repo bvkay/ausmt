@@ -2125,9 +2125,10 @@ def _parse_one_edi(p):
     # read this file from a NORMALISED TEMPORARY COPY (its >INFO JSON trailing-delimiter defect; see
     # _mtm). Parse-only: that copy is destroyed inside the read, so `p` -- the custodian's file --
     # remains the ONLY path this build ever copies to the served tree or hands to sha256().
-    # `_parse_facts` carries the EPI-KIT conditioning the reader applies to a temporary copy BEFORE
-    # reading (see _mtm._pre_read_conditioning): which data section the transfer function came from
-    # when the file carried more than one. An absent key means absent conditioning.
+    # `_parse_facts` carries the two EPI-KIT conditionings the reader applies to a temporary copy
+    # BEFORE reading (see _mtm._pre_read_conditioning): which data section the transfer function came
+    # from when the file carried more than one, and the DATAID normalisation when mt_metadata's name
+    # validator refused the custodian's. Absent keys mean absent conditioning.
     tfobj, _parse_fallback, _parse_facts = mtm.read_with_parse_facts(p)
     _raw = ep.read_norm(p)   # raw EDI text: frame evidence + coord-QC + processing-metadata scrape
     _did = cat.grab(_raw, "DATAID")
@@ -2176,6 +2177,12 @@ def _parse_one_edi(p):
         # and carry it as site_name ONLY when the overwrite actually changes it (a sanitised id such as
         # SA28_2B -> SA282B); identical -> absent, so the catalogue keeps its zero-change convention.
         _orig_site_name = r.get("id")
+        # ... unless the reader refused the custodian's DATAID and read a normalised copy instead. The
+        # tf station name is then a PARSE ARTEFACT, not a source fact, and carrying it as site_name
+        # would publish the reader's rewrite as the custodian's own name. The source fact is the raw
+        # DATAID, which is what `_station` below becomes, so the convention holds with the original.
+        if _parse_facts.get("dataid_normalised"):
+            _orig_site_name = _parse_facts["dataid_normalised"]["original"]
         if _station:
             r["id"] = _station
         if _orig_site_name and _orig_site_name != r["id"]:

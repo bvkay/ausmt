@@ -26,13 +26,19 @@ MIRRORS ARE GUARDED, NOT TRUSTED. `MIRRORED_MT_METADATA` names the version this 
 the mirror still reproduces `Info.info_dict` key for key and value for value. If mt_metadata changes
 its scraping, that test goes RED; the pre-flight never silently starts lying.
 
-WHAT THE VERDICT COVERS, AND WHAT IT DOES NOT. `outcome` predicts the two failure surfaces this
-module models, both established by measurement over 1736 real EDIs (see the test module):
+WHAT THE VERDICT COVERS, AND WHAT IT DOES NOT. `outcome` predicts the three failure surfaces this
+module models, each established by measurement over real EDIs (see the test module):
 
   1. an >INFO value that reaches a numerically-typed field edi.py sets WITHOUT a try/except, so a
      value pydantic refuses RAISES (`_FATAL_INFO_FIELDS`);
   2. a >=DEFINEMEAS reference position that mt_metadata's own validator refuses, which
-     `read_measurement` sets unguarded too.
+     `read_measurement` sets unguarded too;
+  3. a >HEAD DATAID outside the reader's station-name charset, which `read_header` validates outside
+     the try/except that guards the assignment, so the read stops before anything else is attempted.
+
+Surfaces 1 and 3 are ones AusMT RESCUES (needs_repair); surface 2 is terminal (will_not_read). The
+verdict tracks the engine: when the reader gains a rescue, the verdict for that class moves with it,
+or the pre-flight starts telling a curator to fix a file the build already reads.
 
 It is NOT a claim to predict every way mt_metadata can fail. A file reported as reading may still
 fail on an unmodelled surface, and the build remains the authority. The asymmetry is deliberate and
@@ -58,7 +64,7 @@ MIRRORED_MT_METADATA = "1.0.10"
 
 # The three verdicts, in worsening order.
 READS = "reads"                      # stock mt_metadata reads this file today
-NEEDS_REPAIR = "needs_repair"        # stock reader refuses; the AusMT >INFO fallback rescues it
+NEEDS_REPAIR = "needs_repair"        # stock reader refuses; an AusMT temporary-copy fallback rescues it
 WILL_NOT_READ = "will_not_read"      # no code path in AusMT reads this file; it must be fixed upstream
 
 # Numerically-typed destinations that `io/edi/edi.py::station_metadata` assigns through a BARE
@@ -705,26 +711,35 @@ def preflight_bytes(raw: bytes, *, label: str = "") -> dict:
     }
 
     # 1. A station id mt_metadata's own validator refuses. `read_header` calls the validator OUTSIDE
-    #    the try/except that guards the assignment, so this stops the read before anything else runs
-    #    and is reported first, ahead of anything further down the file.
+    #    the try/except that guards the assignment, so a stock read stops here before anything else
+    #    is attempted. AusMT RESCUES this class: the DATAID is normalised to the reader's charset on
+    #    a temporary copy and the custodian's own value is kept as the station's site_name. Measured
+    #    on the GSSA/BHP Roxby Downs 2018 release: nine of 764 files, all now published.
+    #
+    #    Because it is a rescue, it no longer SHORT-CIRCUITS the terminal surfaces below. It used to
+    #    return here, which was right while it was terminal and would now report needs_repair for a
+    #    file that also carries something nothing can read. Its row rides `blocking_fields` whatever
+    #    the final verdict is, so a curator still sees it.
+    dataid_row = None
     if dataid is not None and not _station_name_is_readable(dataid):
-        finding["outcome"] = WILL_NOT_READ
-        finding["blocking_fields"] = [{"field": ">HEAD DATAID", "field_plain": "station id",
-                                       "value": dataid}]
-        finding["reason"] = (f"the station id is written as \"{dataid}\", and the reader accepts only "
-                             f"letters, digits and underscores (it turns spaces, hyphens, full stops "
-                             f"and plus signs into underscores for you), so no reader can open this file")
-        return finding
+        dataid_row = {"field": ">HEAD DATAID", "field_plain": "station id", "value": dataid}
+    dataid_reason = (
+        f"the station id is written as \"{dataid}\", and the reader accepts only letters, digits and "
+        f"underscores (it turns spaces, hyphens, full stops and plus signs into underscores for you), "
+        f"so a stock mt_metadata reader refuses the file; AusMT reads it by normalising the station id "
+        f"on a temporary copy and never changes the file on disk, and the id you wrote is kept as the "
+        f"station's site_name")
+    _rows = [dataid_row] if dataid_row else []
 
-    # 2. A reference position mt_metadata refuses. Set unguarded in read_measurement, and the >INFO
-    #    fallback cannot touch it, so this is terminal.
+    # 2. A reference position mt_metadata refuses. Set unguarded in read_measurement, and no AusMT
+    #    conditioning touches it, so this is terminal.
     positions = _reference_positions(lines)
     for key, kind in (("reflat", "latitude"), ("reflon", "longitude")):
         value = positions.get(key)
         if value not in _NULL_VALUES and not _position_is_readable(value, kind):
             finding["outcome"] = WILL_NOT_READ
-            finding["blocking_fields"] = [{"field": f">=DEFINEMEAS {key.upper()}",
-                                           "field_plain": f"reference {kind}", "value": value}]
+            finding["blocking_fields"] = _rows + [{"field": f">=DEFINEMEAS {key.upper()}",
+                                                   "field_plain": f"reference {kind}", "value": value}]
             finding["reason"] = (f"the reference {kind} is written as \"{value}\", which is not a "
                                  f"number or a DD:MM:SS position, so no reader can open this file")
             return finding
@@ -734,10 +749,12 @@ def preflight_bytes(raw: bytes, *, label: str = "") -> dict:
     #    not, the value is wrong for some other reason and the file will not read at all.
     fatal = _fatal_info_problems(info)
     if fatal:
-        finding["blocking_fields"] = fatal
+        finding["blocking_fields"] = _rows + fatal
         repaired_info, _, _ = scrape_info(_drop_trailing_delimiters(raw))
         still_fatal = _fatal_info_problems(repaired_info)
         first = fatal[0]
+        _also = (" (the station id is outside the reader's charset too, and is normalised on the same "
+                 "temporary copy)") if dataid_row else ""
         if still_fatal:
             finding["outcome"] = WILL_NOT_READ
             finding["reason"] = (f"{first['field_plain']} is written as \"{first['value']}\", which "
@@ -747,7 +764,12 @@ def preflight_bytes(raw: bytes, *, label: str = "") -> dict:
             finding["reason"] = (f"{first['field_plain']} is scraped as \"{first['value']}\" -- the "
                                  f"stray comma is JSON punctuation the reader keeps -- so a stock "
                                  f"mt_metadata reader refuses the file; AusMT reads it by repairing "
-                                 f"a temporary copy and never changes the file on disk")
+                                 f"a temporary copy and never changes the file on disk" + _also)
+        return finding
+    if dataid_row is not None:
+        finding["outcome"] = NEEDS_REPAIR
+        finding["blocking_fields"] = _rows
+        finding["reason"] = dataid_reason
     return finding
 
 
@@ -888,7 +910,7 @@ def render(report: dict, *, root_label: str = "") -> str:
         out.append("Nothing to report: every file reads, and no metadata value is damaged on the way in.")
         return "\n".join(out)
 
-    for title, outcome in (("WILL NOT READ", WILL_NOT_READ), ("NEEDS THE >INFO REPAIR", NEEDS_REPAIR)):
+    for title, outcome in (("WILL NOT READ", WILL_NOT_READ), ("NEEDS AN AUSMT REPAIR", NEEDS_REPAIR)):
         rows = [f for f in report["findings"] if f["outcome"] == outcome]
         if not rows:
             continue

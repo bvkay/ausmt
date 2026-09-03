@@ -319,6 +319,13 @@ def _is_single_period_defect(exc: BaseException) -> bool:
     return False
 
 
+DATAID_CHARSET_DEFECT = (
+    "the DATAID is outside the reader's station-name charset, so mt_metadata refused the file before "
+    "reading anything; reparsed from a temporary copy whose DATAID is normalised to that charset, "
+    "with the custodian's own DATAID kept as the station's site_name (the source file is untouched "
+    "and is what is served)"
+)
+
 # ---------------------------------------------------------------------------------------------
 # THE EPI-KIT SECTION OF RECORD.
 #
@@ -442,6 +449,57 @@ def keep_single_section(raw: bytes, sectid) -> bytes:
     return b"".join(lines[:sections[0][1]] + lines[chosen[0]:chosen[1]] + tail)
 
 
+def dataid_needs_normalising(dataid) -> bool:
+    """Does the PINNED reader refuse this DATAID? Measured by calling mt_metadata's own
+    utils/validators.validate_station_name -- the function header.py::read_header calls OUTSIDE the
+    try/except that guards the assignment, so a value it refuses stops the read before anything else
+    is attempted. Asking the library rather than mirroring its regex is what keeps this from
+    normalising a name that already reads (the four space-only unsafe DATAIDs in the Roxby Downs
+    release read perfectly well and must not be touched)."""
+    if not HAVE_MTM or dataid in (None, ""):
+        return False
+    try:
+        from mt_metadata.utils.validators import validate_station_name  # noqa: PLC0415
+    except Exception:  # noqa: BLE001  (no validator to consult: nothing is refused on speculation)
+        return False
+    try:
+        validate_station_name(dataid)
+    except Exception:  # noqa: BLE001  (any refusal, by whatever class the library raises)
+        return True
+    return False
+
+
+def normalise_dataid(dataid: str) -> str:
+    """The DATAID rewritten into the reader's station-name charset: every character outside letters,
+    digits and underscore becomes `_`. That is mt_metadata's own rewrite (it maps space, `-`, `.`
+    and `+` the same way) extended to the characters it refuses instead of mapping, so a name it
+    already accepts comes back unchanged and one it refuses comes back in the form it would have
+    produced. The leading/trailing strip mirrors the validator's own first act."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", str(dataid).strip())
+
+
+def rewrite_head_dataid(raw: bytes, dataid: str) -> bytes:
+    """Return `raw` with the >HEAD block's DATAID value replaced by `dataid`, the line's indentation
+    and ending kept, and every other byte exactly as it was. Returns the ORIGINAL object when there
+    is no >HEAD DATAID to rewrite."""
+    lines = raw.splitlines(keepends=True)
+    in_head = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not in_head:
+            if stripped.startswith(b">") and b"head" in stripped.lower():
+                in_head = True
+            continue
+        if stripped.startswith(b">"):
+            break
+        if _DATAID_RE.match(stripped):
+            body = line.rstrip(b"\r\n")
+            indent = body[:len(body) - len(body.lstrip())]
+            lines[i] = indent + b"DATAID=" + dataid.encode("utf-8") + line[len(body):]
+            return b"".join(lines)
+    return raw
+
+
 def _freq_count(raw: bytes, sectid) -> int | None:
     """How many values the named section's `>FREQ` block carries, counted from the bytes. None when
     the section carries no such block."""
@@ -487,12 +545,13 @@ def _assert_section_of_record(p: Path, conditioned: bytes, sectid: str, tf) -> N
 
 
 def _pre_read_conditioning(p: Path, raw: bytes):
-    """(conditioned_bytes, facts, reasons) for the EPI-KIT section of record, read off the FILE.
+    """(conditioned_bytes, facts, reasons) for the two EPI-KIT defects, both read off the FILE.
 
-    It is conditioned BEFORE the read, not after a failure, because it never announces itself as
-    one: a multi-section file parses happily and returns the wrong transfer function. The condition
-    is measured with the reader's own section scan instead, which is as narrow as the signature
-    predicates its siblings use.
+    They are conditioned BEFORE the read, not after a failure, because neither announces itself as
+    one: a multi-section file parses happily and returns the wrong transfer function, and a refused
+    DATAID raises inside the header read where no signature distinguishes it from a malformed
+    header. Both conditions are measured instead -- the reader's own section scan, the reader's own
+    name validator -- so each is as narrow as the signature predicates its siblings use.
 
     Narrow in the same four ways as every other conditioning here: `.edi` only (the caller's guard);
     only when the measured condition holds; only when the conditioning actually CHANGES the bytes;
@@ -508,6 +567,14 @@ def _pre_read_conditioning(p: Path, raw: bytes):
         if kept is not conditioned:
             conditioned = kept
             facts["section_selected"] = {"sectid": sectid, "sections_dropped": total - 1}
+    dataid = _head_dataid(conditioned.splitlines(keepends=True))
+    if dataid and dataid_needs_normalising(dataid):
+        read_as = normalise_dataid(dataid)
+        rewritten = rewrite_head_dataid(conditioned, read_as)
+        if rewritten is not conditioned:
+            conditioned = rewritten
+            facts["dataid_normalised"] = {"original": dataid, "read_as": read_as}
+            reasons.append(DATAID_CHARSET_DEFECT)
     return conditioned, facts, reasons
 
 
@@ -620,12 +687,13 @@ def _read_with_fallback(path: Path):
 
 
 def _read_with_parse_facts(path: Path):
-    """(TF, fallback_reason_or_None, facts). `_read_with_fallback` preceded by the EPI-KIT
-    conditioning that has to happen BEFORE the reader sees the file (see `_pre_read_conditioning`).
+    """(TF, fallback_reason_or_None, facts). `_read_with_fallback` preceded by the two EPI-KIT
+    conditionings that have to happen BEFORE the reader sees the file (see `_pre_read_conditioning`).
 
     `facts` is what the build records per station: `section_selected` when the file carried more than
-    one data section. An absent key means absent conditioning, so every file in a corpus of ordinary
-    EDIs yields `{}` and takes the untouched path below, byte for byte as before.
+    one data section, `dataid_normalised` when the reader's name validator refused the DATAID. Absent
+    keys mean absent conditioning, so every file in a corpus of ordinary EDIs yields `{}` and takes
+    the untouched path below, byte for byte as before.
 
     The reason string stays what it has always meant -- what stopped mt_metadata reading the file at
     all -- so a section selection does NOT set one: the file read perfectly well, it just answered
@@ -643,7 +711,7 @@ def _read_with_parse_facts(path: Path):
     # The conditioned copy lives in a TemporaryDirectory destroyed before this returns, is never
     # returned to a caller and never reaches the served tree or the sha256 integrity gate (both of
     # which take the ORIGINAL path). The three failure-triggered fallbacks still apply to it, so a
-    # file carrying a section stack AND a delimiter defect is still rescued.
+    # file carrying an EPI-KIT defect AND a delimiter defect is still rescued.
     with tempfile.TemporaryDirectory(prefix="ausmt-edi-epikit-") as scratch_dir:
         scratch = Path(scratch_dir) / p.name
         scratch.write_bytes(conditioned)
@@ -677,8 +745,8 @@ def read_with_fallback(path: Path):
 
 def read_with_parse_facts(path: Path):
     """`read_with_fallback`, plus the per-file parse facts the build carries into station.json and
-    build_report: which data section the transfer function came from. `{}` for a file that carried
-    one section, which is every EDI in the corpus."""
+    build_report: which data section the transfer function came from, and whether the DATAID the
+    reader read was a normalised form of the custodian's. `{}` for every file that needed neither."""
     return _read_with_parse_facts(path)
 
 

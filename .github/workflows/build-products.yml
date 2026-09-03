@@ -176,7 +176,10 @@ jobs:
       #                                       every product above carries for such a file, so it
       #                                       gates this workflow's build step as directly as the
       #                                       schema tests do
-      # (the 37 enumerated above, plus tests/test_ci_check_skips.py which gates the
+      #   tests/test_epikit_dataid_charset.py the DATAID normalisation that lets a station the
+      #                                       reader's name validator refuses publish at all, plus
+      #                                       the pre-flight verdict that has to move with it
+      # (the 38 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
@@ -257,6 +260,7 @@ jobs:
             tests/test_coord_resolution_guard.py \
             tests/test_survey_drop_visibility.py \
             tests/test_epikit_section_of_record.py \
+            tests/test_epikit_dataid_charset.py \
             tests/test_ci_check_skips.py \
             | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out
