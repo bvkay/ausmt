@@ -13,7 +13,10 @@
 //     entering a step twice is a no-op the second time. Backward navigation is therefore correct by
 //     construction rather than by a per-step undo.
 //   * Shared state belongs to a GROUP of steps, not to one step: the group's cleanup runs when the walk
-//     crosses the group boundary, never on a move inside it. See _TOUR_SELECT_GROUP below.
+//     crosses the group boundary, never on a move inside it. There are four: the BROWSE steps own the
+//     rail's browse mode, the SELECT steps own the select mode and the demo rectangle and selection, the
+//     SURVEYS steps own the forced Cards layout and the survey record, and the collections step owns the
+//     collections view.
 //   * stopTour() from ANY step restores the visitor's pre-tour snapshot. Nothing the tour did leaks.
 //   * The step counter is computed from the deck. No step count is ever written as a literal.
 
@@ -63,7 +66,7 @@ const TOUR_STEPS=[
    enter:_tourEnterSelectDownload},
   {sel:"#navSurveys",
    text:"Surveys lists every survey. Let's look.",
-   enter:_tourEnterMapView},
+   enter:_tourEnterSurveysNav},
   {sel:"#cardGrid .scard",el:_tourSurveyCard,
    text:"Each card is a survey at a glance. Switch to Compact for a denser list.",
    enter:_tourEnterSurveyCards},
@@ -172,16 +175,48 @@ function _tourTarget(step){
 }
 
 // ---- enter hooks -----------------------------------------------------------------------------------
-// Map-view steps: forward this is a no-op; its real job is BACKWARD navigation from the Surveys and
-// Collections steps, where map-only targets would otherwise be display:none and the step would fall back
-// to a centred card.
-function _tourEnterMapView(){
+// The bare view switch, without the map steps' extra housekeeping below. The drawer steps use this one:
+// they are ABOUT the drawer, so they must not close it on arrival.
+function _tourMapView(){
   if(typeof curView!=="undefined"&&curView!=="map"&&typeof setView==="function")setView("map");
 }
-// The filter-rail overview: the rail's Advanced search accordion is opened so the controls the copy
-// names are on screen. Idempotent (details.open is a set, not a toggle).
+// Close a drawer THIS RUN opened. A visitor's own drawer is left where it is: the pre-tour snapshot puts
+// it back on close, and closing it here would be the tour undoing something it never did.
+function _tourCloseOwnDrawer(){
+  if(!_tourOpened.drawer)return;
+  _tourOpened.drawer=false;
+  if(typeof closeDrawer==="function")closeDrawer();
+}
+// Map-view steps. Forward the view switch is a no-op; its real job is BACKWARD navigation from the
+// Surveys and Collections steps, where map-only targets would otherwise be display:none and the step
+// would fall back to a centred card. The drawer close is the same job in the other axis: stepping back
+// from the drawer steps must leave the map these steps are describing unobstructed, and a step that only
+// looked right because the previous step happened to leave the drawer shut is exactly the failure the
+// walk pins exist to catch.
+function _tourEnterMapView(){
+  _tourMapView();
+  _tourCloseOwnDrawer();
+}
+// The BROWSE group: the rail steps whose targets live in the rail's Browse pane, which is hidden when the
+// visitor left the rail in Select mode. Their own mode is group state on the same terms as the select
+// steps': established on entering any member, restored at the boundary.
+const _TOUR_BROWSE_GROUP=[1,2,3];
+function _tourInBrowseGroup(i){return _TOUR_BROWSE_GROUP.indexOf(i)>=0;}
+let _tourBrowse={mode:null};
+function _tourEnterBrowseMode(){
+  if(typeof setSidebarMode!=="function"||typeof sidebarMode==="undefined")return;
+  if(_tourBrowse.mode===null)_tourBrowse.mode=sidebarMode;
+  if(sidebarMode!=="browse")setSidebarMode("browse");
+}
+function _tourLeaveBrowseGroup(){
+  if(_tourBrowse.mode!==null&&typeof setSidebarMode==="function")setSidebarMode(_tourBrowse.mode);
+  _tourBrowse={mode:null};
+}
+// The filter-rail overview: the rail's Advanced search accordion lives in the Browse pane and is opened so
+// the controls the copy names are on screen. Idempotent (details.open is a set, not a toggle).
 function _tourEnterFilters(){
   _tourEnterMapView();
+  _tourEnterBrowseMode();
   const adv=document.getElementById("advSearch");if(adv)adv.open=true;
 }
 function _tourEnterSurveysView(){
@@ -212,6 +247,13 @@ function _tourSurveyCard(){
   if(!sv)return null;
   const cards=[...document.querySelectorAll("#cardGrid .scard")];
   return cards.find(c=>{const b=c.querySelector("[data-survey]");return b&&b.dataset.survey===sv;})||null;
+}
+// The nav step opens the surveys group, so it establishes the group's layout too: without that, arriving
+// back from the card step would leave the forced layout standing inside the group but the walk would read
+// as if the visitor's own choice had been restored early.
+function _tourEnterSurveysNav(){
+  _tourEnterMapView();
+  _tourEnterCards();
 }
 function _tourEnterSurveyCards(){
   _tourEnterSurveysView();
@@ -562,6 +604,7 @@ let _tourTreePrev=null;              // {scrollTop,collapsed[]} before the demo;
 let _tourTreeTarget=null;            // resolved survey label; null = none resolved
 function _tourEnterTreeDemo(){
   _tourEnterMapView();
+  _tourEnterBrowseMode();
   const tr=document.getElementById("tree");
   if(!tr)return;
   if(_tourTreePrev===null)_tourTreePrev={scrollTop:tr.scrollTop,
@@ -594,7 +637,7 @@ function _tourExitTreeDemo(){
 // its default panel, so the tab is (re-)selected here in both cases and this step is the Response tab's
 // establishing step in either direction.
 function _tourEnterStation(){
-  _tourEnterMapView();
+  _tourMapView();
   const i=_tourDemoStation();
   if(i<0)return;
   const dr=document.getElementById("drawer");
@@ -629,9 +672,9 @@ function _tourExitFiles(){
 // put back. The visitor's collapsed rail is NOT restored here: it belongs to the pre-tour snapshot, so a
 // reader who steps BACK off this step still has a rail to read.
 function _tourEnterFinal(){
-  if(_tourOpened.drawer){closeDrawer();_tourOpened.drawer=false;}
+  _tourCloseOwnDrawer();
   if(_tourOpened.hash!==null){history.replaceState(null,"",location.pathname+location.search+_tourOpened.hash);_tourOpened.hash=null;}
-  _tourEnterMapView();
+  _tourMapView();
 }
 // ---- the pre-tour snapshot -------------------------------------------------------------------------
 // The tour navigates, opens drawers, switches rail modes, forces a card layout, draws a shape and makes a
@@ -950,6 +993,7 @@ function _tourExitCurrent(){
 // Group cleanup: run the owning group's teardown when, and only when, the move crosses its boundary.
 // `to` is -1 for stopTour, which leaves every group.
 function _tourCrossGroups(from,to){
+  if(_tourInBrowseGroup(from)&&!_tourInBrowseGroup(to))_tourLeaveBrowseGroup();
   if(_tourInSelectGroup(from)&&!_tourInSelectGroup(to))_tourLeaveSelectGroup();
   if(_tourInSurveysGroup(from)&&!_tourInSurveysGroup(to))_tourLeaveSurveysGroup();
   if(from===_TOUR_COLLECTIONS_STEP&&to!==_TOUR_COLLECTIONS_STEP)_tourLeaveCollections();
@@ -975,6 +1019,7 @@ function startTour(){
   _tourOpened={drawer:false,hash:null};
   _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;
   _tourSel={mode:null,created:false,bounds:null,dimmed:false};_tourSv={layout:null,story:false};
+  _tourBrowse={mode:null};
   _tourDemoSv=undefined;_tourDemoIdx=undefined;   // resolve the demo subjects afresh against the loaded corpus
   _tourTakeSnapshot();                 // the workspace the visitor is handed back on close, from any step
   // A COLLAPSED rail hides every child but the collapse button, so the rail steps would spotlight nothing

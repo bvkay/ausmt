@@ -356,6 +356,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // Whether the current step spotlights a GIVEN element. The two card steps resolve their target from
   // the corpus (one card among many), so a pin has to compare the element itself, not a selector.
   "tourTargetIs:(el)=>_tourTarget(TOUR_STEPS[_tourStep])===el," +
+  "tourTargetEl:()=>_tourTarget(TOUR_STEPS[_tourStep])," +
   "tourStepText:(i)=>_tourText(TOUR_STEPS[i]),tourStepSel:(i)=>TOUR_STEPS[i].sel," +
   // Settle-until-stable re-layout (owner 2026-07-22): the drawer step opens a target that keeps reflowing
   // after open (slide, then the async station.json frame-line inject, then a possible map re-fit), so the
@@ -1764,6 +1765,28 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("drawer").classList.contains("open"), "Esc from the drawer step did not close the drawer it opened");
   ok(A.curView() === "map", "Esc from the drawer step did not restore the map view");
 
+  // THE WORKSPACE, READ AS FIELDS. Every field a tour step can change, in one shape, so a leak is reported
+  // as the field that moved rather than as one assertion at a time. Shared by the close-from-every-step
+  // matrix (H5) and the forward/backward walks (H10).
+  const _tourSnapRead = () => ({
+    view: A.curView(),
+    mode: A.sidebarMode(),
+    collapsed: doc.querySelector("aside.filters").classList.contains("collapsed"),
+    layout: (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout,
+    adv: doc.getElementById("advSearch").open,
+    drawerOpen: doc.getElementById("drawer").classList.contains("open"),
+    drawerSubject: JSON.stringify(A.drawerSubject()),
+    drawerTab: A.curDrawerTab(),
+    hash: win.location.hash,
+    selected: A.selCount(),
+    visible: A.nVisCount(),
+    find: doc.getElementById("find").value,
+    treeCollapsed: A.treeCollapsedKeys().slice().sort().join(","),
+  });
+  const _tourSnapDiff = (want, got) => Object.keys(want)
+    .filter(k => String(want[k]) !== String(got[k]))
+    .map(k => k + ": want " + JSON.stringify(want[k]) + ", got " + JSON.stringify(got[k]));
+
   // H2c. THE DEMO STATION AND THE FILES STEP (LANE-CONTRACT-TOUR-REVISION.md T1 steps 5/6, T4).
   // The drawer steps open a RESOLVED demo station rather than "whatever happens to be first on the map":
   // the demo survey's A1 where the corpus has one, else that survey's first positioned station. The Files
@@ -2006,6 +2029,97 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   _arrow("Escape");
   ok(A.tourStep() === -1, "collections: could not close the tour after the collections checks");
 
+  // H10. THE WALK, BOTH DIRECTIONS (LANE-CONTRACT-TOUR-REVISION.md T2/T4). Every step's enter() has to
+  // establish its COMPLETE state from either direction, which is a claim about the whole deck and cannot be
+  // checked one step at a time: the failures it exists to catch are the ones where a step is only correct
+  // because of what the PREVIOUS step happened to leave behind. So the deck is walked forward 1 to 16 and
+  // backward 16 to 1, and at every arrival, in both directions, the same predicates are checked against the
+  // same table: the view, the rail mode, the drawer's subject and tab, the selection, the card layout, and
+  // that the step's own target resolves to something on screen.
+  //
+  // jsdom has no layout engine, so "the target has a non-zero rect" is checked here as "the target resolves
+  // and nothing between it and the body is hidden" - which is the CAUSE of a zero rect for every step in
+  // this deck (a view that is not showing, a rail pane in the other mode, a drawer tab panel that is not
+  // the active one). The measured-rect half of that proof is a browser run.
+  const _visibleTarget = (el) => {
+    if (!el) return false;
+    for (let n = el; n && n !== doc.body; n = n.parentElement) {
+      if (n.classList && n.classList.contains("hidden")) return false;
+      if (n.style && n.style.display === "none") return false;
+      if (n.hasAttribute && n.hasAttribute("hidden")) return false;
+    }
+    return true;
+  };
+  // A CLEAN pre-tour state, so the predicates below read as the deck's own doing and not as a baseline
+  // showing through. (The snapshot matrix above is where a distinctive baseline is exercised.)
+  A.closeDrawer();
+  A.setSidebarMode("browse");
+  doc.querySelector('#layoutSeg [data-layout="cards"]').click();
+  doc.getElementById("clearSel").click();
+  doc.getElementById("advSearch").open = false;
+  const _walkBase = _tourSnapRead();
+  const _walkSel = A.tourRectMembers(A.tourDemoBounds()).length;
+  ok(_walkSel > 0, "walk setup: the demo rectangle must take at least one station, got " + _walkSel);
+  // The expectation table. Written as ranges, so it states the GROUPS rather than restating each step.
+  // Step 6 is the one entry whose expectation is direction-dependent, and deliberately so. It opens the
+  // select group, and its own picture is an UNSELECTED map ("draw an area, or take everything that passes
+  // the filters"), so it creates no demo: arriving forward there is nothing selected yet. Arriving
+  // backward the group still owns the demo the next step made, and clearing it here would be a group
+  // teardown performed inside the group, which is exactly what the group discipline exists to prevent.
+  const _expect = (i, dir) => ({
+    view: i === 13 ? "collections" : ((i === 11 || i === 12) ? "surveys" : "map"),
+    mode: (i >= 1 && i <= 3) ? "browse" : ((i >= 6 && i <= 9) ? "select" : _walkBase.mode),
+    drawer: (i === 4 || i === 5) ? "station" : (i === 12 ? "survey" : "closed"),
+    tab: i === 5 ? "files" : (i === 4 ? "response" : null),
+    selected: (i >= 7 && i <= 9) ? _walkSel : (i === 6 ? (dir === "back" ? _walkSel : 0) : 0),
+    layout: (i >= 10 && i <= 12) ? "cards" : _walkBase.layout,
+  });
+  const _checkStep = (i, dir) => {
+    const e = _expect(i, dir), at = "walk/" + dir + " step " + i;
+    ok(A.tourStep() === i, at + ": the walk is at " + A.tourStep());
+    ok(A.curView() === e.view, at + ": view must be " + e.view + ", on " + A.curView());
+    ok(A.sidebarMode() === e.mode, at + ": rail mode must be " + e.mode + ", on " + A.sidebarMode());
+    const open = doc.getElementById("drawer").classList.contains("open");
+    if (e.drawer === "closed") {
+      ok(!open, at + ": the drawer must be closed, subject " + JSON.stringify(A.drawerSubject()));
+    } else {
+      const want = e.drawer === "station"
+        ? { kind: "station", i: A.stIndex("A1") } : { kind: "survey", sv: A.tourDemoSurvey() };
+      ok(open, at + ": the drawer must be open on the " + e.drawer);
+      ok(JSON.stringify(A.drawerSubject()) === JSON.stringify(want),
+        at + ": drawer subject must be " + JSON.stringify(want) + ", got " + JSON.stringify(A.drawerSubject()));
+    }
+    if (e.tab) ok(A.curDrawerTab() === e.tab, at + ": drawer tab must be " + e.tab + ", on " + A.curDrawerTab());
+    ok(A.selCount() === e.selected, at + ": selection must be " + e.selected + ", got " + A.selCount());
+    ok(_layoutNow() === e.layout, at + ": card layout must be " + e.layout + ", on " + _layoutNow());
+    ok(_visibleTarget(A.tourTargetEl()),
+      at + ": the target " + A.tourStepSel(i) + " must resolve to an element that is on screen");
+    ok(doc.getElementById("tourStepLabel").textContent === "Step " + (i + 1) + " of " + A.tourStepCount(),
+      at + ": the label must read the computed position, got " + doc.getElementById("tourStepLabel").textContent);
+    ok(doc.getElementById("tourText").textContent.indexOf("{") < 0,
+      at + ": no placeholder may survive into the rendered copy, got " + doc.getElementById("tourText").textContent);
+  };
+  const _last = A.tourStepCount() - 1;
+  // FORWARD 1 to 16.
+  doc.getElementById("welcomeTour").click();
+  for (let i = 0; i <= _last; i++) { _checkStep(i, "fwd"); if (i < _last) _arrow("ArrowRight"); }
+  ok(doc.getElementById("tourNext").textContent === "Done", "walk/fwd: the last step's advance control must read Done");
+  ok(doc.getElementById("tourBack").disabled === false, "walk/fwd: Back must be live on the last step");
+  _arrow("Escape");
+  ok(_tourSnapDiff(_walkBase, _tourSnapRead()).length === 0,
+    "walk/fwd: closing after the forward walk did not restore the baseline: " +
+    _tourSnapDiff(_walkBase, _tourSnapRead()).join("; "));
+  // BACKWARD 16 to 1. The same table, so a step that is only correct arriving forward fails here.
+  doc.getElementById("welcomeTour").click();
+  for (let k = 0; k < _last; k++) _arrow("ArrowRight");
+  for (let i = _last; i >= 0; i--) { _checkStep(i, "back"); if (i > 0) _arrow("ArrowLeft"); }
+  ok(doc.getElementById("tourBack").disabled === true, "walk/back: Back must be disabled on the first step");
+  ok(doc.getElementById("tourNext").textContent === "Next", "walk/back: the advance control must read Next off the last step");
+  _arrow("Escape");
+  ok(_tourSnapDiff(_walkBase, _tourSnapRead()).length === 0,
+    "walk/back: closing after the backward walk did not restore the baseline: " +
+    _tourSnapDiff(_walkBase, _tourSnapRead()).join("; "));
+
   // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
   // (forward, back, close). The collapse set is real state (treeCollapsedKeys), not a proxy.
@@ -2090,24 +2204,6 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // Driven as a MATRIX: a distinctive pre-tour state is built, its every field read, and then for EVERY step
   // the tour is opened, walked to that step and closed - so a step that establishes state without a
   // corresponding restore fails at the step that introduced it, not at whichever step happens to run last.
-  const _tourSnapRead = () => ({
-    view: A.curView(),
-    mode: A.sidebarMode(),
-    collapsed: doc.querySelector("aside.filters").classList.contains("collapsed"),
-    layout: (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout,
-    adv: doc.getElementById("advSearch").open,
-    drawerOpen: doc.getElementById("drawer").classList.contains("open"),
-    drawerSubject: JSON.stringify(A.drawerSubject()),
-    drawerTab: A.curDrawerTab(),
-    hash: win.location.hash,
-    selected: A.selCount(),
-    visible: A.nVisCount(),
-    find: doc.getElementById("find").value,
-    treeCollapsed: A.treeCollapsedKeys().slice().sort().join(","),
-  });
-  const _tourSnapDiff = (want, got) => Object.keys(want)
-    .filter(k => String(want[k]) !== String(got[k]))
-    .map(k => k + ": want " + JSON.stringify(want[k]) + ", got " + JSON.stringify(got[k]));
   // Walk to `step` from a fresh tour and close with Esc. Returns the state the visitor is handed back.
   const _tourCloseFrom = (step) => {
     doc.getElementById("welcomeTour").click();
