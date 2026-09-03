@@ -54,8 +54,6 @@
      site. Same file, same markup and character-identical rule on index.html, brand.html and the
      generated pages (engine/extract/_pages.py). */
   .brandmark{height:30px;width:30px;display:block;flex:none}
-  .orgmark{display:flex;align-items:center;flex:none;margin-left:16px}
-  .orgmark img{height:30px;width:auto;display:block}
   .tagline{color:var(--muted);font-size:12.5px}
   /* flex-wrap is a term of the header's HEIGHT, not a detail of the nav: the three tabs hold a
      112px floor each, so on a narrow viewport a nowrap container keeps them on one row and
@@ -208,11 +206,6 @@
     <div class="counts corpus" id="corpusCounts" hidden
          title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations &middot;
       <b id="corpusSurveys"></b> surveys</div>
-    <!-- The AuScope mark closes the header on every surface: whose service this is, stated
-         where the site's own identity is not. It is not an identity and never opens a header;
-         the left zone owns that. Last in the zone, so it follows the primary nav in the tab
-         order, and focusable, because it is a real destination. -->
-    <a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>
   </div>
 </header>
 <main>

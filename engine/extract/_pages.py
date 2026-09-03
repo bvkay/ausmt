@@ -551,8 +551,6 @@ _CSS = """
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .brandmark{height:30px;width:30px;display:block;flex:none}
-  .orgmark{display:flex;align-items:center;flex:none;margin-left:16px}
-  .orgmark img{height:30px;width:auto;display:block}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:#E8EDF1;text-decoration:none}
   .tagline{color:#8FA3B0;font-size:12.5px}
   header.site nav{display:flex;gap:6px;flex-wrap:wrap}
@@ -662,24 +660,6 @@ _NAV_TABS = (("navMap", "Map", "/"),
              ("navSurveys", "Surveys", "/surveys"),
              ("navCollections", "Collections", "/collections"))
 
-# The parent-organisation mark, top right on every surface of the site. It is NOT the header's
-# identity: the identity is the AusMT mark in the left zone, and this states whose service AusMT is,
-# the same relationship the footer already puts in words. It closes the header, so it follows the
-# primary nav in the tab order while staying focusable.
-#
-# Same-origin, and the same vendored file the documentation site's sidebar carries. It is stated
-# character-identically in portal/index.html and in every portal document wearing this chrome, and
-# pinned pairwise there (portal/tests/test_header_geometry_parity.py) for the reason the zone rules
-# are: an edit to one surface must not leave the others on a different mark.
-#
-# The image is white with an alpha channel, which is the whole reason it can sit on this chrome
-# untreated: every surface carrying it is dark, and the site declares no light theme.
-#
-# One unbroken source literal, like the header markup it joins: the pin reads this file's SOURCE and
-# holds it character-identical against the portal documents' own.
-_ORG_MARK = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
-
-
 def _site_header(active="", status="") -> str:
     """The ONE header, everywhere: the SPA header's three-part division rendered as static links.
 
@@ -689,14 +669,17 @@ def _site_header(active="", status="") -> str:
     around it, and the owner kept that distinction and their wording. The right zone is the status
     slot, which is CONTEXTUAL (see the callers) while the shell around it is identical.
 
-    THE FETCHED ASSETS, WHICH ARE TWO AND NAMED. The identity zone opens with the AusMT mark, the
-    same file and the same markup the SPA header carries, so a reader arriving on a survey page from a
-    search result meets the site's own identity rather than a wordmark alone. The right zone closes
-    with the AuScope mark, which states whose service this is and is not an identity. Both are
-    SAME-ORIGIN paths served by the portal image beside these pages: not a build-time read, not an
-    external fetch, and not 180 circles inlined into 2,655 documents. Everything else on the page
-    stays inline, and the src allow-list in engine/tests/test_index_pages.py names these paths and
-    nothing else.
+    THE FETCHED ASSET, WHICH IS ONE AND NAMED. The identity zone opens with the AusMT mark, the same
+    file and the same markup the SPA header carries, so a reader arriving on a survey page from a
+    search result meets the site's own identity rather than a wordmark alone. It is a SAME-ORIGIN
+    path served by the portal image beside these pages: not a build-time read, not an external fetch,
+    and not 180 circles inlined into 2,655 documents. Everything else in this header stays inline,
+    and the src allow-list in engine/tests/test_index_pages.py names this path and nothing else.
+
+    The AuScope parent mark used to close the right zone. It is withdrawn from every header on the
+    site: the relationship is stated in words, in the footer this sheet also emits and in About's
+    "Who enables AusMT" section, and a symbol repeated in a corner said nothing either of those does
+    not. The right zone keeps the contextual status slot alone.
 
     VERSION SKEW, STATED HONESTLY FOR THE FIRST DEPLOY. /vendor/* is served from the portal image and
     the pages tree from the data volume, so the two can be a deploy apart. Once both carry the mark
@@ -704,14 +687,13 @@ def _site_header(active="", status="") -> str:
     nothing else in this tier. On the FIRST deploy it is worse than that, because the file is new: a
     pages tree rebuilt from this commit against a portal image that predates it asks for a mark the
     image does not serve, and every page renders the alt text instead. So the portal image and the
-    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg,
-    /vendor/auscope-icon-white.png and the footer's /vendor/auscope-ncris-white.png each answering
-    200 with an image type is the check before the pages tree is swapped.
+    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg and the
+    footer's /vendor/auscope-ncris-white.png each answering 200 with an image type is the check
+    before the pages tree is swapped.
 
-    The AusMT mark is a fixed 30x30 box inside the zero-basis .hleft zone and the AuScope mark a
-    fixed-height box inside the zero-basis .hright zone, so neither identity block can move the
-    centre tab group: a zero-basis side hands its leftover space out evenly whatever it holds
-    (tests/test_header_geometry_parity.py)."""
+    The AusMT mark is a fixed 30x30 box inside the zero-basis .hleft zone, so the identity block
+    cannot move the centre tab group: a zero-basis side hands its leftover space out evenly whatever
+    it holds (tests/test_header_geometry_parity.py)."""
     tabs = "".join(
         f'<a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>"
         for i, lbl, h in _NAV_TABS)
@@ -727,7 +709,7 @@ def _site_header(active="", status="") -> str:
             '<a class="about" href="/about.html">About</a>'
             f'<a class="contribute" href="/add-survey.html">Contribute a survey {_ARROW_FWD}</a>'
             "</div>\n"
-            f'<div class="hzone hright">{status}{_ORG_MARK}</div>\n'
+            f'<div class="hzone hright">{status}</div>\n'
             "</header>\n")
 
 
