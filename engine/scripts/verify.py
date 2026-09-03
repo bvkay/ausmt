@@ -288,6 +288,68 @@ def _check_build_report(rep, man, jsonschema, rep_schema):
     return ok, lines
 
 
+DEFAULT_PARSE_FAILURE_ALLOW = ROOT / "scripts" / "parse-failures-allowed.txt"
+
+
+def _parse_failure_allow_list(path: Path) -> set:
+    """The curator's allow list: one `<survey slug>/<source file name>` per line, `#` comments and
+    blank lines ignored. A MISSING file is an EMPTY list, not a pass: the gate below is the point,
+    and a deployment that has deleted the file must not thereby allow everything."""
+    if not path.is_file():
+        return set()
+    return {ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.strip().startswith("#")}
+
+
+def _check_source_parse_failures(rep, allow_path: Path):
+    """THE LOST-STATION GATE. build_report.json has recorded `source_parse_failures` since the GDS
+    readers lane -- which source file the reader refused, and what it said -- and until now nothing
+    read it. Measured cost (GSSA/BHP Roxby Downs 2018, 2026-09-03): nine files refused, build exit 0,
+    no SKIP line, package validator 0 FAIL, and nine transfer functions absent from a corpus nobody
+    was told had lost them.
+
+    The BUILD still exits 0 on a parse failure -- one malformed legacy file must not take the whole
+    corpus down with it -- so the verifier is where the decision belongs. Any refusal FAILs this run,
+    naming the survey and the file, unless the curator has written `<slug>/<file>` into the allow
+    file: a reviewed repository artifact, empty today, whose every line is a station the corpus has
+    deliberately given up on. Same posture as the D20 loud-skip gate one level up, where a survey the
+    validator FAILed stops the swap rather than quietly vanishing.
+
+    Returns (ok, lines). A build predating the field cannot vouch for itself and FAILS, exactly as
+    the surveys_skipped_validation and surveys_dropped gates do."""
+    lines = []
+    if not isinstance(rep, dict):
+        return False, ["   source_parse_failures: FAIL - build_report.json is absent, so the build "
+                       "cannot vouch that no source file was refused"]
+    allow = _parse_failure_allow_list(allow_path)
+    missing, offenders = [], []
+    for slug, entry in sorted((rep.get("surveys") or {}).items()):
+        rows = entry.get("source_parse_failures") if isinstance(entry, dict) else None
+        if rows is None:
+            missing.append(slug)
+            continue
+        for row in rows:
+            key = f"{slug}/{row.get('file')}"
+            if key not in allow:
+                offenders.append((key, row.get("error", "")))
+    if missing:
+        return False, [f"   source_parse_failures: FAIL - {len(missing)} survey(s) carry no "
+                       f"source_parse_failures list ({', '.join(missing[:8])}"
+                       f"{', ...' if len(missing) > 8 else ''}); the build predates the gate, or the "
+                       f"report was not emitted, so it cannot vouch that no station was lost"]
+    if offenders:
+        lines.append(f"   source_parse_failures: FAIL - the reader REFUSED {len(offenders)} source "
+                     f"file(s); each is a station this build does not publish, and none is named in "
+                     f"{allow_path}. Fix the file or the reader, or record the loss deliberately in "
+                     f"that allow file; never swap this build in.")
+        lines.extend(f"      {key}: {error}" for key, error in offenders[:20])
+        if len(offenders) > 20:
+            lines.append(f"      ... and {len(offenders) - 20} more")
+        return False, lines
+    return True, [f"   source_parse_failures: PASS (none refused; {len(allow)} allowed by "
+                  f"{allow_path.name})"]
+
+
 def _scan_nulls_and_empties(doc):
     """Every null and every empty array/object at any depth of one survey-metadata document (it
     defines no null at all); paths as '$.a.b[0]'."""
@@ -461,7 +523,8 @@ def _check_station_metadata(base_dir: Path, mtc, jsonschema, st_schema):
     return ok, lines
 
 
-def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool:
+def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
+                       allow_parse_failures: Path = DEFAULT_PARSE_FAILURE_ALLOW) -> bool:
     """The --data-dir check: mtcat.json schema-conformance + manifest.json integrity/schema, against an
     EXISTING build dir's own files — the same two checks the self-building path runs post-build (via
     _check_mtcat_and_manifest), minus the build step itself. Returns True (PASS) / False (FAIL).
@@ -496,6 +559,10 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool
     for ln in rep_lines:
         print(ln)
     ok &= rep_ok
+    pf_ok, pf_lines = _check_source_parse_failures(rep, allow_parse_failures)
+    for ln in pf_lines:
+        print(ln)
+    ok &= pf_ok
     sm_ok, sm_lines = _check_survey_metadata(data_dir, mtc, rep, jsonschema, sm_schema)
     for ln in sm_lines:
         print(ln)
@@ -531,6 +598,11 @@ def main(argv=None):
                          "stamps are compared against the LIVE survey.yaml sources at this root "
                          "(cache-independent). Absent in --data-dir mode => that gate SKIPS loudly.")
     ap.add_argument("--skip-tests", action="store_true")
+    ap.add_argument("--allow-parse-failures", default=str(DEFAULT_PARSE_FAILURE_ALLOW),
+                    help="the curator's allow file for source files the reader refused: one "
+                         "`<survey slug>/<file name>` per line, '#' comments ignored. A refusal not "
+                         "named there FAILS this run (the build itself still exits 0). Defaults to "
+                         "the reviewed in-repo file, which is empty.")
     ap.add_argument("--data-dir", default=None,
                     help="C12: validate an EXISTING build output dir in place (mtcat.json schema + "
                          "manifest.json integrity/schema) instead of running pytest + a fresh build. "
@@ -545,10 +617,12 @@ def main(argv=None):
                   "dir, does not rebuild or run pytest)", file=sys.stderr)
         # --surveys is now MEANINGFUL in --data-dir mode (arms the C18b consistency gate); pass it through.
         surveys_root = Path(a.surveys) if a.surveys is not None else None
-        return 0 if _validate_data_dir(Path(a.data_dir), surveys_root) else 1
+        return 0 if _validate_data_dir(Path(a.data_dir), surveys_root,
+                                       Path(a.allow_parse_failures)) else 1
 
     ok = True
     self_surveys = a.surveys if a.surveys is not None else str(ROOT / "data")
+    allow_parse_failures = Path(a.allow_parse_failures)
 
     if not a.skip_tests:
         print("== pytest ==")
@@ -589,6 +663,10 @@ def main(argv=None):
     for ln in rep_lines:
         print(ln)
     ok &= rep_ok
+    pf_ok, pf_lines = _check_source_parse_failures(rep, allow_parse_failures)
+    for ln in pf_lines:
+        print(ln)
+    ok &= pf_ok
     sm_ok, sm_lines = _check_survey_metadata(out, mtc, rep, jsonschema, sm_schema)
     for ln in sm_lines:
         print(ln)

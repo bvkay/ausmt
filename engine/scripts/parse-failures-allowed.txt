@@ -1,0 +1,12 @@
+# Source files the reader could not open, that this corpus has DELIBERATELY given up on.
+#
+# scripts/verify.py FAILs a build whose build_report.json records a source_parse_failure that is not
+# named here, so every line is a station the corpus publishes nothing for and a curator has decided
+# to accept. Write one entry per line as `<survey slug>/<source file name>`, with the reason on a
+# comment line above it. Adding a line is a curatorial decision and is reviewed like any other change
+# to this repository; it is never a way past a red gate.
+#
+# The BUILD is unaffected: a corpus build still exits 0 on a refused file, because one malformed
+# legacy file must not take the whole corpus down. This file governs the DEPLOY gate alone.
+#
+# Empty. Every source file in the corpus reads.

@@ -139,12 +139,18 @@ the EDI-wins rule resolved to EDI and which came from EMTF XML; an `emtfxml` sta
 generated, so the digest of the file the custodian supplied matches neither of its manifest rows.
 `source_integrity` is the evidence that a copied custodian EDI landed byte for byte: a mismatch removes
 the served file, drops its manifest row and raises a counted warning. `source_parse_fallbacks` lists
-the files read through a normalised temporary copy (the mt_metadata 1.0.9 `>INFO` JSON defect); the
-copy is never served or hashed, and the custodian's bytes are what is served.
-`source_section_selections` is written only where it fires: it names, per station, which `>=MTSECT`
-section of a multi-section source file the published transfer function came from and how many
-sections went unread, because an EPI-KIT file carries an averaged solution of record and then the
-per-frequency realisations that produced it.
+the files read through a normalised temporary copy (the mt_metadata 1.0.9 `>INFO` JSON defect, and a
+`DATAID` outside the reader's station-name charset); the copy is never served or hashed, and the
+custodian's bytes are what is served. `source_section_selections` is written only where it fires: it
+names, per station, which `>=MTSECT` section of a multi-section source file the published transfer
+function came from and how many sections went unread, because an EPI-KIT file carries an averaged
+solution of record and then the per-frequency realisations that produced it.
+
+`source_parse_failures` is a GATE, not a note. It lists the files the reader refused outright, and
+`scripts/verify.py` FAILS on any entry not named in the curator's allow file
+(`engine/scripts/parse-failures-allowed.txt`, one `<survey slug>/<file name>` per line, empty today).
+The build itself still exits 0 on a refused file, so one malformed legacy file costs its own station
+and never the whole corpus; the verifier is what stops a build that lost a station reaching a swap.
 
 An `xml_failures` entry means different things by source. An `edi`-sourced station falls back to its
 custodian EDI and loses only its XML download; an `emtfxml`-sourced station has no custodian file
