@@ -883,11 +883,11 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and that is the point of them. main
     is 840px on an entity page, 920px on a hub and 1120px above 1180px of viewport, so a viewport
     number answers the question wrongly on two page kinds out of three: measured in Chrome, an
-    entity page at a 1000px viewport gives the footer 840px, the three regions want 871px, and a
-    760px viewport rule leaves the right region alone on a second row with the attribution centred
-    in what is left beside the machine-readable link, 135px off the footer's axis.
+    entity page at a 1000px viewport gives the footer 840px, the three regions want 1200px, and a
+    760px viewport rule leaves the right region alone on a second row with the acknowledgement
+    centred in what is left beside the machine-readable link, 135px off the footer's axis.
 
-    Below 900px of footer the centre therefore takes a row of its own UNDER the two side phrases,
+    Below 1230px of footer the centre therefore takes a row of its own UNDER the two side regions,
     where it spans the footer and is centred on its axis. Below 500px the side phrases no longer
     share a row either, so every region takes one and aligns left, which is the 375px stack.
 
@@ -913,9 +913,9 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
         for decl in decls:
             assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
 
-    centre_row = css.find("@container (max-width:900px){.fcenter{order:1;flex:1 1 100%}}")
+    centre_row = css.find("@container (max-width:1230px){.fcenter{order:1;flex:1 1 100%}}")
     assert centre_row > 0, (
-        "below 900px of footer the centre must take a full row of its own, or it is centred in the "
+        "below 1230px of footer the centre must take a full row of its own, or it is centred in the "
         "space left over beside the machine-readable link instead of on the footer's axis")
     stack = css.find("@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
     assert stack > centre_row, (

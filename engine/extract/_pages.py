@@ -564,24 +564,32 @@ _CSS = """
   .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#8FA3B0;font-variant-numeric:tabular-nums}
   .counts b{color:#E8EDF1}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
-  /* The centre is the region that gives: the two side phrases read badly broken, the attribution is
-     prose that does not. The right grows so a wrapped row keeps it against the right edge.
+  /* The centre is the region that gives: the machine-readable link and the lockup are each a fixed
+     object that reads badly broken or badly scaled, the acknowledgement is prose that does not. The
+     right grows so a wrapped row keeps the lockup against the right edge.
 
      BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's. main is 840px on an entity page,
      920px on a hub and 1120px above 1180px of viewport, so one viewport number answers the question
-     wrongly on two page kinds out of three. Measured, the three regions want 871px of footer; below
-     that the centre takes a row of its own UNDER the two side phrases, where it is centred on the
+     wrongly on two page kinds out of three. Measured, the three regions want 1200px of footer; below
+     that the centre takes a row of its own UNDER the two side regions, where it is centred on the
      footer's axis rather than in the space left over beside the machine-readable link. Below 500px
-     the two side phrases no longer share a row either, so every region takes one and aligns left.
+     the two side regions no longer share a row either, so every region takes one and aligns left.
 
-     Ordering the centre last costs no reading order: it is prose and carries no link, so the tab
-     sequence stays the left link then the right links, in the order a reader meets them. The
-     overrides follow the rules they override; the two tie on specificity and source order wins. */
-  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0;container-type:inline-size}
+     The regions align on their CENTRES, not on a baseline: the lockup is a 28px block beside two
+     lines of 12.8px text, and a baseline would hang it off the text's baseline and add its whole
+     height above the row. The overrides follow the rules they override; the two tie on specificity
+     and source order wins.
+
+     The lockup's width follows its height, so the committed file's own 1919px raster never reaches
+     the page. max-width caps it at the zone in the stacked state, where the row is the footer's
+     whole width; object-fit keeps its proportions in the state where that cap bites. */
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0;container-type:inline-size}
   .fleft{flex:0 0 auto}
   .fcenter{flex:1 1 auto;min-width:0;text-align:center}
   .fright{flex:1 0 auto;text-align:right}
-  @container (max-width:900px){.fcenter{order:1;flex:1 1 100%}}
+  .orglogo{display:inline-block;line-height:0}
+  .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
+  @container (max-width:1230px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}
 """
 
@@ -679,9 +687,9 @@ def _site_header(active="", status="") -> str:
     nothing else in this tier. On the FIRST deploy it is worse than that, because the file is new: a
     pages tree rebuilt from this commit against a portal image that predates it asks for a mark the
     image does not serve, and every page renders the alt text instead. So the portal image and the
-    data rebuild go out in the same pass, image first, and both /vendor/brand/ausmt-mark.svg and
-    /vendor/auscope-icon-white.png answering 200 with an image type is the check before the pages
-    tree is swapped.
+    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg,
+    /vendor/auscope-icon-white.png and the footer's /vendor/auscope-ncris-white.png each answering
+    200 with an image type is the check before the pages tree is swapped.
 
     The AusMT mark is a fixed 30x30 box inside the zero-basis .hleft zone and the AuScope mark a
     fixed-height box inside the zero-basis .hright zone, so neither identity block can move the
@@ -722,14 +730,22 @@ def _site_footer(build=None) -> str:
     pointed at MTCAT. The arrow is the leaves-this-page one; the link hands over a JSON document,
     not another page of the site.
 
-    The centre carries the attribution and the licence note. The build identity is not printed
-    here: the commit sha spoke to operators, not to the readers a public footer is for, and
+    The centre states who enables AusMT and then carries the attribution and the licence note. The
+    URL text is the only link in the line: it is the reader-legible form of the address, so it says
+    where it goes without a title attribute or a rule about link colour. The build identity is not
+    printed here: the commit sha spoke to operators, not to the readers a public footer is for, and
     build_provenance.json still carries it. The `build` argument is kept so callers do not change
     and a future /build page has its input.
 
-    "About this build" is a LINK on this tier, not the SPA's disclosure popover: these pages ship no
-    script, so a popover here could only restate what the centre already says. It resolves to
-    /about.html, the page that does carry the running build's identity and version chip.
+    The right region is the parent organisation's full AuScope-NCRIS lockup. It links where the
+    centre's URL text links, because a reader who clicks either has asked the same question. The
+    image is SAME-ORIGIN and vendored beside the header's two marks, so this states a relationship
+    without taking a runtime dependency on the organisation's own host. Its display height is CSS;
+    the file ships at the brand kit's own resolution.
+
+    Releases and About this build left this region with the ruling. Neither is lost: /about.html
+    carries the running build's identity, the software licence and the route to the citable
+    releases in its own body, which is the page the retired control pointed at anyway.
 
     The year is a literal, the one the SPA's own footer carries. It is deliberately not a build-time
     value: a copyright year that moves when a page is rebuilt makes every page in the tree differ
@@ -737,10 +753,14 @@ def _site_footer(build=None) -> str:
     return ("\n<footer>\n"
             f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">Machine-readable record '
             f'(MTCAT JSON) {_ARROW_OUT}</a></div>\n'
-            '<div class="fzone fcenter">&#169; 2026 AuScope and the AusMT contributors &#183; '
+            '<div class="fzone fcenter">AusMT is enabled by AuScope &#183; '
+            '<a href="https://www.auscope.org.au">www.auscope.org.au</a> &#183; '
+            "&#169; 2026 AuScope and the AusMT contributors &#183; "
             "Data licences vary by survey</div>\n"
-            '<div class="fzone fright"><a href="/releases.html">Releases</a> &#183; '
-            '<a href="/about.html">About this build</a></div>\n'
+            '<div class="fzone fright">'
+            '<a class="orglogo" href="https://www.auscope.org.au" rel="noopener">'
+            '<img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
+            'width="1919" height="325"></a></div>\n'
             "</footer>\n")
 
 

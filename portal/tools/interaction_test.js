@@ -821,18 +821,26 @@ async function bootFreshWindow(dataMap, url, preBoot) {
      _gjOk.features[0].properties.remote_ref === true,
     "a healthy sci.json must write the three screening properties exactly as before");
 
-  // VER CHIP -> FOOTER (UX feedback round 3, item 3): the version chip moved out of the header into the
-  // footer. version.js is a standalone page script (not in MODULES), so run it here against the real DOM
-  // exactly as index.html's <script src="version.js"> would, then assert:
-  //   (a) the ONLY [data-ver-chip] lives inside <footer> (none left in <header>);
-  //   (b) it is POPULATED with the config-derived label (not left empty).
+  // VER CHIP OFF THE SPA. The one-footer ruling took Releases and About this build out of the footer
+  // on every surface, and the version chip rode inside the About-this-build popover, so the SPA now
+  // carries no chip at all: about.html's #build section is the one place on the site that states the
+  // running build's identity, which is the page the retired control pointed at. version.js is a
+  // standalone page script (not in MODULES), so run it here against the real DOM exactly as
+  // index.html's <script src="version.js"> would, then assert:
+  //   (a) this document carries NO [data-ver-chip], in the header, the footer or anywhere else;
+  //   (b) version.js still POPULATES a chip wherever a page supplies one, driven in its own jsdom
+  //       because index.html no longer supplies the node the fill would land in.
   vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), dom.getInternalVMContext());
-  const headerChips = [...doc.querySelectorAll("header [data-ver-chip]")];
-  const footerChips = [...doc.querySelectorAll("footer [data-ver-chip]")];
-  ok(headerChips.length === 0, "the version chip must NOT remain in the header (item 3), found " + headerChips.length);
-  ok(footerChips.length === 1, "expected exactly one version chip in the footer, found " + footerChips.length);
-  ok(footerChips[0].textContent === "AusMT v1.2.3 · MTCAT 1.0",
-    "footer version chip was not populated by version.js, got: " + JSON.stringify(footerChips[0].textContent));
+  const spaChips = [...doc.querySelectorAll("[data-ver-chip]")];
+  ok(spaChips.length === 0,
+    "the SPA carries no version chip: it left with the About-this-build popover, found " + spaChips.length);
+  const chipDom = new JSDOM('<section id="build"><span data-ver-chip></span></section>',
+    { runScripts: "outside-only" });
+  chipDom.window.AUSMT_CONFIG = doc.defaultView.AUSMT_CONFIG;
+  vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), chipDom.getInternalVMContext());
+  ok(chipDom.window.AUSMT_VERSION.label === "AusMT v1.2.3 · MTCAT 1.0",
+    "version.js must still derive the chip label from the loaded config, got: " +
+    JSON.stringify(chipDom.window.AUSMT_VERSION.label));
 
   // THE CONFIG-MISSING SENTINEL must be HONEST. version.js used to fall back to schema_version "1.0",
   // so a page whose config.js failed to load rendered a confident "MTCAT 1.0" chip through the whole of
@@ -4859,7 +4867,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ok(!selectedBy(s, false), "LINKCSS: the muted state text must not be painted the link accent");
   });
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-off-the-SPA, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +

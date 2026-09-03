@@ -59,6 +59,11 @@ BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's. On the static tier 
 entity page, 920px on a hub and 1120px above 1180px of viewport, and on the portal the sibling pages
 set their footers inside reading columns of 760px to 980px, so no single viewport number describes
 "the three regions do not fit" on more than one page kind at a time.
+
+THE OWN-ROW BREAKPOINT IS A MEASUREMENT OF THE CONTENT, not a design constant. Measured in Chrome
+with the ruled strings, the three regions want 1254px of footer on the portal and 1200px on the
+static tier; the rules fire just above each, as they did at the shorter numbers this footer carried
+before the AuScope acknowledgement lengthened the centre.
 """
 import hashlib
 import re
@@ -501,7 +506,7 @@ def test_both_footers_are_wrapping_flex_rows_that_give_at_the_centre():
          {"left": r"(?m)^\s*footer \.apilink\{([^}]*)\}",
           "centre": r"(?m)^\s*footer \.foot-main\{([^}]*)\}",
           "right": r"(?m)^\s*footer \.foot-right\{([^}]*)\}"},
-         "@container (max-width:950px){footer .foot-main{order:1;flex:1 1 100%}}",
+         "@container (max-width:1280px){footer .foot-main{order:1;flex:1 1 100%}}",
          "@container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right"
          "{order:0;flex:1 1 100%;text-align:left}}",
          "@media(max-width:760px){footer .apilink"),
@@ -509,7 +514,7 @@ def test_both_footers_are_wrapping_flex_rows_that_give_at_the_centre():
          {"left": r"(?m)^\s*\.fleft\{([^}]*)\}",
           "centre": r"(?m)^\s*\.fcenter\{([^}]*)\}",
           "right": r"(?m)^\s*\.fright\{([^}]*)\}"},
-         "@container (max-width:900px){.fcenter{order:1;flex:1 1 100%}}",
+         "@container (max-width:1230px){.fcenter{order:1;flex:1 1 100%}}",
          "@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}",
          "@media(max-width:760px){.fzone"),
     )

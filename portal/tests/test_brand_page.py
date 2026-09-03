@@ -142,7 +142,11 @@ def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
             f"brand.html: {nav_id} must point at {href}"
     assert '<link rel="canonical" href="https://ausmt.auscope.org.au/brand.html">' in text, \
         "a page the sitemap advertises must declare its canonical"
-    assert "<footer>" in text and "data-ver-chip" in text, "brand.html must carry the standard footer"
+    # The site's ONE footer. Its strings, targets and geometry are held for all six documents at once
+    # in tests/test_footer_regions.py; what is asserted here is that this page carries it at all,
+    # named by the region the one-footer ruling put in its right zone.
+    assert "<footer>" in text and 'class="orglogo"' in text, \
+        "brand.html must carry the standard footer, lockup and all"
 
 
 def test_about_links_the_brand_page():
