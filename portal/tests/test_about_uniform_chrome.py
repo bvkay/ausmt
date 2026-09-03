@@ -1,7 +1,7 @@
 """about.html carries the SAME header/footer chrome as index.html (fix/about-uniform-chrome).
 
-The owner's ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and a
-footer with the version chip, so chrome is uniform across pages. These are STRUCTURAL assertions parsed
+The owner's ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and
+the site's one footer, so chrome is uniform across pages. These are STRUCTURAL assertions parsed
 from the real DOM (stdlib html.parser, so no jsdom / node dependency and no substring-vs-comment false
 positives — HTML comments are not surfaced as elements by the parser).
 
@@ -22,7 +22,9 @@ Each assertion states its failure criterion:
     identically (see test_header_parity_about_matches_index). The app-state ids remain banned, which is
     the half of the old assertion that was actually about honesty; the class ban was about styling.
   * one version chip — FAILS if the number of real elements carrying data-ver-chip is not exactly 1
-    (must survive the reverse case too: zero chips, or a duplicated chip, both fail).
+    (must survive the reverse case too: zero chips, or a duplicated chip, both fail). It sits in
+    about.html's own #build section since the one-footer ruling emptied the footer's right region;
+    the pins below hold it there and hold the other pages to carrying none.
 """
 import re
 from html.parser import HTMLParser
@@ -65,32 +67,26 @@ _VOID = {"img", "br", "hr", "input", "meta", "link", "source", "area", "base", "
 
 class _FooterCollector(HTMLParser):
     """Records every start tag INSIDE <footer> (running footer-depth flag), the footer analogue of
-    _Collector. Backs the UX6 Wave B (B3) footer-chrome pins: the 'About this build' popover and the
-    version chip nested inside it, asserted against the parsed DOM (comments never reach handle_starttag)."""
+    _Collector. Backs the footer-chrome pins, asserted against the parsed DOM (comments never reach
+    handle_starttag, so a commented-out control cannot satisfy or trip one)."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.elements = []          # (tag, attrs-dict, in_aboutbuild:bool) for elements inside <footer>
+        self.elements = []          # (tag, attrs-dict) for elements inside <footer>
         self._depth = 0             # footer nesting depth
-        self._ab_at = None          # footer-depth at which a details.aboutbuild opened (None => not inside)
 
     def handle_starttag(self, tag, attrs):
         d = {k: (v or "") for k, v in attrs}
         if self._depth > 0 and tag != "footer":
-            self.elements.append((tag, d, self._ab_at is not None))
+            self.elements.append((tag, d))
         if tag == "footer":
             self._depth += 1
         elif self._depth > 0 and tag not in _VOID:
             self._depth += 1
-        # The About-this-build popover region: its DESCENDANTS (recorded above BEFORE this) are inside it.
-        if self._ab_at is None and tag == "details" and "aboutbuild" in _classes(d):
-            self._ab_at = self._depth
 
     def handle_endtag(self, tag):
         if self._depth > 0 and tag not in _VOID:
             self._depth -= 1
-            if self._ab_at is not None and self._depth < self._ab_at:
-                self._ab_at = None
 
 
 def _parse(path):
@@ -152,7 +148,7 @@ def test_about_has_no_live_counts_elements():
         "not index's live map state, and the two must stay distinguishable at a glance")
 
 
-def test_about_footer_carries_exactly_one_ver_chip():
+def test_about_carries_exactly_one_ver_chip():
     els = _parse(ABOUT)
     chips = [a for (tag, a, inh) in els if "data-ver-chip" in a]
     assert len(chips) == 1, f"about.html must carry exactly one data-ver-chip element; found {len(chips)}"
@@ -222,7 +218,7 @@ def test_mtcat_link_in_footer_not_header_across_pages():
         assert not header_hits, (
             f"{path.name}: the MTCAT apilink must NOT appear in <header> (it moved to the footer); "
             f"found {len(header_hits)}")
-        footer_hits = [a for (tag, a, _ab) in _footer_els(path)
+        footer_hits = [a for (tag, a) in _footer_els(path)
                        if tag == "a" and "apilink" in _classes(a)]
         assert len(footer_hits) == 1, (
             f"{path.name}: <footer> must carry exactly one MTCAT apilink (bottom-left); found {len(footer_hits)}")
@@ -402,34 +398,48 @@ def test_index_still_has_the_count_ids_the_about_guard_forbids():
     assert {"nVis", "nSel", "nTot"} <= ids, "index.html should still carry the live-count ids (nVis/nSel/nTot)"
 
 
-def test_footer_about_this_build_control_uniform_across_pages():
-    """UX6 Wave B (B3). FAILS if either the app page (index) or the static About page lacks the trimmed
-    footer's 'About this build' popover — a <details class="aboutbuild"> with a <summary> control — inside
-    <footer>. This is the NEW chrome, asserted identically across pages. Non-vacuous: the pre-wave footer
-    was flat text with no <details>, so both pages would fail here on the old chrome."""
-    for path in (INDEX, ABOUT):
+def test_no_page_keeps_an_about_this_build_control_in_the_footer():
+    """The one-footer ruling took Releases and About this build out of the footer on every surface, so
+    the disclosure popover goes with them: what a reader saw on opening it was the software licence
+    and the build's identity, and about.html carries both in its own body now.
+
+    FAILS if a <details class="aboutbuild"> comes back to any of these four footers. Non-vacuous
+    against the pre-ruling tree, where all four carried one."""
+    for path in (INDEX, ABOUT, ADD, RELEASES):
         els = _footer_els(path)
-        details = [a for (tag, a, _ab) in els if tag == "details" and "aboutbuild" in _classes(a)]
-        assert len(details) == 1, (
-            f"{path.name}: footer must carry exactly one <details class='aboutbuild'> (the "
-            f"'About this build' popover); found {len(details)}")
-        assert any(tag == "summary" for (tag, a, _ab) in els), (
-            f"{path.name}: the About-this-build popover needs a <summary> control to open it")
+        details = [a for (tag, a) in els if tag == "details" and "aboutbuild" in _classes(a)]
+        assert not details, (
+            f"{path.name}: the About-this-build popover is retired from the footer; found "
+            f"{len(details)}")
 
 
-def test_footer_version_chip_relocated_inside_about_this_build_across_pages():
-    """UX6 Wave B (B3). The version chip is RELOCATED into the footer's About-this-build popover on both
-    pages. FAILS if the single [data-ver-chip] is not NESTED inside <details class='aboutbuild'> (e.g.
-    still floating in the visible footer line, left in the header, or dropped). Non-vacuous: the pre-wave
-    chip sat directly in the footer, NOT inside any popover, so this fails on the old chrome."""
-    for path in (INDEX, ABOUT):
-        els = _footer_els(path)
-        chips = [(a, in_ab) for (tag, a, in_ab) in els if "data-ver-chip" in a]
-        assert len(chips) == 1, (
-            f"{path.name}: exactly one version chip must live inside <footer>; found {len(chips)}")
-        assert chips[0][1], (
-            f"{path.name}: the version chip must be nested inside the About-this-build popover "
-            f"(<details class='aboutbuild'>), not floating in the visible footer line")
+def test_the_running_build_identity_lives_in_about_s_body_and_nowhere_else():
+    """The ruling's own justification for taking About this build out of the footer: about.html still
+    carries the running build's identity and the route to the citable releases, so nothing is lost.
+    That is only true if about.html actually carries them, and only ONE page should: a chip on four
+    pages is four things to keep in step.
+
+    FAILS if about.html's single [data-ver-chip] is inside <footer> rather than the page body, if the
+    #build section that carries it stops offering the route to releases.html, or if any of the other
+    three pages grows a chip of its own."""
+    els = _footer_els(ABOUT)
+    assert not [a for (tag, a) in els if "data-ver-chip" in a], (
+        "about.html's version chip belongs in the page body, not in the footer the ruling emptied")
+    text = ABOUT.read_text(encoding="utf-8")
+    section = text.split('<section id="build">', 1)
+    assert len(section) == 2, "about.html must carry a #build section for the running build identity"
+    section = section[1].split("</section>", 1)[0]
+    assert "data-ver-chip" in section, (
+        "about.html's #build section must carry the version chip: it is the page the footer's "
+        "retired About-this-build control used to point at")
+    assert 'href="releases.html"' in section, (
+        "about.html's #build section must offer the route to the citable releases, which left the "
+        "footer with the rest of the right region")
+
+    for path in (INDEX, ADD, RELEASES):
+        chips = [a for (tag, a, _inh) in _parse(path) if "data-ver-chip" in a]
+        assert not chips, (
+            f"{path.name}: the version chip lives on about.html alone; found {len(chips)} here")
 
 
 def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is():

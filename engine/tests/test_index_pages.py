@@ -157,7 +157,14 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 #
 # Two marks, in the order the header emits them: the AusMT identity opening the left zone, the
 # AuScope parent mark closing the right one.
-ALLOWED_PAGE_SRCS = ["/vendor/brand/ausmt-mark.svg", "/vendor/auscope-icon-white.png"]
+# The chrome's own fetched assets, in the order a page writes them: the two header marks, then the
+# footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer ruling, which made the parent
+# organisation's acknowledgement the footer's right region on every surface; it is the same
+# same-origin, vendored, cached-once class of asset as the two header marks and is allow-listed on
+# the same terms (see AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F1).
+ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg", "/vendor/auscope-icon-white.png"]
+ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-white.png"]
+ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
 
 # The collection page draws the one thing in this tier that carries a mark in its BODY as well: the
 # member footprint map, which repeats the AuScope mark in the panel's bottom-left corner. It is the
@@ -175,9 +182,11 @@ _SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
 
 
 def _allowed_srcs(rel):
-    """The exact, ordered src list this page kind may carry: the two header marks, then whatever
-    body mark the kind is named for."""
-    return ALLOWED_PAGE_SRCS + ALLOWED_BODY_SRCS.get(rel, [])
+    """The exact, ordered src list this page kind may carry, in DOCUMENT order: the two header marks,
+    then whatever body mark the kind is named for, then the footer's lockup. The order is the
+    assertion, so the body mark has to be spliced between the two chrome groups rather than appended
+    after them."""
+    return ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, []) + ALLOWED_FOOTER_SRCS
 
 
 def _page_srcs(page, rel):
@@ -698,6 +707,13 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # portal/ at all, and a test that reaches out of the image is a test the image cannot run.
 _FOOTER_LINK = ("Machine-readable record (MTCAT JSON)", "/data/mtcat.json")
 
+# The parent organisation, as the footer states it on every page: the acknowledgement's URL text and
+# the lockup both navigate here, and the lockup itself is served from this site. The address is a
+# NAVIGATION target and nothing more; the src is the vendored file, and the src allow-list above is
+# what keeps it the only new fetch this ruling introduced.
+AUSCOPE_URL = "https://www.auscope.org.au"
+ORG_LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
+
 
 def _kinds(built):
     aid = sorted(p.stem for p in (built / "pages" / "stations").glob("*.html"))[0]
@@ -772,16 +788,20 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
     """R13, restated to the owner's ruling: ONE footer, three regions, byte-identical on every page.
 
     The footer used to be contextual, so a reader could not learn it once. Left is the catalogue,
-    the same document from every page; centre is the attribution and the licence note; right is
-    Releases and About this build. The separator is U+00B7, written as the numeric reference so a
-    mis-decoded read of this file cannot smuggle a hyphen past the pin.
+    the same document from every page; centre is the AuScope acknowledgement with the attribution
+    and the licence note, carrying the one navigation link in the line; right is the AuScope-NCRIS
+    lockup, linked where that URL text links. The separator is U+00B7, written as the numeric
+    reference so a mis-decoded read of this file cannot smuggle a hyphen past the pin.
 
-    A per-page machine link is NOT lost by this: a survey and a station page each carry their own
-    record in the body under "Identifiers and provenance", which is asserted separately.
+    Releases and About this build left the footer on every surface. Nothing is lost: /about.html
+    carries the running build's identity and the route to the citable releases in its own body,
+    which the portal lane pins (portal/tests/test_about_uniform_chrome.py). A per-page machine link
+    is not lost either: a survey and a station page each carry their own record in the body under
+    "Identifiers and provenance", which is asserted separately.
 
     FAILS IF the one-line footer survives anywhere, if the three regions are not present with the
-    owner's exact strings, if a region's links move or retarget, if the footer differs between page
-    kinds, or if the removed build stamp comes back."""
+    owner's exact strings, if a region's links move or retarget, if the retired controls come back,
+    if the footer differs between page kinds, or if the removed build stamp comes back."""
     seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
@@ -799,20 +819,28 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         assert href.startswith("/data/") and (built / href[len("/data/"):]).is_file(), \
             f"{rel}: the footer advertises {href}, which this build did not write"
 
-        # CENTRE. The owner's string, and no link: the attribution line is prose, not navigation.
+        # CENTRE. The owner's string, carrying exactly one link: the AuScope address under its own
+        # URL text. The rest of the line is prose and stays prose.
         centre = foot.split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
-        assert centre == ("&#169; 2026 AuScope and the AusMT contributors &#183; "
+        assert centre == ("AusMT is enabled by AuScope &#183; "
+                          f'<a href="{AUSCOPE_URL}">www.auscope.org.au</a> &#183; '
+                          "&#169; 2026 AuScope and the AusMT contributors &#183; "
                           "Data licences vary by survey"), \
-            f"{rel}: centre region is not the owner's attribution line: {centre!r}"
-        assert "<a" not in centre, f"{rel}: the centre region carries no link: {centre!r}"
+            f"{rel}: centre region is not the owner's acknowledgement line: {centre!r}"
+        assert centre.count("<a") == 1, \
+            f"{rel}: the centre region carries exactly one link: {centre!r}"
 
-        # RIGHT. Two links, separated by the middle dot, About this build resolving to the page
-        # that carries the running build's identity (this tier ships no script and no popover).
+        # RIGHT. The parent organisation's full lockup, linked where the centre's URL text links.
+        # Same-origin and vendored: the ruling adds a navigation anchor, not a runtime dependency.
         right = foot.split('<div class="fzone fright">', 1)[1].split("</div>", 1)[0]
-        assert right == ('<a href="/releases.html">Releases</a> &#183; '
-                         '<a href="/about.html">About this build</a>'), \
-            f"{rel}: right region is not Releases and About this build: {right!r}"
+        assert right == (f'<a class="orglogo" href="{AUSCOPE_URL}" rel="noopener">'
+                         f'<img src="{ORG_LOCKUP_SRC}" alt="AuScope and NCRIS" '
+                         'width="1919" height="325"></a>'), \
+            f"{rel}: right region is not the AuScope-NCRIS lockup: {right!r}"
 
+        for gone in (">Releases<", "About this build", "aboutbuild", "/releases.html"):
+            assert gone not in foot, \
+                f"{rel}: {gone!r} left the footer with the ruling and must not come back: {foot!r}"
         assert "fbuild" not in foot and "Build " not in foot, (
             f"{rel}: the build identity stamp stays out of the footer; "
             f"build_provenance.json still carries it: {foot!r}")
@@ -900,6 +928,23 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     assert "@media(max-width:760px){.fzone" not in css, (
         "the footer's width is not the viewport's on this tier, so the stacking rule must not go "
         "back to asking the viewport")
+
+
+def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
+    """The committed lockup is 1919px wide because it is the brand kit's own raster; what a reader
+    sees is a 28px-high mark, and the width follows from the height.
+
+    FAILS IF the height rule goes (every page would then paint the file at full size and the footer
+    would be taller than the document above it), if the width stops following the height, or if the
+    max-width cap is lost. The cap is what holds the mark inside the stacked 375px row whatever the
+    committed file's own width becomes, and object-fit keeps its proportions where the cap bites."""
+    for rel in _kinds(built):
+        css = (built / "pages" / rel).read_text(
+            encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
+        m = re.search(r"\.orglogo img\{([^}]*)\}", css)
+        assert m, f"{rel}: the footer lockup carries no sizing rule"
+        for decl in ("height:28px", "width:auto", "max-width:100%", "object-fit:contain"):
+            assert decl in m.group(1), f"{rel}: the lockup rule must declare {decl}: {m.group(1)!r}"
 
 
 def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
