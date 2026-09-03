@@ -22,6 +22,9 @@
 // largest positioned survey and then to nothing, because a corpus without the preferred survey (the test
 // fixture, an empty portal, any future corpus) must still walk.
 const TOUR_DEMO_SLUG="vulcan-2022",TOUR_DEMO_MIN=5,TOUR_DEMO_COLLECTION="australia-legacy-gds";
+// The station id the drawer steps prefer within the demo survey. A preference, not a requirement: a
+// survey without it opens on its first positioned station instead.
+const TOUR_DEMO_STATION="A1";
 
 // The deck. `sel` is a static selector so it can be pinned; a step may add `el`, a resolver returning the
 // live element to spotlight (used where the target is one card among many), which falls back to `sel`.
@@ -45,7 +48,7 @@ const TOUR_STEPS=[
    enter:_tourEnterStation},
   {sel:"#dp-files",
    text:"Files: what you can fetch for this station, by level - the transfer function served by AusMT, and time series handed off to NCI where they exist.",
-   enter:_tourEnterStation},
+   enter:_tourEnterFiles,exit:_tourExitFiles},
   {sel:".selbox",
    text:"Select stations: draw an area, or take everything that passes the filters.",
    enter:_tourEnterSelbox},
@@ -111,6 +114,24 @@ function _tourDemoSurvey(){
   if(big){_tourDemoSv=big;return _tourDemoSv;}
   let best=null;surveys.forEach(sv=>{if((pos[sv]||0)>0&&(best===null||pos[sv]>pos[best]))best=sv;});
   _tourDemoSv=best;return _tourDemoSv;
+}
+// The station the drawer steps open, as an index into ST. Resolved from the CORPUS, not from the filtered
+// map: the demo survey's preferred station where it exists, else that survey's first positioned station,
+// else the first visible station so a corpus with no positioned survey still shows a drawer. -1 = nothing
+// to open, which is the empty-corpus state and renders the step centred with no spotlight.
+let _tourDemoIdx=undefined;
+function _tourDemoStation(){
+  if(_tourDemoIdx!==undefined)return _tourDemoIdx;
+  _tourDemoIdx=-1;
+  if(typeof ST==="undefined")return _tourDemoIdx;
+  const sv=_tourDemoSurvey();
+  if(sv){
+    let i=ST.findIndex(s=>s.survey===sv&&s.id===TOUR_DEMO_STATION&&hasPosition(s));
+    if(i<0)i=ST.findIndex(s=>s.survey===sv&&hasPosition(s));
+    if(i>=0){_tourDemoIdx=ST[i].i;return _tourDemoIdx;}
+  }
+  if(typeof visible!=="undefined"&&visible.length)_tourDemoIdx=visible[0].i;
+  return _tourDemoIdx;
 }
 // The collection the collections step names: the preferred id when the corpus carries it, else the first
 // collection in the order renderCollections lays the grid out in, so the copy names the card on screen.
@@ -247,13 +268,15 @@ function _tourExitTreeDemo(){
   }
   _tourTreePrev=null;
 }
-// The station-drawer steps open the first visible station's drawer, the same as clicking its marker.
-// Idempotent: arriving with that station already open re-selects the tab and opens nothing, so stepping
-// back from the Files step does not rewrite the hash or reset the reader's scroll.
+// The station-drawer steps open the demo station's drawer, the same as clicking its marker. Idempotent:
+// arriving with that station already open opens nothing, so stepping back from the Files step neither
+// rewrites the hash nor throws away the reader's scroll position. Opening a station resets the drawer to
+// its default panel, so the tab is (re-)selected here in both cases and this step is the Response tab's
+// establishing step in either direction.
 function _tourEnterStation(){
   _tourEnterMapView();
-  if(typeof visible==="undefined"||!visible.length)return;
-  const i=visible[0].i;
+  const i=_tourDemoStation();
+  if(i<0)return;
   const dr=document.getElementById("drawer");
   const wasOpen=!!(dr&&dr.classList.contains("open"));
   const onSubject=wasOpen&&typeof _drawerSubject!=="undefined"&&_drawerSubject&&
@@ -264,6 +287,23 @@ function _tourEnterStation(){
     if(!wasOpen)_tourOpened.drawer=true;
     if(_tourOpened.hash===null&&prevHash!==location.hash)_tourOpened.hash=prevHash;
   }
+  _tourSelectTab("response");
+}
+// Drive the drawer's own tab control where one is rendered, so the tour takes the path a reader's click
+// takes; fall back to the module seam when the drawer is shut and there is only tab STATE to set.
+function _tourSelectTab(name){
+  const b=document.getElementById("dt-"+name);
+  if(b&&b.click&&typeof _curDrawerTab!=="undefined"&&_curDrawerTab!==name){b.click();return;}
+  if(typeof selectDrawerTab==="function"&&typeof _curDrawerTab!=="undefined"&&_curDrawerTab!==name)selectDrawerTab(name);
+}
+// The Files step: the same station, its Files pane showing. Leaving it in EITHER direction returns the
+// drawer to the Response tab, so the drawer step is never re-entered on a panel it did not establish.
+function _tourEnterFiles(){
+  _tourEnterStation();
+  _tourSelectTab("files");
+}
+function _tourExitFiles(){
+  _tourSelectTab("response");
 }
 // The closing step: land back on the map with the drawer the tour opened closed and a tour-changed hash
 // put back. The visitor's collapsed rail is NOT restored here: it belongs to the pre-tour snapshot, so a
@@ -338,7 +378,12 @@ function _tourTakeSnapshot(){
 function _tourRestoreDrawer(s){
   const dr=document.getElementById("drawer");
   const open=!!(dr&&dr.classList.contains("open"));
-  if(!s.drawerOpen){if(open&&typeof closeDrawer==="function")closeDrawer();return;}
+  if(!s.drawerOpen){
+    if(open&&typeof closeDrawer==="function")closeDrawer();
+    // The active tab is state even with nothing open: the Files step sets it, so it is put back here too.
+    if(s.drawerTab&&typeof selectDrawerTab==="function")selectDrawerTab(s.drawerTab);
+    return;
+  }
   const sub=s.drawerSubject;
   if(!sub)return;
   if(sub.kind==="station"&&typeof openStation==="function")openStation(sub.i);
@@ -607,7 +652,7 @@ function startTour(){
   _tourOpened={drawer:false,hash:null};
   _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;
   _tourSel={mode:null,created:false,bounds:null};
-  _tourDemoSv=undefined;               // resolve the demo subjects afresh against the loaded corpus
+  _tourDemoSv=undefined;_tourDemoIdx=undefined;   // resolve the demo subjects afresh against the loaded corpus
   _tourTakeSnapshot();                 // the workspace the visitor is handed back on close, from any step
   // A COLLAPSED rail hides every child but the collapse button, so the rail steps would spotlight nothing
   // and narrate controls that are not on screen. Expand it for the run; the snapshot above already holds

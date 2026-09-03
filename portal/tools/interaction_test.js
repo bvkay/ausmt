@@ -346,6 +346,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // collection resolves one from the corpus that is actually loaded, so these are what the pins compare
   // the rendered copy and the opened subjects against, never a literal.
   "tourDemoSurvey:()=>_tourDemoSurvey(),tourDemoCollection:()=>_tourDemoCollection()," +
+  "tourDemoStation:()=>_tourDemoStation()," +
   "tourStepText:(i)=>_tourText(TOUR_STEPS[i]),tourStepSel:(i)=>TOUR_STEPS[i].sel," +
   // Settle-until-stable re-layout (owner 2026-07-22): the drawer step opens a target that keeps reflowing
   // after open (slide, then the async station.json frame-line inject, then a possible map re-fit), so the
@@ -1659,10 +1660,16 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(findBox.value === "", "leaving the Find demo FORWARD did not clear the typed query, got: " + JSON.stringify(findBox.value));
   ok(findRes.style.display === "none", "leaving the Find demo FORWARD did not close the dropdown");
   ok(A.nVisCount() === 5, "leaving the Find demo FORWARD did not restore the filtered map, got " + A.nVisCount());
-  // graceful degrade (D5): kalkaroo-2022 is NOT in this fixture -> the resolved target must be the
-  // FIRST survey present (surveys[] is sorted; "Alpha Survey"), and nothing crashed getting here.
+  // MOVED with the deck revision (LANE-CONTRACT-TOUR-REVISION.md T1 step 4, T4 "the kalkaroo tree-demo
+  // target -> the demo survey rule"): the browse step no longer prefers its own hard-coded slug. It scrolls
+  // to whatever the DECK's demo survey resolves to, so the tour narrates one survey throughout instead of
+  // pointing at one survey here and a different one in the drawer and selection steps. The fixture carries
+  // no survey at the preferred size, so the rule degrades to the largest positioned survey.
+  ok(A.tourTreeTarget() === A.tourDemoSurvey(),
+    "the browse step must scroll to the deck's own demo survey, got: " + JSON.stringify(A.tourTreeTarget()) +
+    " against " + JSON.stringify(A.tourDemoSurvey()));
   ok(A.tourTreeTarget() === "Alpha Survey",
-    "tree-browse step must degrade to the first survey when kalkaroo-2022 is absent, got: " + JSON.stringify(A.tourTreeTarget()));
+    "the demo survey must degrade to the largest positioned survey on this fixture, got: " + JSON.stringify(A.tourTreeTarget()));
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));  // BACK -> index 2 (tree exit fires, find re-enters)
   ok(A.tourStep() === 2, "ArrowLeft did not return to the Find demo step, at step " + A.tourStep());
   ok(findBox.value === "AusLAMP", "re-entering the Find demo backwards did not re-type the query");
@@ -1739,6 +1746,71 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.tourSettling() === false, "settle: closing the tour must leave no poll frame pending");
   ok(!doc.getElementById("drawer").classList.contains("open"), "Esc from the drawer step did not close the drawer it opened");
   ok(A.curView() === "map", "Esc from the drawer step did not restore the map view");
+
+  // H2c. THE DEMO STATION AND THE FILES STEP (LANE-CONTRACT-TOUR-REVISION.md T1 steps 5/6, T4).
+  // The drawer steps open a RESOLVED demo station rather than "whatever happens to be first on the map":
+  // the demo survey's A1 where the corpus has one, else that survey's first positioned station. The Files
+  // step then shows the SAME station's Files pane, and stepping back must re-show it on Response WITHOUT
+  // re-opening it - an idempotent enter, because re-opening rewrites the hash and throws away the reader's
+  // scroll position.
+  const _demoSv = A.tourDemoSurvey();
+  ok(_demoSv === "Alpha Survey",
+    "demo: the fixture corpus carries no survey at the preferred size, so the demo survey must degrade to " +
+    "the largest positioned survey, got " + JSON.stringify(_demoSv));
+  ok(typeof A.tourDemoStation === "function" && A.tourDemoStation() === A.stIndex("A1"),
+    "demo: the demo station must resolve to the demo survey's A1, got " +
+    (typeof A.tourDemoStation === "function" ? A.tourDemoStation() : "no resolver"));
+  const _stepTo = (n) => { doc.getElementById("welcomeTour").click();
+    for (let k = 0; k < n; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); };
+  const _arrow = (key) => win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key }));
+
+  // DISCRIMINATION: with the demo survey filtered OFF the map, the first visible station is no longer A1.
+  // The drawer step must still open the demo station, because the demo is resolved from the CORPUS and not
+  // from whatever survives the current filters.
+  const _alphaBox = surveyBoxes.find(b => b.value === "Alpha Survey");
+  _alphaBox.checked = false; fire(_alphaBox, "change");
+  ok(A.nVisCount() > 0 && A.visIds()[0] !== "A1",
+    "demo setup: filtering the demo survey off the map must change which station is first visible, got " +
+    JSON.stringify(A.visIds()));
+  _stepTo(4);
+  ok(A.tourStep() === 4, "demo: could not reach the drawer step, at " + A.tourStep());
+  ok(JSON.stringify(A.drawerSubject()) === JSON.stringify({ kind: "station", i: A.stIndex("A1") }),
+    "demo: the drawer step must open the RESOLVED demo station even when it is filtered off the map, got " +
+    JSON.stringify(A.drawerSubject()));
+  _arrow("Escape");
+  _alphaBox.checked = true; fire(_alphaBox, "change");
+  ok(A.nVisCount() === 5, "demo cleanup: the tree must be back to all five stations, got " + A.nVisCount());
+
+  // THE FILES STEP: same station, Files tab, no re-open in either direction.
+  _stepTo(4);
+  ok(A.curDrawerTab() === "response", "demo: the drawer step must open on the Response tab, got " + A.curDrawerTab());
+  const _hashAtDrawer = win.location.hash;
+  ok(/#\/station\//.test(_hashAtDrawer), "demo: the drawer step must address the station it opened, got " + _hashAtDrawer);
+  _arrow("ArrowRight");
+  ok(A.tourStep() === 5, "files: could not reach the Files step, at " + A.tourStep());
+  ok(A.tourStepSel(5) === "#dp-files", "files: the Files step must spotlight the Files pane, got " + A.tourStepSel(5));
+  ok(A.curDrawerTab() === "files", "files: the Files step did not switch the drawer to the Files tab, on " + A.curDrawerTab());
+  ok(doc.getElementById("dp-files") && doc.getElementById("dp-files").hidden === false,
+    "files: the Files pane must be showing on its own step");
+  ok(doc.getElementById("dt-files").getAttribute("aria-selected") === "true",
+    "files: the Files tab button must read as selected");
+  ok(win.location.hash === _hashAtDrawer,
+    "files: the Files step must not re-open the station; the hash moved to " + win.location.hash);
+  // BACK: step 5 re-enters, re-shows Response, and still does not re-open.
+  _arrow("ArrowLeft");
+  ok(A.tourStep() === 4, "files: ArrowLeft did not return to the drawer step, at " + A.tourStep());
+  ok(A.curDrawerTab() === "response", "files: stepping BACK to the drawer step must re-show Response, on " + A.curDrawerTab());
+  ok(JSON.stringify(A.drawerSubject()) === JSON.stringify({ kind: "station", i: A.stIndex("A1") }),
+    "files: stepping back must keep the same station open, got " + JSON.stringify(A.drawerSubject()));
+  ok(win.location.hash === _hashAtDrawer, "files: stepping back must not re-open the station");
+  // FORWARD out of the Files step: Response again, and the select group closes the drawer for the demo map.
+  _arrow("ArrowRight"); _arrow("ArrowRight");
+  ok(A.tourStep() === 6, "files: could not step forward off the Files step, at " + A.tourStep());
+  ok(A.curDrawerTab() === "response", "files: leaving the Files step FORWARD must return the drawer to Response");
+  ok(!doc.getElementById("drawer").classList.contains("open"),
+    "files: the select steps must close the drawer so the demo map is unobstructed");
+  _arrow("Escape");
+  ok(A.tourStep() === -1, "files: could not close the tour after the Files-step checks");
 
   // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
