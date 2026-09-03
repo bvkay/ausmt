@@ -5135,21 +5135,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "map-chrome: the map must still come up: the home extent fitted and layers added, got " +
       mapCalls.length + " map calls and " + layersAdded.length + " layers");
 
-    // The credit, in the footer, under the acknowledgement, with both sources linked and both links
-    // leaving the tab the way every other outbound anchor on this site does.
-    const _credit = doc.querySelector("footer .fcenter .mapcredit");
-    ok(_credit, "map-chrome: the SPA footer must carry the basemap credit under the acknowledgement");
-    ok(_credit.textContent.replace(/\s+/g, " ").trim() ===
-       "Map data \u00a9 OpenStreetMap contributors, tiles \u00a9 Protomaps",
-      "map-chrome: the credit wording is the ruling's, got " + JSON.stringify(_credit.textContent));
-    const _cl = [..._credit.querySelectorAll("a")];
-    ok(_cl.length === 2 &&
-       _cl[0].getAttribute("href") === "https://www.openstreetmap.org/copyright" &&
-       _cl[1].getAttribute("href") === "https://protomaps.com",
-      "map-chrome: the credit links its two sources, OSM's copyright page then Protomaps");
-    ok(_cl.every(a => a.getAttribute("target") === "_blank" &&
-                      a.getAttribute("rel") === "noopener noreferrer"),
-      "map-chrome: a credit link leaves the site, so it opens in a new tab and hands it no opener");
+    // THE FOOTER CREDITS NO BASEMAP. It is the same box on seven surfaces, and a line only this one
+    // carried made it a taller box here (90.80px against 74.30px at 1280, measured in Chrome); and a
+    // fixed line of prose cannot follow the tile source, because map.js keeps a CARTO fallback that a
+    // Protomaps credit would name wrongly. Asserted against the DRIVEN document, which is where a
+    // credit that survived in one place would still be visible.
+    ok(!doc.querySelector("footer .mapcredit"),
+      "map-chrome: no footer carries a basemap credit; the map's own control meets the obligation");
+    ok(![...doc.querySelectorAll("footer a")].some(a => /openstreetmap\.org|protomaps\.com/.test(a.getAttribute("href") || "")),
+      "map-chrome: no footer anchor credits a basemap source; the credit follows the layer that is drawn");
 
     const _gsv = doc.querySelector('meta[name="google-site-verification"]');
     ok(_gsv && /^[A-Za-z0-9_-]{20,}$/.test(_gsv.getAttribute("content") || ""),

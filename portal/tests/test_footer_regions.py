@@ -119,20 +119,24 @@ MTCAT = "/data/mtcat.json"
 # an <a href>, which is why the two are separate rules rather than one host list.
 _EXTERNAL_NAV = ("https://www.auscope.org.au",)
 
-# THE BASEMAP CREDIT, on the SPA and nowhere else. The map's own corner attribution is gone at the
-# owner's ask, and the credit it carried is a LICENCE OBLIGATION rather than a courtesy: the basemap
-# is OpenStreetMap data under ODbL and the tiles are rendered from Protomaps' build, so the credit
-# moves rather than going. It sits under the acknowledgement in the SPA footer, which is directly
-# beneath the map and always on screen, which is the arrangement OSM's own guidance accepts. The
-# static tier shows no map and carries no credit; a page that credited a basemap it does not draw
-# would be a false statement about what the reader is looking at.
+# NO FOOTER CARRIES A MAP CREDIT, on any surface. The basemap's attribution is a licence obligation
+# (OpenStreetMap data under ODbL, tiles rendered from Protomaps' build) and it is met where the map
+# is: in the map's own attribution control, collapsed behind an (i) in the corner. It cannot be met
+# in the footer, for two reasons the owner ruled on.
 #
-# The "Leaflet" prefix goes with the control: it is a courtesy to a library, not a licence term.
-MAP_CREDIT = "Map data \u00a9 OpenStreetMap contributors, tiles \u00a9 Protomaps"
-MAP_CREDIT_LINKS = [("https://www.openstreetmap.org/copyright", "OpenStreetMap"),
-                    ("https://protomaps.com", "Protomaps")]
-MAP_CREDIT_CLASS = "mapcredit"
-_CREDIT_RE = re.compile(r'<span class="' + MAP_CREDIT_CLASS + r'">.*?</span>', re.S)
+# ONE: the footer is the same box on seven surfaces, and a line only the SPA carries makes it a
+# different box there. Measured in Chrome with the credit in place, the SPA's footer stood 90.80px
+# against 74.30px everywhere else at 1280 and 1024, and its acknowledgement's baseline sat 21.64px
+# from the footer's top against 29.89px elsewhere at 2560.
+#
+# TWO: a fixed line of prose cannot follow the tile source. map.js keeps a CARTO fallback for the
+# case where the pmtiles files are absent or the renderer fails to load, and a footer naming
+# Protomaps would credit the wrong provider on that branch. The control reads each layer's own
+# attribution, so the credit is whatever is actually drawing the map.
+#
+# Held as a negative on every surface, by the class AND by the two hrefs: a page could drop the class
+# and still be making the claim.
+_NO_CREDIT_MARKS = ("mapcredit", "https://www.openstreetmap.org/copyright", "https://protomaps.com")
 
 # HOW THE TWO EXTERNAL ANCHORS OPEN. Both leave the site, so both open in a new tab and neither
 # hands the opened page a handle on this one: target="_blank" gives the opened document
@@ -194,15 +198,15 @@ def _outside_queries(text):
         i = j + 1
 
 
-def _index_footer(keep_credit=False):
+def _index_footer():
     """index.html's <footer> with HTML comments stripped, so prose inside it cannot satisfy a pin.
 
-    The SPA's basemap credit is stripped by default: it is the one thing in this footer that no
-    other surface carries, and every pin comparing the seven wants the shared footer. The credit's
-    own pin asks for it back."""
+    NOTHING ELSE IS STRIPPED. This footer used to have the SPA's basemap credit removed before any
+    comparison, which is what let one surface carry a line the other six did not while every
+    "identical everywhere" pin still passed. The credit is gone from every footer, so the readers
+    compare what is there."""
     raw = _index_text().split("\n<footer>", 1)[1].split("</footer>", 1)[0]
-    raw = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
-    return raw if keep_credit else _without_credit(raw)
+    return re.sub(r"<!--.*?-->", "", raw, flags=re.S)
 
 
 def _engine_footer():
@@ -236,15 +240,8 @@ def _entity(text):
     return text.replace("&middot;", DOT).replace("&copy;", "©")
 
 
-def _without_credit(html):
-    """The footer with the SPA's basemap credit removed, so the acknowledgement can be compared as
-    the one string it is on all seven surfaces. The credit itself is pinned separately."""
-    return _CREDIT_RE.sub("", html)
-
-
 def _regions(footer, classes):
     """{region: inner html} for the three zone divs, each required exactly once."""
-    footer = _without_credit(footer)
     out = {}
     for name, cls in classes.items():
         hits = re.findall(r'class="' + re.escape(cls) + r'"[^>]*>(.*?)</(?:div|span)>', footer, re.S)
@@ -421,7 +418,7 @@ def _footer_children(name):
     text = (ROOT / name).read_text(encoding="utf-8")
     assert text.count("<footer") == 1, f"{name}: expected exactly one footer, found {text.count('<footer')}"
     foot = "<footer>" + text.split("<footer>", 1)[1].split("</footer>", 1)[0] + "</footer>"
-    foot = _without_credit(re.sub(r"<!--.*?-->", "", foot, flags=re.S))
+    foot = re.sub(r"<!--.*?-->", "", foot, flags=re.S)
     parser = _FooterRegions()
     parser.raw = foot
     parser.feed(foot)
@@ -898,11 +895,12 @@ def test_the_centre_line_is_bold_on_every_surface():
 
 
 def _footer_html(name):
-    """A portal page's footer, comments and the SPA's basemap credit stripped, so prose inside it
-    cannot satisfy a pin and the shared footer is compared as the one thing it is."""
+    """A portal page's footer with comments stripped, so prose inside it cannot satisfy a pin.
+
+    Nothing else is removed: every surface's footer is compared as the whole of what it carries."""
     text = (ROOT / name).read_text(encoding="utf-8")
     foot = text.split("<footer>", 1)[1].split("</footer>", 1)[0]
-    return _without_credit(re.sub(r"<!--.*?-->", "", foot, flags=re.S))
+    return re.sub(r"<!--.*?-->", "", foot, flags=re.S)
 
 
 def _anchors(where, footer_html):
@@ -951,12 +949,6 @@ def test_the_two_auscope_anchors_open_in_a_new_tab_on_every_surface():
                 continue
             assert "target=" not in tag, (
                 f"{where}: an in-site footer link stays in this tab, got {tag!r}")
-    # The SPA's basemap credit, which the readers above strip, is held to the same spelling: it is
-    # the only other footer anchor on this site that leaves it.
-    for tag in re.findall(r"<a\b[^>]*>", _CREDIT_RE.search(_index_footer(keep_credit=True)).group(0)):
-        assert _NEW_TAB in tag, (
-            f"portal/index.html: the basemap credit's links leave the site and open the same way "
-            f"every other outbound anchor here does: expected {_NEW_TAB!r} in {tag!r}")
 
 
 def test_the_token_surfaces_declare_one_footer_rule():
@@ -1024,57 +1016,81 @@ def test_every_surface_declares_the_one_footer_rule_set():
                 f"the token layer is resolved.\n  master: {master[sel]!r}\n  {where}: {got[sel]!r}")
 
 
-def test_the_basemap_credit_sits_in_the_spa_footer_and_on_no_other_surface():
-    """THE MAP'S ATTRIBUTION LEAVES THE MAP CORNER, NOT THE SITE. The owner asked for the
-    "Leaflet | (c) OpenStreetMap contributors (c) Protomaps" line off the map. The Leaflet prefix is
-    a courtesy to a library and goes with the control; the rest is a LICENCE OBLIGATION, because the
-    basemap is OpenStreetMap data under ODbL and the tiles are rendered from Protomaps' build, so it
-    moves into the footer rather than going.
+def test_no_footer_on_any_surface_carries_a_map_credit():
+    """NO FOOTER CREDITS A BASEMAP, on any of the seven surfaces.
 
-    THE FOOTER IS WHERE IT CAN GO. It sits directly beneath the map, is always on screen (the SPA's
-    body does not scroll), and attribution beside the map on the same page is the arrangement OSM's
-    own guidance accepts.
+    THE OBLIGATION IS NOT WAIVED, it is met where the map is. The corner control is back, collapsed
+    behind an (i), reading each tile layer's own attribution, which is what makes the credit follow
+    whichever provider is actually drawing the map: map.js keeps a CARTO fallback for the case where
+    the pmtiles files are absent or the renderer fails to load, and a fixed footer line naming
+    Protomaps would credit the wrong source on that branch. portal/tests/test_map_attribution.py
+    holds that half.
 
-    THE SPA ONLY. A static page draws no map, and a page that credited a basemap it does not show
-    would be a false statement about what the reader is looking at.
+    THE FOOTER IS ONE BOX ON SEVEN SURFACES, which is the other half of the reason. A line only the
+    SPA carried made it a different box there: measured in Chrome with the credit in place, the
+    SPA's footer stood 90.80px against 74.30px on every other surface at 1280 and 1024, and its
+    acknowledgement's baseline sat 21.64px from the footer's top against 29.89px elsewhere at 2560.
 
-    FAILS if the SPA footer loses the credit or either of its two links, if a link stops opening in
-    a new tab in the one spelling this site uses, if the wording drifts from the ruling, or if any
-    other surface starts carrying it."""
-    foot = _index_footer(keep_credit=True)
-    credit = _CREDIT_RE.search(foot)
-    assert credit, (
-        "the SPA footer must carry the basemap credit; the attribution control is gone from the "
-        f"map and this is the only place the ODbL obligation is met: {foot!r}")
-    inner = credit.group(0)
-    assert " ".join(_entity(re.sub(r"<[^>]+>", "", inner)).split()) == MAP_CREDIT, (
-        f"the credit must read {MAP_CREDIT!r}, got {inner!r}")
-    links = [(h, " ".join(txt.split()))
-             for h, txt in re.findall(r'<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', inner, re.S)]
-    assert links == MAP_CREDIT_LINKS, (
-        f"the credit names its two sources by link, in order: expected {MAP_CREDIT_LINKS}, "
-        f"got {links}")
-    for tag in re.findall(r"<a\b[^>]*>", inner):
-        assert _NEW_TAB in tag, (
-            f"a credit link leaves the site, so it opens in a new tab and hands it no opener; "
-            f"expected {_NEW_TAB!r} in {tag!r}")
+    HELD BY THE LINKS AS WELL AS THE CLASS: a surface could drop the class name and still carry the
+    copyright href, and still be making the claim. FAILS if any portal document or the engine's
+    emitter reintroduces either.
 
-    assert _CREDIT_RE.search(_index_text()[:_index_text().index("\n<footer>")]) is None, (
-        "the credit belongs to the footer; it must not also be drawn over the map")
-    # THE OTHER SURFACES, held by the LINK and not only by the class: a page could carry the
-    # copyright href without the class and still be making the claim.
-    osm = MAP_CREDIT_LINKS[0][0]
+    Non-vacuous: at the tip before this pin, portal/index.html carried all three marks."""
     for name in _portal_pages():
-        if name == "index.html":
-            continue
-        other = (ROOT / name).read_text(encoding="utf-8")
-        assert MAP_CREDIT_CLASS not in other and osm not in other, (
-            f"{name}: this surface draws no map, so it credits no basemap and carries no link to "
-            f"{osm}")
+        text = (ROOT / name).read_text(encoding="utf-8")
+        for mark in _NO_CREDIT_MARKS:
+            assert mark not in text, (
+                f"{name}: the basemap credit belongs to the map's own attribution control, not to a "
+                f"footer that seven surfaces share; found {mark!r}")
     eng = _pages_text()
-    assert MAP_CREDIT_CLASS not in eng and osm not in eng, (
-        f"the generated tier draws no map in its footer, so it credits no basemap and carries no "
-        f"link to {osm}")
+    for mark in _NO_CREDIT_MARKS:
+        assert mark not in eng, (
+            f"engine/extract/_pages.py: the generated tier draws no map and credits no basemap; "
+            f"found {mark!r}")
+
+
+def test_every_footer_zone_holds_the_same_markup_on_every_surface():
+    """ONE FOOTER MEANS ONE BOX, and a box is its rules AND its contents. The rule set is held
+    identical two pins above; this holds the CONTENT identical, which is the half that the SPA's
+    basemap credit broke while every other pin stayed green.
+
+    WHY THIS IS THE HEIGHT AND BASELINE PIN. Height and baseline are browser measurements and no
+    module here can take one. They are determined by the rule set and the markup inside it, so with
+    both identical the seven footers are the same box by construction and the measurement is
+    confirmation rather than the guarantee. Measured in Chrome after this pin: height and the
+    acknowledgement's baseline agree across all seven surfaces to within 1px at 2560, 1280 and 1024.
+
+    THE THREE SPELLINGS ARE RESOLVED FIRST, not compared raw: the separator is written literally on
+    four documents, as &middot; on two and as a numeric reference by the engine, and the two targets
+    that necessarily differ by surface (the MTCAT link's relative form and the lockup's src) are
+    normalised to the one path each names.
+
+    FAILS if any surface adds, drops or reorders anything inside a zone: a second line, a span, a
+    nbsp, a wrapper. Non-vacuous: at the tip before this pin, index.html's centre zone carried the
+    basemap credit's <span> and the other six did not."""
+    def canonical(where, footer):
+        zones = _regions(footer, _ZONE_CLASSES)
+        out = {}
+        for zone, raw in zones.items():
+            text = _entity(raw)
+            for href in re.findall(r'href="([^"]+)"', text):
+                text = text.replace(f'href="{href}"', f'href="{_root_relative(href, where)}"')
+            for src in re.findall(r'<img [^>]*src="([^"]+)"', text):
+                text = text.replace(f'src="{src}"', f'src="{_root_relative(src, where)}"')
+            out[zone] = " ".join(text.split())
+        return out
+
+    surfaces = [(name, _footer_html(name)) for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _engine_footer()))
+    assert len(surfaces) == 7, f"seven surfaces wear this footer, found {len(surfaces)}"
+    master = canonical("index.html", _index_footer())
+    for where, foot in surfaces:
+        got = canonical(where, foot)
+        for zone in _ZONE_CLASSES:
+            assert got[zone] == master[zone], (
+                f"{where}: the {zone} zone must hold portal/index.html's markup once the separator "
+                f"spelling and the two per-surface targets are resolved.\n"
+                f"  master: {master[zone]!r}\n  {where}: {got[zone]!r}")
 
 
 def test_the_map_carries_no_attribution_control():
