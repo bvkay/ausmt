@@ -8,8 +8,9 @@ documentation at **[ausmt.readthedocs.io](https://ausmt.readthedocs.io)**
 [![gateway](https://github.com/bvkay/ausmt/actions/workflows/gateway-ci.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/gateway-ci.yml)
 [![images](https://github.com/bvkay/ausmt/actions/workflows/deploy-images.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/deploy-images.yml)
 
-An AuScope-funded initiative with the Australian MT community: a national catalogue of
-magnetotelluric transfer functions, carrying the provenance, licence and citation details of
+AusMT is enabled by AuScope and the Australian Government via the National Collaborative Research
+Infrastructure Strategy (NCRIS). Built with the Australian MT community, it is a national catalogue
+of magnetotelluric transfer functions, carrying the provenance, licence and citation details of
 each one. This is the **framework monorepo** (see `maintainer/ADR-001-repo-structure.md`): an
 offline build engine, a static portal, and a curated submission gateway. Survey packages
 (EDI + `survey.yaml`) are validated, parsed with the community mt_metadata/mth5 toolchain, and

@@ -5,10 +5,11 @@ page carries the same content in shorter form.
 
 ## Who runs AusMT
 
-AusMT is an AuScope funded initiative, operated with the Australian MT community, as a pre-institutional
-deployment of the AusMT framework. The intended long-term home is AuScope/NCI institutional
-infrastructure; the framework, catalogue and survey packages are designed to transfer there without
-rework.
+AusMT is enabled by AuScope and the Australian Government via the National Collaborative Research
+Infrastructure Strategy (NCRIS). It is operated with the Australian MT community, as a
+pre-institutional deployment of the AusMT framework. The intended long-term home is AuScope/NCI
+institutional infrastructure; the framework, catalogue and survey packages are designed to transfer
+there without rework.
 
 Publication decisions rest with the curator(s), who review each submission's metadata, licensing,
 access level and validation results before anything is published; see [Review](../operations/review.md).
