@@ -28,6 +28,7 @@ NOT COVERED HERE (deliberately, and pinned elsewhere): the #api section and its 
 paragraph, which neither batch touches (tests/test_api_docs_section.py,
 tests/test_mtcat_machine_contract.py).
 """
+import ast
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -37,6 +38,7 @@ REPO = ROOT.parent
 ABOUT = ROOT / "about.html"
 STATE_JS = ROOT / "src" / "state.js"
 BUILDER = REPO / "engine" / "extract" / "build_portal.py"
+PAGES_PY = REPO / "engine" / "extract" / "_pages.py"
 
 RAW = ABOUT.read_text(encoding="utf-8")
 FLAT = re.sub(r"\s+", " ", RAW)
@@ -538,3 +540,31 @@ def test_the_citing_section_asks_for_both_the_citation_and_the_acknowledgement()
         "the retired cite-not-the-portal sentence is back")
     assert "Cite the survey; acknowledge AusMT." in cite, (
         "the citing section must open on both duties")
+
+
+def test_the_page_and_the_engine_print_one_acknowledgement():
+    """ONE acknowledgement, on both surfaces that print one. About carries the copyable block a
+    reader is asked to use; the engine prints the same sentence in the Cite disclosure of every
+    survey page it emits. FAILS IF the two drift, which is the defect this pin exists for: two
+    wordings of one statement leave a reader nothing to say which is current, and the engine's copy
+    reaches thousands of pages while About's reaches one.
+
+    The engine half is read from _pages.py's SOURCE, parsed rather than imported: the module
+    sibling-imports the engine's own path-dependent helpers and cannot simply be loaded from here,
+    and ast.literal_eval reads the constant exactly however it is line-wrapped.
+
+    WHY IT LIVES HERE rather than in engine/tests, the same reason the header parity pin's engine
+    half does: portal-ci runs on portal/** AND on engine/extract/_pages.py, so an edit to either
+    half fires this lane. The engine lane triggers on engine/** alone and cannot see about.html."""
+    tree = ast.parse(PAGES_PY.read_text(encoding="utf-8"))
+    found = [node.value for node in tree.body
+             if isinstance(node, ast.Assign)
+             and any(isinstance(x, ast.Name) and x.id == "_ACKNOWLEDGEMENT" for x in node.targets)]
+    assert len(found) == 1, (
+        f"engine/extract/_pages.py must declare _ACKNOWLEDGEMENT exactly once, found {len(found)}")
+    engine = ast.literal_eval(found[0])
+    assert engine == ACKNOWLEDGEMENT, (
+        "the acknowledgement has drifted between the page a reader copies it from and the survey "
+        "pages the engine prints it on:\n"
+        f"  portal/about.html          {ACKNOWLEDGEMENT!r}\n"
+        f"  engine/extract/_pages.py   {engine!r}")

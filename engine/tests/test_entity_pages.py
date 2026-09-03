@@ -756,8 +756,12 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
         assert '<details class="cite">' in page, "the citation must become a disclosure"
         assert "<summary>Cite this survey</summary>" in page, "the disclosure must say what it holds"
         assert "Cite as:" in page and "Kay, B." in page, "the formatted citation text is unchanged"
-        assert ("Data were accessed through the AusMT national magnetotelluric data portal."
-                in page), "the AusMT acknowledgement is a separate verbatim line"
+        assert ("Magnetotelluric transfer functions were accessed through AusMT, Australia's "
+                "Magnetotelluric Data Portal (https://ausmt.auscope.org.au), enabled by AuScope "
+                "and the Australian Government via the National Collaborative Research "
+                "Infrastructure Strategy (NCRIS)." in page), (
+            "the AusMT acknowledgement is a separate verbatim line, and it is the one about.html "
+            "asks a reader to use (portal/tests/test_about_copy_batch.py holds the two equal)")
         assert page.index('<details class="cite">') < page.index('class="lede"'), \
             "the citation sits near the title, above the lede and the map"
 
