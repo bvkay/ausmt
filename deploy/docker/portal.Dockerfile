@@ -22,14 +22,13 @@
 #   - index.html's map (portal/src/map.js) loads tiles from basemaps.cartocdn.com — allow-listed in
 #     the default/index CSP img-src.
 #   - the auscope.org.au ANCHORS. The five pages above carry three each: the header's AuScope
-#     link (the full logo on about.html, the symbol elsewhere, the brand-assets lane having made
-#     the AusMT mark the header identity on index.html, releases.html, add-survey.html and
-#     brand.html) and, in the footer, the acknowledgement's URL text and the AuScope-NCRIS
-#     lockup. 404.html carries the two footer anchors only: it has no header. All of them are
-#     NAVIGATION links, not resource loads: CSP does not govern <a href> targets. The images
-#     those pages fetch are vendored and served from 'self' under img-src: the AusMT identity
-#     mark (vendor/brand/ausmt-mark.svg), the header symbol (vendor/auscope-icon-white.png) and
-#     the footer lockup (vendor/auscope-ncris-white.png).
+#     symbol, which closes every one of those headers now that about.html carries the AusMT
+#     mark as its identity like the rest, and, in the footer, the acknowledgement's URL text and
+#     the AuScope-NCRIS lockup. 404.html carries the two footer anchors only: it has no header.
+#     All of them are NAVIGATION links, not resource loads: CSP does not govern <a href>
+#     targets. The images those pages fetch are vendored and served from 'self' under img-src:
+#     the AusMT identity mark (vendor/brand/ausmt-mark.svg), the header symbol
+#     (vendor/auscope-icon-white.png) and the footer lockup (vendor/auscope-ncris-white.png).
 #   - the auscope.org.au METADATA, which loads nothing: the JSON-LD publisher URL and the WebSite
 #     node's own url on index.html, every page's rel=canonical, and og:url plus og:image on
 #     index.html, about.html, releases.html and add-survey.html (brand.html is noindex and
