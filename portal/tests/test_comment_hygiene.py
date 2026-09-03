@@ -37,9 +37,11 @@ SELF = "test_comment_hygiene.py"
 # is what an offending comment is reported as.
 # ---------------------------------------------------------------------------
 DENY = (
-    # OWNER in capitals is a shell variable this repo's compose files carry, so a comment naming
-    # it is naming an identifier, not recording who decided something.
-    (re.compile(r"\b(?!(?-i:OWNER)\b)owner(?:'s|s)?\b", re.I), "decision-owner language"),
+    # OWNER in capitals is a shell variable the compose files carry, so a comment naming it beside
+    # another AUSMT_ variable, or calling it a variable, is naming an identifier rather than
+    # recording who decided something. Everywhere else the word is prose and is caught.
+    (re.compile(r"\b(?!(?-i:OWNER)\b(?=[^\n]*(?:AUSMT_|variable)))owner(?:'s|s)?\b", re.I),
+     "decision-owner language"),
     (re.compile(r"\brulings?\b", re.I), "ruling language"),
     # Approval OF A DESIGN DECISION, which is what may not be recorded here. The bare word is
     # left alone: "Approved-by:" is a git trailer this code writes, and a curator approving a
@@ -60,7 +62,9 @@ DENY = (
 
 # A comment line that is code rather than prose. The leaders are stripped first, so the same
 # three shapes are caught behind <!-- -->, /* */, // and #.
-CODE_LINE = re.compile(r"^(?:<script\b|L\.map\(|fetch\()")
+# A commented-out CALL, not prose that happens to name the function: the argument list is what
+# tells "fetch(url).then(...)" from "fetch() is the scripted probe".
+CODE_LINE = re.compile(r"^(?:<script\b|(?:L\.map|fetch)\(\s*['\"`\w$])")
 LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
 
 # A comment that OPENS on a bare work-item tag ("R10:", "C4 (", "X7:", "B4 -"). The vocabulary list

@@ -1,10 +1,10 @@
 "use strict";
-// C42 lane 3 — portal handles masked coordinates (Invariant 10; every pin states its failure
+// Portal handles masked coordinates (Invariant 10; every pin states its failure
 // criterion). Boots the REAL portal modules in jsdom over ENGINE-BUILT artifacts
 // (tests/fixtures/c42/, produced by tools/gen_c42_fixtures.py — never hand-typed rows) and drives
 // the null-coord (withheld) render/selection/drawer paths plus the honest-counts invariant.
 //
-// GROUND TRUTH (real build; C42 Amendment A1, 2026-07-12): the engine masks the coordinate VALUE AND —
+// GROUND TRUTH: the engine masks the coordinate VALUE AND -
 // for a NON-EXACT station — emits an explicit coordinate-policy MARKER on a boot-loaded artifact:
 //   * withheld    -> catalogue lat/lon = null   (DETECTABLE from the value alone) + coord_policy marker
 //   * generalised -> catalogue lat/lon = the 0.1deg cell (rendered VERBATIM — the record forbids
@@ -185,7 +185,7 @@ const dEx = A.openDrawer(iEx);
 ok(dEx.ok, "PIN2: opening the exact drawer must not throw: " + dEx.err);
 if (dEx.ok) {
   ok(/-31\.234567\s*,\s*135\.234567/.test(dEx.html), "PIN2: exact drawer must render the verbatim coordinates");
-  // A1: an exact station must NOT show the generalised badge (the marker is non-exact-only)
+  // An exact station must NOT show the generalised badge (the marker is non-exact-only)
   ok(!/position generalised/i.test(dEx.html), "PIN-A1: an exact station must NOT show the generalised badge");
 }
 

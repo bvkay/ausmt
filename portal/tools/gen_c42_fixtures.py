@@ -15,7 +15,7 @@ The committed fixtures are the build's own output, so a reader can verify the ex
   * products/sweep-survey/<ID>/station.json — location {lat,lon} masked; distribution.edi_available
     false for a byte-gated (non-exact) station; coordinate_policy present for the non-exact stations.
   * coord_policy.json — ausmt_id -> policy ('generalised'/'withheld') for the NON-EXACT stations only.
-C42 Amendment A1 (2026-07-12): the engine now emits an explicit coordinate-policy MARKER on a boot-loaded
+The engine emits an explicit coordinate-policy MARKER on a boot-loaded
 artifact (coord_policy.json) for non-exact stations, so the portal can badge a generalised station's
 position honestly. Exact stations stay unmarked (no marker file for an all-exact corpus).
 """

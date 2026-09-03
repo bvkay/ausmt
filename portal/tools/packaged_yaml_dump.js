@@ -1,4 +1,4 @@
-// A3 (LANE-CONTRACT-FORM-CREDIT): dump the survey.yaml the REAL add-survey page packages, for each of a
+// Dump the survey.yaml the REAL add-survey page packages, for each of a
 // set of credit/citation scenarios, so the REAL surveys validator can be run over them.
 //
 // This driver asserts nothing itself. It boots the page in jsdom exactly as tools/add_survey_submit_test.js
@@ -88,7 +88,7 @@ function fillRequired(win, slug) {
   $("m_auth").checked = true; $("m_licdecl").checked = true; $("m_locconf").checked = true;
 }
 
-// Every scenario the lane's new questions can produce, driven through the LIVE DOM.
+// Every scenario the module's new questions can produce, driven through the LIVE DOM.
 const SCENARIOS = {
   // The bare case: only the essentials. Proves the seeded custodian row alone validates.
   "packaged-bare": () => {},

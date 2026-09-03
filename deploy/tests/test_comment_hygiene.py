@@ -32,9 +32,11 @@ SELF = "test_comment_hygiene.py"
 VENDORED = "vendored_validation"
 
 DENY = (
-    # OWNER in capitals is a shell variable this repo's compose files carry, so a comment naming
-    # it is naming an identifier, not recording who decided something.
-    (re.compile(r"\b(?!(?-i:OWNER)\b)owner(?:'s|s)?\b", re.I), "decision-owner language"),
+    # OWNER in capitals is a shell variable the compose files carry, so a comment naming it beside
+    # another AUSMT_ variable, or calling it a variable, is naming an identifier rather than
+    # recording who decided something. Everywhere else the word is prose and is caught.
+    (re.compile(r"\b(?!(?-i:OWNER)\b(?=[^\n]*(?:AUSMT_|variable)))owner(?:'s|s)?\b", re.I),
+     "decision-owner language"),
     (re.compile(r"\brulings?\b", re.I), "ruling language"),
     # Approval OF A DESIGN DECISION, which is what may not be recorded here. The bare word is
     # left alone: "Approved-by:" is a git trailer this code writes, and a curator approving a
@@ -53,7 +55,9 @@ DENY = (
     (re.compile(r"\bFIXME\b", re.I), "unowned marker"),
 )
 
-CODE_LINE = re.compile(r"^(?:<script\b|L\.map\(|fetch\()")
+# A commented-out CALL, not prose that happens to name the function: the argument list is what
+# tells "fetch(url).then(...)" from "fetch() is the scripted probe".
+CODE_LINE = re.compile(r"^(?:<script\b|(?:L\.map|fetch)\(\s*['\"`\w$])")
 LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
 
 
@@ -225,3 +229,12 @@ def test_the_approval_rule_targets_a_design_decision_not_the_workflow(tmp_path):
     dirty = tmp_path / "dirty.py"
     dirty.write_text("# Rebuilt to the approved mockup's structure.\na = 1\n", encoding="utf-8")
     assert offences([dirty]), "the approval rule missed approval of a design decision"
+
+
+def test_the_commented_out_code_rule_needs_a_call_not_a_mention(tmp_path):
+    prose = tmp_path / "prose.js"
+    prose.write_text("// fetch() is the scripted healthz probe.\nvar a = 1;\n", encoding="utf-8")
+    assert not offences([prose]), "the rule flagged prose that merely names the function"
+    code = tmp_path / "code.js"
+    code.write_text('// fetch("/api/x").then(r => r.json())\nvar a = 1;\n', encoding="utf-8")
+    assert offences([code]), "the rule missed a commented-out call"

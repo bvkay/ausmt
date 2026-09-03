@@ -520,7 +520,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
     const z = await JSZipNode.loadAsync(zip);
     const ediPaths = Object.keys(z.files).filter((p) => /transfer_functions\/edi\/.+\.edi$/.test(p));
-    // task #16: entries are named by DATAID (KEEP -> KEEP.edi), NOT by the on-disk filename (keep.edi).
+    // Entries are named by DATAID (KEEP -> KEEP.edi), NOT by the on-disk filename (keep.edi).
     // The remove feature must compose with the rename: only the KEPT station's DATAID-named entry ships.
     ok(ediPaths.length === 1 && /\/KEEP\.edi$/.test(ediPaths[0]),
       "the zip carries exactly one EDI, the kept one named by its DATAID (KEEP.edi); entries: " + JSON.stringify(ediPaths));
@@ -547,7 +547,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 7. DATAID-BASED PACKAGING (task #16): files package under <sanitized-DATAID>.edi (matching the
+  // 7. DATAID-BASED PACKAGING: files package under <sanitized-DATAID>.edi (matching the
   //    station identity the engine keys off), the file list shows the rename BEFORE upload, and a
   //    duplicate/unreadable DATAID BLOCKS submission naming both source filenames (fail loud, no silent
   //    auto-suffixing). The motivating case: olympic-dam-2004 ships LineNo__StationNo_1.edi whose
@@ -610,7 +610,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
       ok(/validation FAIL/i.test(e.doc.getElementById("pkBody").textContent), "packaging is blocked with a FAIL message");
     }
 
-    // (7d) SOFTENED DATAID GATE (owner ruling 2026-07-24): an EDI with no DATAID line NO LONGER blocks.
+    // (7d) SOFTENED DATAID GATE: an EDI with no DATAID line NO LONGER blocks.
     //      The station id auto-derives from the filename (extension stripped, sanitised), the file list
     //      shows the derived name flagged for the curator, validation surfaces a WARNING (not a FAIL), and
     //      packaging SUCCEEDS with the derived name + a curator flag recorded in MANIFEST.json.
@@ -664,7 +664,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 8. ROUND 2 (owner-ruled 2026-07-24): slug-collision awareness, zip-path visibility, the collection
+  // 8. ROUND 2: slug-collision awareness, zip-path visibility, the collection
   //    card, the A3 credit questions' emission, DOI normalisation. Live-DOM behaviours the pure tests
   //    (add_survey_logic.test.js) cannot cover.
   const JSON_OK_BODY = { status: 200, text: () => Promise.resolve('{"ok":true}') };

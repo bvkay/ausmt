@@ -59,7 +59,7 @@ const stub = () => new Proxy(function () {}, {
   apply: () => stub(), construct: () => stub(),
 });
 
-// ---- RECORDING LEAFLET FACADE (pane/pointer lane, 2026-08-19) ------------------------------------
+// ---- RECORDING LEAFLET FACADE ------------------------------------
 // The blanket stub above answers every property with another stub, which is right for "the map layer is
 // irrelevant here" but makes three things unobservable that a production regression has now proved matter:
 // which PANES the app creates and with what style, which LAYERS it puts in them, and what a marker's click
@@ -69,7 +69,7 @@ const stub = () => new Proxy(function () {}, {
 // HONESTY, stated once and repeated at the legs: this records the app's CALLS. jsdom has no layout, no
 // compositor and no canvas hit-testing, so nothing here proves that a pointer reaches a layer, that pane
 // z-order resolves the way the browser resolves it, or that pointer-events actually stops a canvas
-// swallowing a click. Those are browser facts, measured separately by the lane and reported as such.
+// swallowing a click. Those are browser facts, measured separately and reported as such.
 const recProxy = (own) => {
   const px = new Proxy(function () { }, {
     get: (t, p) => {
@@ -120,7 +120,7 @@ const recGroup = () => {
   return recProxy(own);
 };
 // The panes the app creates, by name. It must create NONE (F5): a pane is stacked over the station canvas,
-// which is the 2026-08-19 outage. Recorded rather than stubbed away so the absence is assertable.
+// Which is the outage. Recorded rather than stubbed away so the absence is assertable.
 const panesMade = Object.create(null);
 // getZoom is deliberately NOT recorded: curZoom() falls back to 4 (national), which is the zoom the map
 // pins are written at. project/unproject are not recorded either - they existed only to make the retired
@@ -146,7 +146,7 @@ const scaleControls = [];
 // L.control.attribution, recorded, for the SAME reason and on the same terms as the scale bar: the
 // collapsed control is ASSEMBLED IN THE DOM by src/mapattrib.js, so under the blanket stub there
 // would be no node to assemble it on and every assertion about the glyph, the state and the credit
-// would be vacuous. This reproduces the three behaviours the ruling turns on: the control renders
+// would be vacuous. This reproduces the three behaviours the rule turns on: the control renders
 // into a container of its own, it collects each LAYER's declared attribution (which is what makes
 // the credit follow the provider that is drawn), and it prints the prefix only when one is asked
 // for, so "no Leaflet flag" is a real assertion and not a restatement of the option.
@@ -218,7 +218,7 @@ win.L = new Proxy(function () { }, {
     if (p === "layerGroup") return () => recGroup();
     // The basemap layer, recorded for ONE property: the attribution it declares. That is what the
     // collapsed control reads, and "the credit follows the layer that is drawn" is the claim the
-    // whole ruling rests on, so it is asserted against the layer the app actually added rather
+    // whole rule rests on, so it is asserted against the layer the app actually added rather
     // than against a string in a source file.
     if (p === "tileLayer") return (url, o) => {
       const own = Object.create(null);
@@ -342,7 +342,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro lets the driver
   // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
   "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +
-  // Settle-until-stable re-layout (owner 2026-07-22): the drawer step opens a target that keeps reflowing
+  // Settle-until-stable re-layout: the drawer step opens a target that keeps reflowing
   // after open (slide, then the async station.json frame-line inject, then a possible map re-fit), so the
   // tour POLLS the target rect each frame and re-runs _tourLayout until it holds stable. tourSettleEl exposes
   // which element the watcher tracks (drawer step -> "drawer"; null when detached) and tourLayoutRuns counts
@@ -350,15 +350,15 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // re-run-until-stable-then-stop behaviour and clean detach without leaking the watcher onto a persistent element.
   "tourSettleEl:()=>_tourSettleEl&&_tourSettleEl.id,tourLayoutRuns:()=>_tourLayoutRuns," +
   "tourSettling:()=>_tourSettleRAF!==0," +   // whether a poll frame is still pending (true=watching, false=stood down/detached)
-  // UX7b U7 welcome-popup helpers: showWelcome/closeWelcome drive the first-visit modal directly (the
-  // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). UX9 (owner tour redesign): the
+  // U7 welcome-popup helpers: showWelcome/closeWelcome drive the first-visit modal directly (the
+  // Checkbox-persistence matrix pokes #welcomeDismiss then closes each way). the
   // side-picking _tourPlace is retired for a CENTRED card + a LEADER to the spotlight. _tourCardBox is the
   // PURE centred-card box (with the overlap nudge) and _tourLeader the PURE leader geometry (endpoints +
   // suppression) — both unit-tested with synthetic rects since jsdom has no layout engine. U10 TOUR_DIM is
   // the overlay alpha (the load-bearing 'increased dim' value).
   "showWelcome,closeWelcome,tourCardBox:(cw,ch,vw,vh,t)=>_tourCardBox(cw,ch,vw,vh,t)," +
   "tourLeader:(c,s,sup)=>_tourLeader(c,s,sup),tourDim:()=>TOUR_DIM," +
-  // UX6 Wave D hooks: sidebarMode reader + setSidebarMode (D2 Browse/Select toggle); onDrawCreated +
+  // Hooks: sidebarMode reader + setSidebarMode (D2 Browse/Select toggle); onDrawCreated +
   // drawSelectionMsg (D3 draw-created toast + its pure formatter).
   "sidebarMode:()=>sidebarMode,setSidebarMode,onDrawCreated,drawSelectionMsg," +
   // Discoverability (SELECTION-panel draw buttons): armDraw is the panel's arm entry point (reuses the
@@ -368,11 +368,11 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "armDraw,setArmedDraw,drawModeHandler,armedDrawMode:()=>armedDrawMode," +
   // S3 hooks: recentlyAdded() for the strip-content assertion; renderRecentlyAdded so the driver
   // can force a re-render after directly poking SMETA (not needed in the current fixture path, but
-  // keeps parity with runInit()'s own call sites); surveyLatestDate so the pinned cross-lane date
+  // keeps parity with runInit's own call sites); surveyLatestDate so the pinned cross-surface date
   // rule (attribution.declared_date folded into the release_notes candidate set) is asserted
   // directly, without a full re-render.
   "recentlyAdded,renderRecentlyAdded,surveyLatestDate," +
-  // UX4 (D1-A1/D2/D4): the PURE map helpers, exposed so the AusLAMP partition / colour / tooltip /
+  // The PURE map helpers, exposed so the AusLAMP partition / colour / tooltip /
   // zoom-scaling are unit-testable without Leaflet (jsdom can't load it). partitionMarkers(list) ->
   // {unclustered, clustered} splits on AusLAMP membership; isAuslampSurvey(slug,set) is the predicate;
   // radiusForZoom/weightForZoom are the D4 step functions; markerColor(s) is membership-blind post-A1;
@@ -390,7 +390,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // handler the app actually bound rather than a re-implementation of it.
   "stationMarker:(id)=>{const s=ST.find(x=>x.id===id);return s&&s.marker;}," +
   "selectSurvey,renderCards,openSurvey," +
-  // Survey-drawer lane hooks. focusSurvey drives the header "View on map" path; drawerFitOptions is the
+  // Survey-drawer hooks. focusSurvey drives the header "View on map" path; drawerFitOptions is the
   // PURE fit padding (asserted against a stubbed drawer width); dimStyleFor is the PURE Option-A dim
   // decision; setSurveyDim/clearSurveyDim + dimFocus expose the focus STATE so a leg can prove the dim
   // lifts on close. _bgClickShouldClose is the pure background-click rule (see the honesty note at its
@@ -398,15 +398,15 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "focusSurvey,drawerFitOptions,dimStyleFor,setSurveyDim,clearSurveyDim," +
   "dimFocus:()=>_dimFocusSurvey,bgClickShouldClose:_bgClickShouldClose," +
   "surveyDataLevelsHtml,DATA_LEVEL_SLOTS," +
-  // UX4 D5 hook: the tree-demo step's resolved survey label (kalkaroo-2022 preferred, first-survey
+  // D5 hook: the tree-demo step's resolved survey label (kalkaroo-2022 preferred, first-survey
   // degrade) — a REAL observable for the graceful-degrade assertion, not just "didn't crash".
   "tourTreeTarget:()=>_tourTreeTarget," +
-  // UX5 (D7/D8) hooks: the disclosure-caret API (same functions the carets and the tour step call)
+  // The disclosure-caret API (same functions the carets and the tour step call)
   // plus a collapse-set reader, so the invariant and the tour-restore assertions observe real state.
   "treeSetCollapsed,treeIsCollapsed,treeCollapsedKeys:()=>[..._treeCollapsed]," +
   "setType:(id,ty)=>{const s=ST.find(x=>x.id===id);if(s)s.type=ty;}," +
   "setSlug:(id,sl)=>{const s=ST.find(x=>x.id===id);if(s)s.slug=sl;}," +
-  // UX3 item 7 hook: poke a survey's blurb (abstract) and read the rendered surveyCard/surveySummary
+  // Poke a survey's blurb (abstract) and read the rendered surveyCard/surveySummary
   // HTML, so the driver can assert where the abstract renders (C2: the drawer story view, no longer the
   // card) and the removal of the dimensionality displays (while skew/strike stay).
   "setBlurb:(sv,b)=>{SMETA[sv]=SMETA[sv]||{};if(b===null)delete SMETA[sv].blurb;else SMETA[sv].blurb=b;}," +
@@ -417,17 +417,17 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // pre-C22 code still reaches section T and fails THERE with a precise message, instead of dying at
   // this api hook with an unrelated-looking ReferenceError.
   "apa,bibtex,ris,AUSMT_SELF,NCI_CITE,TS_COLLECTION,citeLine:(c,d)=>citeLine(c,d),smeta:(sv)=>SMETA[sv]," +
-  // UX6 Wave E hooks: collScatter (E6 footprint — driven with a stubbed AU_OUTLINE), renderCollections
+  // Hooks: collScatter (E6 footprint - driven with a stubbed AU_OUTLINE), renderCollections
   // (E5 landing), and openStationById (E7 focus — lets the driver control the invoking element before open).
   "collScatter,memberColours,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
-  // UX8 (X5/X7) + C46-W3b PURE helpers, exposed so the field->indicator/star mappings are unit-testable
+  // + C46-W3b PURE helpers, exposed so the field->indicator/star mappings are unit-testable
   // (jsdom can't run real geometry): screeningIndicators(d) maps scalar inputs to the five indicator
   // states; maturityModel(m,sc) is the star model; licBadgeState/licIsOpen/attributionText are the W3b
   // licence/attribution helpers; setSMETA patches a survey's metadata so the driver can drive the
   // attribution/sources render paths that the base fixture doesn't carry.
   "screeningIndicators,maturityModel,licBadgeState,licIsOpen,attributionText," +
   "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
-  // Card-lane polish hooks. processingSoftwareText/pubShortCite are the PURE lineage derivations (the
+  // Card polish hooks. processingSoftwareText/pubShortCite are the PURE lineage derivations (the
   // most-specific software string, and a publication reduced to a short cite without fabricating an
   // "et al."); setManifest swaps the download manifest so the distributed-formats node can be driven
   // against real availability (the fixture data dir ships none), mirroring tools/bundle_tiles_test.js.
@@ -451,14 +451,14 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "restoreSciRows:()=>{if(window.__sciBackup){SCI=window.__sciBackup;window.__sciBackup=null;}}," +
   // CVD amendment hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
   "qColor," +
-  // UX9 item 2 (map off-centre fix) hooks. The off-centre-on-load bug is a fitBounds computed at a
+  // (map off-centre fix) hooks. The off-centre-on-load bug is a fitBounds computed at a
   // degenerate (stale/0x0) container size; the fix invalidates size BEFORE the primary fit and adds a
   // one-shot corrector on the setView('map') timer. mapSizeDegenerate/mapRefitGate are the PURE decisions
   // (unit-tested on synthetic inputs, since jsdom has no layout engine); homeFitDegenerate/mapUserInteracted
   // read the recorded boot state; setMapInteracted flips the user-control flag; mapCorrectHomeFit invokes
   // the corrector so its one-shot re-fit + flag-clear are observable via the map stub's recorded calls.
   "mapSizeDegenerate:(s)=>_mapSizeDegenerate(s),mapRefitGate:(st)=>_mapRefitGate(st)," +
-  // Owner round 2: the home frame is now the FIXED Australia box (AU_HOME_BOUNDS), shared by the map-create
+  // The home frame is now the FIXED Australia box (AU_HOME_BOUNDS), shared by the map-create
   // fit and buildMarkers, NOT the tight positioned-station extent. homeBounds/auHomeBounds expose both so the
   // driver can pin that they are the SAME object (cannot drift) and that HOME_BOUNDS is NOT the old pts array.
   "homeBounds:()=>HOME_BOUNDS,auHomeBounds:()=>AU_HOME_BOUNDS," +
@@ -505,7 +505,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // station path, drawer.js), exposed so the pin can drive the real unlabelled call site rather than a
   // re-implementation of it; selBulkFlag is the flag string exports.js appends, so the cross-file pin
   // in portal/tests can compare it with the aggregator's constant instead of hard-coding a third copy.
-  // LAZY arrows so a boot on pre-lane code still REACHES the section and fails there with a precise
+  // LAZY arrows so a boot on earlier code still REACHES the section and fails there with a precise
   // message, instead of dying at this api hook with a ReferenceError.
   "dispatchProd:(d)=>dispatchProd(d),selBulkFlag:()=>SEL_BULK_FLAG," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
@@ -580,15 +580,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "phase2: with ts_access.json in flight the hand-off index must read as UNKNOWN, never as an empty answer");
   ok(A.nST() === 5, "fixture should load 5 stations, got " + A.nST());
 
-  // UX9 ITEM 2: MAP OFF-CENTRE-ON-LOAD FIX. The bug was buildMarkers' fitBounds computing against a
+  // ITEM 2: MAP OFF-CENTRE-ON-LOAD FIX. The bug was buildMarkers' fitBounds computing against a
   // degenerate (stale/0x0) container size, so the map framed at zoom 0 / off centre. The fix (a) invalidates
   // size BEFORE the primary fit, and (c) adds a ONE-SHOT corrector on the setView('map') 60ms timer that
   // re-fits HOME_BOUNDS only when the fit was degenerate AND the user has not taken control. These run
   // synchronously at boot (the timer hasn't fired yet), so mapCalls holds the primary invalidateSize+fit here.
-  // Owner round 2 (2026-07-22): the home frame is now the FIXED Australia box (AU_HOME_BOUNDS), NOT the tight
+  // The home frame is now the FIXED Australia box (AU_HOME_BOUNDS), NOT the tight
   // positioned-station extent (which dropped the view south and clipped northern Australia). buildMarkers no
   // longer assigns the pts array to HOME_BOUNDS and no longer passes a {padding:[24,24]} inset — it fits the
-  // shared box directly so the post-load frame is byte-identical to the map-create fit the owner likes.
+  // shared box directly so the post-load frame is byte-identical to the map-create fit.
   // HOME-FRAME IDENTITY: HOME_BOUNDS is the SAME object as the map-create AU_HOME_BOUNDS (cannot drift) and is
   // NOT the old tight-extent pts array. This red-proves against the old `HOME_BOUNDS = pts` (an Array).
   ok(A.homeBounds() === A.auHomeBounds(), "item2: HOME_BOUNDS must be the shared fixed Australia box (=== AU_HOME_BOUNDS), not the tight station extent");
@@ -679,7 +679,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // The ts_access-driven surfaces are inert-and-disabled, never live over data that has not
   // arrived: a live Download row would price the scope off routes that are not here, and a live
-  // level filter would hide every station over them. (Lane B: colour-by is retired; the Data
+  // level filter would hide every station over them. (colour-by is retired; the Data
   // available dropdown and the Download block's time-series rows are the gated surfaces.)
   const _tsBtns = () => [...doc.getElementById("tsSeg").querySelectorAll("button")];
   ok(_tsBtns().length === 4,
@@ -840,7 +840,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "honesty: a FAILED tf.json must be STATED, never rendered as a station that has no response functions");
   ok(!/data-plot=/.test(_failDrawer), "a failed tf.json leaves no curves to plot");
   ok(_failDrawer.indexOf("Loading response functions") < 0, "a settled failure must not read as still loading");
-  // Lane B (owner D3): the strike rose is retired; its control must be GONE, not disabled.
+  // The strike rose is retired; its control must be GONE, not disabled.
   ok(!failWin.document.getElementById("strike"), "the strike-rose control is retired and must not render");
 
   // ---- TWO-PHASE BOOT, part 4b: a FAILED sci.json is not a screening outcome ----------------------
@@ -849,7 +849,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // settles on failure too, so a 404 on sci.json re-enabled the completeness controls, emptied the map at any
   // qMin, painted every marker the "not evaluated" grey and wrote remote_ref:false into an exported file.
   // Phase 2 is what made a sci.json failure survivable at all (pre-split it rode the required Promise.all and
-  // blanked the portal), so this state is this lane's to answer.
+  // Blanked the portal), so this state is this module's to answer.
   const _noSci = Object.assign({}, DATAMAP); delete _noSci["data/sci.json"];
   const sciFailWin = await bootFreshWindow(_noSci);
   const sfDoc = sciFailWin.document, sfA = sciFailWin.__api;
@@ -878,9 +878,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
      _gjOk.features[0].properties.remote_ref === true,
     "a healthy sci.json must write the three screening properties exactly as before");
 
-  // VER CHIP OFF EVERY SURFACE. The one-footer ruling took Releases and About this build out of the
+  // VER CHIP OFF EVERY SURFACE. The one-footer rule took Releases and About this build out of the
   // footer, and the version chip rode inside the About-this-build popover; it landed in about.html's
-  // #build section, and the owner has now deleted that section too. NO page on this site carries a
+  // #build section, and we have deleted that section too. NO page on this site carries a
   // chip, and no page loads the script either. version.js is a standalone page script (not in
   // MODULES), so run it here against the real DOM as a page that loaded it would, then assert:
   //   (a) this document carries NO [data-ver-chip], in the header, the footer or anywhere else;
@@ -922,7 +922,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the config-missing sentinel must expose schema_version null (an explicit 'no version'), got: " +
     JSON.stringify(bare.window.AUSMT_VERSION.schema_version));
 
-  // UX4 (D1) AUSLAMP MEMBERSHIP. Collection membership, resolved once at boot.
+  // AUSLAMP MEMBERSHIP. Collection membership, resolved once at boot.
   //
   //   AUSLAMP_SET is built at boot from COLL.auslamp.surveys (survey LABELS) resolved through
   //   SMETA[label].slug. The fixture's auslamp collection lists ["Alpha Survey","Beta Survey"] whose slugs
@@ -936,12 +936,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.isAuslampSurvey("gamma", A.auslampSet()) === false, "isAuslampSurvey must be false for a non-member slug");
   ok(A.isAuslampSurvey("alpha", new Set()) === false, "isAuslampSurvey must be false against an empty set (absent collection)");
   ok(A.isAuslampSurvey(null, A.auslampSet()) === false, "isAuslampSurvey must be false for a null slug");
-  // The never-collapse PRIVILEGE the membership set used to buy is gone with the badges (owner,
-  // 2026-08-24): nothing on the map collapses, so no map surface reads AUSLAMP_SET at all. What is pinned
+  // The never-collapse PRIVILEGE the membership set used to buy is gone with the badges,
+  // ): nothing on the map collapses, so no map surface reads AUSLAMP_SET at all. What is pinned
   // here is only what still exists - the boot resolution above and the predicate over it.
 
-  // ZOOM-SCALED RADII. The UX4-D4 four-step ladder (2.5/3.5/4.5/5) became a CONTINUOUS ramp with a floor
-  // and a ceiling; the drawer-polish lane (owner, 2026-08-19) then removed the per-TYPE base, so ONE curve
+  // ZOOM-SCALED RADII. The D4 four-step ladder (2.5/3.5/4.5/5) became a CONTINUOUS ramp with a floor
+  // And a ceiling; the drawer polish then removed the per-TYPE base, so ONE curve
   // serves every data type - "the same size as the icons set for the AusLAMP sites". The pinned PROPERTY is
   // unchanged and still asserted here (monotone non-decreasing in z); the exact curve, its bounds and the
   // type-uniformity are pinned in tools/map_dots_test.js against the named constants.
@@ -961,7 +961,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ok(A.weightForZoom(z + 1) >= A.weightForZoom(z), "weightForZoom must be monotone non-decreasing at z=" + z);
   }
 
-  // UX4 Amendment A1 COLOUR (still live) + O4 TOOLTIP (2026-07-12). Colour: EVERY colour mode is
+  // Amendment A1 COLOUR (still live) + O4 TOOLTIP. Colour: EVERY colour mode is
   // membership-blind — type mode gives member and non-member LPMT the IDENTICAL flagship teal. Tooltip:
   // O4 slimmed it to station name + survey name ONLY, so the AusLAMP/legacy distinction is NO LONGER on
   // the tooltip — it survives only in the D2 clustering split. Two synthetic LPMT stations differing ONLY
@@ -969,11 +969,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.setAuslampSet(["memb"]);
   const _memberLp = { id: "S1", type: "LPMT", slug: "memb", q: 4.2, dim: "2-D", survey: "Alpha Survey" };
   const _otherLp = { id: "S2", type: "LPMT", slug: "notmemb", q: 4.2, dim: "2-D", survey: "Beta Survey" };
-  // Lane B: colour-by is retired; the ONE marker colour is the data-type colour, membership-blind.
+  // Colour-by is retired; the ONE marker colour is the data-type colour, membership-blind.
   ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
     "A1: marker colour must be IDENTICAL for AusLAMP vs non-AusLAMP LPMT (no colour split), got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
   ok(A.markerColor(_memberLp) === "#2E8FA3", "A1: all LPMT must render the flagship teal #2E8FA3, got " + A.markerColor(_memberLp));
-  // O4 (owner, 2026-07-12): the hover tooltip is station name + survey name ONLY — no diagnostic Q, no
+  // The hover tooltip is station name + survey name ONLY - no diagnostic Q, no
   // type/AusLAMP label. Pre-O4 it swapped the type label to "AusLAMP" for members; that distinction now
   // lives only in the D2 clustering split. Asserting the diagnostic + type/AusLAMP label are GONE is what
   // fails on pre-O4 code (which carried "· Q 4.2" and the AusLAMP/LPMT label).
@@ -1015,7 +1015,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.visSurveys().includes("Beta Survey"), "org toggle wrongly hid a sibling org's survey");
   orgx.checked = true; fire(orgx, "change");
 
-  // C2. UX7a (A3) COLLECTIONS GROUP — its OWN block ABOVE the tree (was UX5 (D6) first-WITHIN the tree),
+  // C2. COLLECTIONS GROUP - its OWN block ABOVE the tree (was first-WITHIN the tree),
   //     cross-cutting, push-only. The group is now mounted in #collGroup, OUTSIDE #tree.
   const treeEl = doc.getElementById("tree");
   const collGroupEl = doc.getElementById("collGroup");
@@ -1035,7 +1035,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "A3: the #collGroup block must appear BEFORE #tree in document order (collections above the tree)");
   ok(/AusLAMP: 2 surveys · 3 stations/.test(collRow.textContent),
     "A3: collection row label must read '<name>: <n> surveys · <m> stations' (Alpha 2 + Beta 1 = 3), got: " + collRow.textContent);
-  // O1 (owner, 2026-07-12): the collection row carries NO nested member-survey list any more — just the
+  // The collection row carries NO nested member-survey list any more - just the
   // name + survey count + station count. Members stay reachable via the org/country tree + collection page.
   ok(collGroupEl.querySelectorAll(".collmember").length === 0,
     "O1: collection rows must NOT nest a member-survey list, got " + collGroupEl.querySelectorAll(".collmember").length);
@@ -1053,7 +1053,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   collBox.checked = true; fire(collBox, "change");
   ok(A.visIds().length === 5, "UX5: re-checking the collection did not restore all 5 stations");
 
-  // C3. UX5 (D7) THE INVARIANT: collapse/expand NEVER changes checkbox state and NEVER changes the
+  // C3. THE INVARIANT: collapse/expand NEVER changes checkbox state and NEVER changes the
   // filter result — with MIXED checkbox states (Beta unchecked). getAttribute('value') deliberately
   // (a value-less checkbox's .value is 'on' — the classic trap this codebase already documents).
   const betaBox = surveyBoxes.find(b => b.value === "Beta Survey");
@@ -1061,7 +1061,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const snapshot = () => [...treeEl.querySelectorAll("input")]
     .map(i => (i.getAttribute("value") || i.dataset.coll || i.dataset.org || i.dataset.country) + "=" + i.checked).join(",");
   const before = snapshot(), visBefore = JSON.stringify(A.visIds());
-  // O1 (2026-07-12): collection rows no longer disclose member rows, so there is no k: collapse key to
+  // Collection rows no longer disclose member rows, so there is no k: collapse key to
   // exercise here — the invariant is carried by the country/org carets (which still hide survey rows).
   ["c:Australia", "o:Australia||OrgX"].forEach(k => A.treeSetCollapsed(k, true));
   ok(snapshot() === before, "UX5 INVARIANT: collapsing changed a checkbox state.\n  before " + before + "\n  after  " + snapshot());
@@ -1075,7 +1075,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   betaBox.checked = true; fire(betaBox, "change");
   ok(A.visIds().length === 5, "UX5 cleanup: restoring Beta did not restore 5 visible");
 
-  // C4. UX5 (D7) CARET CLICK-TARGET: a caret click must NOT toggle the row's checkbox (the rows are
+  // C4. CARET CLICK-TARGET: a caret click must NOT toggle the row's checkbox (the rows are
   // label-wrapped, so an unguarded child click would activate the label) — and must collapse/expand.
   // "Australia" sorts before "New Zealand"; find its country row directly in #tree (the shared
   // kids/firstCountryIdx indices were dropped when the collections group moved out of the tree in A3).
@@ -1111,7 +1111,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.visSurveys().includes("Alpha Survey"), "Find blanked the map for a survey-name query");
   ok(!A.visSurveys().includes("Beta Survey"), "Find query should still exclude non-matching surveys");
 
-  // E2 (UX6 Wave F, F3): the live Find dropdown is keyboard-operable. ArrowDown highlights the first
+  // The live Find dropdown is keyboard-operable. ArrowDown highlights the first
   // option as an active-descendant; Enter activates it on the SAME path as a click (opens the station);
   // Esc clears the query. Non-vacuous: before F3 there was no keydown handler on #find, so no option ever
   // got aria-selected, the input never carried aria-activedescendant, and Esc left the box untouched.
@@ -1137,7 +1137,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // find.value is now "" and refresh() has re-run, so later sections (year/Availability/etc) assume no active Find query
 
   // F. SURVEY route: #/survey/<slug> (the route the published /surveys/<slug> path URLs 301 into
-  //    at the front door - path-URL contract 2026-08-18; the sitemap advertises the path form) must
+  //    at the front door - path-URL contract; the sitemap advertises the path form) must
   //    resolve the slug back to its survey label and open the survey story drawer (openSurvey), same as
   //    clicking a "Survey story" button does. Before this route existed, routeFromHash() silently fell
   //    through for #/survey/... (only #/collection/ and #/station/ were handled) — a sitemap deep-link
@@ -1150,7 +1150,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   win.location.hash = "#/survey/does-not-exist"; A.routeFromHash();
   ok(!doc.getElementById("drawer").classList.contains("open"), "unknown survey slug must not open the drawer");
 
-  // F1b. THE PLURAL ROUTES: #/surveys and #/collections (index-pages lane). Every entity page's
+  // F1b. THE PLURAL ROUTES: #/surveys and #/collections. Every entity page's
   //      back-navigation and the 404 page's own recovery link pointed at #/surveys, and
   //      routeFromHash matched none of its three branches for it: the hash fell through and the
   //      reader stayed on whatever view was showing, which on a cold load is the Map. Those links
@@ -1187,7 +1187,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "#/survey/<slug> must apply the Option-A focus dim, got: " + JSON.stringify(A.dimFocus()));
   A.closeDrawer();
 
-  // F2. SURVEY-DRAWER HASH CLEANUP (survey-drawer lane, ruling 5). closeDrawer() cleared ONLY
+  // F2. SURVEY-DRAWER HASH CLEANUP. closeDrawer() cleared ONLY
   //     "#/station..." - a survey opened by the #/survey/<slug> route left that hash in the address bar
   //     after the drawer shut, so the URL claimed a survey was open when nothing was, Back/reload
   //     re-opened a drawer the reader had deliberately closed, and copying the URL shared a state the
@@ -1203,7 +1203,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.closeDrawer();
   ok(win.location.hash === "", "F2: the station hash cleanup must be PRESERVED, got: " + JSON.stringify(win.location.hash));
 
-  // F3. SURVEY-DRAWER LANE: "View on map" - FIT PADDING + OPTION-A DIM (ruling 2).
+  // F3. SURVEY DRAWER: "View on map" - FIT PADDING + OPTION-A DIM.
   //     HONESTY NOTE, and it is the important part of this block: Leaflet is STUBBED in this harness
   //     (win.L = stub()), so nothing here exercises Leaflet's real projection, hit-testing or pointer
   //     capture. What IS proven: the ARGUMENTS the app hands the map (mapCalls records fitBounds with its
@@ -1241,14 +1241,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.closeDrawer();
   ok(A.dimFocus() === null, "ruling 2: closing the drawer must clear the survey focus dim");
   ok(A.visIds().length === 5, "ruling 2: clearing the dim must not disturb the visible set");
-  // (d) the background-click RULE (ruling 5). Only the pure predicate is provable here: whether a click
+  // (d) the background-click RULE. Only the pure predicate is provable here: whether a click
   //     actually REACHES it is Leaflet hit-testing, which the stub does not implement.
   ok(A.bgClickShouldClose(true, null) === true, "ruling 5: a background click with the drawer open must close it");
   ok(A.bgClickShouldClose(false, null) === false, "ruling 5: a background click with no drawer open is a no-op");
   ok(A.bgClickShouldClose(true, "rectangle") === false,
     "ruling 5: a background click while a draw is ARMED is placing a corner, not dismissing the drawer");
 
-  // F4. DOTS ONLY AT EVERY ZOOM (owner, 2026-08-24). Site locations, never a survey object standing in
+  // F4. DOTS ONLY AT EVERY ZOOM. Site locations, never a survey object standing in
   //     front of them. Driven at NATIONAL zoom (curZoom falls back to 4 here) over the compact-survey
   //     fixture with the AusLAMP privilege lifted, which is the state that USED to collapse Alpha into a
   //     badge: without that setup the pin would pass against zero badges and prove nothing.
@@ -1281,11 +1281,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify(_legDots && _legDots.textContent));
 
   // F5. A STATION CLICK OPENS THAT STATION, AND NOTHING SITS OVER THE STATION LAYER.
-  //     (production regression, 2026-08-19: no station on the deployed portal could be opened. CAUSE: the
+  //     (production regression,: no station on the deployed portal could be opened. CAUSE: the
   //     per-survey badge panes sat at z 600 over the station canvas at z 400, and adding an L.Path to a
   //     pane makes Leaflet build a full-map-size canvas inside it, which swallowed every click.)
   //
-  //     The badges, their panes and the pane guard are gone with the 2026-08-24 ruling, so the invariant is
+  // The badges, their panes and the pane guard are gone with the rule, so the invariant is
   //     now STRUCTURAL rather than guarded: no pane is created, and no layer is routed into one. Both halves
   //     are asserted, because "the guard was deleted" is only safe while the panes really are absent.
   //     SCOPE, so the wording matches what is actually observed: panesMade holds every map.createPane call
@@ -1323,8 +1323,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   A.buildAuslampSet(); A.refresh();       // restore the boot-built membership for the rest of the run
 
-  // G. WELCOME POPUP (UX7b U7): on first visit a small CENTRED MODAL (#introWelcome) shows — successor to
-  // the Wave D corner strip (which is GONE). role=dialog, focus-managed; "Take the 2-minute tour" starts
+  // G. WELCOME POPUP: on first visit a small CENTRED MODAL (#introWelcome) shows - successor to
+  // the corner strip (which is GONE). role=dialog, focus-managed; "Take the 2-minute tour" starts
   // the tour, "Browse immediately" closes, and a "Don't show this again" checkbox GATES persistence.
   const introWelcome = doc.getElementById("introWelcome");
   ok(introWelcome, "#introWelcome (first-visit welcome popup) missing from index.html");
@@ -1446,7 +1446,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   win.localStorage.removeItem("ausmt_intro_dismissed");                                                     // clean state for the tour sections
 
-  // G4. TOUR REDESIGN (UX9 owner): CENTRED card + LEADER to the spotlight. The side-picking _tourPlace is
+  // G4. TOUR REDESIGN: CENTRED card + LEADER to the spotlight. The side-picking _tourPlace is
   // retired; the card is centred for EVERY step and a leader line/arrow connects it to the spotlight. The
   // geometry is PURE (_tourCardBox / _tourLeader) because jsdom has NO layout engine (every
   // getBoundingClientRect is zero) — so the centred-always, overlap-nudge, leader-endpoint and map-step
@@ -1514,7 +1514,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(/0\.78/.test(tBack.style.background) && !/0?\.65/.test(tBack.style.background),
     "U10: the centred (no-target) backdrop must apply the 0.78 dim, got: " + JSON.stringify(tBack.style.background));
 
-  // G4b. OWNER ROUND 2 (2026-07-22): the card must be a CONSTANT SIZE and CONSTANT centred position on EVERY
+  // G4b. THE CARD GEOMETRY: the card must be a CONSTANT SIZE and CONSTANT centred position on EVERY
   // step — steps 1/10 (the map steps) sat differently from 2-9 and steps 7/9 (short copy) rendered a smaller
   // box. FIXED SIZE: .tourcard carries an explicit width (not max-width) + a min-height sized to the tallest
   // step, box-sizing:border-box — so offsetWidth/offsetHeight are constant and short-text steps can no longer
@@ -1528,7 +1528,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // CONSTANT CENTRED POSITION: step through ALL 10 steps and capture the card's applied left/top. Every step's
   // position must be IDENTICAL (the map steps included) — the overlap-nudge is the ONLY documented exception,
   // and under jsdom's zero rects no target overlaps, so all 10 land on the pure viewport centre. This guards
-  // the "same position on every step" contract the owner asked for (map steps 1/10 must match 2-9).
+  // the "same position on every step" contract (map steps 1/10 must match 2-9).
   const _posSeen = [];
   for (let _s = 0; _s < 10; _s++) {
     const _c = doc.getElementById("tourCard");
@@ -1552,7 +1552,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
   // H0b. NO AuScope ORG-MARK IN THE SPA HEADER. The mark closed the right zone on every surface until
-  // the owner moved the relationship to the two places that state it in words: the footer, on every
+  // we moved the relationship to the two places that state it in words: the footer, on every
   // page, and About's "Who enables AusMT" section. Asserted against the REAL index.html DOM rather
   // than its source text, so a mark restored under different markup is caught by the slot it lands in
   // and not only by the literal it was written as. The right zone itself must survive: it carries the
@@ -1602,7 +1602,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "H0c: the watermark's z-index (" + _mine + ") must stay below Leaflet's control (" + _ctlZ +
     ") and popup (" + _popZ + ") layers");
 
-  // H. TOUR v4 (UX rounds 1/2 + UX4 D5): 10 steps now. Opens from the welcome popup's "Take the 2-minute
+  // H. TOUR v4: 10 steps now. Opens from the welcome popup's "Take the 2-minute
   // tour" button (#welcomeTour), which is the only tour BUTTON left; index.html?tour=1 is the other entry
   // and is pinned in G3. Step 1 text matches the verbatim design copy, ArrowRight advances to step 2, Esc
   // closes and tears the tour DOM down.
@@ -1618,7 +1618,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.tourStep() === -1, "Esc did not close the tour");
   ok(!doc.getElementById("tourCard"), "Esc did not remove the tour DOM");
 
-  // H2. TOUR v4 DEMO STEPS (UX4 D5) + drawer enter action. New step layout: 0 map, 1 filters,
+  // H2. TOUR v4 DEMO STEPS + drawer enter action. New step layout: 0 map, 1 filters,
   // 2 FIND DEMO, 3 TREE BROWSE, 4 station drawer, ... Each demo step's EXIT hook must fire on ALL
   // three ways out — Next, Back and mid-tour close — leaving the find box and tree state as found.
   const findBox = doc.getElementById("find"), findRes = doc.getElementById("findResults");
@@ -1661,10 +1661,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(doc.getElementById("drawer").classList.contains("open"), "the station-drawer step did not open the drawer");
   ok(findBox.value === "", "passing THROUGH the Find demo left residue in the find box");
 
-  // H2b. SETTLE-UNTIL-STABLE re-layout (owner 2026-07-22). The drawer step's target keeps reflowing AFTER open
+  // H2b. SETTLE-UNTIL-STABLE re-layout. The drawer step's target keeps reflowing AFTER open
   // — it SLIDES in (transform transition, ~160ms; the box MOVES left), then an ASYNC station.json fetch injects
   // the frame line and grows its HEIGHT, then a deferred map re-fit can nudge it again. A single transitionend
-  // re-measure fires after the slide only and leaves the spotlight on a stale early box (the owner-observed
+  // re-measure fires after the slide only and leaves the spotlight on a stale early box (the observed
   // "highlight ends where the panel first appeared, now empty"). The tour now POLLS the target rect each frame,
   // re-runs _tourLayout on ANY change (position OR size — a size-only ResizeObserver misses the slide's MOVE),
   // and STOPS once the rect holds stable for a quiet window (or a hard cap). jsdom has no layout engine and its
@@ -1716,7 +1716,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("drawer").classList.contains("open"), "Esc from the drawer step did not close the drawer it opened");
   ok(A.curView() === "map", "Esc from the drawer step did not restore the map view");
 
-  // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
+  // H3. the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
   // (forward, back, close). The collapse set is real state (treeCollapsedKeys), not a proxy.
   const goToTreeStep = () => { doc.getElementById("welcomeTour").click();
@@ -1749,7 +1749,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.treeSetCollapsed("c:Australia", false); A.treeSetCollapsed("o:Australia||OrgX", false);   // cleanup
   ok(A.treeCollapsedKeys().length === 0, "D8 cleanup: collapse set not empty after the H3 block");
 
-  // H4. UX6 Wave D (D2 follow-up): the .selbox tour step's target lives in the rail's Select & export
+  // H4. the.selbox tour step's target lives in the rail's Select & export
   // mode pane — hidden in the default Browse mode, where the step would degrade to the centred
   // no-spotlight card. Reaching the step must switch the rail to Select & export (jsdom has no layout,
   // so the load-bearing observable here is the MODE + the target pane's visibility — in a real browser
@@ -1781,7 +1781,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.tourStep() === -1, "D2-tour: Esc from the Download step did not close the tour");
   ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
 
-  // I. EMPTY-STATE fixture (UX7b U7): the welcome POPUP must still show on first visit (it explains the
+  // I. EMPTY-STATE fixture: the welcome POPUP must still show on first visit (it explains the
   // portal even before any survey exists) and boot must not crash. A fresh window/localStorage so "first
   // visit" is genuine.
   const emptyWin = await bootFreshWindow({
@@ -1796,7 +1796,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!emptyDoc.getElementById("introOverlay"), "the retired 'How AusMT works' panel must be absent in the empty-data boot too");
   ok(/No surveys published yet/.test(emptyDoc.getElementById("map").innerHTML), "empty-state message did not render alongside the welcome popup");
 
-  // I2. UX5 (D6) GATING-OFF: a boot WITHOUT collections.json renders NO Collections group (and the
+  // I2. GATING-OFF: a boot WITHOUT collections.json renders NO Collections group (and the
   // country/org/survey rows + their carets are unaffected) — the graceful pre-collections behaviour.
   const noCollData = {};
   Object.keys(DATAMAP).forEach(k => { if (k !== "data/collections.json") noCollData[k] = DATAMAP[k]; });
@@ -1816,7 +1816,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // but must stay EMPTY on load (a value would immediately exclude Gamma under the filter semantics).
   const yearFrom = doc.getElementById("yearFrom"), yearTo = doc.getElementById("yearTo");
   ok(yearFrom && yearTo, "#yearFrom/#yearTo inputs are missing");
-  // C6: the year range is a DISCOVERY filter and now lives in the discovery bar, its one home. The
+  // The year range is a DISCOVERY filter and now lives in the discovery bar, its one home. The
   // predicate below is unchanged, which is the point of moving the control rather than rewriting it
   // (contract section 1, C6: "the rail's year-range and downloadable-only filters are PROMOTED into the
   // discovery bar ... same behaviour, one home; the rail copies are removed").
@@ -1829,9 +1829,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(yearTo.placeholder === "2019", "yearTo placeholder should hint the corpus max (2019), got: " + yearTo.placeholder);
   ok(yearFrom.min === "2010" && yearFrom.max === "2019", "yearFrom min/max attrs should be the corpus range, got: " + JSON.stringify([yearFrom.min, yearFrom.max]));
   const yearHead = doc.getElementById("yearRangeHead");
-  // C1 (owner R2): the corpus-range suffix takes the SPACED HYPHEN, like every other rendered range.
+  // The corpus-range suffix takes the SPACED HYPHEN, like every other rendered range.
   ok(yearHead && yearHead.textContent === "Year range (2010 - 2019)", "Year range label should append the corpus range with a spaced hyphen, got: " + (yearHead && yearHead.textContent));
-  // C6 (fix round): the promotion must not cost the control what the rail copy gave it. A <label> with
+  // The promotion must not cost the control what the rail copy gave it. A <label> with
   // no `for` and no wrapped control labels NOTHING - it only claims to - and the two inputs carry their
   // own aria-labels, so the honest markup is a plain element.
   const _lblFor = yearHead.tagName === "LABEL" ? yearHead.getAttribute("for") : null;
@@ -1927,9 +1927,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "D7: each row states its scope summed size, got " + JSON.stringify(tsMeta("raw_packed")));
   ok(/packed by the custodian/.test(tsBtn("raw_packed").title),
     "D7: each row's action carries its one-line gloss, got " + JSON.stringify(tsBtn("raw_packed").title));
-  // THE SCOPE RULE (Lane B): with no selection the rows price the filtered corpus; a selection
+  // THE SCOPE RULE: with no selection the rows price the filtered corpus; a selection
   // re-prices them to exactly the chosen stations, and the scope line says which state the reader
-  // is in. (The owner's founding defect: 2 selected stations still showed corpus-wide totals.)
+  // Is in.
   ok(/^Across 5 filtered stations:$/.test(doc.getElementById("scopeLine").textContent),
     "the scope line must state the filtered-corpus scope, got " + JSON.stringify(doc.getElementById("scopeLine").textContent));
   A.setSelected(["A1"]);
@@ -1960,7 +1960,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the rows' sizes must come from ts_access.json, not from the download manifest, got " +
     JSON.stringify(tsMeta("raw_packed")));
 
-  // K3. THE HAND-OFF (R7/D3/D5, reshaped in Lane B). AusMT holds none of these bytes, so the offer
+  // K3. THE HAND-OFF (R7/D3/D5, reshaped in ). AusMT holds none of these bytes, so the offer
   // is a POINTER FILE and never a fourth selection zip. The old #dlTs button is replaced by the
   // per-level "Download list" actions on the time-series rows (each names its own level, so no
   // hidden state can narrow the file) and by the merged Pointers export in the Metadata block.
@@ -1995,7 +1995,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "a per-level list must carry exactly that level, got " + _hdScoped.files + " file(s)");
   ok(_hdScoped.doc.scope && String(_hdScoped.doc.scope.levels) === "raw_packed",
     "a per-level list must record its level in the scope, got " + JSON.stringify(_hdScoped.doc.scope));
-  // THE CONFIRMATION (owner rulings 2026-08-23 + 2026-08-25) from the raw_packed row. A small
+  // THE CONFIRMATION from the raw_packed row. A small
   // scope gets its FILES: each route handed to the browser through the tsOpenRoute seam (recorded
   // here), nothing saved, and the browser owns the downloads and their progress.
   const _trackBefore = trackCalls.length;
@@ -2010,7 +2010,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(handed.length === 2 && handed.every(u => /\/go\/ts\/[^/]+\/[^/]+\/raw_packed$/.test(u)),
     "a within-cap click hands each ROUTE to the browser, got " + JSON.stringify(handed));
   ok(savedBlobs.length === _savedBefore, "the direct path saves no list file");
-  // The metadata & citation pack travels with the hand-off (owner, 2026-08-25): citations, the
+  // The metadata & citation pack travels with the hand-off: citations, the
   // station table, the geometry and the hand-off record itself, zipped beside the data.
   const _tsPack = zipEntries.slice(_zmarkTs).map(e => e.name);
   ["CITATIONS.txt", "citations.bib", "citations.ris", "stations.csv", "selection.geojson", "handoff.json"]
@@ -2021,7 +2021,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
      /Progress appears in your browser's downloads\./.test(snackEl.textContent),
     "the direct confirmation states what was handed and where progress lives, got " + JSON.stringify(snackEl.textContent));
   // Beyond the cap the offer stays a LIST + wget (driven through the cap seam: the fixture's
-  // total is megabytes, and the cap's VALUE - 10 GB of TOTAL SIZE, owner-ruled - is a tuning
+  // total is megabytes, and the cap's VALUE, 10 GB of TOTAL SIZE, is a tuning
   // constant, not a contract).
   win.TS_DIRECT_MAX_BYTES = 1;
   A.paintDownloadRows();
@@ -2032,7 +2032,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   await new Promise(r => setTimeout(r, 0));
   // Over the cap the pack is the ONLY save: the standalone list .json was the same document the
   // pack already carries as handoff.json, and it landed at the head of the reader's downloads
-  // (owner, 2026-08-26). Exactly one save (the pack), never two.
+  // . Exactly one save (the pack), never two.
   // The pack is built through the stubbed JSZip, so it shows up as ZIP ENTRIES rather than a save;
   // what must be GONE is the standalone list .json, which was a real save.
   const _zOver = zipEntries.slice(_zmarkOver).map(e => e.name);
@@ -2044,7 +2044,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(/Download list ready - 2 files, /.test(snackEl.textContent),
     "the list confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
   ok(handed.length === 2, "the over-cap path hands nothing directly");
-  // The dialog opens BY ITSELF over the cap (owner, 2026-08-26): at this size the terminal command
+  // The dialog opens BY ITSELF over the cap: at this size the terminal command
   // is the only thing that can serve the reader, so putting it behind a snackbar action was a click
   // between them and the answer. The action stays for re-opening after a dismiss.
   const wgetModal = doc.getElementById("wgetModal"), wgetCmd = doc.getElementById("wgetCmd");
@@ -2137,7 +2137,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "R8: the hand-off adds no track() call site; it is measured at the front door, from the route it uses");
   ok(!/progress|complete|finished|%/i.test(snackEl.textContent),
     "the page claims no progress and no completion; the browser owns both, got " + JSON.stringify(snackEl.textContent));
-  // POINTERS (Lane B, D2): the merged document - EVERY scope station appears; routable stations
+  // POINTERS (: the merged document - EVERY scope station appears; routable stations
   // carry levels[]; the embargoed D1 appears WITHOUT levels (identity is public, routes are not).
   clipboard.length = 0;
   doc.getElementById("dlSh").click();
@@ -2207,10 +2207,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const winSafe = s => String(s).replace(/[^A-Za-z0-9._\/-]/g, "_");  // mirrors exports.js winSafePath()
   const INJ = "$(touch pwned) `id` \";x;\" 'sq' [z].zip";             // every metacharacter the field can carry
   A.setTsAccess({
-    // A1: ONE station whose level0 and level1_mth5 carry the SAME basename (the live SA295.h5 case).
+    // ONE station whose level0 and level1_mth5 carry the SAME basename (the live SA295.h5 case).
     "au.alpha.A1": { level0: { bytes: 100, url_path: "arc/SA295.h5" },
                      level1_mth5: { bytes: 200, url_path: "arc/SA295.h5" } },
-    // A2: a basename carrying live shell metacharacters (the corpus already ships `C5 [REMOTE].zip`).
+    // A basename carrying live shell metacharacters (the corpus already ships `C5 [REMOTE].zip`).
     "au.alpha.A2": { raw_packed: { bytes: 300, url_path: "arc/" + INJ } },
   });
   A.setSelected(["A1", "A2"]);
@@ -2259,7 +2259,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // rail. The Availability group (R2/R3) and the colour-by segmented control are both inside it, and
   // there is exactly ONE Availability group: the standalone "Downloadable here" checkbox and the
   // Min-TF-diagnostic segmented control are gone, replaced by it.
-  // Lane B structure (owner polish round): Browse carries every map filter - data type on top, then
+  // Browse carries every map filter - data type on top, then
   // the Advanced search accordion (Find, Data available, Year range), collapsed by default; Select &
   // download carries selection + Download + Metadata. The retired controls must be absent, not hidden.
   const _adv = doc.getElementById("advSearch");
@@ -2272,7 +2272,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the accordion summary must read Advanced search");
   const _browse = doc.getElementById("browseMode");
   ok(_browse.contains(_adv), "Advanced search lives in the Browse pane");
-  // C6: the year range left this accordion for the discovery bar (its rail copy is removed), so what
+  // The year range left this accordion for the discovery bar (its rail copy is removed), so what
   // Advanced search still holds is Find and the time-series level chooser.
   ok(["find", "availSel"].every(id => _adv.contains(doc.getElementById(id))),
     "Advanced search must hold Find and Data available");
@@ -2285,10 +2285,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(doc.getElementById("selectMode").contains(doc.getElementById("tsSeg")),
     "the Download block's time-series rows live in the Select & download pane");
 
-  // N. RECENTLY ADDED (cleanup wave A): ONE surface (the surveys-view #recentStrip; the map-rail
+  // N. RECENTLY ADDED ONE surface (the surveys-view #recentStrip; the map-rail
   // #recentSide is deleted). The strip's DISPLAY rule is a 30-day window ending at the BUILD day
-  // (build.json generated=2020-01-15) capped at 3, so of the fixture's dated surveys only Beta
-  // (latest 2019-12-31, inside the window) qualifies; Alpha (2012-05-01) is outside it and
+  //  capped at 3, so of the fixture's dated surveys only Beta
+  //  qualifies; Alpha is outside it and
   // Gamma/Delta are undated. surveyLatestDate itself stays lockstep with the engine's feed rule.
   const recents = A.recentlyAdded();
   ok(recents.length === 1 && recents[0].sv === "Beta Survey",
@@ -2307,7 +2307,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(recentStrip.innerHTML.indexOf("#/survey/") < 0,
     "#recentStrip must NOT link the retired #/survey/<slug> drawer route");
   ok(!recentStrip.classList.contains("hidden"), "#recentStrip must be shown when the window has a survey");
-  // C4 (brief 9, Option A): the strip is a CONCISE HORIZONTAL LINE, not a block. It was a heading over a
+  // The strip is a CONCISE HORIZONTAL LINE, not a block. It was a heading over a
   // column of rows in a full-width container, which on a wide screen was a large sparse box of mostly
   // empty space sitting between the reader and the catalogue. Option A is one wrapping line:
   // "Recently added: Vulcan 2022 (interpunct) AusLAMP Queensland Phase 3". Pins moved with the markup per
@@ -2338,7 +2338,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(doc.getElementById("recentSide") == null && doc.getElementById("recentSideSection") == null,
     "the map-rail recently-added section (#recentSide/#recentSideSection) must be deleted (single-surface strip only)");
 
-  // N2. PINNED CROSS-LANE DATE RULE (LOCKSTEP with engine build_portal.py _survey_latest_date):
+  // N2. PINNED CROSS-SURFACE DATE RULE (LOCKSTEP with engine build_portal.py _survey_latest_date):
   // attribution.declared_date is a first-class candidate date sharing ONE candidate set with
   // release_notes[].date; the MAX well-formed YYYY-MM-DD wins, and a survey carrying a declared_date
   // but no release_notes dates by that declared_date, NOT the bare-year Dec-31 fallback. These are
@@ -2418,7 +2418,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "PID: collection_pid (m.ts_pid) did not render as a clickable <a href> in the station lineage; hrefs=" + JSON.stringify(hrefs));
   dpid.classList.remove("open");
 
-  // Q. UX4 (D2) STILL COUNTED ACROSS CONTAINERS: a station moving BETWEEN the cluster group and the plain
+  // Q. STILL COUNTED ACROSS CONTAINERS: a station moving BETWEEN the cluster group and the plain
   // AusLAMP layer must NOT drop out of the visible count or the survey selection — the partition is a
   // rendering split, not a filter. Flip Gamma's G1 (a non-member, so currently CLUSTERED) into an AusLAMP
   // member by pointing its slug at a set entry, refresh (real partitionMarkers over the Leaflet-stubbed
@@ -2477,7 +2477,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // S. DIMENSIONALITY HIDDEN FROM SCREENING DISPLAYS (UX feedback round 3, item 7): removed from the
   // station-drawer screening grid (7a), the survey-card stats line (7b) and the survey-story table (7c) —
   // while the phase-tensor/skew and strike lines STAY (dimensionality is inferable from them).
-  // (a) station drawer: no "Dimensionality" cell. (OWNER HIDE 2026-07-22: the strike + mean-|β| lines lived
+  // (a) station drawer: no "Dimensionality" cell. (HIDDEN: the strike + mean-|β| lines lived
   //     ONLY in the now-hidden Screening panel, so they are ABSENT too — flipped from the prior "KEPT" pins.
   //     Restore the strike/|β| "KEPT" assertions when the Screening surface is re-enabled.)
   win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
@@ -2505,7 +2505,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   drwC.classList.remove("open");
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwC.classList.contains("open"), "C20: #/station/au.alpha.A1 did not open the drawer");
-  // (a) arrow panel EXISTS. C20 Amendment A1 (UX6 Wave C / owner decision D4): the verbatim one-line panel
+  // (a) arrow panel EXISTS. C20 Amendment A1: the verbatim one-line panel
   // label is superseded by a short heading + an ALWAYS-VISIBLE convention subline. BOTH must be asserted so
   // the convention sentence can never silently vanish later (it moved into the subline, it did not go away).
   ok(drwC.innerHTML.indexOf("Induction arrows (Parkinson)") >= 0,
@@ -2546,7 +2546,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(drwC.querySelectorAll("svg path").length > 0, "C20: a no-tipper/no-error open station must still plot ρ/φ curves");
   drwC.classList.remove("open");
 
-  // T2. PT + INDUCTION ARROWS ALWAYS SHOWN (owner requirement). The phase tensor and induction arrows must
+  // T2. PT + INDUCTION ARROWS ALWAYS SHOWN. The phase tensor and induction arrows must
   // ALWAYS be shown when the station carries that data — never collapsed by default and with NO
   // collapse/minimise control the user could hide them with. Pre-change both were plotCollapsible() —
   // <details class="plotcollapse"> panels, collapsed by default and user-hideable; now they are plotBlock()
@@ -2572,7 +2572,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "PTIA a: the phase-tensor convention subline must survive on the always-shown block");
   ok(drwC.innerHTML.indexOf("Real arrows point toward conductors; imaginary unreversed.") >= 0,
     "PTIA a: the induction-arrow convention subline must survive on the always-shown block");
-  // OWNER DIRECTIVE 2026-07-28: the PER-PLOT expand affordance is gone. Every block carried its own ⤢
+  // SECTION-LEVEL EXPAND: the PER-PLOT expand affordance is gone. Every block carried its own ⤢
   // button and all four opened the SAME full-station modal; the response section now carries exactly one
   // control, on its heading row (pinned in section V (h)). RED on stage-1 HEAD, where both blocks have one.
   ok(!drwC.querySelector('div.plot[data-plot="pt"] [data-act="expand"]') &&
@@ -2597,15 +2597,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "PTIA b: a station that collected NEITHER pt nor tipper must render neither block (absent, no empty box)");
   drwC.classList.remove("open");
 
-  // U. C22 CITATION HONESTY (chief-architect ruling 2026-07-07; pre-release hostile-review finding
-  // 2026-07-06 — state.js publisher placeholder). A NO-DOI survey's
+  // U. C22 CITATION HONESTY (pre-release hostile-review finding
+  //  - state.js publisher placeholder). A NO-DOI survey's
   // generated .bib/.ris must carry NO placeholder text a reference manager would ingest as real: the
   // pre-C22 AUSMT_SELF.pb publisher read "AusMT (DOI to be minted per release via Zenodo)" and leaked
   // into EVERY no-DOI citation's publisher/PB field (the doi=/DO/UR FIELDS were already guarded by
   // d2bc616's `${doi?...:""}` — the leak was the publisher STRING, not the DOI field). A WITH-DOI
   // survey keeps its real DOI in both formats; the NCI/TS-collection entries are BYTE-pinned to their
   // pre-C22 output; and the human-readable CITATIONS.txt line for a no-DOI entry SAYS
-  // "[no DOI assigned]" explicitly (exports.js citeLine — net-new in C22, sanctioned by the ruling).
+  // "[no DOI assigned]" explicitly.
   //
   // NOTE (Invariant 10): section U asserts the ASSEMBLY HELPERS (apa/bibtex/ris/citeLine) directly —
   // the exact functions the #dlCite click handler feeds into the pack — NOT the zipped file itself:
@@ -2659,14 +2659,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(lineW.indexOf("https://doi.org/10.99999/alpha-tf-doi") >= 0 && lineW.indexOf("no DOI assigned") < 0,
     "U: the with-DOI CITATIONS.txt line must carry the DOI URL and no note, got: " + lineW);
 
-  // V. UX6 WAVE C — station drawer tabs (C1) + section-role chips (C2) + plot readability/expand (C3).
+  // V. - station drawer tabs (C1) + section-role chips (C2) + plot readability/expand (C3).
   //    Every pin states its failure criterion up front.
   const drwV = doc.getElementById("drawer");
   drwV.classList.remove("open");
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwV.classList.contains("open"), "WaveC: the A1 drawer did not open");
 
-  // (a) UX8 (X4): FOUR tabs, each role=tab, in the mandated order. (OWNER HIDE 2026-07-22: the Screening tab is
+  // (a) FOUR tabs, each role=tab, in the mandated order. (HIDDEN: the Screening tab is
   //     reversibly commented out in drawer.js pending design review, so the count is 4, "screening" is absent
   //     from the order AND the DOM. Restore the 5-tab order + the Screening click test below when re-enabled.)
   //     FAILS if a tab is missing, mis-roled, reordered, or if the retired Overview tab reappears.
@@ -2682,9 +2682,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "X4: the Overview tab/panel must be GONE (folded into the Response tab's Station summary)");
   ok(drwV.querySelector('[role="tablist"]') != null, "C1: no role=tablist container in the drawer");
 
-  // (b) UX8 (X4): Response is DEFAULT-selected; its panel is visible, the others hidden. FAILS if another
+  // (b) Response is DEFAULT-selected; its panel is visible, the others hidden. FAILS if another
   //     tab wins (e.g. a revert to the Overview-default).
-  // (OWNER HIDE 2026-07-22: the Screening tab is hidden, so the "non-Response hidden by default" check now
+  // (HIDDEN: the Screening tab is hidden, so the "non-Response hidden by default" check now
   // rides the Files tab instead of Screening.)
   const rsTab = drwV.querySelector('#dt-response'), filesTab = drwV.querySelector('#dt-files');
   const rsPanel = drwV.querySelector('#dp-response'), filesPanel = drwV.querySelector('#dp-files');
@@ -2692,24 +2692,24 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(rsPanel && rsPanel.hidden === false, "X4: the Response panel must be visible by default");
   ok(filesPanel && filesPanel.hidden === true, "X4: non-Response panels must be hidden by default");
 
-  // (c) UX8 (X4): the Response tab leads with the plots (an OPEN station renders svg plot paths there), and
+  // (c) the Response tab leads with the plots (an OPEN station renders svg plot paths there), and
   //     the former Overview facts live in a collapsible "Station summary" <details> UNDER the plots — not a
   //     leading meta strip. FAILS if the plots aren't first, or the Station summary fold is missing.
   ok(rsPanel.querySelectorAll("svg path").length > 0, "X4: the Response panel must render the plots (svg paths)");
   const ssDetails = [...rsPanel.querySelectorAll("details")].find(d => d.querySelector("summary") && /Station summary/.test(d.querySelector("summary").textContent));
   ok(ssDetails, "X4: the Response tab must carry a collapsible 'Station summary' <details>");
-  // the fold sits AFTER the first plot (plots lead), and carries the owner's four group headers.
+  // The fold sits AFTER the first plot (plots lead), and carries the four group headers.
   const firstPlot = rsPanel.querySelector(".plot");
   ok(firstPlot && (firstPlot.compareDocumentPosition(ssDetails) & win.Node.DOCUMENT_POSITION_FOLLOWING),
     "X4: the Station summary fold must come AFTER the plots (plots are the centerpiece)");
-  // R4: the "Data checks" group (the TF error row) is removed; the Station summary now carries three groups.
+  // The "Data checks" group (the TF error row) is removed; the Station summary now carries three groups.
   ["Station", "Transfer function", "Processing"].forEach(g =>
     ok([...ssDetails.querySelectorAll(".ssg-h")].some(h => h.textContent === g),
       "X4: the Station summary is missing the '" + g + "' group header"));
   ok([...ssDetails.querySelectorAll(".ssg-h")].every(h => h.textContent !== "Data checks"),
     "R4: the Station summary must NOT carry the removed 'Data checks' group");
   ok(ssDetails.innerHTML.indexOf("TF error") < 0, "R4: the removed 'TF error' row must be gone");
-  // SURVEY-DRAWER LANE, amendment 2 (owner): the "Transfer function / Download" TILE is removed from the
+  // IN THE SURVEY DRAWER: the "Transfer function / Download" TILE is removed from the
   // Station summary - it duplicated the Files tab's Level 2 EDI row and blurred the summary-vs-downloads
   // separation. The summary states facts; the Files tab serves bytes. The EDI itself is untouched: it is
   // still offered by the sticky-header action and the Files tab, both asserted below.
@@ -2722,7 +2722,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // NOT a regression in disguise: the EDI is still downloadable from the surface that owns the action.
   ok(doc.querySelector("#drawer .dl-edi"),
     "amendment 2: removing the summary tile must NOT remove the sticky-header Download EDI action");
-  // R4: the Station group ADDS rows — data type, ausmt_id, and (A1 carries site_name 'A_1' != id 'A1')
+  // The Station group ADDS rows - data type, ausmt_id, and (A1 carries site_name 'A_1' != id 'A1')
   // the "site name" row. The collection row is omitted here (Alpha is in the AusLAMP collection, so it
   // renders); ausmt_id is always present.
   const ssRows = [...ssDetails.querySelectorAll("tr")].map(tr => tr.textContent);
@@ -2732,7 +2732,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(ssRows.some(t => /ausmt_id/.test(t) && /au\.alpha\.A1/.test(t)), "R4: the Station summary must carry the 'ausmt_id' row");
   ok(ssRows.some(t => /collection/.test(t) && /AusLAMP/.test(t)), "R4: an in-collection station must carry the 'collection' row");
 
-  // R5: the Files tab is restructured to the NCI data-level standard as a SINGLE COLUMN (.filelist, not the
+  // The Files tab is restructured to the NCI data-level standard as a SINGLE COLUMN (.filelist, not the
   // 2-col .prodgrid), ordered raw -> Level 0 -> Level 1 -> Level 2 (EDI/EMTF XML/MTH5 sub-rows) ->
   // Publication (interpretation); the Phase tensor tile is gone; each product row carries an origin tag.
   const filesHtmlV = filesPanel.innerHTML;
@@ -2745,9 +2745,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(filesHtmlV.indexOf("source archive") >= 0 && filesHtmlV.indexOf("AusMT-derived") >= 0,
     "R5: each Files row must carry an origin tag (source archive / AusMT-derived)");
 
-  // R7: no "(no PID)" / "not recorded" noise anywhere in the station drawer.
+  // No "(no PID)" / "not recorded" noise anywhere in the station drawer.
   ok(drwV.innerHTML.indexOf("(no PID)") < 0, "R7: the station drawer must not render any '(no PID)' suffix");
-  // R6: em-dash sweep on the station drawer's rendered text (all panels render at open, so hidden ones are
+  // Em-dash sweep on the station drawer's rendered text (all panels render at open, so hidden ones are
   // swept too). A full-document textContent sweep runs at the end of this test.
   ok(drwV.textContent.indexOf("—") < 0,
     "R6: an em dash (—) rendered in the station drawer text: " +
@@ -2759,7 +2759,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(drwV.querySelector(".dtop .dl-cite") == null, "R1: the redundant header Cite button (.dl-cite) must be removed");
 
   // (e) clicking a non-default tab activates it (roving tabindex + hidden toggle); switching back restores
-  //     Response. (OWNER HIDE 2026-07-22: this rode the Screening tab; it now rides Files while Screening is
+  // Response. (HIDDEN: this rode the Screening tab; it now rides Files while Screening is
   //     hidden — restore the Screening target when the tab is re-enabled.)
   fire(filesTab, "click");
   ok(filesPanel.hidden === false && rsPanel.hidden === true,
@@ -2768,7 +2768,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C1: aria-selected did not move to Files on click");
   fire(rsTab, "click");   // restore Response default for later helpers
 
-  // (f) C2: section-role chips render with the engine taxonomy (muted, plain text). (OWNER HIDE 2026-07-22:
+  // (f) C2: section-role chips render with the engine taxonomy (muted, plain text). (HIDDEN:
   //     the "Automated screening" role chip lived ONLY on the now-hidden Screening panel, so the drawer now
   //     carries the two surviving labels; assert its ABSENCE and restore the third when the tab returns.)
   ok(drwV.querySelector(".rolechip") != null, "C2: no section-role chips (.rolechip) rendered");
@@ -2785,7 +2785,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(/<circle [^>]*fill="#EF7256"/.test(rspHtml),
     "C3: the xy (copper #EF7256) series must keep <circle> markers");
 
-  // (h) C3 (evolved) + OWNER DIRECTIVE 2026-07-28: ONE EXPAND CONTROL + a CAPPED MODAL.
+  // (h) ONE EXPAND CONTROL and a CAPPED MODAL.
   //     Pre-change EVERY plot block carried its own ⤢ button (FOUR of them in the response section) and all
   //     four opened the SAME full-station modal, whose panels were rendered at a fixed 2x pixel blow-up
   //     (STATION_MODAL_SCALE: the rho svg went out at width="744"). Now the section carries EXACTLY ONE
@@ -2921,14 +2921,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C1b: the embargoed access panel must render inside the Response tab; got: " + dRes.textContent.slice(0, 200));
   ok(dRes.querySelectorAll("svg path").length === 0, "C1b: the embargoed Response tab must render no plot paths");
   // ...and NO expand control either: with the curves withheld the modal has no panels to open, so an
-  // affordance over the access panel would be a dead control. (Section-level control, owner 2026-07-28.)
+  // Affordance over the access panel would be a dead control.
   ok(dRes.querySelectorAll('[data-act="expand"]').length === 0,
     "C1b: an embargoed station's Response tab must carry no expand control (there is nothing to expand)");
   ok(dFiles.innerHTML.indexOf("EDI (via source archive)") < 0,
     "C1b: the embargoed Files tab must NOT offer 'EDI (via source archive)'");
   ok(doc.querySelector(".dtop .dl-edi") == null,
     "C1b: an embargoed station must show NO Download EDI action in the sticky header");
-  // api-docs lane, same C1b fence applied to the API expander: the engine emits a WITHHELD station.json
+  // The API docs section, same C1b fence applied to the API expander: the engine emits a WITHHELD station.json
   // for a non-served survey but returns before writing dimensionality.json at all (a dimensionality
   // classification is interpretation OF the embargoed transfer function). So the endpoint list here must
   // keep the station.json line and drop the dimensionality one, or ~17% of the catalogue is handed a GET
@@ -2941,7 +2941,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C1b: the embargoed station's station.json line must survive (it is emitted as a withheld stub)");
   drwV.classList.remove("open");
 
-  // W. UX6 Wave D (D2): rail Browse / Select & export mode. Default is Browse; the toggle swaps the two
+  // W. rail Browse / Select & export mode. Default is Browse; the toggle swaps the two
   // panes with EVERY existing element id intact; drawing a selection or 'Select all filtered' auto-switches
   // to Select & export.
   const modeSeg = doc.getElementById("modeSeg"), browseMode = doc.getElementById("browseMode"), selectMode = doc.getElementById("selectMode");
@@ -2959,7 +2959,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(selBtn.classList.contains("on"), "D2: the active mode button did not get the .on state");
   [...modeSeg.children].find(b => b.dataset.mode === "browse").click();
   ok(A.sidebarMode() === "browse", "D2: could not switch back to Browse");
-  // W2. TWO LAYOUT REGRESSIONS THIS HARNESS CANNOT SEE BEHAVIOURALLY (found live 2026-08-26).
+  // W2. TWO LAYOUT REGRESSIONS THIS HARNESS CANNOT SEE BEHAVIOURALLY.
   // jsdom has no layout engine: every rect is 0, so the mode-switch pins ABOVE stayed green while the
   // live rail was a ONE-WAY DOOR. #filterPane is a column flex, so the taller Select pane made the
   // flex algorithm shrink #modeSeg, and because .seg clips its overflow it collapsed to its 2px
@@ -2982,7 +2982,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("clearSel").click();
   A.setSidebarMode("browse");
 
-  // X. UX6 Wave D (D3, #20): the draw-created selection toast + its pure formatter. drawSelectionMsg pins
+  // X. the draw-created selection toast + its pure formatter. drawSelectionMsg pins
   // the exact copy (singular/plural, the word 'stations' — never 'sites' — and the shape word).
   // onDrawCreated fires the toast with the freshly computed count and (D2) auto-switches to Select.
   ok(A.drawSelectionMsg(2, "polygon") === "2 stations selected within polygon",
@@ -3001,7 +3001,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("clearSel").click();
   A.setSidebarMode("browse");
 
-  // Z. Discoverability (owner, 2026-07-21): the SELECTION panel's "Draw rectangle"/"Draw polygon" buttons
+  // Z. Discoverability: the SELECTION panel's "Draw rectangle"/"Draw polygon" buttons
   // ARM the same leaflet.draw handlers as the map's top-left toolbar icons, and armedDrawMode is ONE state
   // shared across both surfaces. Pins: (a) the two buttons exist in the SELECTION panel (below 'Select all
   // filtered') and route through armDraw — the same handler entry point (drawModeHandler), not a duplicated
@@ -3043,7 +3043,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("clearSel").click();
   A.setSidebarMode("browse");
 
-  // Y. Lane B scope rule: downloads are never hidden behind a selection - with nothing selected they
+  // Y. scope rule: downloads are never hidden behind a selection - with nothing selected they
   // act on the FILTERED CORPUS and the scope line says so; a selection re-scopes them. The old
   // hidden-row/empty-hint pair is retired with the behaviour it described.
   const exportBtns = doc.getElementById("exportBtns");
@@ -3062,7 +3062,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("clearSel").click();
   A.setSidebarMode("browse");
 
-  // Z. UX6 Wave D (D5, #24): the sidebar collapse toggle sets the .collapsed class AND calls
+  // Z. the sidebar collapse toggle sets the.collapsed class AND calls
   // map.invalidateSize() (recorded by the map stub) so the map reclaims the width; state persists.
   A.setView("map");
   const collapseBtn = doc.getElementById("sidebarCollapse"), aside = doc.getElementById("filterPane");
@@ -3077,7 +3077,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!aside.classList.contains("collapsed"), "D5: a second click did not expand the rail");
   ok(win.localStorage.getItem("ausmt_sidebar_collapsed") === "0", "D5: expanded state was not persisted");
 
-  // AA. UX6 Wave D (D6): the static map legend: a coloured dot per data type and nothing else, the dots
+  // AA. the static map legend: a coloured dot per data type and nothing else, the dots
   // reading the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (a hard-coded hex would fail).
   const legend = doc.getElementById("mapLegend");
   ok(legend, "D6: #mapLegend was not built");
@@ -3113,7 +3113,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   legToggle.click();
   ok(legend.classList.contains("expanded") !== wasExpanded, "D6: the legend toggle did not flip the expanded state");
 
-  // ===== UX6 WAVE E ==============================================================================
+  // ===== ==============================================================================
   // BB. THE WORKSPACE CARD. The card field set is reduced; the heavy blocks moved to the survey DETAIL.
   // Each pin states what it fails on. (Alpha's blurb was reset to null in section R.)
   // C2 (contract section 1: "Update the BB card-shape pins to the new field set"): the abstract block
@@ -3134,7 +3134,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // per-format availability matrix (EDI/time-series/MTH5 badges), the completeness/smoothness check.
   // Both header strings are pinned absent: the station rollup's "Persistent identifiers & instruments"
   // (what the card used to carry) AND the survey grid's "Data at every level" head, which the drawer-polish
-  // lane renamed it to. Pinning only the old string would have gone vacuous the moment it was renamed.
+  // section was renamed to. Pinning only the old string would have gone vacuous the moment it moved.
   ok(cardA1.indexOf("Persistent identifiers") < 0, "E1: the identifiers block must NOT be on the slim card");
   ok(cardA1.indexOf("Data at every level") < 0, "E1: the data-level grid must NOT be on the slim card");
   ok(cardA1.indexOf('class="cite"') < 0, "E1: the APA citation block must NOT be on the slim card");
@@ -3142,7 +3142,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(cardA1.indexOf("coord QC") < 0, "E1: the coordinate-QC flag stat must NOT be on the slim card");
   ok(cardA1.indexOf("time series") < 0 && cardA1.indexOf("MTH5") < 0, "E1: the per-format availability matrix must NOT be on the slim card");
   ok(cardA1.indexOf("completeness/smoothness") < 0, "E1: the completeness/smoothness check must NOT be on the slim card (it stays in the detail)");
-  // C2: the abstract block joins that absent list, and BOTH actions stay present (asserted above).
+  // The abstract block joins that absent list, and BOTH actions stay present (asserted above).
   ok(cardA1.indexOf('class="desc') < 0, "C2: the abstract block must NOT be on the workspace card");
   ok((cardA1.match(/data-act="select"/g) || []).length === 1 && (cardA1.match(/View survey/g) || []).length === 1,
     "C2: the workspace card keeps EXACTLY its two actions, one View survey and one Download");
@@ -3184,7 +3184,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // (d) FORBIDDEN: no completeness/smoothness option in the sort control (the screen must never rank).
   ok([...sortSel.options].every(o => !/completeness|smoothness|quality/i.test(o.value + o.textContent)),
     "E3 FENCE: the sort control must NOT offer a completeness/quality ranking");
-  // (e) FACET SWAP (cleanup wave B): the "Has DOI" / "Has tipper" chips are REMOVED; "Open licence" is
+  // (e) FACET SWAP the "Has DOI" / "Has tipper" chips are REMOVED; "Open licence" is
   // kept; data-type chips (BBMT/LPMT/AMT/GDS, only corpus-present ones) are added. None is the completeness
   // check. (This is a RED-proof target for the facet swap; old code renders a [data-facet="doi"] chip.)
   ok(facetChips.querySelector('[data-facet="doi"]') == null && facetChips.querySelector('[data-facet="tipper"]') == null,
@@ -3213,7 +3213,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(facetChips.querySelector('[data-type-facet="AMT"]').classList.contains("on"), "E3: an active type chip must get the .on state");
   facetChips.querySelector('[data-type-facet="BBMT"]').click();
   ok(surveyCount.textContent === "4 surveys", "E3: type chips are multi-select (AMT OR BBMT -> all four surveys), got: " + JSON.stringify(surveyCount.textContent));
-  // (g) SEARCH (cleanup wave B): reset the type facets first, then case-insensitive substring over
+  // (g) SEARCH reset the type facets first, then case-insensitive substring over
   // name/org/region/blurb, live-updating the grid + count. This REPLACES the rail #find as the Surveys search.
   clearFilters.click();
   const searchInput = doc.getElementById("surveySearch");
@@ -3258,7 +3258,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   layoutSeg.querySelector('[data-layout="cards"]').click();
   ok(cardGridEl.className === "cardgrid" && cardGridEl.querySelectorAll(".scard").length === 4, "E3: toggling back to Cards did not restore the card grid");
 
-  // C3. FOUR ACROSS, AND THE GRID STOPS WHERE THE BAR STOPS (owner ruling; overturns the five-up note
+  // C3. FOUR ACROSS, AND THE GRID STOPS WHERE THE BAR STOPS. It supersedes the five-up note
   // that used to sit at the .cardgrid rule). Two defects in one declaration. The 300px floor let a wide
   // screen pack in five and then six columns of cards too narrow to read; and .cardgrid was the ONLY
   // uncapped grid on the view - .discovery and .collfeature-grid already cap at 1500px - so at 2560px
@@ -3266,8 +3266,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // belonged to the grid. A 352px floor under a 1500px cap yields exactly four columns at the cap
   // (4*352 + 3*14 gap = 1450 <= 1500; a fifth would need 1816) and never more, at any width; the
   // floor sits low enough that a 1500px viewport (grid content 1460px after the view's 20px padding)
-  // fits four as well, not just the capped ultrawide case. Four-across is the ceiling by ruling: a
-  // fifth column on ultrawides would need its own ruling, not a lower floor here.
+  // fits four as well, not just the capped ultrawide case. Four-across is the ceiling by rule: a
+  // fifth column on ultrawides would need its own rule, not a lower floor here.
   // E3 above pins class names only; jsdom resolves declared class CSS through getComputedStyle with no
   // layout engine, so the cap and the floor are pinned as the CSS contract they are.
   const _gridCss = win.getComputedStyle(cardGridEl);
@@ -3286,7 +3286,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify(win.getComputedStyle(doc.getElementById("discoveryControls")).maxWidth) +
     " grid=" + JSON.stringify(_gridCss.maxWidth));
 
-  // C5. THE CONTEXTUAL COUNTER (owner R12, the SPA half). The header counter read
+  // C5. THE CONTEXTUAL COUNTER. The header counter read
   // "N shown / M selected / T total" on EVERY view, and only on the map was that a description of what
   // the reader was looking at. On the Surveys view it counted stations while the screen showed survey
   // cards; on the Collections views it counted something not on screen at all. The SHELL is identical
@@ -3408,12 +3408,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(drwE.classList.contains("open"), "E2/E4: #/survey/alpha did not open the survey detail");
   ok(drwE.getAttribute("role") === "dialog", "E7: the drawer must carry role=dialog");
   ok(/Alpha Survey/.test(drwE.getAttribute("aria-label") || ""), "E7: the survey drawer aria-label must name the survey, got: " + JSON.stringify(drwE.getAttribute("aria-label")));
-  // E2 SUPERSEDED by the survey-drawer lane (ruling 4): the identifiers block is no longer a collapsed
+  // E2 SUPERSEDED by the survey drawer: the identifiers block is no longer a collapsed
   // <details> of whatever rows happened to be recorded. It is an always-open DATA-LEVEL tile grid of SIX
   // FIXED slots in the Rees et al. 2019 / NCI scheme, so the deposit chain has the same shape on every
   // survey. Alpha records no related_identifiers at all, which is exactly the case the old surface hid and
   // this one must state: 0 of 6, six MUTED-BUT-VISIBLE tiles, none of them omitted.
-  // COPY (drawer-polish lane, owner 2026-08-19): the head reads "Data at every level: N of 6 recorded".
+  // COPY: the head reads "Data at every level: N of 6 recorded".
   // The old "Persistent identifiers:" wording is pinned GONE from the survey drawer below, so this rename
   // cannot silently revert; the station drawer's own identifiers block is untouched and keeps its name.
   ok(![...drwE.querySelectorAll("details")].some(d => /Data at every level:/.test(d.querySelector("summary") ? d.querySelector("summary").textContent : "")),
@@ -3428,19 +3428,19 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(idGrid && idGrid.classList.contains("prodgrid"), "ruling 4: the identifiers head must be followed by a .prodgrid (the Downloads tile treatment)");
   const idTiles = [...idGrid.querySelectorAll(".prod")];
   ok(idTiles.length === 6, "ruling 4: Alpha must render exactly the SIX fixed slots (no extras), got: " + idTiles.length);
-  // The six slot names, in the canonical Table-1 order. Order is part of the ruling: the chain reads
+  // The six slot names, in the canonical Table-1 order. Order is part of the rule: the chain reads
   // collection -> raw -> L0 -> L1 -> L2 -> L3 the same way on every survey.
   const SLOTS = ["Collection", "Packed Raw Data", "Level 0", "Level 1", "Level 2", "Level 3"];
   SLOTS.forEach((nm, i) => ok(idTiles[i].textContent.indexOf(nm) === 0,
     "ruling 4: slot " + (i + 1) + " must be '" + nm + "', got: " + JSON.stringify(idTiles[i].textContent.slice(0, 40))));
-  // Owner ruling: an unrecorded level is MUTED BUT VISIBLE (never dropped) - .prod.dis + a hollow dot +
+  // An unrecorded level is MUTED BUT VISIBLE (never dropped) - .prod.dis + a hollow dot +
   // the honest state word. This is the assertion that would fail if a future change went back to hiding them.
   idTiles.forEach((t, i) => {
     ok(t.classList.contains("dis"), "ruling 4: unrecorded slot " + (i + 1) + " must render MUTED (.prod.dis), not hidden");
     ok(t.querySelector(".pdot.hollow"), "ruling 4: unrecorded slot " + (i + 1) + " must carry the hollow dot");
     ok(/not yet recorded/.test(t.textContent), "ruling 4: unrecorded slot " + (i + 1) + " must say 'not yet recorded'");
   });
-  // The Organisation ROR row leaves the drawer with the old rollup (owner). The org name in the header
+  // The Organisation ROR row leaves the drawer with the old rollup. The org name in the header
   // subline still carries its ROR link, so the identifier itself is not lost to the reader.
   ok(!/Organisation ROR/.test(drwE.innerHTML), "ruling 4: the 'Organisation ROR' row must be gone from the survey drawer");
   // The citation line is the POINT of using a published scheme: the vocabulary has to be checkable.
@@ -3453,8 +3453,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const instrLine = drwE.querySelector(".dl-instr");
   ok(instrLine && /LEMI 423; Phoenix MTU-5C/.test(instrLine.textContent),
     "ruling 4: the instruments footer line must carry the declared models, got: " + JSON.stringify(instrLine && instrLine.textContent));
-  // E4: section order. Description before footprint; downloads ahead of funding/publications/identifiers;
-  // release notes last. Ruling 3: the trailing "Related surveys" block is REMOVED.
+  // Section order. Description before footprint; downloads ahead of funding/publications/identifiers;
+  // release notes last. the trailing "Related surveys" block is REMOVED.
   const H = drwE.innerHTML, at = s => H.indexOf(s);
   const oDesc = at('class="dim"'), oScatter = at("<svg"), oSummary = at("Survey summary"), oDl = at(">Downloads<"),
         oFund = at(">Funding<"), oPubs = at("Related publications"), oIds = at("Data at every level:"),
@@ -3469,8 +3469,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(at("Related surveys") < 0, "ruling 3: the 'Related surveys' section must be REMOVED from the survey drawer");
   ok(!/data-act="story"/.test(H), "ruling 3: no related-survey links may remain in the survey drawer");
 
-  // ---- SURVEY-DRAWER LANE: HEADER ACTION + DOWNLOADS TRIM (rulings 1 + 2) --------------------------
-  // Ruling 2: "View on map" is in the drawer HEADER beside the survey name, not in Downloads. The header
+  // ---- SURVEY DRAWER: HEADER ACTION + DOWNLOADS TRIM --------------------------
+  // "View on map" is in the drawer HEADER beside the survey name, not in Downloads. The header
   // is sticky so the control does not scroll away from a long record.
   const svHead = drwE.querySelector(".dhead.svhead");
   ok(svHead, "ruling 2: the survey drawer header must carry the sticky .svhead treatment");
@@ -3479,7 +3479,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "ruling 2: the header must carry the 'View on map' action, got: " + JSON.stringify(mapBtn && mapBtn.textContent));
   ok(svHead.querySelector(".close"), "ruling 2: the header must keep its Close control");
   ok(svHead.querySelector(".sid").textContent === "Alpha Survey", "ruling 2: the header must still name the survey");
-  // Ruling 1: the Downloads grid is the whole-survey BUNDLES only. Neither of the two removed tiles may
+  // The Downloads grid is the whole-survey BUNDLES only. Neither of the two removed tiles may
   // survive there: "All EDIs (select & download)" is gone outright, and "View on map" moved to the header.
   const dlHead = [...drwE.querySelectorAll(".sechead")].find(h => h.textContent.trim() === "Downloads");
   ok(dlHead, "ruling 1: the Downloads section head is missing");
@@ -3494,7 +3494,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "ruling 2: 'View on map' must appear EXACTLY ONCE in the survey drawer (the header), not also in Downloads");
   drwE.classList.remove("open");
 
-  // DD. E5 COLLECTIONS LANDING (cleanup wave E): the intro paragraph is DELETED; ONE rich card style at
+  // DD. E5 COLLECTIONS LANDING the intro paragraph is DELETED; ONE rich card style at
   // any count in the responsive grid; the FULL abstract renders with no 240-char truncation / "Show more".
   A.setView("collections");
   const collGrid = doc.getElementById("collectionsGrid");
@@ -3641,7 +3641,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!drwF.classList.contains("open"), "E7: the close button did not close the drawer");
   ok(doc.activeElement === opener, "E7: focus must be RESTORED to the invoking element on close");
 
-  // ===== UX8 (X2/X3/X5/X7) + C46-W3b =============================================================
+  // ===== + C46-W3b =============================================================
 
   // X2. MAP LEGEND OVERLAYS THE MAP CONTAINER (bug fix). #mapLegend must be a child of #map (the Leaflet
   // container), NOT a flex sibling of #map inside #content — so it can never participate in that layout or
@@ -3650,7 +3650,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(legEl && legEl.parentElement && legEl.parentElement.id === "map",
     "X2: the map legend must be parented INTO the map container (#map), got parent: " + (legEl && legEl.parentElement && legEl.parentElement.id));
 
-  // X3 IS RETIRED WITH ITS SUBJECT. The UX8-X3 ruling was "a grouped map object never mixes surveys",
+  // X3 IS RETIRED WITH ITS SUBJECT. The X3 rule was "a grouped map object never mixes surveys",
   // enforced first by groupMarkersBySurvey for cluster bubbles and then structurally by the badge router.
   // The map groups nothing now, so there is no object left that could mix two surveys.
 
@@ -3682,7 +3682,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const iNA = byKey(A.screeningIndicators({ q: null, azR: null, azN: 0, beta: null, phaseSplit: null, decades: null }));
   ok(KEYS.every(k => iNA[k].state === "na"), "X5: a not-computable input must render 'na' (not evaluated), never a fabricated green, got " + JSON.stringify(KEYS.map(k => k + ":" + iNA[k].state)));
   ok(iNA.smoothness.word === "not evaluated", "X5: an 'na' indicator must say 'not evaluated'");
-  // OWNER HIDE (2026-07-22): the Screening tab/panel is reversibly commented out in drawer.js pending design
+  // HIDDEN: the Screening tab/panel is reversibly commented out in drawer.js pending design
   // review, so the RENDERED panel is ABSENT. The pure screeningIndicators() model above is UNCHANGED (helpers
   // left intact), so re-enabling the tab is uncommenting only. Restore the rendered-panel pins (five .indrow
   // rows + 'Show details' expander + strike prose) when the Screening surface returns.
@@ -3706,7 +3706,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(modNoTs.dims.find(d => d.key === "ts").note === "not available", "X7: a missing time series reads 'not available'");
   ok(A.maturityModel({ lic: "Bananas", doi: "10.1/x", ts: "ok" }, ["", "", "", "BIRRP"]).dims.find(d => d.key === "licence").achieved === false,
     "X7: an unrecognised licence must leave the 'Licence verified' dimension unachieved");
-  // The RENDERED Provenance tab carries the ITEMISED rows only. OWNER RULING (2026-08-02): the aggregate
+  // The RENDERED Provenance tab carries the ITEMISED rows only: the aggregate
   // presentation was removed: the "Dataset maturity" heading, the five-star summary row and the
   // "Record-stewardship maturity ... Not a measure of scientific quality." explainer. The model above is
   // untouched (it still drives the per-row stars), so what is pinned here is the PRESENTATION.
@@ -3721,11 +3721,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "X7: every surviving stewardship row must keep its own star glyph");
   ok(/Curated archive/.test(matP.textContent) && /Licence verified/.test(matP.textContent),
     "X7: the surviving rows must still be labelled");
-  // X6: the three always-visible provenance rows are present up top.
+  // The three always-visible provenance rows are present up top.
   ok(/Processing software/.test(matP.textContent) && /Source archive/.test(matP.textContent), "X6: the Provenance tab must show the software + source-archive summary rows");
-  // X8: the Metadata & API box is a single small 'API' expander at the foot.
+  // The Metadata & API box is a single small 'API' expander at the foot.
   ok([...matP.querySelectorAll("details summary")].some(su => su.textContent.trim() === "API"), "X8: the Provenance tab must carry a single 'API' expander");
-  // api-docs lane: this used to pin the string "Read API (planned)". That text was retired because its
+  // This used to pin the string "Read API (planned)". That text was retired because its
   // premise was false: the three paths it hedged (station json / survey json / station edi, all under an
   // /api prefix) were never served by any AusMT deployment, so "planned" dressed fiction as a roadmap.
   // The expander now lists the endpoints that DO resolve, templated with this station's own slug + id.
@@ -3736,7 +3736,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(matP.textContent.indexOf(_noApiTier) < 0, "X8: the API expander must advertise no fictional API-tier path");
   ok(/\/data\/products\/alpha\/A1\/station\.json/.test(matP.textContent),
     "X8: the API expander must list this station's own products/<slug>/<id>/station.json endpoint");
-  // Public-surface audit (2026-08-22), owner ruling: the only public metadata contracts are mtcat.json and
+  // The only public metadata contracts are mtcat.json and
   // station.json; manifest.json is the download index; everything else under /data is portal-internal.
   // So the expander lists station.json + the download index, and must NOT advertise dimensionality.json
   // (served alongside station.json, not a contract), surveys.json (no contract) or the retired
@@ -3874,7 +3874,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       { t: "An untitled note on the Gamma survey", doi: "10.5555/gamma-note" },
     ],
   });
-  // (1) ONE ATTRIBUTION BOX (owner ruling, card-lane polish). The Attribution section renders EXACTLY ONE
+  // (1) ONE ATTRIBUTION BOX. The Attribution section renders EXACTLY ONE
   //     .attn box. When creators[] drive the attribution (§2.1: cite.au IS the "; "-joined creators) that
   //     single box carries the SAME sentence with each name ORCID/ROR-linked in place, keeping the "; "
   //     separators and the "(year)" tail; there is never a second names box. RED on origin/main: TWO
@@ -3907,7 +3907,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "ONEBOX: the attribution box sits after the Attribution heading and ahead of Downloads");
   ok(!/Cited authors/.test(pcH) && !/credited whenever this dataset is cited/.test(pcH),
     "PC: the attribution box carries NO 'Cited authors' label and NO citation gloss (attribution, not citation)");
-  // (1b) CONTRIBUTORS PLACEMENT (owner ruling): the collapsed "Contributors (N)" details moves out from
+  // (1b) CONTRIBUTORS PLACEMENT: the collapsed "Contributors (N)" details moves out from
   //      below Downloads to sit directly beneath the attribution box, inside the Attribution block. RED on
   //      origin/main: the details renders AFTER the Downloads grid.
   ok(/survey-contributors/.test(pcH), "PLACE: setup, Gamma must still carry its contributors <details>");
@@ -4002,7 +4002,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "GROUP: a nameless contributor row is dropped silently (its ORCID never renders, uncounted)");
   drwGC.classList.remove("open");
 
-  // LG. LINEAGE + PROVENANCE POLISH (owner ruling, from live screenshots). Four fixes in the station
+  // LG. LINEAGE + PROVENANCE POLISH. Four fixes in the station
   // drawer's Provenance tab, driven on Gamma's G1 (its survey already carries the pubs[] poked in section
   // PC, and no later section pins Gamma's provenance):
   //   (a) the processing-software node shows the MOST SPECIFIC versioned string available (station-level
@@ -4150,7 +4150,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.restoreSciRows();
   doc.getElementById("drawer").classList.remove("open");
 
-  // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
+  // OO. CVD-SAFE COMPLETENESS RAMP. The old red→amber→green ramp's endpoints measured
   // dE76≈9.6 under a deuteranopia simulation — indistinguishable for red-green CVD readers. The ramp is
   // now a SEQUENTIAL dark→light progression whose SIGNAL IS LIGHTNESS (viridis principle): dark slate-blue
   // #2A3B66 → olive #6E7F46 → pale warm yellow #F2E27E (simulated low↔high separation deutan 106.8 /
@@ -4176,7 +4176,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(_monotone, "CVD: relative luminance must rise monotonically along the ramp (lightness IS the signal) — the old red→amber→green ramp fails this");
   ok(_relLum(A.qColor(5)) - _relLum(A.qColor(2)) > 0.5,
     "CVD: the ramp must span a LARGE lightness range (Y gap > 0.5), got " + (_relLum(A.qColor(5)) - _relLum(A.qColor(2))).toFixed(3));
-  // (d) drawer render: (OWNER HIDE 2026-07-22: the Station summary "completeness" row — the only .qvdot ramp
+  // (d) drawer render: (HIDDEN: the Station summary "completeness" row - the only.qvdot ramp
   //     swatch in the drawer — is reversibly hidden pending design review, so the swatch is ABSENT. The pure
   //     qColor ramp model above is UNCHANGED (helper intact); restore the .qvdot-present pin when the
   //     completeness row is re-enabled.) The surviving invariant: no element uses a qColor hex as a TEXT
@@ -4190,7 +4190,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(_rampTextColours.length === 0, "CVD: no drawer element may take a ramp hex as its TEXT colour (dark ends are unreadable on the dark panel)");
   doc.getElementById("drawer").classList.remove("open");
 
-  // R6: FINAL em-dash DOM sweep. Render the two rich drawer surfaces (station + survey story) and sweep the
+  // FINAL em-dash DOM sweep. Render the two rich drawer surfaces (station + survey story) and sweep the
   // whole document's rendered textContent — no em dash (U+2014) may appear in any rendered UI text. (The
   // en dash U+2013 is the house range/placeholder glyph and is intentionally NOT swept.)
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
@@ -4202,7 +4202,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("drawer").classList.remove("open");
 
   // C1. DISPLAY GRAMMAR: the workspace prints a period, a range and a licence the way the entity pages
-  // do (owner rulings R1/R2/R3). The helpers' own parity with the engine's Python leaf is held by
+  // Do. The helpers' own parity with the engine's Python leaf is held by
   // tests/display_grammar.test.js; THIS section pins that the rendered slots actually use them, which is
   // the half a pure-function test cannot see. Fixture values: Alpha is 2010-2012 with periods
   // 0.01 - 1000 s, so the pins below are exact strings, not patterns.
@@ -4239,7 +4239,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C1/R2: the survey drawer's period coverage must read '0.01 - 1,000 s', got: " +
     JSON.stringify((c1sv.match(/period coverage.{0,40}/) || [""])[0]));
   ok(c1sv.indexOf("CC BY 4.0") >= 0, "C1/R3: the survey drawer's licence row must read the human form");
-  // H6 (owner ruling: U+2013 leaves portal source). An ABSENT table value renders the plain
+  // H6. An ABSENT table value renders the plain
   // hyphen-minus placeholder, reader-visibly. Alpha's SMETA carries no version, so the survey
   // summary's version row IS the placeholder; and the whole rendered drawer must be free of the
   // en dash (spelt by escape here, since the glyph itself is purged from portal source).
@@ -4282,7 +4282,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("drawer").classList.remove("open");
   A.setView("map");
 
-  // QQ. DRAWER SCRIM (cleanup wave D): a dim backdrop behind the drawer on the Surveys / Collections views
+  // QQ. DRAWER SCRIM a dim backdrop behind the drawer on the Surveys / Collections views
   // (NEVER the map view, where the drawer sits side-by-side with the map). Clicking it closes the drawer.
   const scrim = doc.getElementById("drawerScrim");
   ok(scrim, "D: the drawer scrim element (#drawerScrim) is missing");
@@ -4302,11 +4302,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("drawer").classList.contains("open"), "D: clicking the scrim must close the drawer");
   ok(scrim.classList.contains("hidden"), "D: closing via the scrim must hide the scrim");
 
-  // XX. STAGE B - SELECTION-STATE ISOLATION. Owner bug: the "select & download this survey" control scoped
+  // XX. STAGE B - SELECTION-STATE ISOLATION. the "select & download this survey" control scoped
   // the shared rail tree to its one survey, which (a) emptied the Surveys catalogue with the rail (the only
   // undo) hidden on that view, and (b) left the map tree stuck scoped. Fix: the catalogue is decoupled from
   // the rail tree, and the control's map scoping is a temporary lens restored on exit.
-  // SURFACE MOVED (survey-drawer lane, ruling 1): the survey drawer's "All EDIs (select & download)" TILE is
+  // SURFACE MOVED: the survey drawer's "All EDIs (select & download)" TILE is
   // removed - Downloads is the three whole-survey bundles, and per-station selection lives on the station
   // drawers. The lens machinery (selectSurvey) is unchanged and still reached from the survey CARD's
   // "Download" button, so this section now drives that surface. The BEHAVIOUR under test is identical; only
@@ -4351,13 +4351,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.visIds().length === 5, "StageB RESTORE (Browse): the restored tree must put every station back on the map, got " + A.visIds().length);
 
   // (3) COHERENCE + VIEW-SWITCH EXIT PATH. Re-scope the map via the tile, then navigate to the Surveys view
-  // (the exact step in the owner's repro). The catalogue count is coherent - both #surveyCount and #nVis read
+  // . The catalogue count is coherent - both #surveyCount and #nVis read
   // the discovery-filtered set of 4, never the scoped tree - AND leaving the map releases the lens so the map
   // tree is restored.
   selectCtl().click();
   ok(treeChecked().length === 1, "StageB: re-scope setup failed, got " + JSON.stringify(treeChecked()));
   A.setView("surveys");
-  // C5: the header slot is the workspace line on this view, so the coherence pin reads it there.
+  // The header slot is the workspace line on this view, so the coherence pin reads it there.
   ok(doc.getElementById("surveyCount").textContent === "4 surveys" && /^4 of 4 surveys shown/.test(doc.getElementById("countSlot").textContent),
     "StageB COHERENCE: #surveyCount and the header workspace line must both count 4 surveys regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("countSlot").textContent]));
   ok(treeChecked().length === 4, "StageB RESTORE (view switch): navigating off the map must restore the scoped tree, got " + JSON.stringify(treeChecked()));
@@ -4483,7 +4483,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // checkboxes (`tree.querySelectorAll('input[value]')`, filters.js) - they never read #typeBoxes. So a
   // hand-toggled TYPE (rail or legend: the same checkbox) is a DURABLE Browse filter that the select-and-
   // download flow neither captures nor restores, exactly like the hand-toggled tree box in StageB GUARD.
-  // Driven from the survey CARD's Download button since the survey drawer's tile was removed (ruling 1).
+  // Driven from the survey CARD's Download button since the survey drawer's tile was removed.
   gdRow.click();
   ok(typeBox("GDS").checked === false, "LEG lens setup: GDS must be off before entering the lens");
   selectCtl().click();                                                                    // enters the lens
@@ -4495,7 +4495,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   gdRow.click(); A.closeDrawer();
   A.setType("A1", "BBMT"); A.setView("map"); A.refresh();   // restore the all-BBMT baseline
 
-  // ---- STATION MTH5 IS THE STATION'S OWN FILE (owner report 2026-08-04) ---------------------------
+  // ---- STATION MTH5 IS THE STATION'S OWN FILE ---------------------------
   // The Files tab's Level 2 list belongs to ONE STATION. Its EDI and EMTF XML rows have always read that
   // station's own manifest files[] row; the MTH5 row read the SURVEY's bundles[] row instead, because it
   // was written when the survey-aggregated <slug>-tf.h5 was the only MTH5 the build produced. Once the
@@ -4549,7 +4549,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(h5Row.getAttribute("data-prod") === "fetch",
     "STATION-H5: the row must download through the same masked front-door fetch the EMTF XML row uses");
   // Size comes from the STATION's manifest row: 174,696 B renders "171 KB". The bundle's 1.7 MB is the
-  // live symptom the owner reported and must appear nowhere on the row.
+  // live symptom the review reported and must appear nowhere on the row.
   ok(/171 KB/.test(h5Row.textContent) && h5Row.textContent.indexOf("1.7 MB") < 0,
     "STATION-H5: the size must be the STATION row's (171 KB), not the survey bundle's (1.7 MB), got " +
     JSON.stringify(h5Row.textContent.trim()));
@@ -4606,7 +4606,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "STATION-H5: the survey MTH5 bundle must still be offered by the survey drawer's Downloads grid");
   A.setManifest(null); A.closeDrawer();
 
-  // ---- BULK-EXPORT LABEL (owner ruling 2026-08-01) -------------------------------------------------
+  // ---- BULK-EXPORT LABEL -------------------------------------------------
   // The portal marks the file fetches its multi-file export issues with a query flag, so the server-log
   // aggregator can tell a drag-selected bulk export from a single station download. Two properties, and
   // the second is what makes the first mean anything: the export flow labels EVERY file it fetches, and
@@ -4642,7 +4642,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "SEL: a single-station download must carry NO selection flag, got " + JSON.stringify(singleUrls));
   A.setSelected([]);
 
-  // ---- SELECTION EXPORTS: EMTF XML AND MTH5 (owner ask 2026-08-04) --------------------------------
+  // ---- SELECTION EXPORTS: EMTF XML AND MTH5 --------------------------------
   // "EDIs (zip)" packaged the selection in the custodian's format only. AusMT also serves a per-station
   // EMTF XML and a per-station MTH5, and a reader who has just drawn a box around 40 stations had no way
   // to take either without opening 40 drawers. Two more buttons zip those, client-side, through the same
@@ -4891,13 +4891,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify([xmlBtn.textContent, h5Btn.textContent, ediBtn.textContent]));
   A.setSelected([]);
 
-  // ---- DP. DRAWER-POLISH LANE (owner feedback 2026-08-19): slot mapping + the grid's link treatment ----
+  // ---- DP. DRAWER POLISH: slot mapping + the grid's link styling ----
   // Driven on Delta, which every earlier section has finished with, so nothing above is perturbed.
   //
   // (1) `entire` FILLS the Collection slot. `entire` means ONE record covering all levels - the umbrella
   //     record the Collection slot names - so it belongs in that slot, not in the extra-tile bucket it used
   //     to fall into. The fixture is Gawler Phase 2's real shape: a GSSA/SARIG umbrella landing page
-  //     (identifies: entire, NO `collection` row) plus its level3 models record. RED on the pre-lane build:
+  // (identifies: entire, NO `collection` row) plus its level3 models record. RED on the earlier build:
   //     the Collection tile stayed muted, the head read "1 of 6 recorded", and the umbrella record hung
   //     below the grid as an orphan seventh tile.
   A.setSMETA("Delta Survey", { instrument_pid: "10.82388/bt6orvhn", related_identifiers: [
@@ -4938,12 +4938,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(/Entire dataset/.test(dpTiles()[6].textContent) && /10\.25914\/umbrella/.test(dpTiles()[6].innerHTML),
     "COLLISION: the losing `entire` row must survive as an extra tile, never be dropped");
 
-  // (3) LINK TREATMENT. index.html is the REAL page in this harness, so this asserts the CASCADE rather
+  // (3) LINK STYLING. index.html is the REAL page in this harness, so this asserts the CASCADE rather
   //     than a string: for every anchor the grid renders, some rule in the document's own stylesheet that
   //     sets the accent colour must SELECT that anchor - and the :visited form of the rule must exist too,
-  //     so a followed DOI can never fall back to the browser's purple. RED before this lane: NO rule in
+  //     so a followed DOI can never fall back to the browser's purple. RED before this module: NO rule in
   //     the sheet selected these anchors at all, so the DOIs, the Rees citation and the platform PID
-  //     rendered in the UA's dark blue on the navy tiles (the owner's screenshot). jsdom resolves no
+  //     rendered in the UA's dark blue on the navy tiles. jsdom resolves no
   //     custom properties, so this proves SELECTION and the declared value, not the painted pixel.
   A.setSMETA("Delta Survey", { instrument_pid: "10.82388/bt6orvhn", related_identifiers: [
     { identifier: "10.25914/link-collection", identifier_type: "DOI", relation: "IsPartOf", custodian: "NCI", identifies: "collection" },
@@ -5156,14 +5156,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // The protomaps light flavour renders a stronger sea blue than the portal's palette wants, and the
   // bundle exposes no per-colour flavour override, so the muting is a CSS filter scoped to the tile
   // pane ONLY (station overlays render in other panes and must keep full colour). The google-site-
-  // verification meta proves domain ownership to Search Console; the content value is the owner's
+  // verification meta proves domain ownership to Search Console; the content value is the
   // token, pinned by shape so a token rotation is a one-line index.html edit.
   //
   // THE ATTRIBUTION IS BACK ON THE MAP, COLLAPSED, and this is where that is proven against a DRIVEN
-  // document rather than against source text. What the owner asked to be rid of was the LINE and the
+  // document rather than against source text. What came off the map was the LINE and the
   // Leaflet flag beside it; the credit itself is a licence term (ODbL basemap data, and the tile
   // provider's own terms) and it stays where the map is, because only the layer knows which provider
-  // is drawing. Every leg the ruling names is driven here: the control exists, it starts collapsed,
+  // is drawing. Every leg the rule names is driven here: the control exists, it starts collapsed,
   // it carries no prefix, it names OpenStreetMap, and a click and a keyboard focus both open it.
   {
     ok(/#map \.leaflet-tile-pane\{filter:[^}]*saturate\(/.test(html),
