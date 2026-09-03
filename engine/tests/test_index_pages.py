@@ -155,21 +155,24 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # ever appear as a src, and no OTHER path may either. The lists below are EXACT and ORDERED, so a
 # third asset, or the same asset in the wrong slot, fails here.
 #
-# Two marks, in the order the header emits them: the AusMT identity opening the left zone, the
-# AuScope parent mark closing the right one.
-# The chrome's own fetched assets, in the order a page writes them: the two header marks, then the
+# ONE mark in the header now: the AusMT identity opening the left zone. The AuScope parent mark
+# that used to close the right zone is withdrawn from every header on the site (the relationship is
+# stated in words, in the footer and in About's Who enables AusMT section), so the header's fetched
+# set is a single file.
+# The chrome's own fetched assets, in the order a page writes them: the header identity, then the
 # footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer ruling, which made the parent
 # organisation's acknowledgement the footer's right region on every surface; it is the same
-# same-origin, vendored, cached-once class of asset as the two header marks and is allow-listed on
+# same-origin, vendored, cached-once class of asset as the header mark and is allow-listed on
 # the same terms (see AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F1).
-ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg", "/vendor/auscope-icon-white.png"]
+ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg"]
 ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-white.png"]
 ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
 
-# The collection page draws the one thing in this tier that carries a mark in its BODY as well: the
-# member footprint map, which repeats the AuScope mark in the panel's bottom-left corner. It is the
-# same file the header already asked for, so it costs the reader no second request. Keyed by the
-# page's own path so that no OTHER page kind can quietly grow a body mark.
+# The collection page draws the one thing in this tier that carries a mark in its BODY: the member
+# footprint map, which puts the AuScope mark in the panel's bottom-left corner. That mark is a
+# CAPTION on a figure, not chrome, and the ruling that withdrew the header mark did not reach it, so
+# the entry stays and is now the ONLY generated reference to the file. Keyed by the page's own path
+# so that no OTHER page kind can quietly grow a body mark.
 ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope-icon-white.png"]}
 
 # RESTATED, WHICH MEANS THE SAME SURFACE. The old rule was `"src=" not in page`: a raw substring
@@ -1009,39 +1012,39 @@ def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
             f"{rel}: the mark must carry the shared sizing rule the SPA header uses"
 
 
-# The parent-organisation mark, RENDERED. It is the same string the portal documents carry and the
-# character-for-character parity across surfaces is held in the portal lane
-# (portal/tests/test_header_geometry_parity.py); what is asserted here is that the emitter actually
-# puts it on every page kind, once, in the right zone, at a height matched to the identity mark.
+# The parent-organisation mark, WITHDRAWN. It used to close every header from the right zone; the
+# owner's ruling takes it off every surface of the site, so what this asserts is that the emitter
+# puts it on NO page kind, in no zone. The portal surface's half of the same ruling is held in
+# portal/tests/test_header_geometry_parity.py, character for character.
 ORG_MARK_IMG = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'
+ORG_MARK_CLASS = 'class="orgmark"'
+ORG_MARK_RULE = ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}"
+ORG_MARK_IMG_RULE = ".orgmark img{height:30px;width:auto;display:block}"
 
 
-def test_every_page_kind_closes_its_header_with_the_auscope_mark(built):
-    """Whose service this is, on every page the tier emits. FAILS IF a page kind renders without the
-    mark, renders it twice (it is APPENDED to a zone, so a careless edit adds rather than replaces),
-    puts it anywhere but the header's right zone, or sizes it off the shared rule.
+def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
+    """The withdrawal, on every page kind the tier emits. FAILS IF the anchor literal, the .orgmark
+    class or either of its two CSS rules survives on any page: those four spellings are how the mark
+    would come back, and a header restored from a pre-ruling revision carries all four at once.
 
-    Once per page is the assertion that costs something: the header is emitted from one literal, so
-    a second copy would mean a second emission site, and the tier's whole posture is one header."""
+    The header is emitted from ONE literal, so this is really one assertion made 2,655 times; that
+    is exactly the point, because the emitter is also the one place a revert would land."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        assert page.count(ORG_MARK_IMG) == 1, \
-            f"{rel}: the AuScope mark must appear exactly once, got {page.count(ORG_MARK_IMG)}"
         head = page.split("<header", 1)[1].split("</header>", 1)[0]
-        right = head.split('class="hzone hright"', 1)[1]
-        assert ORG_MARK_IMG in right, \
-            f"{rel}: the mark belongs to the header's RIGHT zone: {head[:400]!r}"
-        # The nav lives in the centre zone, so a mark in the right zone follows every primary
-        # control in the document order the keyboard walks.
-        assert head.index('class="hzone hcenter"') < head.index(ORG_MARK_IMG), \
-            f"{rel}: the mark must follow the primary nav rather than take a tab stop ahead of it"
         css = page.split("<style>", 1)[1].split("</style>", 1)[0]
-        assert ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}" in css, \
-            f"{rel}: the mark must carry the shared header rule"
-        # Matched to the identity mark's 30px box, so the two read as siblings across the header
-        # rather than as a mark and a banner.
-        assert ".orgmark img{height:30px;width:auto;display:block}" in css, \
-            f"{rel}: the mark's height must match the identity mark's"
+        for label, needle, where in (("the anchor", ORG_MARK_IMG, page),
+                                     ("the class", ORG_MARK_CLASS, head),
+                                     ("the zone rule", ORG_MARK_RULE, css),
+                                     ("the sizing rule", ORG_MARK_IMG_RULE, css)):
+            assert needle not in where, (
+                f"{rel}: the header's AuScope org-mark is withdrawn from every surface; {label} is "
+                f"back as {needle!r}")
+        # The right zone survives the withdrawal and keeps the contextual status slot. FAILS IF the
+        # zone itself went with the mark: the geometry pins read three zones, and a header with two
+        # re-floats the centre tab group on every page in the tier.
+        assert 'class="hzone hright"' in head, (
+            f"{rel}: the right zone stays; the mark left it, the zone did not")
 
 
 # The FILE, bounded per page kind, which is the portal surface's pin restated on this one. The mark
@@ -1050,20 +1053,21 @@ def test_every_page_kind_closes_its_header_with_the_auscope_mark(built):
 # a preload link would carry it a second time and pass both.
 ORG_ASSET = "auscope-icon-white.png"
 
-# The collection page is the one kind that legitimately names it twice: the header's parent mark and
-# the member-footprint map's own corner mark, which is the same file and so costs no second request.
-# Every other kind carries the header mark alone.
-ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 2}
+# The collection page is now the ONE kind that names it at all: the member-footprint map's corner
+# mark, which is a caption on that figure and outside the header ruling. Every other kind names the
+# file zero times, which is the withdrawal counted rather than spelled.
+ORG_ASSET_PER_KIND = {"collections/idxcoll.html": 1}
 
 
-def test_no_page_kind_names_the_auscope_image_beyond_the_marks_it_carries(built):
-    """FAILS IF a page kind names the AuScope image more often than the marks it is entitled to, or
-    loses one of them. The header mark is appended to a zone and the map mark is drawn into a panel,
-    so on either surface a careless edit adds rather than replaces, and a page holding the same image
-    twice over reads as a mistake while satisfying every slot-scoped pin above."""
+def test_no_page_kind_names_the_auscope_image_beyond_the_one_figure_that_keeps_it(built):
+    """FAILS IF a page kind names the AuScope image more often than the figures it is entitled to,
+    or loses the one figure that keeps it. The map mark is drawn into a panel and the retired header
+    mark was appended to a zone, so on either surface a careless edit adds rather than replaces, and
+    a page naming the file again is the header mark returning by some other markup while every
+    spelling-scoped pin above still passes."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        want = ORG_ASSET_PER_KIND.get(rel, 1)
+        want = ORG_ASSET_PER_KIND.get(rel, 0)
         assert page.count(ORG_ASSET) == want, (
             f"{rel}: the AuScope image may be named {want} time(s) on this page kind; "
             f"found {page.count(ORG_ASSET)}")

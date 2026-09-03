@@ -1491,6 +1491,23 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel (docs wave)");
   ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
+  // H0b. NO AuScope ORG-MARK IN THE SPA HEADER. The mark closed the right zone on every surface until
+  // the owner moved the relationship to the two places that state it in words: the footer, on every
+  // page, and About's "Who enables AusMT" section. Asserted against the REAL index.html DOM rather
+  // than its source text, so a mark restored under different markup is caught by the slot it lands in
+  // and not only by the literal it was written as. The right zone itself must survive: it carries the
+  // contextual status slot, and a header with two zones re-floats the centre tab group.
+  const _hdr = doc.querySelector("header");
+  ok(_hdr, "H0b: index.html must carry the site header");
+  ok(_hdr.querySelectorAll(".orgmark").length === 0,
+    "H0b: the AuScope org-mark is withdrawn from every header; found " + _hdr.querySelectorAll(".orgmark").length);
+  ok([..._hdr.querySelectorAll("img")].every(i => (i.getAttribute("src") || "").indexOf("auscope-icon") < 0),
+    "H0b: no header image may name the AuScope icon: " +
+    JSON.stringify([..._hdr.querySelectorAll("img")].map(i => i.getAttribute("src"))));
+  ok([..._hdr.querySelectorAll("a")].every(a => (a.getAttribute("href") || "").indexOf("auscope.org.au") < 0),
+    "H0b: the header carries no outbound AuScope anchor; the footer and About section 2 do");
+  ok(_hdr.querySelector(".hright"), "H0b: the right zone stays; the mark left it, the zone did not");
+
   // H. TOUR v4 (UX rounds 1/2 + UX4 D5): 10 steps now. Opens from the welcome popup's "Take the 2-minute
   // tour" button (#welcomeTour), which is the only tour BUTTON left; index.html?tour=1 is the other entry
   // and is pinned in G3. Step 1 text matches the verbatim design copy, ArrowRight advances to step 2, Esc

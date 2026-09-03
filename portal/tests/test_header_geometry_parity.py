@@ -251,8 +251,8 @@ MARK_IMG = f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" heig
 
 # The IDENTITY SLOT, by the class that expressed the one exception to it. A page's identity is
 # .brandmark; .auscope-logo was the AuScope symbol standing in for one. Keyed on the CLASS rather
-# than on the filename of the image, because EVERY page names that file as the parent-organisation
-# mark below: the two are different slots doing different jobs, and only one of them is an identity.
+# than on the filename of the image, so the pin says which SLOT is forbidden the symbol rather than
+# which file may appear on the page at all.
 IDENTITY_CLASS = 'class="auscope-logo"'
 
 
@@ -275,146 +275,124 @@ def test_every_static_chrome_page_carries_the_ausmt_mark():
         assert MARK_RULE in text, (
             f"portal/{page.name}: the mark must carry the shared sizing rule {MARK_RULE!r}")
         assert IDENTITY_CLASS not in text, (
-            f"portal/{page.name}: the AuScope symbol is not this site's header IDENTITY; it states "
-            "the parent organisation from the right zone instead (.orgmark)")
+            f"portal/{page.name}: the AuScope symbol is not this site's header identity, and it no "
+            "longer states the parent organisation from the right zone either; the relationship "
+            "lives in the footer and in About section 2")
     assert seen, "no chrome page was discovered; the glob or the header marker has moved"
 
 
 def test_no_header_stands_the_auscope_symbol_in_for_an_identity():
     """The ruling that closed the carve-out, pinned as one. FAILS IF any page carries the AuScope
-    symbol in its identity slot: the AusMT mark opens every header, and the symbol states the parent
-    organisation from the right zone instead. A header copied from the pre-ruling about.html is
-    exactly how the old slot comes back.
+    symbol in its identity slot: the AusMT mark opens every header, and nothing stands in for it.
+    A header copied from the pre-ruling about.html is exactly how the old slot comes back.
 
-    Scoped to the identity CLASS, not to the image file: every page carries that file, as the
-    parent-organisation mark in the right zone, which is a different slot and not an identity."""
+    Scoped to the identity CLASS rather than to the image file, which is the narrower of the two
+    statements and the one this pin owns: the whole-file ban lives below."""
     holders = [p.name for p in sorted(ROOT.glob("*.html"))
                if IDENTITY_CLASS in p.read_text(encoding="utf-8")]
     assert holders == [], (
         "no page may carry the AuScope symbol as its header identity; the AusMT mark opens every "
-        f"header and the symbol closes it from the right zone, got {holders}")
+        f"header on this site, got {holders}")
 
 
-# ------------------------------------------------------------------- the parent-organisation mark
+# ------------------------------------------------------- the parent-organisation mark, WITHDRAWN
 #
-# The AuScope mark closes the header, top right, on every surface of the site. It is NOT an identity
-# and it is not interchangeable with the pins above: the left zone says what this site IS, and this
-# says whose service it is. Held on every surface for the reason the identity is, and character for
-# character, because the two surfaces are one header.
+# The AuScope mark used to close every header from the right zone. The owner's ruling moves the
+# relationship to the two places that state it in words: the footer, on every surface, and About's
+# "Who enables AusMT" section. A symbol repeated in the top-right corner of every page said nothing
+# those two do not, so it leaves EVERY header, and the right zone keeps the contextual status slot
+# alone.
 #
-# The GEOMETRY argument is the identity mark's, restated on the other side. A fixed-height box inside
-# the zero-basis .hright zone changes that SIDE's content, never the centre tab group's x, so adding
-# it cannot move the nav that the whole module above exists to hold still.
+# THE PINS BELOW ARE THE OLD ONES INVERTED, NOT DROPPED. What was held before was presence,
+# position, count and sizing on every surface; what is held now is ABSENCE on every surface, by the
+# anchor literal, by the class, by both CSS rules and by the image's filename. Absence by four
+# spellings is strictly more than the old set could say, because the old set was slot-scoped and
+# this one is not: no header may name the file at all, in any slot, in any quoting form.
 ORG_SRC = "/vendor/auscope-icon-white.png"
 ORG_IMG = (f'<a class="orgmark" href="https://www.auscope.org.au" target="_blank" '
            f'rel="noopener noreferrer" title="AuScope">'
            f'<img src="{ORG_SRC}" alt="AuScope" width="29" height="30"></a>')
+ORG_CLASS = 'class="orgmark"'
 ORG_RULE = ".orgmark{display:flex;align-items:center;flex:none;margin-left:16px}"
 ORG_IMG_RULE = ".orgmark img{height:30px;width:auto;display:block}"
 
-# NO SURFACE IS EXEMPT from the parent mark either, and that is the same ruling seen from the other
-# side. about.html was exempt for a stated reason: it carried the AuScope symbol as its header
-# IDENTITY, and a parent mark beside it would have put the same image in one header twice. The
-# ruling took the symbol out of that identity slot, so the exemption went with it and every surface
-# now closes its header the same way.
 
+def test_no_chrome_page_is_exempt_from_the_identity_mark():
+    """The guard over the per-surface identity pin above: it may not be hollowed out by skipping a
+    page. FAILS IF any discovered chrome page is missing the AusMT mark that opens its header.
 
-def test_no_chrome_page_is_exempt_from_either_mark():
-    """The guard over the two per-surface pins around it: neither may be hollowed out by skipping a
-    page. FAILS IF any discovered chrome page is missing either mark, the AusMT mark that opens its
-    header or the AuScope mark that closes it.
-
-    It replaces the pin that held the two carve-out names equal. That pin was worth running only
-    while each side could move on its own; with no carve-out left, what is worth holding is that
-    every page satisfies BOTH, which is the stronger half of what the pair used to say."""
+    It used to hold BOTH marks on every page. One of the two is gone from every header, so what is
+    left to hold is the one that remains, and the withdrawal of the other is pinned below rather
+    than folded in here: a page that lost its identity and a page that grew a parent mark back are
+    different defects and read better as different failures."""
     pages = _chrome_pages()
     assert pages, "no chrome page was discovered; the glob or the header marker has moved"
     for page in pages:
         text = page.read_text(encoding="utf-8")
         assert MARK_IMG in text, (
             f"portal/{page.name}: the AusMT mark must open this header; no page is exempt")
-        assert text.count(ORG_IMG) == 1, (
-            f"portal/{page.name}: the AuScope mark must close this header exactly once; no page "
-            f"is exempt, found {text.count(ORG_IMG)}")
 
 
-def test_every_chrome_surface_carries_the_auscope_mark_exactly_once():
-    """FAILS IF a surface wearing the chrome loses the parent-organisation mark, carries it twice,
-    points it at a different file or a different destination, or drifts off the shared sizing rule.
-    A second copy is a real failure mode here and not a tidiness one: the mark is added at the END
-    of a zone, so a careless edit appends rather than replaces and the header grows two of them.
+def test_no_chrome_surface_carries_the_org_mark_in_its_header():
+    """The ruling, on every surface at once. FAILS IF the anchor literal, the .orgmark class or
+    either of its two CSS rules comes back to the SPA, to any static chrome page or to the engine's
+    pages sheet: those five spellings are how the mark would return, and a header copied from a
+    pre-ruling page carries all four at once.
 
-    Same-origin only for the image, for the reason the identity mark is: these documents are served
-    beside /vendor by the portal image, and an external src would be a third-party fetch on every
-    page of the site at once. The LINK is external by definition and carries the new-tab pairing
-    (rel noopener noreferrer) the rest of the site's outbound links do."""
+    The engine surface is read from its SOURCE, the same mechanism the pins above use: the sheet
+    cannot be imported without the engine's path set up, and the emitter is one literal."""
     surfaces = [("engine/extract/_pages.py", PAGES_PY.read_text(encoding="utf-8"))]
     surfaces += [(f"portal/{p.name}", p.read_text(encoding="utf-8")) for p in _chrome_pages()]
     assert len(surfaces) >= 2, "no chrome surface was discovered; the glob or the marker has moved"
     for where, text in surfaces:
-        assert text.count(ORG_IMG) == 1, (
-            f"{where}: the header must carry the AuScope mark exactly once, as {ORG_IMG!r}; "
-            f"found {text.count(ORG_IMG)}")
-        assert ORG_RULE in text, f"{where}: the mark must carry the shared rule {ORG_RULE!r}"
-        assert ORG_IMG_RULE in text, f"{where}: the mark must carry {ORG_IMG_RULE!r}"
+        for label, needle in (("the anchor", ORG_IMG), ("the class", ORG_CLASS),
+                              ("the zone rule", ORG_RULE), ("the sizing rule", ORG_IMG_RULE)):
+            assert needle not in text, (
+                f"{where}: the header's AuScope org-mark is withdrawn from every surface; "
+                f"{label} is back as {needle!r}. The relationship is stated in the footer and in "
+                "About's Who enables AusMT section")
 
 
-# The FILE, bounded per page. Every pin above is scoped to a SLOT: to the .auscope-logo class the
-# identity used to use, or to the parent mark's whole anchor literal. Neither says how often the
-# IMAGE may be named, so a second loose copy of it, in a body, in a url() or as a preload, satisfies
-# the lot. Counting the filename is what makes one mark per page a statement about the image rather
-# than about one spelling of it in one slot.
+# The FILE, bounded per page. The pin above is scoped to SPELLINGS of the retired mark: to its
+# anchor literal, its class and its two rules. None of them says how often the IMAGE may be named,
+# so a second loose copy of it, in a body, in a url() or as a preload, satisfies the lot. Counting
+# the filename is what makes the withdrawal a statement about the image rather than about one
+# spelling of it in one slot.
 ORG_ASSET = ORG_SRC.rsplit("/", 1)[-1]
 
-# One appearance per chrome page: the parent mark in the right zone, and nowhere else. It was one
-# number covering two slots while the carved-out page named the file as its identity instead; there
-# is one slot now, and the number is still one.
-ORG_ASSET_PER_PAGE = 1
+# Zero appearances per chrome page. It was one while the mark closed every header; the ruling took
+# that slot away and left the portal's shipped documents naming the file nowhere at all.
+ORG_ASSET_PER_PAGE = 0
 
 
-def test_no_chrome_page_names_the_auscope_image_more_than_its_one_slot():
-    """FAILS IF a chrome page carries the AuScope image a second time, in any slot and by either
-    spelling. The mark is appended to a zone, so a careless edit adds rather than replaces, and a
-    header holding two copies of the same image reads as a mistake to every visitor while passing
-    every slot-scoped pin above it."""
+def test_no_chrome_page_names_the_auscope_image_at_all():
+    """FAILS IF a chrome page carries the AuScope image in any slot, by either spelling. The mark
+    was appended to a zone, so the way it comes back is a careless copy of a pre-ruling header, and
+    a page naming the file again is that copy whatever markup it arrived in."""
     pages = _chrome_pages()
     assert pages, "no chrome page was discovered; the glob or the header marker has moved"
     for page in pages:
         count = page.read_text(encoding="utf-8").count(ORG_ASSET)
         assert count == ORG_ASSET_PER_PAGE, (
-            f"portal/{page.name}: the AuScope image may be named {ORG_ASSET_PER_PAGE} time on a "
-            f"chrome page, as the parent mark that closes it; found {count}")
+            f"portal/{page.name}: no chrome page may name the AuScope image; the header slot that "
+            f"carried it is withdrawn, found {count}")
 
 
-def test_the_auscope_mark_closes_the_header_after_the_primary_nav():
-    """Position and tab order in one pin, read off the ORDER of the header's own markup. FAILS IF
-    the mark moves ahead of the centre zone (the nav lives there, so the mark would take a tab stop
-    before the site's primary controls) or out of the right zone (it would stop being the top-right
-    corner). The engine surface is read from its source literal, which is the string it emits."""
-    for where, path in SURFACES:
-        # The engine's header is a source EXPRESSION, so the zone that carries the mark holds the
-        # name of the literal rather than the literal. Resolving it here is what makes the two
-        # surfaces comparable by ORDER; that the name resolves to this exact string is the pin
-        # above, which counts the literal itself.
-        text = path.read_text(encoding="utf-8").replace("{_ORG_MARK}", ORG_IMG)
-        header = text.split("hzone hleft", 1)[1].split("</header>", 1)[0]
-        assert ORG_IMG in header, f"{where}: the mark must sit inside the header itself"
-        for zone in ("hzone hcenter", "hzone hright"):
-            assert zone in header and header.index(zone) < header.index(ORG_IMG), (
-                f"{where}: the mark must follow the {zone!r} zone; it belongs to the right zone, "
-                f"after the nav, and never ahead of it")
+def test_the_withdrawn_asset_is_still_the_real_committed_file_its_other_consumers_need():
+    """The file STAYS, and this holds it to being the artefact it was. FAILS IF it is deleted,
+    replaced by a placeholder or re-encoded without its alpha channel.
 
-
-def test_the_auscope_mark_names_a_real_committed_asset():
-    """FAILS IF the header points at a file the portal does not ship. Both surfaces are served from
-    the same origin by the portal image, so one missing file is a broken mark on every page of the
-    site at once. The size assertion is what tells a placeholder from the real artefact."""
+    Three consumers outlive the header slot and none of them is in this ruling: the documentation
+    site's sidebar copy is made from these bytes (tests/test_docs_branding.py), the generated
+    collection page draws the same file as a corner mark on its member-footprint panel, and
+    tools/gen_social_card.py composites it into the social card. Deleting it because no header
+    names it any more breaks all three."""
     asset = ROOT / ORG_SRC.lstrip("/")
-    assert asset.is_file(), f"the header names {ORG_SRC}, which the portal does not ship"
+    assert asset.is_file(), f"{ORG_SRC} still has consumers outside the header and must ship"
     data = asset.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{ORG_SRC} must be a PNG"
-    # Colour type 6 is RGBA: the mark is white, so it reads on this chrome only because it carries
-    # its own transparency rather than a background it would paint over the header.
+    # Colour type 6 is RGBA: the mark is white, so it reads on a dark ground only because it carries
+    # its own transparency rather than a background it would paint over.
     assert data[25] == 6, f"{ORG_SRC} must keep its alpha channel (PNG colour type 6)"
 
 

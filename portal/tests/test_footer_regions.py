@@ -107,8 +107,9 @@ _EXTERNAL_NAV = ("https://www.auscope.org.au",)
 # window.opener, from which it can navigate the tab it was opened from to a look-alike, and the
 # referrer would leak the reader's path through the catalogue to a third party. The pair is asserted
 # as ONE literal string in ONE order so six documents and the engine's emitter cannot each spell it
-# differently; it is the spelling the header's own external anchor already carries. In-site links
-# keep the same tab, which is why this is a per-anchor rule and not a document-wide base target.
+# differently; it is the spelling every outbound anchor on this site carries, About's route to
+# AuScope included. In-site links keep the same tab, which is why this is a per-anchor rule and not
+# a document-wide base target.
 _NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
 
 # The lockup, as the file the footer promises. Recorded from the AuScope brand kit's own bytes; see
