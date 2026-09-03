@@ -862,12 +862,28 @@ function _tourLeader(cardBox,spotBox,suppressed){
   const[x2,y2]=edge(scx,scy,(spotBox.right-spotBox.left)/2,(spotBox.bottom-spotBox.top)/2,-dx,-dy);
   return{x1,y1,x2,y2,visible:true};
 }
+// The containers whose content SCROLLS. A target inside one of them can sit outside the part of it that is
+// on screen, and a spotlight measured there lands on empty space while the copy talks about a control the
+// reader cannot see. The containers themselves are not in this class: scrolling a scroller into view moves
+// the page it sits on, not the content inside it.
+const TOUR_SCROLLERS="aside.filters,#drawer,.tree";
+// Bring a target inside a scroller into view, so what the layout measures next is where the element ends
+// up. "nearest" is the smallest scroll that makes it visible, so a target already on screen does not move
+// and the reader's position in the rail is disturbed no more than the step requires. Guarded: a headless
+// DOM has no scrollIntoView, and the resolution the step depends on is asserted separately from this.
+function _tourScrollIntoView(el){
+  if(!el||!el.parentElement||typeof el.parentElement.closest!=="function")return;
+  if(!el.parentElement.closest(TOUR_SCROLLERS))return;
+  if(typeof el.scrollIntoView!=="function")return;
+  try{el.scrollIntoView({block:"nearest"});}catch(e){}
+}
 // Arrival at a step: run its enter hook (which may switch view / open a drawer and so change the target
-// rect), THEN lay the spotlight + card out. Split from _tourLayout so a resize re-lays-out WITHOUT
-// re-firing the enter hook.
+// rect), bring the target into view where it lives in something that scrolls, THEN lay the spotlight +
+// card out. Split from _tourLayout so a resize re-lays-out WITHOUT re-firing the enter hook.
 function _tourPosition(){
   const step=TOUR_STEPS[_tourStep];
   if(typeof step.enter==="function")step.enter();
+  _tourScrollIntoView(_tourTarget(step));
   _tourLayout();
   _tourAttachSettle();   // then WATCH the target's box until it settles
 }

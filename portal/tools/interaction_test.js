@@ -2252,6 +2252,49 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "walk/back: closing after the backward walk did not restore the baseline: " +
     _tourSnapDiff(_walkBase, _tourSnapRead()).join("; "));
 
+  // H11. TARGETS THAT LIVE IN A SCROLLING CONTAINER. The rail and the drawer scroll, and a step whose target
+  // has scrolled out of its container's visible area is measured where it is not: the spotlight clamps onto
+  // empty space and the reader is shown nothing while the copy talks about a control they cannot see. The
+  // tree step already brought its row into view; the rule is general, so every target that sits inside a
+  // scrolling container is brought into view before it is measured, and no other target is touched.
+  //
+  // jsdom has no layout engine, so what is pinned here is the CALL: which targets get one and which do not
+  // is the whole rule, and it is checked at every step in BOTH directions, because a step that only scrolls
+  // when the walk arrives forward is exactly the failure the rule is for. The measured half of the proof is
+  // a browser run at a viewport small enough to push the rail's lower controls out of sight.
+  const _svWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html", _nbInstant);
+  const _svA = _svWin.__api, _svDoc = _svWin.document;
+  let _svCalls = [];
+  _svWin.Element.prototype.scrollIntoView = function (opts) { _svCalls.push({ el: this, opts: opts }); };
+  const _svArrow = (key) => _svDoc.dispatchEvent(new _svWin.KeyboardEvent("keydown", { key }));
+  // The deck's targets that sit INSIDE one of the two scrolling containers, written out rather than derived,
+  // so this states the expectation instead of re-running the rule the code follows. A container is not on
+  // the list: scrolling a scroller into view scrolls the page it sits on, not the scroller's own content.
+  const _svInside = ["#find", "#browseMode", "#dp-files", ".selbox", "#dlLevel2", "#dlTimeSeries"];
+  const _svCheck = (i, dir) => {
+    const sel = _svA.tourStepSel(i), at = "scroll/" + dir + " step " + i + " (" + sel + ")";
+    const target = _svA.tourTargetEl();
+    ok(target, at + ": the target must resolve, or this step proves nothing about scrolling it");
+    const hit = _svCalls.filter(c => c.el === target);
+    if (_svInside.indexOf(sel) >= 0) {
+      ok(hit.length === 1,
+        at + ": a target inside a scrolling container must be brought into view exactly once on arrival, got " +
+        hit.length + " calls");
+      ok(hit.length === 1 && hit[0].opts && hit[0].opts.block === "nearest",
+        at + ": the scroll must be the minimal one that makes the target visible, got " +
+        JSON.stringify(hit.length === 1 ? hit[0].opts : null));
+    } else {
+      ok(hit.length === 0,
+        at + ": a target outside every scrolling container must not be scrolled, got " + hit.length + " calls");
+    }
+  };
+  const _svLast = _svA.tourStepCount() - 1;
+  _svCalls = []; _svA.startTour(); _svCheck(0, "fwd");
+  for (let i = 1; i <= _svLast; i++) { _svCalls = []; _svArrow("ArrowRight"); _svCheck(i, "fwd"); }
+  for (let i = _svLast - 1; i >= 0; i--) { _svCalls = []; _svArrow("ArrowLeft"); _svCheck(i, "back"); }
+  _svArrow("Escape");
+  ok(_svA.tourStep() === -1, "scroll: the walk must close cleanly, at " + _svA.tourStep());
+
   // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
   // (forward, back, close). The collapse set is real state (treeCollapsedKeys), not a proxy.
