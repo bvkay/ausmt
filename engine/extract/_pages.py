@@ -111,6 +111,50 @@ def _jsonld(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=1).replace("</", "<\\/")
 
 
+# The JSON-LD keyword vocabulary, in ONE place. Four surfaces state it (the homepage catalogue, the
+# two hubs and every survey Dataset) and four copies drift, so they are built here instead;
+# portal/tests/test_jsonld_keywords.py holds the portal's own copy equal to this list. A keyword
+# describes a document to something reading its markup and is not a ranking signal: web search does
+# not use it, and nothing here is written expecting one to.
+#
+# British spelling, and lower case except for a proper noun. The last five are the terms the markup
+# already carried, kept so no surface loses a word it had.
+_KEYWORDS_BASE = (
+    "magnetotelluric", "magnetotelluric survey", "magnetotelluric surveys",
+    "Australian magnetotelluric data", "Australia MT", "MT data", "MT transfer functions",
+    "AusMT", "electromagnetic geophysics", "AusLAMP", "geomagnetic depth sounding", "GDS",
+    "magnetotellurics", "MT", "transfer functions", "geophysics", "Australia",
+)
+
+# A band class, spelt the way a reader would search for it. The keys are the served station types.
+_KEYWORD_FOR_TYPE = {
+    "LPMT": "long-period magnetotelluric",
+    "BBMT": "broadband magnetotelluric",
+    "AMT": "audio-magnetotelluric",
+    "GDS": "geomagnetic depth sounding",
+}
+
+
+def _keywords(*extra) -> list:
+    """The base vocabulary, then whatever THIS page's own record supports, deduped in first-seen
+    order. Every extra term must be read from the record: a survey may not be described by a word
+    its record does not carry."""
+    out = []
+    for term in list(_KEYWORDS_BASE) + [str(t).strip() for t in extra if t and str(t).strip()]:
+        if term not in out:
+            out.append(term)
+    return out
+
+
+def _survey_keywords(served_types, region, org, collection) -> list:
+    """A survey Dataset's keywords: the base vocabulary plus its own band classes, its region, its
+    organisation and its collection, each read from the survey's record."""
+    bands = [_KEYWORD_FOR_TYPE[t] for t in ("LPMT", "BBMT", "AMT", "GDS")
+             if t in (served_types or set())]
+    coll = (collection or {}).get("title") or (collection or {}).get("id") or ""
+    return _keywords(*bands, region, org, coll)
+
+
 def _breadcrumb(base, trail):
     """A BreadcrumbList for `trail`: [(name, path)] from the site root down to this page.
 
@@ -1056,7 +1100,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
           "includedInDataCatalog": {"@type": "DataCatalog", "name": "AusMT", "url": base + "/"},
           "measurementTechnique": "magnetotellurics",
           "variableMeasured": "magnetotelluric transfer function",
-          "keywords": ["magnetotellurics", "MT", "transfer function", "geophysics", "Australia"]}
+          "keywords": _survey_keywords(served_types, region, org, smeta.get("collection"))}
     if org:
         creator = {"@type": "Organization", "name": org}
         if smeta.get("org_ror"):
@@ -1727,7 +1771,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
           "measurementTechnique": "magnetotellurics",
           "variableMeasured": "magnetotelluric transfer function",
           "hasPart": [{"@type": "Dataset", "url": f"{base}/surveys/{s}"} for _lbl, s in member_slugs],
-          "keywords": ["magnetotellurics", "MT", "AusLAMP", "geophysics", "Australia"]}
+          "keywords": _keywords(*[(m or {}).get("org") for m in member_smeta], title)}
     # licence / creators / temporal coverage roll up from the member surveys' own served records:
     # a single shared licence is stated; mixed licences state nothing (never overclaim).
     lics = {(_LICENSE_URLS.get((m or {}).get("lic"), (m or {}).get("lic")))
@@ -1964,6 +2008,18 @@ def _card_facts_line(bits) -> str:
     return _CARD_SEP.join(b for b in bits if b)
 
 
+
+def _hub_catalogue(*, name, description, url, base) -> dict:
+    """The DataCatalog a hub page IS. Emitted BEFORE the breadcrumb, like every other entity node,
+    so a consumer reading only the first block gets what the page is about."""
+    return {"@context": "https://schema.org", "@type": "DataCatalog",
+            "name": name, "description": description, "url": url,
+            "isAccessibleForFree": True,
+            "publisher": {"@type": "Organization", "name": "AuScope",
+                          "url": "https://www.auscope.org.au"},
+            "keywords": _keywords()}
+
+
 def surveys_index_page(*, rows, base, build=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
@@ -2026,7 +2082,9 @@ def surveys_index_page(*, rows, base, build=None) -> str:
         f'<div class="idxlist">{"".join(cards)}</div>\n')
     return _shell(title="Surveys - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
-                  jsonld=_breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")]),
+                  jsonld=[_hub_catalogue(name="AusMT surveys", description=desc, url=url,
+                                        base=base),
+                          _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")])],
                   extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts)
 
 
@@ -2071,7 +2129,9 @@ def collections_index_page(*, rows, base, build=None) -> str:
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
     return _shell(title="Collections - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
-                  jsonld=_breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")]),
+                  jsonld=[_hub_catalogue(name="AusMT collections", description=desc, url=url,
+                                        base=base),
+                          _breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")])],
                   extra_css=_INDEX_CSS, nav="navCollections", build=build)
 
 
