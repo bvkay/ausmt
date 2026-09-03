@@ -329,13 +329,14 @@ diagnostics, never alone.
 | Obligation | mandatory on a served station |
 | Occurrence | 1 |
 | Type | object |
-| Note | Best-effort reads of the file's free text. mt_metadata exposes no structured processing metadata for most EDI dialects, so a null here means the source did not state it. |
+| Note | Best-effort reads of the file's free text, except where a dialect states the fact in a machine-readable field (see `remote_reference`). mt_metadata exposes no structured processing metadata for most EDI dialects, so a null here means the source did not state it. |
 
 | Member | Type | Definition |
 |---|---|---|
 | `software` | string or null | the program that **processed** the transfer function |
 | `algorithm` | string or null | processing algorithm |
 | `remote_reference` | boolean | whether remote reference is stated |
+| | | An EPI-KIT file DECLARES this in its JSON `>INFO` block, as `"ProcessingType": "RemoteH1"` or `"Single"`, and that declaration is the answer for such a file: it is the only source here that can state a NO as well as a YES, where the free-text evidence beside it can only ever raise a false to true. Any other declared value, and any other dialect, leaves the field to that evidence. |
 | `remote_site` | string or null | the named reference station, where the header encodes one |
 | `file_written_by` | object | `{name, version}`, the program that **wrote** the file, verbatim from its header; either member is null where the header does not state it |
 | `note` | string or null | the arrangement detail from the source file's free text |
@@ -392,6 +393,18 @@ is reported separately under `file_written_by` rather than being published as th
 | Default | absent, which is every station whose source file carries one data section |
 | Example | `{ "sectid": "Wp01_avg", "sections_dropped": 100 }` |
 | Note | An EPI-KIT processor writes its solution twice over: one `>=MTSECT` block carries the averaged solution, named `<DATAID>_avg`, and after it come the per-frequency realisations `XPR-0` to `XPR-n`. The averaged block is the transfer function of record. AusMT reads the section of record and states which one it was: `<DATAID>_avg`, else the section named for the `DATAID`, else the first section. The selection is applied to a temporary copy carrying that section alone, so the served file stays byte-identical to the custodian's and `input_sha256` still hashes it. A station whose source names no such stack of sections carries no member at all. |
+
+#### 1.11.3 provenance.coordinate_signs_collapsed
+
+| | |
+|---|---|
+| Definition | The coordinate fields whose sign character the source file repeats, and the single-sign form the reader was given for each. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | array of objects, each `{ field, value, read_as }` |
+| Default | absent, which is every station whose source file writes one sign per coordinate |
+| Example | `[ { "field": "REFLAT", "value": "--26.0322667", "read_as": "-26.0322667" } ]` |
+| Note | A coordinate written with its sign character repeated is not a number any reader accepts. On a `>=DEFINEMEAS` reference position that stops the read outright and the station publishes nothing; on a `>HEAD` latitude or longitude the value is dropped silently and the station can publish `0.0`. AusMT collapses a run of two or more IDENTICAL leading signs to one on a temporary copy and states here what the file writes and what the reader read, so the difference between the served bytes and the published coordinate is on the record. A MIXED run is not collapsed: it is not a repeated keystroke, and either of its signs would be a hemisphere the custodian did not write, so such a file is still refused. The served file stays byte-identical to the custodian's and `input_sha256` still hashes it. |
 
 ### 1.12 coordinate_qc
 
