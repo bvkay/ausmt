@@ -249,6 +249,9 @@ function _tourEnterSelbox(){
 //   * Every frame and timer is registered, so an interrupt cancels all of them: no loop may outlive the
 //     step that started it.
 const TOUR_RECT_PAD=0.1,TOUR_RECT_MIN_PAD=0.01;      // rectangle padding: 10 percent of span, with a floor
+// How far inside the margin that would first admit a neighbour the chosen margin sits. Containment is
+// inclusive, so the admitting margin is itself unusable and a fraction of a hair below it is the answer.
+const TOUR_RECT_GAP=0.99;
 // Phase durations. The whole demo is about two seconds, which is long enough to read as an action and
 // short enough that a reader does not start reaching for Next. The fit wait is an upper bound only: it
 // resolves on the map's own moveend, which on a large jump is immediate.
@@ -286,6 +289,33 @@ function _tourInstant(){
   if(typeof window!=="undefined"&&window.AUSMT_TOUR_INSTANT===true)return true;
   try{return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){return false;}
 }
+// The margin the rectangle is padded by, as a fraction of the demo survey's extent. TOUR_RECT_PAD is the
+// most it can be and the floor is the least; between them it is the LARGEST fraction that admits no station
+// of any OTHER survey. The step frames one survey and says every station inside the rectangle is selected,
+// so a margin that reaches the sites of the survey next door leaves the sentence true and the reading
+// wrong. Stations are weighed as the membership weighs them, over what is VISIBLE: a station a filter has
+// taken off the map is not one the rectangle can select.
+//
+// Each station enters at the margin where BOTH axes stop keeping it out, so its own admitting margin is the
+// larger of the two; an axis the floor already covers cannot exclude it at any margin, and an axis with no
+// span can only ever be widened by the floor. The smallest of those is the first margin that would take a
+// neighbour, and the chosen one sits just inside it. Where that is the floor itself, the floor stands and
+// the rectangle keeps the neighbour: shrinking further would drop the demo survey's own sites, and the copy
+// prints the membership, so what it says is still what the map shows.
+function _tourRectMargin(sv,south,north,west,east){
+  if(typeof visible==="undefined")return TOUR_RECT_PAD;
+  const h=north-south,w=east-west;
+  let first=Infinity;
+  visible.forEach(s=>{
+    if(s.survey===sv||!hasPosition(s))return;
+    const dLat=Math.max(0,south-s.lat,s.lat-north),dLon=Math.max(0,west-s.lon,s.lon-east);
+    const fLat=(TOUR_RECT_MIN_PAD>=dLat)?0:(h>0?dLat/h:Infinity);
+    const fLon=(TOUR_RECT_MIN_PAD>=dLon)?0:(w>0?dLon/w:Infinity);
+    const f=Math.max(fLat,fLon);
+    if(f<first)first=f;
+  });
+  return Math.min(TOUR_RECT_PAD,first*TOUR_RECT_GAP);
+}
 // The demo rectangle: the demo survey's positioned extent, padded so every one of its stations is inside
 // rather than on the edge. The floor keeps a single-station or single-line survey from producing a
 // degenerate box no station can be strictly inside.
@@ -296,8 +326,9 @@ function _tourDemoBounds(){
   if(!pts.length)return null;
   const lats=pts.map(s=>s.lat),lons=pts.map(s=>s.lon);
   const south=Math.min(...lats),north=Math.max(...lats),west=Math.min(...lons),east=Math.max(...lons);
-  const padLat=Math.max((north-south)*TOUR_RECT_PAD,TOUR_RECT_MIN_PAD);
-  const padLon=Math.max((east-west)*TOUR_RECT_PAD,TOUR_RECT_MIN_PAD);
+  const m=_tourRectMargin(sv,south,north,west,east);
+  const padLat=Math.max((north-south)*m,TOUR_RECT_MIN_PAD);
+  const padLon=Math.max((east-west)*m,TOUR_RECT_MIN_PAD);
   return{south:south-padLat,north:north+padLat,west:west-padLon,east:east+padLon};
 }
 // The rectangle's membership over the CURRENTLY VISIBLE stations, which is what a drawn shape selects.

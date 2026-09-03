@@ -2048,6 +2048,81 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "demo/reduced-motion: no cursor glyph may be created when the motion was declined");
   rmWin.document.dispatchEvent(new rmWin.KeyboardEvent("keydown", { key: "Escape" }));
 
+  // (1d) THE RECTANGLE'S NEIGHBOURS. The copy says every station inside the rectangle is selected, and a
+  // reader looking at ONE survey framed on the map reads that number as that survey's own. A margin wide
+  // enough to reach the sites of the survey next door makes the sentence true and the reading wrong. So the
+  // margin is the LARGEST one, up to the full pad and never below the floor, that admits no station of any
+  // other survey. Where even the floor admits one, the rectangle keeps it and the copy prints the membership
+  // it actually has: a rectangle drawn on the map whose stated count is not its contents is the worse
+  // failure of the two. Both branches are driven on a corpus doctored ONE station at a time, so the geometry
+  // is the only thing that differs from the fixture the rest of this file drives.
+  const _nbCSv = win.CAT_COLUMNS.indexOf("survey"), _nbCLat = win.CAT_COLUMNS.indexOf("lat"),
+    _nbCLon = win.CAT_COLUMNS.indexOf("lon"), _nbCId = win.CAT_COLUMNS.indexOf("id");
+  const _nbSv = A.tourDemoSurvey();
+  const _nbLats = DATAMAP["data/catalogue.json"].filter(r => r[_nbCSv] === _nbSv).map(r => r[_nbCLat]);
+  const _nbS = Math.min(..._nbLats), _nbN = Math.max(..._nbLats);
+  // Plant one station of ANOTHER survey at a chosen latitude, in the middle of the demo survey's longitude
+  // range so the latitude alone decides whether the rectangle takes it. Row ORDER is preserved, so the
+  // parallel tf/sci products still line up with the catalogue they are indexed against.
+  const _nbPlant = (lat) => {
+    const cat = JSON.parse(JSON.stringify(DATAMAP["data/catalogue.json"]));
+    const row = cat.find(r => r[_nbCSv] !== _nbSv && r[_nbCLat] !== null);
+    row[_nbCLat] = lat; row[_nbCLon] = (_demoBounds.west + _demoBounds.east) / 2;
+    return { map: Object.assign({}, DATAMAP, { "data/catalogue.json": cat }),
+      id: row[_nbCId], survey: row[_nbCSv], lat: lat };
+  };
+  const _nbInstant = w => { w.AUSMT_TOUR_INSTANT = true; };
+  const _nbToDemo = (w) => { w.__api.startTour();
+    for (let k = 0; k < 7; k++) w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "ArrowRight" })); };
+
+  // BAND: a neighbour between the demo survey's own northern edge and the fully padded edge. The full pad
+  // takes it; a margin that stops short of it does not, and the count stays the survey's own.
+  const _nbBand = _nbPlant((_nbN + _demoBounds.north) / 2);
+  const _bandWin = await bootFreshWindow(_nbBand.map, "http://localhost/index.html", _nbInstant);
+  const _bandA = _bandWin.__api;
+  ok(_bandA.tourDemoSurvey() === _nbSv,
+    "neighbours/band: setup, the doctored corpus must still resolve the same demo survey, got " + _bandA.tourDemoSurvey());
+  ok(_bandA.visIds().indexOf(_nbBand.id) >= 0,
+    "neighbours/band: setup, the planted station must be ON the map, or there is nothing for the rectangle to exclude");
+  const _bandB = _bandA.tourDemoBounds();
+  ok(_bandB.north < _nbBand.lat,
+    "neighbours/band: the rectangle must stop short of the neighbour; its north edge is " + _bandB.north +
+    " and the neighbour sits at " + _nbBand.lat);
+  ok(_bandB.south <= _nbS && _bandB.north >= _nbN,
+    "neighbours/band: the rectangle must still contain the demo survey's own extent, got " + JSON.stringify(_bandB));
+  ok(_bandA.tourRectMembers(_bandB).length === _nbLats.length,
+    "neighbours/band: the rectangle must take the demo survey's own stations and nothing else, got " +
+    _bandA.tourRectMembers(_bandB).length + " against " + _nbLats.length);
+  _nbToDemo(_bandWin);
+  ok(_bandA.selCount() === _nbLats.length,
+    "neighbours/band: the demo must leave the survey's own stations selected, got " + _bandA.selCount());
+  ok(_bandWin.document.getElementById("tourText").textContent.indexOf("- " + _nbLats.length + " here") >= 0,
+    "neighbours/band: the copy must print the survey's own count, got " +
+    JSON.stringify(_bandWin.document.getElementById("tourText").textContent));
+  _bandWin.document.dispatchEvent(new _bandWin.KeyboardEvent("keydown", { key: "Escape" }));
+
+  // FLOOR: a neighbour INSIDE the demo survey's own extent. No margin excludes it, so the smallest rectangle
+  // the rule allows is the one that stands, and what it took is what the copy says.
+  const _nbInside = _nbPlant((_nbS + _nbN) / 2);
+  const _insideWin = await bootFreshWindow(_nbInside.map, "http://localhost/index.html", _nbInstant);
+  const _insideA = _insideWin.__api;
+  ok(_insideA.tourDemoSurvey() === _nbSv,
+    "neighbours/floor: setup, the doctored corpus must still resolve the same demo survey, got " + _insideA.tourDemoSurvey());
+  const _insideB = _insideA.tourDemoBounds();
+  ok(_insideB.north - _nbN < _demoBounds.north - _nbN,
+    "neighbours/floor: a rectangle that cannot exclude the neighbour must still shrink to the smallest the " +
+    "rule allows; its margin is " + (_insideB.north - _nbN) + " against the full " + (_demoBounds.north - _nbN));
+  ok(_insideA.tourRectMembers(_insideB).length === _nbLats.length + 1,
+    "neighbours/floor: the rectangle takes the neighbour it cannot exclude, got " +
+    _insideA.tourRectMembers(_insideB).length);
+  _nbToDemo(_insideWin);
+  ok(_insideA.selCount() === _nbLats.length + 1,
+    "neighbours/floor: the selection must be the rectangle's whole membership, got " + _insideA.selCount());
+  ok(_insideWin.document.getElementById("tourText").textContent.indexOf("- " + (_nbLats.length + 1) + " here") >= 0,
+    "neighbours/floor: the copy must print the membership the rectangle actually has, got " +
+    JSON.stringify(_insideWin.document.getElementById("tourText").textContent));
+  _insideWin.document.dispatchEvent(new _insideWin.KeyboardEvent("keydown", { key: "Escape" }));
+
   // H7. THE DOWNLOAD BLOCK, SPLIT IN TWO. One step used to
   // point at the whole block and say one sentence about four different things: zips AusMT serves and lists
   // NCI holds are not the same offer and do not arrive the same way. The block is now spotlit in two parts,
