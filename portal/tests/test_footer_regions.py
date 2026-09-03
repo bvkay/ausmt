@@ -611,15 +611,15 @@ def test_every_footer_is_a_wrapping_flex_row_whose_side_zones_take_equal_zero_ba
             assert decl in rules[".fcenter"], (
                 f"{where}: the centre zone must declare {decl}: {rules['.fcenter']!r}")
 
-        centre_row = text.find(_CENTRE_ROW_RULE)
-        stacked = text.find(_STACK_RULE)
-        assert stacked > centre_row, (
+        centre_row, stacked = text.find(_CENTRE_ROW_RULE), text.find(_STACK_RULE)
+        assert centre_row > 0 and stacked > centre_row, (
             f"{where}: every region must take a full row and align left once the left link and the "
             f"lockup cannot share one, in a rule that FOLLOWS the centre's own-row rule: the two "
             f"tie on specificity, so placed above it the stack would not restore the 375px order")
-        assert _SET_RE.search(text[:centre_row]) and text.index(".fright{") < centre_row, (
-            f"{where}: both states below one row must follow the zone rules they override; the "
-            f"selectors tie on specificity and source order alone decides")
+        for zone in (".fleft{", ".fcenter{", ".fright{"):
+            assert 0 < text.index(zone) < centre_row, (
+                f"{where}: both states below one row must follow the zone rules they override, {zone}"
+                f" included; the selectors tie on specificity and source order alone decides")
         for retired in ("@media(max-width:760px){.fzone", "@media (max-width:760px){.fzone",
                         "footer .apilink{", "footer .foot-main{", "footer .foot-right{"):
             assert retired not in text, (
