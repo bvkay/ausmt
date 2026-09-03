@@ -413,8 +413,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "focusSurvey,drawerFitOptions,dimStyleFor,setSurveyDim,clearSurveyDim," +
   "dimFocus:()=>_dimFocusSurvey,bgClickShouldClose:_bgClickShouldClose," +
   "surveyDataLevelsHtml,DATA_LEVEL_SLOTS," +
-  // UX4 D5 hook: the tree-demo step's resolved survey label (kalkaroo-2022 preferred, first-survey
-  // degrade) — a REAL observable for the graceful-degrade assertion, not just "didn't crash".
+  // The survey label the browse step actually scrolled to. It follows the DECK's own demo-survey rule
+  // (the preferred slug where the loaded corpus carries it, else the first survey big enough for the
+  // selection demo to read, else the largest positioned one), so this is a real observable for the
+  // graceful-degrade assertion rather than "didn't crash".
   "tourTreeTarget:()=>_tourTreeTarget," +
   // UX5 (D7/D8) hooks: the disclosure-caret API (same functions the carets and the tour step call)
   // plus a collapse-set reader, so the invariant and the tour-restore assertions observe real state.
@@ -1676,11 +1678,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(findBox.value === "", "leaving the Find demo FORWARD did not clear the typed query, got: " + JSON.stringify(findBox.value));
   ok(findRes.style.display === "none", "leaving the Find demo FORWARD did not close the dropdown");
   ok(A.nVisCount() === 5, "leaving the Find demo FORWARD did not restore the filtered map, got " + A.nVisCount());
-  // MOVED with the deck revision (LANE-CONTRACT-TOUR-REVISION.md T1 step 4, T4 "the kalkaroo tree-demo
-  // target -> the demo survey rule"): the browse step no longer prefers its own hard-coded slug. It scrolls
-  // to whatever the DECK's demo survey resolves to, so the tour narrates one survey throughout instead of
-  // pointing at one survey here and a different one in the drawer and selection steps. The fixture carries
-  // no survey at the preferred size, so the rule degrades to the largest positioned survey.
+  // The browse step has no preferred survey of its own. It scrolls to whatever the DECK's demo survey
+  // resolves to, so the tour narrates ONE survey throughout instead of pointing at one here and a
+  // different one in the drawer and selection steps. The fixture carries no survey at the preferred slug,
+  // so the rule degrades to the largest positioned survey.
   ok(A.tourTreeTarget() === A.tourDemoSurvey(),
     "the browse step must scroll to the deck's own demo survey, got: " + JSON.stringify(A.tourTreeTarget()) +
     " against " + JSON.stringify(A.tourDemoSurvey()));
@@ -1742,9 +1743,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // (3) Detach on step change: stepping off the drawer must RELEASE #drawer's watcher (no leak on a persistent element).
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));   // -> tree (index 3)
   ok(A.tourSettleEl() !== "drawer", "settle: stepping off the drawer step must release #drawer's watcher, still on " + JSON.stringify(A.tourSettleEl()));
-  // MOVED with the deck revision (LANE-CONTRACT-TOUR-REVISION.md T1 step 4): the browse step spotlights the
-  // rail container that holds BOTH the collections list and the tree, so the watcher's target is that
-  // container and no longer #tree alone. Read from the deck so the selector and the pin cannot drift.
+  // The browse step spotlights the rail container that holds BOTH the collections list and the tree, so
+  // the watcher's target is that container and not #tree alone. Read from the deck, so the selector and
+  // the pin cannot drift apart.
   ok("#" + A.tourSettleEl() === A.tourStepSel(3),
     "settle: the watcher must re-attach to the browse step's own target " + A.tourStepSel(3) +
     ", got " + JSON.stringify(A.tourSettleEl()));
@@ -1766,6 +1767,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // THE WORKSPACE, READ AS FIELDS. Every field a tour step can change, in one shape, so a leak is reported
   // as the field that moved rather than as one assertion at a time. Shared by the close-from-every-step
   // matrix (H5) and the forward/backward walks (H10).
+  //
+  // Two of the tour's OWN snapshot fields are deliberately absent from this reader: the drawn shapes and
+  // the map bounds. Leaflet is stubbed in this harness, so `drawn` records nothing (eachLayer never calls
+  // back, and hasShapes() is therefore false whatever the tour added) and getBounds/fitBounds are recorded
+  // calls rather than a viewport. Reading either field back here would compare a stub to a stub and pass
+  // whatever the tour did with them, which is worse than not asserting at all. Their restore is proved in
+  // a real browser instead, by the CDP walk over the served corpus.
   const _layoutNow = () => (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout;
   const _tourSnapRead = () => ({
     view: A.curView(),
@@ -1786,7 +1794,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     .filter(k => String(want[k]) !== String(got[k]))
     .map(k => k + ": want " + JSON.stringify(want[k]) + ", got " + JSON.stringify(got[k]));
 
-  // H2c. THE DEMO STATION AND THE FILES STEP (LANE-CONTRACT-TOUR-REVISION.md T1 steps 5/6, T4).
+  // H2c. THE DEMO STATION AND THE FILES STEP.
   // The drawer steps open a RESOLVED demo station rather than "whatever happens to be first on the map":
   // the demo survey's A1 where the corpus has one, else that survey's first positioned station. The Files
   // step then shows the SAME station's Files pane, and stepping back must re-show it on Response WITHOUT
@@ -1914,7 +1922,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify(A.drawerSubject()) + " on " + A.curDrawerTab());
   A.closeDrawer();
 
-  // H6. THE SELECTION DEMO (LANE-CONTRACT-TOUR-REVISION.md T3, T4). The demo zooms to the demo survey,
+  // H6. THE SELECTION DEMO. The demo zooms to the demo survey,
   // draws a rectangle over it and selects what falls inside. Three properties are pinned.
   //
   // (1) THE INSTANT PATH. Reduced motion, and any environment with no frame clock to rely on, skip straight
@@ -2037,7 +2045,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "demo/reduced-motion: no cursor glyph may be created when the motion was declined");
   rmWin.document.dispatchEvent(new rmWin.KeyboardEvent("keydown", { key: "Escape" }));
 
-  // H7. THE DOWNLOAD BLOCK, SPLIT IN TWO (LANE-CONTRACT-TOUR-REVISION.md T1 steps 9/10). One step used to
+  // H7. THE DOWNLOAD BLOCK, SPLIT IN TWO. One step used to
   // point at the whole block and say one sentence about four different things: zips AusMT serves and lists
   // NCI holds are not the same offer and do not arrive the same way. The block is now spotlit in two parts,
   // which needs two wrappers to point at. They are MARKUP ONLY: no class, no inline style and no rule of
@@ -2206,11 +2214,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // an unhidden pane is exactly what gives .selbox a nonzero rect and thus its spotlight), and leaving
   // it must restore the visitor's prior mode on ALL exit paths (forward, back, close) — the same
   // three-path restore discipline the Find/tree demo steps pin above.
-  // MOVED with the deck revision (LANE-CONTRACT-TOUR-REVISION.md T1 + T2): the select steps are now a
-  // GROUP of four (selbox, the selection demo, Level 2, time series) at indices 5+1 .. 5+4, and the rail
-  // mode belongs to the GROUP, not to one step: it is captured on entering the group and restored only
-  // when the walk leaves it. So a move INSIDE the group must not restore the visitor's mode, and the
-  // restore is asserted at the group boundary instead of after the second step.
+  // The select steps are a GROUP of four (selbox, the selection demo, Level 2, time series), and the rail
+  // mode belongs to the GROUP rather than to any one of them: it is captured on entering the group and
+  // restored only when the walk leaves it. So a move INSIDE the group must not restore the visitor's mode,
+  // and the restore is asserted at the group boundary rather than after any single step.
   const _SELG = [6, 7, 8, 9];
   A.setSidebarMode("browse");
   doc.getElementById("welcomeTour").click();                              // step index 0
@@ -2241,11 +2248,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.tourStep() === -1, "D2-tour: Esc from a select-group step did not close the tour");
   ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
 
-  // H5. THE PRE-TOUR SNAPSHOT (LANE-CONTRACT-TOUR-REVISION.md T2/T4). The tour navigates, opens drawers,
-  // switches rail modes, forces a card layout and makes a selection. Closing it from ANY step must hand the
-  // visitor back exactly the workspace they had, field for field: nothing the tour did may leak. That is
-  // stronger than the old "undo only what the tour opened" rule, which could only undo the drawer, the hash
-  // and the collapsed rail, and had nothing to say about a selection, a card layout or a map frame.
+  // H5. THE PRE-TOUR SNAPSHOT. The tour opens drawers, switches rail modes, draws a shape and makes a
+  // selection. Closing it from ANY step must hand the visitor back exactly the workspace they had, field
+  // for field: nothing the tour did may leak. That is stronger than "undo only what the tour opened",
+  // which can put back a drawer, a hash and a collapsed rail and has nothing to say about a selection a
+  // filter change silently dropped or a map frame a fit moved.
   //
   // Driven as a MATRIX: a distinctive pre-tour state is built, its every field read, and then for EVERY step
   // the tour is opened, walked to that step and closed - so a step that establishes state without a
@@ -5495,7 +5502,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ok(!selectedBy(s, false), "LINKCSS: the muted state text must not be painted the link accent");
   });
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-off-the-SPA, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse demo-survey-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-off-the-SPA, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
