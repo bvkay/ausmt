@@ -1908,6 +1908,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(animA.tourAnimPending().running === true,
     "demo/anim: the demo must be running with a frame or timer pending, got " + JSON.stringify(animA.tourAnimPending()));
   const _wantAnim = animA.tourRectMembers(animA.tourDemoBounds()).length;
+  // The count is a fact about the RECTANGLE, and the rectangle's bounds are known before it is drawn. The
+  // copy must therefore state it from the first frame: counting up from a zero that is only true while the
+  // shape is still growing tells the reader the demo selected nothing for as long as it runs.
+  ok(animWin.document.getElementById("tourText").textContent.indexOf("- " + _wantAnim + " here") >= 0,
+    "demo/anim: the copy must state the rectangle's count while the animation is still running, got " +
+    JSON.stringify(animWin.document.getElementById("tourText").textContent));
   const _deadline = Date.now() + 8000;
   while (animA.selCount() !== _wantAnim && Date.now() < _deadline) await new Promise(r => setTimeout(r, 40));
   ok(animA.selCount() === _wantAnim,

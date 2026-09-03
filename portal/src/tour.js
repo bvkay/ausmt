@@ -157,7 +157,14 @@ function _tourCollectionName(cid){
   return (c&&c.title)||cid||"";
 }
 // The count the selection-demo copy prints: whatever the demo rectangle actually took. Never a literal.
-function _tourDemoCount(){return (typeof selected!=="undefined")?selected.size:0;}
+// Once the demo has been applied that is the live selection. BEFORE it is applied the rectangle's bounds
+// are already known, and its membership is the same number the apply will produce, so the copy states it
+// from the first frame rather than counting up from a zero that is only true while the shape is still
+// being drawn.
+function _tourDemoCount(){
+  if(!_tourSel.created&&_tourSel.bounds)return _tourRectMembers(_tourSel.bounds).length;
+  return (typeof selected!=="undefined")?selected.size:0;
+}
 // Render a step's copy. The placeholders resolve to the empty-corpus wording when nothing resolved, so
 // the sentence stays grammatical rather than showing a token.
 function _tourText(step){
@@ -341,11 +348,14 @@ function _tourEnterSelbox(){
 //   * Every frame and timer is registered, so an interrupt cancels all of them: no loop may outlive the
 //     step that started it.
 const TOUR_RECT_PAD=0.1,TOUR_RECT_MIN_PAD=0.01;      // rectangle padding: 10 percent of span, with a floor
-const TOUR_ANIM={fit:600,glide:500,press:120,grow:900,fade:120};
+// Phase durations. The whole demo is about two seconds, which is long enough to read as an action and
+// short enough that a reader does not start reaching for Next. The fit wait is an upper bound only: it
+// resolves on the map's own moveend, which on a large jump is immediate.
+const TOUR_ANIM={fit:450,glide:420,press:110,grow:780,fade:120};
 const TOUR_RECT_STYLE={color:"#EF7256",weight:2};                                  // matches a hand-drawn shape
 const TOUR_PREVIEW_STYLE={color:"#EF7256",weight:2,dashArray:"6 5",fill:false};    // the growing outline
 
-let _tourAnim={raf:0,timers:[],cursor:null,layer:null,seq:0};
+let _tourAnim={raf:0,timers:[],cursor:null,layer:null,rect:null,seq:0};
 function _tourAnimPending(){
   return{raf:_tourAnim.raf!==0,timers:_tourAnim.timers.length,cursor:!!_tourAnim.cursor,
     layer:!!_tourAnim.layer,running:_tourAnim.raf!==0||_tourAnim.timers.length>0};
@@ -367,6 +377,7 @@ function _tourAnimCancel(){
   if(_tourAnim.raf){cancelAnimationFrame(_tourAnim.raf);_tourAnim.raf=0;}
   if(_tourAnim.cursor){_tourAnim.cursor.remove();_tourAnim.cursor=null;}
   if(_tourAnim.layer){try{if(typeof map!=="undefined"&&map.removeLayer)map.removeLayer(_tourAnim.layer);}catch(e){}_tourAnim.layer=null;}
+  _tourAnim.rect=null;
   const btn=document.getElementById("drawRect");
   if(btn&&btn.classList)btn.classList.remove("armed");
 }
@@ -484,13 +495,17 @@ function _tourPreviewMake(){
     _tourAnim.layer=g;return g;
   }catch(e){return null;}
 }
+// One rectangle, RESHAPED each frame. Rebuilding the shape per frame re-adds a layer to the map on every
+// tick, which on a large corpus costs a full re-draw of the canvas the station dots share.
 function _tourPreviewDraw(g,bb){
   try{
-    if(!g||!g.clearLayers)return;
-    g.clearLayers();
-    const r=L.rectangle([[bb.south,bb.west],[bb.north,bb.east]],TOUR_PREVIEW_STYLE);
+    if(!g)return;
+    const ll=[[bb.south,bb.west],[bb.north,bb.east]];
+    if(_tourAnim.rect&&_tourAnim.rect.setBounds){_tourAnim.rect.setBounds(ll);return;}
+    const r=L.rectangle(ll,TOUR_PREVIEW_STYLE);
     if(r&&r.options)r.options.interactive=false;
-    g.addLayer(r);
+    if(g.addLayer)g.addLayer(r);
+    _tourAnim.rect=r;
   }catch(e){}
 }
 // The map's own fit animates, so the demo waits for it before moving the cursor. Bounded: a map that
@@ -507,6 +522,7 @@ function _tourWaitFit(cb){
 }
 function _tourRunDemo(b){
   _tourAnimCancel();
+  _tourSel.bounds=b;                 // the copy states the rectangle's count from the first frame
   const seq=_tourAnim.seq;
   const alive=()=>_tourStep>=0&&_tourAnim.seq===seq;
   _tourFocusDemo();
@@ -546,6 +562,7 @@ function _tourFinishDemo(b,c){
     try{if(typeof map!=="undefined"&&map.removeLayer)map.removeLayer(_tourAnim.layer);}catch(e){}
     _tourAnim.layer=null;
   }
+  _tourAnim.rect=null;
   const btn=document.getElementById("drawRect");
   if(btn&&btn.classList)btn.classList.remove("armed");
   _tourApplyDemo(b);
