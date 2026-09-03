@@ -17,8 +17,9 @@ Each assertion states its failure criterion:
     one .counts block in the right zone. Non-vacuous: a page with a hand-rolled header trips every line.
   * NO APP STATE - FAILS if the page carries index's live map-state ids (nVis/nSel/nTot), which have no
     meaning on a page with no map, no filter and no selection.
-  * FOOTER CHROME - FAILS if the footer does not carry exactly one About-this-build popover with the
-    single version chip nested inside it (the UX6 Wave B shape shared by index and about).
+  * FOOTER CHROME - FAILS if the footer keeps the retired About-this-build popover or a version
+    chip, loses the bottom-left MTCAT link, or does not carry the AuScope-NCRIS lockup the
+    one-footer ruling put in the right region on every surface.
   * NO INLINE SCRIPT - FAILS if the page carries an inline <script> block. The deployed CSP for every
     page except add-survey.html is script-src 'self' with no 'unsafe-inline' (@strictPages in
     deploy/docker/caddy/Caddyfile is a `not path /add-survey.html` matcher, so a NEW page picks up the
@@ -30,7 +31,9 @@ Each assertion states its failure criterion:
   * NO DEAD LINK - FAILS if the pending-DOI marker is ever emitted as an anchor.
   * SAFE RENDERING - FAILS if releases.js reaches the DOM through innerHTML: every value it renders
     (tags, notes, commits, file paths) comes from a served JSON document.
-  * FOOTER LINK - FAILS if index.html's footer does not carry a Releases link beside About this build.
+  * THE ENTRY POINT - FAILS if about.html's #build section stops linking this page, or if a Releases
+    link comes back to index.html's footer. The ruling took the link out of every footer, so #build
+    is the page's one route in.
 """
 import re
 import shutil
@@ -189,21 +192,27 @@ def test_no_live_app_state_ids():
 
 
 def test_footer_chrome_matches_the_other_pages():
+    """The one-footer ruling emptied the right region of Releases and About this build and put the
+    AuScope-NCRIS lockup there instead, so the chrome this page must match is the new one. FAILS if
+    the popover or a version chip comes back here, if the MTCAT link leaves the bottom-left, or if
+    the lockup is missing. The strings and the targets are held for all six documents at once in
+    tests/test_footer_regions.py; this is the same shape asserted from this page's own parsed DOM."""
     els = _footer(RELEASES)
     details = [a for (t, a, _ab) in els if t == "details" and "aboutbuild" in _classes(a)]
-    assert len(details) == 1, (
-        f"footer must carry exactly one <details class='aboutbuild'> popover; found {len(details)}")
-    assert any(t == "summary" for (t, _a, _ab) in els), "the About-this-build popover needs a <summary>"
+    assert not details, f"the About-this-build popover is retired from the footer; found {len(details)}"
 
-    chips = [(a, in_ab) for (t, a, in_ab) in els if "data-ver-chip" in a]
-    assert len(chips) == 1, f"exactly one version chip must live inside <footer>; found {len(chips)}"
-    assert chips[0][1], (
-        "the version chip must be nested inside the About-this-build popover, not floating in the "
-        "visible footer line")
+    chips = [a for (t, a, _ab) in els if "data-ver-chip" in a]
+    assert not chips, (
+        "the version chip left the footer with the popover; about.html carries the running build's "
+        "identity now")
 
     apilinks = [a for (t, a, _ab) in els if "apilink" in _classes(a)]
     assert len(apilinks) == 1 and apilinks[0].get("href") == "data/mtcat.json", (
         "the machine-readable MTCAT link is pinned bottom-left in the footer on every page")
+
+    logos = [a for (t, a, _ab) in els if t == "img" and "auscope-ncris-white.png" in a.get("src", "")]
+    assert [a.get("alt") for a in logos] == ["AuScope and NCRIS"], (
+        f"the footer must carry exactly one AuScope-NCRIS lockup, with its alt text; found {logos}")
 
 
 # --- deployed-CSP and link safety -----------------------------------------------------------------
@@ -337,17 +346,24 @@ def test_releases_js_does_not_parse_the_catalogue():
 
 # --- the entry point ------------------------------------------------------------------------------
 
-def test_index_footer_links_to_releases():
-    """FAILS if index.html's footer does not carry a Releases link, or if it is not beside the
-    About-this-build control. Non-vacuous: before this lane index.html had no releases.html link at all."""
+def test_about_carries_the_entry_point_the_footer_gave_up():
+    """The Releases link was in every footer until the one-footer ruling; the page still needs ONE
+    entry point or it is unreachable from the site. It is about.html's #build section, the section
+    that also carries the running build's identity, which is the answer to the neighbouring question
+    (which build am I looking at now, and which frozen snapshots can I cite).
+
+    FAILS if about.html's #build section stops linking releases.html, or if a Releases link comes
+    back to index.html's footer."""
+    about = ABOUT.read_text(encoding="utf-8")
+    section = about.split('<section id="build">', 1)
+    assert len(section) == 2, "about.html must carry the #build section that holds this entry point"
+    assert 'href="releases.html"' in section[1].split("</section>", 1)[0], (
+        "about.html's #build section must link releases.html, the page's only entry point since the "
+        "footer gave the link up")
     els = _footer(INDEX)
-    links = [i for i, (t, a, _ab) in enumerate(els) if t == "a" and a.get("href") == "releases.html"]
-    assert len(links) == 1, (
-        f"index.html's footer must carry exactly one link to releases.html; found {len(links)}")
-    details = [i for i, (t, a, _ab) in enumerate(els) if t == "details" and "aboutbuild" in _classes(a)]
-    assert details, "index.html's footer lost its About-this-build popover"
-    assert links[0] < details[0], (
-        "the Releases link belongs beside 'About this build' (immediately before it in the footer line)")
+    links = [a for (t, a, _ab) in els if t == "a" and a.get("href") == "releases.html"]
+    assert not links, (
+        f"index.html's footer must carry no Releases link; the ruling took it out: {links}")
 
 
 # --- behaviour ------------------------------------------------------------------------------------

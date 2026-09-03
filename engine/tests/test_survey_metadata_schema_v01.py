@@ -140,7 +140,16 @@ def test_fixture_validates_with_format_checking_and_scans_clean(name):
 
 def test_t20_fixture_is_the_ratified_suite_document_verbatim():
     """The committed T20 document is the ratified suite's `svm` (run-fixture-suite.py T20); the
-    load-bearing values are pinned so a silent edit to the fixture is a visible one."""
+    load-bearing values are pinned so a silent edit to the fixture is a visible one.
+
+    THE ACKNOWLEDGEMENT IS PINNED BY ITS TEXT, not only by its type. The row is a CURATED
+    acknowledgement, the wording a survey.yaml supplied, and D10 of the survey-metadata contract is
+    that the engine authors none of its own
+    (engine/tests/test_survey_metadata_emission.py: "D10: no engine-authored row"). The engine's own
+    printed sentence happens to read the same today and is being changed on another lane; with only
+    the type asserted, an editor aligning the two wordings would rewrite this document and nothing
+    would say the repo had stepped out of line with the external suite. The text is what makes
+    "verbatim" in this test's name true."""
     doc = fixture("t20-synthetic")
     assert doc["survey_id"] == "example-basin-2024"
     assert doc["identifiers"] == [{"scheme": "URL",
@@ -148,7 +157,9 @@ def test_t20_fixture_is_the_ratified_suite_document_verbatim():
     assert doc["activities"] == [{"identifier": "https://raid.org/10.99999/example", "scheme": "RAiD"}]
     assert doc["organisations"][0]["primary_custodian"] is True
     assert doc["citation"]["additional"][0]["reason"] == "repository_product"
-    assert doc["acknowledgements"][0]["type"] == "access_provider"
+    assert doc["acknowledgements"] == [
+        {"text": "Data were accessed through the AusMT national magnetotelluric data portal.",
+         "type": "access_provider"}]
     assert doc["relationships"] == [{"identifier": "10.99999/source-release", "identifier_type": "DOI",
                                      "relation": "IsDerivedFrom"}]
 

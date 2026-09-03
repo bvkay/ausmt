@@ -444,9 +444,9 @@ def _footprint_svg(points, *, width=230) -> str:
 # --------------------------------------------------------------------------- page shell
 
 _CSS = """
-  body{margin:0;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
-  main{max-width:840px;margin:0 auto;padding:1.6rem 1.25rem 3rem}
-  @media(min-width:1180px){main{max-width:1120px}}
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+  main{max-width:840px;width:min(100% - 2.5rem,840px);margin:0 auto;padding:1.6rem 1.25rem 0;flex:1 0 auto}
+  @media(min-width:1180px){main{max-width:1120px;width:min(100% - 2.5rem,1120px)}}
   a{color:#EF7256}
   code{overflow-wrap:anywhere}
   a:focus-visible,summary:focus-visible{outline:2px solid #EF7256;outline-offset:2px;border-radius:2px}
@@ -564,25 +564,50 @@ _CSS = """
   .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#8FA3B0;font-variant-numeric:tabular-nums}
   .counts b{color:#E8EDF1}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
-  /* The centre is the region that gives: the two side phrases read badly broken, the attribution is
-     prose that does not. The right grows so a wrapped row keeps it against the right edge.
+  /* The centre is the region that gives: the machine-readable link and the lockup are each a fixed
+     object that reads badly broken or badly scaled, the acknowledgement is prose that does not. The
+     right grows so a wrapped row keeps the lockup against the right edge.
 
-     BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's. main is 840px on an entity page,
-     920px on a hub and 1120px above 1180px of viewport, so one viewport number answers the question
-     wrongly on two page kinds out of three. Measured, the three regions want 871px of footer; below
-     that the centre takes a row of its own UNDER the two side phrases, where it is centred on the
-     footer's axis rather than in the space left over beside the machine-readable link. Below 500px
-     the two side phrases no longer share a row either, so every region takes one and aligns left.
+     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and the footer spans the page
+     rather than the reading column: it is the page's bottom edge, the same band the Map carries,
+     and a footer set inside the 840px measure could not fit the bold acknowledgement on one line
+     at any viewport. Measured, the three regions want 1249px of footer; below that the centre
+     takes a row of its own UNDER the two side regions, where it is centred on the footer's axis
+     rather than in the space left over beside the machine-readable link. Below 500px the two side
+     regions no longer share a row either, so every region takes one and aligns left.
 
-     Ordering the centre last costs no reading order: it is prose and carries no link, so the tab
-     sequence stays the left link then the right links, in the order a reader meets them. The
-     overrides follow the rules they override; the two tie on specificity and source order wins. */
-  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0;container-type:inline-size}
+     The regions align on their CENTRES, not on a baseline: the lockup is a 28px block beside two
+     lines of 12.8px text, and a baseline would hang it off the text's baseline and add its whole
+     height above the row. The overrides follow the rules they override; the two tie on specificity
+     and source order wins.
+
+     The lockup's width follows its height, so the committed file's own 1919px raster never reaches
+     the page. max-width caps it at the zone in the stacked state, where the row is the footer's
+     whole width; object-fit keeps its proportions in the state where that cap bites.
+
+     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
+     a sticky box keeps its own place in flow, so the last line of a long page is never left
+     underneath it and no page owes the footer a padding-bottom that would have to track the wrap
+     state. A sticky box is never pushed DOWN from that place, so the column above supplies the
+     free space instead. The ground is opaque because content passes beneath it, and the stacking
+     order is stated because a station table's frozen first column declares z-index:2.
+
+     Below 560px of VIEWPORT the footer returns to ordinary flow: that is where the three regions
+     stop sharing rows on the widest-footered surface, and a three-row footer would sit over most
+     of a phone screen. It is a viewport query because a container query cannot ask about the
+     container it is declared on.
+
+     The centre's weight is one declaration on the zone: the whole acknowledgement is bold, the
+     anchor with it, and 700 is the sans family's bold. */
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1.2rem;margin-top:2.2rem;border-top:1px solid #2B3557;padding:.7rem 1.25rem 0;font-size:.8rem;color:#8FA3B0;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
   .fleft{flex:0 0 auto}
-  .fcenter{flex:1 1 auto;min-width:0;text-align:center}
+  .fcenter{flex:1 1 auto;min-width:0;text-align:center;font-weight:700}
   .fright{flex:1 0 auto;text-align:right}
-  @container (max-width:900px){.fcenter{order:1;flex:1 1 100%}}
+  .orglogo{display:inline-block;line-height:0}
+  .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
+  @container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}
+  @media(max-width:560px){footer{position:static}}
 """
 
 
@@ -600,8 +625,8 @@ _CSS = """
 # read its map, its facts line and its licence as part of the link text, and it keeps buttons out of
 # rows entirely (the hierarchy is catalogue -> survey -> data, and a row is not an action).
 _INDEX_CSS = """
-  main{max-width:920px}
-  @media(min-width:1180px){main{max-width:920px}}
+  main{max-width:920px;width:min(100% - 2.5rem,920px)}
+  @media(min-width:1180px){main{max-width:920px;width:min(100% - 2.5rem,920px)}}
   .idxlede{max-width:62ch;margin:.2rem 0 .1rem}
   .idxsum{color:#8FA3B0;font-size:.92rem;font-variant-numeric:tabular-nums;margin:.2rem 0 .2rem}
   .idxact{font-size:.9rem;margin:.2rem 0 1.1rem}
@@ -679,9 +704,9 @@ def _site_header(active="", status="") -> str:
     nothing else in this tier. On the FIRST deploy it is worse than that, because the file is new: a
     pages tree rebuilt from this commit against a portal image that predates it asks for a mark the
     image does not serve, and every page renders the alt text instead. So the portal image and the
-    data rebuild go out in the same pass, image first, and both /vendor/brand/ausmt-mark.svg and
-    /vendor/auscope-icon-white.png answering 200 with an image type is the check before the pages
-    tree is swapped.
+    data rebuild go out in the same pass, image first, and /vendor/brand/ausmt-mark.svg,
+    /vendor/auscope-icon-white.png and the footer's /vendor/auscope-ncris-white.png each answering
+    200 with an image type is the check before the pages tree is swapped.
 
     The AusMT mark is a fixed 30x30 box inside the zero-basis .hleft zone and the AuScope mark a
     fixed-height box inside the zero-basis .hright zone, so neither identity block can move the
@@ -722,25 +747,50 @@ def _site_footer(build=None) -> str:
     pointed at MTCAT. The arrow is the leaves-this-page one; the link hands over a JSON document,
     not another page of the site.
 
-    The centre carries the attribution and the licence note. The build identity is not printed
-    here: the commit sha spoke to operators, not to the readers a public footer is for, and
+    The centre states who enables AusMT and then carries the attribution and the licence note. The
+    URL text is the only link in the line: it is the reader-legible form of the address, so it says
+    where it goes without a title attribute or a rule about link colour. The build identity is not
+    printed here: the commit sha spoke to operators, not to the readers a public footer is for, and
     build_provenance.json still carries it. The `build` argument is kept so callers do not change
     and a future /build page has its input.
 
-    "About this build" is a LINK on this tier, not the SPA's disclosure popover: these pages ship no
-    script, so a popover here could only restate what the centre already says. It resolves to
-    /about.html, the page that does carry the running build's identity and version chip.
+    The right region is the parent organisation's full AuScope-NCRIS lockup. It links where the
+    centre's URL text links, because a reader who clicks either has asked the same question. The
+    image is SAME-ORIGIN and vendored beside the header's two marks, so this states a relationship
+    without taking a runtime dependency on the organisation's own host. Its display height is CSS;
+    the file ships at the brand kit's own resolution.
+
+    BOTH ANCHORS TO THAT ADDRESS OPEN IN A NEW TAB, and neither hands the opened page a handle on
+    this one: target="_blank" grants window.opener, from which the opened document could navigate
+    the tab it came from, and noreferrer keeps a reader's path through the catalogue out of a third
+    party's logs. The MTCAT link takes no target, so a new tab means one thing here: the link leaves
+    AusMT. The pair is spelt exactly as the portal's six documents spell it.
+
+    Releases and About this build left this region with the ruling. Neither is lost: /about.html
+    carries the running build's identity, the software licence and the route to the citable
+    releases in its own body, which is the page the retired control pointed at anyway.
 
     The year is a literal, the one the SPA's own footer carries. It is deliberately not a build-time
     value: a copyright year that moves when a page is rebuilt makes every page in the tree differ
-    from the tree beside it for a reason no reader can see."""
+    from the tree beside it for a reason no reader can see.
+
+    IT IS WRITTEN AFTER </main>, as the page's own bottom edge rather than the reading column's: a
+    footer inside main is not a contentinfo landmark, and set in the 840px measure it could not hold
+    the bold acknowledgement on one line at any viewport. The rules that keep it on screen are in
+    _CSS beside the ones that lay its regions out."""
     return ("\n<footer>\n"
             f'<div class="fzone fleft"><a href="{_MTCAT_HREF}">Machine-readable record '
             f'(MTCAT JSON) {_ARROW_OUT}</a></div>\n'
-            '<div class="fzone fcenter">&#169; 2026 AuScope and the AusMT contributors &#183; '
+            '<div class="fzone fcenter">AusMT is enabled by AuScope &#183; '
+            '<a href="https://www.auscope.org.au" target="_blank" '
+            'rel="noopener noreferrer">www.auscope.org.au</a> &#183; '
+            "&#169; 2026 AuScope and the AusMT contributors &#183; "
             "Data licences vary by survey</div>\n"
-            '<div class="fzone fright"><a href="/releases.html">Releases</a> &#183; '
-            '<a href="/about.html">About this build</a></div>\n'
+            '<div class="fzone fright">'
+            '<a class="orglogo" href="https://www.auscope.org.au" target="_blank" '
+            'rel="noopener noreferrer">'
+            '<img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" '
+            'width="1919" height="325"></a></div>\n'
             "</footer>\n")
 
 
@@ -793,8 +843,9 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f"{_site_header(nav, status)}"
         "<main>\n"
         f"{body}"
+        "</main>\n"
         f"{_site_footer(build)}"
-        "</main>\n</body>\n</html>\n"
+        "</body>\n</html>\n"
     )
 
 

@@ -6,7 +6,7 @@
 # ZERO-CDN CLAIM (verified by grep against the committed tree, not assumed — re-run this grep if
 # portal/*.html changes and this comment starts to drift):
 #   grep -n "http" portal/index.html portal/about.html portal/add-survey.html portal/brand.html \
-#                  portal/releases.html
+#                  portal/releases.html portal/404.html
 # results, and why each is fine to serve behind the CSP in deploy/docker/caddy/Caddyfile:
 #   - The one `<script src="https://YOUR-PLAUSIBLE-HOST/...">` line (index.html + add-survey.html)
 #     sits INSIDE an HTML comment (<!-- ... -->) — analytics is off by default and there is no live
@@ -21,17 +21,21 @@
 #     on the add-survey page block).
 #   - index.html's map (portal/src/map.js) loads tiles from basemaps.cartocdn.com — allow-listed in
 #     the default/index CSP img-src.
-#   - the header AuScope logo <a href="https://www.auscope.org.au"> survives on ABOUT.HTML ALONE.
-#     It is a NAVIGATION link, not a resource load: CSP does not govern <a href> targets; the logo
-#     image itself is vendored (portal/vendor/auscope-icon-white.png, img-src 'self'). The
-#     brand-assets lane made the AusMT mark (vendor/brand/ausmt-mark.svg, also img-src 'self') the
-#     header identity on index.html, releases.html, add-survey.html and brand.html, and the anchor
-#     left with the symbol on each. about.html's header is carved out pending an owner ruling.
-#     Every remaining auscope.org.au string on these pages is METADATA and loads nothing: the
-#     JSON-LD publisher URL and the WebSite node's own url on index.html, and each page's
-#     rel=canonical plus its og:url and og:image on about.html, releases.html, add-survey.html and
-#     brand.html. An og:image URL is fetched by a link-preview crawler out of band, never by the
-#     browser rendering the page, so no CSP directive governs it. Nothing here changes a CSP rule.
+#   - the auscope.org.au ANCHORS. The five pages above carry three each: the header's AuScope
+#     link (the full logo on about.html, the symbol elsewhere, the brand-assets lane having made
+#     the AusMT mark the header identity on index.html, releases.html, add-survey.html and
+#     brand.html) and, in the footer, the acknowledgement's URL text and the AuScope-NCRIS
+#     lockup. 404.html carries the two footer anchors only: it has no header. All of them are
+#     NAVIGATION links, not resource loads: CSP does not govern <a href> targets. The images
+#     those pages fetch are vendored and served from 'self' under img-src: the AusMT identity
+#     mark (vendor/brand/ausmt-mark.svg), the header symbol (vendor/auscope-icon-white.png) and
+#     the footer lockup (vendor/auscope-ncris-white.png).
+#   - the auscope.org.au METADATA, which loads nothing: the JSON-LD publisher URL and the WebSite
+#     node's own url on index.html, every page's rel=canonical, and og:url plus og:image on
+#     index.html, about.html, releases.html and add-survey.html (brand.html is noindex and
+#     carries canonical alone). An og:image URL is fetched by a link-preview crawler out of band,
+#     never by the browser rendering the page, so no CSP directive governs it. Nothing here
+#     changes a CSP rule: outbound anchors only, and no new host is fetched from.
 # All other assets (leaflet, leaflet.draw, markercluster, jszip) are vendored under portal/vendor/
 # and served from 'self' -- portal/tests/test_no_cdn_references.py (part of the surveys/portal
 # pytest gate, not this image build) already guards the cdnjs.cloudflare.com supply-chain case and

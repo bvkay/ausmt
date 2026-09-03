@@ -157,7 +157,14 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 #
 # Two marks, in the order the header emits them: the AusMT identity opening the left zone, the
 # AuScope parent mark closing the right one.
-ALLOWED_PAGE_SRCS = ["/vendor/brand/ausmt-mark.svg", "/vendor/auscope-icon-white.png"]
+# The chrome's own fetched assets, in the order a page writes them: the two header marks, then the
+# footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer ruling, which made the parent
+# organisation's acknowledgement the footer's right region on every surface; it is the same
+# same-origin, vendored, cached-once class of asset as the two header marks and is allow-listed on
+# the same terms (see AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F1).
+ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg", "/vendor/auscope-icon-white.png"]
+ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-white.png"]
+ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
 
 # The collection page draws the one thing in this tier that carries a mark in its BODY as well: the
 # member footprint map, which repeats the AuScope mark in the panel's bottom-left corner. It is the
@@ -175,9 +182,11 @@ _SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
 
 
 def _allowed_srcs(rel):
-    """The exact, ordered src list this page kind may carry: the two header marks, then whatever
-    body mark the kind is named for."""
-    return ALLOWED_PAGE_SRCS + ALLOWED_BODY_SRCS.get(rel, [])
+    """The exact, ordered src list this page kind may carry, in DOCUMENT order: the two header marks,
+    then whatever body mark the kind is named for, then the footer's lockup. The order is the
+    assertion, so the body mark has to be spliced between the two chrome groups rather than appended
+    after them."""
+    return ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, []) + ALLOWED_FOOTER_SRCS
 
 
 def _page_srcs(page, rel):
@@ -698,6 +707,18 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # portal/ at all, and a test that reaches out of the image is a test the image cannot run.
 _FOOTER_LINK = ("Machine-readable record (MTCAT JSON)", "/data/mtcat.json")
 
+# The parent organisation, as the footer states it on every page: the acknowledgement's URL text and
+# the lockup both navigate here, and the lockup itself is served from this site. The address is a
+# NAVIGATION target and nothing more; the src is the vendored file, and the src allow-list above is
+# what keeps it the only new fetch this ruling introduced.
+AUSCOPE_URL = "https://www.auscope.org.au"
+ORG_LOCKUP_SRC = "/vendor/auscope-ncris-white.png"
+# Both anchors to that address leave the site, so both open in a new tab and hand the opened page no
+# handle on this one: target="_blank" grants window.opener, from which the opened document can
+# navigate the tab it came from. One literal in one order, the spelling the header's own external
+# anchor carries, so the generated tier cannot drift from the portal's six documents.
+NEW_TAB = 'target="_blank" rel="noopener noreferrer"'
+
 
 def _kinds(built):
     aid = sorted(p.stem for p in (built / "pages" / "stations").glob("*.html"))[0]
@@ -772,16 +793,20 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
     """R13, restated to the owner's ruling: ONE footer, three regions, byte-identical on every page.
 
     The footer used to be contextual, so a reader could not learn it once. Left is the catalogue,
-    the same document from every page; centre is the attribution and the licence note; right is
-    Releases and About this build. The separator is U+00B7, written as the numeric reference so a
-    mis-decoded read of this file cannot smuggle a hyphen past the pin.
+    the same document from every page; centre is the AuScope acknowledgement with the attribution
+    and the licence note, carrying the one navigation link in the line; right is the AuScope-NCRIS
+    lockup, linked where that URL text links. The separator is U+00B7, written as the numeric
+    reference so a mis-decoded read of this file cannot smuggle a hyphen past the pin.
 
-    A per-page machine link is NOT lost by this: a survey and a station page each carry their own
-    record in the body under "Identifiers and provenance", which is asserted separately.
+    Releases and About this build left the footer on every surface. Nothing is lost: /about.html
+    carries the running build's identity and the route to the citable releases in its own body,
+    which the portal lane pins (portal/tests/test_about_uniform_chrome.py). A per-page machine link
+    is not lost either: a survey and a station page each carry their own record in the body under
+    "Identifiers and provenance", which is asserted separately.
 
     FAILS IF the one-line footer survives anywhere, if the three regions are not present with the
-    owner's exact strings, if a region's links move or retarget, if the footer differs between page
-    kinds, or if the removed build stamp comes back."""
+    owner's exact strings, if a region's links move or retarget, if the retired controls come back,
+    if the footer differs between page kinds, or if the removed build stamp comes back."""
     seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
         page = (built / "pages" / rel).read_text(encoding="utf-8")
@@ -799,20 +824,33 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
         assert href.startswith("/data/") and (built / href[len("/data/"):]).is_file(), \
             f"{rel}: the footer advertises {href}, which this build did not write"
 
-        # CENTRE. The owner's string, and no link: the attribution line is prose, not navigation.
+        # CENTRE. The owner's string, carrying exactly one link: the AuScope address under its own
+        # URL text. The rest of the line is prose and stays prose.
         centre = foot.split('<div class="fzone fcenter">', 1)[1].split("</div>", 1)[0]
-        assert centre == ("&#169; 2026 AuScope and the AusMT contributors &#183; "
+        assert centre == ("AusMT is enabled by AuScope &#183; "
+                          f'<a href="{AUSCOPE_URL}" {NEW_TAB}>www.auscope.org.au</a> &#183; '
+                          "&#169; 2026 AuScope and the AusMT contributors &#183; "
                           "Data licences vary by survey"), \
-            f"{rel}: centre region is not the owner's attribution line: {centre!r}"
-        assert "<a" not in centre, f"{rel}: the centre region carries no link: {centre!r}"
+            f"{rel}: centre region is not the owner's acknowledgement line: {centre!r}"
+        assert centre.count("<a") == 1, \
+            f"{rel}: the centre region carries exactly one link: {centre!r}"
 
-        # RIGHT. Two links, separated by the middle dot, About this build resolving to the page
-        # that carries the running build's identity (this tier ships no script and no popover).
+        # RIGHT. The parent organisation's full lockup, linked where the centre's URL text links.
+        # Same-origin and vendored: the ruling adds a navigation anchor, not a runtime dependency.
         right = foot.split('<div class="fzone fright">', 1)[1].split("</div>", 1)[0]
-        assert right == ('<a href="/releases.html">Releases</a> &#183; '
-                         '<a href="/about.html">About this build</a>'), \
-            f"{rel}: right region is not Releases and About this build: {right!r}"
+        assert right == (f'<a class="orglogo" href="{AUSCOPE_URL}" {NEW_TAB}>'
+                         f'<img src="{ORG_LOCKUP_SRC}" alt="AuScope and NCRIS" '
+                         'width="1919" height="325"></a>'), \
+            f"{rel}: right region is not the AuScope-NCRIS lockup: {right!r}"
 
+        # The MTCAT record is this site's own document: it stays in the tab the reader is in, so
+        # the new-tab behaviour reads as "this link leaves AusMT" and nothing else.
+        assert "target=" not in left, \
+            f"{rel}: an in-site footer link stays in this tab: {left!r}"
+
+        for gone in (">Releases<", "About this build", "aboutbuild", "/releases.html"):
+            assert gone not in foot, \
+                f"{rel}: {gone!r} left the footer with the ruling and must not come back: {foot!r}"
         assert "fbuild" not in foot and "Build " not in foot, (
             f"{rel}: the build identity stamp stays out of the footer; "
             f"build_provenance.json still carries it: {foot!r}")
@@ -855,11 +893,12 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and that is the point of them. main
     is 840px on an entity page, 920px on a hub and 1120px above 1180px of viewport, so a viewport
     number answers the question wrongly on two page kinds out of three: measured in Chrome, an
-    entity page at a 1000px viewport gives the footer 840px, the three regions want 871px, and a
-    760px viewport rule leaves the right region alone on a second row with the attribution centred
-    in what is left beside the machine-readable link, 135px off the footer's axis.
+    entity page at a 1000px viewport gives the footer the page's width, the three regions want
+    1249px of it, and a
+    760px viewport rule leaves the right region alone on a second row with the acknowledgement
+    centred in what is left beside the machine-readable link, 135px off the footer's axis.
 
-    Below 900px of footer the centre therefore takes a row of its own UNDER the two side phrases,
+    Below 1280px of footer the centre therefore takes a row of its own UNDER the two side regions,
     where it spans the footer and is centred on its axis. Below 500px the side phrases no longer
     share a row either, so every region takes one and aligns left, which is the 375px stack.
 
@@ -885,9 +924,9 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
         for decl in decls:
             assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
 
-    centre_row = css.find("@container (max-width:900px){.fcenter{order:1;flex:1 1 100%}}")
+    centre_row = css.find("@container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}")
     assert centre_row > 0, (
-        "below 900px of footer the centre must take a full row of its own, or it is centred in the "
+        "below 1280px of footer the centre must take a full row of its own, or it is centred in the "
         "space left over beside the machine-readable link instead of on the footer's axis")
     stack = css.find("@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
     assert stack > centre_row, (
@@ -900,6 +939,23 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     assert "@media(max-width:760px){.fzone" not in css, (
         "the footer's width is not the viewport's on this tier, so the stacking rule must not go "
         "back to asking the viewport")
+
+
+def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):
+    """The committed lockup is 1919px wide because it is the brand kit's own raster; what a reader
+    sees is a 28px-high mark, and the width follows from the height.
+
+    FAILS IF the height rule goes (every page would then paint the file at full size and the footer
+    would be taller than the document above it), if the width stops following the height, or if the
+    max-width cap is lost. The cap is what holds the mark inside the stacked 375px row whatever the
+    committed file's own width becomes, and object-fit keeps its proportions where the cap bites."""
+    for rel in _kinds(built):
+        css = (built / "pages" / rel).read_text(
+            encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
+        m = re.search(r"\.orglogo img\{([^}]*)\}", css)
+        assert m, f"{rel}: the footer lockup carries no sizing rule"
+        for decl in ("height:28px", "width:auto", "max-width:100%", "object-fit:contain"):
+            assert decl in m.group(1), f"{rel}: the lockup rule must declare {decl}: {m.group(1)!r}"
 
 
 def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
@@ -1165,3 +1221,67 @@ def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
         assert len(nodes) == 2, f"{rel}: entity node plus breadcrumb, got {len(nodes)}"
         assert nodes[0]["@type"] == entity, f"{rel}: the entity node must come first, got {nodes}"
         assert nodes[1]["@type"] == "BreadcrumbList", nodes
+
+
+# THE CONSTANT FOOTER, over BUILT pages: the emitted document's own structure and CSS, where the
+# portal half of this pin (portal/tests/test_footer_regions.py) reads _pages.py's source text.
+# AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F5 and F6.
+_FLOW_BELOW = 560
+_FLOW_RULE = f"@media(max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
+
+
+def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
+    """The footer is at the bottom of the VIEWPORT on every page kind, not at the end of the scroll:
+    the document is a viewport-tall column, the block above the footer takes the free space, and the
+    footer itself is sticky to the bottom edge over the page's own opaque ground.
+
+    A sticky box is never pushed DOWN from its place in flow, so the column and the growing block
+    are not decoration around the sticky rule: without them the Collections hub, which is shorter
+    than a screen, would show its footer halfway up the page. And because a sticky box keeps that
+    place in flow, the last line of a long survey page is never left underneath the footer.
+
+    FAILS if any of the three goes, if the footer stops painting an opaque ground (the content
+    passing beneath would show through), or if it stops naming a stacking order above the frozen
+    first column of a station table."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        assert page.index("</main>") < page.index("<footer>"), \
+            f"{rel}: the footer is the page's bottom edge and follows </main>; inside the reading "\
+            f"column it is neither a contentinfo landmark nor wide enough for the bold centre line"
+        body = re.search(r"(?m)^\s*body\{([^}]*)\}", css)
+        assert body, f"{rel}: no body rule"
+        for decl in ("min-height:100vh", "display:flex", "flex-direction:column"):
+            assert decl in body.group(1), \
+                f"{rel}: the page must be a viewport-tall column, missing {decl}: {body.group(1)!r}"
+        grows = [r for r in re.findall(r"(?m)^\s*main\{([^}]*)\}", css) if "flex:1 0 auto" in r]
+        assert len(grows) == 1 and "width:min(" in grows[0], \
+            f"{rel}: exactly one main rule must take the column's free space and state its width; "\
+            f"a flex item with auto side margins and an auto width shrinks to its content: {grows!r}"
+        foot = re.search(r"(?m)^\s*footer\{([^}]*)\}", css)
+        assert foot, f"{rel}: no footer rule"
+        for decl in ("position:sticky", "bottom:0", "background:#11182D"):
+            assert decl in foot.group(1), \
+                f"{rel}: the footer must declare {decl}: {foot.group(1)!r}"
+        assert re.search(r"z-index:[1-9]", foot.group(1)), \
+            f"{rel}: the footer must name its stacking order: {foot.group(1)!r}"
+        assert _FLOW_RULE in css and css.index(_FLOW_RULE) > foot.start(), \
+            f"{rel}: below {_FLOW_BELOW}px of viewport the footer returns to flow, in a rule that " \
+            f"FOLLOWS the sticky one; the two tie on specificity"
+        assert "padding:1.6rem 1.25rem 0" in css or "padding:4rem 1.25rem 0" in css, \
+            f"{rel}: main must carry no bottom padding, or the footer comes to rest ABOVE the " \
+            f"document's bottom edge and lifts off the viewport at the end of the scroll"
+
+
+def test_the_centre_line_is_bold_on_every_page_kind(built):
+    """The owner's acknowledgement renders bold, the anchor included, as ONE declaration on the
+    centre zone. FAILS if the weight goes, if it is written per span in the markup, or if a second
+    declaration appears for the two surfaces to drift on."""
+    for rel in _kinds(built):
+        css = (built / "pages" / rel).read_text(
+            encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
+        centre = re.search(r"(?m)^\s*\.fcenter\{([^}]*)\}", css)
+        assert centre and "font-weight:700" in centre.group(1), \
+            f"{rel}: the centre zone must declare font-weight:700: {centre and centre.group(1)!r}"
+        assert css.count("font-weight:700") == 1, \
+            f"{rel}: the weight is one declaration on the zone, not one per surface it reaches"

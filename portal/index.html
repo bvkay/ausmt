@@ -136,7 +136,6 @@
   .contribute:hover{border-color:var(--copper)}
   .about{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
   .about:hover{border-color:var(--copper)}
-  .ver{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
   /* UX7a (A5): the MTCAT link now lives in the footer's bottom-left; footer flex gap handles its spacing
      (the old header margin-left is dropped). */
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
@@ -514,53 +513,42 @@
   @keyframes hydrpulse{0%,100%{opacity:.55}50%{opacity:1}}
   @media (prefers-reduced-motion:reduce){.hydrating{animation:none;opacity:.8}}
   .scard .cardbtns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-  /* UX6 Wave B (B3): footer trimmed to a single line; the developer-status detail (software licence,
-     data-build id + date, version chip) moves INTACT into an "About this build" popover. The #buildId
-     element and the [data-ver-chip] chip are RELOCATED here, not reimplemented — main.js renderBuildId()
-     and version.js still fill them by id/attribute. */
   /* One footer, three regions, the same here as on the static pages the engine emits: the MTCAT
-     machine-readable link on the LEFT, the attribution and licence note in the CENTRE, Releases
-     beside the About-this-build control on the RIGHT. The left link is content-sized and never
-     shrinks, so it is not broken mid-phrase on a narrow measure; the centre takes what is left and
-     centres its text in it; the right grows so that on a wrapped row it still sits against the
-     right edge rather than under the left one.
+     machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the AuScope-NCRIS
+     lockup on the RIGHT. The left link is content-sized and never shrinks, so it is not broken
+     mid-phrase on a narrow measure; the centre takes what is left and centres its text in it; the
+     right grows so that on a wrapped row the lockup still sits against the right edge rather than
+     under the left one.
 
      BOTH QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, which is what lets one rule serve
      this footer and the narrower ones the sibling pages set inside their reading column. Measured,
-     the three regions want 921px of footer; below that the centre takes a row of its own UNDER the
-     two side phrases, where it is centred on the footer's axis rather than in the space left over
-     beside the machine-readable link. Below 520px the two side phrases no longer share a row
+     the three regions want 1254px of footer; below that the centre takes a row of its own UNDER the
+     two side regions, where it is centred on the footer's axis rather than in the space left over
+     beside the machine-readable link. Below 520px the two side regions no longer share a row
      either, so every region takes one and aligns left, which is what keeps 375px stacking rather
      than colliding.
 
-     Ordering the centre last costs no reading order: it is prose and carries no link, so the tab
-     sequence stays the left link then the right links, in the order a reader meets them. The
-     overrides follow the rules they override; the two tie on specificity and source order wins. */
-  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;position:relative;container-type:inline-size}footer a{color:var(--copper);text-decoration:none}
+     The regions align on their CENTRES, not on a baseline: the lockup is a 28px block beside a line
+     of 12.5px text, and a baseline would hang it off that text's baseline and put its whole height
+     above the row. The overrides follow the rules they override; the two tie on specificity and
+     source order wins.
+
+     The lockup's width follows its height, so the committed file's own 1919px raster never reaches
+     the page. max-width caps it at its zone in the stacked state, where that zone is the footer's
+     whole width; object-fit keeps the mark's proportions wherever the cap bites.
+
+     The Map holds its footer on screen by its own layout: the body never scrolls, so the footer is
+     simply the last child of a full-height column. The sticky declarations are stated anyway, and
+     are inert here, so one rule covers every surface and the parity pins hold one fact. */
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}footer a{color:var(--copper);text-decoration:none}
   footer .apilink{flex:0 0 auto}
-  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
+  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0;font-weight:700}
   footer .foot-right{flex:1 0 auto;text-align:right}
-  @container (max-width:950px){footer .foot-main{order:1;flex:1 1 100%}}
+  footer .orglogo{display:inline-block;line-height:0}
+  footer .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
+  @container (max-width:1330px){footer .foot-main{order:1;flex:1 1 100%}}
   @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
-  footer details.aboutbuild{display:inline-block;position:relative}
-  footer details.aboutbuild>summary{display:inline;cursor:pointer;color:var(--copper);list-style:none}
-  footer details.aboutbuild>summary::-webkit-details-marker{display:none}
-  footer details.aboutbuild>summary::marker{content:""}
-  footer details.aboutbuild>summary:hover{text-decoration:underline}
-  footer .aboutbuild-body{position:absolute;bottom:calc(100% + 8px);right:0;
-    width:min(440px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:8px;
-    padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.5);text-align:left;font-size:12px;color:var(--muted);
-    line-height:1.5;z-index:50}
-  footer .aboutbuild-body .ver{margin-top:8px;display:inline-block}
-  /* Stacked, the About-this-build control sits near the left of its own row, so a popover anchored
-     to it runs off the screen edge whichever side it opens from (it did before the regions were
-     split, too). In that state it is anchored to the FOOTER instead, the only box on that row wide
-     enough to hold it, inset to the footer's own horizontal padding. It is the STACKED state that
-     moves the control, so the query is the stacking one; the footer carries position:relative
-     unconditionally because a container query cannot style the element that establishes it. This
-     follows the rules it overrides: they tie on specificity, order wins. */
-  @container (max-width:520px){footer details.aboutbuild{position:static}
-    footer .aboutbuild-body{left:18px;right:18px;width:auto}}
+  @media (max-width:560px){footer{position:static}}
   .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px}
   .leaflet-tooltip.qtip::before{display:none}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
@@ -1099,24 +1087,16 @@
   <!-- LEFT. The machine-readable MTCAT link, the same document from every page on both surfaces.
        The honest link text + href/title are kept verbatim. -->
   <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
-  <!-- CENTRE. Attribution and the licence note, and nothing else: it is prose, not navigation, so it
-       carries no link. The year is a literal here and in the engine's page shell, one mechanism for
-       both surfaces; a copyright year that moved on rebuild would differ across the tree for a
-       reason no reader could see. -->
-  <span class="foot-main">© 2026 AuScope and the AusMT contributors · Data licences vary by survey</span>
-  <!-- RIGHT. Quarterly citable snapshots of the corpus (releases.html) sit beside "About this build"
-       because the two answer neighbouring questions: which build am I looking at now, and which
-       frozen snapshots can I cite. The separator is U+00B7, the same glyph the centre carries. -->
-  <span class="foot-right">
-    <a href="releases.html">Releases</a> ·
-    <details class="aboutbuild">
-      <summary>About this build</summary>
-      <div class="aboutbuild-body">
-        Portal software is licensed under Apache-2.0; survey data remains licensed by its custodians.<span id="buildId"></span>
-        <span class="ver" data-ver-chip title="build &middot; MTCAT schema"></span>
-      </div>
-    </details>
-  </span>
+  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one
+       link in the line: it is the reader-legible form of the address, so it says where it goes
+       without a title attribute. The year is a literal here and in the engine's page shell, one
+       mechanism for both surfaces; a copyright year that moved on rebuild would differ across the
+       tree for a reason no reader could see. The separators are U+00B7. -->
+  <span class="foot-main">AusMT is enabled by AuScope · <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> · © 2026 AuScope and the AusMT contributors · Data licences vary by survey</span>
+  <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links: a
+       reader who clicks either has asked the same question. The image is same-origin and vendored,
+       so stating the relationship takes no runtime dependency on the organisation's own host. -->
+  <span class="foot-right"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></span>
 </footer>
 <div id="toast" role="status"></div>
 <!-- The hand-off snackbar (owner UX ruling 2026-08-23). PROGRESS BELONGS TO THE BROWSER: the 302 hands
