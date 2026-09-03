@@ -253,3 +253,18 @@ def test_the_survey_warning_for_an_unreadable_file_is_one_line(tmp_path):
     rows = [f for f in entry["source_parse_failures"] if f["file"] == "badref.edi"]
     assert len(rows) == 1, entry["source_parse_failures"]
     assert "\n" in rows[0]["error"], "the structured ledger keeps the reader's full error verbatim"
+
+
+WORKFLOW = REPO.parent / ".github" / "workflows" / "build-products.yml"
+
+
+@pytest.mark.skipif(not WORKFLOW.is_file(),
+                    reason="engine image build: workflow tree not shipped "
+                           "(designed topology; the CI guards are pinned from checkout lanes)")
+def test_this_file_is_in_the_pr_gate_subset():
+    """Rule 8: the PR gate enumerates test files BY NAME, and this file carries the assertions the
+    two deploy gates read, so it has to run on the pull request that changes them."""
+    steps = re.split(r"\n(?=      - name: )", WORKFLOW.read_text(encoding="utf-8"))
+    subset = [s for s in steps if "PR gate subset" in s.split("\n")[0]]
+    assert len(subset) == 1, [s.split("\n")[0] for s in steps]
+    assert f"tests/{Path(__file__).name}" in subset[0]
