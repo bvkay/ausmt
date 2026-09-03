@@ -135,8 +135,8 @@ def test_resolved_copy_carries_placeholders_not_literals():
 
 
 # Spelt as escapes so this pin never trips the source sweep it mirrors (test_no_en_dash.py).
-EM_DASH = "—"
-EN_DASH = "–"
+EM_DASH = "\u2014"
+EN_DASH = "\u2013"
 
 
 def test_deck_copy_takes_plain_hyphens_only():
