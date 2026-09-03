@@ -11,23 +11,13 @@
   a{color:#EF7256}
   h1{color:#fff;font-size:1.7rem;margin:.2rem 0 .6rem}
   .crumb{font-size:.85rem;opacity:.8}
-  /* One footer, three regions, the same here as on every other surface: the MTCAT
-     machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
-     AuScope-NCRIS lockup on the RIGHT.
-
-     THE RULE SET BELOW IS index.html's, character for character with the four colour tokens resolved to the literals
-     this page writes, because it is served for any unmatched path at any depth and carries no token layer. The zone geometry, the two
-     container states and the measured numbers behind them are stated there, once, and
-     tests/test_footer_regions.py holds all seven surfaces identical: an edit here that is not an
-     edit there fails.
-
-     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
-     it keeps its own box in flow, so the last line of the page is never hidden under it and the
-     page owes it no padding-bottom that would have to track the wrap state. A sticky box is never
-     pushed DOWN from where it sits in flow, so body is a viewport-tall column and main takes its
-     free space; remove either and a short page shows its footer halfway up. The ground is opaque
-     because content passes beneath it. Below 560px of viewport the footer is three rows and would
-     cover most of a phone screen, so it returns to ordinary flow there. */
+  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
+     CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
+     character, with the four colour tokens resolved to the literals this page writes, because it is
+     served for any unmatched path at any depth and carries no token layer;
+     tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed: it keeps its
+     own box in flow, so body is a viewport-tall column and the last line is never hidden under it;
+     below 560px of viewport it returns to ordinary flow. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid #2B3557;font-size:12.5px;color:#8FA3B0;line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
   footer a{color:#EF7256;text-decoration:none}
   .apilink{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:#8FA3B0;text-decoration:none}

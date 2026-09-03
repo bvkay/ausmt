@@ -8,23 +8,24 @@
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="src/security.js"></script>   <!-- canonical esc/escAttr/escUrl, shared with the portal (single source) -->
-<script src="src/contract.js"></script>   <!-- C46: generated licence vocab (LICENSES), single source for the licence <select>s (never hand-copied) -->
+<script src="src/contract.js"></script>   <!-- Generated licence vocabulary (LICENSES), the single source for the licence selects; never
+     hand-copied. -->
 <script src="src/doi_harvest.js"></script> <!-- DOI citation-harvest core (window.AusmtDoiHarvest); single source, shared byte-for-byte with the curator editor -->
 <script src="src/mapattrib.js"></script>  <!-- the collapsed map attribution control, shared with the portal map (single source) -->
 
-<!-- Privacy-respecting analytics OFF by default (see ANALYTICS.md). To enable, uncomment + set your domain:
-<script defer data-domain="YOUR-DOMAIN" src="https://YOUR-PLAUSIBLE-HOST/js/script.js"></script> -->
-<script src="src/analytics-shim.js"></script><!-- external (not inline); the app script element below stays this page's single intentional inline block (CSP allows inline here only). NOTE: never write a literal script OPEN TAG inside a comment on this page, tests/add_survey_logic.test.js extracts inline blocks by regex and would treat it as real. -->
+<script src="src/analytics-shim.js"></script><!-- external (not inline); the app script element below is this page's single intentional inline
+     block, which the CSP allows here alone. NEVER write a literal script open tag inside a comment on
+     this page: tests/add_survey_logic.test.js extracts inline blocks by regex and would treat it as
+     real. -->
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
-<!-- Home-screen shortcut icon (brand-assets lane E4). Without it iOS renders a screenshot of
-     the page instead of the mark. Same lattice as the favicon, rendered at 180px. -->
+<!-- Without an apple-touch-icon iOS renders a screenshot of the page instead of the mark. Same
+     lattice as the favicon, at 180px. -->
 <link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">
-<!-- The one true URL for this page. It is substantive, indexable, linked from the root and
-     now advertised in sitemap.xml, so it must say which address it is served at (index.html
-     has carried its own canonical since the head-hygiene lane; these three had none). -->
+<!-- The one true URL for this page. It is substantive, indexable, linked from the root and advertised
+     in sitemap.xml, so it must say which address it is served at. -->
 <link rel="canonical" href="https://ausmt.auscope.org.au/add-survey.html">
-<!-- Search snippet and link preview, on the same rule as about.html: the description is the first
-     three sentences of this page's own lede, verbatim and cut at a sentence boundary. -->
+<!-- The description is the first three sentences of this page's own lede, verbatim and cut at a
+     sentence boundary. -->
 <meta name="description" content="Files first. Drop your EDI, EMTF XML or MTH5 transfer functions, watch the stations land on the map, then fill the short required section below.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
@@ -39,7 +40,7 @@
   :root{
     --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
-    /* UX6 Wave F (F2): --no lightened #A85454 -> #E2938B for WCAG AA as text (see index.html). */
+    /* --no carries the danger red that clears WCAG AA as text; see index.html. */
     --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -97,10 +98,8 @@
   .panel h3{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 10px}
   .v{display:flex;gap:9px;align-items:flex-start;font-size:13px;padding:3px 0}
   .badge{font-family:var(--mono);font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;flex:none;margin-top:1px}
-  /* UX6 Wave F (F2): AA text contrast on the status-chip tints. PASS tint darkened .18 -> .08 so the
-     --ok text clears 4.5:1 (was 3.91:1 -> 4.65:1). FAIL tint recoloured to the new --no red at a lower
-     alpha (rgba(168,84,84,.22) -> rgba(226,147,139,.14)) so --no text clears 4.5:1 (was 2.30:1 -> 4.74:1).
-     WARNING tint left at .18 (its --part text already clears at 4.56:1). */
+  /* AA text contrast on the status-chip tints: the PASS tint is light enough for --ok text to clear
+     4.5:1 (4.65:1), the FAIL tint for --no text (4.74:1) and the WARNING tint for --part (4.56:1). */
   .PASS{background:rgba(91,174,106,.08);color:var(--ok)}
   .WARNING{background:rgba(217,162,59,.18);color:var(--part)}
   .FAIL{background:rgba(226,147,139,.14);color:var(--no)}
@@ -118,8 +117,8 @@
   .orcidok{font-size:12px;margin-top:3px;display:block;font-family:var(--mono)}
   .orcidok.good{color:var(--ok)}
   .orcidok.bad{color:var(--part)}
-  /* R1 slug collision: a non-blocking "slug already served" context warning, distinct from valid/invalid.
-     Amber like a WARNING chip, allowed to wrap (the message carries the existing survey name + guidance). */
+  /* A non-blocking "slug already served" context warning, distinct from valid and invalid. Amber like a
+     WARNING chip, and allowed to wrap. */
   .orcidok.warn{color:var(--part);white-space:normal;line-height:1.45}
   .kv{font-family:var(--mono);font-size:13px;line-height:1.7}
   .kv b{color:var(--text);font-weight:700}
@@ -138,22 +137,11 @@
   .modal .bar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
   .modal .bar .spacer{margin-left:auto}
   .leaflet-container{background:#0e1822}
-  /* One footer, three regions, the same here as on every other surface: the MTCAT
-     machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
-     AuScope-NCRIS lockup on the RIGHT.
-
-     THE RULE SET BELOW IS index.html's, character for character with the four colour tokens this page shares. The zone geometry, the two
-     container states and the measured numbers behind them are stated there, once, and
-     tests/test_footer_regions.py holds all seven surfaces identical: an edit here that is not an
-     edit there fails.
-
-     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
-     it keeps its own box in flow, so the last line of the page is never hidden under it and the
-     page owes it no padding-bottom that would have to track the wrap state. A sticky box is never
-     pushed DOWN from where it sits in flow, so body is a viewport-tall column and main takes its
-     free space; remove either and a short page shows its footer halfway up. The ground is opaque
-     because content passes beneath it. Below 560px of viewport the footer is three rows and would
-     cover most of a phone screen, so it returns to ordinary flow there. */
+  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
+     CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
+     character, where the zone geometry and the two container states are stated once;
+     tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed, so it keeps
+     its box in flow and body is a viewport-tall column; below 560px it returns to ordinary flow. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
@@ -196,36 +184,19 @@
   .slugchip{display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line);
     border-radius:20px;padding:3px 6px 3px 12px;max-width:100%}
   .slugchip .pre{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
-  /* Wide enough to show a full-length folder name (SLUG_MAX = 40 mono characters) without scrolling -
-     the submitter has to be able to READ what they are about to publish, since the slug becomes
-     au.<slug>.<station> in every id and URL and is expensive to change once a DOI is minted.
-     ch units track the mono font, so the field fits the cap rather than a guessed pixel width;
-     max-width keeps it inside the flex row on a narrow viewport instead of overflowing the card. */
+  /* Wide enough to show a full-length folder name (SLUG_MAX = 40 mono characters) without scrolling:
+     the slug becomes au.<slug>.<station> in every id and URL and is expensive to change once a DOI is
+     minted, so the submitter must be able to READ it. ch units track the mono font, and max-width
+     keeps the field inside the flex row on a narrow viewport. */
   .slugchip input{background:transparent;border:none;border-radius:16px;padding:4px 8px;font-family:var(--mono);font-size:13px;
     width:42ch;min-width:16ch;max-width:100%;flex:1 1 auto}
   .slugchip input:focus{outline:1px solid var(--copper)}
   #t0mapwrap{margin-top:12px;display:none}
   #t0map{height:300px;border-radius:8px;border:1px solid var(--line)}
-  /* THE MAP'S ATTRIBUTION, COLLAPSED TO ONE GLYPH. What the owner asked off the map was the corner
-     LINE and the Leaflet flag and word beside it; the credit itself is a licence term and stays
-     where the map is, because only the layer that is drawing knows which provider to name.
-     src/mapattrib.js wraps Leaflet's own control, mounted with prefix:false, and these rules are
-     the whole of its appearance.
-
-     THE GLYPH IS THE WHOLE CONTROL until a reader asks for the text. It is a real button, so it
-     takes keyboard focus and is announced, and the credit opens on hover, on focus and on click
-     alike; the focus ring is the one every other control on this page carries.
-
-     ABOVE ANYTHING SHARING ITS CORNER when it opens. Leaflet's corner is a stacking context of its
-     own above the legend and the watermark, so those two are already clear of it; the 900 here
-     orders the expanded text above another control placed in the same corner later.
-
-     THE CAP IS WHAT KEEPS IT OFF THE LEGEND. The legend sits bottom-left with a 210px cap and a
-     10px inset, so at 560px of map (the narrowest width this map is drawn at, below which the
-     watermark is not drawn either) 240px of credit plus the glyph still leaves the two apart.
-
-     RULE SET SHARED with add-survey.html character for character, because its three maps wear this
-     same control; tests/test_map_attribution.py holds the two identical. */
+  /* The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map,
+     because only the layer that is drawing knows which provider to name, and the 240px cap keeps the
+     opened text clear of the legend at 560px of map. Shared character for character with index.html,
+     because these three maps wear the same control; pinned by tests/test_map_attribution.py. */
   .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-end;gap:4px}
   .mapattrib-toggle{flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--text);font-family:var(--sans);font-size:12px;font-style:italic;line-height:1;cursor:pointer}
   .mapattrib-toggle:hover{border-color:var(--copper)}
@@ -247,10 +218,8 @@
 </head>
 <body>
 <header>
-  <!-- The AusMT mark, not an organisation mark: AusMT is the thing this header IDENTIFIES, so it
-       opens the header and no header on this site carries a second mark of any kind. The AuScope
-       relationship is stated in the footer and in About's Who enables AusMT, which is where a
-       reader asks it. Same file, same markup and same rule on every surface wearing this chrome. -->
+  <!-- The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on
+     this site carries a second mark of any kind. Same markup and same rule on every surface. -->
   <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
   <div class="wordmark">AusMT</div>
   <div class="tagline">Contribute a survey</div>
@@ -286,8 +255,8 @@
     <div id="t0mapwrap">
       <div id="t0map"></div>
       <div class="t0count" id="t0count"></div>
-      <!-- softened location gate: the DMS resolver appears ONLY when a HEAD/INFO conflict is detected;
-           otherwise a plain informational nudge (no checkbox wall). -->
+      <!-- The DMS resolver appears ONLY when a HEAD/INFO conflict is detected; otherwise a plain
+     informational nudge. -->
       <div id="dmsChoice" style="display:none;margin-top:10px">
         <label style="text-transform:none;letter-spacing:0">For <b id="dmsCount">0</b> station(s) with a HEAD/INFO coordinate conflict, trust:</label>
         <label class="check"><input type="radio" name="dmschoice" value="head" checked><span>the <b>HEAD</b> coordinate (EDI-standard field, default)</span></label>
@@ -316,24 +285,24 @@
       <div><label>Organisation ROR <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(auto-filled from the lookup)</span></label><input id="m_ror" placeholder="https://ror.org/…"></div>
 
       <div class="req"><label>Licence</label>
-        <!-- C46: options are populated at runtime from the generated contract (LICENSES in src/contract.js),
-             grouped redistributable vs recognised-only + a TBD option, never a hand-copied list. -->
+        <!-- Options are populated at runtime from the generated contract (LICENSES in src/contract.js),
+     grouped redistributable against recognised-only with a TBD option, never a hand-copied list. -->
         <select id="m_license"></select></div>
       <div class="req"><label>Access level</label>
         <select id="m_access"><option>open</option><option>metadata_only</option><option>embargoed</option></select></div>
 
-      <!-- Always-visible disclosure of what each access level actually exposes (audit 5.3). Truthful to
-           current behaviour: every level lists the survey publicly (build_portal.py:161-165 "discovery is
-           universal"; stations emitted with lat/lon at :558-560); only 'open' serves data bytes. -->
+      <!-- Always-visible disclosure of what each access level actually exposes, and truthful to current
+     behaviour: every level lists the survey publicly and emits its stations with lat/lon, and only
+     'open' serves data bytes. -->
       <div class="full"><div class="hint" id="accessDisclosure">Every access level <b>lists this survey
         publicly</b>, its map presence, exact station coordinates and screening diagnostics are visible to
         anyone regardless of level. <b>open</b> also serves the data files for download. <b>metadata_only</b>
         and <b>embargoed</b> withhold <b>all data bytes</b> (downloads route to the source archive) until a
         curator releases them; an embargo never lifts automatically, even after its date passes.</div></div>
 
-      <!-- embargo_until + access contact (audit 5.2): revealed only for a non-open level, mirroring the
-           page's other show/hide blocks (#gatewayBlock, #dmsChoice). Emitted into survey.yaml's access
-           block by buildSurveyYaml (empty -> null, date as YYYY-MM-DD). -->
+      <!-- embargo_until and access contact, revealed only for a non-open level, mirroring the page's other
+     show/hide blocks. Emitted into survey.yaml's access block by buildSurveyYaml (empty to null, date
+     as YYYY-MM-DD). -->
       <div class="full" id="embargoBlock" style="display:none">
         <div class="grid">
           <div><label>Embargo until <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(release date)</span></label>
@@ -383,9 +352,8 @@
           <code>dates.issued</code>. If you do not know the exact release date, leave it blank: a
           publication date is never guessed from when the data were collected.</div></div>
 
-      <!-- Credit C1: the plain-language citation-authorship question -> creators[] (an ORDERED citation
-           list). Basic tier: just a name per row, with an Organisation checkbox that sets name_type;
-           ORCID/ROR is optional. -->
+      <!-- The plain-language citation-authorship question feeds creators[], an ORDERED citation list. Basic
+     tier: a name per row, with an Organisation checkbox that sets name_type; ORCID and ROR optional. -->
       <div class="full"><label>Who should the citation name, in order?</label>
         <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">The people
           or organisations named in this survey's citation, <b>in the order they should appear</b>. Add a row
@@ -395,17 +363,16 @@
         <div class="hint" style="margin-top:4px">Recorded as <code>creators</code>, the citation author line.
           Leave blank and AusMT cites the organisation and the year.</div></div>
 
-      <!-- CONTRIBUTOR-CREDIT-SPEC §4 (D3): the ratified replacement for the retired flat lead field.
-           One plain-language question, ONE typed contributors row (role ProjectLeader). It is a
-           who-did-what fact, not a citation fact: it never touches creators[]. -->
+      <!-- One plain-language question, ONE typed contributors row (role ProjectLeader). It is a who-did-what
+     fact, not a citation fact: it never touches creators[]. -->
       <div><label>Who led this survey? <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(name)</span></label><input id="m_lead_name" placeholder="Family, Given"></div>
       <div><label>Their ORCID <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label><input id="m_lead_orcid" placeholder="0000-0002-1825-0097"><span class="orcidok" id="leadOrcidOk"></span></div>
       <div class="full"><div class="hint">Recorded as a <code>contributors</code> row with the DataCite role
         <b>ProjectLeader</b>. Leading a survey and being named in its citation are separate facts: if this
         person should also appear in the citation, add them above as well.</div></div>
 
-      <!-- Credit C2: contributors[] (who did what), moved UP from the advanced tier because with the
-           retired lead field gone this is the only home for "who led / collected / holds / distributes". -->
+      <!-- contributors[] (who did what) sits in this tier, because it is the only home for who led,
+     collected, holds or distributes. -->
       <div class="full"><label>Who did what?</label>
         <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">Optional, and
           separate from the citation credit above. Record who collected in the field, who to contact,
@@ -414,10 +381,10 @@
         <button type="button" class="act" id="addContributor" style="margin-top:2px">+ Add contributor</button>
         <div class="hint" style="margin-top:4px">Recorded as <code>contributors</code>, each with a DataCite role.</div></div>
 
-      <!-- Citation block (interface contract section 3). TWO outputs, never a third: the custodian's own
-           wording verbatim, and a typed related_identifiers row for a pasted identifier. The form NEVER
-           writes citation.preferred_identifier: designating which identifier the citation should quote is
-           curation, and the curator does it beside identity_classification (D18). -->
+      <!-- Citation block. TWO outputs, never a third: the custodian's own wording verbatim, and a typed
+     related_identifiers row for a pasted identifier. The form NEVER writes
+     citation.preferred_identifier, because designating which identifier a citation quotes is
+     curation. -->
       <div class="full"><label>Does this dataset already have a citation or DOI?</label>
         <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">If the data
           were published somewhere before, paste the citation exactly as it is written and the DOI or link.
@@ -431,9 +398,9 @@
           identifier is recorded as a row under <b>This dataset elsewhere</b>. A curator decides which
           identifier the published citation should quote.</div></div>
 
-      <!-- organisations[] (survey scope section 3). The essential Organisation above stays the custodial
-           discovery value AND seeds the first row, marked for curator review; extra rows say who else was
-           involved and how. A publisher is NEVER inferred: it is written only when ticked. -->
+      <!-- organisations[]. The essential Organisation above stays the custodial discovery value AND seeds
+     the first row, marked for curator review; extra rows say who else was involved and how. A
+     publisher is NEVER inferred: it is written only when ticked. -->
       <div class="full"><label>Which organisations were involved, and how?</label>
         <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">Only if
           more than one body was involved. <b>The organisation you named above</b> is already recorded as the custodian; add a row
@@ -483,9 +450,10 @@
     </div>
   </div>
 
-  <!-- ==================== CARD 4, "Collection / program" (R3: own card, collapsed by default) ==========
-       Moved out of tier 1 into its own tier-style disclosure so the common single-survey submission is not
-       slowed by programme fields. Same IDs (m_coll_*) so the collections.json autofill IIFE is unchanged. -->
+  <!-- ==================== CARD 4, "Collection / program" ================================
+     Its own tier-style disclosure, collapsed by default, so the common single-survey submission is
+     not slowed by programme fields. The IDs (m_coll_*) are unchanged, so the collections.json
+     autofill IIFE still addresses them. -->
   <details class="tier" id="tierCollection">
     <summary><div class="tlead"><h2>4. Was this survey part of a collection / program (eg AusLAMP)?</h2><span class="tk">optional</span></div></summary>
     <p class="tsub">Only if this survey belongs to a national programme or campaign (for example, AusLAMP).
@@ -510,12 +478,12 @@
     <p class="tsub">Provenance identifiers, instruments, processing and data types. Leave these to the curator
       if you are unsure, server validation and curator review fill any gaps.</p>
 
-    <!-- Credit C2: contributors[] ("Who did what?") moved UP to tier 3, beside the citation-authorship
-         question, because with the retired lead field gone it is the only home for who led the survey. -->
+    <!-- contributors[] ("Who did what?") sits beside the citation-authorship question, because it is the
+     only home for who led the survey. -->
 
-    <!-- Identifiers by data level (mirrors the curator "This dataset elsewhere" editor). Each row states
-         WHAT the identifier points at in NCI Table 1 data-level terms; the DataCite relation is DERIVED
-         server-side from the level and is NOT asked here (never emitted). -->
+    <!-- Identifiers by data level, mirroring the curator editor. Each row states WHAT the identifier
+     points at in NCI Table 1 terms; the DataCite relation is DERIVED server-side from the level and
+     is never asked here. -->
     <label>This dataset elsewhere <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(every DOI or PID this survey already has at another archive)</span></label>
     <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">Start by picking
       <b>what</b> the identifier points at; the citation relation is set for you. The raw time-series collection
@@ -591,8 +559,8 @@
         <a href="about.html">About page</a>. It is sent only as a request header, never stored, never
         written into the package.</div>
     </div>
-    <!-- Key request (contract stub; the /gateway/request-key endpoint is a sibling lane). Always shows the
-         same neutral message regardless of the response, so it can never confirm whether an address exists. -->
+    <!-- Key request. It always shows the same neutral message regardless of the response, so it can
+     never confirm whether an address exists. -->
     <div class="keyreq" id="keyReqBlock">
       <label style="text-transform:none;letter-spacing:0">Need a key? Enter your email and we will send you one.</label>
       <div class="kr">

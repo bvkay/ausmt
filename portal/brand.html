@@ -5,11 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Brand and assets - AusMT</title>
 <meta name="description" content="AusMT logos, the standalone mark and the presentation artwork, with the terms for using them.">
-<!-- Out of the search index and out of the sitemap. This page is an asset shelf for anyone who
-     needs a logo file, reached from About when they need it; it is not something the site has any
-     reason to advertise, and a brand page ranking beside the survey and collection pages would
-     spend the site's own discovery surface on it. The page stays crawlable on purpose: a robots.txt
-     Disallow would stop the crawler ever reading the noindex below. -->
+<!-- Out of the search index and out of the sitemap: this page is an asset shelf reached from About,
+     and a brand page ranking beside the survey and collection pages would spend the site's own
+     discovery surface on it. It stays crawlable on purpose, because a robots.txt Disallow would stop
+     the crawler ever reading the noindex below. -->
 <meta name="robots" content="noindex">
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">
@@ -17,25 +16,23 @@
      sitemap.xml, so it must say which address it is served at. -->
 <link rel="canonical" href="https://ausmt.auscope.org.au/brand.html">
 <style>
-  /* Treatment D+ palette, the same tokens index.html, about.html, add-survey.html and releases.html
-     declare. Copied rather than shared because the portal ships as classic static pages with no
-     template step, which is the same bargain every other page here makes. */
+  /* The same tokens index.html, about.html, add-survey.html and releases.html declare, copied rather
+     than shared because the portal ships as classic static pages with no template step. */
   :root{
     --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-    /* The two backgrounds the variants are DRAWN FOR, taken from contract/brand.json. A preview on
-       the wrong one is how a reader concludes the file is broken; a pin holds these to the
-       generator's own declared values. */
+    /* The two backgrounds the variants are DRAWN FOR, taken from contract/brand.json: a preview on the
+     wrong ground is how a reader concludes the file is broken. Pinned to the generator's own values. */
     --preview-dark:#07162F;
     --preview-light:#FFFFFF;
   }
   *{box-sizing:border-box}
   body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6;min-height:100vh;display:flex;flex-direction:column}
   a{color:var(--copper)}
-  /* Uniform chrome: the three-zone header with the C9 zero-basis sides, so the tab group sits at the
-     same x here as on every other surface. */
+  /* Uniform chrome: the three-zone header with zero-basis sides, so the tab group sits at the same x
+     here as on every other surface. */
   header{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
   .hleft{flex:1 1 0;min-width:0}
@@ -63,12 +60,9 @@
   .usage{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--copper);
     border-radius:8px;padding:.9rem 1.1rem;margin:1.2rem 0 0;max-width:66ch}
 
-  /* One preview per variant: the artwork on the ground it was drawn for, its name, and the two
-     downloads. The panel is the only thing that changes between the dark and light rows. */
-  /* min(360px,100%) rather than a bare 360px: a grid track's MINIMUM is not allowed to shrink, so on
-     a 375px phone the 360px track plus main's 20px gutters resolved 5px wider than the viewport and
-     the whole page scrolled sideways. Capping the minimum at the available width keeps the two-up
-     layout everywhere it fits and lets the card become one-up when it does not. */
+  /* min(360px,100%) rather than a bare 360px: a grid track's MINIMUM cannot shrink, so on a 375px phone
+     the 360px track plus main's 20px gutters resolves wider than the viewport and the page scrolls
+     sideways. */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:1rem;margin:.9rem 0 0}
   .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .panel{margin:0;padding:22px 20px;display:flex;align-items:center;justify-content:center;min-height:130px}
@@ -94,22 +88,13 @@
   .hero{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:.9rem 0 0}
   .hero img{width:100%;height:auto;display:block}
 
-  /* One footer, three regions, the same here as on every other surface: the MTCAT
-     machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
-     AuScope-NCRIS lockup on the RIGHT.
-
-     THE RULE SET BELOW IS index.html's, character for character with the four colour tokens this page shares. The zone geometry, the two
-     container states and the measured numbers behind them are stated there, once, and
-     tests/test_footer_regions.py holds all seven surfaces identical: an edit here that is not an
-     edit there fails.
-
-     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
-     it keeps its own box in flow, so the last line of the page is never hidden under it and the
-     page owes it no padding-bottom that would have to track the wrap state. A sticky box is never
-     pushed DOWN from where it sits in flow, so body is a viewport-tall column and main takes its
-     free space; remove either and a short page shows its footer halfway up. The ground is opaque
-     because content passes beneath it. Below 560px of viewport the footer is three rows and would
-     cover most of a phone screen, so it returns to ordinary flow there. */
+  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
+     CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
+     character, where the zone geometry and the two container states are stated once;
+     tests/test_footer_regions.py holds all seven surfaces identical, so an edit here that is not an
+     edit there fails. STICKY, not fixed: it keeps its own box in flow, so the last line of the page
+     is never hidden under it, which is why body is a viewport-tall column and main takes its free
+     space. Below 560px of viewport it would cover most of a phone screen, so it returns to flow. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none}
@@ -141,9 +126,9 @@
     <a class="contribute" href="add-survey.html">Contribute a survey &rarr;</a>
   </div>
   <div class="hzone hright">
-    <!-- The corpus-totals block the other static pages carry, filled by the same corpus-stats.js from
-         the same served catalogue. It ships hidden and appears only once the documents resolve, so an
-         unpublished deployment shows nothing rather than a fabricated total. -->
+    <!-- The corpus-totals block the other static pages carry, filled by the same corpus-stats.js. It ships
+     hidden and appears only once the documents resolve, so an unpublished deployment shows nothing
+     rather than a fabricated total. -->
     <div class="counts corpus" id="corpusCounts" hidden
          title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations &middot;
       <b id="corpusSurveys"></b> surveys</div>
