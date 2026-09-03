@@ -61,9 +61,10 @@ set their footers inside reading columns of 760px to 980px, so no single viewpor
 "the three regions do not fit" on more than one page kind at a time.
 
 THE OWN-ROW BREAKPOINT IS A MEASUREMENT OF THE CONTENT, not a design constant. Measured in Chrome
-with the ruled strings, the three regions want 1254px of footer on the portal and 1200px on the
-static tier; the rules fire just above each, as they did at the shorter numbers this footer carried
-before the AuScope acknowledgement lengthened the centre.
+with the ruled strings at the ruled weight, the three regions want 1301px of footer on the portal
+and 1249px on the static tier; the rules fire just above each, as they did at every shorter number
+this footer has carried. The acknowledgement lengthened the centre once when it replaced the bare
+copyright line and again when it went bold.
 
 The ruling and every number this module holds it to: AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md.
 """
@@ -508,7 +509,7 @@ def test_both_footers_are_wrapping_flex_rows_that_give_at_the_centre():
          {"left": r"(?m)^\s*footer \.apilink\{([^}]*)\}",
           "centre": r"(?m)^\s*footer \.foot-main\{([^}]*)\}",
           "right": r"(?m)^\s*footer \.foot-right\{([^}]*)\}"},
-         "@container (max-width:1280px){footer .foot-main{order:1;flex:1 1 100%}}",
+         "@container (max-width:1330px){footer .foot-main{order:1;flex:1 1 100%}}",
          "@container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right"
          "{order:0;flex:1 1 100%;text-align:left}}",
          "@media(max-width:760px){footer .apilink"),
@@ -516,7 +517,7 @@ def test_both_footers_are_wrapping_flex_rows_that_give_at_the_centre():
          {"left": r"(?m)^\s*\.fleft\{([^}]*)\}",
           "centre": r"(?m)^\s*\.fcenter\{([^}]*)\}",
           "right": r"(?m)^\s*\.fright\{([^}]*)\}"},
-         "@container (max-width:1230px){.fcenter{order:1;flex:1 1 100%}}",
+         "@container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}",
          "@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}",
          "@media(max-width:760px){.fzone"),
     )
@@ -631,19 +632,20 @@ def test_every_portal_page_sizes_the_lockup_the_same_way():
 _FLOW_BELOW = 560
 _STICKY = ("position:sticky", "bottom:0")
 
-# The block that GROWS to fill the column, per surface. Where the footer sits inside main the page
-# wraps its content so main has exactly two children and the wrapper takes the free space; where the
-# footer is already a sibling of main, main takes it. Either way the footer lands on the viewport's
-# bottom edge on a document shorter than the screen.
+# The block that GROWS to fill the column. The footer is a SIBLING of main on every surface, so main
+# is that block everywhere: it takes the free space and the footer lands on the viewport's bottom
+# edge on a document shorter than the screen. main also states a width, because a flex item with an
+# auto width and auto side margins shrinks to its content instead of stretching to the reading
+# measure.
 _GROWS = {
-    "404.html": (".pagebody", "flex:1 0 auto"),
-    "about.html": (".pagebody", "flex:1 0 auto"),
+    "404.html": ("main", "flex:1 0 auto"),
+    "about.html": ("main", "flex:1 0 auto"),
     "add-survey.html": ("main", "flex:1 0 auto"),
     "brand.html": ("main", "flex:1 0 auto"),
     "index.html": ("main", "flex:1"),
     "releases.html": ("main", "flex:1 0 auto"),
 }
-_ENGINE_GROWS = (".pagebody", "flex:1 0 auto")
+_ENGINE_GROWS = ("main", "flex:1 0 auto")
 
 # The opaque ground each surface paints under the footer. A sticky footer with a transparent
 # background shows the content sliding under it; these are each page's own body colour, so the
@@ -718,13 +720,35 @@ def test_every_surface_makes_the_page_a_full_height_column():
         assert "min-height:100vh" in body or re.search(r"(?m)^\s*html,body\{[^}]*height:100%", base), (
             f"{where}: the column must be at least a viewport tall, or a short page ends above the "
             f"screen's bottom edge and the footer with it: {body!r}")
-        grows = re.findall(rf"(?m)^\s*{re.escape(selector)}\{{([^}}]*)\}}", base)
+        rules = re.findall(rf"(?m)^\s*{re.escape(selector)}\{{([^}}]*)\}}", base)
+        grows = [r for r in rules if growth in r]
         assert len(grows) == 1, (
-            f"{where}: expected exactly one {selector} rule to take the column's free space, "
-            f"found {len(grows)}")
-        assert growth in grows[0], (
-            f"{where}: {selector} must declare {growth} so the free space above the footer is "
-            f"taken by content and not left under it: {grows[0]!r}")
+            f"{where}: exactly one {selector} rule must declare {growth}, so the free space above "
+            f"the footer is taken by content and not left under it; found {len(grows)} of "
+            f"{len(rules)}: {rules!r}")
+        assert "width:min(" in grows[0] or "display:flex" in grows[0], (
+            f"{where}: {selector} must state a width; as a flex item with auto side margins an "
+            f"auto width shrinks to the content instead of holding the reading measure: "
+            f"{grows[0]!r}")
+
+
+def test_the_footer_is_a_sibling_of_main_on_every_surface():
+    """THE FOOTER IS THE PAGE'S BOTTOM EDGE, not the reading column's. Inside main it is neither a
+    contentinfo landmark nor wide enough to hold the bold acknowledgement on one line: measured, the
+    sentence wants 813px and about.html's column is 780px, so a footer set in the column is two rows
+    where the Map's is one.
+
+    FAILS if any page moves its footer back inside main, which is where the two surfaces last
+    diverged on height."""
+    for name in _portal_pages():
+        text = (ROOT / name).read_text(encoding="utf-8")
+        body = text.split("<body", 1)[1]
+        assert body.index("</main>") < body.index("<footer"), (
+            f"{name}: the footer must follow </main>, not sit inside the reading column")
+    emitter = _pages_text()
+    shell = emitter.split("def _shell(", 1)[1]
+    assert shell.index('"</main>') < shell.index("_site_footer(build)"), (
+        "engine/extract/_pages.py: _shell must close main before it writes the footer")
 
 
 def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
@@ -754,15 +778,23 @@ def test_the_centre_line_is_bold_on_every_surface():
 
     FAILS if any surface's centre zone loses the weight, if it is written somewhere other than the
     zone rule, or if the anchor is given a weight of its own."""
+    portal_siblings = (r"(?m)^\s*footer\{([^}]*)\}", r"(?m)^\s*footer a\{([^}]*)\}",
+                       r"(?m)^\s*footer \.apilink\{([^}]*)\}",
+                       r"(?m)^\s*footer \.foot-right\{([^}]*)\}")
     surfaces = [(name, (ROOT / name).read_text(encoding="utf-8"),
-                 r"(?m)^\s*footer \.foot-main\{([^}]*)\}") for name in _portal_pages()]
-    surfaces.append(("engine/extract/_pages.py", _pages_text(), r"(?m)^\s*\.fcenter\{([^}]*)\}"))
-    for where, text, pattern in surfaces:
+                 r"(?m)^\s*footer \.foot-main\{([^}]*)\}", portal_siblings)
+                for name in _portal_pages()]
+    surfaces.append(("engine/extract/_pages.py", _pages_text(), r"(?m)^\s*\.fcenter\{([^}]*)\}",
+                     (r"(?m)^\s*footer\{([^}]*)\}", r"(?m)^\s*\.fleft\{([^}]*)\}",
+                      r"(?m)^\s*\.fright\{([^}]*)\}")))
+    for where, text, pattern, siblings in surfaces:
         base = _outside_queries(text)
         rules = re.findall(pattern, base)
         assert len(rules) == 1, f"{where}: expected exactly one centre zone rule, found {len(rules)}"
         assert _CENTRE_WEIGHT in rules[0], (
             f"{where}: the centre zone must declare {_CENTRE_WEIGHT}: {rules[0]!r}")
-        assert base.count(_CENTRE_WEIGHT) == 1, (
-            f"{where}: the weight is one declaration on the zone; a second one is a second place "
-            f"for the two surfaces to drift")
+        for sibling in siblings:
+            for rule in re.findall(sibling, base):
+                assert "font-weight" not in rule, (
+                    f"{where}: the weight belongs to the centre zone alone; a second declaration "
+                    f"in {sibling!r} is a second place for the surfaces to drift: {rule!r}")

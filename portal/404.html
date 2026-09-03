@@ -6,8 +6,8 @@
 <meta name="robots" content="noindex">
 <title>Page not found - AusMT</title>
 <style>
-  body{margin:0;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
-  main{max-width:760px;margin:0 auto;padding:4rem 1.25rem 3rem}
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:#11182D;color:#C9D4E8;font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+  main{max-width:760px;width:min(100% - 2.5rem,760px);margin:0 auto;padding:4rem 1.25rem 0;flex:1 0 auto}
   a{color:#EF7256}
   h1{color:#fff;font-size:1.7rem;margin:.2rem 0 .6rem}
   .crumb{font-size:.85rem;opacity:.8}
@@ -29,18 +29,20 @@
      The lockup's width follows its height, so the committed file's own 1919px raster never reaches
      the page. max-width caps it at its zone in the stacked state; object-fit keeps the mark's
      proportions wherever the cap bites. */
-  footer{margin-top:2.2rem;font-size:.8rem;color:#8FA3B0;border-top:1px solid #2B3557;padding-top:.7rem;
-    display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1.2rem;container-type:inline-size}
+  footer{margin-top:2.2rem;font-size:.8rem;color:#8FA3B0;border-top:1px solid #2B3557;padding:.7rem 1.25rem 0;
+    display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1.2rem;container-type:inline-size;
+    position:sticky;bottom:0;background:#11182D;z-index:3}
   footer a{color:#EF7256;text-decoration:none}
   .apilink{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:#8FA3B0;text-decoration:none}
   .apilink:hover{color:#EF7256}
   footer .apilink{flex:0 0 auto}
-  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
+  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0;font-weight:700}
   footer .foot-right{flex:1 0 auto;text-align:right}
   footer .orglogo{display:inline-block;line-height:0}
   footer .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
-  @container (max-width:1280px){footer .foot-main{order:1;flex:1 1 100%}}
+  @container (max-width:1330px){footer .foot-main{order:1;flex:1 1 100%}}
   @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
+  @media (max-width:560px){footer{position:static}}
 </style>
 </head>
 <body>
@@ -54,6 +56,7 @@ the <a href="/surveys">survey index</a>.</p>
 <!-- Caddy rewrites ANY unmatched path to this document, so every link here is root-absolute: a
      relative one would resolve against the address that was not found. Nothing in this footer needs
      script, which is what makes the identical footer on every surface reachable from here too. -->
+</main>
 <footer>
   <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
   <a class="apilink" href="/data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a>
@@ -65,6 +68,5 @@ the <a href="/surveys">survey index</a>.</p>
        the organisation's own host. -->
   <span class="foot-right"><a class="orglogo" href="https://www.auscope.org.au" rel="noopener"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></span>
 </footer>
-</main>
 </body>
 </html>

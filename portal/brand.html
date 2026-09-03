@@ -32,7 +32,7 @@
     --preview-light:#FFFFFF;
   }
   *{box-sizing:border-box}
-  body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6}
+  body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6;min-height:100vh;display:flex;flex-direction:column}
   a{color:var(--copper)}
   /* Uniform chrome: the three-zone header with the C9 zero-basis sides, so the tab group sits at the
      same x here as on every other surface. */
@@ -57,7 +57,7 @@
   .counts b{color:var(--text)}
   @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
 
-  main{max-width:900px;margin:0 auto;padding:30px 20px 80px}
+  main{max-width:900px;width:min(100%,900px);margin:0 auto;padding:30px 20px 80px;flex:1 0 auto}
   h1{font-size:1.8rem;margin:.2rem 0 .4rem}
   h2{font-size:1.15rem;margin:2.2rem 0 .3rem}
   .sub{color:var(--muted);max-width:66ch;margin:.2rem 0 1.4rem}
@@ -114,19 +114,30 @@
 
      The lockup's width follows its height, so the committed file's own 1919px raster never reaches
      the page. max-width caps it at its zone in the stacked state; object-fit keeps the mark's
-     proportions wherever the cap bites. */
-  footer{border-top:1px solid var(--line);margin-top:3rem;padding:14px 20px;color:var(--muted);
-    font-size:12.5px;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem 1rem;container-type:inline-size}
+     proportions wherever the cap bites.
+
+     THE VERTICAL METRICS ARE THE ONES THE OTHER PAGES CARRY. This page had set its own padding
+     and row gap, which left its footer 89.39px against 70.64px to 75.00px everywhere else at the
+     same viewport; the rule below is now index.html's and add-survey.html's, character for
+     character, so a reader meets one footer of one height wherever they are.
+
+     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll: sticky, so it
+     keeps its own box in flow and never hides the last line of the page, over an opaque ground
+     because content passes beneath it. A sticky box is never pushed DOWN from where it sits in
+     flow, so the page is a column and main takes its free space. Below 560px of viewport the
+     footer is three rows and would sit over most of a phone screen, so it returns to flow. */
+  footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none}
   .apilink:hover{color:var(--copper)}
   footer .apilink{flex:0 0 auto}
-  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
+  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0;font-weight:700}
   footer .foot-right{flex:1 0 auto;text-align:right}
   footer .orglogo{display:inline-block;line-height:0}
   footer .orglogo img{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
-  @container (max-width:1280px){footer .foot-main{order:1;flex:1 1 100%}}
+  @container (max-width:1330px){footer .foot-main{order:1;flex:1 1 100%}}
   @container (max-width:520px){footer .apilink,footer .foot-main,footer .foot-right{order:0;flex:1 1 100%;text-align:left}}
+  @media (max-width:560px){footer{position:static}}
 </style>
 </head>
 <body>

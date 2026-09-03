@@ -883,11 +883,12 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and that is the point of them. main
     is 840px on an entity page, 920px on a hub and 1120px above 1180px of viewport, so a viewport
     number answers the question wrongly on two page kinds out of three: measured in Chrome, an
-    entity page at a 1000px viewport gives the footer 840px, the three regions want 1200px, and a
+    entity page at a 1000px viewport gives the footer the page's width, the three regions want
+    1249px of it, and a
     760px viewport rule leaves the right region alone on a second row with the acknowledgement
     centred in what is left beside the machine-readable link, 135px off the footer's axis.
 
-    Below 1230px of footer the centre therefore takes a row of its own UNDER the two side regions,
+    Below 1280px of footer the centre therefore takes a row of its own UNDER the two side regions,
     where it spans the footer and is centred on its axis. Below 500px the side phrases no longer
     share a row either, so every region takes one and aligns left, which is the 375px stack.
 
@@ -913,9 +914,9 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
         for decl in decls:
             assert decl in m.group(1), f"{zone} must declare {decl}, got {m.group(1)!r}"
 
-    centre_row = css.find("@container (max-width:1230px){.fcenter{order:1;flex:1 1 100%}}")
+    centre_row = css.find("@container (max-width:1280px){.fcenter{order:1;flex:1 1 100%}}")
     assert centre_row > 0, (
-        "below 1230px of footer the centre must take a full row of its own, or it is centred in the "
+        "below 1280px of footer the centre must take a full row of its own, or it is centred in the "
         "space left over beside the machine-readable link instead of on the footer's axis")
     stack = css.find("@container (max-width:500px){.fzone{order:0;flex:1 1 100%;text-align:left}}")
     assert stack > centre_row, (
@@ -1235,17 +1236,18 @@ def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         css = page.split("<style>", 1)[1].split("</style>", 1)[0]
-        assert '<div class="pagebody">' in page and page.index('<div class="pagebody">') < \
-            page.index("<footer>"), \
-            f"{rel}: the page's content must sit in the growing block ABOVE the footer"
+        assert page.index("</main>") < page.index("<footer>"), \
+            f"{rel}: the footer is the page's bottom edge and follows </main>; inside the reading "\
+            f"column it is neither a contentinfo landmark nor wide enough for the bold centre line"
         body = re.search(r"(?m)^\s*body\{([^}]*)\}", css)
         assert body, f"{rel}: no body rule"
         for decl in ("min-height:100vh", "display:flex", "flex-direction:column"):
             assert decl in body.group(1), \
                 f"{rel}: the page must be a viewport-tall column, missing {decl}: {body.group(1)!r}"
-        grow = re.search(r"(?m)^\s*\.pagebody\{([^}]*)\}", css)
-        assert grow and "flex:1 0 auto" in grow.group(1), \
-            f"{rel}: the block above the footer must take the column's free space"
+        grows = [r for r in re.findall(r"(?m)^\s*main\{([^}]*)\}", css) if "flex:1 0 auto" in r]
+        assert len(grows) == 1 and "width:min(" in grows[0], \
+            f"{rel}: exactly one main rule must take the column's free space and state its width; "\
+            f"a flex item with auto side margins and an auto width shrinks to its content: {grows!r}"
         foot = re.search(r"(?m)^\s*footer\{([^}]*)\}", css)
         assert foot, f"{rel}: no footer rule"
         for decl in ("position:sticky", "bottom:0", "background:#11182D"):
