@@ -342,10 +342,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro lets the driver
   // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
   "introSeen,maybeShowIntro,tourStep:()=>_tourStep,tourStepCount:()=>TOUR_STEPS.length," +
-  // The deck's resolved demo subjects. Every step that would otherwise name a survey, a station or a
-  // collection resolves one from the corpus that is actually loaded, so these are what the pins compare
-  // the rendered copy and the opened subjects against, never a literal.
-  "tourDemoSurvey:()=>_tourDemoSurvey(),tourDemoCollection:()=>_tourDemoCollection()," +
+  // The deck's resolved demo subjects. Every step that would otherwise name a survey or a station
+  // resolves one from the corpus that is actually loaded, so these are what the pins compare the
+  // rendered copy and the opened subjects against, never a literal.
+  "tourDemoSurvey:()=>_tourDemoSurvey()," +
   "tourDemoStation:()=>_tourDemoStation(),startTour,stopTour," +
   // The selection demo. tourDemoBounds is the padded rectangle the demo draws and tourRectMembers its
   // membership, so a pin can state the expected selection from the geometry instead of a literal;
@@ -353,9 +353,8 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // which is what an interrupt has to leave empty.
   "tourDemoBounds:()=>_tourDemoBounds(),tourRectMembers:(b)=>_tourRectMembers(b)," +
   "tourAnimPending:()=>_tourAnimPending()," +
-  // Whether the current step spotlights a GIVEN element. The two card steps resolve their target from
-  // the corpus (one card among many), so a pin has to compare the element itself, not a selector.
-  "tourTargetIs:(el)=>_tourTarget(TOUR_STEPS[_tourStep])===el," +
+  // The element the current step spotlights, so a walk can assert the target actually resolves to
+  // something on screen rather than trusting the selector string.
   "tourTargetEl:()=>_tourTarget(TOUR_STEPS[_tourStep])," +
   "tourStepText:(i)=>_tourText(TOUR_STEPS[i]),tourStepSel:(i)=>TOUR_STEPS[i].sel," +
   // Settle-until-stable re-layout (owner 2026-07-22): the drawer step opens a target that keeps reflowing
@@ -1560,11 +1559,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // position must be IDENTICAL (the map steps included) — the overlap-nudge is the ONLY documented exception,
   // and under jsdom's zero rects no target overlaps, so all of them land on the pure viewport centre. This
   // guards the "same position on every step" contract (the map steps must match the rest).
-  // MOVED with the deck revision (LANE-CONTRACT-TOUR-REVISION.md T4, "every 'of 11' -> 'of 16'" and
-  // "ArrowRight x10 reaches the last step -> x15"): the walk length is now READ FROM THE DECK, so a future
-  // deck change moves this pin by construction instead of leaving a stale literal to chase.
+  // The walk length is READ FROM THE DECK, so a deck change moves this pin by construction instead of
+  // leaving a stale literal to chase; the length itself is pinned once, here, against the shipped deck.
   const _nSteps = A.tourStepCount();
-  ok(_nSteps === 16, "deck: the tour must carry 16 steps, got " + _nSteps);
+  ok(_nSteps === 13, "deck: the tour must carry 13 steps, got " + _nSteps);
   const _posSeen = [];
   for (let _s = 0; _s < _nSteps; _s++) {
     const _c = doc.getElementById("tourCard");
@@ -1768,11 +1766,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // THE WORKSPACE, READ AS FIELDS. Every field a tour step can change, in one shape, so a leak is reported
   // as the field that moved rather than as one assertion at a time. Shared by the close-from-every-step
   // matrix (H5) and the forward/backward walks (H10).
+  const _layoutNow = () => (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout;
   const _tourSnapRead = () => ({
     view: A.curView(),
     mode: A.sidebarMode(),
     collapsed: doc.querySelector("aside.filters").classList.contains("collapsed"),
-    layout: (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout,
+    layout: _layoutNow(),
     adv: doc.getElementById("advSearch").open,
     drawerOpen: doc.getElementById("drawer").classList.contains("open"),
     drawerSubject: JSON.stringify(A.drawerSubject()),
@@ -2011,87 +2010,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "download split: the two download steps must point at one wrapper each, got " +
     JSON.stringify([A.tourStepSel(8), A.tourStepSel(9)]));
 
-  // H8. THE SURVEYS GROUP (LANE-CONTRACT-TOUR-REVISION.md T1 steps 11-13, T2). Two things the tour could
-  // not previously guarantee. The card step's copy is about a CARD, so the grid must be showing cards: a
-  // visitor who chose the compact list saw a step describing something that was not on screen. And the
-  // step after it opens the survey's own record, because "open it for the full record" was an instruction
-  // the tour never carried out. Both belong to the GROUP: the forced layout is established on entering it
-  // and the visitor's own choice is restored only when the walk leaves it, never on a move inside.
-  const _layoutNow = () => (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout;
-  doc.querySelector('#layoutSeg [data-layout="compact"]').click();
-  ok(_layoutNow() === "compact", "surveys group setup: the visitor's layout must start as the compact list");
-  _stepTo(11);
-  ok(A.tourStep() === 11, "surveys group: could not reach the card step, at " + A.tourStep());
-  ok(A.curView() === "surveys", "surveys group: the card step must show the Surveys view, on " + A.curView());
-  ok(_layoutNow() === "cards",
-    "surveys group: the card step must force the Cards layout; its copy is about a card, on " + _layoutNow());
-  const _demoCard = [...doc.querySelectorAll("#cardGrid .scard")]
-    .find(c => { const b = c.querySelector("[data-survey]"); return b && b.dataset.survey === A.tourDemoSurvey(); });
-  ok(_demoCard, "surveys group: the demo survey must have a card in the grid");
-  ok(A.tourTargetIs(_demoCard),
-    "surveys group: the card step must spotlight the DEMO survey's card, not whichever card happens to be first");
-  _arrow("ArrowRight");
-  ok(A.tourStep() === 12, "surveys group: could not reach the story step, at " + A.tourStep());
-  ok(doc.getElementById("drawer").classList.contains("open"),
-    "surveys group: the story step must actually open the survey's record");
-  ok(JSON.stringify(A.drawerSubject()) === JSON.stringify({ kind: "survey", sv: A.tourDemoSurvey() }),
-    "surveys group: the story step must open the DEMO survey's record, got " + JSON.stringify(A.drawerSubject()));
-  ok(_layoutNow() === "cards", "surveys group: a move inside the group must not restore the visitor's layout");
-  _arrow("ArrowLeft");
-  ok(A.tourStep() === 11 && !doc.getElementById("drawer").classList.contains("open"),
-    "surveys group: stepping BACK off the story step must close the record it opened");
-  ok(_layoutNow() === "cards", "surveys group: stepping back inside the group must not restore the layout either");
-  _arrow("ArrowRight"); _arrow("ArrowRight");
-  ok(A.tourStep() === 13, "surveys group: could not step forward out of the group, at " + A.tourStep());
-  ok(!doc.getElementById("drawer").classList.contains("open"),
-    "surveys group: leaving the story step FORWARD must close the record it opened");
-  ok(_layoutNow() === "compact",
-    "surveys group: leaving the group must restore the visitor's own layout, on " + _layoutNow());
-  _arrow("Escape");
-  ok(_layoutNow() === "compact", "surveys group: closing the tour must leave the visitor's layout alone");
-  doc.querySelector('#layoutSeg [data-layout="cards"]').click();   // hand the world back to the sections below
-
-  // H9. THE COLLECTIONS STEP (LANE-CONTRACT-TOUR-REVISION.md T1 step 14, T2). Collections are a first-class
-  // way into the corpus and the tour never mentioned them, so a reader learnt the tree and the surveys grid
-  // and never saw that related surveys are gathered. The step shows the collections view with the resolved
-  // collection's own card spotlit and its name in the copy. The step OWNS that view: leaving it in either
-  // direction drops it, so the nav step after it needs no view change of its own and the reader is back on
-  // the map where its copy says they are.
-  _stepTo(13);
-  ok(A.tourStep() === 13, "collections: could not reach the collections step, at " + A.tourStep());
-  ok(A.curView() === "collections", "collections: the step must show the Collections view, on " + A.curView());
-  const _cid = A.tourDemoCollection();
-  ok(_cid === "auslamp",
-    "collections: the fixture carries one collection, so that is what must resolve, got " + JSON.stringify(_cid));
-  const _collCard = [...doc.querySelectorAll("#collectionsGrid .scard")]
-    .find(c => { const h = c.querySelector("[data-coll]"); return h && h.dataset.coll === _cid; });
-  ok(_collCard, "collections: the resolved collection must have a card in the grid");
-  ok(A.tourTargetIs(_collCard),
-    "collections: the step must spotlight the RESOLVED collection's card, not whichever card is first");
-  const _collCopy = doc.getElementById("tourText").textContent;
-  ok(_collCopy.indexOf("AusLAMP") >= 0,
-    "collections: the copy must name the resolved collection, got " + JSON.stringify(_collCopy));
-  ok(_collCopy.indexOf("{") < 0,
-    "collections: no placeholder may survive into the rendered copy, got " + JSON.stringify(_collCopy));
-  _arrow("ArrowRight");
-  ok(A.tourStep() === 14 && A.curView() === "map",
-    "collections: leaving the step FORWARD must drop the collections view, on " + A.curView());
-  _arrow("ArrowLeft");
-  ok(A.tourStep() === 13 && A.curView() === "collections",
-    "collections: stepping BACK must re-establish the view, on " + A.curView());
-  _arrow("ArrowLeft");
-  ok(A.tourStep() === 12 && A.curView() === "surveys",
-    "collections: stepping BACK past the step must land on the view the story step establishes, on " + A.curView());
-  _arrow("Escape");
-  ok(A.tourStep() === -1, "collections: could not close the tour after the collections checks");
-
-  // H10. THE WALK, BOTH DIRECTIONS (LANE-CONTRACT-TOUR-REVISION.md T2/T4). Every step's enter() has to
-  // establish its COMPLETE state from either direction, which is a claim about the whole deck and cannot be
-  // checked one step at a time: the failures it exists to catch are the ones where a step is only correct
-  // because of what the PREVIOUS step happened to leave behind. So the deck is walked forward 1 to 16 and
-  // backward 16 to 1, and at every arrival, in both directions, the same predicates are checked against the
-  // same table: the view, the rail mode, the drawer's subject and tab, the selection, the card layout, and
-  // that the step's own target resolves to something on screen.
+  // H10. THE WALK, BOTH DIRECTIONS. Every step's enter() has to establish its COMPLETE state from either
+  // direction, which is a claim about the whole deck and cannot be checked one step at a time: the failures
+  // it exists to catch are the ones where a step is only correct because of what the PREVIOUS step happened
+  // to leave behind. So the whole deck is walked forward and then backward, its length read from the deck
+  // itself, and at every arrival, in both directions, the same predicates are checked against the same
+  // table: the view, the rail mode, the drawer's subject and tab, the selection, the card layout, and that
+  // the step's own target resolves to something on screen.
   //
   // jsdom has no layout engine, so "the target has a non-zero rect" is checked here as "the target resolves
   // and nothing between it and the body is hidden" - which is the CAUSE of a zero rect for every step in
@@ -2122,13 +2047,16 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // the filters"), so it creates no demo: arriving forward there is nothing selected yet. Arriving
   // backward the group still owns the demo the next step made, and clearing it here would be a group
   // teardown performed inside the group, which is exactly what the group discipline exists to prevent.
+  // The map view and the visitor's card layout are CONSTANTS across the whole walk, and that is the point:
+  // the two nav steps spotlight the Surveys and Collections buttons without pressing them, so no step of
+  // the deck navigates and no step touches the Surveys grid's layout control.
   const _expect = (i, dir) => ({
-    view: i === 13 ? "collections" : ((i === 11 || i === 12) ? "surveys" : "map"),
+    view: "map",
     mode: (i >= 1 && i <= 3) ? "browse" : ((i >= 6 && i <= 9) ? "select" : _walkBase.mode),
-    drawer: (i === 4 || i === 5) ? "station" : (i === 12 ? "survey" : "closed"),
+    drawer: (i === 4 || i === 5) ? "station" : "closed",
     tab: i === 5 ? "files" : (i === 4 ? "response" : null),
     selected: (i >= 7 && i <= 9) ? _walkSel : (i === 6 ? (dir === "back" ? _walkSel : 0) : 0),
-    layout: (i >= 10 && i <= 12) ? "cards" : _walkBase.layout,
+    layout: _walkBase.layout,
   });
   const _checkStep = (i, dir) => {
     const e = _expect(i, dir), at = "walk/" + dir + " step " + i;
@@ -2139,8 +2067,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     if (e.drawer === "closed") {
       ok(!open, at + ": the drawer must be closed, subject " + JSON.stringify(A.drawerSubject()));
     } else {
-      const want = e.drawer === "station"
-        ? { kind: "station", i: A.stIndex("A1") } : { kind: "survey", sv: A.tourDemoSurvey() };
+      const want = { kind: "station", i: A.stIndex("A1") };
       ok(open, at + ": the drawer must be open on the " + e.drawer);
       ok(JSON.stringify(A.drawerSubject()) === JSON.stringify(want),
         at + ": drawer subject must be " + JSON.stringify(want) + ", got " + JSON.stringify(A.drawerSubject()));
@@ -2156,7 +2083,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       at + ": no placeholder may survive into the rendered copy, got " + doc.getElementById("tourText").textContent);
   };
   const _last = A.tourStepCount() - 1;
-  // FORWARD 1 to 16.
+  // FORWARD, first step to last.
   doc.getElementById("welcomeTour").click();
   for (let i = 0; i <= _last; i++) { _checkStep(i, "fwd"); if (i < _last) _arrow("ArrowRight"); }
   ok(doc.getElementById("tourNext").textContent === "Done", "walk/fwd: the last step's advance control must read Done");
@@ -2165,7 +2092,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(_tourSnapDiff(_walkBase, _tourSnapRead()).length === 0,
     "walk/fwd: closing after the forward walk did not restore the baseline: " +
     _tourSnapDiff(_walkBase, _tourSnapRead()).join("; "));
-  // BACKWARD 16 to 1. The same table, so a step that is only correct arriving forward fails here.
+  // BACKWARD, last step to first. The same table, so a step that is only correct arriving forward
+  // fails here.
   doc.getElementById("welcomeTour").click();
   for (let k = 0; k < _last; k++) _arrow("ArrowRight");
   for (let i = _last; i >= 0; i--) { _checkStep(i, "back"); if (i > 0) _arrow("ArrowLeft"); }

@@ -12,11 +12,12 @@
 //   * Every step's enter() establishes its COMPLETE state from either direction and is idempotent:
 //     entering a step twice is a no-op the second time. Backward navigation is therefore correct by
 //     construction rather than by a per-step undo.
+//   * The map is the tour's whole subject. No step leaves the map view: the Surveys and Collections navs
+//     are spotlighted where they sit and never clicked, so the tour has no view of its own to undo and a
+//     reader is never carried somewhere the copy did not say they were going.
 //   * Shared state belongs to a GROUP of steps, not to one step: the group's cleanup runs when the walk
-//     crosses the group boundary, never on a move inside it. There are four: the BROWSE steps own the
-//     rail's browse mode, the SELECT steps own the select mode and the demo rectangle and selection, the
-//     SURVEYS steps own the forced Cards layout and the survey record, and the collections step owns the
-//     collections view.
+//     crosses the group boundary, never on a move inside it. There are two: the BROWSE steps own the
+//     rail's browse mode, and the SELECT steps own the select mode and the demo rectangle and selection.
 //   * stopTour() from ANY step restores the visitor's pre-tour snapshot. Nothing the tour did leaks.
 //   * The step counter is computed from the deck. No step count is ever written as a literal.
 
@@ -24,15 +25,14 @@
 // make the selection demo read. Both are preferences, not requirements: _tourDemoSurvey degrades to the
 // largest positioned survey and then to nothing, because a corpus without the preferred survey (the test
 // fixture, an empty portal, any future corpus) must still walk.
-const TOUR_DEMO_SLUG="vulcan-2022",TOUR_DEMO_MIN=5,TOUR_DEMO_COLLECTION="australia-legacy-gds";
+const TOUR_DEMO_SLUG="vulcan-2022",TOUR_DEMO_MIN=5;
 // The station id the drawer steps prefer within the demo survey. A preference, not a requirement: a
 // survey without it opens on its first positioned station instead.
 const TOUR_DEMO_STATION="A1";
 
-// The deck. `sel` is a static selector so it can be pinned; a step may add `el`, a resolver returning the
-// live element to spotlight (used where the target is one card among many), which falls back to `sel`.
-// `text` is the copy verbatim; {survey}, {n} and {collection} are resolved at render from the loaded
-// corpus, never written into the source.
+// The deck. `sel` is a static selector, so it can be pinned and so a step spotlights the same element
+// whichever way the walk arrives at it. `text` is the copy verbatim; {survey} and {n} are resolved at
+// render from the loaded corpus, never written into the source.
 const TOUR_STEPS=[
   {sel:"#map",
    text:"Every dot is an MT station. Click one to see its transfer function.",
@@ -65,19 +65,11 @@ const TOUR_STEPS=[
    text:"Time series at NCI: download lists by level, handed off through an AusMT redirect. Metadata and citations follow below.",
    enter:_tourEnterSelectDownload},
   {sel:"#navSurveys",
-   text:"Surveys lists every survey. Let's look.",
-   enter:_tourEnterSurveysNav},
-  {sel:"#cardGrid .scard",el:_tourSurveyCard,
-   text:"Each card is a survey at a glance. Switch to Compact for a denser list.",
-   enter:_tourEnterSurveyCards},
-  {sel:"#drawer",
-   text:"Open a survey for its full record: abstract, stations, downloads and citation. View survey leads to its shareable page.",
-   enter:_tourEnterSurveyStory,exit:_tourExitSurveyStory},
-  {sel:"#collectionsGrid .scard",el:_tourCollectionCard,
-   text:"Collections gather related surveys: {collection} here. Open one to explore its members on the map.",
-   enter:_tourEnterCollections},
-  {sel:"#navMap",
-   text:"Map brings you back to the stations."},
+   text:"Surveys: every survey with its coverage, years, periods, licence and downloads, as cards or a compact list.",
+   enter:_tourEnterMapView},
+  {sel:"#navCollections",
+   text:"Collections: related surveys grouped, such as AusLAMP and the Australia legacy GDS, each with its combined coverage.",
+   enter:_tourEnterMapView},
   {sel:"#map",
    text:"That's it: find, screen, select, download, cite. Contribute your own survey from Contribute a survey.",
    enter:_tourEnterFinal}
@@ -89,12 +81,6 @@ const TOUR_STEPS=[
 // it would tear the shared state down on every move inside the group and rebuild it on the next arrival.
 const _TOUR_SELECT_GROUP=[6,7,8,9];
 function _tourInSelectGroup(i){return _TOUR_SELECT_GROUP.indexOf(i)>=0;}
-// The SURVEYS group, on the same terms: it owns the forced Cards layout and the survey record the story
-// step opens.
-const _TOUR_SURVEYS_GROUP=[10,11,12];
-function _tourInSurveysGroup(i){return _TOUR_SURVEYS_GROUP.indexOf(i)>=0;}
-// The collections step is a group of one: it owns the collections view.
-const _TOUR_COLLECTIONS_STEP=13;
 
 // Overlay dim. Single source of truth, applied inline by _tourLayout: on a targeted step it colours the
 // spot's box-shadow (the backdrop stays transparent so the cutout shows the element fully); on a
@@ -143,19 +129,6 @@ function _tourDemoStation(){
   if(typeof visible!=="undefined"&&visible.length)_tourDemoIdx=visible[0].i;
   return _tourDemoIdx;
 }
-// The collection the collections step names: the preferred id when the corpus carries it, else the first
-// collection in the order renderCollections lays the grid out in, so the copy names the card on screen.
-function _tourDemoCollection(){
-  const coll=(typeof COLL!=="undefined"&&COLL)||null;
-  if(!coll)return null;
-  if(coll[TOUR_DEMO_COLLECTION])return TOUR_DEMO_COLLECTION;
-  const ids=Object.keys(coll).sort();
-  return ids.length?ids[0]:null;
-}
-function _tourCollectionName(cid){
-  const c=(typeof COLL!=="undefined"&&COLL&&COLL[cid])||null;
-  return (c&&c.title)||cid||"";
-}
 // The count the selection-demo copy prints: whatever the demo rectangle actually took. Never a literal.
 // Once the demo has been applied that is the live selection. BEFORE it is applied the rectangle's bounds
 // are already known, and its membership is the same number the apply will produce, so the copy states it
@@ -171,13 +144,10 @@ function _tourText(step){
   let t=step.text;
   if(t.indexOf("{survey}")>=0)t=t.split("{survey}").join(_tourDemoSurvey()||"a survey");
   if(t.indexOf("{n}")>=0)t=t.split("{n}").join(String(_tourDemoCount()));
-  if(t.indexOf("{collection}")>=0)t=t.split("{collection}").join(_tourCollectionName(_tourDemoCollection()));
   return t;
 }
-// The element a step spotlights: its own resolver when it has one and it finds something, else its
-// static selector. Both may come back null, which is the centred no-spotlight state.
+// The element a step spotlights. May be null, which is the centred no-spotlight state.
 function _tourTarget(step){
-  if(step&&typeof step.el==="function"){const e=step.el();if(e)return e;}
   return (step&&step.sel)?document.querySelector(step.sel):null;
 }
 
@@ -194,12 +164,12 @@ function _tourCloseOwnDrawer(){
   _tourOpened.drawer=false;
   if(typeof closeDrawer==="function")closeDrawer();
 }
-// Map-view steps. Forward the view switch is a no-op; its real job is BACKWARD navigation from the
-// Surveys and Collections steps, where map-only targets would otherwise be display:none and the step
-// would fall back to a centred card. The drawer close is the same job in the other axis: stepping back
-// from the drawer steps must leave the map these steps are describing unobstructed, and a step that only
-// looked right because the previous step happened to leave the drawer shut is exactly the failure the
-// walk pins exist to catch.
+// Map-view steps. No step of the deck leaves the map, so the view switch has one job: a visitor who
+// started the tour from the Surveys or Collections view, where the map-only targets are display:none and
+// every step would fall back to a centred card. The drawer close is the same job in the other axis:
+// stepping back from the drawer steps must leave the map these steps are describing unobstructed, and a
+// step that only looked right because the previous step happened to leave the drawer shut is exactly the
+// failure the walk pins exist to catch.
 function _tourEnterMapView(){
   _tourMapView();
   _tourCloseOwnDrawer();
@@ -225,84 +195,6 @@ function _tourEnterFilters(){
   _tourEnterMapView();
   _tourEnterBrowseMode();
   const adv=document.getElementById("advSearch");if(adv)adv.open=true;
-}
-function _tourEnterSurveysView(){
-  if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
-}
-// The surveys group's shared state: the forced Cards layout and the survey record the story step opens.
-// The card step's copy is about a CARD, so a visitor who chose the compact list would otherwise be shown a
-// step describing something that is not on screen. Their own choice is captured on entering the group and
-// restored only when the walk leaves it.
-let _tourSv={layout:null,story:false};
-function _tourEnterCards(){
-  if(_tourSv.layout===null)_tourSv.layout=_tourCardLayout();
-  _tourSetCardLayout("cards");
-}
-function _tourCloseStory(){
-  if(!_tourSv.story)return;
-  _tourSv.story=false;
-  if(typeof closeDrawer==="function")closeDrawer();
-}
-function _tourLeaveSurveysGroup(){
-  _tourCloseStory();
-  if(_tourSv.layout!==null){_tourSetCardLayout(_tourSv.layout);_tourSv.layout=null;}
-}
-// The demo survey's own card in the grid, so the step spotlights the survey the tour has been narrating
-// rather than whichever card happens to be first. Null falls back to the step's static selector.
-function _tourSurveyCard(){
-  const sv=_tourDemoSurvey();
-  if(!sv)return null;
-  const cards=[...document.querySelectorAll("#cardGrid .scard")];
-  return cards.find(c=>{const b=c.querySelector("[data-survey]");return b&&b.dataset.survey===sv;})||null;
-}
-// The nav step opens the surveys group, so it establishes the group's layout too: without that, arriving
-// back from the card step would leave the forced layout standing inside the group but the walk would read
-// as if the visitor's own choice had been restored early.
-function _tourEnterSurveysNav(){
-  _tourEnterMapView();
-  _tourEnterCards();
-}
-function _tourEnterSurveyCards(){
-  _tourEnterSurveysView();
-  _tourEnterCards();
-  _tourCloseStory();                    // arriving BACK from the story step leaves the grid on show
-  const card=_tourSurveyCard();
-  if(card&&typeof card.scrollIntoView==="function"){try{card.scrollIntoView({block:"center"});}catch(e){}}
-}
-// The story step opens the survey's own record, because "open it for the full record" was an instruction
-// the tour never carried out. Idempotent on the same subject, and closed on leaving in either direction.
-function _tourEnterSurveyStory(){
-  _tourEnterSurveysView();
-  _tourEnterCards();
-  const sv=_tourDemoSurvey();
-  if(!sv||typeof openSurvey!=="function")return;
-  const dr=document.getElementById("drawer");
-  const onSubject=!!(dr&&dr.classList.contains("open")&&typeof _drawerSubject!=="undefined"&&_drawerSubject&&
-                     _drawerSubject.kind==="survey"&&_drawerSubject.sv===sv);
-  if(!onSubject){
-    const prevHash=location.hash;
-    openSurvey(sv);
-    if(_tourOpened.hash===null&&prevHash!==location.hash)_tourOpened.hash=prevHash;
-  }
-  _tourSv.story=true;
-}
-function _tourExitSurveyStory(){_tourCloseStory();}
-// The collections step OWNS the collections view: it establishes it on arrival and drops it on leaving in
-// either direction, so the nav step after it needs no view change of its own and the step before it lands
-// on the view its own enter establishes.
-function _tourCollectionCard(){
-  const cid=_tourDemoCollection();
-  if(!cid)return null;
-  const cards=[...document.querySelectorAll("#collectionsGrid .scard")];
-  return cards.find(c=>{const h=c.querySelector("[data-coll]");return h&&h.dataset.coll===cid;})||null;
-}
-function _tourEnterCollections(){
-  if(typeof curView!=="undefined"&&curView!=="collections"&&typeof setView==="function")setView("collections");
-  const card=_tourCollectionCard();
-  if(card&&typeof card.scrollIntoView==="function"){try{card.scrollIntoView({block:"center"});}catch(e){}}
-}
-function _tourLeaveCollections(){
-  if(typeof curView!=="undefined"&&curView==="collections"&&typeof setView==="function")setView("map");
 }
 // The select group's shared state: the rail mode, the demo rectangle and the demo selection. The visitor's
 // own mode is captured ONCE on entering the group and restored when the walk leaves it, so a move inside
@@ -694,28 +586,15 @@ function _tourEnterFinal(){
   _tourMapView();
 }
 // ---- the pre-tour snapshot -------------------------------------------------------------------------
-// The tour navigates, opens drawers, switches rail modes, forces a card layout, draws a shape and makes a
-// selection. Undoing "only what the tour opened" cannot express that: it can restore a drawer and a hash,
-// but it has nothing to say about a selection a filter change silently dropped, a card layout a step
-// forced, or a map frame a fit moved. So the visitor's workspace is snapshotted ONCE at startTour and put
-// back whole on stop, from any step. The snapshot is the authority; the group teardowns below exist for
-// the boundaries the walk crosses while the tour is still running.
+// The tour navigates, opens drawers, switches rail modes, draws a shape and makes a selection. Undoing
+// "only what the tour opened" cannot express that: it can restore a drawer and a hash, but it has nothing
+// to say about a selection a filter change silently dropped or a map frame a fit moved. So the visitor's
+// workspace is snapshotted ONCE at startTour and put back whole on stop, from any step. The snapshot is
+// the authority; the group teardowns below exist for the boundaries the walk crosses while the tour is
+// still running.
 let _tourSnap=null;
 let _tourMapMoved=false;             // whether the tour itself moved the map frame
 
-// The card layout is read and written through the layout control itself, so the tour drives the same path
-// a visitor's click does and never has to mirror the module's own layout state.
-function _tourCardLayout(){
-  const seg=document.getElementById("layoutSeg");
-  const on=seg&&seg.querySelector?seg.querySelector("button.on"):null;
-  return (on&&on.dataset&&on.dataset.layout)||null;
-}
-function _tourSetCardLayout(mode){
-  if(!mode||_tourCardLayout()===mode)return;
-  const seg=document.getElementById("layoutSeg");
-  const b=seg&&seg.querySelector?seg.querySelector('[data-layout="'+mode+'"]'):null;
-  if(b&&b.click)b.click();
-}
 function _tourMapBounds(){
   try{if(typeof map!=="undefined"&&map.getBounds)return map.getBounds();}catch(e){}
   return null;
@@ -737,7 +616,6 @@ function _tourTakeSnapshot(){
     view:(typeof curView!=="undefined")?curView:null,
     mode:(typeof sidebarMode!=="undefined")?sidebarMode:null,
     collapsed:!!(sb&&sb.classList.contains("collapsed")),
-    layout:_tourCardLayout(),
     adv:!!(adv&&adv.open),
     drawerOpen:!!(dr&&dr.classList.contains("open")),
     drawerSubject:(typeof _drawerSubject!=="undefined"&&_drawerSubject)?_drawerSubject:null,
@@ -793,7 +671,6 @@ function _tourRestoreSnapshot(){
     selected=new Set(s.selected);
     if(typeof updateSel==="function")updateSel();
   }
-  _tourSetCardLayout(s.layout);
   // "collection" is a full-width detail page, not one of setView's three tab views; a visitor who was
   // reading one is returned to the map rather than to a view name setView cannot take.
   const wantView=(s.view==="map"||s.view==="surveys"||s.view==="collections")?s.view:"map";
@@ -1012,8 +889,6 @@ function _tourExitCurrent(){
 function _tourCrossGroups(from,to){
   if(_tourInBrowseGroup(from)&&!_tourInBrowseGroup(to))_tourLeaveBrowseGroup();
   if(_tourInSelectGroup(from)&&!_tourInSelectGroup(to))_tourLeaveSelectGroup();
-  if(_tourInSurveysGroup(from)&&!_tourInSurveysGroup(to))_tourLeaveSurveysGroup();
-  if(from===_TOUR_COLLECTIONS_STEP&&to!==_TOUR_COLLECTIONS_STEP)_tourLeaveCollections();
 }
 function _tourGo(to){
   const from=_tourStep;
@@ -1035,7 +910,7 @@ function startTour(){
   if(!TOUR_STEPS.length)return;
   _tourOpened={drawer:false,hash:null};
   _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;
-  _tourSel={mode:null,created:false,bounds:null,dimmed:false};_tourSv={layout:null,story:false};
+  _tourSel={mode:null,created:false,bounds:null,dimmed:false};
   _tourBrowse={mode:null};
   _tourDemoSv=undefined;_tourDemoIdx=undefined;   // resolve the demo subjects afresh against the loaded corpus
   _tourTakeSnapshot();                 // the workspace the visitor is handed back on close, from any step
