@@ -154,7 +154,7 @@
   @container (max-width:1421px){.fcenter{order:1;flex:1 1 100%}}
   @container (max-width:520px){.fzone{order:0;flex:1 1 100%;text-align:left}}
   @media (max-width:560px){footer{position:static}}
-  /* C13 direct-upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes. */
+  /* Direct upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes. */
   #gatewayBlock{display:none}
   #gatewayBlock.show{display:block}
   .keyrow{max-width:420px}
@@ -660,7 +660,7 @@ function parseEdi(text){
           hasFreq, hasSpectra, hasZ, hasT,
           nper, pmin, pmax, type:hasFreq?band(pmin,hasZ,hasT):(hasSpectra?band(pmin,true,hasT):"unknown")};
 }
-// ---------- DATAID-based packaging (task #16) ----------
+// ---------- DATAID-based packaging ----------
 // The pipeline keys a station off the EDI-INTERNAL DATAID (see engine/extract/_edi_catalog.parse_dataid
 // + build_portal.safe_component), NOT the on-disk filename. A submission whose files are named
 // LineNo__StationNo_1.edi (whose DATAIDs are ROX000 …) therefore packages under names that don't match
@@ -695,7 +695,7 @@ function safeEdiComponent(s, fallback){
 }
 // packagedEdiName: the zip entry / MANIFEST filename for an EDI, derived from its DATAID.
 function packagedEdiName(dataid){ return safeEdiComponent(dataid,"station")+".edi"; }
-// deriveDataId (softened DATAID gate, owner-ruled 2026-07-24): when an EDI carries NO DATAID in its >HEAD
+// deriveDataId: when an EDI carries NO DATAID in its >HEAD
 // block, the station id is auto-derived from the on-disk FILENAME (extension stripped, then run through
 // the SAME safe_component sanitiser the engine applies) rather than blocking the submission. The derived
 // id is flagged for curator review in the package; only a true post-sanitisation COLLISION still blocks.
@@ -711,7 +711,7 @@ function effectiveDataId(entry){
 }
 // ediNameGate: the SUBMISSION-time COLLISION guard (design: fail loud, no silent auto-suffixing). Input
 // is the EDI entries [{name, dataid}] in list order; output is a list of blocking error strings (empty
-// = clean). A missing DATAID is NO LONGER a hard error on its own, it auto-derives from the filename
+// = clean). A missing DATAID is not a hard error on its own, it auto-derives from the filename
 // (deriveDataId) and is flagged for curator review. The ONE remaining blocking failure is a real on-disk
 // collision: two files whose EFFECTIVE ids (real DATAID or filename-derived) map to the SAME packaged
 // name (compared on the SANITISED name, catching ids that differ only in characters the sanitiser folds).
@@ -779,7 +779,7 @@ function creditRowsEmit(list, roled){
     return out;
   });
 }
-// ---------- A3 (LANE-CONTRACT-FORM-CREDIT): the MTCAT 2.0 curated homes the plain-language tier-3
+// ---------- The MTCAT 2.0 curated homes the plain-language tier-3
 // questions write. Every vocabulary is a BAKED copy kept byte-in-step with the surveys validator
 // (validate_survey.ORG_ROLES_ORDERED / ACKNOWLEDGEMENT_TYPES / CITATION_TEXT_SOURCES) and with
 // gateway/editor_form.py, pinned by tests/add_survey_logic.test.js. Out-of-vocab values are DROPPED at
@@ -808,7 +808,7 @@ const CITATION_ID_NOTE="# CONTRIBUTOR: pasted as this dataset's citation identif
   "curator: designate via identity_classification.represents and citation.preferred_identifier";
 
 // organisationsEmit: the organisations[] rows to write. The essential Organisation ALWAYS seeds row 0 as
-// the marked custodian with primary_custodian: true (D4: the projection and the role statement cannot
+// the marked custodian with primary_custodian: true (the projection and the role statement cannot
 // disagree, and the marker keeps the mechanical seed distinguishable from a curated claim). A row naming
 // that same organisation MERGES its ticked roles into the seed rather than making a second row; every
 // other named row is appended. Roles are vocab-guarded and emitted in ORG_ROLES_ORDERED order. A publisher
@@ -917,7 +917,7 @@ function submitResultMessage(status, body){
 }
 // §3 wire contract form fields: submitter_name + submitter_email always; submitter_orcid ONLY when
 // non-empty (the field is OMITTED entirely when blank, per the gateway's ≤8-field parser + §4 PII
-// note). Email/ORCID ride as multipart fields into sqlite only, never into the package (C3).
+// note). Email/ORCID ride as multipart fields into sqlite only, never into the package.
 function submitFormFields(meta){
   const f={submitter_name:(meta&&meta.uploader_name)||"", submitter_email:(meta&&meta.uploader_email)||""};
   const orcid=(meta&&meta.uploader_orcid||"").trim();
@@ -926,8 +926,8 @@ function submitFormFields(meta){
 }
 function isSemver(s){ return /^\d+\.\d+\.\d+$/.test(String(s||"").trim()); }
 // slugValid MIRRORS the AUTHORITATIVE slug rule in the vendored validator -
-// gateway/tests/fixtures/vendored_validation/validate_survey.py:331
-//   re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", str(slug_val))
+// gateway/tests/fixtures/vendored_validation/validate_survey.py:331, which admits lower-case
+// alphanumerics in hyphen-separated groups and nothing else.
 // The slug becomes au.<slug>.<station> in every id/URL, so anything outside [a-z0-9-] (uppercase,
 // spaces, underscores, dots, slashes, leading/trailing hyphens) is silently rewritten by the pipeline's
 // safe_component() and forks the survey identity, a server-side hard FAIL. Mirroring it here catches
@@ -937,8 +937,8 @@ function isSemver(s){ return /^\d+\.\d+\.\d+$/.test(String(s||"").trim()); }
 // publication and then breaks the station-MTH5 tier HOURS later, at build time: the producer passes
 // the slug through verbatim as the MTH5 survey id (build_portal.py, normalize(survey_id=slug)), the
 // HDF5 survey group name comes back TRUNCATED AT 45 CHARACTERS, and the round-trip gate then cannot
-// find the group it just wrote, so it withholds every station .h5 in the survey. Observed live
-// 2026-08-11 on a 54-character slug: the gate reported the group as slug[:45], exactly.
+// find the group it just wrote, so it withholds every station .h5 in the survey. Observed on a
+// 54-character slug: the gate reported the group as slug[:45], exactly.
 // 40 is the cap with margin under that 45, and every survey in the corpus at the time was 9-30.
 // Enforced HERE (blocking, via validateSurvey) and derived-to-fit in deriveSlug, so the form cannot
 // mint one; the server-side validator carries the matching check for hand-edited packages.
@@ -948,7 +948,7 @@ function slugValid(s){ const v=String(s==null?"":s).trim();
 // deriveSlug: the project name -> the auto folder name shown in the slug chip. Capped at SLUG_MAX so
 // the AUTO value is always submittable - a long project name ("AusLAMP EFTF Phase 1 - Northern
 // Territory and Queensland (Geoscience Australia)") otherwise derives a 54-character slug that passes
-// every gate and then withholds every station MTH5 at build time, which is the live 2026-08-11 case
+// every gate and then withholds every station MTH5 at build time, which is the case
 // this cap exists to prevent. The cut lands on a HYPHEN BOUNDARY when one falls in the last third of
 // the budget, so the result reads as whole words ("auslamp-eftf-phase-1-northern-territory") rather
 // than a severed one ("auslamp-eftf-phase-1-northern-territor"); trailing hyphens are stripped after
@@ -1047,7 +1047,7 @@ function validateSurvey(meta, edis, mth5s, xmls){
     const key=parsed.lat.toFixed(4)+","+parsed.lon.toFixed(4);
     if(seen[key]) add("WARNING","duplicate",name+": same coordinates as "+seen[key]); else seen[key]=name;
   });
-  // DATAID naming gate (softened, owner-ruled 2026-07-24): a MISSING DATAID no longer blocks, the station
+  // DATAID naming gate: a MISSING DATAID does not block, the station
   // id auto-derives from the filename and is flagged for curator review (a WARNING, and a package note). The
   // ONLY blocking failure now is a true post-sanitisation COLLISION (two files -> the same packaged name).
   edis.forEach(({name,parsed})=>{ if(!(parsed&&parsed.dataid))
@@ -1097,9 +1097,9 @@ function buildSurveyYaml(m){
   const ext=[m.west,m.east,m.south,m.north].every(v=>v!=null&&v!=="")
     ? `{ west: ${+m.west}, east: ${+m.east}, south: ${+m.south}, north: ${+m.north}, datum: WGS84 }` : "{}";
   const dts=(m.data_types||[]);
-  // C46 capture: persist the uploader's licence declaration as attribution (who + when), and any
-  // upstream source dataset. declared_date is a bare ISO scalar derived from the tsUTC seam (or an
-  // explicit m.declared_date). A package carrying any C46 field declares schema_version 0.3.
+  // Attribution capture: persist the uploader's licence declaration (who + when), and any upstream
+  // source dataset. declared_date is a bare ISO scalar derived from the tsUTC seam (or an explicit
+  // m.declared_date). A package carrying any attribution field declares schema_version 0.3.
   const declaredBy=String(m.declared_by||m.uploader_name||"").trim();
   const rawDeclared=String(m.declared_date||"").trim();
   const declaredDate=/^\d{4}-\d{2}-\d{2}$/.test(rawDeclared)?rawDeclared:tsUTCDate();
@@ -1132,11 +1132,11 @@ function buildSurveyYaml(m){
   L.push("organisation:");
   L.push("  name: "+q(m.organisation));
   L.push("  ror: "+(m.ror?q(m.ror):"null"));
-  // A3 (LANE-CONTRACT-FORM-CREDIT): the two RETIRED flat credit keys are NEVER written. The migration
+  // The two RETIRED flat credit keys are NEVER written. The migration
   // seeded creators[]/contributors[] from them and deleted them corpus-wide, the engine reads neither,
   // and the curator editor models neither - so a form that still wrote them would be producing keys
   // nobody can read or fix. "Who led this survey?" writes a ProjectLeader contributors row instead
-  // (D3), and the organisations[] block below carries the role statement.
+  // and the organisations[] block below carries the role statement.
   // Contributor credit model (CONTRIBUTOR-CREDIT-SPEC C1/C2): creators[] (ORDERED citation names, the
   // "who should be credited?" question) then contributors[] (the typed who-did-what rows). A row is
   // emitted only when it carries a name; absent -> absent (no empty list) so a bare survey stays lean, and
@@ -1179,7 +1179,7 @@ function buildSurveyYaml(m){
     L.push("  dms_sign: "+m.coord_resolution.dms_sign);
     L.push("  basis: "+q(m.coord_resolution.basis));
   }
-  // Optional acquisition window (T1). Bare scalars; a year or an ISO date. Injection-guarded: only a
+  // Optional acquisition window. Bare scalars; a year or an ISO date. Injection-guarded: only a
   // 4-digit year or a strict YYYY-MM-DD is emitted unquoted, anything else is quoted as free text.
   const dq=v=>{v=String(v==null?"":v).trim(); if(!v) return null;
     return /^\d{4}$/.test(v)||/^\d{4}-\d{2}-\d{2}$/.test(v)?v:q(v);};
@@ -1219,9 +1219,9 @@ function buildSurveyYaml(m){
     });
   } else { L.push("related_identifiers: []"); }
   // citation{} (interface contract section 3): the custodian's own wording, VERBATIM, plus where it came
-  // from. TWO keys, never a third: citation.preferred_identifier is a curated designation (D18) and the
-  // form never writes it. text_source rides a non-empty preferred_text and is meaningless without one
-  // (D17), so both appear together or not at all.
+  // from. TWO keys, never a third: citation.preferred_identifier is a curated designation and the
+  // form never writes it. text_source rides a non-empty preferred_text and is meaningless without
+  // one, so both appear together or not at all.
   if(citeText){
     L.push("citation:");
     L.push("  preferred_text: "+q(citeText));
@@ -1380,7 +1380,7 @@ function rorMatchesFromResponse(data){
   }).filter(Boolean).slice(0,3);
 }
 
-// R3/R5 DOI harvest core -- normalizeDoi, looksLikeDoi, parseCrossref, parseDatacite, formatCitation and
+// DOI harvest core -- normalizeDoi, looksLikeDoi, parseCrossref, parseDatacite, formatCitation and
 // harvestDoi now live in the SINGLE shared source src/doi_harvest.js (loaded in <head>; it attaches to
 // window.AusmtDoiHarvest), reused verbatim by the curator metadata editor so the registry parsing can
 // never drift between the two surfaces (CONTRIBUTOR-CREDIT-SPEC curator DOI harvest). Alias the shared
@@ -1446,11 +1446,11 @@ if(typeof module!=="undefined"&&module.exports){
 // ---------- UI wiring (browser only) ----------
 if(typeof document!=="undefined"&&document.getElementById){
   const files=[]; const $=id=>document.getElementById(id);
-  // C13 gateway state: set true ONLY by a passing same-origin healthz probe (design §1). Read by the
+  // Gateway state: set true ONLY by a passing same-origin healthz probe (design §1). Read by the
   // shared package builder so SUBMISSION.md lists the direct-upload path first when a gateway is live.
   let gatewayReady=false;
 
-  // C46: populate the licence <select>s from the GENERATED contract vocab (LICENSES from
+  // Populate the licence <select>s from the GENERATED contract vocab (LICENSES from
   // src/contract.js), grouped redistributable vs recognised metadata-only + a TBD workflow option.
   // Never a hand-copied list, the pure exported vocab is licenseSelectIds(LICENSES).
   function licenseOptionsHtml(selected){
@@ -1486,7 +1486,7 @@ if(typeof document!=="undefined"&&document.getElementById){
       '<div style="display:flex;align-items:flex-end"><button type="button" class="act ri-rm">Remove</button></div>'+
       '</div>';
     wrap.querySelector(".ri-rm").onclick=()=>wrap.remove();
-    // R5: normalise a pasted DOI resolver URL ONLY when this row's type is DOI; a URL-typed row keeps its URL.
+    // Normalise a pasted DOI resolver URL ONLY when this row's type is DOI; a URL-typed row keeps its URL.
     wireConditionalDoiBlur(wrap.querySelector(".ri-identifier"), wrap.querySelector(".ri-type"));
     return wrap;
   }
@@ -1552,7 +1552,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     wrap.querySelector(".f-rm").onclick=()=>wrap.remove();
     // reuse ROR lookup for the funding organisation field
     wireRor(wrap.querySelector(".f-org"), wrap.querySelector(".f-rormatches"), wrap.querySelector(".f-ror"));
-    wireDoiBlur(wrap.querySelector(".f-doi"));   // R5: normalise a pasted resolver URL in the funding DOI slot
+    wireDoiBlur(wrap.querySelector(".f-doi"));   // Normalise a pasted resolver URL in the funding DOI slot
     return wrap;
   }
   function readFunding(){
@@ -1566,7 +1566,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addFund").onclick=()=>$("fundRows").appendChild(fundRow());
 
-  // ----- R3: DOI-first publication rows. Each row's PRIMARY input is one DOI; on a valid-looking DOI the
+  // ----- DOI-first publication rows. Each row's PRIMARY input is one DOI; on a valid-looking DOI the
   // page harvests the citation (Crossref for journal papers, DataCite for dataset DOIs, via the pure
   // harvestDoi) and fills the row's HIDDEN manual fields, showing a compact read-only preview. The manual
   // fields (author/year/title/journal) are the SINGLE source of truth readPublications reads, so the
@@ -1652,7 +1652,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   $("addPub").onclick=()=>$("pubRows").appendChild(pubRow());
   $("pubRows").appendChild(pubRow());   // one publication row present by default
 
-  // ----- Credit C1: creators[] (the plain-language citation-authorship question). Basic tier: an
+  // ----- Credit: creators[] (the plain-language citation-authorship question). Basic tier: an
   // ordered list of citation names, each a person or (org checkbox) an organisation, ORCID/ROR optional.
   // DOM order IS the citation order. Emitted as creators[] {name, name_type, orcid?/ror?} by readMeta ->
   // buildSurveyYaml. One empty row shows by default so the question is visible; a nameless row is dropped
@@ -1684,7 +1684,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   $("addCreator").onclick=()=>$("creatorRows").appendChild(creatorRow());
   $("creatorRows").appendChild(creatorRow());   // one creator row visible by default (the primary credit question)
 
-  // ----- Credit C2: contributors[] (who did what). Advanced tier: typed rows adding a name_type <select>
+  // ----- Credit: contributors[] (who did what). Advanced tier: typed rows adding a name_type <select>
   // and the fail-closed role <select> (the 8 DataCite tokens, CONTRIBUTOR_ROLES). The <select>s only ever
   // offer the ratified vocab, so the form cannot author a value the server would block. Emitted as
   // contributors[] {name, name_type, role, orcid?/ror?}. Starts empty (added on demand, like the PIs).
@@ -1716,7 +1716,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addContributor").onclick=()=>$("contributorRows").appendChild(contributorRow());
 
-  // ----- A3: organisations[] rows ("Which organisations were involved, and how?"). A name plus an
+  // ----- organisations[] rows ("Which organisations were involved, and how?"). A name plus an
   // optional ROR plus a role checkbox group over ORG_ROLES_OFFERED (every ratified role except
   // hosting_institution, which is AusMT's own export-side role, never a contributor's claim). The
   // checkboxes are the honest control: an organisation is often several things at once. The essential
@@ -1745,7 +1745,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addOrg").onclick=()=>$("orgRows").appendChild(orgRow());
 
-  // ----- A3: acknowledgements[] rows ("Is there wording you must include?"). The wording IS the row, so
+  // ----- acknowledgements[] rows ("Is there wording you must include?"). The wording IS the row, so
   // a textless row is dropped at emit time; the type <select> only offers the ratified candidate vocab.
   function ackRow(){
     const wrap=document.createElement("div"); wrap.className="ackrow"; wrap.style.marginBottom="8px";
@@ -1770,7 +1770,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addAck").onclick=()=>$("ackRows").appendChild(ackRow());
 
-  // ----- A3: the citation question's "what does it point at?" <select>. Same NCI Table 1 vocabulary and
+  // ----- The citation question's "what does it point at?" <select>. Same NCI Table 1 vocabulary and
   // labels as the tier-2 identifier rows; its DEFAULT is "let the curator decide", which omits the key
   // rather than guessing a level on the contributor's behalf.
   (function(){
@@ -1791,7 +1791,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_lead_orcid","leadOrcidOk");
 
-  // ----- R5: DOI normalisation on blur. A contributor who pastes a full resolver URL (https://doi.org/
+  // ----- DOI normalisation on blur. A contributor who pastes a full resolver URL (https://doi.org/
   // 10.x/y, dx.doi.org, http variants) into a DOI slot triggered the live validator's "publication DOI
   // looks malformed" warning. wireDoiBlur folds the field down to the bare DOI on blur and SHOWS the
   // normalised value, so the contributor sees exactly what will be recorded. A bare DOI and any non-DOI
@@ -1815,7 +1815,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     const nameInp=$("m_name"), inp=$("m_slug"), ok=$("slugOk");
     if(!inp||!ok) return;
     let slugTouched=false;
-    // R1 slug-collision awareness: the derived slug can already match a PUBLISHED survey (e.g. "vulcan
+    // Slug-collision awareness: the derived slug can already match a PUBLISHED survey (e.g. "vulcan
     // 2022" -> vulcan-2022, already served). Lazily fetch the same-origin data/surveys.json (slug set) +
     // data/catalogue.json (station counts, for the "(N stations)" context) on first name/slug input, and
     // WARN with context on a match without ever BLOCKING (a custodian updating an existing survey is
@@ -1916,12 +1916,12 @@ if(typeof document!=="undefined"&&document.getElementById){
     dms_choice:(document.querySelector('input[name="dmschoice"]:checked')||{}).value||"head"};}
 
   // Per-EDI rename preview: shows "originalname.edi → ROX000.edi" so the submitter sees the DATAID-based
-  // packaged name BEFORE uploading (task #16). A missing DATAID shows a red "no DATAID" note, the same
+  // packaged name BEFORE uploading. A missing DATAID shows a red "no DATAID" note, the same
   // condition validateSurvey turns into a blocking FAIL, so the UI and the gate agree.
   function renameLabel(f){
     if(f.kind!=="edi") return "";
     // Softened DATAID gate: a missing DATAID auto-derives from the filename and is flagged for the curator
-    // (amber), it no longer blocks. A real DATAID renames the packaged file (copper).
+    // (amber), it does not block. A real DATAID renames the packaged file (copper).
     if(!f.dataid) return ` <span class="autoid">→ ${esc(packagedEdiName(deriveDataId(f.name)))} (auto from filename, flagged for curator)</span>`;
     return ` <span class="rename">→ ${esc(packagedEdiName(f.dataid))}</span>`;
   }
@@ -1980,7 +1980,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   ["m_w","m_e","m_s","m_n"].forEach(id=>$(id).addEventListener("input",updateReadout));
   function clearPick(){ corners=[]; if(rect&&pmap){pmap.removeLayer(rect);} rect=null; $("pickHint").textContent="Click two corners to set a bounding box. Your loaded stations are shown as dots."; }
   // THE THREE MAPS ON THIS PAGE WEAR THE PORTAL MAP'S ATTRIBUTION CONTROL: Leaflet's default one
-  // carries the flag and the word, which the owner asked off every map, so each map is created
+  // carries the flag and the word, which must appear on no map on this site, so each map is created
   // without one and src/mapattrib.js mounts a collapsed control in its place. The credit itself is
   // the tile layer's own and is unchanged: these three draw OpenStreetMap raster tiles directly.
   function openPicker(){
@@ -2176,7 +2176,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     // mixed submission is described honestly rather than collapsed to its first format.
     const inputFormat = [ediF.length && "edi", xf.length && "emtfxml", mh.length && "mth5"]
       .filter(Boolean).join("+") || "edi";
-    // C3 (PII scrub): MANIFEST.json/SUBMISSION.md may be published (PR attachment) -- email/ORCID must
+    // PII scrub: MANIFEST.json/SUBMISSION.md may be published (PR attachment) -- email/ORCID must
     // NOT be written into the package. Name is fine (a submission needs an attributable submitter).
     const manifest={slug, survey:meta.name, organisation:meta.organisation, licence:meta.license,
       input_format:inputFormat,
@@ -2193,7 +2193,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   // SUBMISSION.md travels INSIDE the zip on BOTH transport paths (design §2), so it must stay accurate
   // for both: the direct-upload path is listed as option 1 where a gateway is available, emailing the
-  // packaged zip to the operator as the fallback. It NEVER references email/ORCID as file CONTENT (C3);
+  // packaged zip to the operator as the fallback. It NEVER references email/ORCID as file CONTENT;
   // the operator-email path is a submission INSTRUCTION, not a stored address. `gatewayAvailable` only
   // reorders the guidance, the fallback is documented regardless, since the file may be read after the
   // fact by someone on a different deploy.
@@ -2287,7 +2287,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     idIn.addEventListener("input",apply); idIn.addEventListener("change",apply);
   })();
 
-  // ----- C13: direct upload to the same-origin submission gateway -------------------------------
+  // ----- Direct upload to the same-origin submission gateway ------------------------------------
   // Detection (design §1): one healthz probe per page load, 5 s AbortController timeout, no polling.
   // The submit UI stays hidden unless gatewayPresent(status, body) is strictly true (200 + JSON +
   // ok===true). A failed/absent probe leaves the page byte-identical to the pre-C13 page, the
@@ -2297,9 +2297,9 @@ if(typeof document!=="undefined"&&document.getElementById){
     gatewayReady=true;
     $("gatewayBlock").classList.add("show");
     setKeyReqEnabled(true);
-    // R2: with a live gateway the primary public flow is validate -> submit directly, so the package-and-
+    // With a live gateway the primary public flow is validate -> submit directly, so the package-and-
     // download-zip path (the email-the-operator fallback) is HIDDEN. It is shown ONLY in the degraded
-    // no-gateway state (its default). All zip code stays intact (owner: keep it just in case); this is
+    // no-gateway state (its default). All zip code stays intact; this is
     // visibility wiring only. Hiding is visual (display:none) - the packager still works if invoked.
     const bp=$("btnPackage"); if(bp) bp.style.display="none";
     track("GatewayDetected");   // PII-free, no ids
@@ -2314,10 +2314,10 @@ if(typeof document!=="undefined"&&document.getElementById){
       .catch(()=>{ if(timer) clearTimeout(timer); /* network error/timeout/HTML -> ABSENT; stay hidden */ });
   })();
 
-  // ----- key request (contract stub for the sibling security lane). POSTs {email} to the same-origin
-  // /gateway/request-key and ALWAYS shows the same neutral message regardless of the response, so it can
-  // never confirm whether an address is eligible (no account enumeration). The endpoint itself is not this
-  // lane. Disabled with a clear note until the gateway probe passes.
+  // ----- key request (a client-side stub; the endpoint is the sibling security work's). POSTs {email}
+  // to the same-origin /gateway/request-key and ALWAYS shows the same neutral message regardless of the
+  // response, so it can never confirm whether an address is eligible (no account enumeration). Disabled
+  // with a clear note until the gateway probe passes.
   function setKeyReqEnabled(on){
     const btn=$("btnRequestKey"), inp=$("m_keyreq_email"), msg=$("keyReqMsg");
     if(!btn) return;
