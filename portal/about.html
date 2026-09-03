@@ -16,11 +16,11 @@
      invented summary is a second wording of the page that nobody maintains. Preview crawlers
      resolve nothing relative, so og:url and og:image are absolute, and the card is the portal's
      root artwork (this page has no map of its own to preview). -->
-<meta name="description" content="A national catalogue of Australian magnetotelluric transfer functions, carrying the provenance, licence and citation details of each one.">
+<meta name="description" content="Australia's national discovery and access portal for magnetotelluric data, connecting transfer functions with their provenance, licences, citations and source archives.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
 <meta property="og:title" content="About - AusMT">
-<meta property="og:description" content="A national catalogue of Australian magnetotelluric transfer functions, carrying the provenance, licence and citation details of each one.">
+<meta property="og:description" content="Australia's national discovery and access portal for magnetotelluric data, connecting transfer functions with their provenance, licences, citations and source archives.">
 <meta property="og:url" content="https://ausmt.auscope.org.au/about.html">
 <meta property="og:image" content="https://ausmt.auscope.org.au/vendor/social-card.png">
 <meta property="og:image:width" content="1200">
@@ -117,6 +117,12 @@
   .toc a:hover{color:var(--text)}
   .pill{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0}
   .cta{display:inline-block;background:var(--copper);color:#12202b;font-weight:700;text-decoration:none;padding:9px 16px;border-radius:5px;margin-top:4px}
+  /* The AuScope-NCRIS lock-up in the body, the same committed file every footer on this site
+     carries. The width is capped HERE and not in the file: the committed raster is 1919px wide, so
+     the mark would otherwise be more than twice this column. max-width is what keeps it inside a
+     narrow column once 320px no longer fits, and object-fit holds the mark's proportions wherever
+     that cap bites. */
+  .orglockup{width:320px;max-width:100%;height:auto;object-fit:contain;display:block;margin:0 0 12px}
   /* One footer, three regions, the grammar index.html carries and every page here repeats: the
      MTCAT machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
      AuScope-NCRIS lockup on the RIGHT. The portal ships as classic static pages with no template
@@ -190,7 +196,7 @@
     <!-- Docs wave, stage 2 (owner ruling): the header is FIVE items, namely Map, Surveys, Collections, About,
          Contribute. The sixth, "How to use AusMT", is retired on both pages. On index it opened the
          #introOverlay help panel, which is retired with it; here it jumped to the in-body #howto section,
-         which survives as answer 2 and keeps its id so an inbound deep link still lands. -->
+         which survives as answer 3 and keeps its id so an inbound deep link still lands. -->
     <a class="about active" href="about.html">About</a>
     <a class="contribute" href="add-survey.html">Contribute a survey →</a>
   </div>
@@ -216,12 +222,12 @@
 </header>
 <main>
   <h1>About AusMT</h1>
-  <p class="sub">A national catalogue of Australian magnetotelluric transfer functions, carrying the
-  provenance, licence and citation details of each one.</p>
+  <p class="sub">Australia's national discovery and access portal for magnetotelluric data,
+  connecting transfer functions with their provenance, licences, citations and source archives.</p>
 
-  <!-- Docs wave, stage 2 (owner ruling): About is the two-minute front door. It answers six questions and
-       then hands off. What AusMT is, what you can do, how licensing and access work, how to cite, how to
-       contribute, and how to fetch data without the UI. Every deeper topic is a link into the docs site at
+  <!-- Docs wave, stage 2 (owner ruling): About is the two-minute front door. It answers seven questions and
+       then hands off. What AusMT is, who enables it, what you can do, how licensing and access work,
+       how to cite, how to contribute, and how to fetch data without the UI. Every deeper topic is a link into the docs site at
        https://ausmt.readthedocs.io/en/latest/ (every target below was fetched and returned 200 before it
        was written here). Two bodies that used to live on this page moved out in the same wave: the
        manifest-driven and bounding-box fetch patterns are now on the docs API reference, and the MTCAT
@@ -229,7 +235,8 @@
        machine-contract paragraph with its schema link. The #howto and #api ids are kept because other
        surfaces deep-link them. -->
   <div class="toc">
-    <a href="#what">What AusMT is</a><a href="#howto">What you can do</a><a href="#access">Licence and access</a>
+    <a href="#what">What AusMT is</a><a href="#who">Who enables AusMT</a>
+    <a href="#howto">What you can do</a><a href="#access">Licence and access</a>
     <a href="#cite">Citing and credit</a><a href="#contribute">Contributing</a>
     <a href="#api">Fetching data via API</a><a href="#docs">Documentation</a>
     <a href="#build">This build</a>
@@ -241,8 +248,9 @@
     collaborations, supplementary files and ageing legacy archives. AusMT exists to fix that: one national
     catalogue where every transfer function can be found, cited and downloaded with its provenance
     attached.</p>
-    <p>A magnetotelluric transfer function is the processed, instrument-independent response of the Earth at
-    one site. It's the result most MT work reuses, and it's what AusMT indexes. For each one the catalogue
+    <p>A magnetotelluric transfer function is a processed estimate of the Earth's electromagnetic
+    response at a site, derived from measured electric and magnetic field variations. It's the result
+    most MT work reuses, and it's what AusMT indexes. For each one the catalogue
     records which file it came from, who produced it, which licence applies and how to cite it.</p>
     <p>AusMT is a discovery and provenance layer over work that other people own. It doesn't hold raw time
     series; where they exist, it links to the archive that holds them, such as the
@@ -260,8 +268,25 @@
     </div>
   </section>
 
+  <section id="who">
+    <h2>2 · Who enables AusMT</h2>
+    <p>AusMT is enabled by AuScope and the Australian Government via the National Collaborative
+    Research Infrastructure Strategy (NCRIS).</p>
+    <p>AuScope is Australia's national provider of research infrastructure for the geoscience
+    community. AusMT provides national digital research infrastructure for discovering, accessing and
+    reusing Australian magnetotelluric data and its provenance.</p>
+    <img class="orglockup" src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325">
+    <p>Learn more about <a class="link" href="https://www.auscope.org.au" rel="noopener">AuScope</a>.</p>
+    <h3>Operation and governance</h3>
+    <p>AusMT is maintained by AuScope with contributions from Australia's magnetotelluric community.
+    Data custodians retain authority over their survey data, licences and attribution. AusMT's
+    governance, correction and preservation arrangements are documented in
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/governance/">Governance
+    &amp; Operation</a>.</p>
+  </section>
+
   <section id="howto">
-    <h2>2 · What you can do here</h2>
+    <h2>3 · What you can do here</h2>
     <div class="two" style="grid-template-columns:repeat(3,1fr)">
       <div class="card">
         <h3>Browse &amp; download</h3>
@@ -286,7 +311,7 @@
   </section>
 
   <section id="access">
-    <h2>3 · Licence and access</h2>
+    <h2>4 · Licence and access</h2>
     <p id="policy">Custodians keep ownership of their data. AusMT claims no ownership over anything it
     indexes, and what it may redistribute depends on the licence and the access level each custodian sets.
     Three things are licensed separately and it's worth keeping them apart.</p>
@@ -315,8 +340,8 @@
   </section>
 
   <section id="cite">
-    <h2>4 · Citing and credit</h2>
-    <p>Cite the survey, not the portal. Each survey record carries the custodian's own citation, and the
+    <h2>5 · Citing and credit</h2>
+    <p>Cite the survey; acknowledge AusMT. Each survey record carries the custodian's own citation, and the
     station drawer's Cite tab renders it in APA with the DOI as a live link where one exists. Where a
     custodian recorded no citation, the drawer says so plainly and points you at the survey package instead
     of inventing an author list.</p>
@@ -337,7 +362,7 @@
     <p>Cite the survey wherever its data appears in your work (the data availability or methods section is
     the usual home) and make sure the survey's citation lands in your reference list, not only in the text.
     Please also acknowledge AusMT:</p>
-    <pre class="code">Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric Data Portal (https://ausmt.auscope.org.au), an AuScope-funded initiative.</pre>
+    <pre class="code">Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric Data Portal (https://ausmt.auscope.org.au), enabled by AuScope and the Australian Government via the National Collaborative Research Infrastructure Strategy (NCRIS).</pre>
     <!-- The brand page is reached from here rather than from the header: the owner ruled the header at
          five items, and the reader who needs a logo is the one already preparing a paper or a talk. -->
     <p>If your talk or paper shows AusMT as well as citing it, the
@@ -346,7 +371,7 @@
   </section>
 
   <section id="contribute">
-    <h2>5 · Contributing a survey</h2>
+    <h2>6 · Contributing a survey</h2>
     <p>Bring your EDI, EMTF XML or MTH5 transfer functions to the
     <a class="link" href="add-survey.html">Contribute a survey</a> page. It extracts the stations, plots
     them, and walks you through the metadata AusMT needs.</p>
@@ -358,7 +383,7 @@
   </section>
 
   <section id="api">
-    <h2>6 · Fetching data via API</h2>
+    <h2>7 · Fetching data via API</h2>
     <p>Everything the portal reads is a read-only static JSON file on this site, and you can read the same
     files. There's no API key and no sign-up. Every response carries
     <code>Access-Control-Allow-Origin: *</code>, so a browser application can fetch it cross-origin.</p>
@@ -404,7 +429,7 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
   </section>
 
   <section id="docs">
-    <h2>7 · Documentation</h2>
+    <h2>8 · Documentation</h2>
     <p>For further information, see the
     <a class="link" href="https://ausmt.readthedocs.io/en/latest/">AusMT documentation</a>.</p>
   </section>
@@ -415,7 +440,7 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
        I looking at, and which frozen snapshots can I cite. The chip is filled by version.js from
        config.js, both loaded at the foot of this page. -->
   <section id="build">
-    <h2>8 · This build</h2>
+    <h2>This build</h2>
     <p>AusMT is a national MT research infrastructure. It indexes processed transfer functions and
     their provenance. It doesn't host raw time series; where an archive has verified an openly
     accessible file, it routes you straight to the archive that does.</p>

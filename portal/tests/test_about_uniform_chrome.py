@@ -344,7 +344,7 @@ def test_no_page_header_keeps_the_retired_how_to_use_entry():
     same item. All are pinned absent, by id and by visible text, on all four shipped pages. Non-vacuous:
     run against the pre-wave HTML, index.html, about.html and releases.html all fail.
 
-    The #howto ANCHOR survives on About (answer 2 keeps that id, so an inbound deep link still lands) and
+    The #howto ANCHOR survives on About (answer 3 keeps that id, so an inbound deep link still lands) and
     is deliberately not what this asserts against; the assertion is about the HEADER entry.
 
     Comments are stripped before the text check on purpose: both headers carry a comment explaining what
