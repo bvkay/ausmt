@@ -341,7 +341,12 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // intro-panel + tour hooks (S2 UX-A) — exposed so the driver can assert on internal helpers
   // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro lets the driver
   // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
-  "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +
+  "introSeen,maybeShowIntro,tourStep:()=>_tourStep,tourStepCount:()=>TOUR_STEPS.length," +
+  // The deck's resolved demo subjects. Every step that would otherwise name a survey, a station or a
+  // collection resolves one from the corpus that is actually loaded, so these are what the pins compare
+  // the rendered copy and the opened subjects against, never a literal.
+  "tourDemoSurvey:()=>_tourDemoSurvey(),tourDemoCollection:()=>_tourDemoCollection()," +
+  "tourStepText:(i)=>_tourText(TOUR_STEPS[i]),tourStepSel:(i)=>TOUR_STEPS[i].sel," +
   // Settle-until-stable re-layout (owner 2026-07-22): the drawer step opens a target that keeps reflowing
   // after open (slide, then the async station.json frame-line inject, then a possible map re-fit), so the
   // tour POLLS the target rect each frame and re-runs _tourLayout until it holds stable. tourSettleEl exposes
@@ -1525,19 +1530,26 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(/^\d+px$/.test(_tcs.minHeight) && parseInt(_tcs.minHeight, 10) > 0,
     "owner2/size: .tourcard must have a positive min-height (constant box; short steps 7/9 must not shrink), got minHeight=" + JSON.stringify(_tcs.minHeight));
   ok(_tcs.boxSizing === "border-box", "owner2/size: .tourcard must be border-box so the fixed width is the full rendered box, got " + JSON.stringify(_tcs.boxSizing));
-  // CONSTANT CENTRED POSITION: step through ALL 10 steps and capture the card's applied left/top. Every step's
+  // CONSTANT CENTRED POSITION: step through EVERY step and capture the card's applied left/top. Every step's
   // position must be IDENTICAL (the map steps included) — the overlap-nudge is the ONLY documented exception,
-  // and under jsdom's zero rects no target overlaps, so all 10 land on the pure viewport centre. This guards
-  // the "same position on every step" contract the owner asked for (map steps 1/10 must match 2-9).
+  // and under jsdom's zero rects no target overlaps, so all of them land on the pure viewport centre. This
+  // guards the "same position on every step" contract (the map steps must match the rest).
+  // MOVED with the deck revision (LANE-CONTRACT-TOUR-REVISION.md T4, "every 'of 11' -> 'of 16'" and
+  // "ArrowRight x10 reaches the last step -> x15"): the walk length is now READ FROM THE DECK, so a future
+  // deck change moves this pin by construction instead of leaving a stale literal to chase.
+  const _nSteps = A.tourStepCount();
+  ok(_nSteps === 16, "deck: the tour must carry 16 steps, got " + _nSteps);
   const _posSeen = [];
-  for (let _s = 0; _s < 10; _s++) {
+  for (let _s = 0; _s < _nSteps; _s++) {
     const _c = doc.getElementById("tourCard");
     _posSeen.push(_c.style.left + "|" + _c.style.top);
-    if (_s < 10) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+    if (_s < _nSteps - 1) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
   }
-  ok(A.tourStep() === 10, "owner2/pos: stepping ArrowRight x10 must reach the last step, at " + A.tourStep());
+  ok(A.tourStep() === _nSteps - 1,
+    "owner2/pos: stepping ArrowRight x" + (_nSteps - 1) + " must reach the last step, at " + A.tourStep());
   ok(_posSeen.every(p => p === _posSeen[0]),
-    "owner2/pos: the card's centred position must be IDENTICAL across all 10 steps (map steps included), got " + JSON.stringify(_posSeen));
+    "owner2/pos: the card's centred position must be IDENTICAL across all " + _nSteps +
+    " steps (map steps included), got " + JSON.stringify(_posSeen));
   ok(/px$/.test(_posSeen[0].split("|")[0]) && /px$/.test(_posSeen[0].split("|")[1]),
     "owner2/pos: the constant position must be applied in px, got " + JSON.stringify(_posSeen[0]));
 
@@ -1700,7 +1712,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // (3) Detach on step change: stepping off the drawer must RELEASE #drawer's watcher (no leak on a persistent element).
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));   // -> tree (index 3)
   ok(A.tourSettleEl() !== "drawer", "settle: stepping off the drawer step must release #drawer's watcher, still on " + JSON.stringify(A.tourSettleEl()));
-  ok(A.tourSettleEl() === "tree", "settle: the watcher must re-attach to the new step's target (#tree), got " + JSON.stringify(A.tourSettleEl()));
+  // MOVED with the deck revision (LANE-CONTRACT-TOUR-REVISION.md T1 step 4): the browse step spotlights the
+  // rail container that holds BOTH the collections list and the tree, so the watcher's target is that
+  // container and no longer #tree alone. Read from the deck so the selector and the pin cannot drift.
+  ok("#" + A.tourSettleEl() === A.tourStepSel(3),
+    "settle: the watcher must re-attach to the browse step's own target " + A.tourStepSel(3) +
+    ", got " + JSON.stringify(A.tourSettleEl()));
   const _runsAfterDetach = A.tourLayoutRuns();
   _dr.left = 999;                                          // mutate the (now-detached) drawer rect...
   _tick();                                                 // ...and fire the STALE drawer frame: the guard must make it a no-op
@@ -1756,29 +1773,39 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // an unhidden pane is exactly what gives .selbox a nonzero rect and thus its spotlight), and leaving
   // it must restore the visitor's prior mode on ALL exit paths (forward, back, close) — the same
   // three-path restore discipline the Find/tree demo steps pin above.
+  // MOVED with the deck revision (LANE-CONTRACT-TOUR-REVISION.md T1 + T2): the select steps are now a
+  // GROUP of four (selbox, the selection demo, Level 2, time series) at indices 5+1 .. 5+4, and the rail
+  // mode belongs to the GROUP, not to one step: it is captured on entering the group and restored only
+  // when the walk leaves it. So a move INSIDE the group must not restore the visitor's mode, and the
+  // restore is asserted at the group boundary instead of after the second step.
+  const _SELG = [6, 7, 8, 9];
   A.setSidebarMode("browse");
   doc.getElementById("welcomeTour").click();                              // step index 0
-  for (let k = 0; k < 5; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); // -> index 5 (.selbox)
-  ok(A.tourStep() === 5, "D2-tour: ArrowRight x5 did not reach the selbox step, at step " + A.tourStep());
-  ok(A.sidebarMode() === "select", "D2-tour: the selbox step did not switch the rail to Select & export");
+  for (let k = 0; k < _SELG[0]; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  ok(A.tourStep() === _SELG[0], "D2-tour: ArrowRight x" + _SELG[0] + " did not reach the selbox step, at step " + A.tourStep());
+  ok(A.tourStepSel(_SELG[0]) === ".selbox", "D2-tour: the select group must open on .selbox, got " + A.tourStepSel(_SELG[0]));
+  ok(A.sidebarMode() === "select", "D2-tour: the selbox step did not switch the rail to Select & download");
   ok(!doc.getElementById("selectMode").classList.contains("hidden"),
     "D2-tour: the Select pane (the selbox target's mode container) is still hidden on the selbox step");
   ok(!doc.querySelector(".selbox").closest("section").classList.contains("hidden"),
     "D2-tour: the selbox's own section is hidden on the selbox step (map view not forced?)");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD -> index 6 (.dlbox)
-  ok(A.tourStep() === 6, "D2-tour: could not step forward off the selbox step");
-  ok(A.sidebarMode() === "select",
-    "D2-tour: the Download step lives in the same Select pane and must keep the mode");
+  // Every remaining member of the group keeps the mode: the group owns it, so no move inside it restores.
+  for (let k = 1; k < _SELG.length; k++) {
+    win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+    ok(A.tourStep() === _SELG[k], "D2-tour: could not step forward to select-group step " + _SELG[k] + ", at " + A.tourStep());
+    ok(A.sidebarMode() === "select",
+      "D2-tour: step " + _SELG[k] + " lives in the same Select pane and must keep the mode");
+  }
   ok(!doc.querySelector(".dlbox").closest("section").classList.contains("hidden"),
-    "D2-tour: the Download block's section is hidden on its own step");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD exit -> index 7
-  ok(A.tourStep() === 7, "D2-tour: could not step forward off the Download step");
-  ok(A.sidebarMode() === "browse", "D2-tour: leaving the Select-pane steps did not restore the Browse mode");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK -> index 6 again
-  ok(A.tourStep() === 6 && A.sidebarMode() === "select",
-    "D2-tour: re-entering the Download step backwards did not re-switch the mode");
+    "D2-tour: the Download block's section is hidden on the download steps");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD out of the group
+  ok(A.tourStep() === _SELG[_SELG.length - 1] + 1, "D2-tour: could not step forward off the last select-group step");
+  ok(A.sidebarMode() === "browse", "D2-tour: leaving the select group did not restore the Browse mode");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK into the group
+  ok(A.tourStep() === _SELG[_SELG.length - 1] && A.sidebarMode() === "select",
+    "D2-tour: re-entering the select group backwards did not re-switch the mode");
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));       // CLOSE from the step
-  ok(A.tourStep() === -1, "D2-tour: Esc from the Download step did not close the tour");
+  ok(A.tourStep() === -1, "D2-tour: Esc from a select-group step did not close the tour");
   ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
 
   // I. EMPTY-STATE fixture (UX7b U7): the welcome POPUP must still show on first visit (it explains the
