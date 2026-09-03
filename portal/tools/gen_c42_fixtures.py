@@ -80,7 +80,7 @@ def main():
     FIXTURES.mkdir(parents=True, exist_ok=True)
     for f in ("catalogue.json", "tf.json", "sci.json", "surveys.json", "collections.json",
               "mtcat.json", "qc_report.json",
-              # C42 A1: the coordinate-policy marker boot artifact (ausmt_id -> policy for the non-exact
+              # The coordinate-policy marker boot artifact (ausmt_id -> policy for the non-exact
               # stations). Emitted by the engine because this fixture survey has a generalised + a withheld
               # station; the portal drawer reads it to badge the generalised station.
               "coord_policy.json"):

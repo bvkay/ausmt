@@ -235,7 +235,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   ok(filePart, "the FormData carries a `file` part");
   const zipBuf = Buffer.from(await filePart.arrayBuffer());
   ok(zipBuf.indexOf(Buffer.from(SECRET_KEY)) < 0, "the key is absent from the built zip bytes");
-  // Also prove email/ORCID (C3) never entered the zip bytes even though they ride as form fields.
+  // Also prove email/ORCID never entered the zip bytes even though they ride as form fields.
   ok(zipBuf.indexOf(Buffer.from("ada@example.org")) < 0, "the submitter email is absent from the zip bytes (C3)");
   // (f) the key is NOT in any track() payload (name or props).
   ok(!record.trackCalls.some((t) => JSON.stringify(t).indexOf(SECRET_KEY) >= 0), "the key is absent from every track() payload");
@@ -610,7 +610,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
       ok(/validation FAIL/i.test(e.doc.getElementById("pkBody").textContent), "packaging is blocked with a FAIL message");
     }
 
-    // (7d) SOFTENED DATAID GATE: an EDI with no DATAID line NO LONGER blocks.
+    // (7d) SOFTENED DATAID GATE: an EDI with no DATAID line does not block.
     //      The station id auto-derives from the filename (extension stripped, sanitised), the file list
     //      shows the derived name flagged for the curator, validation surfaces a WARNING (not a FAIL), and
     //      packaging SUCCEEDS with the derived name + a curator flag recorded in MANIFEST.json.

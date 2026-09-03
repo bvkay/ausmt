@@ -173,10 +173,10 @@ if (dGen.ok) {
   // the generalised value is rendered VERBATIM (0.1deg cell), never re-rounded or badged-as-exact
   ok(/-32\.9(0*)?\s*,\s*136\.9/.test(dGen.html), "PIN2: generalised drawer must render the masked 0.1deg value verbatim");
   ok(!/coordinates withheld/i.test(dGen.html), "PIN2: a generalised station must not show the withheld line");
-  // A1 BADGE: the "position generalised to ~0.1° (custodian policy)" line renders from the engine marker
+  // BADGE: the "position generalised to ~0.1° (custodian policy)" line renders from the engine marker
   ok(/position generalised to ~0\.1° \(custodian policy\)/.test(dGen.html),
     "PIN-A1: generalised drawer must show the 'position generalised to ~0.1°' badge (from coord_policy.json)");
-  // A1 LEAK: the badge co-occurs with the ROUNDED cell, NEVER the true 6-dp coords (mirror the leak-sweep
+  // LEAK: the badge co-occurs with the ROUNDED cell, NEVER the true 6-dp coords (mirror the leak-sweep
   // spirit at the DOM layer — a generalised station's badge is present AND its shown coords are rounded)
   ok(dGen.html.indexOf("32.876543") < 0 && dGen.html.indexOf("136.876543") < 0,
     "PIN-A1 leak: the generalised station's TRUE coordinates must appear nowhere in the DOM");

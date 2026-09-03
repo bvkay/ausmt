@@ -1,5 +1,5 @@
 "use strict";
-// C25-V3 portal frame-line driver (Invariant 10). Boots the REAL portal modules in jsdom and drives
+// Portal frame-line driver (Invariant 10). Boots the REAL portal modules in jsdom and drives
 // the reader-facing frame line the station drawer shows when the engine served impedances AS STORED in
 // a declared acquisition frame (the engine never de-rotates under frame policy v3). It asserts:
 //   * frameLineText() (PURE, DOM-free) renders the terse honest line for a non-zero declared angle,
