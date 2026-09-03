@@ -189,6 +189,27 @@ def test_the_spa_map_mounts_the_collapsed_control_and_credits_the_layer_it_draws
             f"expected {_NEW_TAB!r} in {tag!r}")
 
 
+def test_the_dormant_user_layer_path_still_guards_and_still_escapes():
+    """THE OTHER HALF OF THE PIN THIS MODULE INHERITED. userLayer() feeds a fetched GeoJSON's source
+    field to addAttribution, which Leaflet renders as HTML, so that string is escaped; and the call
+    is guarded on a control existing, because a document that failed to load src/mapattrib.js draws
+    a map with no control and a layer added there must degrade rather than throw.
+
+    THE PATH IS DORMANT: the layer control below it is built but never added to the map, so the
+    fetch never runs today. The guard and the escaping are pinned anyway, and the escaping is
+    DRIVEN through a stub by tests/test_url_guard.py, precisely so a later lane that re-enables the
+    control cannot re-open the sink by omission.
+
+    FAILS if the guard goes, or if the source reaches addAttribution unescaped."""
+    src = _text(MAP_JS)
+    assert re.search(r"&&\s*map\.attributionControl\b", src), (
+        "the user-layer path must guard the control it reaches: a document that failed to load the "
+        "module has no control, and a layer added there must degrade rather than throw")
+    assert re.search(r"function _layerAttribution\([^)]*\)\s*\{\s*return esc\(", src), (
+        "the layer name and its fetched source both reach addAttribution ESCAPED; Leaflet renders "
+        "an attribution as HTML")
+
+
 def test_add_surveys_three_maps_all_wear_the_control_and_keep_their_own_credit():
     """ADD-SURVEY DRAWS THREE MAPS and every one of them wears the same control: the footprint
     picker, the station preview that plots files as they land, and the confirmation map.
