@@ -1,0 +1,35 @@
+# Stations the build DROPPED that this corpus has DELIBERATELY given up on.
+#
+# scripts/verify.py FAILs a build whose build_report.json records a stations_dropped row that is not
+# named here, so every line is a station the corpus publishes nothing for and a curator has decided
+# to accept. Write one entry per line as `<survey slug>/<source file name>`, with the station the
+# build wrote and the reason on comment lines above it. Adding a line is a curatorial decision and is
+# reviewed like any other change to this repository; it is never a way past a red gate.
+#
+# Entries are keyed on the FILE. The row's `station` is the id the build settled on BEFORE any
+# station_ids override applies, so for a third-party release it is neither the file name nor the
+# published id; it is recorded in the comment because a curator needs it to match a build log line to
+# a row, and it is not what the gate matches on.
+#
+# The BUILD is unaffected: a corpus build still exits 0 when a gate refuses a station, because one
+# station must not take a survey down. This file governs the DEPLOY gate alone. Its sibling,
+# parse-failures-allowed.txt, gates the narrower ledger of files the READER refused; a refused file
+# writes a row in both ledgers, and the two gates are independent, so giving up on one is two
+# deliberate acts for one lost station.
+
+# capricorn-2010: five stations whose off-diagonal impedance phases both sit outside the quadrants
+# the served e^{+i omega t} x=north/y=east convention requires. The C25 gate refuses them rather than
+# serve a transfer function under a sign convention it cannot establish, and the fix belongs to the
+# custodian's export, not to AusMT. Stations CP1L05, CP2B13, CP2L01, CP2L02, CP2L08.
+capricorn-2010/CP1L05.edi
+capricorn-2010/CP2B13.edi
+capricorn-2010/CP2L01.edi
+capricorn-2010/CP2L02.edi
+capricorn-2010/CP2L08.edi
+
+# roxby-downs-2018: one station refused by the same sign-convention gate, in a third-party release
+# whose published ids come from a station_ids override. The build writes station "188" here, the
+# DATAID, because the gate refuses the station before the override applies; the id the package would
+# have published is RD18-188e. Named ahead of that package's merge so the corpus change needs no
+# engine change beside it.
+roxby-downs-2018/188_S__2.edi

@@ -2125,7 +2125,11 @@ def _parse_one_edi(p):
     # read this file from a NORMALISED TEMPORARY COPY (its >INFO JSON trailing-delimiter defect; see
     # _mtm). Parse-only: that copy is destroyed inside the read, so `p` -- the custodian's file --
     # remains the ONLY path this build ever copies to the served tree or hands to sha256().
-    tfobj, _parse_fallback = mtm.read_with_fallback(p)
+    # `_parse_facts` carries the two EPI-KIT conditionings the reader applies to a temporary copy
+    # BEFORE reading (see _mtm._pre_read_conditioning): which data section the transfer function came
+    # from when the file carried more than one, and the DATAID normalisation when mt_metadata's name
+    # validator refused the custodian's. Absent keys mean absent conditioning.
+    tfobj, _parse_fallback, _parse_facts = mtm.read_with_parse_facts(p)
     _raw = ep.read_norm(p)   # raw EDI text: frame evidence + coord-QC + processing-metadata scrape
     _did = cat.grab(_raw, "DATAID")
 
@@ -2149,6 +2153,18 @@ def _parse_one_edi(p):
     _frame_notes = list(_disp.notes)
 
     r = mtm.record_from_tf(tfobj, p.name)
+    # The EPI-KIT section of record: which of the file's data sections these numbers came from, and
+    # how many were left behind. Rides the record (so it reaches station.json and build_report) and
+    # the C18 cache with the rest of the parse; ABSENT for a file carrying one section, which is
+    # every EDI in the corpus, so an ordinary station's record is unchanged key for key.
+    if _parse_facts.get("section_selected"):
+        r["section_selected"] = dict(_parse_facts["section_selected"])
+    # The coordinate sign collapse: what the file writes and what the reader was given. Rides the
+    # record for the same reason the section of record does, and is ABSENT for every file that
+    # writes one sign, which is every file in the corpus but one.
+    if _parse_facts.get("coordinate_signs_collapsed"):
+        r["coordinate_signs_collapsed"] = [dict(row) for row
+                                           in _parse_facts["coordinate_signs_collapsed"]]
     # mt_metadata reads only the HEAD coordinate, so run the INFO-vs-HEAD DMS-bug detection +
     # the processing-metadata scrape on the raw EDI text (kept helpers; not a TF re-parse).
     # Curator signal only (C3): the SOURCE EDI (as submitted/served) still carries whatever the
@@ -2167,6 +2183,12 @@ def _parse_one_edi(p):
         # and carry it as site_name ONLY when the overwrite actually changes it (a sanitised id such as
         # SA28_2B -> SA282B); identical -> absent, so the catalogue keeps its zero-change convention.
         _orig_site_name = r.get("id")
+        # ... unless the reader refused the custodian's DATAID and read a normalised copy instead. The
+        # tf station name is then a PARSE ARTEFACT, not a source fact, and carrying it as site_name
+        # would publish the reader's rewrite as the custodian's own name. The source fact is the raw
+        # DATAID, which is what `_station` below becomes, so the convention holds with the original.
+        if _parse_facts.get("dataid_normalised"):
+            _orig_site_name = _parse_facts["dataid_normalised"]["original"]
         if _station:
             r["id"] = _station
         if _orig_site_name and _orig_site_name != r["id"]:
@@ -2203,9 +2225,16 @@ def _parse_one_edi(p):
     # EDI written directly by its processor, e.g. LEMIMT or Phoenix EMpower). A known writer never
     # becomes the processor, and nothing is invented — no evidence leaves sw None.
     _sw_writer = _writer.get("name") if not cat.is_known_writer(_writer.get("name")) else None
+    # rr: an EPI-KIT file DECLARES its processing type in a machine-readable field, so where it does
+    # that declaration is the answer and the evidence chain below is not consulted. It is the only
+    # source here that can say NO as well as yes, which is the point: the chain is a disjunction of
+    # weaker evidence and can only ever turn a 0 into a 1. Every other dialect answers None and keeps
+    # the chain exactly as it was.
+    _declared_rr = cat.epikit_remote_reference(_raw)
     proc = (_mined or _pt[0] or _pm[0] or _sw_writer,           # sw: THE PROCESSOR
             _pm[1] or _pt[1],                                  # alg: scrape
-            _pm[2] or _pt[2] or (1 if r.get("remote_site") else 0))  # rr: ...or remote_site found
+            int(_declared_rr) if _declared_rr is not None      # rr: the file's own declaration...
+            else (_pm[2] or _pt[2] or (1 if r.get("remote_site") else 0)))  # ...else the evidence
     r["file_written_by"] = _writer
     _tnotes = []
     per, comp = mtm.components_from_tf(tfobj, notes=_tnotes)
@@ -2260,7 +2289,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
     C25: the per-EDI parse runs the convention gates (extract/_conventions.py). A gate FAIL skips
     the station LOUDLY (stderr + a structured drop record); a derotation/warn is carried as
     conditioning-style frame notes. `report`, when given, is a dict the caller owns that collects
-    the survey-scoped gate output: {"stations_dropped": [{station, reason}],
+    the survey-scoped gate output: {"stations_dropped": [{station, file, reason}],
     "frame_notes": {station_id: [note, ...]}} — the main loop feeds these into build_report.json
     (stations_dropped + warnings) and the survey-level NOTICE log. Optional so existing callers
     (tests) are unchanged.
@@ -2320,7 +2349,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                 if report is not None:
                     _why = f"source file unreadable by mt_metadata: {type(e).__name__}: {e}"
                     report.setdefault("stations_dropped", []).append(
-                        {"station": p.stem, "reason": _why})
+                        {"station": p.stem, "file": p.name, "reason": _why})
                     report.setdefault("parse_failures", []).append(
                         {"station": p.stem, "file": p.name,
                          "error": f"{type(e).__name__}: {e}"})
@@ -2335,7 +2364,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             print(f"  GATE FAIL {p.name} [{_sk['gate']}]: {_sk['reason']}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": _sk.get("station") or p.stem,
+                    {"station": _sk.get("station") or p.stem, "file": p.name,
                      "reason": f"[{_sk['gate']}] {_sk['reason']}"})
             continue
         r, tf, srow = parsed["record"], parsed["tf"], parsed["sci"]
@@ -2410,7 +2439,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                   f"(malformed header or unreadable transfer function)", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": r.get("id") or p.stem,
+                    {"station": r.get("id") or p.stem, "file": p.name,
                      "reason": "no coordinates/periods recovered by mt_metadata"})
             continue
         r["survey"] = survey_label
@@ -2472,6 +2501,12 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             if _fb:
                 report.setdefault("parse_fallbacks", []).append(
                     {"station": _r["id"], "file": _p.name, "defect": _fb})
+            # The section of record stays ON the record (station.json publishes it) and is ALSO
+            # collected here, keyed by the FINAL id, so build_report answers "which solution did this
+            # corpus publish" without opening every station document.
+            if _r.get("section_selected"):
+                report.setdefault("section_selections", []).append(
+                    {"station": _r["id"], "file": _p.name, **_r["section_selected"]})
     else:
         for (_p, _r) in stations:
             _r.pop("_frame_notes", None)
@@ -2517,7 +2552,7 @@ def process_mth5(h5_paths, survey_label, org, slug, report=None):
                     print(f"  SKIP {r.get('id')} in {h5.name}: no coordinates/periods in MTH5", file=sys.stderr)
                     if report is not None:
                         report.setdefault("stations_dropped", []).append(
-                            {"station": str(r.get("id") or h5.stem),
+                            {"station": str(r.get("id") or h5.stem), "file": h5.name,
                              "reason": "no coordinates/periods in MTH5"})
                     continue
                 r["survey"] = survey_label
@@ -2532,7 +2567,8 @@ def process_mth5(h5_paths, survey_label, org, slug, report=None):
             print(f"  MTH5 READ FAIL {h5.name}: {e}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": h5.stem, "reason": f"MTH5 read failed: {type(e).__name__}"})
+                    {"station": h5.stem, "file": h5.name,
+                     "reason": f"MTH5 read failed: {type(e).__name__}"})
             continue
     _disambiguate(stations, slug)   # keep same-station re-processings as distinct variant records
     return stations, tf_rows, sci_rows
@@ -2668,7 +2704,7 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
                   f"(malformed EMTF XML or unreadable transfer function)", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": r.get("id") or p.stem,
+                    {"station": r.get("id") or p.stem, "file": p.name,
                      "reason": "no coordinates/periods recovered from EMTF XML"})
             continue
         r["survey"] = survey_label
@@ -2708,7 +2744,8 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
             print(f"  GATE FAIL {p.name} [rotation-frame]: {_fail}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": r["id"], "reason": f"[rotation-frame] {_fail}"})
+                    {"station": r["id"], "file": p.name,
+                     "reason": f"[rotation-frame] {_fail}"})
             continue
         # C25 Gate 2 (sign convention) is format-agnostic -- it reads the SERVED components, so the
         # EMTF-XML path runs the identical check the EDI path does. A coherent quadrant flip FAILs
@@ -2718,7 +2755,8 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
             print(f"  GATE FAIL {p.name} [sign-convention]: {_ck['detail']}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
-                    {"station": r["id"], "reason": f"[sign-convention] {_ck['detail']}"})
+                    {"station": r["id"], "file": p.name,
+                     "reason": f"[sign-convention] {_ck['detail']}"})
             continue
         _frame["convention_check"] = _ck
         r["frame"] = _frame
@@ -3215,8 +3253,15 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
         # THIRD-PARTY ingest provenance the custodian declared in survey.yaml's station_ids block. It
         # rides AusMT's record because the source EDI is served byte-identical and is never rewritten.
         # ADDITIVE + absent-means-absent: a survey that declares none gains no key at all.
+        # `section_selected` and `coordinate_signs_collapsed` are PARSE provenance facts and belong
+        # beside input_file: which of a multi-section source file's data sections these numbers came
+        # from, and which coordinate the reader was handed with a repeated sign character collapsed.
+        # Additive and absent-means-absent, so a source needing neither gains no key.
         "provenance": {**prov, "input_file": p.name, "input_sha256": sha256(p),
-                       **({"source": r["source_provenance"]} if r.get("source_provenance") else {})},
+                       **({"source": r["source_provenance"]} if r.get("source_provenance") else {}),
+                       **({"section_selected": r["section_selected"]} if r.get("section_selected") else {}),
+                       **({"coordinate_signs_collapsed": r["coordinate_signs_collapsed"]}
+                          if r.get("coordinate_signs_collapsed") else {})},
         # coordinate QC: present only when the parse flagged something, so consumers can surface
         # "treat with caution" without implying anything about unflagged stations.
         "coordinate_qc": ({"flag": r.get("coord_flag"),
@@ -5880,6 +5925,20 @@ def _main_build(argv=None):
         # which is what the echo cannot say.
         _parse_failure_rows = list(_gate_report.get("parse_failures", []))
         _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
+        # EPI-KIT section of record: a counted survey WARNING as well as the structured ledger, same
+        # discipline as the fallbacks below. The file parses either way, so nothing here is a repair;
+        # what the operator must be told is that these stations' published transfer function is ONE
+        # of several solutions the file carries, and which one.
+        _section_rows = list(_gate_report.get("section_selections", []))
+        if _section_rows:
+            _sect_names = sorted({_row["sectid"] for _row in _section_rows})
+            _survey_warnings.append(
+                f"{len(_section_rows)} source file(s) carry more than one data section; the "
+                f"published transfer function is the section of record for each "
+                f"({mtm.SECTION_OF_RECORD_RULE}), and "
+                f"{sum(_row['sections_dropped'] for _row in _section_rows)} other section(s) were "
+                f"not read [{', '.join(_sect_names[:8])}"
+                f"{', ...' if len(_sect_names) > 8 else ''}]")
         if _parse_fallback_rows:
             # Compact defect clause: the row carries the full reason; the counted warning names the
             # class (everything before the first "; ", which is where the reason strings start
@@ -5930,9 +5989,12 @@ def _main_build(argv=None):
                 f"bytes at all")
         build_report_surveys[slug] = {
             "stations_built": len(stations),
-            # STRUCTURED drops ({station, reason}): the C25 convention-gate skips, the stations with
-            # no recoverable coordinates or periods, and - since the GDS readers lane - the source
-            # files mt_metadata could not read at all, which until then dropped silently.
+            # STRUCTURED drops ({station, file, reason}): the C25 convention-gate skips, the stations
+            # with no recoverable coordinates or periods, and - since the GDS readers lane - the
+            # source files mt_metadata could not read at all, which until then dropped silently.
+            # `file` is the SOURCE FILE NAME. A drop row is the whole record for a station the corpus
+            # does not publish, and `station` is the id the build settled on, which for a third-party
+            # release is not the file's name and often not a substring of it.
             "stations_dropped": list(_gate_report.get("stations_dropped", [])),
             # Per-station record of the source files the reader could not read AND could not rescue
             # from a normalised copy: the file, and what the reader said about it. The negative twin
@@ -5947,6 +6009,11 @@ def _main_build(argv=None):
             # fact, not a repair log: the parse came from a normalised temporary copy that no longer
             # exists, while the served bytes and the sha256 columns are the custodian's source file.
             "source_parse_fallbacks": _parse_fallback_rows,
+            # Per-station record of which data section each multi-section source file's transfer
+            # function came from, and how many sections were left behind. Written ONLY when it
+            # fires: every EDI in the corpus carries one section, so the key is absent for all of
+            # them and their reports are unchanged.
+            **({"source_section_selections": _section_rows} if _section_rows else {}),
             # The INGEST SOURCE per station (owner ruling 2026-08-03): {station_id: edi|mth5|emtfxml}.
             # A provenance fact, not a summary: for a mixed survey it is the only place that says
             # which stations the EDI precedence rule resolved to EDI and which came from EMTF XML.

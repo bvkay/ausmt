@@ -62,10 +62,12 @@ the human review a curator does before a survey is published. The rationale is i
     It reads only, changes nothing, always exits 0, and reports three classes per station. **Will not
     read**: the file does not open in the reader AusMT uses and has to be fixed by whoever produced it
     (a reference latitude written `--26.0322667`, a doubled minus, is the real example;
-    `capricorn-2010`'s `CP3B21.edi` carries it). **Needs the `>INFO` repair**: AusMT reads the file only
-    via the parse-only fallback recorded in
+    `capricorn-2010`'s `CP3B21.edi` carries it). **Needs an AusMT repair**: AusMT reads the file only
+    via a parse-only fallback recorded in
     [`source_parse_fallbacks`](build-lifecycle.md#the-build-report);
-    246 of the 312 EDIs in the GSSA Western Gawler 2023 delivery are in this state. **Reads, but damage
+    246 of the 312 EDIs in the GSSA Western Gawler 2023 delivery are in this state for the `>INFO`
+    defect, and nine of the 764 in the GSSA Roxby Downs 2018 release for a `DATAID` the reader's
+    station-name charset refuses, whose own value the catalogue keeps as `site_name`. **Reads, but damage
     on the way in**: metadata values stored with a trailing comma (141 of 159 scraped values on one
     Western Gawler station), and number fields that carry their units in the value (a contact resistance
     written `2.5 kilo-ohms`), which are dropped in silence and publish empty. Only the first is a reason

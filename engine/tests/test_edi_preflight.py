@@ -547,9 +547,13 @@ def test_the_station_named_in_the_report_is_the_station_the_build_names(path):
 
 def test_a_station_id_the_reader_refuses_stops_the_file_and_is_predicted(tmp_path):
     """`read_header` validates DATAID OUTSIDE the try/except that guards the assignment, so a station
-    called `MT01(a)` never opens. Hyphens and spaces are fine (they become underscores); brackets,
-    `#` and `/` are not. Both halves checked against the reader, with a passing control so the test
-    cannot go green by refusing everything."""
+    called `MT01(a)` never opens on a stock reader. Hyphens and spaces are fine (they become
+    underscores); brackets, `#` and `/` are not. Both halves checked against the reader, with a
+    passing control so the test cannot go green by refusing everything.
+
+    The VERDICT is needs_repair, not terminal: AusMT normalises the id on a temporary copy and keeps
+    the custodian's own value as site_name, so the file reads. The engine oracle is what decides
+    that here, exactly as it decides every other verdict in this module."""
     def _with_dataid(name: str, value: bytes) -> Path:
         path = tmp_path / name
         path.write_bytes(re.sub(rb"DATAID=\S+", b"DATAID=" + value, NODECL.read_bytes(), count=1))
@@ -557,9 +561,9 @@ def test_a_station_id_the_reader_refuses_stops_the_file_and_is_predicted(tmp_pat
 
     bad = _with_dataid("bad.edi", b"MT01(a)")
     finding = pf.preflight_file(bad)
-    assert finding["outcome"] == pf.WILL_NOT_READ
+    assert finding["outcome"] == pf.NEEDS_REPAIR
     assert finding["blocking_fields"][0]["field_plain"] == "station id"
-    assert _engine_outcome(bad) == pf.WILL_NOT_READ
+    assert _engine_outcome(bad) == pf.NEEDS_REPAIR
 
     fine = _with_dataid("fine.edi", b"MT-01")
     assert pf.preflight_file(fine)["outcome"] == pf.READS == _engine_outcome(fine)

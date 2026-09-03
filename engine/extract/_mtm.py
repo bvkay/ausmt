@@ -319,6 +319,391 @@ def _is_single_period_defect(exc: BaseException) -> bool:
     return False
 
 
+DATAID_CHARSET_DEFECT = (
+    "the DATAID is outside the reader's station-name charset, so mt_metadata refused the file before "
+    "reading anything; reparsed from a temporary copy whose DATAID is normalised to that charset, "
+    "with the custodian's own DATAID kept as the station's site_name (the source file is untouched "
+    "and is what is served)"
+)
+
+# ---------------------------------------------------------------------------------------------
+# THE EPI-KIT SECTION OF RECORD.
+#
+# An EPI-KIT file records its solution twice over: one `>=MTSECT` block carries the averaged
+# solution, named <DATAID>_avg, and after it come the per-frequency realisations the processor's own
+# "EstimationsPerFrequency" setting produced, named XPR-0 .. XPR-n. The averaged block is the
+# transfer function of record; the realisations are its inputs, and the late ones hold little but the
+# EMPTY sentinel.
+#
+# mt_metadata reads a multi-section file by scanning EVERY data block in it and REBINDING
+# data_dict[key] at each block header (io/edi/edi.py::_read_mt), so the parse silently returns the
+# LAST section in the file. Measured over the three GSSA EPI-KIT packages, 932 files:
+# the reader returned the averaged block 0 times of 75 sampled and the last realisation 75 times; on
+# copper-coast-2020 that is 440 of the 3847 impedance values the averaged blocks hold, and four
+# stations publishing no resistivity at all.
+#
+# THE SELECTION RULE: <DATAID>_avg, else the section named for the DATAID, else the FIRST section.
+# The last clause is the honest default for a file whose sections name no solution of record -- the
+# first section is where a writer puts the answer -- and it is never "whichever one the parser
+# happened to finish on".
+#
+# Applied ON A TEMPORARY COPY, exactly like the >INFO delimiter repair: the copy keeps the head, the
+# info block, the measurement definitions and the chosen section alone. D1 stands: the served bytes
+# are the custodian's file.
+SECTION_OF_RECORD_RULE = "<DATAID>_avg, else the section named for the DATAID, else the first"
+
+_SECTID_RE = re.compile(rb"^\s*SECTID\s*=\s*(.*?)\s*$", re.IGNORECASE)
+_DATAID_RE = re.compile(rb"^\s*DATAID\s*=\s*(.*?)\s*$", re.IGNORECASE)
+
+
+def _unquote(value: bytes) -> str:
+    """The value as mt_metadata sees it: io/tools.py::_validate_edi_lines strips `"` and `'` from
+    every line before any section parser runs, so quoting is not part of any identifier."""
+    return value.replace(b'"', b"").replace(b"'", b"").strip().decode("utf-8", "replace")
+
+
+def _is_section_header(stripped: bytes) -> bool:
+    """True for a line that OPENS an EDI data section. mt_metadata's own test (data_section.py::
+    get_data) is `">=" in line and "sect" in line.lower()`, which also matches a line carrying that
+    pair anywhere -- an >INFO note, for instance. This requires the `>=` to LEAD the stripped line,
+    which every real section header does. The two only disagree on a file whose prose fools the
+    reader, and there this test finds FEWER sections, so the conditioning below stands down and the
+    file reads exactly as it does today."""
+    return stripped.startswith(b">=") and b"sect" in stripped.lower()
+
+
+def _head_dataid(lines: list[bytes]) -> str | None:
+    """The DATAID written in the >HEAD block, or None. Block bounds mirror header.py::
+    get_header_list (start: a line containing ">" and "head"; end: the next line starting with ">"),
+    so a DATAID-shaped line anywhere else in the file is not mistaken for the header's."""
+    in_head = False
+    for line in lines:
+        stripped = line.strip()
+        if not in_head:
+            if stripped.startswith(b">") and b"head" in stripped.lower():
+                in_head = True
+            continue
+        if stripped.startswith(b">"):
+            return None
+        m = _DATAID_RE.match(stripped)
+        if m:
+            return _unquote(m.group(1))
+    return None
+
+
+def _sections(lines: list[bytes]) -> list[tuple]:
+    """Every data section as (sectid_or_None, start_line, stop_line). A section runs from its header
+    to the next section header, or to the `>END` marker, or to the end of the file."""
+    starts = [i for i, ln in enumerate(lines) if _is_section_header(ln.strip())]
+    end = next((i for i, ln in enumerate(lines) if ln.strip().upper().startswith(b">END")),
+               len(lines))
+    out = []
+    for n, start in enumerate(starts):
+        stop = starts[n + 1] if n + 1 < len(starts) else (end if end > start else len(lines))
+        sectid = None
+        for ln in lines[start:stop]:
+            m = _SECTID_RE.match(ln.strip())
+            if m:
+                sectid = _unquote(m.group(1))
+                break
+        out.append((sectid, start, stop))
+    return out
+
+
+def _ident(value: str) -> str:
+    """One EDI identifier in comparable form: runs of non-alphanumeric characters collapse to a
+    single `_`, the ends are trimmed of it, and case is dropped.
+
+    Comparing the raw strings is not enough, and the reason is measured rather than imagined. Two of
+    the 764 files in the GSSA Roxby Downs 2018 release carry `DATAID="222 "` and `DATAID="245 "`
+    against `SECTID="222 _avg"` and `SECTID="245 _avg"`: the writer put the trailing space inside the
+    section name, so `<DATAID>_avg` built from the trimmed DATAID misses by one character. Both files
+    happen to put the averaged block first, so a raw comparison still publishes the right section
+    through the rule's last clause -- but by accident, and the next delivery that orders its sections
+    differently would silently publish a realisation. Collapsing separators is what makes the NAME
+    decide it. Two sections whose names differ only in punctuation would now compare equal; the first
+    match wins and the fallback is the first section either way, so the worst case is the answer the
+    rule already gives."""
+    return re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").lower()
+
+
+def section_of_record(raw: bytes) -> tuple:
+    """(sectid, index, total) for `raw` under SECTION_OF_RECORD_RULE. `total` is how many data
+    sections the file carries, so a caller can tell "one section, nothing to choose" from "chose the
+    first of several". (None, -1, 0) for a file with no data section at all."""
+    lines = raw.splitlines(keepends=True)
+    sections = _sections(lines)
+    if not sections:
+        return (None, -1, 0)
+    dataid = _head_dataid(lines)
+    if dataid:
+        for preferred in (_ident(dataid + "_avg"), _ident(dataid)):
+            for i, (sectid, _a, _b) in enumerate(sections):
+                if sectid is not None and _ident(sectid) == preferred:
+                    return (sectid, i, len(sections))
+    return (sections[0][0], 0, len(sections))
+
+
+def keep_single_section(raw: bytes, sectid) -> bytes:
+    """Return `raw` carrying the section named `sectid` and no other, every other byte exactly as it
+    was: the head, the info block and the measurement definitions ahead of the first section are
+    kept, the other sections' metadata and data blocks are dropped, and the `>END` marker and
+    anything after it are kept. Operates on BYTES and never re-encodes.
+
+    Returns the ORIGINAL object when there is nothing to drop (one section, or a name this file does
+    not carry), which is what lets the caller refuse to condition a file that does not need it."""
+    lines = raw.splitlines(keepends=True)
+    sections = _sections(lines)
+    if len(sections) < 2:
+        return raw
+    chosen = next(((a, b) for sid, a, b in sections if sid == sectid), None)
+    if chosen is None:
+        return raw
+    end = next((i for i, ln in enumerate(lines) if ln.strip().upper().startswith(b">END")),
+               len(lines))
+    tail = lines[end:] if end >= sections[-1][1] else []
+    return b"".join(lines[:sections[0][1]] + lines[chosen[0]:chosen[1]] + tail)
+
+
+def dataid_needs_normalising(dataid) -> bool:
+    """Does the PINNED reader refuse this DATAID? Measured by calling mt_metadata's own
+    utils/validators.validate_station_name -- the function header.py::read_header calls OUTSIDE the
+    try/except that guards the assignment, so a value it refuses stops the read before anything else
+    is attempted. Asking the library rather than mirroring its regex is what keeps this from
+    normalising a name that already reads (the four space-only unsafe DATAIDs in the Roxby Downs
+    release read perfectly well and must not be touched)."""
+    if not HAVE_MTM or dataid in (None, ""):
+        return False
+    try:
+        from mt_metadata.utils.validators import validate_station_name  # noqa: PLC0415
+    except Exception:  # noqa: BLE001  (no validator to consult: nothing is refused on speculation)
+        return False
+    try:
+        validate_station_name(dataid)
+    except Exception:  # noqa: BLE001  (any refusal, by whatever class the library raises)
+        return True
+    return False
+
+
+def normalise_dataid(dataid: str) -> str:
+    """The DATAID rewritten into the reader's station-name charset: every character outside letters,
+    digits and underscore becomes `_`. That is mt_metadata's own rewrite (it maps space, `-`, `.`
+    and `+` the same way) extended to the characters it refuses instead of mapping, so a name it
+    already accepts comes back unchanged and one it refuses comes back in the form it would have
+    produced. The leading/trailing strip mirrors the validator's own first act."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", str(dataid).strip())
+
+
+def rewrite_head_dataid(raw: bytes, dataid: str) -> bytes:
+    """Return `raw` with the >HEAD block's DATAID value replaced by `dataid`, the line's indentation
+    and ending kept, and every other byte exactly as it was. Returns the ORIGINAL object when there
+    is no >HEAD DATAID to rewrite."""
+    lines = raw.splitlines(keepends=True)
+    in_head = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not in_head:
+            if stripped.startswith(b">") and b"head" in stripped.lower():
+                in_head = True
+            continue
+        if stripped.startswith(b">"):
+            break
+        if _DATAID_RE.match(stripped):
+            body = line.rstrip(b"\r\n")
+            indent = body[:len(body) - len(body.lstrip())]
+            lines[i] = indent + b"DATAID=" + dataid.encode("utf-8") + line[len(body):]
+            return b"".join(lines)
+    return raw
+
+
+# ---------------------------------------------------------------------------------------------
+# THE DOUBLED COORDINATE SIGN.
+#
+# A coordinate written with its sign character repeated -- `REFLAT=--26.0322667` -- is not a number,
+# and what the reader does with it depends on which key carries it. Measured against the pinned
+# library, per key, rather than reasoned from its source:
+#
+#   >=DEFINEMEAS REFLAT / REFLONG   FATAL. read_measurement assigns through a BARE setattr, outside
+#                                   any try/except, and the position validator refuses the string, so
+#                                   the read stops before anything else is attempted. One file in the
+#                                   corpus carries this (capricorn-2010 CP3B21.edi) and it has
+#                                   therefore published nothing at all.
+#   >HEAD LAT / LONG                SILENT. The assignment is guarded, so the value is dropped: the
+#                                   station falls back to the reference position, or, with no
+#                                   reference position behind it, publishes latitude 0.0.
+#
+# So the fatal case costs a station and the silent case would mislocate one, and neither key carries
+# the defect anywhere in the corpus but that single REFLAT. Covering all four is inert today and
+# closes the silent case before a delivery brings it.
+#
+# THE COLLAPSE RULE: a run of two or more IDENTICAL leading sign characters becomes one of that
+# character, and nothing else on the line is touched. A repeated keystroke is the whole class this
+# repairs. A MIXED run (`-+`) is deliberately left refused: it is not a repeated keystroke, and
+# picking either of its signs would choose a hemisphere the custodian did not write.
+#
+# And the collapse only happens where it WORKS: the single-sign form is offered to the reader's own
+# position validator first, and a value that is still not a position is left exactly as the custodian
+# wrote it. Without that test a coordinate carrying a repeated sign AND some other corruption would
+# fail with an error message about a string the file does not contain, which is the reader lying
+# about the bytes it read. A file this cannot rescue fails byte for byte as it does today.
+#
+# Applied ON A TEMPORARY COPY, exactly like the >INFO delimiter repair and the section selection: the
+# served bytes keep the custodian's own characters.
+COORDINATE_SIGN_RUN_DEFECT = (
+    "a coordinate is written with its sign character repeated, which is not a number the reader can "
+    "accept; reparsed from a temporary copy with the run collapsed to a single sign (the source file "
+    "is untouched and is what is served)"
+)
+
+# The four keys above, anchored at the start of their line so nothing inside a data block or a
+# measurement definition can match, and requiring a digit or a decimal point after the sign run so a
+# value that is not numeric at all is left alone.
+_COORD_SIGN_RUN_RE = re.compile(
+    rb"^[ \t]*(?P<key>(?:REF)?(?:LATITUDE|LAT|LONGITUDE|LONG|LON))[ \t]*=[ \t]*"
+    rb"(?P<sign>[+-])(?P=sign)+(?P<rest>[0-9.][^\s]*)",
+    re.IGNORECASE)
+
+
+def _position_kind(key: str) -> str:
+    """Which of the validator's two ranges this EDI key is measured against."""
+    bare = key.upper().removeprefix("REF")
+    return "latitude" if bare.startswith("LAT") else "longitude"
+
+
+def position_reads(value: str, kind: str) -> bool:
+    """Does the PINNED reader accept this position string? Measured by calling mt_metadata's own
+    utils/location_helpers.validate_position -- the function both the header and the measurement
+    parsers reach -- rather than mirroring its parsing and its range checks here. Asking the library
+    is what keeps this from conditioning a value the library would refuse anyway.
+
+    No library means no rescue: nothing can read the file at all, so the bytes are left alone."""
+    if not HAVE_MTM:
+        return False
+    try:
+        from mt_metadata.utils.location_helpers import validate_position  # noqa: PLC0415
+    except Exception:  # noqa: BLE001  (no validator to consult: nothing is conditioned on speculation)
+        return False
+    try:
+        validate_position(value, kind)
+    except Exception:  # noqa: BLE001  (any refusal, by whatever class the library raises)
+        return False
+    return True
+
+
+def collapse_coordinate_sign_runs(raw: bytes):
+    """(bytes, rows): `raw` with every REPAIRABLE doubled coordinate sign collapsed to one, and a row
+    per collapse naming the key, what the file says and what the reader is given.
+
+    Repairable means the collapsed value is one the reader's own validator accepts; a line that fails
+    that test is left untouched and takes no row, so a file this cannot rescue raises the error stock
+    mt_metadata raises, about the bytes the custodian actually wrote.
+
+    Returns the ORIGINAL object and an empty list when there is nothing to collapse, which is what
+    lets the caller refuse to condition a file that does not need it. Operates on BYTES, keeps each
+    line's indentation and padding, and never re-encodes."""
+    lines = raw.splitlines(keepends=True)
+    rows: list = []
+    for i, line in enumerate(lines):
+        body = line.rstrip(b"\r\n")
+        m = _COORD_SIGN_RUN_RE.match(body)
+        if m is None:
+            continue
+        one = m.group("sign") + m.group("rest")
+        field = m.group("key").decode("utf-8", "replace").upper()
+        read_as = one.decode("utf-8", "replace")
+        if not position_reads(read_as, _position_kind(field)):
+            continue
+        rows.append({"field": field,
+                     "value": body[m.start("sign"):m.end("rest")].decode("utf-8", "replace"),
+                     "read_as": read_as})
+        lines[i] = body[:m.start("sign")] + one + body[m.end("rest"):] + line[len(body):]
+    return (b"".join(lines), rows) if rows else (raw, [])
+
+
+def _freq_count(raw: bytes, sectid) -> int | None:
+    """How many values the named section's `>FREQ` block carries, counted from the bytes. None when
+    the section carries no such block."""
+    lines = raw.splitlines(keepends=True)
+    for sid, a, b in _sections(lines):
+        if sid != sectid:
+            continue
+        values, reading = 0, False
+        for line in lines[a:b]:
+            stripped = line.strip()
+            if stripped.startswith(b">"):
+                reading = stripped.upper().startswith(b">FREQ")
+                continue
+            if reading:
+                values += len(stripped.split())
+        return values if values else None
+    return None
+
+
+def _assert_section_of_record(p: Path, conditioned: bytes, sectid: str, tf) -> None:
+    """The build-time assertion the refuter asked for: when a file carried more than one section, the
+    parse must have come from the one the rule names, or the station is dropped LOUDLY (the caller
+    records the raise in build_report's source_parse_failures and stations_dropped, and the deploy
+    gate refuses the build). Two independent observables over the conditioned bytes: exactly one
+    section survives and it is the named one, and the parsed frequency count is that section's own.
+
+    BOUNDARY, stated: the frequency count cannot tell two sections of equal length apart, which every
+    EPI-KIT realisation is. It catches a copy that lost or merged blocks, not a mis-selection; the
+    NAME check is what proves the selection, and the per-value proof against a section's own ZXYR
+    block lives in the test suite and in the lane's build evidence, not in every build of every
+    file."""
+    sections = _sections(conditioned.splitlines(keepends=True))
+    if len(sections) != 1 or sections[0][0] != sectid:
+        raise ValueError(
+            f"section-of-record conditioning did not isolate {sectid!r} in {p.name}: the copy carries "
+            f"{[s[0] for s in sections]} (rule: {SECTION_OF_RECORD_RULE})")
+    want = _freq_count(conditioned, sectid)
+    got = int(tf.period.size) if getattr(tf, "period", None) is not None else 0
+    if want is not None and want != got:
+        raise ValueError(
+            f"section-of-record parse of {p.name} returned {got} frequencies where section "
+            f"{sectid!r} declares {want}: the parse did not come from the section it was given")
+
+
+def _pre_read_conditioning(p: Path, raw: bytes):
+    """(conditioned_bytes, facts, reasons) for the three defects that are read off the FILE.
+
+    They are conditioned BEFORE the read, not after a failure, because none announces itself as one:
+    a multi-section file parses happily and returns the wrong transfer function, a refused DATAID
+    raises inside the header read where no signature distinguishes it from a malformed header, and a
+    doubled coordinate sign is fatal on one key and silent on another. Every condition is measured
+    instead -- the reader's own section scan, the reader's own name validator, the shape of the
+    coordinate itself -- so each is as narrow as the signature predicates its siblings use.
+
+    Narrow in the same four ways as every other conditioning here: `.edi` only (the caller's guard);
+    only when the measured condition holds; only when the conditioning actually CHANGES the bytes;
+    and, unlike the failure-triggered fallbacks, a conditioned read that fails is NOT quietly
+    replaced by the unconditioned one -- publishing the wrong section silently is the defect, so the
+    station is dropped loudly instead."""
+    facts: dict = {}
+    reasons: list = []
+    conditioned = raw
+    collapsed, sign_rows = collapse_coordinate_sign_runs(conditioned)
+    if collapsed is not conditioned:
+        conditioned = collapsed
+        facts["coordinate_signs_collapsed"] = sign_rows
+        reasons.append(COORDINATE_SIGN_RUN_DEFECT)
+    sectid, _index, total = section_of_record(conditioned)
+    if total > 1 and sectid is not None:
+        kept = keep_single_section(conditioned, sectid)
+        if kept is not conditioned:
+            conditioned = kept
+            facts["section_selected"] = {"sectid": sectid, "sections_dropped": total - 1}
+    dataid = _head_dataid(conditioned.splitlines(keepends=True))
+    if dataid and dataid_needs_normalising(dataid):
+        read_as = normalise_dataid(dataid)
+        rewritten = rewrite_head_dataid(conditioned, read_as)
+        if rewritten is not conditioned:
+            conditioned = rewritten
+            facts["dataid_normalised"] = {"original": dataid, "read_as": read_as}
+            reasons.append(DATAID_CHARSET_DEFECT)
+    return conditioned, facts, reasons
+
+
 def _read_once(path: Path):
     tf = TF()
     tf.read(str(path))
@@ -427,8 +812,49 @@ def _read_with_fallback(path: Path):
         raise
 
 
+def _read_with_parse_facts(path: Path):
+    """(TF, fallback_reason_or_None, facts). `_read_with_fallback` preceded by the two EPI-KIT
+    conditionings that have to happen BEFORE the reader sees the file (see `_pre_read_conditioning`).
+
+    `facts` is what the build records per station: `section_selected` when the file carried more than
+    one data section, `dataid_normalised` when the reader's name validator refused the DATAID, and
+    `coordinate_signs_collapsed` when a coordinate repeated its sign character. Absent keys mean
+    absent conditioning, so every file in a corpus of ordinary EDIs yields `{}` and takes the
+    untouched path below, byte for byte as before.
+
+    The reason string stays what it has always meant -- what stopped mt_metadata reading the file at
+    all -- so a section selection does NOT set one: the file read perfectly well, it just answered
+    with the wrong one of its solutions. The two are recorded in different ledgers for that reason.
+    """
+    p = Path(path)
+    if p.suffix.lower() != ".edi":
+        tf, reason = _read_with_fallback(p)
+        return tf, reason, {}
+    raw = p.read_bytes()
+    conditioned, facts, reasons = _pre_read_conditioning(p, raw)
+    if conditioned is raw:
+        tf, reason = _read_with_fallback(p)
+        return tf, reason, facts
+    # The conditioned copy lives in a TemporaryDirectory destroyed before this returns, is never
+    # returned to a caller and never reaches the served tree or the sha256 integrity gate (both of
+    # which take the ORIGINAL path). The three failure-triggered fallbacks still apply to it, so a
+    # file carrying an EPI-KIT defect AND a delimiter defect is still rescued.
+    with tempfile.TemporaryDirectory(prefix="ausmt-edi-epikit-") as scratch_dir:
+        scratch = Path(scratch_dir) / p.name
+        scratch.write_bytes(conditioned)
+        tf, reason = _read_with_fallback(scratch)
+    if facts.get("section_selected"):
+        _assert_section_of_record(p, conditioned, facts["section_selected"]["sectid"], tf)
+    # mt_metadata records the path it read in TF.fn. Point it back at the custodian's file, exactly
+    # as the delimiter fallback does. NOT guarded -- a failure to scrub is a leak and must be loud.
+    tf.fn = p
+    if reason:
+        reasons.append(reason)
+    return tf, (" + ".join(reasons) if reasons else None), facts
+
+
 def _read(path: Path):
-    return _read_with_fallback(path)[0]
+    return _read_with_parse_facts(path)[0]
 
 
 def read(path: Path):
@@ -439,9 +865,16 @@ def read(path: Path):
 
 
 def read_with_fallback(path: Path):
-    """`read`, plus the reason string when the >INFO delimiter fallback fired (None when it did not),
-    so the build can RECORD per station that a file needed it. Silent repair is not acceptable."""
-    return _read_with_fallback(path)
+    """`read`, plus the reason string when a normalising fallback fired (None when none did), so the
+    build can RECORD per station that a file needed one. Silent repair is not acceptable."""
+    return _read_with_parse_facts(path)[:2]
+
+
+def read_with_parse_facts(path: Path):
+    """`read_with_fallback`, plus the per-file parse facts the build carries into station.json and
+    build_report: which data section the transfer function came from, and whether the DATAID the
+    reader read was a normalised form of the custodian's. `{}` for every file that needed neither."""
+    return _read_with_parse_facts(path)
 
 
 def classify(pmin, has_z, has_t):

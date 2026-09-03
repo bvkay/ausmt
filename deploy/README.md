@@ -144,6 +144,18 @@ failed build or verify leaves `current` untouched and exits non-zero with the fa
 so a host-side swap gets `Permission denied` (exactly what the first real deploy hit after build +
 verify had already passed).
 
+The verify gate FAILS on a build that lost a station, and it reads both of `build_report.json`'s
+ledgers for it: `source_parse_failures`, the files the reader refused outright, and
+`stations_dropped`, every station the build did not publish whatever refused it (a convention gate, a
+missing coordinate or period, an MTH5 read failure, or the reader). Each has its own reviewed in-repo
+allow file, one `<survey slug>/<source file name>` per line with the reason above it, and the rules
+are the same for both: a missing file allows nothing, a build whose surveys carry no such list
+predates the field and FAILS, and `--allow-parse-failures` / `--allow-stations-dropped` point the
+gates at another file. `engine/scripts/parse-failures-allowed.txt` is EMPTY, and
+`engine/scripts/stations-dropped-allowed.txt` names the stations the sign-convention gate refuses,
+whose fix belongs to the custodian's export. Adding a line to either is a curatorial decision that
+gives up on a station; it is reviewed like any other change and is never a way past a red gate.
+
 ### Time-series hand-off routes: the table goes out BEFORE the data
 
 `/go/ts/<survey>/<station>/<level>` 302s a reader to the file's one NCI THREDDS URL. The resolution is

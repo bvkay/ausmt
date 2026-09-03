@@ -57,13 +57,14 @@
         "stations_built": {"type": "integer", "minimum": 0},
         "stations_dropped": {
           "type": "array",
-          "description": "structured per-station drops: the C25 convention-gate FAILs (which name the gate, the angles and the fix), the stations whose coordinates or periods could not be recovered, and the source files mt_metadata could not read at all (whose file and reader error are also carried, typed, in source_parse_failures)",
+          "description": "structured per-station drops: the C25 convention-gate FAILs (which name the gate, the angles and the fix), the stations whose coordinates or periods could not be recovered, and the source files mt_metadata could not read at all (whose reader error is also carried, typed, in source_parse_failures)",
           "items": {
             "type": "object",
             "required": ["station", "reason"],
             "additionalProperties": false,
             "properties": {
               "station": {"type": "string"},
+              "file": {"type": "string", "description": "the name of the source file this station was dropped from. A drop row is the whole record for a station the corpus does not publish, and the only action it can lead to is opening that file; `station` is the id the build settled on, which for a third-party release is not the file's name (Roxby Downs 2018 withholds RD18-188e, whose source is 188_S__2.edi). Every drop path writes it. NOT required, because scripts/verify.py --data-dir validates a build_report already on disk, which during a rollback or a pre-swap check is one an older engine wrote without it."},
               "reason": {"type": "string"}
             }
           }
@@ -94,7 +95,7 @@
         },
         "source_parse_failures": {
           "type": "array",
-          "description": "per-station record of source files mt_metadata could not read AT ALL, and that no normalised reparse rescued: the negative twin of source_parse_fallbacks. Each row is a DROPPED station and also carries a {station, reason} row in stations_dropped, which is where drop COUNTS are read; this array exists because stations_dropped has no room for the file name or the reader's own error, and a curator needs both to tell a malformed header from a reader defect. Until the GDS readers lane these failures printed to stderr and continued, writing no record at all, so a station could vanish from a green build unremarked. The stations_dropped row raises the survey warning; this array raises none of its own, so one lost station is counted once. Empty for every survey whose files all read; optional for pre-fix reports.",
+          "description": "per-station record of source files mt_metadata could not read AT ALL, and that no normalised reparse rescued: the negative twin of source_parse_fallbacks. Each row is a DROPPED station and also carries a {station, reason} row in stations_dropped, which is where drop COUNTS are read; this array exists because stations_dropped has no room for the reader's own error, and a curator needs it beside the file name to tell a malformed header from a reader defect. Until the GDS readers lane these failures printed to stderr and continued, writing no record at all, so a station could vanish from a green build unremarked. The stations_dropped row raises the survey warning; this array raises none of its own, so one lost station is counted once. Empty for every survey whose files all read; optional for pre-fix reports.",
           "items": {
             "type": "object",
             "required": ["station", "file", "error"],
@@ -117,6 +118,21 @@
               "station": {"type": "string"},
               "file": {"type": "string", "description": "the supplied file's name"},
               "defect": {"type": "string", "description": "what the reader could not do, and what was reparsed instead"}
+            }
+          }
+        },
+        "source_section_selections": {
+          "type": "array",
+          "description": "per-station record of which data section a MULTI-section source file's transfer function came from, and how many sections were left unread. An EPI-KIT file records its solution twice over: one >=MTSECT block carries the averaged solution named <DATAID>_avg, and after it come the per-frequency realisations XPR-0..XPR-n. mt_metadata rebinds each data block as it meets it, so an unconditioned read returns the LAST section, which is one sparse realisation rather than the transfer function of record. AusMT reads the section of record instead (<DATAID>_avg, else the section named for the DATAID, else the first), from a temporary copy carrying that section alone; the served bytes and the catalogue sha256 are still the custodian's unmodified file. A PROVENANCE fact, not a repair log, and also raised as a counted survey warning. WRITTEN ONLY WHEN IT FIRES: a survey whose files each carry one section (which is every survey in the corpus at the time this was added) carries no such key at all.",
+          "items": {
+            "type": "object",
+            "required": ["station", "file", "sectid", "sections_dropped"],
+            "additionalProperties": false,
+            "properties": {
+              "station": {"type": "string"},
+              "file": {"type": "string", "description": "the supplied file's name"},
+              "sectid": {"type": "string", "description": "the SECTID of the section the transfer function was read from"},
+              "sections_dropped": {"type": "integer", "minimum": 1, "description": "how many other data sections the file carries and this build did not read"}
             }
           }
         },

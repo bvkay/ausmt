@@ -272,6 +272,46 @@ def writer_from_text(raw):
     return {"name": name, "version": version}
 
 
+# --- THE EPI-KIT PROCESSING TYPE ---------------------------------------------------------------
+# An EPI-KIT EDI states the processing it ran as a member of its JSON >INFO block. mt_metadata reads
+# none of it, and the free-text scrape looks for the phrase "remote reference", which no EPI-KIT file
+# writes, so a remote-reference station published remote_reference false while its own served bytes
+# said RemoteH1: the record and the file it cites contradicting each other.
+#
+# The vocabulary is CLOSED and measured, not guessed: over the three GSSA EPI-KIT packages, 932
+# files, RemoteH1 and Single are the only values that appear. Anything else answers None and the
+# facet is decided by whatever decides it today, because a value nobody has seen is not a value to
+# assign a meaning to.
+EPIKIT_PROCESSING_TYPES = {"remoteh1": True, "single": False}
+
+# The writer stamp that scopes this seam. Files carrying the same JSON block shape but exported by a
+# different program exist on the corpus, and they are NOT read here: what they publish is a curatorial
+# question about merged packages, not a reader defect, and leaving them alone is what keeps this
+# change inert on every product the corpus already serves.
+_EPIKIT_WRITER = "epi-kit"
+_EPIKIT_PROCESSING_TYPE = re.compile(r'"?ProcessingType"?\s*:\s*"?([A-Za-z0-9_-]+)"?', re.IGNORECASE)
+
+
+def epikit_processing_type(raw):
+    """The ProcessingType an EPI-KIT-written EDI declares in its JSON >INFO block, verbatim, or None
+    for any file this seam does not speak for (another writer, no >INFO block, no such member)."""
+    text = raw or ""
+    if _EPIKIT_WRITER not in (grab(text, "PROGVERS") or "").lower():
+        return None
+    m = _INFO_BLOCK.search(text)
+    if not m:
+        return None
+    hit = _EPIKIT_PROCESSING_TYPE.search(m.group(1))
+    return hit.group(1) if hit else None
+
+
+def epikit_remote_reference(raw):
+    """True/False where an EPI-KIT file declares a processing type this corpus has measured, None
+    everywhere else. None means "this seam says nothing", never "single site"."""
+    declared = epikit_processing_type(raw)
+    return EPIKIT_PROCESSING_TYPES.get(declared.lower()) if declared else None
+
+
 def _line_of(text, pos):
     a = text.rfind("\n", 0, pos) + 1
     b = text.find("\n", pos)
