@@ -684,6 +684,16 @@
      #16110b on --copper = 6.44:1, AA). */
   .tourbtns .tourprimary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
   .tourbtns .tourprimary:hover{border-color:var(--copper)}
+  /* The selection demo's pointer glyph. It sits ABOVE the spot and the card (3003) because it travels from
+     the map into the rail, crossing both, and it is out of hit testing entirely so it can never intercept
+     a click meant for the control it is pointing at. The transitions are the press dip and the closing
+     fade; the reduced-motion rule below strips both, and the tour takes its instant path there anyway. */
+  .tourcursor{position:fixed;z-index:3003;width:16px;height:20px;margin:-2px 0 0 -2px;pointer-events:none;
+    opacity:1;transition:opacity .12s ease,transform .12s ease;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}
+  .tourcursor svg{display:block}
+  .tourcursor svg path{fill:var(--copper);stroke:#16110b;stroke-width:1;stroke-linejoin:round}
+  .tourcursor.press{transform:scale(.82)}
+  .tourcursor.out{opacity:0}
 
   /* --- S3: year range / downloadable-only / go-to-place / recently-added --- */
   .fieldnote{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}

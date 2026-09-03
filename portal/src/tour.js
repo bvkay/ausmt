@@ -54,13 +54,13 @@ const TOUR_STEPS=[
    enter:_tourEnterSelbox},
   {sel:"#map",
    text:"Selecting in action: zoom to {survey}, draw a rectangle, and every station inside is selected - {n} here.",
-   enter:_tourEnterSelectStep},
+   enter:_tourEnterSelectDemo},
   {sel:"#dlLevel2",
    text:"Level 2 transfer functions, served by AusMT: EDI, EMTF XML and MTH5 zips for your selection.",
-   enter:_tourEnterSelectStep},
+   enter:_tourEnterSelectDownload},
   {sel:"#dlTimeSeries",
    text:"Time series at NCI: download lists by level, handed off through an AusMT redirect. Metadata and citations follow below.",
-   enter:_tourEnterSelectStep},
+   enter:_tourEnterSelectDownload},
   {sel:"#navSurveys",
    text:"Surveys lists every survey. Let's look.",
    enter:_tourEnterMapView},
@@ -184,7 +184,7 @@ function _tourEnterSurveysView(){
 // own mode is captured ONCE on entering the group and restored when the walk leaves it, so a move inside
 // the group never touches it. `created` records whether the tour made a selection of its own, so the
 // teardown clears the demo and never a selection the visitor brought with them.
-let _tourSel={mode:null,created:false,bounds:null};
+let _tourSel={mode:null,created:false,bounds:null,dimmed:false};
 function _tourEnterSelectMode(){
   if(typeof setSidebarMode!=="function"||typeof sidebarMode==="undefined")return;
   if(_tourSel.mode===null)_tourSel.mode=sidebarMode;
@@ -194,11 +194,11 @@ function _tourLeaveSelectGroup(){
   if(_tourSel.created){
     try{if(typeof drawn!=="undefined"&&drawn.clearLayers)drawn.clearLayers();}catch(e){}
     if(typeof selected!=="undefined"){selected.clear();if(typeof updateSel==="function")updateSel();}
-    if(typeof clearSurveyDim==="function")clearSurveyDim();
   }
+  if(_tourSel.dimmed&&typeof clearSurveyDim==="function")clearSurveyDim();
   if(_tourSel.mode!==null&&typeof setSidebarMode==="function")setSidebarMode(_tourSel.mode);
   if(_tourMapMoved&&_tourSnap){_tourFitBounds(_tourSnap.bounds);_tourMapMoved=false;}
-  _tourSel={mode:null,created:false,bounds:null};
+  _tourSel={mode:null,created:false,bounds:null,dimmed:false};
 }
 // The selection demo needs an unobstructed map, so the group closes an open drawer on arrival. Whose
 // drawer it was does not matter: the pre-tour snapshot puts a visitor's own drawer back on close, and
@@ -210,8 +210,253 @@ function _tourEnterSelbox(){
   _tourOpened.drawer=false;
   _tourEnterSelectMode();
 }
-function _tourEnterSelectStep(){
+
+// ---- the selection demo ----------------------------------------------------------------------------
+// The demo shows selection happening: frame the demo survey, move a cursor to the Draw rectangle button,
+// grow a rectangle over the survey, and leave the stations inside it selected. Constraints:
+//   * No dependency and no asset. The cursor is an inline glyph and the preview is a Leaflet layer.
+//   * The demo never ARMS the real draw handler. A handler armed and never completed would swallow the
+//     visitor's next map click; the button is lit for the beat the cursor presses it and nothing more.
+//   * The end state is applied through the same seam a hand-drawn shape uses, so the selection, the rail
+//     mode and the toast are the app's own behaviour rather than a second implementation of it.
+//   * Reduced motion, and any environment with no frame clock to rely on, take the INSTANT path straight
+//     to that end state. The animation is decoration over a result that stands without it.
+//   * Every frame and timer is registered, so an interrupt cancels all of them: no loop may outlive the
+//     step that started it.
+const TOUR_RECT_PAD=0.1,TOUR_RECT_MIN_PAD=0.01;      // rectangle padding: 10 percent of span, with a floor
+const TOUR_ANIM={fit:600,glide:500,press:120,grow:900,fade:120};
+const TOUR_RECT_STYLE={color:"#EF7256",weight:2};                                  // matches a hand-drawn shape
+const TOUR_PREVIEW_STYLE={color:"#EF7256",weight:2,dashArray:"6 5",fill:false};    // the growing outline
+
+let _tourAnim={raf:0,timers:[],cursor:null,layer:null,seq:0};
+function _tourAnimPending(){
+  return{raf:_tourAnim.raf!==0,timers:_tourAnim.timers.length,cursor:!!_tourAnim.cursor,
+    layer:!!_tourAnim.layer,running:_tourAnim.raf!==0||_tourAnim.timers.length>0};
+}
+function _tourAnimTimer(fn,ms){
+  const id=setTimeout(()=>{
+    const k=_tourAnim.timers.indexOf(id);if(k>=0)_tourAnim.timers.splice(k,1);
+    fn();
+  },ms);
+  _tourAnim.timers.push(id);
+  return id;
+}
+// Cancel everything the demo has in flight. Bumping the sequence invalidates any callback already queued,
+// so a frame or timer that fires between the clear and its own removal stands down instead of acting on a
+// step that has been left.
+function _tourAnimCancel(){
+  _tourAnim.seq++;
+  _tourAnim.timers.forEach(clearTimeout);_tourAnim.timers=[];
+  if(_tourAnim.raf){cancelAnimationFrame(_tourAnim.raf);_tourAnim.raf=0;}
+  if(_tourAnim.cursor){_tourAnim.cursor.remove();_tourAnim.cursor=null;}
+  if(_tourAnim.layer){try{if(typeof map!=="undefined"&&map.removeLayer)map.removeLayer(_tourAnim.layer);}catch(e){}_tourAnim.layer=null;}
+  const btn=document.getElementById("drawRect");
+  if(btn&&btn.classList)btn.classList.remove("armed");
+}
+function _tourInstant(){
+  if(typeof window!=="undefined"&&window.AUSMT_TOUR_INSTANT===true)return true;
+  try{return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){return false;}
+}
+// The demo rectangle: the demo survey's positioned extent, padded so every one of its stations is inside
+// rather than on the edge. The floor keeps a single-station or single-line survey from producing a
+// degenerate box no station can be strictly inside.
+function _tourDemoBounds(){
+  const sv=_tourDemoSurvey();
+  if(!sv||typeof ST==="undefined")return null;
+  const pts=ST.filter(s=>s.survey===sv&&hasPosition(s));
+  if(!pts.length)return null;
+  const lats=pts.map(s=>s.lat),lons=pts.map(s=>s.lon);
+  const south=Math.min(...lats),north=Math.max(...lats),west=Math.min(...lons),east=Math.max(...lons);
+  const padLat=Math.max((north-south)*TOUR_RECT_PAD,TOUR_RECT_MIN_PAD);
+  const padLon=Math.max((east-west)*TOUR_RECT_PAD,TOUR_RECT_MIN_PAD);
+  return{south:south-padLat,north:north+padLat,west:west-padLon,east:east+padLon};
+}
+// The rectangle's membership over the CURRENTLY VISIBLE stations, which is what a drawn shape selects.
+// Axis-aligned, so this is the same answer the shape layer's point-in-polygon test gives for this box.
+function _tourRectMembers(b){
+  if(!b||typeof visible==="undefined")return[];
+  return visible.filter(s=>hasPosition(s)&&s.lat>=b.south&&s.lat<=b.north&&s.lon>=b.west&&s.lon<=b.east)
+                .map(s=>s.i);
+}
+function _tourFocusDemo(){
+  const sv=_tourDemoSurvey();
+  if(!sv||typeof focusSurvey!=="function")return;
+  focusSurvey(sv);
+  _tourMapMoved=true;_tourSel.dimmed=true;
+}
+// The end state, applied the way a completed draw applies one: the shape replaces any previous shape,
+// refresh() re-derives the selection from it, and the rail surfaces the exports the selection enabled.
+// The demo's selection IS the rectangle's membership: where no shape layer carried the rectangle, the
+// same membership is applied directly, so the count the copy prints is always the rectangle's contents
+// and never a lower number from a shape the map did not take.
+function _tourApplyDemo(b){
+  if(!b)return;
+  try{
+    if(typeof drawn!=="undefined"&&drawn.clearLayers)drawn.clearLayers();
+    if(typeof L!=="undefined"&&L.rectangle&&typeof drawn!=="undefined"&&drawn.addLayer){
+      const rect=L.rectangle([[b.south,b.west],[b.north,b.east]],TOUR_RECT_STYLE);
+      if(rect&&rect.options)rect.options.interactive=false;
+      drawn.addLayer(rect);
+    }
+  }catch(e){}
+  if(typeof refresh==="function")refresh();
+  if(typeof hasShapes!=="function"||!hasShapes()){
+    if(typeof selected!=="undefined"){
+      selected=new Set(_tourRectMembers(b));
+      if(typeof updateSel==="function")updateSel();
+    }
+  }
+  if(typeof setSidebarMode==="function")setSidebarMode("select");
+  _tourSel.created=true;_tourSel.bounds=b;
+  if(typeof toast==="function"&&typeof drawSelectionMsg==="function")
+    toast(drawSelectionMsg(_tourDemoCount(),"rectangle"));
+}
+// ---- the animation ---------------------------------------------------------------------------------
+function _tourFrames(ms,onFrame,onDone){
+  const start=_tourNow(),seq=_tourAnim.seq;
+  const tick=()=>{
+    _tourAnim.raf=0;
+    if(_tourStep<0||_tourAnim.seq!==seq)return;
+    const t=ms>0?Math.min(1,(_tourNow()-start)/ms):1;
+    onFrame(t);
+    if(t<1){_tourAnim.raf=requestAnimationFrame(tick);return;}
+    if(onDone)onDone();
+  };
+  _tourAnim.raf=requestAnimationFrame(tick);
+}
+function _tourCursorMake(){
+  const c=document.createElement("div");
+  c.className="tourcursor";c.id="tourCursor";c.setAttribute("aria-hidden","true");
+  c.innerHTML='<svg viewBox="0 0 16 20" width="16" height="20"><path d="M1 1 L1 16 L5 12 L8 19 L11 18 L8 11 L14 11 Z"></path></svg>';
+  document.body.appendChild(c);
+  _tourAnim.cursor=c;
+  return c;
+}
+function _tourCursorAt(c,p){if(c&&p){c.style.left=Math.round(p.x)+"px";c.style.top=Math.round(p.y)+"px";}}
+function _tourPointOf(el){
+  if(!el||!el.getBoundingClientRect)return null;
+  const r=el.getBoundingClientRect();
+  return{x:r.left+r.width/2,y:r.top+r.height/2};
+}
+// A latitude/longitude as a viewport point. Falls back to the map's centre wherever the projection is
+// unavailable, so the glyph always has somewhere real to be and the demo never fails on the geometry.
+function _tourMapPoint(lat,lng){
+  const el=document.getElementById("map");
+  const r=el&&el.getBoundingClientRect?el.getBoundingClientRect():null;
+  try{
+    if(typeof map!=="undefined"&&map.latLngToContainerPoint&&typeof L!=="undefined"&&L.latLng&&r){
+      const p=map.latLngToContainerPoint(L.latLng(lat,lng));
+      const x=Number(p&&p.x),y=Number(p&&p.y);
+      if(isFinite(x)&&isFinite(y))return{x:r.left+x,y:r.top+y};
+    }
+  }catch(e){}
+  return r?{x:r.left+r.width/2,y:r.top+r.height/2}:{x:0,y:0};
+}
+function _tourGlide(c,from,to,ms,done){
+  if(!from||!to){if(done)done();return;}
+  _tourFrames(ms,t=>{
+    const e=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;                     // ease in and out, so the move reads
+    _tourCursorAt(c,{x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e});
+  },done);
+}
+function _tourPreviewMake(){
+  try{
+    if(typeof L==="undefined"||!L.layerGroup||typeof map==="undefined")return null;
+    const g=L.layerGroup();
+    if(g&&g.addTo)g.addTo(map);
+    _tourAnim.layer=g;return g;
+  }catch(e){return null;}
+}
+function _tourPreviewDraw(g,bb){
+  try{
+    if(!g||!g.clearLayers)return;
+    g.clearLayers();
+    const r=L.rectangle([[bb.south,bb.west],[bb.north,bb.east]],TOUR_PREVIEW_STYLE);
+    if(r&&r.options)r.options.interactive=false;
+    g.addLayer(r);
+  }catch(e){}
+}
+// The map's own fit animates, so the demo waits for it before moving the cursor. Bounded: a map that
+// never reports the move (a stubbed or already-settled map) still proceeds on the timer.
+function _tourWaitFit(cb){
+  let done=false;
+  const finish=()=>{
+    if(done)return;done=true;
+    try{if(typeof map!=="undefined"&&map.off)map.off("moveend",finish);}catch(e){}
+    cb();
+  };
+  try{if(typeof map!=="undefined"&&map.once)map.once("moveend",finish);}catch(e){}
+  _tourAnimTimer(finish,TOUR_ANIM.fit);
+}
+function _tourRunDemo(b){
+  _tourAnimCancel();
+  const seq=_tourAnim.seq;
+  const alive=()=>_tourStep>=0&&_tourAnim.seq===seq;
+  _tourFocusDemo();
+  const c=_tourCursorMake();
+  _tourCursorAt(c,_tourMapPoint((b.south+b.north)/2,(b.west+b.east)/2));
+  const btn=document.getElementById("drawRect");
+  _tourWaitFit(()=>{
+    if(!alive())return;
+    const btnPt=_tourPointOf(btn)||_tourMapPoint(b.north,b.west);
+    _tourGlide(c,_tourPointOf(document.getElementById("map"))||btnPt,btnPt,TOUR_ANIM.glide,()=>{
+      if(!alive())return;
+      if(c.classList)c.classList.add("press");
+      if(btn&&btn.classList)btn.classList.add("armed");
+      _tourAnimTimer(()=>{
+        if(!alive())return;
+        if(c.classList)c.classList.remove("press");
+        const nw=_tourMapPoint(b.north,b.west);
+        _tourGlide(c,btnPt,nw,TOUR_ANIM.glide,()=>{
+          if(!alive())return;
+          const g=_tourPreviewMake();
+          _tourFrames(TOUR_ANIM.grow,t=>{
+            const bb={north:b.north,west:b.west,
+                      south:b.north+(b.south-b.north)*t,east:b.west+(b.east-b.west)*t};
+            _tourPreviewDraw(g,bb);
+            _tourCursorAt(c,_tourMapPoint(bb.south,bb.east));   // the glyph rides the moving corner
+          },()=>{
+            if(!alive())return;
+            _tourFinishDemo(b,c);
+          });
+        });
+      },TOUR_ANIM.press);
+    });
+  });
+}
+function _tourFinishDemo(b,c){
+  if(_tourAnim.layer){
+    try{if(typeof map!=="undefined"&&map.removeLayer)map.removeLayer(_tourAnim.layer);}catch(e){}
+    _tourAnim.layer=null;
+  }
+  const btn=document.getElementById("drawRect");
+  if(btn&&btn.classList)btn.classList.remove("armed");
+  _tourApplyDemo(b);
+  if(c){
+    if(c.classList)c.classList.add("out");
+    _tourAnimTimer(()=>{if(_tourAnim.cursor===c){c.remove();_tourAnim.cursor=null;}},TOUR_ANIM.fade);
+  }
+  if(_tourStep>=0&&_tourEls)_tourLayout();   // the copy prints the count the selection actually has
+}
+// The demo step. Idempotent: arriving with the demo already established changes nothing, so stepping
+// back into it neither replays the animation nor re-derives the selection.
+function _tourEnterSelectDemo(){
   _tourEnterSelbox();
+  if(_tourSel.created)return;
+  const b=_tourDemoBounds();
+  if(!b)return;                              // no positioned survey: the step renders its copy, no demo
+  if(_tourInstant()){_tourFocusDemo();_tourApplyDemo(b);return;}
+  _tourRunDemo(b);
+}
+// The download steps live inside the same group and need the same selection, but they never animate:
+// arriving at one backwards from outside the group re-creates the end state directly.
+function _tourEnterSelectDownload(){
+  _tourEnterSelbox();
+  if(_tourSel.created)return;
+  const b=_tourDemoBounds();
+  if(!b)return;
+  _tourFocusDemo();
+  _tourApplyDemo(b);
 }
 // Find demo. Save the visitor's own query, type the demo query and dispatch a REAL bubbling input event
 // so the live wiring in filters.js (refresh() + renderFind()) filters the map and renders the actual
@@ -624,6 +869,7 @@ function _tourLayout(){
 function _tourExitCurrent(){
   const s=TOUR_STEPS[_tourStep];
   if(s&&typeof s.exit==="function")s.exit();
+  _tourAnimCancel();     // no frame or timer of the selection demo outlives the step that started it
   _tourDetachSettle();   // drop this step's settle watcher on every way out, symmetric with attach
 }
 // Group cleanup: run the owning group's teardown when, and only when, the move crosses its boundary.
@@ -651,7 +897,7 @@ function startTour(){
   if(!TOUR_STEPS.length)return;
   _tourOpened={drawer:false,hash:null};
   _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;
-  _tourSel={mode:null,created:false,bounds:null};
+  _tourSel={mode:null,created:false,bounds:null,dimmed:false};
   _tourDemoSv=undefined;_tourDemoIdx=undefined;   // resolve the demo subjects afresh against the loaded corpus
   _tourTakeSnapshot();                 // the workspace the visitor is handed back on close, from any step
   // A COLLAPSED rail hides every child but the collapse button, so the rail steps would spotlight nothing

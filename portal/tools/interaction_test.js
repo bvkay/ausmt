@@ -346,7 +346,13 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // collection resolves one from the corpus that is actually loaded, so these are what the pins compare
   // the rendered copy and the opened subjects against, never a literal.
   "tourDemoSurvey:()=>_tourDemoSurvey(),tourDemoCollection:()=>_tourDemoCollection()," +
-  "tourDemoStation:()=>_tourDemoStation()," +
+  "tourDemoStation:()=>_tourDemoStation(),startTour,stopTour," +
+  // The selection demo. tourDemoBounds is the padded rectangle the demo draws and tourRectMembers its
+  // membership, so a pin can state the expected selection from the geometry instead of a literal;
+  // tourAnimPending is the animation's own registry of pending frames, timers, cursor and preview layer,
+  // which is what an interrupt has to leave empty.
+  "tourDemoBounds:()=>_tourDemoBounds(),tourRectMembers:(b)=>_tourRectMembers(b)," +
+  "tourAnimPending:()=>_tourAnimPending()," +
   "tourStepText:(i)=>_tourText(TOUR_STEPS[i]),tourStepSel:(i)=>TOUR_STEPS[i].sel," +
   // Settle-until-stable re-layout (owner 2026-07-22): the drawer step opens a target that keeps reflowing
   // after open (slide, then the async station.json frame-line inject, then a possible map re-fit), so the
@@ -1372,6 +1378,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // FOCUS MANAGEMENT (U7): showing the popup moves focus INTO the dialog.
   ok(introWelcome.contains(doc.activeElement), "showing the welcome popup must move focus into the dialog, active=" + (doc.activeElement && doc.activeElement.id));
 
+  // THE SELECTION DEMO'S INSTANT PATH, for this window only. The driver PARKS requestAnimationFrame (so
+  // the deferred map re-fit can be drained deterministically), which means an animation driven by frames
+  // could never advance here and every tour leg below would hang on a demo that never finishes. The tour
+  // exposes the same instant path reduced motion takes, and this flag selects it, so the legs below assert
+  // the demo's END STATE - which is what they are about. The animation itself is driven in its own fresh
+  // window, whose frame clock is real, with a bounded wait (section H6).
+  win.AUSMT_TOUR_INSTANT = true;
+
   // G1. CHECKBOX PERSISTENCE MATRIX (U7): dismiss ticked/unticked × close-via {tour, browse, Esc, click-out}.
   // Ticked -> the dismissal PERSISTS (localStorage key set) on every close path; unticked -> it does NOT
   // (the popup may return next visit). Load-bearing: on OLD code there is no such popup at all.
@@ -1811,6 +1825,83 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "files: the select steps must close the drawer so the demo map is unobstructed");
   _arrow("Escape");
   ok(A.tourStep() === -1, "files: could not close the tour after the Files-step checks");
+
+  // H6. THE SELECTION DEMO (LANE-CONTRACT-TOUR-REVISION.md T3, T4). The demo zooms to the demo survey,
+  // draws a rectangle over it and selects what falls inside. Three properties are pinned.
+  //
+  // (1) THE INSTANT PATH. Reduced motion, and any environment with no frame clock to rely on, skip straight
+  //     to the end state. That is the path the walk pins drive, so it has to be complete on its own: the
+  //     rectangle applied through the same seam a hand-drawn shape uses, the selection equal to the
+  //     rectangle's membership, and the copy printing the count that selection actually has.
+  // (2) THE ANIMATED PATH reaches the SAME end state. Driven in a fresh window with a real frame clock and
+  //     a bounded wait, so a demo that never completes fails instead of hanging.
+  // (3) A CANCEL mid-animation leaves nothing behind: no pending frame, no pending timer, no cursor glyph
+  //     and no preview layer. Interrupting the tour must not leave a loop running against a torn-down step.
+  const _demoBounds = A.tourDemoBounds();
+  ok(_demoBounds && _demoBounds.south < _demoBounds.north && _demoBounds.west < _demoBounds.east,
+    "demo: the demo survey must yield a padded rectangle, got " + JSON.stringify(_demoBounds));
+  const _wantMembers = A.tourRectMembers(_demoBounds).slice().sort();
+  ok(_wantMembers.length === 2,
+    "demo: the fixture's demo survey has two positioned stations, so the padded rectangle must take both, got " +
+    JSON.stringify(_wantMembers));
+  doc.getElementById("clearSel").click();
+  _stepTo(7);
+  ok(A.tourStep() === 7, "demo: could not reach the selection-demo step, at " + A.tourStep());
+  ok(A.selCount() === _wantMembers.length,
+    "demo: the instant path must leave the rectangle's membership selected, got " + A.selCount() +
+    " against " + JSON.stringify(_wantMembers));
+  ok(A.sidebarMode() === "select", "demo: the demo must leave the rail in Select & download");
+  const _demoCopy = doc.getElementById("tourText").textContent;
+  ok(_demoCopy.indexOf(A.tourDemoSurvey()) >= 0,
+    "demo: the copy must name the RESOLVED survey, got " + JSON.stringify(_demoCopy));
+  ok(_demoCopy.indexOf("- " + _wantMembers.length + " here") >= 0,
+    "demo: the copy must print the count the selection actually has, got " + JSON.stringify(_demoCopy));
+  ok(_demoCopy.indexOf("{") < 0, "demo: no placeholder may survive into the rendered copy, got " + JSON.stringify(_demoCopy));
+  // IDEMPOTENCE: leaving the step and returning must not re-run the demo or change the end state.
+  _arrow("ArrowRight"); _arrow("ArrowLeft");
+  ok(A.tourStep() === 7 && A.selCount() === _wantMembers.length,
+    "demo: re-entering the demo step must be a no-op, selection is now " + A.selCount());
+  // The download steps RE-CREATE the demo without animation when they are reached with none present.
+  _arrow("Escape");
+  _stepTo(9);
+  ok(A.tourStep() === 9 && A.selCount() === _wantMembers.length,
+    "demo: arriving at the time-series step must ensure the demo selection, got " + A.selCount());
+  // OUTSIDE the group the demo is gone: the group owns it, and the boundary is where it is cleared.
+  _arrow("ArrowRight");
+  ok(A.tourStep() === 10 && A.selCount() === 0,
+    "demo: leaving the select group must clear the demo selection, got " + A.selCount());
+  _arrow("Escape");
+
+  // (2) + (3): a fresh window, whose frame clock is the real one (the driver's own is parked so the
+  // deferred map re-fit can be observed) and whose tour therefore takes the ANIMATED path.
+  const animWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html?tour=1");
+  const animA = animWin.__api;
+  ok(animA.tourStep() === 0, "demo/anim: ?tour=1 did not start the tour, at " + animA.tourStep());
+  for (let k = 0; k < 7; k++) animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  ok(animA.tourStep() === 7, "demo/anim: could not reach the selection-demo step, at " + animA.tourStep());
+  ok(animA.tourAnimPending().running === true,
+    "demo/anim: the demo must be running with a frame or timer pending, got " + JSON.stringify(animA.tourAnimPending()));
+  const _wantAnim = animA.tourRectMembers(animA.tourDemoBounds()).length;
+  const _deadline = Date.now() + 8000;
+  while (animA.selCount() !== _wantAnim && Date.now() < _deadline) await new Promise(r => setTimeout(r, 40));
+  ok(animA.selCount() === _wantAnim,
+    "demo/anim: the animated path must reach the same end state within the bound, selection is " + animA.selCount());
+  ok(animA.tourStepText(7).indexOf("- " + _wantAnim + " here") >= 0,
+    "demo/anim: the copy must print the animated demo's own count, got " + JSON.stringify(animA.tourStepText(7)));
+  // (3) CANCEL: restart, reach the demo step and step away immediately.
+  animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "Escape" }));
+  animA.startTour();
+  for (let k = 0; k < 7; k++) animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  ok(animA.tourAnimPending().running === true, "demo/cancel: setup must catch the demo mid-flight");
+  animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "ArrowLeft" }));
+  const _pend = animA.tourAnimPending();
+  ok(_pend.raf === false && _pend.timers === 0 && _pend.cursor === false && _pend.layer === false,
+    "demo/cancel: stepping away mid-animation must leave no frame, timer, cursor or preview layer, got " +
+    JSON.stringify(_pend));
+  ok(!animWin.document.getElementById("tourCursor"),
+    "demo/cancel: the cursor glyph must be removed from the document when the animation is cancelled");
+  animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "Escape" }));
+  ok(animA.tourAnimPending().running === false, "demo/cancel: closing the tour must leave nothing pending");
 
   // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
