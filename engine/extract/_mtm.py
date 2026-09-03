@@ -37,7 +37,7 @@ def available() -> bool:
 
 
 # ---------------------------------------------------------------------------------------------
-# mt_metadata 1.0.9 >INFO JSON trailing-delimiter defect (measured 2026-08-08, GSSA Western Gawler
+# Mt_metadata 1.0.9 >INFO JSON trailing-delimiter defect, GSSA Western Gawler
 # 2023, a Zonge job: 246 of 312 EDIs unreadable). THE DATA IS FINE; THE READER IS WRONG, in three
 # composing steps, all in mt_metadata:
 #
@@ -649,7 +649,7 @@ def _assert_section_of_record(p: Path, conditioned: bytes, sectid: str, tf) -> N
     BOUNDARY, stated: the frequency count cannot tell two sections of equal length apart, which every
     EPI-KIT realisation is. It catches a copy that lost or merged blocks, not a mis-selection; the
     NAME check is what proves the selection, and the per-value proof against a section's own ZXYR
-    block lives in the test suite and in the lane's build evidence, not in every build of every
+    block lives in the test suite and in the build evidence, not in every build of every
     file."""
     sections = _sections(conditioned.splitlines(keepends=True))
     if len(sections) != 1 or sections[0][0] != sectid:
@@ -997,7 +997,7 @@ def _is_placeholder_tipper(txr, txi, tyr, tyi) -> bool:
 
 def _is_missing(zi) -> bool:
     """True if a complex Z/T element is absent, NaN, a non-physical missing-data fill (~1e32), or
-    EXACT complex zero. The exact-zero arm is C19b (TAS120 incident, 2026-07-07): mt_metadata
+    EXACT complex zero. The exact-zero arm is C19b: mt_metadata
     converts an EDI's 1e32 fills to exact zeros on read, which passed the magnitude threshold and
     plotted as phase=0deg / rho=0 / tipper-dip data points at every source-masked period. A real
     estimated Z/T element is never exactly 0+0j to double precision; a SINGLE zero component
@@ -1118,7 +1118,7 @@ def components(path: Path):
 def proc_info_from_tf(tf, with_writer=False):
     """(software, algorithm, remote_reference[, file_written_by]) from an already-parsed TF object.
 
-    LINEAGE (2026-08-14): `software` is the program that PROCESSED the transfer function, which is
+    LINEAGE: `software` is the program that PROCESSED the transfer function, which is
     NOT the same fact as mt_metadata's `transfer_function.software`. That field is populated from
     the source file's own program stamp (an EDI HEAD's PROGNAME/PROGVERS), i.e. from whatever WROTE
     the file — for most of the corpus a database/plotting exporter that estimated nothing (see

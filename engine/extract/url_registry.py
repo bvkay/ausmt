@@ -1,4 +1,4 @@
-"""The published-URL id freeze (path-URL contract commit 3, owner ruling 2026-08-18).
+"""The published-URL id freeze.
 
 /surveys/<slug>, /stations/<ausmt_id> and /collections/<id> are PUBLISHED URL contracts, so the id
 VOCABULARY behind them is frozen in a checked-in registry (portal/data/url_registry.json): every
@@ -18,8 +18,7 @@ would be a second derivation, the exact divergence risk build_portal.py refuses 
 
   * survey slug   = mtcat surveys[].survey_id: declared in survey.yaml (`slug:`, defaulting to the
     package folder name), sanitised by safe_component. NOT derived from the display name in
-    --surveys builds. (--raw bulk-seed mode DOES slugify display labels; rebrand-fragile, flagged
-    as an owner item in the lane report.)
+    --surveys builds.
   * station ausmt_id = mtcat stations[].station_id: au.<survey-slug>.<station-id[.variant]>, the
     station id being the transfer function's own declared DATAID (sanitised), with a processing
     variant tag only when one survey holds the same station twice.
@@ -35,7 +34,7 @@ CLI (module form, like the other engine tools):
 --check: exits non-zero on any removed/changed id or any unpinned sitemap id; additions are
 auto-recorded into the registry and reported. --update: seeds or extends the registry (additions
 only; it refuses to bless a removal). The registry's `_meta.redirects` map plus a dated
-`_meta.notes` entry is where a genuinely moved id is recorded when the owner decides one.
+`_meta.notes` entry is where a genuinely moved id is recorded when one is decided.
 """
 from __future__ import annotations
 

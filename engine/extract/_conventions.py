@@ -18,10 +18,7 @@ GATE 1 — rotation/frame guard. mt_metadata 1.0.9 RECORDS rotation but never co
     rotation metadata. The raw-text evidence parse below is therefore load-bearing, not advisory.
 So the gate reads BOTH sources — the TF's _rotation_angle AND a cheap lexical parse of the source
 EDI (ZROT/TROT blocks, SPECTRA ROTSPEC attributes, HMEAS azimuths) — cross-checks them, and
-applies the owner-ruled frame POLICY v3 (owner doctrine 2026-07-11: "We serve the data as how we
-are given it; if we know any details about the coordinate frame we report it. Frame mixing is
-something we should pick up on and try to minimalize from the data coming in, but the de-rotated we
-should not do."). The engine NEVER rotates served data — DETECTION stays, CORRECTION goes:
+applies frame POLICY v3. The engine NEVER rotates served data - DETECTION stays, CORRECTION goes:
   * V3-A — survey-uniform declared angle (ANY magnitude): serve AS STORED, record the angle
     (frame_served="declared-azimuth", declared_azimuth_deg) + a note. The archive respects
     acquisition frames; rotation joins byte-rewriting as a thing the archive does not do. (Absorbs
@@ -82,8 +79,8 @@ ROT_ZERO_EPS_DEG = 0.01      # |angle| below this is zero (no rotation)
 AZIMUTH_TOL_DEG = 0.5        # HMEAS azimuth agreement tolerance (HY == HX+90, ROTSPEC == HX)
 ROT_FILL_MAX = 1e8           # missing-data sentinel threshold — same convention as _mtm._FILL_MAX
 
-# Frame POLICY v3 (owner-ruled 2026-07-11; supersedes v2's R1-R4 — see C25-ConventionGates.md).
-# Owner doctrine, verbatim: "We serve the data as how we are given it; if we know any details about
+# Frame POLICY v3.
+# Verbatim: "We serve the data as how we are given it; if we know any details about
 # the coordinate frame we report it. Frame mixing is something we should pick up on and try to
 # minimalize from the data coming in, but the de-rotated we should not do." So the engine NEVER
 # rotates served data — detection stays, correction goes:
@@ -321,7 +318,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
         return FrameDisposition(action="fail", facts=facts, fail_reason=reason)
 
     def _done(recorded_deg=None) -> FrameDisposition:
-        # V3: nothing is ever rotated. `recorded_deg` is a serve-as-stored declaration — the station
+        # Nothing is ever rotated. `recorded_deg` is a serve-as-stored declaration - the station
         # keeps its declared acquisition frame and the angle is recorded honestly. The rotation-source
         # fields stay in the record (always None now) for station.json shape stability; `derotated`
         # is always False. Frame labels never claim more than the file proves: the recorded reference
@@ -344,7 +341,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
         rs = _uniq_eps(_mask_sentinels(ev["rotspec"]))
         az = azimuth_implied_rotation(ev)
         if len(rs) > 1:
-            # V3-C: per-block spectra rotation is per-period frame mixing — refuse.
+            # Per-block spectra rotation is per-period frame mixing - refuse.
             return _fail(f"SPECTRA ROTSPEC varies across blocks ({rs[:4]}...) — each block sits in a "
                          f"DIFFERENT frame, so a single served curve would mix frames period-by-period "
                          f"(misleading-by-construction); fix: re-export in a single coherent frame.")
@@ -356,7 +353,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
         theta = None
         if rs_th is not None and az is not None:
             if abs(abs(_norm_angle(rs_th)) - abs(_norm_angle(az))) <= AZIMUTH_TOL_DEG:
-                # Black Hill ruling: |HMEAS-implied| == |ROTSPEC| -> ONE rotation, not two.
+                # The Black Hill case: |HMEAS-implied| == |ROTSPEC| -> ONE rotation, not two.
                 theta = _norm_angle(rs_th)
             else:
                 return _fail(f"SPECTRA frame declarations conflict: ROTSPEC={rs_th:g} but the HMEAS "
@@ -372,7 +369,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                              f"(HX={ev['azm_hx']}, HY={ev['azm_hy']}); no ROTSPEC stated")
         if theta is None or theta == 0.0:
             return _done()
-        # V3-A: a survey-uniform declared angle (any magnitude) — serve as stored, record honestly.
+        # A survey-uniform declared angle (any magnitude) - serve as stored, record honestly.
         notes.append(f"frame: served in its declared acquisition frame, x-axis {theta:g} deg from "
                      f"the file's zero/geographic reference (spectra ROTSPEC/HMEAS declaration; "
                      f"NOT rotated)")
@@ -402,14 +399,14 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
         nz = [a for a in u if abs(a) > ROT_ZERO_EPS_DEG]
         if nz:
             if len(u) > 1:
-                # V3-C: per-period ZROT places each period in a different frame — refuse. A single
+                # Per-period ZROT places each period in a different frame - refuse. A single
                 # served curve from period-varying frames is misleading-by-construction (the old R1
                 # PAX de-rotation is retired; absence is honester).
                 return _fail(f"per-period ZROT ({_angles_summary(u)}) places each period in a "
                              f"DIFFERENT frame — a single served curve would mix frames "
                              f"period-by-period (misleading-by-construction; principal-axis/PAX-style "
                              f"export); fix: re-export in a single coherent frame.")
-            # V3-A: survey-uniform nonzero declaration (any magnitude) — serve as stored, record.
+            # Survey-uniform nonzero declaration (any magnitude) - serve as stored, record.
             theta = _norm_angle(u[0])
             notes.append(f"frame: served in its declared acquisition frame, x-axis {theta:g} deg "
                          f"from the file's zero/geographic reference (declared uniform ZROT; "
@@ -448,13 +445,13 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
             return _fail("TROT mixes missing-data sentinels with nonzero angles — the tipper "
                          "frame is unknowable; fix: supply real angles or zero.")
         if len(tu) > 1 and tnz:
-            # V3-C: per-period tipper rotation — a single served tipper curve would mix frames.
+            # Per-period tipper rotation - a single served tipper curve would mix frames.
             return _fail(f"per-period TROT ({_angles_summary(tu)}) places each period's tipper in a "
                          f"DIFFERENT frame — a single served tipper curve would mix frames "
                          f"period-by-period (misleading-by-construction); fix: re-export in a single "
                          f"coherent frame.")
         if len(tu) == 1:
-            # F2 (owner doctrine: "if we know any details about the coordinate frame we report it"):
+            # F2:
             # a UNIFORM declared tipper frame that DIFFERS from the impedance's declared azimuth is a
             # known frame detail — record it first-class (station.json tipper_declared_azimuth_deg)
             # + note it (build_report/QA + the portal frame line). Covers both directions: TROT=-60
@@ -472,8 +469,8 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
 
 
 # ---------------------------------------------------------------------------------------------
-# De-rotation — DIAGNOSTIC-ONLY under POLICY v3 (the engine never rotates served data; owner ruling
-# 2026-07-11). No serve-path caller invokes apply_derotation: frame_disposition returns only pass/fail
+# De-rotation is DIAGNOSTIC-ONLY under POLICY v3: the engine never rotates served data, and no
+# serve-path caller invokes apply_derotation: frame_disposition returns only pass/fail
 # and never produces theta_z/theta_t. The math is RETAINED and kept pinned (the synthetic round-trips
 # + the AusLAMP-SA custodian-twin proof) so a future DIAGNOSTIC use — comparing an as-stored curve
 # against what a de-rotated one would look like — has a documented, verified transform to call.

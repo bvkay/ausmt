@@ -4,7 +4,7 @@
 SCOPE:377-380 asks for emitter-side validation beyond the schema, and this is that layer: referential
 integrity of a resource's run references, unique run and resource ids, time_period ordering, channel
 shape per component family, archive-row containment, withheld-branch rejection, DOI syntax, the
-zero-null rule over everything this lane adds, plus the 1.x pin that keeps `distribution.edi_path`
+zero-null rule over everything this module adds, plus the 1.x pin that keeps `distribution.edi_path`
 and the served EDI resource row stating one path (SCOPE:71-73).
 
 ONE implementation, two enforcement points: build_portal._validate_station_metadata runs it over the
@@ -55,11 +55,11 @@ _TS_REQUIRED = ("access_url", "processing_level")
 # space or bracket means the route was assembled by concatenation instead of encoded, and only the
 # encoded form resolves (NVP_2019's `C5 [REMOTE].zip`), so the unencoded one is a dead download.
 _TS_ENCODED = re.compile(r"^(?:[A-Za-z0-9/_.~-]|%[0-9A-Fa-f]{2})+$")
-# D19 (ruled 2026-08-24), fail-CLOSED rather than merely unemitted: the archive's level_2 tree holds
+# Fail-CLOSED rather than merely unemitted: the archive's level_2 tree holds
 # TRANSFER FUNCTIONS, so a level2 row under this kind asserts a recorded time series for a station
 # that has none. The emitter routes no such row; this refuses one that arrives by any other path.
 _TS_EXCLUDED_LEVEL = "level2"
-# What this lane ADDS. Section 2's zero-null rule is scoped to it: the frozen keys carry eight
+# What this module ADDS. Section 2's zero-null rule is scoped to it: the frozen keys carry eight
 # legitimate nulls (remote_site, coordinate_qc, rotspec, the emeas azimuths, the two rotation sources,
 # convention_check.detail), so the survey-metadata document's corpus-wide rule cannot be imported.
 # The fold (D1) is an addition too, and the scan reaches INTO `diagnostics` for exactly its members:

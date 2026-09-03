@@ -283,7 +283,7 @@ def _run_validator(cfg: RunnerConfig, package_dir: Path, out_json: Path, deadlin
     lives in the surveys repo (bind-mounted at AUSMT_VALIDATOR_PATH); it is invoked as a subprocess,
     never imported.
 
-    Invocation contract (fixed 2026-07-06, arbitration of the C31 review's cycle-1 flag): the
+    Invocation contract: the
     validator takes the package folder as a REQUIRED positional and `--json` takes an OUTPUT FILE
     path; its stdout carries only the human `[LEVEL] check message` lines — the machine-readable
     {counts, items, manifest} JSON goes ONLY to the --json file. The original implementation passed
@@ -358,7 +358,7 @@ def _run_preview(cfg: RunnerConfig, package_dir: Path, preview_dir: Path, summar
     """Run the engine preview build of the single package into preview_dir, then write a compact
     preview-summary.json (station count, types, coord flags, warnings). Returns True on success.
 
-    The layout contract (established EMPIRICALLY from the Olympic Dam 2004 incident, 2026-07-06):
+    The layout contract:
     safe-extract preserves the zip's single <slug>/ root, so package_dir/<slug>/survey.yaml is
     exactly the `--surveys <root>` shape build_portal's discover_work iterates — discovery is at the
     RIGHT level (the real 58-EDI package built 58/58 once its slug was valid). Two guards make a
@@ -473,7 +473,7 @@ def _generate_intake_files(package_dir: Path) -> list[str]:
     a package that keeps its correct 'file missing' WARNING). `intake` is imported lazily (it reaches
     the engine's _license_text leaf) so this module stays importable without the engine installed."""
     try:
-        from . import intake  # lazy: keeps the runner importable in the stack-less gateway lane
+        from . import intake  # lazy: keeps the runner importable in the stack-less gateway environment
         return intake.generate_intake_files(_single_package_root(package_dir))
     except Exception:  # noqa: BLE001 -- best-effort generation; a failure must not fail the job
         return []
@@ -488,7 +488,7 @@ def _import_preflight():
     makes once. The house rule exists so the runner never pulls the scientific stack (mt_metadata /
     mth5 / numpy) into itself; `edi_preflight` is stdlib-only by construction and pinned that way by
     its own test, so importing it costs nothing the rule is protecting against. Lazy, so the gateway
-    test lane can import this module with no engine present at all."""
+    test run can import this module with no engine present at all."""
     try:
         from extract.edi_preflight import advisory_summary, preflight_tree
     except ImportError:  # pragma: no cover - sibling-on-sys.path fallback (engine cwd / dev checkout)
@@ -546,7 +546,7 @@ def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) ->
     """The ONE canonical argv for invoking the surveys validator as a subprocess (M7, code-health
     review §6). Both the C10 submission runner (_run_validator above) and the C31 metadata-edit
     runner (edit._run_validator) go through this, so the invocation contract lives in exactly one
-    place — no second, independently-assembled argv can drift and re-open the 2026-07-06 ship-blocker
+    place - no second, independently-assembled argv can drift and re-open the ship-blocker
     (the folder had been passed as the --json VALUE with no positional, argparse exited 2, every real
     submission quarantined).
 

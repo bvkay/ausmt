@@ -192,8 +192,7 @@ def operator_env_vars() -> tuple[str, ...]:
     container (the .env->app bridge). DERIVED, never hand-listed: it records every key load_config()
     actually reads and drops the container-fixed paths above, so a knob newly added to load_config is
     required in compose AUTOMATICALLY. That closes the H1 drift CLASS - the regression pin can no longer
-    restate a stale copy of config's env surface and stay green while a var is silently dropped (the
-    2026-07-24 mail-var incident). Returned in first-read order, de-duplicated."""
+    restate a stale copy of config's env surface and stay green while a var is silently dropped. Returned in first-read order, de-duplicated."""
     seen: dict[str, None] = {}
 
     class _Recorder(dict):

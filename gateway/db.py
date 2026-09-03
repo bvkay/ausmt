@@ -166,7 +166,7 @@ def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
-    """v4 (C41 D2 owner amendment): per-curator TOTP secret for the destructive-op second factor. The
+    """V4: per-curator TOTP secret for the destructive-op second factor. The
     DB is already the secrets/PII home (never git, WAL-safe backed up, restore-drilled), so the secret
     lives here beside the session store — a survey deletion needs a valid TOTP code in addition to the
     curator session.
@@ -179,7 +179,7 @@ def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
       * last_used_step— the highest RFC 6238 time-step already consumed, so a code can never be
                         replayed within or across its window (a deletion needs a step STRICTLY GREATER).
 
-    Additive-only (the C43 lane invariant): a single CREATE TABLE IF NOT EXISTS, no existing column
+    Additive-only, which is the migration invariant: a single CREATE TABLE IF NOT EXISTS, no existing column
     touched, no data migrated. IF NOT EXISTS makes a re-run on a partially-migrated DB idempotent
     (mirrors v2's rationale). No unenrol/delete method exists by design (record D2, D12 boundary):
     lost-authenticator recovery is a console action (delete the row on the box), the same class as
@@ -198,7 +198,7 @@ def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
 
 def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
     """v3 (C43 D7): add a free-text `note` column to uploader_keys — a curator annotation (who the key
-    is for, expiry intent). ADDITIVE-ONLY (the C43 lane invariant): a single `ALTER TABLE ... ADD
+    is for, expiry intent). ADDITIVE-ONLY, the migration invariant: a single `ALTER TABLE ... ADD
     COLUMN note TEXT`, which SQLite applies without rewriting the table and which defaults every
     existing row's note to NULL (rendered as "—"). No existing column is touched, no data migrated.
 
@@ -214,7 +214,7 @@ def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
 
 def _migrate_v5_selfserve_keys(conn: sqlite3.Connection) -> None:
     """v5 (feat/selfserve-submit-keys): a SECOND, self-serve key-issuance path alongside the existing
-    operator-issued keys. Two additive changes, both the C43 lane invariant (no existing column
+    operator-issued keys. Two additive changes, both under the migration invariant (no existing column
     touched, no data migrated):
 
     1. uploader_keys gains three columns for key PROVENANCE + the email_verified extras:

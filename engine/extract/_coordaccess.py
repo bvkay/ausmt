@@ -112,8 +112,7 @@ def base_station_id(station_id, variant=None):
 
 def station_policy(default, overrides, station_id, variant=None):
     """The APPLICATION half of the one shared matcher: the effective policy for one station — its
-    per-station override if declared, else the survey default. Override keys are BASE station ids
-    (fix round 2 ruling): the record's id is base-stripped via base_station_id before matching, so
+    per-station override if declared, else the survey default. Override keys are BASE station ids: the record's id is base-stripped via base_station_id before matching, so
     privacy of a physical site covers ALL its processing variants. EXACT base match only — no
     prefixes, no stems. validate_overrides() is the validation half, checking keys against the very
     same base_station_id derivation, so a validated key can never be a silent no-op."""
@@ -292,7 +291,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
         if pol == "exact":
             continue
         masked_ausmt_ids.add(r.get("ausmt_id"))
-        # A1: stamp the RESOLVED policy on the (non-exact) record so the boot-loaded coord_policy.json
+        # Stamp the RESOLVED policy on the (non-exact) record so the boot-loaded coord_policy.json
         # marker and station.json can emit it WITHOUT re-deriving from coordinate values — the mask seam
         # already resolved it here (the record's rule: reuse, never re-derive). Exact records are left
         # unstamped, so an all-exact corpus keeps its zero-change default (no marker, no new key).

@@ -59,7 +59,7 @@ _KEY_EMAIL_MAX_CHARS = 254
 # second copy here can drift, and a write path that refuses a value the console offers is a 400 no
 # curator can act on.
 _COLLECTION_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-# F4 (D5-C): any control character (incl. newline/CR/TAB) is rejected in the collection id + release
+# Any control character (incl. newline/CR/TAB) is rejected in the collection id + release
 # note before they interpolate into a commit subject/body — a newline in either forges fake
 # `Curated-by:`/`Approved-by:` trailers into the git audit record (the git history IS the audit trail).
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -551,7 +551,7 @@ class Gateway:
                          "state": sub.state, "updated_utc": sub.updated_utc, "warn_count": warn_count})
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
         nav = self._nav_context(request, active="queue", crumb="<b>Submission queue</b>")
-        # C43 FR2-1: the queue page is purely the queue now (owner ruling, ratified 2026-07-11). The
+        # C43 FR2-1: the queue page is purely the queue now. The
         # serve-state panel moved to /gateway/curator/serve; the ever-present drift chip + that screen
         # own the served-vs-published job, so a second copy here was redundant.
         return self._html(curatorpage.render_queue(curator_name=name, rows=rows, csrf_token=csrf,
@@ -954,8 +954,7 @@ class Gateway:
         """GET /gateway/curator/ui.js — the shared curator-page behaviours (delegated data-confirm /
         data-toggle-big handlers) as an external same-origin script. The strictPages CSP blocks
         BOTH inline script blocks and inline on*-attribute handlers on every /gateway/* page —
-        three shipped inline and silently never ran (found 2026-07-08: the Reject and Revoke
-        confirms and the preview size toggle). Deliberately UNGATED (review C2): the LOGIN page
+        three shipped inline and silently never ran. Deliberately UNGATED (review C2): the LOGIN page
         loads it via the shared shell before any session exists — a gate here means every login
         view fetches JS, gets a 303 to HTML, and logs a nosniff console error. The content is a
         static public-repo constant; there is nothing to protect."""
@@ -1148,7 +1147,7 @@ class Gateway:
         email = (email_field or "").strip() or None
         if not name:
             return self.handle_uploaders(request, error="A name is required.", status_code=400)
-        # F5 (fix-round): modest server-side caps, consistent with the note cap — refused, not truncated.
+        # Modest server-side caps, consistent with the note cap - refused, not truncated.
         if len(name) > _KEY_NAME_MAX_CHARS:
             return self.handle_uploaders(
                 request, error=f"Name too long ({len(name)} chars; max {_KEY_NAME_MAX_CHARS}).",
@@ -1189,7 +1188,7 @@ class Gateway:
         """POST set-note (C43 D7): session + CSRF gated. Stores a free-text curator annotation on an
         ACTIVE key — SQLITE ONLY, never a git-bound path (the PII-containment invariant, D2.5).
 
-        F6 (fix-round, architect ruling): a REVOKED key is a READ-ONLY audit row (record D7) — a note
+        F6: a REVOKED key is a READ-ONLY audit row (record D7) - a note
         POST to a revoked id is REFUSED with 409 and changes nothing (the UI already hides the editor;
         this is the server-side enforcement, plus the DB layer's own `AND revoked_utc IS NULL` guard).
         An UNKNOWN id keeps the idempotent no-oracle redirect (matching revoke's posture).
@@ -1214,7 +1213,7 @@ class Gateway:
                 status_code=400, headers={"Cache-Control": "no-store"})
         key = self.db.get_uploader_key(key_id)
         if key is not None and key.revoked_utc is not None:
-            # F6: revoked = read-only audit row; the note is frozen at revocation time.
+            # Revoked = read-only audit row; the note is frozen at revocation time.
             return JSONResponse(
                 {"detail": "this key is revoked — a revoked key is a read-only audit row"},
                 status_code=409, headers={"Cache-Control": "no-store"})
@@ -1360,7 +1359,7 @@ class Gateway:
     def handle_survey_hub(self, request: Request, slug: str, tab: str = "overview", *,
                           error: str = "", field_errors: list | None = None,
                           submitted: dict | None = None) -> Response:
-        """The per-survey hub (C43 Stage 1 S1-2; C43-HUB header treatment). Overview & QA (default) /
+        """The per-survey hub (C43 Stage 1 S1-2; C43-HUB header styling). Overview & QA (default) /
         Stations / Metadata / History, inside the nav shell. EVERY tab runs the metadata read-job so
         the mockup's header (title + slug chip + orientation line) renders hub-wide — strict on the
         Metadata tab (the editor is useless without fields, so a failure bounces to the list),
@@ -1368,7 +1367,7 @@ class Gateway:
         browser-populated from /data (Overview/Stations) or runner read-jobs (History). Sync `def`
         route -> the seam's bounded blocking poll runs in Starlette's threadpool.
 
-        `error`/`field_errors`/`submitted` (HUB-SINGLE-SAVE 2026-08-14) re-render the Metadata tab
+        `error`/`field_errors`/`submitted` re-render the Metadata tab
         after a failed save from the hub's one metadata form: the per-section errors annotate their
         owning sections and `submitted` re-prefills EVERY section's widgets, so a bad ORCID in one
         section never discards what the curator typed in the other nine."""
@@ -1513,7 +1512,7 @@ class Gateway:
         submit is never accidentally removed). Returns (spec, None) or (None, error_message). Server-
         side guardrails (A2): the id must be lowercase-hyphenated; type/status must be in-vocab."""
         fid = (form.get("f_id") or "").strip()
-        # R3 (D5-C round 2): fullmatch, not match — an anchored `$` matches before a trailing newline.
+        # Fullmatch, not match - an anchored `$` matches before a trailing newline.
         # (.strip() above already removes one; every regex gate on this seam is exact-semantics anyway.)
         if not _COLLECTION_ID_RE.fullmatch(fid):
             return None, "The collection id must be lowercase-hyphenated (a-z 0-9 -), e.g. 'auslamp-sa'."
@@ -1524,7 +1523,7 @@ class Gateway:
         if fstatus and fstatus not in _COLLECTION_STATUS_VOCAB:
             return None, "Invalid collection status."
         fstart = (form.get("f_start_year") or "").strip()
-        # R2 (D5-C round 2): start_year is empty or EXACTLY a 4-digit year — a clear 400 naming the
+        # Start_year is empty or EXACTLY a 4-digit year - a clear 400 naming the
         # field. Kills the executed traps: "2003²" (isdigit-True but int()-ValueError -> an opaque
         # internal error) and "007" (a silent literal rewrite to 7).
         if fstart and not re.fullmatch(r"[0-9]{4}", fstart):
@@ -1557,7 +1556,7 @@ class Gateway:
             if s and s not in set_slugs:
                 set_slugs.append(s)
         remove_slugs = [s for s in rendered if s not in kept]
-        # F6 (D5-C): a slug landing in BOTH set and remove (a crafted/edge form — the normal UI can't
+        # A slug landing in BOTH set and remove (a crafted/edge form - the normal UI can't
         # produce it, the picker excludes current members) is dropped from BOTH, so one survey never
         # gets two ops in a batch. Dropping = the slug is left untouched (neither added nor removed).
         both = set(set_slugs) & set(remove_slugs)
@@ -1602,7 +1601,7 @@ class Gateway:
         if not note:
             return self._collection_preview_error(
                 request, cid, is_new, "A release note is required (it is written to every commit).")
-        # F5 (D5-C): the audit id is the DESIRED end-state id (spec.fields.id) in BOTH the create and the
+        # The audit id is the DESIRED end-state id (spec.fields.id) in BOTH the create and the
         # rename case — a rename rewrites every member's collection.id to the new id, so the commit
         # subject/branch/body must record the NEW id, not the stale URL cid. (Non-rename edit: new == url.)
         target_cid = spec["fields"]["id"]
@@ -1678,7 +1677,7 @@ class Gateway:
         surveys_live = self.cfg.surveys_live_dir
         if surveys_live is None:
             return JSONResponse({"detail": "AUSMT_SURVEYS_LIVE is not configured"}, status_code=503)
-        # F4 (D5-C): re-enforce the A2 guardrails on the untrusted client-carried spec BEFORE any commit
+        # Re-enforce the A2 guardrails on the untrusted client-carried spec BEFORE any commit
         # — id/type/status vocab + control-char rejection in cid/note. Fail-closed 409, nothing staged.
         violation = _collection_spec_violation(cid, operations, note)
         if violation:
@@ -1751,7 +1750,7 @@ class Gateway:
 
     def _edit_error_surface(self, request: Request, slug: str, form: dict, *, error: str = "",
                             field_errors: list | None = None) -> Response:
-        """HUB-SINGLE-SAVE (2026-08-14): re-render the surface the failed save CAME FROM.
+        """HUB-SINGLE-SAVE: re-render the surface the failed save CAME FROM.
 
         The hub's one metadata form posts a hidden HUB_FORM_FIELD marker; when it is present the
         curator goes back to the hub Metadata tab with the errors beside their owning sections and
@@ -2854,7 +2853,7 @@ def _slug_from_refs(refs: dict) -> str | None:
 
 
 def _collection_spec_violation(cid: str, operations: list, note: str) -> str | None:
-    """F4 (D5-C): re-enforce the console's own A2 guardrails on the UNTRUSTED client-carried spec at
+    """Re-enforce the console's own A2 guardrails on the UNTRUSTED client-carried spec at
     publish time (an authenticated curator can hand-edit the hidden spec_json). Returns an error string
     or None. The validator only WARNINGs on an out-of-vocab id/status, so without this a crafted spec
     would publish PAST the console's own guardrail; and a control char in cid/note forges git-trailer
@@ -2895,7 +2894,7 @@ def _collection_spec_violation(cid: str, operations: list, note: str) -> str | N
         bstatus = block.get("status")
         if bstatus and bstatus not in _COLLECTION_STATUS_VOCAB:
             return "an operation carries an out-of-vocab collection status"
-        # R2 (D5-C round 2): mirror the form's start_year gate — the spec is untrusted, so a crafted
+        # Mirror the form's start_year gate - the spec is untrusted, so a crafted
         # "2003²"/"007" must be refused here too, not surface as a runner error or a literal rewrite.
         # A JSON int (e.g. 2003) is fine: its str form is the same 4-digit literal.
         bstart = block.get("start_year")
@@ -3024,7 +3023,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     async def request_key(request: Request):
         # Accept BOTH body encodings. The portal form posts JSON ({"email": ...}); a Form(...)
         # parameter silently reads "" from a JSON body, so every real request failed the syntactic
-        # gate and the neutral 202 hid it (found live 2026-07-24 — the two halves were built against
+        # Gate and the neutral 202 hid it - the two halves were built against
         # an encoding-ambiguous contract). A public endpoint parses defensively: JSON when declared,
         # urlencoded/multipart otherwise, and any parse failure degrades to "" (the neutral path).
         # Cap the body AS BYTES ARRIVE before any parse: this public route read one email address

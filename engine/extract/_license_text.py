@@ -23,7 +23,7 @@ from __future__ import annotations
 # `_contract` is a SIBLING module (engine/extract/_contract.py). This module is imported in two
 # contexts and must resolve `_contract` in BOTH:
 #   * as a bare sibling — build_portal runs `sys.path.insert(0, HERE)` before importing us, and the
-#     engine test lane puts extract/ on sys.path; then `import _contract` works directly.
+#     engine test run puts extract/ on sys.path; then `import _contract` works directly.
 #   * as an installed package — the gw-runner does `from extract._license_text import ...` on the
 #     engine image (C37). There sys.path holds the package ROOT (engine/), not engine/extract/, so a
 #     bare `import _contract` would miss; `from extract._contract` is the resolvable path.
@@ -34,7 +34,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only in the installed-package (runner) context
     from extract._contract import LICENSES, PROFILES
 
-# C6: normalise a raw survey.yaml licence string to a canonical id for allow-list matching. trim ->
+# Normalise a raw survey.yaml licence string to a canonical id for allow-list matching. trim ->
 # collapse internal whitespace -> upper, then resolve a legacy bare alias (CC0, CC-BY, ODBL, ...) to
 # its canonical id. Allow-list keys and aliases are compared in this same UPPER space, so the match is
 # case-insensitive by construction. This is the ONLY place a licence string is canonicalised — the old
@@ -73,7 +73,7 @@ def recognised(license_str) -> bool:
 # C46 (CC-BY 4.0 §3(a) discharge): the default human summary rendered in the changes clause when a
 # survey declares no explicit attribution.changes_summary. Factual — it describes what the engine does
 # to every deposited transfer function it serves (EMTF-XML regeneration, MTH5, coordinate/identifier
-# conditioning). Owner-review wording (flagged in the C46-W2 report); to change it, edit here AND
+# conditioning). Reviewed wording; to change it, edit here AND
 # regenerate engine/tests/fixtures/license_instrument_vectors.json (both mirrors read the vectors).
 DEFAULT_CHANGES_SUMMARY = (
     "the deposited transfer functions were regenerated into AusMT's canonical distribution formats, "
@@ -204,7 +204,7 @@ def license_instrument_text(lic, licensor, year, attribution=None, sources=None,
             if slic and slic != cid:
                 lines += [f"The upstream dataset was obtained under {slic}; this AusMT release is "
                           f"published by the custodian under {cid}.", ""]
-        # C46-W3a: render each custodian profile's s.5-style DISCLAIMER once (dedup, first-seen order) as
+        # Render each custodian profile's s.5-style DISCLAIMER once (dedup, first-seen order) as
         # the final paragraph(s) of the Source-datasets block, when a source's profile carries one (today
         # only `ga`). The disclaimer is a profile-level legal notice distinct from the attribution LINE,
         # so it renders even when a source supplies a verbatim `statement` (which supplants only the line).

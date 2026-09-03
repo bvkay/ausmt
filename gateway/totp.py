@@ -1,4 +1,4 @@
-"""RFC 6238 TOTP — the workbench's destructive-op second factor (C41 D2 owner amendment, 2026-07-11).
+"""RFC 6238 TOTP - the workbench's destructive-op second factor.
 
 STDLIB ONLY, by design (C41: "the TOTP is stdlib by design"): hmac / hashlib / struct / base64 /
 time / secrets — no new dependency. TOTP is RFC 6238 (HOTP-over-time, RFC 4226), SHA-1, 30-second
@@ -7,8 +7,7 @@ steps, a ±1-step verify window for box clock skew, per-curator secret.
 The threat this closes (D2): the typed slug protects against a mistaken click; the second factor
 protects against a STOLEN curator session — a different and worse threat. Because the secret lives
 only in the gateway sqlite (never git, WAL-safe backed up), and verification is stdlib arithmetic,
-the box needs no egress (the 2026-07-11 DNS-outage failure mode would not have locked deletion out —
-an emailed code would have).
+the box needs no egress.
 
 PURE FUNCTIONS: this module holds no state. Enrolment storage (the per-curator secret + the
 replay-guard `last_used_step`) lives in gateway.db; the fail-closed verification POLICY (enrolled?
@@ -51,7 +50,7 @@ def _decode_secret(secret: str) -> bytes:
     genuinely malformed secret — the caller treats an undecodable secret as 'no valid enrolment'."""
     cleaned = secret.strip().replace(" ", "").upper()
     if not cleaned:
-        # F2: an empty / whitespace-only secret cleans to "" and base64.b32decode("") returns b"" — a
+        # An empty / whitespace-only secret cleans to "" and base64.b32decode("") returns b"" - a
         # VALID HMAC key — so verify() would compute and could MATCH an empty-key code instead of
         # refusing, contradicting the fail-closed claim. Reject it: verify() catches ValueError and
         # returns None, so an empty secret fails closed as documented. Unreachable via the DB today

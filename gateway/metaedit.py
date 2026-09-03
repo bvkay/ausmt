@@ -6,7 +6,7 @@ jobs/edit/ namespace. This module only writes job JSON, polls for the result JSO
 back; job files carry a SLUG and form values, never a filesystem path (the two containers mount
 surveys-live at different paths) and never PII.
 
-Adversarial-review FIX 1 (ship-blocker, 2026-07-06): the first implementation spawned
+Adversarial-review FIX 1: the first implementation spawned
 `sys.executable -m gateway.runner.edit` as a CHILD OF THE GATEWAY CONTAINER — whose image
 deliberately has no ruamel — so every real curator edit would have 500'd in deployment (tests passed
 only via an in-process seam). The queue below is the adjudicated replacement: the gateway enqueues,

@@ -31,7 +31,7 @@ _ALLOWED_NAME_CHARS = set(
 )
 
 # Extensions that make a member count as a transfer function for the "package is not empty" shape
-# rule. EDI and EMTF XML are both first-class submission inputs (owner ruling 2026-08-03). Checked on
+# Rule. EDI and EMTF XML are both first-class submission inputs. Checked on
 # the lowercased basename suffix; see inspect() for why this is a shape heuristic, not an allowlist.
 _TF_SUFFIXES = (".edi", ".xml")
 
@@ -100,7 +100,7 @@ def inspect(zip_path, max_upload_bytes: int) -> list[str]:
     "Transfer-function member" is a NAME-SHAPE heuristic, not an allowlist: this module is
     content-blind by design (house rule: the gateway never parses EDI/YAML), so it can only ask
     whether the package plausibly contains transfer functions at all. `.edi` and, since EMTF XML
-    became a first-class submission input (owner ruling 2026-08-03), `.xml` both count. The
+    became a first-class submission input, `.xml` both count. The
     surveys-repo validator is the authority on whether those files are really transfer functions and
     whether their type is accepted; this guard only stops an empty or obviously-wrong upload from
     consuming a scan + validation cycle.

@@ -73,7 +73,7 @@ def _load_existing(data_dir: Path):
 
 
 def _live_survey_digests(surveys_root: Path) -> dict:
-    """C18b (Amendment A3): recompute the sha256 of every survey.yaml under `surveys_root`, keyed by
+    """Recompute the sha256 of every survey.yaml under `surveys_root`, keyed by
     the SAME slug the build derives (safe_component(yaml.slug or dir.name)), so a sidecar slug resolves
     to its live source digest regardless of any slug/dir-name divergence. This reads the SOURCE
     survey.yaml files ONLY — never the cache dir; the consistency gate is cache-INDEPENDENT. Reuses
@@ -101,7 +101,7 @@ def _check_digest_consistency(data_dir: Path, surveys_root: Path):
 
     Compares out/products/survey_digests.json (the digest-stamp sidecar the build emitted) against the
     LIVE survey.yaml sources under `surveys_root`. FAILS when a served survey's XML was produced under a
-    digest that differs from its current source — the 2026-07-07 incident shape (a stale cache entry
+    digest that differs from its current source - the incident shape (a stale cache entry
     served a pre-edit product while surveys.json showed the post-edit metadata). Two independent checks
     per served survey:
       * xml_digest_stamped[station] == recomputed live survey.yaml digest (the product-vs-source check);
@@ -306,8 +306,8 @@ def _curator_allow_list(path: Path) -> set:
 
 def _check_source_parse_failures(rep, allow_path: Path):
     """THE LOST-STATION GATE. build_report.json has recorded `source_parse_failures` since the GDS
-    readers lane -- which source file the reader refused, and what it said -- and until now nothing
-    read it. Measured cost (GSSA/BHP Roxby Downs 2018, 2026-09-03): nine files refused, build exit 0,
+    readers arrived -- which source file the reader refused, and what it said -- and until now nothing
+    read it. Measured cost: nine files refused, build exit 0,
     no SKIP line, package validator 0 FAIL, and nine transfer functions absent from a corpus nobody
     was told had lost them.
 

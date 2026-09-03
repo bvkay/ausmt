@@ -119,14 +119,13 @@ def _dist_version(default="0.2.1"):
 def peak_rss_mib():
     """The build process's memory high-water mark in MiB, from resource.getrusage (a cheap kernel
     counter, no sampling): what build_report.json records as `peak_rss_mib` so every real build carries
-    its own peak and an operator can see the trend BEFORE the box runs out (the 2026-08-15 P350 OOM
-    kills were the first anyone heard of 13.7 GB). ru_maxrss is KiB on Linux and bytes on macOS; both
+    its own peak and an operator can see the trend BEFORE the box runs out. ru_maxrss is KiB on Linux and bytes on macOS; both
     are normalised here. None where the counter is unavailable (Windows), never a guess.
 
-    SCOPE (for the survey-parallel build lane, which composes with this): RUSAGE_SELF is THIS process
+    SCOPE (for the survey-parallel build, which composes with this): RUSAGE_SELF is THIS process
     only, and RUSAGE_CHILDREN reports the largest single waited-for descendant, never the sum over
     concurrent workers. With N worker processes the box-level footprint is about N times what either
-    counter reports. That lane must report max(RUSAGE_SELF, RUSAGE_CHILDREN) together with the worker
+    counter reports. That module must report max(RUSAGE_SELF, RUSAGE_CHILDREN) together with the worker
     count (or per-worker peaks) in build_report, and restate tests/test_build_memory.py's pin as a
     per-worker bound times workers, so the field keeps meaning "what the box needed"."""
     try:
@@ -162,8 +161,8 @@ def lib_versions() -> dict:
 
 
 def _json_default(obj):
-    """json.dumps `default=` hook for EVERY product emit (surveys.json, mtcat, catalogue, products,
-    ...). A survey.yaml that carries an UNQUOTED ISO date (e.g. `attribution.declared_date: 2026-07-25`)
+    """Json.dumps `default=` hook for EVERY product emit (surveys.json, mtcat, catalogue, products,
+    ...). A survey.yaml that carries an UNQUOTED ISO date
     is implicit-typed by PyYAML safe_load into a datetime.date, which survey_meta_from_yaml threads
     VERBATIM into SMETA — plain json.dumps could not serialise it and the whole build CRASHED at the
     first emit site (Object of type date is not JSON serializable), quarantining every survey with it.
@@ -374,10 +373,10 @@ def derived_rendition_withheld(r):
     The per-station coordinate byte-gate is a SEPARATE, additional filter with its own home in
     _coord_access; both are applied, neither subsumes the other.
 
-    NOT the tipper mask, and that is a stated gap awaiting an owner ruling rather than an oversight.
+    NOT the tipper mask, and that is a stated gap awaiting a decision rather than an oversight.
     The shipped tipper mask has the same shape and leaks the same way (a masked tipper is republished
     in the served XML and both MTH5 tiers), but withholding those renditions would delete downloads
-    that are already published for two live surveys, so it is an owner decision, not a fix this seam
+    that are already published for two live surveys, so it is a policy decision, not a fix this seam
     can make on its own. When it is ruled, it is one more clause here and a flag stamped at the
     tipper-mask seam, exactly as the impedance half does.
     """
@@ -575,10 +574,10 @@ def _near_duplicate_collection_ids(cids):
 
 
 def _survey_latest_date(meta: dict):
-    """S3: the single 'best' date for a survey, as (date_str YYYY-MM-DD, is_exact) — used for BOTH
+    """The single 'best' date for a survey, as (date_str YYYY-MM-DD, is_exact) - used for BOTH
     the Atom feed <updated> and the portal's recently-added sort, so the two never disagree.
 
-    PINNED CROSS-LANE DATE RULE (LOCKSTEP with portal/src/main.js surveyLatestDate, the two MUST
+    PINNED CROSS-SURFACE DATE RULE (LOCKSTEP with portal/src/main.js surveyLatestDate, the two MUST
     implement this identically so the feed and the portal strip can never show a different "latest"
     survey): the latest date = the MAX well-formed YYYY-MM-DD among ALL release_notes[].date PLUS
     attribution.declared_date when present (each a real dated event, day-precision) -> else Dec 31 of
@@ -609,7 +608,7 @@ def _survey_latest_date(meta: dict):
 
 
 def feed_entries(surveys_meta: dict) -> list:
-    """S3: surveys with a resolvable date (see _survey_latest_date), sorted NEWEST first — the
+    """Surveys with a resolvable date (see _survey_latest_date), sorted NEWEST first - the
     shared ordering for BOTH feed.xml and the portal's 'recently added' strip. Each entry:
     {survey, slug, date} (date = 'YYYY-MM-DD'). Surveys with no date at all are OMITTED (not
     sorted-last with a fake date), since neither the feed nor 'recently added' should imply a date
@@ -625,15 +624,14 @@ def feed_entries(surveys_meta: dict) -> list:
 
 
 def build_feed_xml(surveys_meta: dict, base_url: str = None):
-    """S3: a minimal valid Atom 1.0 feed of surveys, sorted by feed_entries() (latest release_notes
+    """A minimal valid Atom 1.0 feed of surveys, sorted by feed_entries() (latest release_notes
     date, falling back to the dates.end/start year). Returns the XML text, or None when NO survey
     has a resolvable date (empty builds, or a corpus with zero dated surveys, emit no feed file at
     all — an Atom feed with no dated content is not a meaningful product). Deterministic: the ONLY
     "build time" value is <feed><updated>, set to the MAX entry date (not wall-clock time), so two
     builds of the same surveys_meta are byte-identical regardless of when they run.
     `base_url`: passed a's --sitemap-base (rstrip("/") + "/") when set; entry <link> is that base +
-    'surveys/<slug>' (the PATH-URL contract form, owner ruling 2026-08-18: the path shape is the
-    published URL and the front door maps it into the SPA), or OMITTED (no <link> element) when
+    'surveys/<slug>', or OMITTED (no <link> element) when
     base_url is None (the feed is still valid Atom without it, just not clickable outside the
     portal's own context)."""
     from xml.sax.saxutils import escape as _xesc
@@ -744,7 +742,7 @@ def stations_geojson(all_stations: list, surveys_meta: dict) -> dict:
     appear here exactly as the catalogue serves them.
 
     Properties are lean and FLAT. A GIS attribute table has no useful nesting, and credit/licence are
-    survey-level facts that already have one owner each (surveys.json, mtcat.json, and the record link in
+    survey-level facts that already have one home each (surveys.json, mtcat.json, and the record link in
     the docs); a copy of the licence string on every one of ~1400 features is bloat, not provenance."""
     feats = []
     for (_p, r) in all_stations:
@@ -862,7 +860,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
       * omit-when-undeclared everywhere (see _omit_none); the paired station position nulls are
         the one defined null.
       * formats emitted only when at least one format is distributed - an embargoed/withheld
-        survey OMITS the key (owner finding 62), and no manifest at all omits it corpus-wide
+        survey OMITS the key, and no manifest at all omits it corpus-wide
         ("not known" is never served as "nothing distributed"; see _formats_by_survey).
       * sources[]/changes are NEVER emitted: sources rows map to related_identifiers rows; a row
         carrying rights content (statement/licence/retrieved/profile) HARD-STOPS the build so the
@@ -873,7 +871,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         metadata only (canonicalised, see _canonical_sample_rates), coordinates_state projected
         from the survey's DECLARED access.coordinates policy (see _coordinates_state).
       * stations[].has_time_series / surveys[].n_stations_time_series_verified are schema-defined
-        for the later projection lane and emitted NOWHERE here.
+        for the later projection and emitted NOWHERE here.
 
     `manifest_doc` is the manifest built earlier in the same run."""
     from datetime import datetime, timezone
@@ -919,7 +917,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         entry = {
             "survey_id": slug_of.get(lbl, slugify(lbl)), "title": lbl,
             "organisation": m.get("org", "unknown"),
-            # C7: additive optional federation fields - the organisation's ROR and the project's
+            # Additive optional federation fields - the organisation's ROR and the project's
             # RAiD, when the survey declares them; None here is DROPPED by the _omit_none pass.
             "organisation_ror": m.get("org_ror"),
             "raid": m.get("raid"),
@@ -927,7 +925,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
             "version": m.get("version"),
             "collection_id": (m.get("collection") or {}).get("id"),
             "doi": m.get("doi"), "license": m.get("lic"),
-            # C1: emit the NORMALISED access level. SMETA already normalises it; normalise again so
+            # Emit the NORMALISED access level. SMETA already normalises it; normalise again so
             # a raw-mode seed value stays a clean scalar.
             "access": normalise_access_level(m.get("access", "open")),
             "bbox": ({"west": round(bb[0], 6), "south": round(bb[1], 6),
@@ -979,7 +977,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
             if _state == "withheld":
                 entry["bbox"] = None
                 entry["centroid"] = None
-        # C46-W3a: the attribution rights block, PRESENT ONLY when the survey declares it, emitted
+        # The attribution rights block, PRESENT ONLY when the survey declares it, emitted
         # verbatim from SMETA. MTCAT 2.0 REMOVED the sources/changes blocks: a sources row maps to
         # a related_identifiers row below, and the changes facts already live inside attribution
         # (SMETA's changes descriptor is derived FROM attribution, so nothing is lost).
@@ -1012,7 +1010,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         entry["contributors"] = _export_contributors_of(m)
         # MTCAT 2.0 formats: what is ACTUALLY distributed, off the download manifest (the one
         # authority) - emitted ONLY when at least one format is distributed. An embargoed/withheld
-        # survey OMITS the key (owner finding 62: under represented-holdings semantics, [] would
+        # survey OMITS the key: under represented-holdings semantics, [] would
         # falsely assert that no formats are KNOWN when the holdings exist and are merely
         # withheld). No manifest at all also omits it: "not known" is never served as "nothing
         # distributed".
@@ -1058,8 +1056,8 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
                    # second implementation can validate mtcat.json without resolving the canonical $id.
                    "schema_url": p.get("schema_url", "mtcat.schema.json"),
                    # FAIR-R: the licence of the CATALOGUE METADATA itself (distinct from per-survey data
-                   # licences). CC0 by recommendation; overridable via portal.config.yaml pending owner
-                   # sign-off on the catalogue-metadata licence.
+                   # licences). CC0 by recommendation, overridable via portal.config.yaml until the
+                   # catalogue-metadata licence is settled.
                    "metadata_license": p.get("metadata_license", "CC0-1.0"),
                    "generated_at": generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}),
         "surveys": surveys, "stations": stations}
@@ -1083,7 +1081,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
 # non-served (embargoed / metadata_only) survey emits every curated class exactly as mtcat does (D8);
 # the only policy seam is the coordinate policy (a withheld state omits the curated extent, D7). ----------
 
-# The identifies -> DataCite relation derivation (owner ruling D-L2): the SAME table the surveys
+# The identifies -> DataCite relation derivation: the SAME table the surveys
 # validator (validate_survey.IDENTIFIES_RELATION) and the gateway editor (gateway/editor_form.py) carry.
 # A related_identifiers row states the data level it points at and the relation follows; an explicit
 # relation on the row stands when present.
@@ -1106,7 +1104,7 @@ _SM_DOI_RESOLVER_RE = _re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", _re.IGNO
 # above is stripped. Anything else is not placeable as a DOI and is reported for curation.
 _BARE_DOI_RE = _re.compile(r"^10\.\d{4,9}/\S+$")
 # extent is emitted ONLY from a curated WGS 84 geographic_extent (D7: never station-derived; the
-# schema's CRS rule). GDA94/GDA2020 extents wait on an owner ruling and are omitted meanwhile.
+# schema's CRS rule). GDA94/GDA2020 extents wait on a decision and are omitted meanwhile.
 _SM_WGS84_DATUMS = {"WGS84", "EPSG:4326", "WGS-84"}
 
 
@@ -1339,7 +1337,7 @@ def survey_metadata_document(label, y: dict, smeta: dict, served: bool, coord_st
     surveys would plug into, never an invention of this emitter. `coord_state` is the aggregated
     post-mask coordinate state (exact / generalised / withheld): a withheld survey emits no extent (D7).
 
-    The mapping (LANE-CONTRACT-SURVEY-METADATA D5-D13):
+    The mapping (survey-metadata contract D5-D13):
       * title = project_name, else name (never the directory name); survey_id = the slug.
       * abstract, subjects, creators, contributors, organisations, citation, acknowledgements,
         dates.issued and attribution VERBATIM when present (placeholders pruned); no HostingInstitution
@@ -1437,7 +1435,7 @@ def _org_of(y: dict):
     return org or "unknown", None
 
 
-# A1 (CONTRIBUTOR-CREDIT-SPEC C3, reader retirement): the back-compat 'who' facet that folded the two
+# The back-compat 'who' facet that folded the two
 # retired flat credit keys into a served SMETA list is GONE, and with it the reader that built it. The
 # corpus migration seeded creators[]/contributors[] from those keys and deleted them, so nothing reads
 # them anywhere in the engine; a survey that still carries them (a pre-migration corpus) is simply
@@ -1594,7 +1592,7 @@ def _date_range_of(y: dict):
 
 
 def _year_range_of(y: dict):
-    """S3: (year_start, year_end) as ints|None, parsed from the SAME dates map as _date_range_of —
+    """(year_start, year_end) as ints|None, parsed from the SAME dates map as _date_range_of -
     reuses its str()-coercion (an unquoted YAML int or a present-but-null year must not raise/crash)
     instead of re-parsing the display string portal-side, so the modeller year filter and the
     'YYYY-YYYY' display can never drift apart. A non-dict/absent dates value -> (None, None): the
@@ -1610,7 +1608,7 @@ def _year_range_of(y: dict):
 
 
 def _citation_year_of(y: dict) -> str:
-    """C7: the citation year — the 4-digit year of the dates.end, else dates.start, else '' (genuinely
+    """The citation year - the 4-digit year of the dates.end, else dates.start, else '' (genuinely
     no date declared, in which case the citation honestly renders '(n.d.)'). Independent of
     _date_range_of's display string so a malformed/partial dates map still yields a usable year."""
     d = y.get("dates")
@@ -1747,7 +1745,7 @@ def survey_meta_from_yaml(y: dict) -> dict:
     mappers above. Tolerant of both the Prototype-20 structured schema and the older flat schema."""
     ids = y.get("identifiers", {}) or {}
     acc_raw = y.get("access", {})
-    # C1: carry BOTH the normalised access level and embargo_until into SMETA. The level gates byte
+    # Carry BOTH the normalised access level and embargo_until into SMETA. The level gates byte
     # distribution (see access_serve_state); the portal reads both (surveys.json) to badge withholding
     # honestly. embargo_until is only meaningful under level=embargoed but is preserved verbatim regardless.
     acc = normalise_access_level(acc_raw.get("level") if isinstance(acc_raw, dict) else acc_raw)
@@ -1788,7 +1786,7 @@ def survey_meta_from_yaml(y: dict) -> dict:
         "mth5": "unk",
         "access": acc,                       # SMETA key; normalised ACCESS_LEVELS: open|metadata_only|embargoed
         "embargo_until": embargo_until,       # C1: ISO date or None; the portal badges withholding from these
-        # C7: yr/ve were always '' (every citation rendered "(n.d.)" regardless of a declared date/version);
+        # Yr/ve were always '' (every citation rendered "(n.d.)" regardless of a declared date/version);
         # yr = year of dates.end, else dates.start, else '' (genuinely no date -> honest "(n.d.)"); ve = the
         # declared survey version, else '' (no version -> the apa()/bibtex()/ris() helpers already omit it).
         # au: CONTRIBUTOR-CREDIT-SPEC §2.1 - the creators[] names in order when present, else a hand-authored
@@ -1804,7 +1802,7 @@ def survey_meta_from_yaml(y: dict) -> dict:
     instruments = _instruments_of(y)
     if instruments is not None:
         sm["instruments"] = instruments
-    # C46-W3a: thread the schema-0.3 attribution/sources blocks (design §2.1) into SMETA when present,
+    # Thread the schema-0.3 attribution/sources blocks (design §2.1) into SMETA when present,
     # ABSENT -> ABSENT (no empty placeholders), so a survey WITHOUT them yields a byte-identical entry.
     # This LIGHTS UP the W2 build-side instrument threading (which reads SMETA.attribution/.sources) and
     # feeds the render/export surfaces (mtcat/manifest/LICENSE.txt). `changes` is a normalised {made,
@@ -1831,7 +1829,7 @@ def survey_meta_from_yaml(y: dict) -> dict:
     # seam (order preserved, keys omitted when absent). ADDITIVE + absent -> absent: a survey without them
     # yields a byte-identical surveys.json entry (the whole pre-migration corpus). creators[] is the
     # citation-author order; contributors[] carries the fail-closed roles the drawer renders.
-    # Survey-declared recorded channels (owner mechanism for tipper truth: a declaration without
+    # Survey-declared recorded channels (the mechanism for tipper truth: a declaration without
     # a vertical coil masks any file-borne tipper survey-wide). ADDITIVE + absent -> absent.
     channels = y.get("channels_recorded")
     if isinstance(channels, list) and channels:
@@ -1879,9 +1877,7 @@ _STATION_IDS_KEY = _re.compile(r"(?m)^station_ids[ \t]*:")
 def _read_yaml(path: Path, raw: bytes | None = None):
     """Parse a survey.yaml. `raw`, when given, is the file's ALREADY-READ bytes and is parsed instead
     of re-reading the path — so a caller that also derives a content digest from those same bytes gets
-    parse+digest coherence from ONE read (C18 Amendment A4: the 2026-07-07 incident was a build whose
-    metadata and cache-key digest came from two reads of the same file, minutes apart, straddling an
-    edit). YAML mandates a UTF family, so the bytes decode as UTF-8 (replace-on-error: a bad byte
+    parse+digest coherence from ONE read. YAML mandates a UTF family, so the bytes decode as UTF-8 (replace-on-error: a bad byte
     degrades one field's text, never the parse+digest pairing)."""
     text = raw.decode("utf-8", errors="replace") if raw is not None else None
     try:
@@ -1936,14 +1932,14 @@ def _mini_yaml(text: str) -> dict:
         if v[0] == "#":
             # The whole value is a comment ('data_types:  # pick one'). YAML forbids an unquoted
             # scalar starting with '#' after a space, so this is always a comment, never data.
-            # Before 2026-08-25 this case leaked through (the mid-string scan below needs ' #'),
+            # Before this case leaked through (the mid-string scan below needs ' #'),
             # so a commented key line swallowed its nested block and truncated the document.
             return ""
         if v[0] in "\"'":
             # A quoted scalar may carry a trailing comment AFTER its closing quote
             # ('name: "Stephan Thiel"  # note'). Walk to the closing quote (honouring
             # backslash escapes inside double quotes) and drop a trailing comment; a hash
-            # INSIDE the quotes is data and survives. Found live 2026-07-25: the credit
+            # INSIDE the quotes is data and survives. Found live: the credit
             # migration's inline review note read as part of the value on the no-PyYAML path.
             q, i = v[0], 1
             while i < len(v):
@@ -2113,7 +2109,7 @@ def _parse_one_edi(p):
     byte-identically into the positional products (numpy float64 serialises as a float; verified
     by test).
 
-    C25 frame POLICY v3 (owner ruling 2026-07-11): Gate 1 NEVER rotates served data — it PASSES the
+    C25 frame POLICY v3: Gate 1 NEVER rotates served data - it PASSES the
     station (served AS STORED, the declared frame recorded in `frame`) or FAILS it (per-period frame
     mixing V3-C, or an unknowable frame). Because a station's disposition no longer depends on its
     siblings' angles (every uniform declaration serves as-stored regardless of the survey), this
@@ -2444,7 +2440,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             continue
         r["survey"] = survey_label
         r["org"] = org
-        # STATION-ID OVERRIDE (owner ruling 2026-08-08): for a third-party release the contractor's
+        # STATION-ID OVERRIDE: for a third-party release the contractor's
         # DATAID is not a usable public identifier, and the EDI must be served byte-identical, so the
         # published id is declared per SOURCE FILE in survey.yaml instead. Applied HERE - after the
         # DATAID parse, before safe_component and before _disambiguate below - so the disambiguator
@@ -2487,7 +2483,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         tf_rows.append(tf)
         sci_rows.append(srow)
     _disambiguate(stations, slug)   # keep same-station re-processings as distinct variant records
-    # C25: hand the frame notes to the caller keyed by the FINAL (post-disambiguation) station id —
+    # Hand the frame notes to the caller keyed by the FINAL (post-disambiguation) station id -
     # the same key discipline the canonical-conditioning notes use.
     if report is not None:
         for (_p, _r) in stations:
@@ -2656,7 +2652,7 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
     and the diagnostics are identical where equivalent information exists (the same contract the
     MTH5 input path holds).
 
-    `exclude_ids` carries the OWNER PRECEDENCE RULING (2026-08-03): where a station has both an EDI
+    `exclude_ids` carries the PRECEDENCE RULE: where a station has both an EDI
     and an EMTF XML, the EDI is the canonical source and the XML is NOT ingested. The caller passes
     the base station ids the EDI pass already produced; a matching XML is skipped with a NOTICE and
     the file stays in the package, untouched. `report`, when given, collects the same survey-scoped
@@ -2711,7 +2707,7 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
         r["org"] = org
         r["id"] = safe_component(r.get("id"))          # untrusted Site id -> no traversal / XSS
         if r["id"] in exclude:
-            # OWNER PRECEDENCE RULING: this station's EDI already won. The XML is not ingested and
+            # PRECEDENCE RULE: this station's EDI already won. The XML is not ingested and
             # not re-emitted from here; it stays in the submitted package as a custodian artifact.
             print(f"  PRECEDENCE {p.name}: station {r['id']} is already ingested from "
                   f"transfer_functions/edi/ -- the EDI is canonical, this EMTF XML is kept in the "
@@ -2769,7 +2765,7 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
         tf_rows.append(tf)
         sci_rows.append(srow)
     _disambiguate(stations, slug)   # keep same-station re-processings as distinct variant records
-    # C25: hand the frame notes to the caller keyed by the FINAL (post-disambiguation) station id --
+    # Hand the frame notes to the caller keyed by the FINAL (post-disambiguation) station id --
     # the same key discipline process_edis uses.
     for (_p, _r) in stations:
         _notes = _r.pop("_frame_notes", None)
@@ -2879,7 +2875,7 @@ def _station_identity(r, label, slug) -> dict:
 
 
 def _folded_dimensionality(srow) -> dict:
-    """D1: the dimensionality members station.json's `diagnostics` carries, read off the sidecar
+    """The dimensionality members station.json's `diagnostics` carries, read off the sidecar
     document itself so the two surfaces cannot state different calls. `screening_diagnostic` stays
     sidecar-only: where the numbers now sit, the caveat text carries that meaning.
 
@@ -2896,7 +2892,7 @@ def _folded_dimensionality(srow) -> dict:
 # D19 role axes, emitted ONLY where they are mechanically certain: the served EDI is the custodian's
 # never-edited source in its original form (rule 11), while the EMTF XML and the MTH5 are this
 # engine's conversions of it. The bundle archives carry NEITHER axis in 0.1: whether a zip of source
-# EDIs is source or derived is a semantics call this lane must not improvise.
+# EDIs is source or derived is a semantics call this module must not improvise.
 _RESOURCE_BY_FORMAT = {
     "edi":         {"id": "edi", "kind": "transfer_function", "format": "edi",
                     "provenance_role": "source", "representation_role": "original"},
@@ -2932,7 +2928,7 @@ STATION_VOCABULARY_UNMAPPED = ("collection", "entire")
 # one record covering all levels, which states the scope of a RECORD and asserts no containment.
 _PLACEABLE_SCOPES = frozenset({"collection"} | {v["mtcat_identifies"]
                                                 for v in STATION_VOCABULARY_CROSSWALK.values()})
-# D2: the repository that holds the bytes a `time_series` row routes to. The schema's deferral
+# The repository that holds the bytes a `time_series` row routes to. The schema's deferral
 # trigger (:327) has fired; the crawler knows the host with certainty, NCI is the ratified token, and
 # a controlled string is additively replaceable by a richer object when one exists.
 TS_REPOSITORY = "NCI"
@@ -2940,7 +2936,7 @@ TS_REPOSITORY = "NCI"
 # level added to the crosswalk cannot be silently unroutable here; `format` is the domain token for
 # what the archive serves; `roles` are the D19 axes.
 #
-# level2 IS ABSENT BY RULING (D19, 2026-08-24), not by omission: NCI's level_2 tree holds transfer
+# Level2 IS ABSENT BY DESIGN, not by omission: NCI's level_2 tree holds transfer
 # functions, and projecting 1,197 of them as kind=time_series would assert a verified TIME SERIES for
 # 88 stations that have none. The token stays in the register's vocabulary for hand-curated rows;
 # nothing here routes it, and _stationcheck rejects one that reaches a document by another path.
@@ -3013,7 +3009,7 @@ def station_time_series_resources(rows, collection_identifiers, run_ids=()) -> l
 def station_collection_identifiers(meta):
     """(related_collection_identifiers[], declined notes) for one survey's curated rows.
 
-    SCOPE:173-179 makes placement verification mandatory and this lane resolves no DOIs, so a row is
+    SCOPE:173-179 makes placement verification mandatory and this module resolves no DOIs, so a row is
     projected only where the CURATION states its entity scope: a bare canonical DOI whose
     `identifies` names a collection or product level. The scope travels with the row, so a
     collection DOI can never read as an identifier of the file it sits beside.
@@ -3146,7 +3142,7 @@ def station_runs(run_facts, run_ids, station_id, comps):
 
     named = {c.lower() for c in ((run_facts or {}).get("named_components") or [])}
     excluded = {c.lower() for c in ((run_facts or {}).get("excluded_components") or [])}
-    # D9: corroborated beyond DEFINEMEAS alone, minus anything a source assertion contradicts, minus
+    # Corroborated beyond DEFINEMEAS alone, minus anything a source assertion contradicts, minus
     # the rr* pair, which the PRESENCE rule governs rather than corroboration (they are mt_metadata
     # run defaults; over the corpus EDIs the CHTYPE census carries no RRHX at all).
     components = {c for c in (named | _measured_components(comps))
@@ -3211,12 +3207,12 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
     doc = {
         **_station_identity(r, label, slug),
         "country": (meta or {}).get("country", "Australia"), "organisation": org,
-        # C42: post-mask coordinates, exact / generalised (0.1deg) / withheld (null) per the custodian
+        # Post-mask coordinates, exact / generalised (0.1deg) / withheld (null) per the custodian
         # policy, read from the single-seam-masked record.
         "location": {"lat": r["lat"], "lon": r["lon"]},
         "data": {"type": r.get("type"), "n_periods": r.get("n_periods"),
                  "period_min_s": r.get("period_min_s"), "period_max_s": r.get("period_max_s")},
-        # D1: the dimensionality call is FOLDED IN here, and the method string and the screening caveat
+        # The dimensionality call is FOLDED IN here, and the method string and the screening caveat
         # come with it, from the SAME computed values _dimensionality_document() reads. The earlier
         # removal was aimed at a copy that travelled WITHOUT the caveat; folding the caveat in is what
         # answers that, and it puts the qualification beside the numbers instead of one file away. The
@@ -3245,7 +3241,7 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
                        "remote_site": r.get("remote_site"),
                        "file_written_by": r.get("file_written_by") or {"name": None, "version": None},
                        "note": r.get("processing_note")},
-        # C42: edi_served folds in the per-station coordinate byte-gate. A non-exact station is NOT
+        # Edi_served folds in the per-station coordinate byte-gate. A non-exact station is NOT
         # distributed even inside a served survey, so its distribution must not advertise an EDI.
         "distribution": {"edi_available": edi_served, "license": lic,
                          "edi_path": edi_rel},
@@ -3434,7 +3430,7 @@ def _git_commit_at(cwd):
     Memoised PER PROCESS on success (A4, the C18c-flake hardening): the resolved commit feeds the C18
     cache salt, so two builds in one interpreter (tests; any future in-process rebuild loop) must key
     identically even if HEAD moves or a transient rev-parse failure lands between them — a mid-suite
-    salt flip is exactly the nondeterministic full-miss the 2026-07-07 verification runs hit. A FAILED
+    salt flip is exactly the nondeterministic full-miss the verification runs hit. A FAILED
     resolution is never memoised (a later build in this process may still resolve); tests that need a
     different commit monkeypatch this NAME, which bypasses the memo entirely."""
     key = str(cwd)
@@ -3459,7 +3455,7 @@ def _build_prov(extractor):
     import platform as _pf
 
     def _git_commit():
-        # U2: the engine image COPYs engine/ WITHOUT .git (deploy/docker/engine.Dockerfile), so
+        # The engine image COPYs engine/ WITHOUT .git (deploy/docker/engine.Dockerfile), so
         # _git_commit_at(HERE) is ALWAYS None in a container -- fall back to AUSMT_ENGINE_COMMIT, the
         # real commit CI bakes in at image-build time (deploy-images.yml's GIT_SHA build-arg -> ENV;
         # the SAME env build_identity() consumes). Provenance stays HONEST where build_identity()'s
@@ -3554,7 +3550,7 @@ def aggregate_conditioning(notes_by_station: dict) -> list:
         elif absentees and len(absentees) <= CONDITIONING_ENUM_LIMIT and len(absentees) < count:
             # `absentees and`: a note carried by ALL stations has an EMPTY absentee list, which
             # passed the small-complement check and shipped except=[] — truthy in JS, so the first
-            # production panel render (2026-07-08) showed "[all except: ]" on every fleet-wide note.
+            # Production panel render showed "[all except: ]" on every fleet-wide note.
             # All-carriers => both sides None; count == the survey total tells the story.
             ex = sorted(absentees)
         entries.append({"note": note, "count": count,
@@ -3622,7 +3618,7 @@ def run_extraction_report(run_facts_by_station: dict) -> dict:
 
 
 def build_identity(surveys_root) -> dict:
-    """C12: build.json — the build<->data handshake a served portal needs to trace itself back to the
+    """Build.json - the build<->data handshake a served portal needs to trace itself back to the
     exact engine + surveys commits that produced it (flagged missing in the review). Deterministic
     aside from `generated` (an ISO UTC timestamp), so two builds of identical inputs differ only there.
 
@@ -3810,10 +3806,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     caller writes stamped into the out/products/survey_digests.json sidecar the verify.py consistency
     gate compares against the LIVE survey.yaml, so a product served under a stale digest is caught.
 
-    C18 (~27% of a cold build - the 2026-08-27 full-corpus profile corrected the old '~84%' claim,
-    which described a build without --station-h5/--survey-h5; the MTH5 writers dominate the
-    production shape at ~68%, and a warm rebuild is ~99% MTH5 precisely because THIS cache
-    covers parse+XML and not MTH5. See AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md):
+    C18:
     when `cache` is an ENABLED BuildCache, the normalize()
     round-trip is cached per station by source-EDI sha + salt. A HIT writes the cached XML BYTES
     verbatim to <xmldir>/<station>.xml (the exact bytes normalize() produced on the miss build) and
@@ -3821,7 +3814,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     writes is byte-identical to what a fresh normalize() writes (the round-trip QC gate already ran on
     the miss build that populated it); verify.py re-hashes these bytes cache-blind regardless.
 
-    `derived_edi_dir` (the EMTF-XML ingest path, owner ruling 2026-08-03): normalize() always writes a
+    `derived_edi_dir`: normalize() always writes a
     round-trip-verified derived EDI beside the canonical XML. For an EDI-sourced station that file is
     redundant (the custodian's own EDI is served) and is deleted, exactly as before. For a station
     whose SOURCE is an EMTF XML there is no custodian EDI, so (when this dir is given) the derived
@@ -3886,7 +3879,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
                     xml_target.parent.mkdir(parents=True, exist_ok=True)
                     xml_target.write_bytes(_cached_xml)
                     written[r["id"]] = xml_target
-                    # C18b (A3): stamp the digest the CACHED entry was written under. The v3 meta blob
+                    # Stamp the digest the CACHED entry was written under. The v3 meta blob
                     # always carries survey_digest; an entry WITHOUT one reads as a SENTINEL that can
                     # never equal a live digest, so the verify gate goes RED — never as this call's
                     # digest, which would bless exactly the unprovable state the gate exists to catch.
@@ -3902,7 +3895,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
             res = normalize(p, xmldir, survey_id=slug, station_id=r["id"], survey_meta=survey_meta,
                             source_provenance=r.get("source_provenance"))
             written[r["id"]] = res.canonical_xml
-            # C18b (A3): the FRESH path is keyed under THIS call's survey_digest — stamp it directly.
+            # The FRESH path is keyed under THIS call's survey_digest - stamp it directly.
             stamped[r["id"]] = survey_digest
             if res.conditioned:
                 notes[r["id"]] = res.conditioned
@@ -3936,7 +3929,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
                 except OSError:
                     pass
             if _ck:   # populate the cache with the EXACT served bytes + notes for the next warm build.
-                # C18b (A3): the meta blob carries survey_digest (the digest this entry was keyed under)
+                # The meta blob carries survey_digest (the digest this entry was keyed under)
                 # so a future cache HIT can propagate it to the sidecar — surfacing a stale entry's
                 # digest to the verify.py consistency gate. The v3 tag bump keys this new-shape meta.
                 cache.put_bytes(_ck, "xml", Path(res.canonical_xml).read_bytes())
@@ -4078,7 +4071,7 @@ def _mth5_project_lead(smeta: dict):
 
 def _apply_mth5_survey_metadata(sm, smeta, slug, label):
     """Map survey.yaml/SMETA scholarly + identifier fields onto an mth5 TF's survey_metadata at write
-    time (SPEC §3.3 mapping table, A5 ruling). The grouping key id=slug ALWAYS overrides the raw EDI
+    time. The grouping key id=slug ALWAYS overrides the raw EDI
     '0' so stations do not collapse into one survey group. The DATASET DOI is INJECTED because it is the
     one scholarly field genuinely absent from every EDI (raw AND enriched read citation_dataset.doi=None,
     SPEC §9.1); the journal citation is single-sourced from SMETA too (belt-and-braces, it also survives
@@ -4106,7 +4099,7 @@ def _apply_mth5_survey_metadata(sm, smeta, slug, label):
     _set("name", _name)
     _set("project", _name)
     _set("summary", smeta.get("blurb"))
-    # A5: the one genuinely-absent scholarly field. Inject the dataset DOI from SMETA (survey.yaml).
+    # The one genuinely-absent scholarly field. Inject the dataset DOI from SMETA (survey.yaml).
     _set("citation_dataset.doi", _mth5_doi_url(smeta.get("doi")))
     # Journal citation: single-source from the first publication (SMETA), best-effort.
     _pubs = smeta.get("pubs") or []
@@ -4153,8 +4146,7 @@ def _release_mth5_metadata_classes() -> None:
     """Emit-and-release for the MTH5 arm. Called after EVERY station-sized unit of MTH5 work (each
     add_transfer_function in the writers, each get_transfer_function in the round-trip gate).
 
-    WHY (measured, 2026-08-15, the P350 OOM incident: 5 kernel kills at anon-rss 13.7 GB on a 14 GB box
-    at ~2,580 stations). The build was not holding the corpus. On the pinned stack every mth5 0.6.8
+    WHY. The build was not holding the corpus. On the pinned stack every mth5 0.6.8
     group/dataset instantiation calls add_attributes_to_metadata_class_pydantic, which builds a FRESH
     pydantic model class via create_model (about 75 classes per served station across the tier-1
     file, the tier-2 bundle and the gate's reopen), and mt_metadata 1.0.9's to_dict then memoises each
@@ -4165,19 +4157,19 @@ def _release_mth5_metadata_classes() -> None:
     and unbounded, 78% of the peak footprint, all of it inside _write_tf_mth5; parsing, the C18 cache,
     the XML arm, the zips and the corpus-wide emissions are flat.
 
-    The library's own clear_field_caches() empties that memo; the classes then have no owner and the
+    The library's own clear_field_caches() empties that memo; the classes then have no holder and the
     ordinary cyclic GC frees them. Cost: the next lookup of a STATIC class re-reads its tree from
     mt_metadata's on-disk cache (the same source the memo was filled from), so the served bytes cannot
     change; measured full-corpus build time did not rise. Guarded so a future mt_metadata without the
     helper degrades to the old behaviour rather than failing the build (the memory regression pin in
     tests/test_build_memory.py would then go RED, which is the right way to learn about it).
 
-    CONCURRENCY (for the survey-parallel build lane): this clears a PROCESS-GLOBAL memo. On the pinned
+    CONCURRENCY (for the survey-parallel build): this clears a PROCESS-GLOBAL memo. On the pinned
     mt_metadata 1.0.9 its RLock is held from the cycle-breaking sentinel write through the final store
     (get_all_fields_serializable's whole body is one `with _CACHE_LOCK`), so a clear from another
     thread cannot split a computation; but with THREAD workers one worker's release evicts what
     another is about to look up again, and the per-unit bound this gives is per process, not per
-    thread. Worker PROCESSES each own their memo and keep the bound; that lane should use processes."""
+    thread. Worker PROCESSES each own their memo and keep the bound; that module should use processes."""
     try:
         from mt_metadata.base.pydantic_helpers import clear_field_caches  # noqa: PLC0415
     except Exception:  # noqa: BLE001  (a different mt_metadata layout: no memo to release)
@@ -4362,7 +4354,7 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
 
 
 # ---- The MTH5 worker pool (the build-parallelism seam) -------------------------------------------
-# The 2026-08-27 profile (AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md) attributed ~68% of a cold
+# The profile attributed ~68% of a cold
 # build and ~99% of a warm rebuild to _write_tf_mth5, which is self-contained by construction: it
 # re-reads its source EDIs from disk, carries its own SPEC §6 gate, owns a unique output path per
 # call and returns 0 instead of raising. The pool parallelises exactly that unit and NOTHING else:
@@ -4528,7 +4520,7 @@ def _stamp_mth5_source_provenance(station_metadata, record) -> None:
 
 
 def emit_station_mth5(stations, slug, label, h5dir, smeta=None):
-    """Tier 1 (owner ruling 2026-08-02, which OVERRIDES the earlier skip-tier-1 ruling): one
+    """Tier 1: one
     <station>.h5 per served station, written into h5dir = out/h5/<slug>/ so the per-station MTH5 sits
     beside the edi/ and xml/ families the manifest already keys. deploy/docker/caddy/Caddyfile has
     force-downloaded /h5/* since before there was a producer; this is the producer.
@@ -4670,8 +4662,7 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
 def load_flags(path) -> dict:
     """Distribution feature flags from the portal.config.yaml `flags:` block (default OFF). The single
     config seam, mirrored to the portal via tools/gen_config.py -> config.js. survey_h5_enabled gates the
-    tier-2 survey-aggregated MTH5 producer; station_h5_enabled gates the tier-1 per-station MTH5 producer
-    (owner ruling 2026-08-02); collection_download_enabled reserves the future collection-level bundle.
+    tier-2 survey-aggregated MTH5 producer; station_h5_enabled gates the tier-1 per-station MTH5 producer; collection_download_enabled reserves the future collection-level bundle.
     CLI --survey-h5 / --station-h5 / --collection-download OR on top.
 
     NOTE FOR ANYONE FLIPPING A FLAG HERE: this YAML lives under portal/ and the engine image does NOT
@@ -4867,7 +4858,7 @@ def discover_work(a, ap, validator):
     the point the REAL parsed station ids exist — for both EDI and MTH5 inputs, before any of that
     survey's bytes are emitted, with the SAME matcher station_policy applies with.
 
-    Station-id override (owner ruling 2026-08-08): also returns station_ids = {label: {source
+    Station-id override: also returns station_ids = {label: {source
     filename: published station id}}, the survey.yaml `station_ids` block parsed by
     extract/_stationids.py. Same SIDE-CHANNEL discipline as coord_policy (it is an ingest instruction,
     not survey metadata, so it never reaches surveys.json) and the same validation SPLIT: the block's
@@ -4902,13 +4893,13 @@ def discover_work(a, ap, validator):
                 rep = validator.validate(d)
                 if rep.worst() == 2:
                     print(f"SKIP {d.name}: validation FAILED ({rep.counts()['FAIL']} fails)", file=sys.stderr)
-                    # D20: record the skip so build_report.json / verify.py make it LOUD. The package
+                    # Record the skip so build_report.json / verify.py make it LOUD. The package
                     # directory name is the slug in every validated corpus (the validator FAILs a slug
                     # that differs from its folder); the yaml is not parsed here because it just FAILed.
                     surveys_skipped_validation.append(d.name)
                     continue
             # C18 Amendment A4 (single-read coherence): read survey.yaml's bytes ONCE and derive BOTH
-            # the parsed metadata and the cache-key digest from them. The 2026-07-07 incident was a
+            # The parsed metadata and the cache-key digest from them. The incident was a
             # build that read this file twice (meta here, digest at its per-survey loop iteration,
             # minutes later on a full corpus): an edit landing between the reads wrote served XML
             # embedding the PRE-edit metadata KEYED under the POST-edit digest — poisoning the cache
@@ -4934,8 +4925,8 @@ def discover_work(a, ap, validator):
             edis = sorted((d / "transfer_functions" / "edi").glob("*.edi"))
             mh = sorted((d / "transfer_functions" / "mth5").glob("*.h5")) \
                 + sorted((d / "transfer_functions" / "mth5").glob("*.mth5"))
-            # EMTF XML is a FIRST-CLASS submission input (owner ruling 2026-08-03), alongside EDI and
-            # MTH5. transfer_functions/emtfxml/ in a SUBMITTED package is therefore an ingest folder;
+            # EMTF XML is a FIRST-CLASS submission input, alongside EDI and
+            # Transfer_functions/emtfxml/ in a SUBMITTED package is therefore an ingest folder;
             # the build's own canonical re-emission still lands in the served tree (out/xml/<slug>/),
             # never back into the package, so the two never collide.
             xmls = sorted((d / "transfer_functions" / "emtfxml").glob("*.xml"))
@@ -4947,7 +4938,7 @@ def discover_work(a, ap, validator):
             elif fmt == "emtfxml":
                 inputs, kind = xmls, "emtfxml"
             # auto: the file-based TF inputs (EDI and/or EMTF XML) together, otherwise MTH5. EDI+XML
-            # are ingested as ONE set because precedence is PER STATION (the ruling: a station present
+            # are ingested as ONE set because precedence is PER STATION (a station present
             # in edi/ wins; its same-station XML stays in the package as an untouched artifact and is
             # not ingested). main() applies that precedence after the parse, where the real station ids
             # exist. `kind` names the PRIMARY file format so the pre-parse dispatch below stays a
@@ -4960,7 +4951,7 @@ def discover_work(a, ap, validator):
             # structured schema that mapping would otherwise land in station.json as a dict.
             smeta = survey_meta_from_yaml(y)
             survey_extent[label] = _extent_of(y)  # for the build-time out-of-extent QC FYI
-            # C42: parse the coordinate-access policy from THIS survey's access block. An unknown enum
+            # Parse the coordinate-access policy from THIS survey's access block. An unknown enum
             # value is a SURVEY-level build failure (fail-closed, D2): the survey is DROPPED loudly,
             # NOTHING is served for it, and the REST of the corpus builds — never a silent fallback to
             # exact. Override IDS are NOT validated here (fix round 2): a discovery-time scrape is a
@@ -5265,7 +5256,7 @@ def _main_build(argv=None):
     # both rows hash the file they name and both verify.
     _artifact_claims: dict = {}
     _artifact_collisions: list = []
-    # C42: --products station.json carries a `location` (r[lat/lon]) and IS a served surface in
+    # --products station.json carries a `location` (r[lat/lon]) and IS a served surface in
     # deployment (deploy/Makefile writes products/ INSIDE the served build dir; D1/D3). Its coordinates
     # must therefore be the POST-MASK values from the single seam — but the mask runs after the corpus-
     # wide qc_pass, which is after this per-survey loop. So the per-station product emission is DEFERRED:
@@ -5290,7 +5281,7 @@ def _main_build(argv=None):
     # the coordinate mask seam and the deferred station jobs, because the extent follows the post-mask
     # coordinate state (D7), into out/products/<slug>/ (the served root, D2).
     _survey_metadata_jobs: dict = {}
-    # C1b: ausmt_ids whose survey is NOT served (embargoed/metadata_only/unrecognised level). The C1 gate
+    # Ausmt_ids whose survey is NOT served (embargoed/metadata_only/unrecognised level). The C1 gate
     # withholds the BYTES; C1b additionally withholds the DERIVED DISPLAY products (the thinned tf.json
     # curves + the science-derived sci.json fields) at EMISSION, because for an embargoed dataset the
     # response curves ARE the data — a portal that plots them has published what the byte gate withheld.
@@ -5299,13 +5290,13 @@ def _main_build(argv=None):
     # public while its tf series go empty and its science sci fields are nulled.
     withheld_ids = set()
     input_formats = set()
-    # C18b (A3, as amended by A4): the digest-stamp sidecar (out/products/survey_digests.json). Per
+    # The digest-stamp sidecar (out/products/survey_digests.json). Per
     # served survey it records the digest of the survey.yaml bytes THIS BUILD'S METADATA CAME FROM
     # (yaml_digest_current — the discovery-time single read, A4) and, per served station, the digest
     # its served XML was KEYED/PRODUCED under (xml_digest_stamped). verify.py's --surveys consistency
     # gate compares BOTH against the LIVE survey.yaml, catching (a) a product served under a stale
     # (pre-edit) digest and (b) a STRADDLED build whose yaml changed underneath it mid-build — the
-    # 2026-07-07 incident's two faces. Cache-INDEPENDENT: built from the served products + the source
+    #  incident's two faces. Cache-INDEPENDENT: built from the served products + the source
     # yaml, never from cache state.
     survey_digests_sidecar: dict = {}
     import time as _time  # noqa: PLC0415 (house style: local import where used — per-survey wall time)
@@ -5323,15 +5314,15 @@ def _main_build(argv=None):
         # over-invalidating — any yaml edit re-derives just this survey; "" for --raw entries, which
         # are cache-excluded anyway). Amendment A4: the digest is CARRIED from discover_work, computed
         # there from the SAME bytes the survey meta was parsed from — never re-read here. A loop-time
-        # re-read is exactly the 2026-07-07 incident window: an edit landing between discovery and
+        # Re-read is exactly the incident window: an edit landing between discovery and
         # this iteration used to key PRE-edit products under the POST-edit digest, poisoning the
         # cache invisibly to the C18b gate (test_straddled_build_cannot_poison_the_cache pins this).
-        # C18b (A3): snapshot the cumulative cache counters so this survey's PER-SURVEY delta can be
+        # Snapshot the cumulative cache counters so this survey's PER-SURVEY delta can be
         # logged after its products are emitted (all of a survey's cache reads/writes happen within
         # this one iteration — the parse gets in process_edis and the xml gets in _emit_served_xml).
         _c0 = (build_cache.hits, build_cache.misses, build_cache.writes) \
             if (build_cache is not None and build_cache.enabled) else None
-        # C25: survey-scoped gate output (structured drops + per-station frame notes) — collected
+        # Survey-scoped gate output (structured drops + per-station frame notes) - collected
         # by process_edis, fed into build_report.json + the NOTICE log below.
         _gate_report: dict = {}
         # `station_ids` keys are EDI source FILENAMES, and both the key check and the application
@@ -5381,7 +5372,7 @@ def _main_build(argv=None):
                                                        mask_impedance=_mask_impedance) \
                 if _edi_in else ([], [], [])
             if _xml_in:
-                # OWNER PRECEDENCE RULING (2026-08-03): EDI wins per station. The exclusion set is the
+                # PRECEDENCE RULE: EDI wins per station. The exclusion set is the
                 # BASE station ids the EDI pass produced (a disambiguated variant A.lemi still occupies
                 # station A), computed with the SAME shared matcher the coordinate policy uses, so the
                 # precedence key and the policy key cannot diverge.
@@ -5407,7 +5398,7 @@ def _main_build(argv=None):
                   file=sys.stderr)
             dropped_surveys.append((label, n_in, None))
             continue
-        # C42 (fix round 2): validate override ids NOW — at the exact point the REAL station ids
+        # Validate override ids NOW - at the exact point the REAL station ids
         # exist (the parsed, disambiguated records above, EDI and MTH5 inputs alike) and BEFORE any
         # of this survey's bytes/products are emitted (the canonical store, served XML/EDI copies,
         # bundles, station.json jobs, and the corpus aggregation all come after this line). The
@@ -5519,7 +5510,7 @@ def _main_build(argv=None):
         # SAME serve state the byte gate uses, never re-derived). A --raw entry has no yaml and no job.
         if label in survey_yaml_by_label:
             _survey_metadata_jobs[label] = (slug, survey_yaml_by_label[label], smeta_entry, bool(_acc["served"]))
-        # C1b: the DISPLAY-product gate keys on the ACCESS state ALONE (not can_serve). A survey may be
+        # The DISPLAY-product gate keys on the ACCESS state ALONE (not can_serve). A survey may be
         # access=open yet non-redistributably licensed (or built with --no-bundle-edi): that survey's bytes
         # are withheld by the licence/flag gate but its curves SHOULD still plot (open-access preview). Only
         # a NON-OPEN ACCESS state (embargoed/metadata_only/unrecognised) withholds the derived display data.
@@ -5556,7 +5547,7 @@ def _main_build(argv=None):
             # (both passes agree, so update is idempotent) so station.json carries conditioning either way.
             for _sid, _nl in _xnotes.items():
                 conditioning_notes.setdefault(_sid, _nl)
-            # C18b (A3/A4): record this served survey's digest stamps. yaml_digest_current is the
+            # Record this served survey's digest stamps. yaml_digest_current is the
             # digest of the bytes this build's metadata was parsed from (the discovery single read);
             # xml_digest_stamped is per-station the digest each served XML was keyed/produced under
             # (fresh => this build's digest; cache hit => the entry's stored digest). A survey served
@@ -5566,7 +5557,7 @@ def _main_build(argv=None):
                 "yaml_digest_current": _survey_digest,
                 "xml_digest_stamped": _xstamped,
             }
-            # ---- tier 1: one <station>.h5 per served station (owner ruling 2026-08-02) ----
+            # ---- tier 1: one <station>.h5 per served station ----
             # Inside `can_serve`, so an embargoed or non-served survey emits nothing, identically to
             # its EDI. The station list is filtered by the SAME per-station coordinate byte gate the
             # EDI copy loop and the tier-2 bundle apply (C42 F1: an MTH5 rebuilt from the RAW source
@@ -5581,7 +5572,7 @@ def _main_build(argv=None):
                          _coord_default, _coord_overrides, _r.get("id"), _r.get("variant")))
                      and not derived_rendition_withheld(_r)],
                     slug, label, out / "h5" / slug, smeta=meta)
-        # C18b (A3): one per-survey instrumentation line (the delta of this survey's cache activity vs
+        # One per-survey instrumentation line (the delta of this survey's cache activity vs
         # the snapshot at the top of the iteration). digest=<first12> ties the log to the sidecar so an
         # operator reading the build log sees, per survey, which digest keyed it and how it hit/missed.
         # The corpus-total "C18 cache [...]" line below is UNCHANGED (tests pin it).
@@ -5598,7 +5589,7 @@ def _main_build(argv=None):
         # where checked == verified and mismatches == [] is the machine-readable form of the promise
         # AusMT makes to a third-party custodian.
         _integrity: dict = {"checked": 0, "verified": 0, "mismatches": []}
-        # C46-W3a: the survey's custodian of record for manifest rows — the declared attribution.custodian
+        # The survey's custodian of record for manifest rows - the declared attribution.custodian
         # (rights-holder, may differ from the acquiring organisation), else the organisation. Computed once.
         _custodian = (((meta or {}).get("attribution") or {}).get("custodian") or org)
         # runs[] inputs: this survey's >INFO extraction (per station, off the cached parse) and its
@@ -5649,7 +5640,7 @@ def _main_build(argv=None):
             if tsproject.station_flag(_ts_index.get(_r2["id"])):
                 _r2["has_ts"] = True
         # resources[]: the survey's placeable containing-collection identifiers, and the rows this
-        # lane REFUSES to place. A refusal is reported, never silently dropped: an unplaceable row
+        # emitter REFUSES to place. A refusal is reported, never silently dropped: an unplaceable row
         # would publish a wrong citation claim, and a curator is the only one who can fix it.
         _collection_ids[slug], _collection_declined = station_collection_identifiers(meta)
         if _collection_declined:
@@ -5712,7 +5703,7 @@ def _main_build(argv=None):
             if served_edi is not None:
                 available_ids.add(r["ausmt_id"])
                 served_edis.append(served_edi)
-                # One file, one owner (see _claim_served_artifact): the served-EDI directory is the
+                # One file, one writer (see _claim_served_artifact): the served-EDI directory is the
                 # one place two naming schemes meet, but the invariant is checked over every
                 # per-station artifact so no future emitter can reintroduce the class.
                 _claim_served_artifact(_artifact_claims, _artifact_collisions,
@@ -5756,19 +5747,19 @@ def _main_build(argv=None):
             # position-withheld station hands off nothing even though its survey is open.
             if _acc["served"] and _cserved and _ts_index.get(r["id"]):
                 _ts_rows[r["ausmt_id"]] = _ts_index[r["id"]]
-            # C42: DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
+            # DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
             # above). The job captures this station's SHARED record `r` (masked in place downstream), its
             # science row, and the survey context needed to render - nothing here depends on cross-survey
             # state that changes after this iteration (conditioning_notes is this survey's own dict). The
             # per-station coordinate byte-gate (_cserved) is captured too: even inside a served survey, a
             # non-exact station's EDI is withheld, so station.json's distribution must not advertise it.
-            # C1c: the SURVEY access-serve state (_acc["served"], the SAME result the byte gate and the
+            # The SURVEY access-serve state (_acc["served"], the SAME result the byte gate and the
             # C1b tf/sci withholding use, never re-derived) is captured so the deferred emitter withholds
             # the derived science products for a non-served survey, exactly as tf.json/sci.json are.
             # edi_served is the ACTUAL served-EDI outcome for this station, not the gate alone:
             # an EMTF-XML-sourced station whose canonical emission failed passes both gates yet
             # has no EDI to advertise, and station.json's distribution must not claim one.
-            # D7: the job is queued for EVERY station, not only under --products; station.json is a
+            # The job is queued for EVERY station, not only under --products; station.json is a
             # public contract and the write path below publishes it at the served root regardless.
             _sheet_row = _survey_run_sheet.get(r["id"])
             if _sheet_row is not None:
@@ -5783,7 +5774,7 @@ def _main_build(argv=None):
                  conditioning_notes, bool(_acc["served"]), _runs))
         # ---- per-survey bundles (served surveys only): pre-zipped EDIs + optional survey MTH5 ----
         if can_serve and served_edis:
-            # C6: rights travel with the bytes — build a deterministic LICENSE.txt for the zip. Licensor =
+            # Rights travel with the bytes - build a deterministic LICENSE.txt for the zip. Licensor =
             # the survey custodian org; year = the survey's date range (drop the license year to a single
             # 4-digit token so a "2009–2011" range prints "2011"); attribution from the SMETA cite block.
             _dates = (meta or {}).get("dates") or ""
@@ -5791,7 +5782,7 @@ def _main_build(argv=None):
             _cite = (meta or {}).get("cite") or {}
             _attn = " ".join(x for x in [_cite.get("au") or org, f"({_yr})" if _yr else "",
                                          _cite.get("ti") or label] if x).strip() or None
-            # C46: thread the survey's attribution/sources blocks + a changes descriptor into the
+            # Thread the survey's attribution/sources blocks + a changes descriptor into the
             # instrument. `derived_products` keys on THIS survey's ACTUAL derived-rendition emission
             # (served EMTF XML and/or the MTH5 bundle) — not a hardcode: when the build emits neither,
             # changes.made defaults off. The attribution/sources blocks ride on SMETA (dormant until a
@@ -5824,7 +5815,7 @@ def _main_build(argv=None):
                                                         custodian=_custodian))
                 _bundle_formats.setdefault(slug, {})["xml-zip"] = _xrel
             if flags["survey_h5_enabled"]:
-                # C42 (F1): emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
+                # Emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
                 # (TF(fn=...)), bypassing the masked record entirely — an unfiltered station list served
                 # a withheld station's exact lat/lon/elev inside the h5 while every JSON surface was
                 # correctly null (the leak-sweep's HDF5 leg pins this). Filter to the byte-gated
@@ -5858,7 +5849,7 @@ def _main_build(argv=None):
                                                                lic, _hn, nci_base=nci_base, base_url=base_url,
                                                                custodian=_custodian))
                         _bundle_formats.setdefault(slug, {})["survey-mth5"] = _hrel
-                        # C46-W3a: rights must travel with the MTH5 bytes too. The survey MTH5 ships as a bare
+                        # Rights must travel with the MTH5 bytes too. The survey MTH5 ships as a bare
                         # file (bundles/<slug>-tf.h5, NOT a zip - HDF5 embeds timestamps so it is not
                         # byte-reproducible), so the SAME LICENSE.txt instrument is written BESIDE it as a
                         # sidecar (bundles/<slug>-tf.LICENSE.txt). Identical bytes to the zip-internal LICENSE.txt.
@@ -5990,7 +5981,7 @@ def _main_build(argv=None):
         build_report_surveys[slug] = {
             "stations_built": len(stations),
             # STRUCTURED drops ({station, file, reason}): the C25 convention-gate skips, the stations
-            # with no recoverable coordinates or periods, and - since the GDS readers lane - the
+            # with no recoverable coordinates or periods, and - since the GDS readers arrived - the
             # source files mt_metadata could not read at all, which until then dropped silently.
             # `file` is the SOURCE FILE NAME. A drop row is the whole record for a station the corpus
             # does not publish, and `station` is the id the build settled on, which for a third-party
@@ -6014,7 +6005,7 @@ def _main_build(argv=None):
             # fires: every EDI in the corpus carries one section, so the key is absent for all of
             # them and their reports are unchanged.
             **({"source_section_selections": _section_rows} if _section_rows else {}),
-            # The INGEST SOURCE per station (owner ruling 2026-08-03): {station_id: edi|mth5|emtfxml}.
+            # The INGEST SOURCE per station: {station_id: edi|mth5|emtfxml}.
             # A provenance fact, not a summary: for a mixed survey it is the only place that says
             # which stations the EDI precedence rule resolved to EDI and which came from EMTF XML.
             "ingest_sources": dict(sorted(_ingest_sources.items())),
@@ -6025,7 +6016,7 @@ def _main_build(argv=None):
                                  "mismatches": list(_integrity["mismatches"])},
             # Same shared aggregation as the log lines above: [{note,count,stations|null,except|null}].
             "conditioning": conditioning_report(conditioning_notes),
-            # C25: frame/convention notes, same aggregation shape as `conditioning`.
+            # Frame/convention notes, same aggregation shape as `conditioning`.
             "frame": conditioning_report(_frame_notes_by_station),
             # The presence rule (gate 15), same aggregation shape again: the mt_metadata defaults
             # this survey's parses carried, which the emitter never publishes as source assertions.
@@ -6166,7 +6157,7 @@ def _main_build(argv=None):
                  "region": (r.get("region") or r.get("state") or "?"),   # survey-driven region facet
                  "file": p.name, "coord_flag": bool(r.get("coord_flag")), "ausmt_id": r["ausmt_id"],
                  "edi_available": 1 if r["ausmt_id"] in available_ids else 0, "sha256": sha256(p),
-                 # R4: original pre-sanitisation station/site name, present only when it differs from id.
+                 # Original pre-sanitisation station/site name, present only when it differs from id.
                  "site_name": r.get("site_name")}
         compact.append([_vals[c] for c in CATALOGUE_COLUMNS])
         # Catalogue row is UNCHANGED for a withheld survey — locations/band/nper/sha256 stay public because
@@ -6265,7 +6256,7 @@ def _main_build(argv=None):
         print(f"WARNING collections: ids {_dup} differ only by case/whitespace — likely a typo; they form "
               f"SEPARATE collections. Use one exact collection.id across member surveys.", file=sys.stderr)
     (out / "collections.json").write_text(_jdump(collections_document(surveys_meta, all_stations, coll_by_id), separators=(",", ":")), encoding="utf-8")
-    # ---- stations.geojson: the corpus as a vector layer (owner ruling 2026-08-02) ----
+    # ---- stations.geojson: the corpus as a vector layer ----
     # Emitted from the SAME masked records the catalogue projection above reads, so the two documents
     # cannot disagree about where a station is; a withheld station has no geometry and is absent (see
     # stations_geojson). Served beside the other top-level documents and mirrored under products/ like
@@ -6275,7 +6266,7 @@ def _main_build(argv=None):
     (out / "stations.geojson").write_text(_stations_gj, encoding="utf-8")
     if prod:
         (prod / "stations.geojson").write_text(_stations_gj, encoding="utf-8")
-    # C18: the deterministic cache hit/miss/write tally (design §4.6) — NOT wall-clock timing. Only
+    # The deterministic cache hit/miss/write tally (design §4.6) - NOT wall-clock timing. Only
     # emitted into build_provenance.json (which already carries a non-deterministic `generated`
     # timestamp, so it is NOT a §4.5 byte-equivalence surface); the served products stay cache-blind.
     _cache_stats = build_cache.counters() if build_cache is not None else {"enabled": False}
@@ -6333,7 +6324,7 @@ def _main_build(argv=None):
         "totals": {"surveys": len(build_report_surveys),
                    "stations_built": _report_stations_built,
                    "warnings": _report_warnings},
-        # D20, the LOUD skip: the packages the survey validator FAILed and the build skipped (see
+        # The LOUD skip: the packages the survey validator FAILed and the build skipped (see
         # discover_work). Empty on a clean build; scripts/verify.py FAILs on a non-empty list so
         # `make rebuild-data` never swaps a build that silently lost a survey from every surface.
         "surveys_skipped_validation": sorted(surveys_skipped_validation),
@@ -6351,10 +6342,10 @@ def _main_build(argv=None):
         # have quoted, before it has to.
         print(f"build peak RSS: {_peak_rss:.0f} MiB ({_report_stations_built} stations built)", file=sys.stderr)
 
-    # C18b (A3): the digest-stamp sidecar. out/products/survey_digests.json maps each served survey's
+    # The digest-stamp sidecar. out/products/survey_digests.json maps each served survey's
     # slug -> {yaml_digest_current, xml_digest_stamped:{station_id:digest}}. This is the independent
     # observable the verify.py --surveys consistency gate needs to catch a product served under a stale
-    # cache digest (the 2026-07-07 incident): it recomputes the LIVE survey.yaml digest and asserts the
+    # Cache digest: it recomputes the LIVE survey.yaml digest and asserts the
     # stamps agree. Emitted for EVERY served survey (non-served/embargoed surveys have no served XML and
     # so no stamps). NOT a §4.5 byte-equivalence surface — the digests are stable inputs, but this file
     # is deliberately kept out of the manifest/mtcat products the cache-equivalence test pins.
@@ -6473,14 +6464,14 @@ def _main_build(argv=None):
         return 2
 
     # ---- optional sitemap.xml (discoverability) ----
-    # PATH-URL CONTRACT (owner ruling 2026-08-18): the published URL for each entity is the PATH
+    # PATH-URL CONTRACT: the published URL for each entity is the PATH
     # form - <base>/surveys/<slug>, <base>/stations/<ausmt_id>, <base>/collections/<id>. The sitemap
     # advertises ONLY the path form: it is the published contract, and crawlers ignore fragments
     # anyway, so the old #/... entries never indexed as pages. Collections join the sitemap here
     # (previously no collection link was emitted at all).
     if a.sitemap_base:
         # Tier 3 rides the same flag as the sitemap: the pages ARE what the sitemap advertises, so
-        # one flag governs both and a flagless build stays byte-identical to a pre-lane build. The
+        # one flag governs both and a flagless build stays byte-identical to a build without it. The
         # pages render ONLY from the served documents (survey-metadata / station.json /
         # collections), so the C42 posture is inherited and the coord-access whole-tree sweep
         # audits pages/ like every other emitter. The reconciliation below is a hard error: a
@@ -6636,7 +6627,7 @@ def _main_build(argv=None):
 
 
 def _prune_cache(build_cache):
-    """C18 (design §3): run the cache prune at the end of a SUCCESSFUL build (drop entries untouched
+    """Run the cache prune at the end of a SUCCESSFUL build (drop entries untouched
     for the age window, then enforce the AUSMT_CACHE_MAX_MB size cap oldest-first). A prune failure
     must never fail the build; a disabled/absent cache is a no-op."""
     if build_cache is None or not build_cache.enabled:

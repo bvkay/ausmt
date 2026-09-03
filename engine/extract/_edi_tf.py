@@ -40,8 +40,8 @@ def sig(x, n=4):
     # Non-finite -> None (rides the existing None path every consumer already tolerates). MTpy
     # writes literal `inf` into impedance-ERROR arrays for dead/infinite-variance points;
     # math.log10(inf) -> int(inf) raised OverflowError here, build_portal caught it as a
-    # station-level "PARSE FAIL" and SILENTLY DROPPED the whole station (2026-07-10: FR01, NF19,
-    # NF21, SA26W_2 — 4 real stations lost from the served corpus over single bad error points).
+    # Station-level "PARSE FAIL" and SILENTLY DROPPED the whole station: FR01, NF19,
+    # SA26W_2 - 4 real stations lost from the served corpus over single bad error points).
     # None serializes as JSON null ("no finite error estimate", honest); returning inf raw would
     # poison tf.json (Python json emits non-RFC `Infinity`, which browsers' JSON.parse rejects).
     if not math.isfinite(x):
@@ -93,7 +93,7 @@ def tf_from_components(periods, comp):
     def at(arr, i):
         # The single accessor every per-point read flows through — so non-finite values are
         # filtered HERE, once, instead of per column. MTpy writes literal `inf` into error
-        # arrays for dead points (2026-07-10: FR01/NF19/NF21/SA26W_2), and inf survives round()
+        # Arrays for dead points, and inf survives round()
         # (round(inf,1)=inf) while norm_phase would mint a NaN ((inf+180)%360). A leaked
         # non-finite poisons tf.json: Python json emits non-RFC `Infinity`, browsers' JSON.parse
         # rejects the whole file. Non-finite -> None = "no value here", the path every column

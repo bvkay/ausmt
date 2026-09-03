@@ -2,10 +2,10 @@
 
 Four questions, answered here and nowhere else. The last three part ways on purpose
 (INTERFACE-CONTRACT:126-132 evidence permanence; :150-153 route detail is its own assertion
-class; the THREDDS lane's D19), and they all rest on the first:
+class; the THREDDS rule), and they all rest on the first:
 
   projects()       does this ONE register row publish anything: `review: verified` and a level
-                   this lane routes. Asked by the three below AND by station.json's emitter, so
+                   this module routes. Asked by the three below AND by station.json's emitter, so
                    the publication rule is stated once rather than restated per surface.
   station_flag()   does a verified time-series resource EXIST for this station? Existence
                    semantics: follows the register for EVERY station, withheld included (R13);
@@ -27,8 +27,7 @@ suppression one predicate instead of three opinions.
 from __future__ import annotations
 
 # level2 rows are register EVIDENCE (a curator may record one by hand) but never time-series
-# claims: not the flag, not a resource row, not a route, not a chooser token (D19, owner ruled
-# 2026-08-24).
+# claims: not the flag, not a resource row, not a route, not a chooser token.
 NEVER_PROJECTS = ("level2",)
 
 

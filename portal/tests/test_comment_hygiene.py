@@ -23,6 +23,7 @@ Fails if: any comment on a covered surface matches the forbidden vocabulary, OR 
 carries more comment bytes than its cap, OR the extractor stops seeing comments on a surface class
 at all (a scanner that reads nothing must not report PASS over it).
 """
+import ast
 import re
 from pathlib import Path
 
@@ -36,9 +37,15 @@ SELF = "test_comment_hygiene.py"
 # is what an offending comment is reported as.
 # ---------------------------------------------------------------------------
 DENY = (
-    (re.compile(r"\bowner(?:'s|s)?\b", re.I), "decision-owner language"),
+    # OWNER in capitals is a shell variable this repo's compose files carry, so a comment naming
+    # it is naming an identifier, not recording who decided something.
+    (re.compile(r"\b(?!(?-i:OWNER)\b)owner(?:'s|s)?\b", re.I), "decision-owner language"),
     (re.compile(r"\brulings?\b", re.I), "ruling language"),
-    (re.compile(r"\bapproved\b", re.I), "approval language"),
+    # Approval OF A DESIGN DECISION, which is what may not be recorded here. The bare word is
+    # left alone: "Approved-by:" is a git trailer this code writes, and a curator approving a
+    # submission is the gateway's own workflow, not a note about who settled an argument.
+    (re.compile(r"\bowner[-\s]approved\b|\bapproved\s+(?:by\s+the\s+owner|mockup|preview|design|wording|copy)\b",
+                re.I), "approval language"),
     (re.compile(r"\bwave\s+[a-z]\b", re.I), "wave identifier"),
     (re.compile(r"\bux\d", re.I), "work-item identifier"),
     (re.compile(r"\btask\s*#", re.I), "work-item identifier"),
@@ -83,12 +90,42 @@ SYNTAX = {
     ".html": r"(?s:<!--.*?-->)|(?s:/\*.*?\*/)",
     ".js": r"(?s:/\*.*?\*/)|(?m:^[ \t]*//.*$)",
     ".css": r"(?s:/\*.*?\*/)",
-    ".py": r'(?s:"""(?:.|\n)*?""")|(?m:^[ \t]*#.*$)',
 }
+HASH = re.compile(r"(?m:^[ \t]*#.*$)")
+
+
+def python_comments(text):
+    """A Python file's # comments and its REAL docstrings.
+
+    A triple-quoted string is not a docstring by virtue of its quotes: gateway/curatorpage.py holds
+    the curator console's HTML and its browser-side scripts in them, and a regex that reads those as
+    comments reports the served page as a wall of offences. The AST is what tells the two apart, so
+    the sweep lands on the module's own prose and never on a template it serves."""
+    out = [(text.count("\n", 0, m.start()) + 1, m.group(0)) for m in HASH.finditer(text)]
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return sorted(out)
+    starts, total = [], 0
+    for line in text.splitlines(keepends=True):
+        starts.append(total)
+        total += len(line)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        first = node.body[0] if node.body else None
+        if (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)):
+            c = first.value
+            out.append((c.lineno, text[starts[c.lineno - 1] + c.col_offset:
+                                       starts[c.end_lineno - 1] + c.end_col_offset]))
+    return sorted(out)
 
 
 def comments(path, text):
     """Every comment in one file, as (line number, text), each counted once."""
+    if path.suffix == ".py":
+        return python_comments(text)
     pattern = SYNTAX.get(path.suffix)
     if not pattern:
         return []

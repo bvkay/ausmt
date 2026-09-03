@@ -1,4 +1,4 @@
-"""C34/D1 — intake generation of LICENSE.md and README.md into a submitted package.
+"""Intake generation of LICENSE.md and README.md into a submitted package.
 
 The gw-runner calls generate_intake_files() AFTER safe-extraction and BEFORE the validator runs
 (runner._do_work), so a package that arrived without these files carries them by the time the
@@ -22,7 +22,7 @@ STDLIB + PyYAML only (the reader the validator and build_portal use; present on 
 where the runner runs). It imports the engine's _license_text leaf for the rights text — a
 stdlib-only module, so no heavy scientific stack is pulled into the runner. This module is import-
 safe without the engine installed: _license_text is imported LAZILY inside the generator (a bare
-`import gateway.runner.intake` in the stack-less gateway test lane must not require `extract`).
+`import gateway.runner.intake` in the stack-less gateway test run must not require `extract`).
 """
 from __future__ import annotations
 
@@ -49,11 +49,11 @@ _SCALAR_TYPES = (str, int, float, date, datetime)
 
 
 def _import_license_text():
-    """Resolve the engine's stdlib-only _license_text leaf (D2 single source) in whichever context the
+    """Resolve the engine's stdlib-only _license_text leaf (the single source) in whichever context the
     runner runs. On the engine image `extract` is an installed package, so `extract._license_text` is
     the resolvable path; a sibling checkout with engine/extract on sys.path resolves the bare name.
     Returns (license_instrument_text, recognised, redistributable, instrument_params_from_survey). Lazy so
-    a bare import of this module in the stack-less gateway test lane never requires the engine installed."""
+    a bare import of this module in the stack-less gateway test run never requires the engine installed."""
     try:
         from extract._license_text import (license_instrument_text, recognised, redistributable,
                                             instrument_params_from_survey)
@@ -135,9 +135,7 @@ def _license_of(y: dict) -> str:
 
 def _station_count(package_root: Path) -> int:
     """A CHEAP station count: the number of one-station transfer-function files under
-    transfer_functions/edi/ and transfer_functions/emtfxml/ (EMTF XML is a first-class submission
-    input since the 2026-08-03 ruling, so counting only EDIs would report an XML-only survey as
-    having no stations). Not a parse, just a glob, so it is a best-effort figure the README states
+    transfer_functions/edi/ and transfer_functions/emtfxml/. Not a parse, just a glob, so it is a best-effort figure the README states
     honestly ('N stations') and omits when zero/unknown.
 
     It deliberately does NOT de-duplicate a station supplied in both formats, and does not count
@@ -182,7 +180,7 @@ def _license_md_body(y: dict, now_utc: datetime) -> str | None:
         return None
     org = _org_of(y)
     year = _citation_year_of(y)
-    # C46: thread the survey's attribution/sources blocks + a changes descriptor so LICENSE.md carries
+    # Thread the survey's attribution/sources blocks + a changes descriptor so LICENSE.md carries
     # the SAME rights the bundle LICENSE.txt does — both call sites derive them through the shared
     # instrument_params_from_survey helper, so intake and build cannot state divergent attribution.
     # Attribution mirrors the bundle default (custodian + year) when the survey states no explicit

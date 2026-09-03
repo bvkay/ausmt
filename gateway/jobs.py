@@ -27,8 +27,7 @@ def ensure_dirs(jobs_dir: Path) -> None:
 
 
 def _json_default(obj):
-    """json.dump `default=` hook for the job protocol. A survey.yaml that carries an UNQUOTED ISO date
-    (e.g. `embargo_until: 2027-02-01`) is loaded by ruamel/PyYAML into a datetime.date, which then
+    """Json.dump `default=` hook for the job protocol. A survey.yaml that carries an UNQUOTED ISO date is loaded by ruamel/PyYAML into a datetime.date, which then
     flows through an edit-job RESULT dict (the read job's editable_subset, a merge/list_stations
     result, ...). A plain json.dump could not serialise it and the runner CRASHED writing the done-file
     — the job never completed, was re-claimed on restart, and blocked ALL metadata reads. Here any

@@ -15,7 +15,7 @@ THE ONE LOAD-BEARING FACT (verified against engine/extract/_edi_tf.py:143):
 
   φxy (t[3]) carries NO shift — it is stored as the true phase and its expected quadrant is Q1 (0…90).
 
-ENGINE-GATE ALIGNMENT (fix-round F4, architect ruling): the engine's Gate-2 convention check
+ENGINE-GATE ALIGNMENT: the engine's Gate-2 convention check
 (engine/extract/_conventions.py convention_check) judges MEDIANS against the quadrant bands widened by
 QUADRANT_SLACK_DEG, with arg(Zyx) compared on a wrap-safe axis (values mapped to (−360, 0] so a
 legitimate median near ±180 cannot straddle the atan2 representation seam). The workbench mirrors that

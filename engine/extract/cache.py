@@ -122,7 +122,7 @@ def contract_schema_digest(engine_root: Path) -> str:
 # NOTE (Amendment A4): the per-survey yaml digest (design §2.5) is no longer derived here. It is
 # computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from —
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
-# metadata does not match (the 2026-07-07 poisoned-cache incident). The path-taking helper that
+# Metadata does not match. The path-taking helper that
 # lived here was deliberately DELETED, not deprecated: any reappearance of a read-the-yaml-again
 # digest call site is the incident's window reopening.
 
@@ -237,7 +237,7 @@ class BuildCache:
             self.misses += 1
             return None
         except OSError:
-            # A4: a PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is not a
+            # A PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is not a
             # normal cold miss. Still tallied as a miss (the §4.6 arithmetic and the recompute path
             # are unchanged) but counted in read_errors so a lock-induced spurious miss is
             # attributable from the build report instead of masquerading as content drift.
@@ -292,7 +292,7 @@ class BuildCache:
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.parent / f".{key}.{ext}.{os.getpid()}.{time.time_ns()}.tmp"
             tmp.write_bytes(hashlib.sha256(data).hexdigest().encode("ascii") + b"\n" + data)
-            # A4: retry the rename — on Windows an AV/on-access scanner briefly holding the fresh tmp
+            # Retry the rename - on Windows an AV/on-access scanner briefly holding the fresh tmp
             # (or the destination) raises a transient PermissionError, and a silently dropped entry
             # is a spurious miss on the next build (one C18c-flake candidate). Three attempts with a
             # short backoff clears a scanner hold; a still-failing write counts in write_errors.

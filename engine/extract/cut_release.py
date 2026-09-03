@@ -13,7 +13,7 @@ WHAT THIS IS NOT. This tool MINTS NOTHING. It has no network access, no DataCite
 git write path. It prepares the metadata so that the day AuScope's ARDC/DataCite access lands, the
 emitted `datacite.json` can be submitted as-is, and `--doi` can be run again on the SAME tag to
 stamp the minted DOI back into `release.json` + `datacite.json` (the post-minting backfill). The
-corpus git tag is PRINTED for the owner to run; this tool never invokes git.
+corpus git tag is PRINTED for a person to run; this tool never invokes git.
 
 USAGE (host, against a data root):
 
@@ -208,7 +208,7 @@ def doi_parts(mtcat) -> list:
       * the survey's own `doi` - the clearest "part of this release" there is;
       * each `related_identifiers[]` row whose `identifier_type` is DOI.
     NOTE FOR REVIEW: rolling the related-identifier rows in means a source archive a survey declares
-    as IsDerivedFrom is emitted under HasPart, which overstates containment. The lane spec asks for
+    as IsDerivedFrom is emitted under HasPart, which overstates containment. The specification asks for
     HasPart over the DOI-typed related identifiers, so that is what ships; if the relation should
     instead be carried verbatim from each row, this is the ONE function to change."""
     out: list = []
@@ -475,7 +475,7 @@ def _files_block(dest: Path, copied: list) -> list:
 
 def _print_tag_commands(tag: str, source_commit, surveys_live: str) -> None:
     """PRINT the corpus tag commands. This tool never runs git: tagging and pushing the surveys repo
-    is an owner action against an owner-authenticated remote, and a build container has no business
+    is a human action against an authenticated remote, and a build container has no business
     holding that credential."""
     print("")
     print("Tag the corpus for this release (run these yourself; cut_release never runs git):")

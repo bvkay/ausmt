@@ -19,8 +19,7 @@ It reproduces exactly these Compose interpolation forms
     ${VAR:+repl}      -> `repl` if set AND non-empty, else ""
     ${VAR+repl}       -> `repl` if set, else ""
 
-`docker compose config` fails iff at least one `:?`/`?` guard trips for the given environment (that
-is precisely the "required variable is missing" error the 2026-07-06 deploy hit). So: enumerate the
+`docker compose config` fails iff at least one `:?`/`?` guard trips for the given environment. So: enumerate the
 guards in the file, evaluate them against a supplied environment, and report every abort.
 
 Usage:
@@ -123,7 +122,7 @@ def _self_test() -> int:
     failures: list[str] = []
 
     # (1) With ONLY the two always-required vars set, the base config must resolve (no guard trips).
-    #     This is the C33 fix: portal-only operation needs only AUSMT_DATA_DIR + OWNER.
+    #     Portal-only operation needs only AUSMT_DATA_DIR and the OWNER variable.
     minimal = {"AUSMT_DATA_DIR": "/srv/ausmt", "OWNER": "someowner"}
     trips = find_guard_trips(compose, minimal)
     if trips:
@@ -133,7 +132,8 @@ def _self_test() -> int:
         )
 
     # (2) The two always-required vars MUST still be guarded (removing them must still abort). Prove
-    #     the guard scoping did not throw the baby out — AUSMT_DATA_DIR and OWNER stay :?.
+    #     the guard scoping did not throw the baby out: AUSMT_DATA_DIR and the OWNER
+    #     variable stay :?.
     for required in ("AUSMT_DATA_DIR", "OWNER"):
         env = dict(minimal)
         del env[required]

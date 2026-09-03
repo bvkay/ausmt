@@ -23,7 +23,7 @@ from __future__ import annotations
 MTIME_EPOCH = "1980-01-01"
 # Run.id where the source declares none: the station name with a trailing sequence letter.
 _SYNTHESISED_RUN_ID_SUFFIXES = "abcdefghijklmnopqrstuvwxyz"
-# D9: the rr* channels are mt_metadata RUN DEFAULTS. Over the corpus EDIs the CHTYPE census carries
+# The rr* channels are mt_metadata RUN DEFAULTS. Over the corpus EDIs the CHTYPE census carries
 # no RRHX at all, so DEFINEMEAS cannot be their source and no source declares them.
 _RUN_DEFAULT_COMPONENT_PREFIX = "rr"
 

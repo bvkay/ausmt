@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Station-id override for third-party released data (owner ruling 2026-08-08).
+"""Station-id override for third-party released data.
 
 AusMT serves third-party released data BYTE-IDENTICAL (D1), so a station whose contractor numbering
 is not a usable public identifier cannot be renamed by editing its EDI. The custodian declares the
@@ -55,7 +55,7 @@ import re
 from pathlib import Path
 from typing import NamedTuple
 
-# The `source` enum. Only filename-keyed maps exist in this lane; the enum is declared as a tuple so
+# The `source` enum. Only filename-keyed maps exist in this module; the enum is declared as a tuple so
 # a future key ('dataid', 'raw_recording') is an addition here rather than a shape change.
 STATION_ID_SOURCES = ("filename",)
 
@@ -94,7 +94,7 @@ class StationIds(NamedTuple):
 # acceptable only when safe_component would return it unchanged. safe_component keeps
 # [A-Za-z0-9._-], neutralises '..', strips leading dots/dashes and never returns empty; the pattern
 # plus the two guards below are that exact post-condition, checked as a PREDICATE so an id the
-# sanitiser would mangle FAILS LOUDLY instead of being silently rewritten (owner's ids are not ours
+# sanitiser would mangle FAILS LOUDLY instead of being silently rewritten (a custodian's ids are not ours
 # to mangle). tests/test_station_ids.py pins the two in agreement over the shared safe_component
 # vector fixture, so they cannot drift apart.
 _SAFE_ID = re.compile(r"\A[A-Za-z0-9._-]+\Z")
@@ -104,7 +104,7 @@ _SAFE_ID = re.compile(r"\A[A-Za-z0-9._-]+\Z")
 # DIRECTORY name: ENAMETOOLONG, raised out of the per-survey emission, and the WHOLE corpus build
 # died with no catalogue.json written at all. A bound here turns that into an ordinary
 # survey-granularity StationIdError like every other charset violation. 96 is far beyond any real
-# station identifier (the owner's own RD18 scheme peaks at 13) and leaves ample room inside the
+# Station identifier and leaves ample room inside the
 # 255-byte filesystem component limit for the product suffixes appended to it.
 MAX_STATION_ID_LEN = 96
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""C45 usage-analytics aggregator (record D4/D5 — the C45-impl lane).
+"""Usage-analytics aggregator.
 
 A host-side, STDLIB-ONLY daily job (deploy/systemd/ausmt-stats.timer fires it) that folds the Caddy
 access log into a cumulative `stats.json` the workbench Analytics screen reads. It is the same
@@ -125,7 +125,7 @@ DEFAULT_DAILY_KEEP_DAYS = 92
 
 # The served download families (path prefixes under /data/) and the visit proxy. `h5` was excluded here
 # for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer (record D1).
-# The engine produces per-station MTH5 files there since the tier-1 lane (owner ruling 2026-08-02), so
+# The engine produces per-station MTH5 files there, so
 # the exclusion had to go with it. It is worth naming why the interlock matters: an excluded family
 # classifies as `ignore`, and an ignored path is absent from `unattributed` as well, so every
 # station-h5 download would have vanished from the analytics rather than surfacing as build/serve skew.
@@ -146,7 +146,7 @@ _VISIT_PATH = "/data/catalogue.json"
 _RELEASE_FAMILY = "releases"
 _RELEASE_BUNDLE_SEGMENT = "bundles"
 
-# The TIME-SERIES HAND-OFF namespace (THREDDS lane, owner ruling R3/R5, namespace record D12).
+# The TIME-SERIES HAND-OFF namespace.
 # /go/ts/<survey>/<station>/<level> is a front-door TERMINAL route: it answers 302 with the one NCI
 # THREDDS fileServer URL for that file and never reaches this box, so the only trace it leaves is the
 # front door's own masked log line, which is what this fold reads. Exactly three segments below the
@@ -183,7 +183,7 @@ _LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
 # What is left is the documents About points a programmatic reader at. mtcat.schema.json is the `$id`
 # the MTCAT document declares (engine/schema/mtcat.schema.json), so every validator and every harvester
 # that resolves the schema fetches it: the cleanest machine-consumer signal the corpus has, and the one
-# that was counted nowhere. stations.geojson (owner ruling 2026-08-02) is the corpus as a vector layer:
+# That was counted nowhere. stations.geojson is the corpus as a vector layer:
 # a GIS user adds it as a layer straight from the URL and the SPA never fetches it, so it belongs on
 # this line for the same reason -- and without it every QGIS reader of the corpus would count nowhere,
 # because a `.geojson` at the data root is in no download family and would fall through to `ignore`.
@@ -211,7 +211,7 @@ _API_MIRROR_PREFIX = _DATA_PREFIX + "products/"
 _API_MIRROR_PATHS = tuple(_API_MIRROR_PREFIX + p[len(_DATA_PREFIX):] for p in _API_PATHS
                           if not p.startswith(_API_MIRROR_PREFIX))
 
-# The BULK-EXPORT LABEL (owner ruling 2026-08-01). The portal's THREE selection exports over a map
+# The BULK-EXPORT LABEL. The portal's THREE selection exports over a map
 # selection (portal/src/exports.js SEL_ZIP_BUTTONS: the EDI, EMTF XML and MTH5 zips) each mark every file
 # fetch they issue with this exact query token. It is the ONE thing in this pipeline the portal
 # deliberately puts INTO the log; everything else here is read from what the server was already writing.
@@ -750,7 +750,7 @@ def _empty_handoffs(*, geo: bool = False) -> dict:
 
     `geo` adds the by-country map, and it is added at the CUMULATIVE and CALENDAR-MONTH grains ONLY.
     That is the one line that must not move (see _count_geo): a named country on a named day is a
-    smaller cell than the named-state-in-a-named-month the owner already ruled out, so no day row and
+    smaller cell than the named-state-in-a-named-month already ruled out, so no day row and
     no archive line carries one."""
     out = {"requests": 0, "bytes": 0, "unattributed": 0,
            "by_survey": {}, "by_level": {}, "by_destination": {}}
@@ -1632,7 +1632,7 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 
 
 # --------------------------------------------------------------------------------------------------
-# The APPEND-ONLY DAILY ARCHIVE (owner ruling 2026-07-30: capture maximal non-geo granularity at day
+# The APPEND-ONLY DAILY ARCHIVE: capture maximal non-geo granularity at day
 # grain now, so a report nobody has asked for yet can still be derived later).
 #
 # WHY IT EXISTS. The raw log rotates in about a week and the daily rows in stats.json roll off after 92
@@ -1645,7 +1645,7 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 # not rewritten: a day is appended once, when it folds, and the fold watermark guarantees that happens
 # exactly once. Nothing here is ever backfilled.
 #
-# THE GEO BOUNDARY, which is the one line that must not move. The owner's ratified exclusion of
+# THE GEO BOUNDARY, which is the one line that must not move. The ratified exclusion of
 # day-by-state data generalises: NO country and NO state below month grain, rendered OR archived. A
 # named country on a named day is a smaller cell than a named state on a named month, and the
 # small-cell argument that ruled out a city column rules it out too. So these rows carry counts,
@@ -1735,7 +1735,7 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
     Tolerant, as the whole file is (record D6 retention pin): a missing dir, an unreadable file, or a
     truncated/non-gzip archive contributes no lines from THAT file and never raises.
 
-    TOLERANT IS NOT SILENT, and the difference cost real days. On 2026-07-30 the box's own access.json
+    TOLERANT IS NOT SILENT, and the difference cost real days. On the box's own access.json
     was root:root 0600, every open raised, and this function swallowed it: the fold ran for days on the
     shipped front-door file alone and produced a plausible, complete-looking stats.json the whole time.
     A file that the glob MATCHED but that could not be OPENED is an operational fault, so it is named
