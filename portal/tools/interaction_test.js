@@ -1964,6 +1964,27 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "Escape" }));
   ok(animA.tourAnimPending().running === false, "demo/cancel: closing the tour must leave nothing pending");
 
+  // (1b) REDUCED MOTION is the other half of the instant gate, and it is a real reader setting rather than a
+  // harness flag, so it is driven as one: a fresh window whose matchMedia answers the reduce query. The demo
+  // must reach its end state with NOTHING scheduled - a reader who has asked for no motion must not be given
+  // a two-second animation with the frames merely stripped out.
+  const rmWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html", w => {
+    w.matchMedia = q => ({ matches: /prefers-reduced-motion/.test(q), media: q,
+      addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+  });
+  const rmA = rmWin.__api;
+  rmA.startTour();
+  for (let k = 0; k < 7; k++) rmWin.document.dispatchEvent(new rmWin.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  ok(rmA.tourStep() === 7, "demo/reduced-motion: could not reach the selection-demo step, at " + rmA.tourStep());
+  const _wantRm = rmA.tourRectMembers(rmA.tourDemoBounds()).length;
+  ok(rmA.selCount() === _wantRm,
+    "demo/reduced-motion: the end state must be present without waiting for anything, selection is " + rmA.selCount());
+  ok(rmA.tourAnimPending().running === false,
+    "demo/reduced-motion: no frame or timer may be scheduled, got " + JSON.stringify(rmA.tourAnimPending()));
+  ok(!rmWin.document.getElementById("tourCursor"),
+    "demo/reduced-motion: no cursor glyph may be created when the motion was declined");
+  rmWin.document.dispatchEvent(new rmWin.KeyboardEvent("keydown", { key: "Escape" }));
+
   // H7. THE DOWNLOAD BLOCK, SPLIT IN TWO (LANE-CONTRACT-TOUR-REVISION.md T1 steps 9/10). One step used to
   // point at the whole block and say one sentence about four different things: zips AusMT serves and lists
   // NCI holds are not the same offer and do not arrive the same way. The block is now spotlit in two parts,
