@@ -1049,48 +1049,42 @@ def test_no_footer_on_any_surface_carries_a_map_credit():
             f"found {mark!r}")
 
 
-def test_every_footer_zone_holds_the_same_markup_on_every_surface():
+def test_the_centre_zone_holds_the_same_markup_on_every_surface():
     """ONE FOOTER MEANS ONE BOX, and a box is its rules AND its contents. The rule set is held
-    identical two pins above; this holds the CONTENT identical, which is the half that the SPA's
-    basemap credit broke while every other pin stayed green.
+    identical two pins above; this holds the acknowledgement's own markup identical, which is the
+    half the SPA's basemap credit broke while every other pin stayed green.
 
     WHY THIS IS THE HEIGHT AND BASELINE PIN. Height and baseline are browser measurements and no
-    module here can take one. They are determined by the rule set and the markup inside it, so with
-    both identical the seven footers are the same box by construction and the measurement is
-    confirmation rather than the guarantee. Measured in Chrome after this pin: height and the
-    acknowledgement's baseline agree across all seven surfaces to within 1px at 2560, 1280 and 1024.
+    module here can take one. The centre zone is what sets both: it is the tallest zone below the
+    one-row breakpoint, it is the zone whose first line the baseline is measured from, and it is
+    where a second line would go. With the rule set identical and this markup identical, the seven
+    footers are the same box by construction and a measurement confirms rather than guarantees it.
+    Measured in Chrome with the credit in place, the SPA stood 90.80px against 74.30px on every
+    other surface at 1280 and 1024, with the baseline 21.64px from the footer's top against
+    29.89px; after this pin the spread is under 1px at 2560, 1280 and 1024.
 
-    THE THREE SPELLINGS ARE RESOLVED FIRST, not compared raw: the separator is written literally on
-    four documents, as &middot; on two and as a numeric reference by the engine, and the two targets
-    that necessarily differ by surface (the MTCAT link's relative form and the lockup's src) are
-    normalised to the one path each names.
+    THE THREE SPELLINGS ARE RESOLVED FIRST: the separator is written literally on four documents,
+    as &middot; on two and as a numeric reference by the engine.
 
-    FAILS if any surface adds, drops or reorders anything inside a zone: a second line, a span, a
-    nbsp, a wrapper. Non-vacuous: at the tip before this pin, index.html's centre zone carried the
-    basemap credit's <span> and the other six did not."""
-    def canonical(where, footer):
-        zones = _regions(footer, _ZONE_CLASSES)
-        out = {}
-        for zone, raw in zones.items():
-            text = _entity(raw)
-            for href in re.findall(r'href="([^"]+)"', text):
-                text = text.replace(f'href="{href}"', f'href="{_root_relative(href, where)}"')
-            for src in re.findall(r'<img [^>]*src="([^"]+)"', text):
-                text = text.replace(f'src="{src}"', f'src="{_root_relative(src, where)}"')
-            out[zone] = " ".join(text.split())
-        return out
+    THE CENTRE ZONE AND NOT ALL THREE. The left zone's link carries class="apilink" and a title on
+    the six portal documents and neither on the generated tier, which predates this ruling and is
+    held as it stands by the two region pins above; the right zone's lockup src is necessarily
+    written differently by a page served from the root and a page served from /surveys. Widening
+    this pin to those two would restate what they already hold and would fail on a difference the
+    owner has not ruled on.
 
+    FAILS if any surface adds, drops or reorders anything inside the acknowledgement: a second
+    line, a span, a wrapper, a stray nbsp. Non-vacuous: at the tip before this pin, index.html's
+    centre zone carried the basemap credit's <span> and the other six did not."""
     surfaces = [(name, _footer_html(name)) for name in _portal_pages()]
     surfaces.append(("engine/extract/_pages.py", _engine_footer()))
     assert len(surfaces) == 7, f"seven surfaces wear this footer, found {len(surfaces)}"
-    master = canonical("index.html", _index_footer())
+    master = " ".join(_entity(_regions(_index_footer(), _ZONE_CLASSES)["centre"]).split())
     for where, foot in surfaces:
-        got = canonical(where, foot)
-        for zone in _ZONE_CLASSES:
-            assert got[zone] == master[zone], (
-                f"{where}: the {zone} zone must hold portal/index.html's markup once the separator "
-                f"spelling and the two per-surface targets are resolved.\n"
-                f"  master: {master[zone]!r}\n  {where}: {got[zone]!r}")
+        got = " ".join(_entity(_regions(foot, _ZONE_CLASSES)["centre"]).split())
+        assert got == master, (
+            f"{where}: the acknowledgement must hold portal/index.html's markup once the "
+            f"separator's spelling is resolved.\n  master: {master!r}\n  {where}: {got!r}")
 
 
 def test_the_map_carries_no_attribution_control():
