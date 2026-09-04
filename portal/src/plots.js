@@ -60,8 +60,8 @@ function arrowSvg(t){const per=t[T.periods];if(!per.length)return"";
   // the period-decade labels sit at the very bottom, clear of the vectors.
   const H=112,x=xScale(per),base=56,scale=ARROW_UNIT_PX;let g="";
   per.forEach((p,i)=>{const xr=zxr[i],xi=zxi[i],yr=zyr[i],yi=zyi[i];const x0=x(p);
-    if(xr!=null&&yr!=null){g+=arrow(x0,base,-yr,-xr,scale,REAL,"1.2");}          // REAL: Parkinson (east,north)=(-tzy_re,-tzx_re)
-    if(xi!=null&&yi!=null){g+=arrow(x0,base, yi, xi,scale,IMAG,"1.0");}          // IMAG: unreversed (east,north)=(tzy_im,tzx_im)
+    if(xr!=null&&yr!=null){g+=arrow(x0,base,-yr,-xr,scale,REAL,"1.2");}          // REAL: Parkinson `(east,north)=(-tzy_re,-tzx_re)`
+    if(xi!=null&&yi!=null){g+=arrow(x0,base, yi, xi,scale,IMAG,"1.0");}          // IMAG: unreversed `(east,north)=(tzy_im,tzx_im)`
   });
   // |T| = 0.5 unit-scale reference arrow (points north/up) in the top-left corner, at the SAME scale.
   const refx=PADL+6,ref=0.5,refTail=18;

@@ -484,7 +484,7 @@ def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# (f) Stage 2b-ii: PERSISTENT-PAUSE alarm + pending-intent facts (7 /). A single
+# (f) Stage 2b-ii: PERSISTENT-PAUSE alarm + pending-intent facts. A single
 # fresh pause is fine; a pause active or SLOW-RE-ARMED past the cumulative threshold (24 h) must fail a
 # check AND surface as an ops-floor fact — an authenticated attacker cannot silently keep serving
 # frozen. The pending privileged intents + the actions audit tail are surfaced read-only for the serve

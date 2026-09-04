@@ -938,8 +938,18 @@ ENUMERATOR = re.compile(r"^[ \t]*(?:\d{1,2}|[a-z])\)")
 DEFINITION_ROW = re.compile(r"^\s*\S+[ ]+:[ ]", re.M)
 SPACE_BEFORE_PUNCT = re.compile(r"\w[ ]+[.,;!?](?:\s|$)")
 SPACE_BEFORE_COLON = re.compile(r"\w[ ]+:(?:\s|$)")
+# A gap between the last word of a bracketed group and the bracket that closes
+# it is where the rest of the group stood.
+SPACE_BEFORE_BRACKET = re.compile(r"\w[ ]+[)\]](?!\w)")
 EMPTY_GROUP = re.compile(r"\([ \t]*[-+:;,|][ \t]*\)")
-OPEN_CONNECTOR = re.compile(r"\([ \t]*[-:;,][ \t]")
+OPEN_CONNECTOR = re.compile(r"\([ \t]*[-:;,/][ \t]")
+# The same scar at the other end of the group. A cut token leaves the character
+# that joined it standing: in front of the bracket that closed the group, in
+# front of the end of the run, or hard against the connector that preceded it.
+# A connector list that reads only the opening side sees half the damage.
+CLOSE_CONNECTOR = re.compile(r"[ \t][-:;,/|][ \t]*(?=[)\]]|\Z)")
+BRACKET_GROUP = re.compile(r"\([^()]*\)")
+CONNECTOR_PAIR = re.compile(r"\w[,;][-/](?=\w)")
 LONE_PUNCTUATION = re.compile(r"^[)\].]$")
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
@@ -959,18 +969,20 @@ def unquoted(text):
 def unbalanced(prose):
     """Every unmatched bracket in one comment, as (character, index). An opener pairs with ANY
     closer so interval notation balances, and a closer that opens a line as an enumerator is a
-    list marker rather than a bracket."""
-    prose = unquoted(prose)
+    list marker rather than a bracket. A quoted run wrapped across two comment lines is one
+    quoted run to a reader, so the wraps are read as spaces before the quotes are blanked; the
+    blanking keeps the text's length, so a bracket still reports where it stands."""
+    cleaned = unquoted(prose.replace("\n", " "))
     stack, stray, line_start = [], [], 0
-    for i, ch in enumerate(prose):
-        if ch == "\n":
+    for i, ch in enumerate(cleaned):
+        if prose[i] == "\n":
             line_start = i + 1
         elif ch in "([{":
             stack.append((ch, i))
         elif ch in ")]}":
             if stack:
                 stack.pop()
-            elif not (ch == ")" and ENUMERATOR.match(prose[line_start:i + 1])):
+            elif not (ch == ")" and ENUMERATOR.match(cleaned[line_start:i + 1])):
                 stray.append((ch, i))
     return stack + stray
 
@@ -1002,19 +1014,29 @@ def shape_offences(files, root=None):
             clean = unquoted(joined)
             table = len(DEFINITION_ROW.findall(clean)) >= 2
             said = []
-            for ch, at in unbalanced(joined):
-                line = joined.count("\n", 0, at)
-                if line == 0 or line == len(lines) - 1:
-                    said.append("unmatched %s" % ch)
-                    break
-            for line in clean.splitlines():
+            # Wherever in the run the stray bracket falls. A reader reads the run, so a bracket
+            # left open on an interior line is the same broken shape as one left open on the
+            # first; reporting only the head and the tail hides the middle of every long comment.
+            for ch, _ in unbalanced(joined):
+                said.append("unmatched %s" % ch)
+                break
+            # On the run a reader reads as well as on each line: a wrap between the last word of a
+            # sentence and the full stop that ends it is the gap a cut token left, not a wrap.
+            for line in clean.splitlines() + [unquoted(flat)]:
                 if SPACE_BEFORE_PUNCT.search(line) or (not table and SPACE_BEFORE_COLON.search(line)):
                     said.append("a space before punctuation")
                     break
+            if SPACE_BEFORE_BRACKET.search(unquoted(flat)):
+                said.append("a space before the bracket that closes a group")
             if EMPTY_GROUP.search(unquoted(flat)):
                 said.append("an empty bracketed group")
             if OPEN_CONNECTOR.search(unquoted(flat)):
                 said.append("a bracket opening on a connector")
+            bare_flat = unquoted(flat)
+            if (CLOSE_CONNECTOR.search(bare_flat)
+                    or any(CONNECTOR_PAIR.search(group.group(0))
+                           for group in BRACKET_GROUP.finditer(bare_flat))):
+                said.append("a connector left standing where a token was cut")
             if any(LONE_PUNCTUATION.match(line.strip()) for line in body):
                 said.append("a line carrying one bracket")
             if any(m is None for _, m in pointer_fragments(flat)):

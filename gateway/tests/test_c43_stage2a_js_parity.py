@@ -231,8 +231,8 @@ process.stdout.write(JSON.stringify(out));
 #
 # THE LESSON IS THE PIN: the merged Stage-2a filter compared the catalogue `survey` column to the
 # hub's SLUG, but the engine writes the survey display LABEL there (build_portal.py:
-# r["survey"] = survey_label) — zero matches, Stations tab blank on EVERY production survey
-# . No pin caught it because none drove the filter with rows the ENGINE
+# r["survey"] = survey_label): zero matches, Stations tab blank on EVERY production survey.
+# No pin caught it because none drove the filter with rows the ENGINE
 # produced. These pins run the REAL engine (the same _run_preview seam the gateway uses) over the
 # engine's own sample survey and drive the EXTRACTED filter function with the emitted catalogue —
 # hand-built rows are banned here by design.

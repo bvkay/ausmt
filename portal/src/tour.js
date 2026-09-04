@@ -343,9 +343,9 @@ function startTour(){
   if(!TOUR_STEPS.length)return;
   _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
   _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;   // demo state: fresh every run
-  // A COLLAPSED rail hides every child but the collapse button, so the rail steps (Find, the tree. Expand
-  // it for the run and record that WE did, so _tourRestore puts the visitor's own choice back. See docs:
-  // portal internals, tour.js.
+  // A COLLAPSED rail hides every child but the collapse button, so the rail steps (Find, the tree,
+  // the Select and Download boxes) would spotlight nothing. Expand it for the run and record that WE
+  // did, so _tourRestore puts the visitor's own choice back. See docs: portal internals, tour.js.
   const _sb=document.querySelector("aside.filters");
   if(_sb&&_sb.classList.contains("collapsed")&&typeof setSidebarCollapsed==="function"){
     setSidebarCollapsed(false);_tourOpened.collapsed=true;

@@ -625,7 +625,7 @@ def _package_for_validation(tmp_path, extra_yaml: bytes = b""):
 
 
 def test_preferred_identifier_without_its_designation_is_refused_by_the_merge(tmp_path):
-    """ENTRY-GATE GUARD (/ emitter): the editor CAN write citation.preferred_identifier, and
+    """ENTRY-GATE GUARD: the editor CAN write citation.preferred_identifier, and
     the validator FAILs a pair that no designation matches. The merge surfaces that FAIL verbatim, so
     an inconsistent curator save can never reach the engine. RED if the editor writes the pair and
     nothing refuses it."""

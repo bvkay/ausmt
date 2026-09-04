@@ -112,8 +112,8 @@ class Config:
         return self.state_dir / "gateway.sqlite"
 
     def redacted_items(self) -> list[tuple[str, str]]:
-        """Config for the startup log — submit_key AND curator_keys intentionally DROPPED (design
-: never masked, dropped, so a formatting slip cannot leak even a prefix). The curator-count
+        """Config for the startup log: submit_key AND curator_keys intentionally DROPPED, never
+        masked, dropped, so a formatting slip cannot leak even a prefix. The curator-count
         is logged instead of the keys so the operator can confirm curators are configured without the
         secrets appearing anywhere in the log stream."""
         curators_configured = len([p for p in self.curator_keys.split(",") if p.strip()])

@@ -1,7 +1,7 @@
 """Phase-quadrant classification for the curator-workbench Stations plots.
 
 PURE FUNCTIONS, no I/O — the AUTHORITATIVE specification of the workbench's phase handling, so the
-classification logic is unit-testable server-side (/ the contract's "test the classification
+classification logic is unit-testable server-side (the contract's "test the classification
 logic at the JS-data seam" — a server-side helper is that seam). The browser-side STATIONS_JS mirrors
 these exact rules; an EXECUTABLE Node parity pin (test_c43_stage2a_js_parity.py) runs the extracted JS
 against this module over a boundary-heavy vector sweep, so the mirror cannot drift semantically (the

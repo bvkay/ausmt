@@ -2,8 +2,8 @@
 
 The tool is the ONLY network-touching piece; these tests keep the BUILD/CI offline by INJECTING a fake
 head function (never a real doi.org HEAD). They pin the alive-rule classifier, the DOI-shape helpers, the
-union sweep (typed related_identifiers DOIs + the still-readable flat dataset_doi / collection_pid -
- ), and the written cache shape build_portal consumes.
+union sweep (typed related_identifiers DOIs + the still-readable flat dataset_doi /
+collection_pid), and the written cache shape build_portal consumes.
 """
 import importlib.util
 import json

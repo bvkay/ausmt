@@ -2,8 +2,8 @@
 style in the portal palette. Reports are shown verbatim MINUS absolute paths.
 
 Two hard rules enforced here:
-  1. Submitter fields (name/email/orcid) are NEVER rendered — a leaked status URL must not leak PII
-. The render function is not even given the submitter fields.
+  1. Submitter fields (name/email/orcid) are NEVER rendered, because a leaked status URL must not leak
+     PII. The render function is not even given the submitter fields.
   2. Everything interpolated from a report is HTML-escaped (html.escape) — reports derive from
      submitted bytes and must not be able to inject markup into the operator/submitter's browser.
 """

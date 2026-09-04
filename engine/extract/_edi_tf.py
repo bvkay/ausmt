@@ -40,7 +40,7 @@ def sig(x, n=4):
     # Non-finite -> None (rides the existing None path every consumer already tolerates). MTpy
     # writes literal `inf` into impedance-ERROR arrays for dead/infinite-variance points;
     # math.log10(inf) -> int(inf) raised OverflowError here, build_portal caught it as a
-    # Station-level "PARSE FAIL" and SILENTLY DROPPED the whole station: FR01, NF19,
+    # station-level "PARSE FAIL" and SILENTLY DROPPED the whole station (FR01, NF19, NF21,
     # SA26W_2 - 4 real stations lost from the served corpus over single bad error points).
     # None serializes as JSON null ("no finite error estimate", honest); returning inf raw would
     # poison tf.json (Python json emits non-RFC `Infinity`, which browsers' JSON.parse rejects).

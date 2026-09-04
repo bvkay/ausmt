@@ -93,7 +93,7 @@ def test_published_status_pages_say_not_yet_served(tmp_path):
 
 
 def test_commit_carries_no_submitter_email(tmp_path):
-    # THE PII guarantee for publish (house rule /): the submitter email appears in NO git
+    # THE PII guarantee for publish (house rule): the submitter email appears in NO git
     # Argument. proven failing: injecting the submitter email into the commit body made
     # this assertion break (verified by patching a leak in).
     async def _body():

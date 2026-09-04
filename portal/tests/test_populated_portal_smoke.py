@@ -120,7 +120,7 @@ def test_populated_portal_value_binding(tmp_path):
     assert ",-30.5,135.25," in line, "lat/lon must serialise as bare numbers: " + line
     assert "'-30.5" not in line, "negative latitude must not carry the injection apostrophe: " + line
 
-    # csvCell directly: numbers pass through; a hostile leading = (or a non-numeric leading -) is
+    # csvCell directly: numbers pass through; a hostile leading `=` (or a non-numeric leading `-`) is
     # still neutralised.
     mc = re.search(r"^CSVCELL (\[.*\])\s*$", out, re.M)
     assert mc, "smoke.js did not emit CSVCELL:\n" + out

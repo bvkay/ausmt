@@ -2031,8 +2031,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   tsBtn("raw_packed").click();
   await new Promise(r => setTimeout(r, 0));
   // Over the cap the pack is the ONLY save: the standalone list .json was the same document the
-  // pack already carries as handoff.json, and it landed at the head of the reader's downloads
-  // . Exactly one save (the pack), never two.
+  // pack already carries as handoff.json, and it landed at the head of the reader's downloads.
+  // Exactly one save (the pack), never two.
   // The pack is built through the stubbed JSZip, so it shows up as ZIP ENTRIES rather than a save;
   // what must be GONE is the standalone list .json, which was a real save.
   const _zOver = zipEntries.slice(_zmarkOver).map(e => e.name);
@@ -4344,8 +4344,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(treeChecked().length === 4, "StageB RESTORE (Browse): returning to Browse must restore the scoped map tree (all 4 checked), got " + JSON.stringify(treeChecked()));
   ok(A.visIds().length === 5, "StageB RESTORE (Browse): the restored tree must put every station back on the map, got " + A.visIds().length);
 
-  // (3) COHERENCE + VIEW-SWITCH EXIT PATH. Re-scope the map via the tile, then navigate to the Surveys view
-  // . The catalogue count is coherent - both #surveyCount and #nVis read
+  // (3) COHERENCE + VIEW-SWITCH EXIT PATH. Re-scope the map via the tile, then navigate to the
+  // Surveys view. The catalogue count is coherent - both #surveyCount and #nVis read
   // the discovery-filtered set of 4, never the scoped tree - AND leaving the map releases the lens so the map
   // tree is restored.
   selectCtl().click();

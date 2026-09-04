@@ -31,8 +31,8 @@ let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState; backs the
 // docs: portal internals, state.js.
 let AUSLAMP_SET=new Set();
 // ausmt_id -> coordinate policy ('generalised' | 'withheld') for NON-EXACT stations, loaded at boot from
-// the OPTIONAL coord_policy.json (absent for an all-exact corpus => empty => no badges - graceful degrade.
-// See docs: portal internals, state.js.
+// the OPTIONAL coord_policy.json (absent for an all-exact corpus => empty => no badges - graceful
+// degrade). See docs: portal internals, state.js.
 let COORD_POLICY={};
 // The hand-off index: ausmt_id -> {level token: {bytes, url_path}} for stations with a VERIFIED route into
 // the NCI archive, loaded at phase 2 from the OPTIONAL ts_access.json. See docs: portal internals,

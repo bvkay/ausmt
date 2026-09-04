@@ -226,7 +226,7 @@ def test_c43_js_routes_are_session_gated(tmp_path):
 # --------------------------------------------------------------------------------------------------
 def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
     """Every session-gated curator page renders the left rail (the Stage-1 surfaces PLUS the Stage-3a
-    Collections entry,-A) and the context bar's drift chip carrying the server-rendered
+    Collections entry) and the context bar's drift chip carrying the server-rendered
     published HEAD + Request-rebuild button. FAILS IF a page loses the shell or the rail drops a
     surface."""
     async def _body():

@@ -16,8 +16,8 @@ What this module pins, each RED-proven against the unchanged tree:
     VERBATIM when present; no engine-appended HostingInstitution row and no engine-authored
     acknowledgement; funders (funding_doi -> award_uri); dates.coverage from the year
     range; rights {license raw, access normalised, embargo_until ISO}; extent from the curated
-    geographic_extent only, WGS84 only, all-zero = placeholder, omitted under withheld coordinates
-    ; identifiers[] from the identity_classification mapping (case_a represents[] / case_b
+    geographic_extent only, WGS84 only, all-zero = placeholder, omitted under withheld
+    coordinates; identifiers[] from the identity_classification mapping (case_a represents[] / case_b
     own_identifiers[]) and every other related_identifiers row to relationships[] {identifier,
     identifier_type, relation} with the DOI resolver prefix stripped, case kept, exact duplicates
     dropped; activities[] from identifiers.project_raid only; placeholders (None, "",

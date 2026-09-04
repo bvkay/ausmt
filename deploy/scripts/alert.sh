@@ -85,7 +85,7 @@ PIN_MAX_H="${AUSMT_ALERT_PIN_MAX_H:-$PAUSE_MAX_H}"
 TIMER_PERIOD_MIN="${AUSMT_ALERT_PERIOD_MIN:-15}"
 # The gateway state dir (10002-owned, group-writable to the operator — the same shared-group prep the
 # reconcile agent uses) is where reconcile-status.json AND ops-status.json live. Empty when
-# AUSMT_DATA_DIR is unset (we then skip the ops-status write, loudly, rather than write into /).
+# AUSMT_DATA_DIR is unset (we then skip the ops-status write, loudly, rather than write into `/`).
 DATA_DIR_ROOT="${AUSMT_DATA_DIR:-}"
 STATE_DIR="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/gateway/state}"
 OPS_STATUS_FILE="${STATE_DIR:+$STATE_DIR/ops-status.json}"

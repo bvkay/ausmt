@@ -1010,7 +1010,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         entry["contributors"] = _export_contributors_of(m)
         # MTCAT 2.0 formats: what is ACTUALLY distributed, off the download manifest (the one
         # authority) - emitted ONLY when at least one format is distributed. An embargoed/withheld
-        # survey OMITS the key: under represented-holdings semantics, [] would
+        # survey OMITS the key (under represented-holdings semantics, [] would
         # falsely assert that no formats are KNOWN when the holdings exist and are merely
         # withheld). No manifest at all also omits it: "not known" is never served as "nothing
         # distributed".

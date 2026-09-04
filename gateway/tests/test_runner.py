@@ -276,8 +276,8 @@ def test_preview_end_to_end_real_engine(tmp_path):
 @pytest.mark.skipif(not _has_real_engine(),
                     reason="real engine stack / sample survey / validator not present")
 def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
-    # NO MOCKS, and no assertion-by-assumption: EMTF XML became a first-class submission input
-    # , so an EMTF-XML-ONLY upload must survive the REAL safe_extract and
+    # NO MOCKS, and no assertion-by-assumption: EMTF XML became a first-class submission input,
+    # so an EMTF-XML-ONLY upload must survive the REAL safe_extract and
     # build a REAL preview with stations in it. The engine change alone is not proof that the
     # gateway's path carries it, which is why this drives the actual gw-runner preview rather than
     # inspecting build_portal directly.

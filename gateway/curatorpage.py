@@ -756,7 +756,7 @@ CONTEXT_BAR_JS = """
 
 
 # The survey hub's browser-side script, built to the mockup's
-# information design). Jobs, all degradable:
+# information design. Jobs, all degradable:
 #   1. HUB HEADER + TAB STRIP (every tab) — fill the orientation line's station counts
 #      ([data-hub-counts]: 'N stations published, M serving') and the Stations tab chip
 #      ([data-stations-chip]: 'd dropped · f flagged', hidden at 0/0) from /data/build_report.json.
@@ -2566,7 +2566,7 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
 #   SERVER-SIDE (passed in): surveys-live HEAD (via the publish git seam), the reconcile-status.json
 #     contents, and whether a rebuild.request is pending — all from mounts the gateway already has.
 #   BROWSER-SIDE (fetched by the inline JS below): /data/build.json + /data/build_report.json,
-#     same-origin from Caddy (the gateway server has NO site-data mount -). The JS renders
+#     same-origin from Caddy (the gateway server has NO site-data mount). The JS renders
 #     the served build id + source_commit (highlighted when it differs from the published HEAD the
 #     server passed in) and the per-survey build_report table with an expandable detail row.
 # Dependency-free vanilla JS, matching the rest of the curator UI (no framework, no CDN).
@@ -3133,7 +3133,7 @@ def _backups_table(ops, ops_stale: bool, generated_at, *, actions: bool = False)
 
 # ---- privileged ACTION controls on the serve screen ----------------
 # The buttons. All post to session+CSRF-gated routes that write an INTENT the host actions agent
-# executes (the gateway gains no shell -). Single-flight (D9.3): a pending intent of a kind
+# executes (the gateway gains no shell). Single-flight (D9.3): a pending intent of a kind
 # disables its button and shows the pending state. The destructive/id-carrying ones (rollback,
 # restore) are their own confirmation PAGES (typed id; restore also a TOTP code). Everything here
 # rides the shared data-confirm delegation in CURATOR_UI_JS — NO inline handler (strictPages CSP).
@@ -5611,8 +5611,8 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
 
 
 # ==================================================================================================
-# the contributor-credit model: the unified "People & credit" panel, replacing
-# the four-panel Investigators hub group with "one huge list which makes no sense"). ONE row per person
+# The contributor-credit model: the unified "People & credit" panel, replacing
+# the four-panel Investigators hub group with "one huge list which makes no sense". ONE row per person
 # or organisation: name, name_type, ORCID (people) / ROR (orgs), a Cited-author checkbox, and the eight
 # role checkboxes. The panel DECOMPOSES to the two served lists on save
 # (editor_form.assemble_people); the served creators[]/contributors[] shape is byte-for-byte unchanged.
@@ -7813,7 +7813,7 @@ def render_uploader_created(*, curator_name: str, name: str, key: str) -> str:
     return _page("AusMT uploader key created", body)
 
 
-# ---- curator security: TOTP second factor (schema v4 -) -----------------------------------
+# ---- curator security: TOTP second factor (schema v4) ------------------------------------
 # The Security page enrols the per-curator TOTP authenticator that gates the destructive workbench
 # actions (survey retirement first). Three states, no inline JS (every form is a plain POST):
 #   * none    — not enrolled; offer "Begin enrolment" (generates a secret).

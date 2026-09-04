@@ -21,7 +21,8 @@ from pathlib import Path
 from . import states
 
 # ULID would need a dep; a 26-char Crockford-base32 of (48-bit time + 80-bit random) is ULID-shaped
-# and stdlib-only. The id is NOT a secret (the token is -); it is sortable-ish by the
+# and stdlib-only. The id is NOT a secret (the submission token is the secret); it is
+# sortable-ish by the
 # time prefix, which is all the design asks of it.
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
@@ -41,8 +42,8 @@ def new_id(now_ms: int | None = None) -> str:
 
 
 def is_valid_id(value: str) -> bool:
-    """True only for a 26-char string drawn entirely from the Crockford-base32 id charset (design
-). Because that charset contains NO path separators, dots, or spaces, a valid id can never
+    """True only for a 26-char string drawn entirely from the Crockford-base32 id charset.
+    Because that charset contains NO path separators, dots, or spaces, a valid id can never
     form `..`, an absolute path, or a traversal component — this is the load-bearing guard the
     curator/preview routes apply BEFORE any id reaches a filesystem path or a git branch name."""
     return len(value) == 26 and all(c in _ID_CHARS for c in value)

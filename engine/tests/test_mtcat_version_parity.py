@@ -138,7 +138,7 @@ def _generated_engine_constant() -> str:
 
 def _docs_display() -> str:
     """The docs current-version display: the reference index states which schema version the
-    documentation describes. Without this pin the version-literal class has
+    documentation describes. This surface lacked a pin (the version-literal class has
     bitten three times); it has one now, so a version bump cannot leave the docs describing the
     previous release."""
     docs_index = REPO / "docs" / "docs" / "reference" / "index.md"

@@ -883,8 +883,8 @@ def test_salt_library_version_change_zero_hits(tmp_path, clean_salt, monkeypatch
 
 def test_salt_survey_yaml_edit_rederives_only_that_survey(tmp_path, clean_salt):
     """FAILS IF: editing one survey's survey.yaml either (a) fails to re-derive that survey, or (b)
-    busts OTHER surveys. The v1 salt is the WHOLE survey.yaml, so any edit re-derives just that survey
-; a sibling survey with an untouched yaml + unchanged EDIs must still hit."""
+    busts OTHER surveys. The v1 salt is the WHOLE survey.yaml, so any edit re-derives just that
+    survey; a sibling survey with an untouched yaml + unchanged EDIs must still hit."""
     root = tmp_path / "surveys"
     _make_survey(tmp_path, SAMPLE_EDIS, name="Alpha", slug="alpha", subdir="surveys")
     _make_survey(tmp_path, SAMPLE_EDIS, name="Beta", slug="beta", subdir="surveys")

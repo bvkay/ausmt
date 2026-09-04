@@ -14,8 +14,8 @@ Three layers:
      portal.generated_at; every survey-metadata.json validates with format checking, carries no null
      and no empty container, is dict-equal across the two builds minus provenance.generated, and is
      under the 16 KB budget; the schema served at both routes byte-identical to the in-tree artifact
-     and across builds; survey_id == directory component == mtcat surveys[].survey_id (set equality,
-     ; the doi / raid / organisation projection chains hold; no manifest row names the
+     and across builds; survey_id == directory component == mtcat surveys[].survey_id (set
+     equality); the doi / raid / organisation projection chains hold; no manifest row names the
      document; the shared-definition guarantee (subject_row and the relationship core vs the mtcat
      schema, structurally).
   2. built layer, the 3-survey corpus (open + embargoed + metadata_only, each curating every

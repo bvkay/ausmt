@@ -1200,8 +1200,8 @@ function rorMatchesFromResponse(data){
 }
 
 // DOI harvest core -- normalizeDoi, looksLikeDoi, parseCrossref, parseDatacite, formatCitation and
-// harvestDoi now live in the SINGLE shared source src/doi_harvest.js (loaded in <head>. See docs: portal
-// internals, add-survey.html.
+// harvestDoi now live in the SINGLE shared source src/doi_harvest.js (loaded in <head>).
+// See docs: portal internals, add-survey.html.
 var _DH = (typeof window !== "undefined" && window.AusmtDoiHarvest) ? window.AusmtDoiHarvest : {};
 var normalizeDoi = _DH.normalizeDoi, looksLikeDoi = _DH.looksLikeDoi, parseCrossref = _DH.parseCrossref,
     parseDatacite = _DH.parseDatacite, formatCitation = _DH.formatCitation, harvestDoi = _DH.harvestDoi;

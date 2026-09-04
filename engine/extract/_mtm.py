@@ -37,7 +37,7 @@ def available() -> bool:
 
 
 # ---------------------------------------------------------------------------------------------
-# Mt_metadata 1.0.9 >INFO JSON trailing-delimiter defect, GSSA Western Gawler
+# mt_metadata 1.0.9 >INFO JSON trailing-delimiter defect (GSSA Western Gawler
 # 2023, a Zonge job: 246 of 312 EDIs unreadable). THE DATA IS FINE; THE READER IS WRONG, in three
 # composing steps, all in mt_metadata:
 #

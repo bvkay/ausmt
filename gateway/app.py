@@ -1,10 +1,10 @@
 """FastAPI app: upload -> scan -> queue, plus the single asyncio poll loop that ingests done-files,
-retries clamd on held submissions, does the post-unpack sweep, and re-queues dead jobs (design
-). The gateway never parses EDI/YAML; the deepest it inspects submitted bytes is the zip
+retries clamd on held submissions, does the post-unpack sweep, and re-queues dead jobs. The
+gateway never parses EDI/YAML; the deepest it inspects submitted bytes is the zip
 central directory (zipsafety). It is the ONLY DB writer.
 
-No CORS headers anywhere - same-origin by construction through Caddy. No cookies/sessions
-. Auth is the submit key on POST and the capability token on GET.
+No CORS headers anywhere - same-origin by construction through Caddy. No cookies or sessions.
+Auth is the submit key on POST and the capability token on GET.
 """
 from __future__ import annotations
 
@@ -1220,7 +1220,7 @@ class Gateway:
         self.db.set_uploader_key_note(key_id, note=clean)
         return RedirectResponse("/gateway/curator/uploaders", status_code=303)
 
-    # ---- curator security: TOTP second factor (schema v4 -) ---------------------------
+    # ---- curator security: TOTP second factor (schema v4) -----------------------------
 
     def _totp_state(self, curator_name: str) -> tuple[str, str | None]:
         """Map the stored TOTP row to a page state: ('none'|'pending'|'active', enrolled_utc)."""
@@ -1435,8 +1435,8 @@ class Gateway:
             submitted=submitted))
 
     def handle_collections_index(self, request: Request) -> Response:
-        """GET /gateway/curator/collections (Stage 3a,-A). Enqueue the whole-corpus
-        `collections` read-job (the runner is the only place YAML is parsed -) and render the
+        """GET /gateway/curator/collections (Stage 3a). Enqueue the whole-corpus
+        `collections` read-job (the runner is the only place YAML is parsed) and render the
         read-only index: summary cards, the list table, and the id-near-duplicate + per-field
         divergence bands. A runner error degrades to the empty state (never a 500 — the projection is
         informational). Sync `def` route -> the seam's bounded blocking poll runs in the threadpool."""
@@ -1450,7 +1450,7 @@ class Gateway:
 
     def handle_collection_detail(self, request: Request, cid: str, *, error: str = "",
                                  status_code: int = 200) -> Response:
-        """GET /gateway/curator/collections/{id} (Stage 3b,-A). Render the collection
+        """GET /gateway/curator/collections/{id} (Stage 3b). Render the collection
         EDITOR for ONE id: the fan-out edit form + the two-column membership manager over the candidate
         list. An unknown id -> 404. `?id=<canonical>` pre-fills the id field (the Merge entry point,
         record E). `error` re-renders after a refused preview (no-op / invalid id)."""
@@ -3023,7 +3023,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     async def request_key(request: Request):
         # Accept BOTH body encodings. The portal form posts JSON ({"email": ...}); a Form(...)
         # parameter silently reads "" from a JSON body, so every real request failed the syntactic
-        # Gate and the neutral 202 hid it - the two halves were built against
+        # gate and the neutral 202 hid it (the two halves were built against
         # an encoding-ambiguous contract). A public endpoint parses defensively: JSON when declared,
         # urlencoded/multipart otherwise, and any parse failure degrades to "" (the neutral path).
         # Cap the body AS BYTES ARRIVE before any parse: this public route read one email address
@@ -3115,7 +3115,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
                               csrf_token: str = Form(default="")):
         return gw.handle_uploader_note(request, key_id, note, csrf_token)
 
-    # ---- curator security: TOTP second factor (schema v4 -). GET is `def` (blocking sqlite
+    # ---- curator security: TOTP second factor (schema v4). GET is `def` (blocking sqlite
     # read -> threadpool). The code-verifying POSTs are `async def` so the throttle decision
     # (blocked-check -> verify -> record) runs to completion on the event loop with NO await between
     # its steps - atomic against a concurrent burst without needing the login route's evaluate form.

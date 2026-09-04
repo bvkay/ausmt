@@ -151,9 +151,9 @@ def make_history_job(slug: str) -> dict:
 
 
 def make_collections_job() -> dict:
-    """A `collections` edit-job (/ Stage 3a): a WHOLE-CORPUS read-only projection. The runner
+    """A `collections` edit-job (Stage 3a): a WHOLE-CORPUS read-only projection. The runner
     reads EVERY published survey.yaml's `collection` block (the runner is the only place YAML is
-    parsed -) and returns the rollup the portal shows readers (first-declarer programme
+    parsed) and returns the rollup the portal shows readers (first-declarer programme
     fields) PLUS the two honesty seams the build only prints to stderr today: id near-duplicates and
     per-field divergence. Whole-corpus, so the job carries NO slug — the runner enumerates surveys-live
     from its own mount. READ-ONLY: same trust class as the history job (no git write, no mutation)."""

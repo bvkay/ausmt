@@ -46,8 +46,8 @@ DECL = FIX / "LineNo__StationNo_11.edi"        # JSON >INFO + "Declination": 5, 
 STOCKJSON = FIX / "LineNo__StationNo_104.edi"  # JSON >INFO + trailing commas, NO empower token
 NODECL = FIX / "LineNo__StationNo_39.edi"      # plain-text >INFO, nothing wrong with it
 
-# Every EDI this repository ships that is a real instrument/processing dialect. MEASURED
-# , because an earlier version of this comment claimed more than the files deliver: of
+# Every EDI this repository ships that is a real instrument/processing dialect. MEASURED,
+# because the comment must claim no more than the files deliver: of
 # the six, exactly one takes the Empower branch (LineNo__StationNo_11) and the other five take the
 # standard branch. NOTHING here takes the Phoenix branch, and two of the three real_dialects files
 # carry no >INFO block at all. The Empower and Phoenix branches are therefore each pinned by their

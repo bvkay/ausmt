@@ -41,7 +41,7 @@ let _drawerSubject=null;
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
 // ---- two-phase boot: the loading surfaces ------------------------------------------------------ The
 // drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json -> the
-// processing/screening rows. See docs: portal internals, drawer.js.
+// processing/screening rows). See docs: portal internals, drawer.js.
 function hydrBlock(what){return `<div class="hydrating" role="status">Loading ${esc(what)}…</div>`;}
 function hydrFailBlock(what){return `<div class="hydrating hydrfail" role="status">Could not load ${esc(what)}.</div>`;}
 function hydrCell(){return `<span class="hydrating hydr-inline">loading…</span>`;}
@@ -695,7 +695,7 @@ function openStation(i,opts){
   const filesHtml=`<div class="sechead">Related products</div>`+relatedProducts(s);
   // Provenance: three source-data rows visible (processing software, transfer function source file+sha ·
   // source archive), then the Dataset-maturity stars, then EVERYTHING ELSE (lineage graph, full provenance
-  // table, identifiers, format availability. See docs: portal internals, drawer.js.
+  // table, identifiers, format availability). See docs: portal internals, drawer.js.
   const _srcArchive=sourceArchiveCell(m);
   // This station's served artifact rows (manifest `files`), read once and reused by the format-availability
   // badge and the API section below. See docs: portal internals, drawer.js.

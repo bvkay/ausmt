@@ -7,7 +7,7 @@ follow: every primary nav item pointed at bare index.html, which meant
   * Surveys and Collections both landed on the Map - four header items that silently
     mis-navigated, documented as deliberate in about.html's own source comment because no route
     existed to point them at;
-  * every one of those links took a needless 301 hop (/index.html -> /), including add-survey's
+  * every one of those links took a needless 301 hop (`/index.html` -> `/`), including add-survey's
     "Back to portal";
   * the guided-tour link was index.html?tour=1, whose query the alias redirect dropped, so the
     tour could not be started from its only documented entry point;
