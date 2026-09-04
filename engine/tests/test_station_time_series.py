@@ -55,7 +55,7 @@ FILESERVER = "https://thredds.nci.org.au/thredds/fileServer/"
 # for that designed topology. On every checkout workflow the docs tree is present and they assert.
 API_REFERENCE = REPO / "docs" / "docs" / "interoperability" / "api-reference.md"
 DOCS_SKIP_REASON = ("engine image build: docs tree not shipped "
-                    "(designed topology; the docs surface is pinned from checkout lanes)")
+                    "(designed topology; the docs surface is pinned from the checkout workflows)")
 
 
 def _ts_access_docs_section() -> str:

@@ -1365,14 +1365,31 @@ REASON_CALLS = ("skip", "xfail", "skipif")
 DASHES = ("\u2014", "\u2013")
 
 
-def _static_text(node):
-    """The literal text of a string node, an f-string's constant parts included."""
+def _static_text(node, names=None):
+    """The literal text of a string node: an f-string's constant parts included, and a module-level
+    constant resolved where a name map is given. A reason held in a NAME is the same reason to the
+    reader of a red run, and a rule that reads only literals does not reach it."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.JoinedStr):
         return "".join(v.value for v in node.values
                        if isinstance(v, ast.Constant) and isinstance(v.value, str))
+    if names is not None and isinstance(node, ast.Name):
+        return names.get(node.id)
     return None
+
+
+def module_constants(tree):
+    """Every module-level NAME = "..." binding, so a message held in a constant is read where it is
+    used rather than where it is spelled."""
+    found = {}
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)):
+            text = _static_text(node.value)
+            if text:
+                found[node.targets[0].id] = text
+    return found
 
 
 def message_strings(path):
@@ -1383,10 +1400,11 @@ def message_strings(path):
         tree = ast.parse(source_text(path))
     except (SyntaxError, UnicodeDecodeError, OSError):
         return []
+    names = module_constants(tree)
     found = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Assert) and node.msg is not None:
-            text = _static_text(node.msg)
+            text = _static_text(node.msg, names)
             if text:
                 found.append((node.msg.lineno, text))
             continue
@@ -1399,13 +1417,13 @@ def message_strings(path):
         # positionally; all three carry the reason as a keyword.
         if name in SKIP_CALLS:
             for arg in node.args:
-                text = _static_text(arg)
+                text = _static_text(arg, names)
                 if text:
                     found.append((arg.lineno, text))
         for keyword in node.keywords:
             if keyword.arg != "reason":
                 continue
-            text = _static_text(keyword.value)
+            text = _static_text(keyword.value, names)
             if text:
                 found.append((keyword.value.lineno, text))
     return found

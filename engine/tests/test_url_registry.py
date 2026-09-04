@@ -43,8 +43,8 @@ _PORTAL_TREE_PROBES = (
     ROOT.parent / "portal" / "index.html",
 )
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: portal tree not shipped "
-                              "(designed topology; the committed registry is pinned from "
-                              "checkout lanes)")
+                              "(designed topology; the committed registry is pinned from the "
+                              "checkout workflows)")
 portal_tree = pytest.mark.skipif(not any(p.is_file() for p in _PORTAL_TREE_PROBES),
                                  reason=IMAGE_TOPOLOGY_SKIP_REASON)
 

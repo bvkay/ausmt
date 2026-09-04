@@ -90,7 +90,8 @@ SURVEYS = HERE / "fixtures"                         # vendored, self-contained (
 PORTAL_SURFACES = (PORTAL_CFG, CONFIG_JS, PLACEHOLDER, GEN_CONFIG)
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: portal tree not shipped "
-                              "(designed topology; portal surfaces are pinned from checkout lanes)")
+                              "(designed topology; portal surfaces are pinned from the checkout "
+                              "workflows)")
 
 # Skip ONLY when NOT ONE of them is present: that is the image, where these surfaces do not exist to
 # disagree. Any one of them present means a portal tree is meant to be here, so the guard opens and a
