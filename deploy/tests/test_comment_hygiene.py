@@ -1474,8 +1474,11 @@ MESSAGE_LABELS = (
     "design-document citation",
 )
 # A message that NAMES the glyph it is about keeps it: the dash inside a quoted run is the data the
-# assertion is talking about, not the message's own punctuation.
-QUOTED_DASH = re.compile(r"['\"`][^'\"`\n]*[\u2014\u2013][^'\"`\n]*['\"`]")
+# assertion is talking about, not the message's own punctuation. The run is the one QUOTED_RUN
+# pairs, left to right, opening mark to the SAME closing mark. A pattern that let the two marks be
+# different characters read the closing mark of one run and the opening mark of the next as a run of
+# its own, so a dash standing BETWEEN two backtick runs was excused as though it stood inside one,
+# when a dash between two quoted runs is the message's own punctuation.
 
 
 def message_offences(files, root=None):
@@ -1487,7 +1490,7 @@ def message_offences(files, root=None):
             labels = [label for label in labels_for(text, cite_contract=True)
                       if label in MESSAGE_LABELS]
             if any(dash in text for dash in DASHES) and any(
-                    dash in QUOTED_DASH.sub("", text) for dash in DASHES):
+                    dash in unquoted(text) for dash in DASHES):
                 labels.append("an em or en dash")
             if labels:
                 found.append("%s:%s: %s: %s"
@@ -1869,6 +1872,16 @@ def test_a_message_keeps_its_semantics_and_loses_its_audit_trail(tmp_path):
                       encoding="utf-8")
     hits = message_offences([dashed])
     assert hits and "an em or en dash" in hits[0], hits
+    # The dash that stands BETWEEN two quoted runs is the message's own punctuation, not the data
+    # it is naming, and the run it is read against opens and closes on the same mark.
+    between = tmp_path / "between.py"
+    between.write_text(
+        'def test_a():\n'
+        '    assert 1, "Caddy must use `handle /gateway/*` \u2014 `handle_path` strips the prefix"\n',
+        encoding="utf-8")
+    hits = message_offences([between])
+    assert hits and "an em or en dash" in hits[0], (
+        "a dash between two quoted runs was read as though it stood inside one: %s" % (hits,))
 
 
 def test_a_skip_reason_held_in_a_constant_is_still_read(tmp_path):

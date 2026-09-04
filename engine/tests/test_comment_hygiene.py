@@ -1470,8 +1470,11 @@ MESSAGE_LABELS = (
     "design-document citation",
 )
 # A message that NAMES the glyph it is about keeps it: the dash inside a quoted run is the data the
-# assertion is talking about, not the message's own punctuation.
-QUOTED_DASH = re.compile(r"['\"`][^'\"`\n]*[\u2014\u2013][^'\"`\n]*['\"`]")
+# assertion is talking about, not the message's own punctuation. The run is the one QUOTED_RUN
+# pairs, left to right, opening mark to the SAME closing mark. A pattern that let the two marks be
+# different characters read the closing mark of one run and the opening mark of the next as a run of
+# its own, so a dash standing BETWEEN two backtick runs was excused as though it stood inside one,
+# when a dash between two quoted runs is the message's own punctuation.
 
 
 def message_offences(files, root=None):
@@ -1483,7 +1486,7 @@ def message_offences(files, root=None):
             labels = [label for label in labels_for(text, cite_contract=True)
                       if label in MESSAGE_LABELS]
             if any(dash in text for dash in DASHES) and any(
-                    dash in QUOTED_DASH.sub("", text) for dash in DASHES):
+                    dash in unquoted(text) for dash in DASHES):
                 labels.append("an em or en dash")
             if labels:
                 found.append("%s:%s: %s: %s"
