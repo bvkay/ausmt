@@ -75,7 +75,7 @@ ok(JSON.stringify(tokens) === JSON.stringify(VEC.routable_levels),
    "state.js TS_LEVELS must be the shared routable_levels, in render order: got "
    + JSON.stringify(tokens) + ", want " + JSON.stringify(VEC.routable_levels));
 ok(!tokens.includes("level2"),
-   "level2 is absent BY RULING (D19): the archive's level_2 tree holds transfer functions");
+   "level2 is absent BY DESIGN: the archive's level_2 tree holds transfer functions");
 
 console.log(fail ? ("FAILED " + fail) : "ALL PASSED");
 process.exit(fail ? 1 : 0);

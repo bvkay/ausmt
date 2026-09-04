@@ -44,7 +44,7 @@ ok(typeof licHuman === "function", "licHuman loaded from state.js");
 for (const [value, shown] of [[5.33333, "5.3"], [0.005012, "0.005"], [9.6e-05, "0.000096"],
                               [0.004, "0.004"], [100000, "100,000"], [11651, "11,651"], [5, "5"]])
   eq(fmtPeriod(value), shown, "R1 worked example " + JSON.stringify(value));
-ok(fmtPeriod(9.6e-05).indexOf("e") < 0, "R1: exponent notation must never reach a rendered slot");
+ok(fmtPeriod(9.6e-05).indexOf("e") < 0, "exponent notation must never reach a rendered slot");
 
 // TIE VECTORS. Not in the list, and the reason the JS twin cannot simply call toFixed:
 // Python rounds an exact .5 tie to the EVEN neighbour and JS rounds it away from zero, so a 1.25 s
@@ -66,7 +66,7 @@ eq(fmtPeriod(0), "0", "R1: zero prints as zero");
 eq(fmtRange(2016, 2021), "2016 - 2021", "R2: a year range takes the spaced hyphen");
 eq(fmtRange(fmtPeriod(5), fmtPeriod(100000)), "5 - 100,000", "R2: a period range takes the spaced hyphen");
 ok(fmtRange(1, 2).indexOf("\u2013") < 0 && fmtRange(1, 2).indexOf("\u2014") < 0,
-   "R2: the range separator carries no dash glyph");
+   "the range separator carries no dash glyph");
 
 // --- The licence in human form ------------------------------------------------------------
 // The SPDX identifier is the machine's name for a licence; what a reader sees in chrome is the form
@@ -96,10 +96,10 @@ eq(licHuman(""), "", "R3: no licence, no text");
 // a display form, which is how one card came to read "CC-BY-3.0-AU" beside another's "CC BY 4.0".
 const allCc = ctx.LICENSES.redistributable.concat(ctx.LICENSES.recognised_only)
   .filter(id => /^CC/.test(id));
-ok(allCc.length >= 14, "R3: the instrument's CC ids are readable from contract.js (" + allCc.length + ")");
+ok(allCc.length >= 14, "the instrument's CC ids are readable from contract.js (" + allCc.length + ")");
 for (const id of allCc)
   ok(licHuman(id) !== id && licHuman(id).indexOf(" ") > 0,
-     "R3: every recognised CC id needs a reader's form, " + JSON.stringify(id) +
+     "every recognised CC id needs a reader's form, " + JSON.stringify(id) +
      " printed " + JSON.stringify(licHuman(id)));
 
 console.log(fail ? ("FAILED " + fail) : "ALL PASSED");

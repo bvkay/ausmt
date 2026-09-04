@@ -533,7 +533,7 @@ for (const q of ["Who should the citation name, in order?", "Who led this survey
                  "Which organisations were involved, and how?",
                  "Is there wording you must include?",
                  "When was this dataset published?"]) {
-  ok(flat.includes(q), "tier 3 asks the ratified question: " + q);
+  ok(flat.includes(q), "tier 3 asks the required question: " + q);
 }
 ok(flat.indexOf("Who should the citation name, in order?") < flat.indexOf("Who led this survey?")
    && flat.indexOf("Who led this survey?") < flat.indexOf("Who did what?"),
@@ -567,7 +567,7 @@ const yCite = M.buildSurveyYaml({ ...base,
 ok(/citation:\s*\n\s*preferred_text: "GSSA \(2016\)\. AusLAMP South Australia\. \[Data set\]\."\s*\n\s*text_source: source_provided/.test(yCite),
    "a filled citation question emits preferred_text (quoted verbatim) + a bare text_source");
 ok(!/^\s*preferred_identifier:/m.test(yCite),
-   "the form NEVER writes citation.preferred_identifier (D18: designation is curation)");
+   "the form NEVER writes citation.preferred_identifier (designation is curation)");
 ok(/citation\.preferred_identifier/.test(yCite),
    "...it names it only inside the curator note comment, which no parser ever sees");
 ok(/- identifier: "10\.25914\/abc"/.test(yCite),
@@ -584,7 +584,7 @@ ok(!/citation:/.test(yCiteUrl), "an identifier with NO wording emits no citation
 const yCiteTextOnly = M.buildSurveyYaml({ ...base, citation_text: "Some wording" });
 ok(/text_source: source_provided/.test(yCiteTextOnly), "text_source rides a non-empty preferred_text");
 ok(!/text_source/.test(M.buildSurveyYaml({ ...base })),
-   "text_source is NEVER emitted without a preferred_text (D17)");
+   "text_source is NEVER emitted without a preferred_text");
 const yCiteLevel = M.buildSurveyYaml({ ...base, citation_identifier: "10.25914/abc",
                                        citation_identifies: "entire" });
 ok(/identifies: entire/.test(yCiteLevel), "a chosen data level emits the bare vocab token");
@@ -699,7 +699,7 @@ ok(/wireConditionalDoiBlur\(wrap\.querySelector\("\.ri-identifier"\), wrap\.quer
 // --- The collection block is its own collapsed card (own <details>, exact heading), renumbered. ----
 ok(/<details class="tier" id="tierCollection">/.test(html), "the collection block is its own tier-style <details> card");
 ok(/<h2>4\. Was this survey part of a collection \/ program \(eg AusLAMP\)\?<\/h2>/.test(html),
-   "the collection card carries the exact owner-ruled heading (numbered 4)");
+   "the collection card carries the exact heading (numbered 4)");
 ok(/<h2>5\. I know my metadata<\/h2>/.test(html) && /<h2>6\. Check and package<\/h2>/.test(html),
    "the following sections are renumbered consistently (5. metadata, 6. check and package)");
 // the collection FIELDS (and the collections.json autofill IDs) are intact inside the new card, so emission is unchanged.
@@ -714,7 +714,7 @@ ok(/const bp=\$\("btnPackage"\); if\(bp\) bp\.style\.display="none";/.test(html)
    "showGatewayUI hides the package .zip button when the gateway probe passes");
 ok(!/Package \.zip to email \(fallback path\)/.test(html), "the old rewording of the package button is gone (it is hidden, not reworded)");
 ok(/async function buildPackage/.test(html) && /function buildSubmissionMd/.test(html),
-   "R2 is visibility-only: the zip packager code is kept intact");
+   "the change is visibility-only: the zip packager code is kept intact");
 
 // ============================ EMTF XML as a first-class input ==================================================
 // The page must ADMIT EMTF XML the way it admits EDI and MTH5: in the file picker's accept list, in the

@@ -31,7 +31,7 @@ let fail = 0;
 const ok = (c, m) => { console.log((c ? "  ok   " : "  FAIL ") + m); if (!c) fail++; };
 const eqList = (got, want, m) =>
   ok(JSON.stringify(got) === JSON.stringify(want),
-     m + "\n         want " + JSON.stringify(want) + "\n         got  " + JSON.stringify(got));
+     m + "\n want " + JSON.stringify(want) + "\n got " + JSON.stringify(got));
 
 ok(typeof memberColours === "function", "memberColours loaded from state.js");
 
@@ -53,9 +53,9 @@ eqList(memberColours(14),
 // anything. Distinctness is the property, asserted well past the palette's length.
 for (const n of [9, 12, 14, 20, 33]) {
   const cols = memberColours(n);
-  ok(cols.length === n, "C7: memberColours(" + n + ") must return " + n + " colours, got " + cols.length);
+  ok(cols.length === n, "memberColours(" + n + ") must return " + n + " colours, got " + cols.length);
   ok(new Set(cols).size === n,
-     "C7: every member needs its OWN colour at n=" + n + " (a cycling palette repeats); distinct=" +
+     "every member needs its OWN colour at n=" + n + " (a cycling palette repeats); distinct=" +
      new Set(cols).size);
 }
 
@@ -67,10 +67,10 @@ for (let n = 1; n <= COLL_PAL.length; n++)
 // Deterministic in member order, with no randomness: the same count must give the same list every call,
 // which is what lets the static page and the SPA agree without sharing a runtime.
 ok(JSON.stringify(memberColours(11)) === JSON.stringify(memberColours(11)),
-   "C7: the ramp must be deterministic across calls");
+   "the ramp must be deterministic across calls");
 // Every value is a full six-digit uppercase hex triple, the form the engine writes.
 ok(memberColours(14).every(c => /^#[0-9A-F]{6}$/.test(c)),
-   "C7: colours must be six-digit uppercase hex, got " + JSON.stringify(memberColours(14).slice(0, 3)));
+   "colours must be six-digit uppercase hex, got " + JSON.stringify(memberColours(14).slice(0, 3)));
 
 console.log(fail ? ("FAILED " + fail) : "ALL PASSED");
 process.exit(fail ? 1 : 0);

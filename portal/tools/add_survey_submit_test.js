@@ -236,7 +236,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   const zipBuf = Buffer.from(await filePart.arrayBuffer());
   ok(zipBuf.indexOf(Buffer.from(SECRET_KEY)) < 0, "the key is absent from the built zip bytes");
   // Also prove email/ORCID never entered the zip bytes even though they ride as form fields.
-  ok(zipBuf.indexOf(Buffer.from("ada@example.org")) < 0, "the submitter email is absent from the zip bytes (C3)");
+  ok(zipBuf.indexOf(Buffer.from("ada@example.org")) < 0, "the submitter email is absent from the zip bytes");
   // (f) the key is NOT in any track() payload (name or props).
   ok(!record.trackCalls.some((t) => JSON.stringify(t).indexOf(SECRET_KEY) >= 0), "the key is absent from every track() payload");
   ok(record.trackCalls.some((t) => t.name === "GatewaySubmitAttempted"), "GatewaySubmitAttempted fired");
@@ -244,7 +244,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     "GatewaySubmitResult{code:201} fired");
   // track() must never carry the submission id either (capability-adjacent).
   ok(!record.trackCalls.some((t) => JSON.stringify(t.props || {}).indexOf("SUB123") >= 0),
-    "the submission id never enters a track() payload (design §0.4)");
+    "the submission id never enters a track() payload ");
   // (g) the key is NOT anywhere in the rendered DOM (outside the input's own live .value, which is not
   //     serialised into innerHTML). This is the "never echoed into the DOM" assertion.
   ok(doc.body.innerHTML.indexOf(SECRET_KEY) < 0, "the key never appears in document.body.innerHTML");
@@ -304,7 +304,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     await fillValidForm(e.win, { key: SECRET_KEY, orcid: "0000-0002-1825-0098" }); // wrong checksum
     await e.doc.getElementById("btnSubmitGateway").onclick();
     await new Promise((res) => setTimeout(res, 0));
-    ok(e.record.opens.length === 0, "a bad-checksum submitter ORCID blocks before any upload (fail fast, design §2.2)");
+    ok(e.record.opens.length === 0, "a bad-checksum submitter ORCID blocks before any upload (fail fast)");
     ok(/checksum/i.test(e.doc.getElementById("submitBody").textContent), "ORCID-checksum message shown");
   }
 
@@ -691,24 +691,24 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     name.value = "Vulcan 2022";
     name.dispatchEvent(new e.win.Event("input", { bubbles: true }));
     await settle();
-    ok(e.doc.getElementById("m_slug").value === "vulcan-2022", "R1: the slug auto-derives to vulcan-2022");
+    ok(e.doc.getElementById("m_slug").value === "vulcan-2022", "the slug auto-derives to vulcan-2022");
     const chip = e.doc.getElementById("slugOk");
     ok(chip.className.indexOf("warn") >= 0 && chip.className.indexOf("bad") < 0,
-      "R1: a slug collision shows the amber 'warn' chip (not the red invalid state); got: " + JSON.stringify(chip.className));
+      "a slug collision shows the amber 'warn' chip (not the red invalid state); got: " + JSON.stringify(chip.className));
     ok(/matches the existing survey Vulcan 2022/.test(chip.textContent) && /100 stations/.test(chip.textContent),
-      "R1: the collision warning names the served survey + its station count; got: " + JSON.stringify(chip.textContent));
-    ok(/Continue if you are updating that survey/.test(chip.textContent), "R1: the warning informs (update vs new), it never walls");
+      "the collision warning names the served survey + its station count; got: " + JSON.stringify(chip.textContent));
+    ok(/Continue if you are updating that survey/.test(chip.textContent), "the warning informs (update vs new), it never walls");
     // NON-BLOCKING: the collision is a WARNING only, packaging a colliding slug still succeeds (custodian update).
     fillValidMeta(e.win); e.doc.getElementById("m_name").value = "Vulcan 2022"; e.doc.getElementById("m_slug").value = "vulcan-2022";
     await addEdi(e.win, "S01.edi", EDI_TEXT);
     await e.doc.getElementById("btnPackage").onclick();
     await new Promise((res) => setTimeout(res, 0));
-    ok(e.record.blobs.length === 1, "R1: a colliding slug does NOT block packaging (the warning never walls)");
+    ok(e.record.blobs.length === 1, "a colliding slug does NOT block packaging (the warning never walls)");
     // a brand-new, non-colliding slug shows the plain green 'valid slug' cue.
     const n2 = e.doc.getElementById("m_name"); n2.value = "Glenelg Deep 2027";
     n2.dispatchEvent(new e.win.Event("input", { bubbles: true }));
     await settle();
-    ok(e.doc.getElementById("slugOk").className.indexOf("good") >= 0, "R1: a non-colliding slug shows the plain green valid cue");
+    ok(e.doc.getElementById("slugOk").className.indexOf("good") >= 0, "a non-colliding slug shows the plain green valid cue");
   }
   // (8a-ii) FETCH-FAILURE DEGRADE: surveys.json unreachable -> no served set -> a valid slug shows the
   //         plain green cue (no false collision), and the page never blocks on the missing data.
@@ -720,7 +720,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     await settle();
     const chip = e.doc.getElementById("slugOk");
     ok(chip.className.indexOf("good") >= 0 && /valid slug/.test(chip.textContent),
-      "R1: fetch-failure degrade - an unreachable surveys.json yields a plain green cue (no false collision); got: " + JSON.stringify(chip.textContent));
+      "fetch-failure degrade - an unreachable surveys.json yields a plain green cue (no false collision); got: " + JSON.stringify(chip.textContent));
   }
 
   // (8b) ZIP-PATH VISIBILITY: the package .zip (download/email fallback) button is VISIBLE with no
@@ -728,23 +728,23 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   {
     const eAbsent = await boot({ probe: probeAbsent });
     ok(eAbsent.doc.getElementById("btnPackage").style.display !== "none",
-      "R2: no gateway -> the package .zip button is visible (the primary fallback path)");
+      "no gateway -> the package .zip button is visible (the primary fallback path)");
     const ePresent = await boot({ probe: probePresent });
     ok(ePresent.doc.getElementById("btnPackage").style.display === "none",
-      "R2: live gateway -> the package .zip button is hidden (validate -> submit directly is primary)");
+      "live gateway -> the package .zip button is hidden (validate -> submit directly is primary)");
     // the button element still exists (hidden, not removed) - all zip code stays intact.
-    ok(ePresent.doc.getElementById("btnPackage") !== null, "R2: the package button is hidden, not removed (zip code intact)");
+    ok(ePresent.doc.getElementById("btnPackage") !== null, "the package button is hidden, not removed (zip code intact)");
   }
 
   // (8c) COLLECTION CARD: its own collapsed <details> with the exact heading; emission is unchanged.
   {
     const e = await boot({ probe: probeAbsent });
     const card = e.doc.getElementById("tierCollection");
-    ok(card && card.tagName.toLowerCase() === "details", "R3: the collection block is its own <details> card");
-    ok(card.open === false, "R3: the collection card is collapsed (minimised) by default");
+    ok(card && card.tagName.toLowerCase() === "details", "the collection block is its own <details> card");
+    ok(card.open === false, "the collection card is collapsed (minimised) by default");
     const h2 = card.querySelector("summary h2");
     ok(h2 && h2.textContent.trim() === "4. Was this survey part of a collection / program (eg AusLAMP)?",
-      "R3: the collection card heading is exact; got: " + JSON.stringify(h2 && h2.textContent.trim()));
+      "the collection card heading is exact; got: " + JSON.stringify(h2 && h2.textContent.trim()));
     // emission unchanged: set a collection id/title in the new card, package, and read survey.yaml.
     fillValidMeta(e.win);
     await addEdi(e.win, "S01.edi", EDI_TEXT);
@@ -754,7 +754,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     await new Promise((res) => setTimeout(res, 0));
     const y = await packagedSurveyYaml(e.win, e.record);
     ok(/collection:\s*\n\s*id: "auslamp"\s*\n\s*title: "AusLAMP"/.test(y),
-      "R3: the collection still emits from the new card (id/title unchanged by the move)");
+      "the collection still emits from the new card (id/title unchanged by the move)");
   }
 
   // (8d) THE PLAIN-LANGUAGE CREDIT QUESTIONS, driven through the LIVE DOM and inspected in the
@@ -774,41 +774,41 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     e.doc.getElementById("addOrg").onclick();
     e.doc.getElementById("addOrg").onclick();
     const orgs = e.doc.querySelectorAll("#orgRows .orgrow");
-    ok(orgs.length === 2, "A3: two organisation rows added; got " + orgs.length);
+    ok(orgs.length === 2, "two organisation rows added; got " + orgs.length);
     orgs[0].querySelector(".og-name").value = "Geoscience Australia";
     orgs[0].querySelector(".og-ror").value = "https://ror.org/04ge02x20";
     orgs[0].querySelector('.og-role[value="publisher"]').checked = true;
     e.doc.getElementById("addAck").onclick();
     const acks = e.doc.querySelectorAll("#ackRows .ackrow");
-    ok(acks.length === 1, "A3: an acknowledgement row added; got " + acks.length);
+    ok(acks.length === 1, "an acknowledgement row added; got " + acks.length);
     acks[0].querySelector(".ak-text").value = "Data supplied by the GSSA.";
     acks[0].querySelector(".ak-type").value = "custodian";
     await e.doc.getElementById("btnPackage").onclick();
     await new Promise((res) => setTimeout(res, 0));
     const y = await packagedSurveyYaml(e.win, e.record);
     ok(!/lead_investigator/.test(y) && !/principal_investigators/.test(y),
-      "A3: the packaged survey.yaml carries NEITHER retired flat credit key");
+      "the packaged survey.yaml carries NEITHER retired flat credit key");
     ok(/contributors:\s*\n\s*- name: "Duan, Jingming"\s*\n\s*name_type: person\s*\n\s*role: ProjectLeader\s*\n\s*orcid: "0000-0002-1825-0097"/.test(y),
-      "A3: 'Who led this survey?' packages ONE ProjectLeader contributors row; got: "
+      "'Who led this survey?' packages ONE ProjectLeader contributors row; got: "
       + (y.match(/contributors:[\s\S]*?(?=\n\w)/) || [""])[0]);
     ok(/citation:\s*\n\s*preferred_text: "GSSA \(2016\)\. AusLAMP South Australia\. \[Data set\]\."\s*\n\s*text_source: source_provided/.test(y),
-      "A3: the citation question packages preferred_text + text_source");
+      "the citation question packages preferred_text + text_source");
     ok(!/^\s*preferred_identifier:/m.test(y),
-      "A3: the packaged survey.yaml NEVER carries citation.preferred_identifier");
+      "the packaged survey.yaml NEVER carries citation.preferred_identifier");
     ok(/# CONTRIBUTOR: pasted as this dataset's citation identifier/.test(y)
        && /- identifier: "10\.25914\/abc"\s*\n\s*identifier_type: DOI/.test(y),
-      "A3: the pasted DOI packages as a typed related row (normalised) under its curator note");
+      "the pasted DOI packages as a typed related row (normalised) under its curator note");
     ok(/organisations:\s*\n\s*# INFERRED-REVIEW: custodian seeded from the essential organisation; confirm roles\s*\n\s*- name: "Test Org"\s*\n\s*roles:\s*\n\s*- custodian\s*\n\s*primary_custodian: true/.test(y),
-      "A3: the essential organisation packages as the MARKED seeded custodian row; got: "
+      "the essential organisation packages as the MARKED seeded custodian row; got: "
       + (y.match(/organisations:[\s\S]*?(?=\n\w)/) || [""])[0]);
     ok(/- name: "Geoscience Australia"\s*\n\s*ror: "https:\/\/ror\.org\/04ge02x20"\s*\n\s*roles:\s*\n\s*- publisher/.test(y),
-      "A3: a role-ticked organisation row packages its ROR and its roles");
+      "a role-ticked organisation row packages its ROR and its roles");
     ok(/acknowledgements:\s*\n\s*- text: "Data supplied by the GSSA\."\s*\n\s*type: custodian/.test(y),
-      "A3: the required wording packages verbatim with its type");
+      "the required wording packages verbatim with its type");
     // remove the second (empty) organisation row -> it drops out.
     orgs[1].querySelector(".og-rm").onclick();
     ok(e.doc.querySelectorAll("#orgRows .orgrow").length === 1,
-      "A3: removing an organisation row drops it (repeatable add/remove)");
+      "removing an organisation row drops it (repeatable add/remove)");
   }
 
   // (8e) DOI NORMALISATION on blur: a pasted resolver URL folds to the bare DOI in the publication DOI
@@ -819,27 +819,27 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     // Publication DOIs live in repeatable #pubRows rows (one present by default);
     // the normalisation now rides each row's .p-doi input.
     const pub = e.doc.querySelector("#pubRows .pubrow .p-doi");
-    ok(pub, "R5: a default publication row with a .p-doi input exists at boot");
+    ok(pub, "a default publication row with a .p-doi input exists at boot");
     pub.value = "https://doi.org/10.1093/gji/xyz";
     pub.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
-    ok(pub.value === "10.1093/gji/xyz", "R5: a publication DOI resolver URL folds to the bare DOI on blur; got: " + JSON.stringify(pub.value));
+    ok(pub.value === "10.1093/gji/xyz", "a publication DOI resolver URL folds to the bare DOI on blur; got: " + JSON.stringify(pub.value));
     pub.value = "10.5281/zenodo.9";
     pub.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
-    ok(pub.value === "10.5281/zenodo.9", "R5: a bare publication DOI is left untouched on blur");
+    ok(pub.value === "10.5281/zenodo.9", "a bare publication DOI is left untouched on blur");
     // related-identifier rows (there is one by default; add a second).
     e.doc.getElementById("addRelId").onclick();
     const rrows = e.doc.querySelectorAll("#relidRows .relidrow");
-    ok(rrows.length >= 2, "R5: at least two related-identifier rows available");
+    ok(rrows.length >= 2, "at least two related-identifier rows available");
     rrows[0].querySelector(".ri-type").value = "DOI";
     const id0 = rrows[0].querySelector(".ri-identifier");
     id0.value = "https://dx.doi.org/10.9/a";
     id0.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
-    ok(id0.value === "10.9/a", "R5: a DOI-typed related-identifier row normalises its identifier on blur; got: " + JSON.stringify(id0.value));
+    ok(id0.value === "10.9/a", "a DOI-typed related-identifier row normalises its identifier on blur; got: " + JSON.stringify(id0.value));
     rrows[1].querySelector(".ri-type").value = "URL";
     const id1 = rrows[1].querySelector(".ri-identifier");
     id1.value = "https://doi.org/10.9/b";
     id1.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
-    ok(id1.value === "https://doi.org/10.9/b", "R5: a URL-typed related-identifier row keeps its URL (no normalisation)");
+    ok(id1.value === "https://doi.org/10.9/b", "a URL-typed related-identifier row keeps its URL (no normalisation)");
   }
 
   // --------------------------------------------------------------------------------------------------
@@ -853,23 +853,23 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     const e = await boot({ probe: probeAbsent });
     const doc = e.doc;
     // (i) the basic-tier creators UI is present, with one row visible by default (the primary question).
-    ok(doc.getElementById("addCreator"), "8f: the 'who should be credited?' creators UI is present (addCreator)");
+    ok(doc.getElementById("addCreator"), "the 'who should be credited?' creators UI is present (addCreator)");
     ok(doc.querySelectorAll("#creatorRows .creatorrow").length === 1,
-      "8f: one creator row is visible by default so the credit question is discoverable");
+      "one creator row is visible by default so the credit question is discoverable");
     // (ii) the advanced-tier contributors UI is present, and the role <select> offers EXACTLY the 8
     //      fail-closed DataCite tokens (no more, no less) plus the blank prompt; name_type offers 2.
-    ok(doc.getElementById("addContributor"), "8f: the advanced contributors UI is present (addContributor)");
+    ok(doc.getElementById("addContributor"), "the advanced contributors UI is present (addContributor)");
     doc.getElementById("addContributor").onclick();
     const crow = doc.querySelector("#contributorRows .contribrow");
-    ok(crow, "8f: adding a contributor appends a typed row");
+    ok(crow, "adding a contributor appends a typed row");
     const roleOpts = Array.from(crow.querySelector(".co-role").options).map((o) => o.value);
     const EXPECT_ROLES = ["ProjectLeader", "ProjectMember", "DataCollector", "ContactPerson",
       "DataCurator", "Sponsor", "RightsHolder", "Distributor"];
     ok(roleOpts[0] === "" && roleOpts.slice(1).join(",") === EXPECT_ROLES.join(","),
-      "8f: the role <select> is the 8-token fail-closed vocab in ratified order; got: " + JSON.stringify(roleOpts));
+      "the role <select> is the 8-token fail-closed vocab in the declared order; got: " + JSON.stringify(roleOpts));
     const ntOpts = Array.from(crow.querySelector(".co-nametype").options).map((o) => o.value);
     ok(ntOpts.join(",") === "person,organisation",
-      "8f: the name_type <select> offers exactly person/organisation; got: " + JSON.stringify(ntOpts));
+      "the name_type <select> offers exactly person/organisation; got: " + JSON.stringify(ntOpts));
 
     // (iii) drive a full submission. Metadata + one EDI, then three ORDERED creators and two contributors.
     fillValidMeta(e.win);
@@ -878,7 +878,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     doc.getElementById("addCreator").onclick();
     doc.getElementById("addCreator").onclick();
     const cr = doc.querySelectorAll("#creatorRows .creatorrow");
-    ok(cr.length === 3, "8f: three creator rows present; got " + cr.length);
+    ok(cr.length === 3, "three creator rows present; got " + cr.length);
     // row 0: a PERSON with an ORCID (comma in the name exercises the YAML-quote path).
     cr[0].querySelector(".cr-name").value = "Thiel, Stephan";
     cr[0].querySelector(".cr-id").value = "0000-0002-8678-412X";
@@ -887,7 +887,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     org1.checked = true;
     org1.dispatchEvent(new e.win.Event("change", { bubbles: true }));
     ok(/ror\.org/i.test(cr[1].querySelector(".cr-id").placeholder),
-      "8f: ticking Organisation switches the creator id hint to ROR; got: " + JSON.stringify(cr[1].querySelector(".cr-id").placeholder));
+      "ticking Organisation switches the creator id hint to ROR; got: " + JSON.stringify(cr[1].querySelector(".cr-id").placeholder));
     cr[1].querySelector(".cr-name").value = "Geological Survey of South Australia";
     cr[1].querySelector(".cr-id").value = "https://ror.org/04s1m4564";
     // row 2: a PERSON, no identifier (proves an id is optional, name-only still emits name + name_type).
@@ -903,7 +903,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     nt2.value = "organisation";
     nt2.dispatchEvent(new e.win.Event("change", { bubbles: true }));
     ok(/ror\.org/i.test(crow2.querySelector(".co-id").placeholder),
-      "8f: setting the contributor type to organisation switches the id hint to ROR");
+      "setting the contributor type to organisation switches the id hint to ROR");
     crow2.querySelector(".co-name").value = "Zonge Engineering";
     crow2.querySelector(".co-role").value = "DataCollector";
     crow2.querySelector(".co-id").value = "https://ror.org/05fq5w259";
@@ -915,21 +915,21 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     // (iv) creators[] emitted in ORDER, name_type from the org toggle, ORCID vs ROR routed by type, the
     //      comma-bearing name QUOTED, and the id-less person emitting name + name_type only.
     ok(/creators:\s*\n\s*- name: "Thiel, Stephan"\s*\n\s*name_type: person\s*\n\s*orcid: "0000-0002-8678-412X"\s*\n\s*- name: "Geological Survey of South Australia"\s*\n\s*name_type: organisation\s*\n\s*ror: "https:\/\/ror\.org\/04s1m4564"\s*\n\s*- name: "Heinson, Graham"\s*\n\s*name_type: person/.test(y),
-      "8f: creators[] emit in citation order with name_type + routed ORCID/ROR; got: " +
+      "creators[] emit in citation order with name_type + routed ORCID/ROR; got: " +
       (y.match(/creators:[\s\S]*?(?=\ncontributors:|\nabstract:)/) || [""])[0]);
     // a comma in a creator name MUST be quoted (the unquoted-scalar YAML-trap the declared_date fix set).
-    ok(/- name: "Thiel, Stephan"/.test(y), "8f: a comma-bearing creator name is quoted (YAML-trap guard)");
+    ok(/- name: "Thiel, Stephan"/.test(y), "a comma-bearing creator name is quoted (YAML-trap guard)");
     // ORDER is load-bearing (citation order): Thiel before GSSA before Heinson in the emitted bytes.
     ok(y.indexOf('"Thiel, Stephan"') < y.indexOf("Geological Survey") &&
       y.indexOf("Geological Survey") < y.indexOf('"Heinson, Graham"'),
-      "8f: creator ORDER is preserved as the citation order");
+      "creator ORDER is preserved as the citation order");
     // the id-less person carries no orcid/ror line (name + name_type only).
     ok(!/- name: "Heinson, Graham"\s*\n\s*name_type: person\s*\n\s*(orcid|ror):/.test(y),
-      "8f: an id-less creator emits name + name_type only (no empty orcid/ror line)");
+      "an id-less creator emits name + name_type only (no empty orcid/ror line)");
 
     // (v) contributors[] carry the fail-closed role token + name_type, ORCID vs ROR routed by type.
     ok(/contributors:\s*\n\s*- name: "Thiel, Stephan"\s*\n\s*name_type: person\s*\n\s*role: ProjectLeader\s*\n\s*orcid: "0000-0002-8678-412X"\s*\n\s*- name: "Zonge Engineering"\s*\n\s*name_type: organisation\s*\n\s*role: DataCollector\s*\n\s*ror: "https:\/\/ror\.org\/05fq5w259"/.test(y),
-      "8f: contributors[] emit name_type + the fail-closed role token + routed ORCID/ROR; got: " +
+      "contributors[] emit name_type + the fail-closed role token + routed ORCID/ROR; got: " +
       (y.match(/contributors:[\s\S]*?(?=\nabstract:)/) || [""])[0]);
 
   }
@@ -947,8 +947,8 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     const y = await packagedSurveyYaml(e.win, e.record);
     const block = (y.match(/creators:[\s\S]*?(?=\n\w)/) || [""])[0];
     ok((block.match(/- name:/g) || []).length === 1,
-      "8f: a nameless creator row is dropped at emit time (name is the signal); got: " + block);
-    ok(/- name: "Solo, Person"/.test(y), "8f: the one named creator survives the nameless-row filter");
+      "a nameless creator row is dropped at emit time (name is the signal); got: " + block);
+    ok(/- name: "Solo, Person"/.test(y), "the one named creator survives the nameless-row filter");
   }
 
   console.log("SUBMIT-TEST PASSED (probe gating, double-submit guard, key-hygiene: header-only, " +

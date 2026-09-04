@@ -738,6 +738,25 @@ def _inside_a_repo_path(text, start, stop):
     return run != text[start:stop] and bool(REPO_PATH.match(run))
 
 
+ROUTE_RUN = re.compile(r"[A-Za-z0-9_./#-]")
+
+
+def _inside_a_route(text, start, stop):
+    """A token inside a ROUTE the app answers names what the route addresses, the same way a token
+    inside a repository path names a file: `#/station/au.alpha.A1` is a station the driver opens.
+    A route is told from ordinary prose by its shape - it opens on / or #/ and carries at least two
+    segments - and the token must be a PART of it, never the whole run."""
+    left, right = start, stop
+    while left > 0 and ROUTE_RUN.match(text[left - 1]):
+        left -= 1
+    while right < len(text) and ROUTE_RUN.match(text[right]):
+        right += 1
+    run = text[left:right].rstrip("./,;:")
+    if run == text[start:stop] or not run.startswith(("/", "#/")):
+        return False
+    return run.count("/") >= 2
+
+
 # An apostrophe inside a word does not open a quoted run. Read as one it reaches to the next
 # apostrophe a sentence away and excuses every tag standing between the two.
 QUOTE_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|(?<![\w'])'[^'\n]*'(?!\w)")
@@ -780,6 +799,7 @@ def work_item_tags(text):
         if _in_character_class(text, start, stop):
             continue
         if (_inside_a_corpus_id(text, start, stop) or _inside_a_repo_path(text, start, stop)
+                or _inside_a_route(text, start, stop)
                 or _inside_a_quoted_literal(text, start, stop)):
             continue
         window = text[max(0, start - WINDOW):stop + WINDOW]
@@ -1730,6 +1750,77 @@ def message_strings(path):
             text = _static_text(keyword.value, names)
             if text:
                 found.append((keyword.value.lineno, text))
+    return found
+
+
+# THE NODE DRIVERS' OWN MESSAGES. A JavaScript driver has no ast module behind it and no pytest
+# marker, so its failure text sat outside every guard: the JS behaviour comparison holds the file
+# byte-identical apart from comments, which FREEZES a message rather than reading it, and the
+# Python message surface cannot see a .js file at all. The text still reaches an operator on a red
+# run, so it carries the same rule.
+#
+# The message is found structurally: the drivers assert through ok(cond, message), die(message) and
+# assert(cond, message), so it is the SECOND top-level argument of ok and assert and the FIRST of
+# die. String parts are read at the call's own depth only, which is what keeps a fixture id inside
+# a nested JSON.stringify(...) out of the message and leaves the concatenated `"... got " + x`
+# form whole.
+JS_ASSERT_CALL = re.compile(r"(?<![\w.$])(ok|die|assert|fail)\s*\(")
+
+
+def js_message_strings(text):
+    """(line number, text) for every assertion message a JavaScript driver would print."""
+    found = []
+    size = len(text)
+    for call in JS_ASSERT_CALL.finditer(text):
+        which, i, depth, arg, parts, line = call.group(1), call.end(), 1, 0, [], None
+        wanted = 0 if which == "die" else 1
+        while i < size and depth:
+            char = text[i]
+            if char in "'\"`":
+                stop = _skip_template(text, i) if char == "`" else _skip_quoted(text, i, char)
+                if depth == 1 and arg == wanted:
+                    parts.append(text[i + 1:stop - 1])
+                    if line is None:
+                        line = text.count("\n", 0, i) + 1
+                i = stop
+                continue
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if not depth:
+                    break
+            elif char == "," and depth == 1:
+                arg += 1
+            elif char == "/" and i + 1 < size and text[i + 1] in "/*":
+                if text[i + 1] == "/":
+                    stop = text.find("\n", i)
+                else:
+                    stop = text.find("*/", i + 2)
+                    stop = size if stop < 0 else stop + 2
+                i = size if stop < 0 else stop
+                continue
+            i += 1
+        if parts:
+            found.append((line, "".join(parts)))
+    return found
+
+
+def js_message_offences(files, root=None):
+    """Every driver message that carries the audit trail or a typographic dash, as report lines."""
+    found = []
+    for path in files:
+        where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+        text = source_text(path)
+        for lineno, said in js_message_strings(text):
+            labels = [label for label in labels_for(said, cite_contract=True)
+                      if label in MESSAGE_LABELS]
+            if any(dash in said for dash in DASHES) and any(
+                    dash in unquoted(said) for dash in DASHES):
+                labels.append("an em or en dash")
+            if labels:
+                found.append("%s:%s: %s: %s"
+                             % (where, lineno, ", ".join(labels), flattened(said)[:110]))
     return found
 
 
@@ -3751,3 +3842,50 @@ def test_the_messages_a_failure_prints_carry_no_audit_trail():
     assert not hits, (
         f"{len(hits)} assertion message(s) or skip reason(s) under portal/tests carry the audit "
         "trail or a typographic dash:\n" + "\n".join(hits))
+
+
+def js_drivers():
+    """Every node driver the portal runs: portal/tools/*.js and the *.test.js suites beside the
+    Python guards. These are the only trees in this repository whose tests are JavaScript."""
+    return [p for p in generators() + guard_tests() if p.suffix.lower() == ".js"]
+
+
+def test_node_driver_messages_state_what_broke_without_the_audit_trail():
+    """The node drivers' assertion messages, held to the same rule as the Python ones and for the
+    same reason: an operator reads them on a red run. No other guard reaches them - the JS
+    behaviour comparison holds a driver byte-identical apart from its comments, which freezes a
+    message rather than reading it, and the Python message surface cannot parse a .js file."""
+    files = js_drivers()
+    assert files, "the driver class resolved to no files, so this would pass over nothing"
+    read = sum(len(js_message_strings(source_text(p))) for p in files)
+    assert read > 500, f"the driver message extractor read only {read} messages, so it is blind"
+    hits = js_message_offences(files, root=ROOT)
+    assert not hits, (
+        f"{len(hits)} node-driver assertion message(s) carry the audit trail or a typographic "
+        "dash:\n" + "\n".join(hits))
+
+
+def test_a_tag_shape_inside_a_route_is_the_thing_the_route_addresses():
+    """FAILS IF a station id at the end of a route reads as a work item, or if the exemption is so
+    wide that a bare tag beside a slash escapes it. A route is told by its shape: it opens on / or
+    #/ and carries at least two segments, and the token must be a PART of the run."""
+    excused = "the driver opens #/station/au.alpha.A1 and reads the drawer"
+    assert not work_item_tags(excused), work_item_tags(excused)
+    for still in ("C42 is the coordinate-access work", "see /C42 for the shape",
+                  "the C42/D3 seam"):
+        assert work_item_tags(still), still
+
+
+def test_the_driver_message_extractor_reads_the_message_and_not_the_data(tmp_path):
+    """FAILS IF the extractor takes the condition, a nested call's arguments or a fixture literal
+    for the message: a scanner that reads the data reports a station id as a work item, and one
+    that reads nothing reports PASS over whatever is written."""
+    driver = tmp_path / "driver.js"
+    driver.write_text(
+        'ok(rows.length === 2, "the two rows must render, got " + JSON.stringify(["A1", "A2"]));\n'
+        'die("the boot never finished");\n'
+        'ok(seen("ST01"), `the ${kind} row must carry ST01`);\n', encoding="utf-8")
+    said = [text for _line, text in js_message_strings(driver.read_text(encoding="utf-8"))]
+    assert said == ["the two rows must render, got ",
+                    "the boot never finished",
+                    "the ${kind} row must carry ST01"], said

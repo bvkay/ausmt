@@ -58,7 +58,7 @@ ok(t.indexOf("bundles/demo-tf.h5") >= 0, "TF MTH5 tile url missing");
 ok(/EDI bundle/.test(t), "EDI-zip tile label missing");
 ok(/EMTF-XML bundle/.test(t), "EMTF-XML-zip tile label missing");
 // Core labelling requirement: the MTH5 tile must say transfer functions, never imply time series
-ok(/transfer functions/i.test(t), "MTH5 tile must be labelled 'transfer functions' (C32)");
+ok(/transfer functions/i.test(t), "MTH5 tile must be labelled 'transfer functions'");
 ok(t.toLowerCase().indexOf("time series") < 0, "MTH5 tile must NOT imply time series");
 // size formatting rides through (fmtBytes) so the tiles show a human size
 ok(/KB|MB|B/.test(t), "bundle tiles should show a formatted size");
