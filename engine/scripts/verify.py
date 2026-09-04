@@ -20,7 +20,7 @@ conda/pip ABI note):
 
 Exit code 0 only if every step passed.
 
-C12 --data-dir mode: validate an EXISTING build output dir (e.g. a deploy/Makefile rebuild-data run's
+--data-dir mode: validate an EXISTING build output dir (e.g. a deploy/Makefile rebuild-data run's
 just-produced builds/<timestamp>) in place, WITHOUT rebuilding or running pytest — the post-build gate
 `make rebuild-data` runs inside the build-runner container before the atomic `current` symlink swap.
 Mutually exclusive with the default self-building invocation (--surveys/--skip-tests are ignored, with
@@ -531,7 +531,7 @@ def _check_station_metadata(base_dir: Path, mtc, jsonschema, st_schema):
          channel shape per component family, withheld-branch closure, DOI syntax, the 1.x
          distribution.edi_path equivalence pin);
       2. the set of published ausmt_ids equals mtcat.json's stations[].station_id exactly, with no id
-         published twice (T33, the station half of the identity chain the sibling check pins for
+         published twice (the station half of the identity chain the sibling check pins for
          surveys).
 
     Returns (ok, lines). Reads the files on disk, never a build's in-memory state, which is what makes
@@ -638,7 +638,7 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
         print(ln)
     ok &= st_ok
 
-    # C18b consistency gate — armed only with --surveys.
+    # The cache-consistency gate — armed only with --surveys.
     if surveys_root is not None:
         cons_ok, cons_lines = _check_digest_consistency(data_dir, surveys_root)
         for ln in cons_lines:

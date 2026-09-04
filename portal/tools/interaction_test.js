@@ -1548,7 +1548,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // and neither #headerTour nor #howToUse exists. Both ids are pinned absent so neither can quietly
   // return.
   ok(!doc.getElementById("headerTour"), "#headerTour should have been removed from the header (item 2)");
-  ok(!doc.getElementById("howToUse"), "#howToUse must be absent along with the 'How AusMT works' panel");
+  ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel (docs wave)");
   ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
   // NO AuScope ORG-MARK IN THE SPA HEADER. The mark closed the right zone on every surface until

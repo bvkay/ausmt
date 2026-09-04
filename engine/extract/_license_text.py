@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - exercised only in the installed-packag
     from extract._contract import LICENSES, PROFILES
 
 # Normalise a raw survey.yaml licence string to a canonical id for allow-list matching. trim ->
-# collapse internal whitespace -> upper, then resolve a legacy bare alias (CC0, CC-BY, ODBL, ...) to
+# collapse internal whitespace -> upper, then resolve a legacy bare licence alias (CC0, CC-BY, ODBL) to
 # its canonical id. Allow-list keys and aliases are compared in this same UPPER space, so the match is
 # case-insensitive by construction. This is the ONLY place a licence string is canonicalised — the old
 # `startswith("CC")` prefix test (which redistributed a typo'd 'CC-BY-4.O' or any 'CC-nonsense') is gone.
@@ -61,7 +61,7 @@ def redistributable(license_str) -> bool:
 
 
 def recognised(license_str) -> bool:
-    """C34/D3 fail-closed gate for LICENSE.md generation: the id must be a RECOGNISED canonical id
+    """Fail-closed gate for LICENSE.md generation: the id must be a RECOGNISED canonical id
     (redistributable ∪ recognised_only, matched case-insensitively after de-alias). An unrecognised id
     (typo, placeholder 'TBD', free text, None) is NOT recognised, so no LICENSE.md is generated and the
     validator's 'LICENSE.md missing' WARNING correctly stands. Broader than `redistributable`: a
@@ -141,16 +141,16 @@ def license_instrument_text(lic, licensor, year, attribution=None, sources=None,
     normalised value if unrecognised - this file ships only for redistributable surveys, so in practice
     it is always a known id, but it never fabricates a URL for an unknown one).
 
-    C46 additions, appended AFTER the existing attribution block and BYTE-INERT when both are absent:
+    Two additions, appended AFTER the existing attribution block and BYTE-INERT when both are absent:
       * `sources` (list of dicts: title/custodian/identifier/licence/retrieved/statement/profile) - one
         attribution paragraph per upstream dataset, using the source's verbatim `statement` when present
         else the custodian profile's rendered attribution (the GA derivative form when the release makes
         changes), a supersession line for any source whose licence differs from the release licence, and
-        (C46-W3a) the custodian profile's s.5 disclaimer paragraph once per distinct disclaimer when a
+        and the custodian profile's s.5 disclaimer paragraph once per distinct disclaimer when a
         source's profile carries one (today only `ga`).
       * `changes` ({made, summary}) - the CC-BY 4.0 §3(a) 'indicate if changes were made' clause.
     When `sources` is falsy and `changes` is falsy/`made` False, the output is byte-identical to the
-    pre-C46 instrument (the frozen LICENSE.txt pins)."""
+    instrument without them (the frozen LICENSE.txt pins)."""
     cid = canon_license(lic)
     url = _LIC_URLS.get(cid, "")
     who = (licensor or "the survey custodian").strip()

@@ -208,7 +208,7 @@ def fid(p, r):
 
 def _mask_qc_report(qc, policy_of):
     """Rewrite every coordinate-bearing qc_report field so a non-exact station carries no true-position
-    bits (D3). Two fields carry coordinates today:
+    bits. Two fields carry coordinates today:
 
       * outside_declared_extent[].lat/lon (qc_pass :1339) — the TRUE position of a station outside its
         survey's declared extent. For a non-exact station: generalised -> the 0.1deg cell; withheld ->

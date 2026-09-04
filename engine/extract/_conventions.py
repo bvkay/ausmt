@@ -18,15 +18,15 @@ GATE 1, rotation/frame guard. mt_metadata 1.0.9 RECORDS rotation but never compe
 So the gate reads BOTH sources — the TF's _rotation_angle AND a cheap lexical parse of the source
 EDI (ZROT/TROT blocks, SPECTRA ROTSPEC attributes, HMEAS azimuths) — cross-checks them, and
 applies frame POLICY v3. The engine NEVER rotates served data - DETECTION stays, CORRECTION goes:
-  * V3-A — survey-uniform declared angle (ANY magnitude): serve AS STORED, record the angle
+  * Arm A — survey-uniform declared angle (ANY magnitude): serve AS STORED, record the angle
     (frame_served="declared-azimuth", declared_azimuth_deg) + a note. The archive respects
     acquisition frames; rotation joins byte-rewriting as a thing the archive does not do. (Absorbs
     the old R3 record + R4 de-rotate — the arbitrary 15deg FRAME_KEEP_MAX_DEG threshold dies.)
-  * V3-B — station-uniform angles INCONSISTENT across one survey (spread beyond
+  * Arm B — station-uniform angles INCONSISTENT across one survey (spread beyond
     SURVEY_ANGLE_SPREAD_MAX_DEG): each station STILL serves as-stored with its own declared angle;
     the SURVEY gains a "mixed declared frames" note (classify_survey_frame; surfaced in
     build_report + station.json + the portal). NO de-rotation, NO refusal.
-  * V3-C — per-period rotation WITHIN a station (PAX class: per-period ZROT/TROT, or per-block
+  * Arm C — per-period rotation WITHIN a station (PAX class: per-period ZROT/TROT, or per-block
     SPECTRA ROTSPEC): REFUSE the station, exactly like a convention-gate refusal — a single served
     curve from period-varying frames is misleading-by-construction; absence is honester. The reason
     names the per-period rotation and the fix ("re-export in a single coherent frame").
@@ -83,14 +83,14 @@ ROT_FILL_MAX = 1e8           # missing-data sentinel threshold — same conventi
 # the coordinate frame we report it. Frame mixing is something we should pick up on and try to
 # minimalize from the data coming in, but the de-rotated we should not do." So the engine NEVER
 # rotates served data — detection stays, correction goes:
-#   * V3-A — a survey-uniform declared angle (ANY magnitude) serves AS STORED, the angle recorded
+#   * Arm A — a survey-uniform declared angle (ANY magnitude) serves AS STORED, the angle recorded
 #            (absorbs the old R3 record + R4 de-rotate; the 15deg FRAME_KEEP_MAX_DEG threshold dies).
-#   * V3-B — survey-inconsistent per-station-uniform angles: each station serves AS STORED with its
+#   * Arm B — survey-inconsistent per-station-uniform angles: each station serves AS STORED with its
 #            own angle recorded; the SURVEY gains a "mixed declared frames" note (no de-rotation).
-#   * V3-C — per-period rotation WITHIN a station (PAX class): REFUSE the station (a single served
+#   * Arm C — per-period rotation WITHIN a station (PAX class): REFUSE the station (a single served
 #            curve from period-varying frames is misleading-by-construction; absence is honester).
 # Only the survey-inconsistency threshold survives (it drives the V3-B note, not any rotation).
-SURVEY_ANGLE_SPREAD_MAX_DEG = 5.0  # V3-B: per-station uniform angles spreading more than this within
+SURVEY_ANGLE_SPREAD_MAX_DEG = 5.0  # Arm B: per-station uniform angles spreading more than this within
                                    # one survey -> the survey carries the mixed-declared-frames note
                                    # (each station is still served as-stored; nothing is de-rotated)
 
@@ -238,19 +238,19 @@ def declared_uniform_angle(ev: dict):
 
 def classify_survey_frame(station_angles: list):
     """POLICY v3 survey-scope scan from every station's declared_uniform_angle output. Returns the
-    V3-B mixed-declared-frames NOTE (a string) when the survey's per-station declared angles are
+    arm-B mixed-declared-frames NOTE (a string) when the survey's per-station declared angles are
     inconsistent (spread beyond SURVEY_ANGLE_SPREAD_MAX_DEG), else None.
 
-    DECLARED-ZERO stations participate as angle 0.0 (fix round F1): a served station always sits in
+    DECLARED-ZERO stations participate as angle 0.0: a served station always sits in
     SOME declared frame — zero/undeclared serves under the declared-zero reference — so a [0°, 20°]
     survey mixes frames exactly as an [8°, 20°] one does, and the note's range must include the 0°
-    members it is stamped on. Only per-period (V3-C) stations stay out of the vote: they are
+    members it is stamped on. Only per-period (arm C) stations stay out of the vote: they are
     refused, never served, so they cannot mix a SERVED frame.
 
     Unlike v2, this classification does NOT change any per-station disposition — every uniform
     declaration serves AS STORED and every per-period declaration refuses, regardless of survey
     context. It exists ONLY to surface the survey-level "mixed declared frames" note in
-    build_report + station.json + the portal (V3-B); the engine never de-rotates and never refuses a
+    build_report + station.json + the portal (arm B); the engine never de-rotates and never refuses a
     station on survey-consistency grounds."""
     angles = [t for k, t in station_angles if k in ("uniform", "none")]
     if not angles:
@@ -375,7 +375,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
         return _done(recorded_deg=theta)
 
     # ---- MT (impedance-block) branch: the >ZROT declaration IS the stored-tensor frame. ----
-    recorded = None   # V3-A/B serve-as-stored declaration (survey-uniform angle, any magnitude)
+    recorded = None   # arm A/B serve-as-stored declaration (survey-uniform angle, any magnitude)
     if ev["zrot"] is not None:
         zr = _mask_sentinels(ev["zrot"])
         # sentinel angles are only acceptable where there is no impedance data to serve

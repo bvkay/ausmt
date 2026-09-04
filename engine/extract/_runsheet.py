@@ -12,7 +12,7 @@ reviewed by a human before it enters the corpus, and the build stays determinist
 
 Run IDS are deliberately absent from this file: the per-survey run-id store (run-ids.yaml,
 extract/_runids) remains the only id authority, so a station with sheet facts but no stored id
-still publishes no runs[] and the gap is reported (D2).
+still publishes no runs[] and the gap is reported.
 
 Stdlib only: a leaf like _runfacts, importable by the spawn workers' build_portal.
 """

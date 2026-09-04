@@ -286,7 +286,7 @@ _EMPOWER_RATE = re.compile(r'"sampleRate"\s*:\s*(\d+(?:\.\d+)?)')
 
 
 def _empower_json(info: str, kv: dict, doc: _Doc):
-    """Phoenix EMpower writes one JSON record per acquisition into >INFO. D10: a SECOND top-level
+    """Phoenix EMpower writes one JSON record per acquisition into >INFO. A SECOND top-level
     record is the REMOTE STATION, never a second run. The highest declared sampleRate is the run's
     nominal rate; the lower ones are the decimation ladder riding the transfer-function product.
 
@@ -391,7 +391,7 @@ _FAMILIES = (_enriched_dotted, _mtpy_fieldnotes, _lemimt_site, _empower_json, _p
 
 
 def run_facts(info: str) -> dict:
-    """The acquisition facts one EDI's >INFO block asserts. `facts` is the D2 gate's input (empty =>
+    """The acquisition facts one EDI's >INFO block asserts. `facts` is the run gate's input (empty =>
     the station publishes no runs[] at all); `run` and `channels` carry the values themselves;
     `confidence` records the extraction class behind each; `named_components` and
     `excluded_components` feed the D9 channel rule."""

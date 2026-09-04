@@ -8,7 +8,7 @@ class; the THREDDS rule), and they all rest on the first:
                    this module routes. Asked by the three below AND by station.json's emitter, so
                    the publication rule is stated once rather than restated per surface.
   station_flag()   does a verified time-series resource EXIST for this station? Existence
-                   semantics: follows the register for EVERY station, withheld included (R13);
+                   semantics: follows the register for EVERY station, withheld included;
                    an embargo never flips it, an outage never flips it, and the only lawful way
                    down is curation - a row retired with its dated reason stops projecting, and
                    when it was the station's last verified row the flag goes with it.

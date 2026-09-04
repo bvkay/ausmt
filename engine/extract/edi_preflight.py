@@ -2,7 +2,7 @@
 """Pre-flight EDI reader check: tell a curator or a submitter what an EDI's >INFO block will do to
 its metadata BEFORE a build runs, in words a geophysicist can act on.
 
-WHY THIS EXISTS. The 2026-08 >INFO fallback (see `_mtm.normalise_info_json_delimiters`) made the
+WHY THIS EXISTS. The >INFO fallback (see `_mtm.normalise_info_json_delimiters`) makes the
 engine READ the GSSA Western Gawler 2023 delivery. It did not make the problem VISIBLE. Today the
 only way to learn that a delivery's magnetic declination is unreadable, or that 141 of a station's
 160 scraped >INFO values will be stored with a stray comma, or that a contact resistance written as

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Station-id override for third-party released data.
 
-AusMT serves third-party released data BYTE-IDENTICAL (D1), so a station whose contractor numbering
+AusMT serves third-party released data BYTE-IDENTICAL, so a station whose contractor numbering
 is not a usable public identifier cannot be renamed by editing its EDI. The custodian declares the
 id AusMT should publish in survey.yaml instead, keyed by the SOURCE FILE the record is parsed from:
 
@@ -100,7 +100,7 @@ class StationIds(NamedTuple):
 _SAFE_ID = re.compile(r"\A[A-Za-z0-9._-]+\Z")
 
 # ...INTERSECTED with a length bound. safe_component has none, so a declared id of 300 legal
-# characters used to pass validation and then reach the filesystem as this station's product
+# characters would pass validation and then reach the filesystem as this station's product
 # DIRECTORY name: ENAMETOOLONG, raised out of the per-survey emission, and the WHOLE corpus build
 # died with no catalogue.json written at all. A bound here turns that into an ordinary
 # survey-granularity StationIdError like every other charset violation. 96 is far beyond any real

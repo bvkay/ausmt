@@ -17,7 +17,7 @@ import _ediparse as ep  # noqa: E402  (shared _norm / cached read_norm)
 
 NUM = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
 
-# Australian bounding box (w, e, s, n) — used to guard the AU-only state_of() facet so non-AU
+# Australian bounding box (w, e, s, n) — it guards the AU-only state_of() facet so non-AU
 # coordinates are not mislabelled as Australian states. Generous; matches the validator's box.
 AUS_BBOX = (108.0, 156.0, -45.0, -8.0)
 
@@ -184,7 +184,7 @@ def proc_note(text, dataid=None):
     note = (m.group(1).strip() if m else "")
     if note:  # mojibake from reading a UTF-8 EDI as latin-1 (degree sign, ohm sign)
         note = note.replace("Â°", "°").replace("[â¦]", "[Ω]").replace("â¦", "Ω").replace("Â", "").strip()
-        note = _EMAIL.sub("[email removed]", note)  # PII scrub (C3): never let an operator email reach station.json
+        note = _EMAIL.sub("[email removed]", note)  # PII scrub: never let an operator email reach station.json
     remote = parse_dataid(dataid)[1] if dataid else None
     if not remote:
         r = _REF_STATION.search(text)
