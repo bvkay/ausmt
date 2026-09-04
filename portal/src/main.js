@@ -20,20 +20,14 @@ function buildState(){
     // (au.<survey-slug>.<station>). Fall back to the legacy survey-name slugification only for
     // older data that predates r[C.ausmt_id], so the id shown/exported matches the product + MTCAT.
     ausmt_id:r[C.ausmt_id]||((CC[(SMETA[r[C.survey]]||{}).country]||"au").toLowerCase()+"."+r[C.survey].toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,"")+"."+r[C.id])}));
-  // Fold the boot-loaded coordinate policy onto each station (generalised | withheld), keyed by
-  // the authoritative ausmt_id just derived; null when exact/unmarked. Positions are already masked in the
-  // catalogue — this signals POLICY, not position — so the drawer can badge a generalised station honestly
-  // without re-deriving precision client-side (forbidden by the record). Tolerant of an absent artifact.
+  // Fold the boot-loaded coordinate policy onto each station (generalised | withheld), keyed by the
+  // authoritative ausmt_id just derived; null when exact/unmarked. See docs: portal internals, main.js.
   const _cp=(typeof COORD_POLICY!=="undefined"&&COORD_POLICY)||{};
   ST.forEach(s=>{s.coordPolicy=_cp[s.ausmt_id]||null;});
   surveys=[...new Set(ST.map(s=>s.survey))].sort();
-  // slug -> survey label, for the #/survey/<slug> route (the published /surveys/<slug> path URLs
-  // The sitemap now emits 301 into this route at the front door - path-URL contract;
-  // ausmt_id is
-  // au.<slug>.<station> — mirrors the engine's own slug_of derivation in extract/build_portal.py
-  // rather than re-slugifying the label, so it stays correct even if a label's slugification is
-  // irregular). Prefer the authoritative SMETA[survey].slug; fall back to deriving it from a
-  // station's own ausmt_id (strip "au." and the trailing ".<station>") for older data without it.
+  // slug -> survey label, for the #/survey/<slug> route (the published /surveys/<slug> path URLs The
+  // sitemap now emits 301 into this route at the front door - path-URL contract. See docs: portal
+  // internals, main.js.
   SLUG_TO_SURVEY={};
   surveys.forEach(sv=>{const slug=(SMETA[sv]||{}).slug;if(slug)SLUG_TO_SURVEY[slug]=sv;});
   ST.forEach(s=>{if(!SLUG_TO_SURVEY[s.slug||""]&&s.ausmt_id){
@@ -45,18 +39,13 @@ function buildState(){
 }
 // Two-phase boot: the ONLY two station fields that come from sci.json. buildState() runs at first paint,
 // before sci.json has landed, so it derives them from an empty row; this re-folds them from the real data
-// the moment SCI_READY settles. Identical expressions to buildState's own (sciRow keeps the deref shared),
-// so a hydrated station is byte-for-byte what a single-phase boot produced.
+// the moment SCI_READY settles. See docs: portal internals, main.js.
 function applySciToStations(){
   if(!Array.isArray(ST))return;
   ST.forEach(s=>{const sc=sciRow(s.i);s.q=sc[SC.q];s.dim=sc[SC.dim];});
 }
-// Build AUSLAMP_SET (survey SLUGS in the `auslamp` collection) from the boot data. The
-// collections.json member list (COLL.auslamp.surveys) holds survey LABELS, not slugs (the engine keys
-// _group_collections by the survey.yaml name; see build_portal.py); the portal's partition/colour
-// predicates key off s.slug, so each label is resolved through SMETA[label].slug here — the SAME
-// authoritative slug the engine wrote (no re-derivation). Absent collection / absent slug => empty set
-// (graceful degrade). Rebuildable (not a boot-only const) so a test can repopulate COLL and re-run it.
+// Build AUSLAMP_SET (survey SLUGS in the `auslamp` collection) from the boot data. See docs: portal
+// internals, main.js.
 function buildAuslampSet(){
   AUSLAMP_SET=new Set();
   const c=(typeof COLL!=="undefined"&&COLL)?COLL.auslamp:null;
@@ -65,11 +54,7 @@ function buildAuslampSet(){
 }
 // UX feedback round 1 (#2): corpus-wide year hints on the two Year range inputs — placeholder + min/max
 // attrs from the min year_start / max year_end across ALL of SMETA (not just ST, so an undated-in-CAT
-// survey with declared dates still counts), plus the range appended to the section label, e.g.
-// "Year range (2019-2022)". Values themselves stay EMPTY on load — deliberately NOT defaulted to the
-// corpus range: passesYearRange() treats a set input as "a range WAS requested" and hides undated
-// surveys, so pre-filling the inputs would immediately (and silently) drop every undated survey the
-// moment the page loads. These are hints for what values are meaningful, not a default filter.
+// survey with declared dates still counts). See docs: portal internals, main.js.
 function applyYearRangeHints(){
   let lo=null,hi=null;
   Object.keys(SMETA||{}).forEach(sv=>{const m=SMETA[sv]||{};
@@ -81,14 +66,9 @@ function applyYearRangeHints(){
   if(toEl){toEl.placeholder=dated?String(hi):"to";if(dated)toEl.min=lo,toEl.max=hi;}
   if(head)head.textContent="Year range"+(dated?` (${fmtRange(lo,hi)})`:"");   // suffix hidden when no survey is dated
 }
-// ---- "Recently added" -------------------------------------------------------------------------
-// LOCKSTEP RULE (keep identical to the engine's _survey_latest_date at
-// engine/extract/build_portal.py:467-489): a survey's "latest date" is the max well-formed
-// YYYY-MM-DD among all release_notes[].date PLUS attribution.declared_date when present; else
-// Dec-31 of (year_end||year_start); else null. Expressed here in JS, not shared code (Python vs
-// JS), so the portal strip and the Atom feed can never name a different "latest" survey; when the
-// rule changes on either side, change BOTH. The 30-day window and 3-item cap below are PORTAL-ONLY
-// display rules for the strip; feed.xml keeps every dated survey.
+// ---- "Recently added" ------------------------------------------------------------------------- LOCKSTEP
+// RULE (keep identical to the engine's _survey_latest_date at engine/extract/build_portal.py:467-489). See
+// docs: portal internals, main.js.
 function surveyLatestDate(m){
   const cands=[];
   const rn=(m&&m.release_notes);
@@ -126,19 +106,13 @@ function recentlyAdded(limit){
   return out.slice(0,limit||3);
 }
 // Brief 9, Option A: ONE concise horizontal line, wrapping - "Recently added: Vulcan 2022 (interpunct)
-// AusLAMP Queensland Phase 3" - not a heading over a column of rows. The old block form left a large
-// sparse box of mostly empty space between the reader and the catalogue, which is precisely what the
-// brief says not to keep just because the information exists. The date is what makes an entry recent, so
-// it is not dropped: it rides each link as its title rather than spending a second line.
+// AusLAMP Queensland Phase 3" - not a heading over a column of rows. See docs: portal internals, main.js.
 function recentlyAddedHtml(entries){
   if(!entries.length)return"";
   const items=entries.map(e=>`<a href="/surveys/${encodeURIComponent(e.slug)}" title="${escAttr("Latest release "+e.date)}">${esc(e.sv)}</a>`).join(" · ");
   return `<span class="ra-label">Recently added:</span> ${items}`;
 }
-// ONE surface only (the surveys-view #recentStrip). The map-rail #recentSideSection/#recentSide was
-// deleted: rendering it here un-hid its section on EVERY view whenever any survey was dated (the
-// data-views toggle in setView un-hid it for the map view, and this render then un-hid it wholesale),
-// which leaked the section onto the Surveys/Collections views. Hidden entirely when empty.
+// ONE surface only (the surveys-view #recentStrip). See docs: portal internals, main.js.
 function renderRecentlyAdded(){
   const entries=recentlyAdded(3);
   const strip=document.getElementById("recentStrip");
@@ -147,11 +121,8 @@ function renderRecentlyAdded(){
 }
 function setView(v){
   // Stage B (selection-state isolation): navigating OFF the map ends any All-EDIs selection lens - the lens
-  // is a map-scoped view and its rail is hidden on other views, so it must not persist. Restore BEFORE
-  // curView flips so restoreSelectLens's refresh() runs against the outgoing view. Entering the map
-  // (v==="map") is deliberately excluded, so selectSurvey's own setView("map") never undoes the scoping it
-  // just applied. (The only mode-exit path, the Browse button, is covered in setSidebarMode; Escape and the
-  // export / done actions change neither the mode nor the view, so there is nothing to restore for them.)
+  // is a map-scoped view and its rail is hidden on other views, so it must not persist. See docs: portal
+  // internals, main.js.
   if(v!=="map"&&typeof restoreSelectLens==="function")restoreSelectLens();
   curView=v;
   document.body.classList.toggle("tree-tall",v==="surveys");   // give the country→org→survey tree more height on the Surveys view
@@ -170,10 +141,9 @@ function setView(v){
   // The map legend sits over the map, so it belongs to the map view only. (The
   // first-visit welcome popup is a modal dismissed by user action, not tied to the view — no toggle here.)
   const _leg=document.getElementById("mapLegend");if(_leg)_leg.classList.toggle("hidden",v!=="map");
-  // The left filter rail (+ its resize handle) belong to the MAP view. On Surveys and
-  // Collections the rail's controls don't apply (search + facet chips live in the discovery bar there),
-  // so hide both and let the content span the width. The map view restores them, and the invalidateSize
-  // on its setTimeout below reclaims the space. openCollectionPage mirrors this on its manual path.
+  // The left filter rail (+ its resize handle) belong to the MAP view. On Surveys and Collections the
+  // rail's controls don't apply (search + facet chips live in the discovery bar there), so hide both and
+  // let the content span the width. See docs: portal internals, main.js.
   const _showRail=(v==="map");
   const _fp=document.getElementById("filterPane");if(_fp)_fp.classList.toggle("hidden",!_showRail);
   const _rz=document.getElementById("resizer");if(_rz)_rz.classList.toggle("hidden",!_showRail);
@@ -186,20 +156,13 @@ function setView(v){
   if(typeof ST!=="undefined"&&ST.length)renderRecentlyAdded();
   updateCounts();
 }
-// Only Map switches a view in place. Surveys and
-// Collections real links to the served hub pages, and a click handler on a control that is
-// navigating away would run a view switch the page is about to leave: a visible flash of the wrong
-// view on a slow load, and dead work otherwise. setView("surveys"/"collections") stays the way IN to
-// the in-app grids for routeFromHash, the tour and the drawer's own back-navigation.
+// Only Map switches a view in place. See docs: portal internals, main.js.
 document.getElementById("navMap").onclick=()=>setView("map");
 
 function routeFromHash(){
-  // The PLURAL routes. Published HTML has pointed at #/surveys since the entity pages shipped (every
-  // survey page's back-nav, plus 404.html's recovery link) and no branch matched it, so the hash fell
-  // through and the reader stayed on whatever view was showing. Those links now target the served
-  // /surveys and /collections index pages, but the hash form is out in the wild for good, so it lands
-  // where its name promises. Listed first, and matched EXACTLY, so neither shadows the singular
-  // entity routes below (the strings share a prefix).
+  // The PLURAL routes. Published HTML has pointed at #/surveys since the entity pages shipped (every survey
+  // page's back-nav, plus 404.html's recovery link) and no branch matched it, so the hash fell through and
+  // the reader stayed on whatever view was showing. See docs: portal internals, main.js.
   if(location.hash==="#/surveys"){setView("surveys");return;}
   if(location.hash==="#/collections"){setView("collections");return;}
   const mc=location.hash.match(/^#\/collection\/(.+)$/);
@@ -211,23 +174,17 @@ function routeFromHash(){
     if(s){if(curView!=="map")setView("map");openStation(s.i);}return;}
   const msv=location.hash.match(/^#\/survey\/(.+)$/);
   if(msv){const slug=decodeURIComponent(msv[1]),sv=SLUG_TO_SURVEY[slug];
-    // The entity page's button for this route is labelled "View all stations on the main map", so the
-    // route must FRAME the survey: openSurvey rewrites the hash and renders but frames nothing, and the
-    // setView above is on the station branch only. focusSurvey is the seam the drawer's own "View on
-    // map" control uses, so the route delivers the same framing and the same Option-A dim. Called AFTER
-    // openSurvey so the fit padding measures the drawer that is actually open.
-    // Called directly, as filters.js does: focusSurvey is a top-level declaration in drawer.js,
-    // which index.html loads before this file, so a typeof guard here could never be false and
-    // would only turn a real regression into a silent no-op.
+    // The entity page's button for this route is labelled "View all stations on the main map", so the route
+    // must FRAME the survey: openSurvey rewrites the hash and renders but frames nothing, and the setView
+    // above is on the station branch only. See docs: portal internals, main.js.
     if(sv){openSurvey(sv);focusSurvey(sv);}
     return;}                                           // unknown slug: fall through, no crash, no view change
   // hash fell through (e.g. browser Back to ''): if a full-width collection detail is showing, restore a tab view
   if(curView==="collection")setView("map");}
 window.addEventListener("hashchange",routeFromHash);
 
-// "View all stations on main map" from a collection page - switch to the map view and
-// fit the map to the collection's extent. Prefers the collection's declared bbox; falls back to the
-// bounds of its member stations' positions. Uses the same setView/map seams the rest of the app does.
+// "View all stations on main map" from a collection page - switch to the map view and fit the map to the
+// collection's extent. See docs: portal internals, main.js.
 function viewCollectionOnMap(cid){
   const c=(typeof COLL!=="undefined"&&COLL)?COLL[cid]:null;
   setView("map");
@@ -274,11 +231,9 @@ function setSidebarCollapsed(collapsed){
   if(sidebarCollapsed())setSidebarCollapsed(true);   // apply the persisted state on load
 })();
 
-// Drawer left-edge drag handle. It reuses the resizer pattern but is created HERE
-// (never in drawer.js) and parented to .content — NOT #drawer, whose innerHTML drawer.js rewrites on every
-// open (which would wipe a child handle). A MutationObserver mirrors the drawer's open state onto the
-// handle's visibility + left-edge position, so drawer.js internals stay untouched. min 420px, max 60vw;
-// invalidateSize on drag end.
+// Drawer left-edge drag handle. It reuses the resizer pattern but is created HERE (never in drawer.js) and
+// parented to .content - NOT #drawer, whose innerHTML drawer.js rewrites on every open (which would wipe a
+// child handle). See docs: portal internals, main.js.
 (function(){
   const drawer=document.getElementById("drawer"),content=document.getElementById("content");
   if(!drawer||!content)return;
@@ -303,10 +258,8 @@ function setSidebarCollapsed(collapsed){
   if(typeof MutationObserver!=="undefined"){const mo=new MutationObserver(sync);mo.observe(drawer,{attributes:true,attributeFilter:["class"]});}
 })();
 
-// Load-error copy distinguishes the two real causes rather than always blaming file:// (which was
-// this message's original, pre-container diagnosis): over HTTP a failed data load almost always
-// means the deployment simply has no published data build yet (e.g. site-data/current absent on a
-// fresh server) — an operator hint, phrased so a visitor still understands the portal is fine.
+// Load-error copy distinguishes the two real causes rather than always blaming file:// (which was this
+// message's original, pre-container diagnosis). See docs: portal internals, main.js.
 function showLoadError(){
   var overFile=(location.protocol==="file:");
   document.getElementById("content").innerHTML = overFile
@@ -328,18 +281,8 @@ function showEmptyState(){
   }
   var sv=document.getElementById("surveysview");if(sv)sv.innerHTML=html;
 }
-// --- First-visit welcome popup -----------------------------------------------------------
-// The first-visit surface is a small centred MODAL popup (#introWelcome).
-// It offers exactly: "Take the 2-minute tour" (starts the tour),
-// "Browse immediately" (close), and a "Don't show this again" checkbox that
-// GATES persistence — ticked, every close path (tour / browse / Esc / click-out) persists the dismissal
-// via the existing localStorage key; unticked, the popup may return next visit. Esc and click-out behave
-// as "Browse immediately". First-visit show fires from runInit() (populated AND empty-data paths).
-// There is no header "How to use AusMT" item and no #introOverlay "How AusMT works" panel, so there is
-// no on-demand tour button either.
-// The tour is reached by the ?tour=1 query parameter handled in maybeShowIntro() below, which About links as
-// "start the guided tour". It is checked BEFORE the seen flag on purpose: someone who ticked "don't show
-// this again" months ago is exactly the person who follows that link, so the flag must not swallow it.
+// --- First-visit welcome popup ----------------------------------------------------------- The first-visit
+// surface is a small centred MODAL popup (#introWelcome). See docs: portal internals, main.js.
 const INTRO_KEY="ausmt_intro_dismissed";
 function introSeen(){try{return localStorage.getItem(INTRO_KEY)==="1";}catch(e){return false;}}
 function markIntroSeen(){try{localStorage.setItem(INTRO_KEY,"1");}catch(e){/* storage unavailable (e.g. privacy mode) — just don't persist */}}
@@ -360,11 +303,9 @@ function hideWelcome(){const w=document.getElementById("introWelcome");if(w)w.cl
   const f=_welcomeReturnFocus;_welcomeReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
 // Close via Browse / Esc / click-out: persist ONLY when "Don't show this again" is ticked.
 function closeWelcome(){if(welcomeDismissChecked())markIntroSeen();hideWelcome();}
-// ?tour=1 (About's "start the guided tour" link) starts the tour outright and shows no popup. Anything
-// else falls back to the first-visit rule: show the welcome popup unless the visitor dismissed it.
-// The parameter is dropped from the address bar once the tour is running (same replaceState pattern the
-// drawer and the tour itself use for their hashes), so a later reload browses the portal rather than
-// replaying the tour at someone who has finished it.
+// ?tour=1 (About's "start the guided tour" link) starts the tour outright and shows no popup. Anything else
+// falls back to the first-visit rule: show the welcome popup unless the visitor dismissed it. See docs:
+// portal internals, main.js.
 function tourRequested(){try{return /(^|[?&])tour=1(&|$)/.test(location.search||"");}catch(e){return false;}}
 function dropTourParam(){try{
   const q=(location.search||"").replace(/(^\?|&)tour=1(?=&|$)/,"").replace(/^&/,"?");
@@ -385,29 +326,8 @@ function maybeShowIntro(){if(tourRequested()){startTourSafe();dropTourParam();re
   }
 })();
 
-// Static map legend (bottom-left): a coloured dot per data type, and nothing else, since
-// a dot is the only thing the map draws. The dots read the LIVE --lpmt/--bbmt/--amt/--gds tokens via var(),
-// so they track any future colour change automatically. Built once (idempotent). Collapsible on small
-// widths (the toggle only shows there via CSS); starts collapsed on a narrow viewport.
-// The legend is parented INTO the Leaflet map container (#map), not to .content. As a
-// child of #content it was a sibling of #map in that flex row — an absolutely-positioned box, but living
-// in the same positioned/flex context as the map, so it participated in that layout and could nudge the
-// map's framing at load. Inside #map (which Leaflet keeps position:relative) it is an overlay that can
-// NEVER affect the map container's own size or centre: #map's box is measured before this child is
-// appended and an absolute child adds nothing to it. It also rides #map's display toggle for free.
-//
-// INTERACTIVE LEGEND: a visitor tried to CLICK the data-type rows to show/hide sites, which
-// is the reasonable reading - the rail's DATA TYPE checkboxes use the identical dot+label visual language
-// and ARE toggles, and mapping tools conventionally make a legend a layer switch. So the four TYPE rows are
-// real toggle buttons that PROXY the rail's #typeBoxes checkboxes. There is deliberately NO second state
-// store: a legend click flips the SAME checkbox the rail owns and dispatches its change event, so the one
-// existing #typeBoxes path (filters.js) runs every consumer - passesCore, the map redraw, the header
-// counts, the surveys-view decoupling and the select-lens semantics - exactly as a rail click does.
-// There is no survey-badge row: the legend may not key an object the
-// map does not draw, and the map draws nothing but the four data types.
-//
-// Resolve a rail type checkbox by its type key (LPMT / BBMT / AMT / GDS - the keys passesCore compares
-// against s.type). Read live from the DOM on each call: the rail is the single source of truth.
+// Static map legend (bottom-left): a coloured dot per data type, and nothing else, since a dot is the only
+// thing the map draws. See docs: portal internals, main.js.
 function legendTypeBox(key){
   return [...document.querySelectorAll("#typeBoxes input")].find(c=>c.value===key)||null;}
 // Legend row activation. Flip the rail checkbox and fire ITS change event - the sole state mutation.
@@ -416,22 +336,14 @@ function toggleLegendType(key){
   box.checked=!box.checked;
   box.dispatchEvent(new Event("change",{bubbles:true}));}
 // Two-way sync: repaint the legend FROM the checkboxes. Called from the one #typeBoxes change path, so a
-// rail flip and a legend flip both land here. An off type renders dimmed (the .legoff opacity covers the
-// dot AND the label together) and reports aria-pressed=false.
+// rail flip and a legend flip both land here. See docs: portal internals, main.js.
 function syncLegendTypes(){
   const leg=document.getElementById("mapLegend");if(!leg||!leg.querySelectorAll)return;
   leg.querySelectorAll(".legtype").forEach(btn=>{
     const box=legendTypeBox(btn.dataset.type),on=box?!!box.checked:true;
     btn.setAttribute("aria-pressed",String(on));
     btn.classList.toggle("legoff",!on);});}
-// The metric scale bar, RE-PARENTED into the legend body. Leaflet drops a control into one of the
-// map's own corners, where a scale would sit apart from the key it belongs with and over the dots;
-// moving its container is the smallest change that puts it where a reader already looks. Constructing a
-// Leaflet control deliberately has one precedent here, map.js's layer control.
-// IT TAKES ITS OWN CLASS, and that is load-bearing rather than tidy: the legend's own pins count
-// `.legrow .dot` and assert #mapLegend is a child of #map, so a scale bar that borrowed either would
-// break a claim about the data-type key. Metric only (this is an Australian corpus) and capped at
-// 120px so it cannot outgrow the legend it now sits in.
+// The metric scale bar, RE-PARENTED into the legend body. See docs: portal internals, main.js.
 function buildScaleBar(body){
   if(!body||!body.appendChild||body.querySelector(".maplegend-scale"))return null;   // idempotent, like buildLegend
   if(typeof L==="undefined"||!L.control||typeof L.control.scale!=="function")return null;
@@ -466,8 +378,7 @@ function buildLegend(){
     btn.addEventListener("click",()=>toggleLegendType(btn.dataset.type));
     // Explicit keyboard activation. A <button> already activates on Enter/Space in a browser, but the
     // default action is CANCELLED here so the browser cannot then synthesise its own click on top of this
-    // handler (one keypress must be one flip, not two). It also makes the keyboard path directly drivable
-    // in the headless jsdom harness, which does not synthesise clicks from key events.
+    // handler (one keypress must be one flip, not two). See docs: portal internals, main.js.
     btn.addEventListener("keydown",e=>{
       if(e.key==="Enter"||e.key===" "||e.key==="Spacebar"){e.preventDefault();toggleLegendType(btn.dataset.type);}});});
   syncLegendTypes();                                               // paint from the checkboxes, never from an assumption
@@ -480,18 +391,9 @@ function runInit(){
   if(portalIsEmpty()){buildTree();buildLegend();setView("map");updateCounts();showEmptyState();maybeShowIntro();renderRecentlyAdded();return;}
   buildMarkers();buildFootprints();buildTree();buildLegend();setView("map");refresh();routeFromHash();maybeShowIntro();renderRecentlyAdded();
 }
-// "data build <short id> · <date>" footer text, or "" when build.json didn't resolve (older
-// builds predate it — BUILDID is null — so the placeholder must stay empty, not show stale/undefined
-// text). Split from the DOM write below so a test can assert the VALUE binding (BUILDID -> text)
-// without needing a real DOM (mirrors buildState()'s station0/export0 value-binding pattern).
-//
-// UX feedback round 1 (#6): the emitter (build_identity() in engine/extract/build_portal.py) is
-// already fixed to never fold Python's None into build_id — an unresolved source_commit renders as
-// the WORD "unknown" there, never "None". This function still must not display either literal word
-// to a visitor: a build_id containing "None" (an older/foreign build predating that fix) or
-// "unknown" (the legitimate no-surveys-commit case) is display-DEFENDED here by dropping the short-id
-// segment entirely, keeping only the date (when known) — the full raw id still goes in a title attr
-// for anyone who needs to trace it, via renderBuildId() below.
+// "data build <short id> · <date>" footer text, or "" when build.json didn't resolve (older builds predate
+// it - BUILDID is null - so the placeholder must stay empty, not show stale/undefined text). See docs:
+// portal internals, main.js.
 function buildIdText(){
   if(!BUILDID||!BUILDID.build_id)return"";
   const raw=String(BUILDID.build_id);
@@ -510,20 +412,10 @@ function renderBuildId(){
   if(BUILDID&&BUILDID.build_id)el.title="build "+String(BUILDID.build_id);
 }
 // ---- two-phase boot ------------------------------------------------------------------------------
-// HYDRATION_DONE settles once every phase-2 product has landed AND its late-render work has run. It is not
-// on any user-facing path (nothing awaits it to paint); it exists so a headless driver can say "now the app
-// is in the state a single-phase boot produces" without racing the continuations.
+// HYDRATION_DONE settles once every phase-2 product has landed AND its late-render work has run. See docs:
+// portal internals, main.js.
 let HYDRATION_DONE=Promise.resolve();
-// Late hydration must never leave a stale render standing. Each gate re-runs EXACTLY the surfaces that read
-// its product, and nothing else:
-//   sci      -> re-folds s.q/s.dim (applySciToStations), re-enables the completeness/dimensionality
-//               colour modes, then refresh() so the map/counts/cards reflect a completeness predicate
-//               that was inert until now.
-//   tf       -> the open station drawer (its response plots and the sci/tf-derived summary rows).
-//   manifest -> the open drawer again (Files rows, format badges, download tiles), station OR survey.
-// Re-rendering the open drawer is the deliberate simplest correct answer: it is one innerHTML rewrite of a
-// panel the user is already looking at, and rehydrateOpenDrawer preserves scroll position and the selected
-// tab so the only visible change is the section that was showing a loading state.
+// Late hydration must never leave a stale render standing. See docs: portal internals, main.js.
 function wireHydration(){
   const tf=TF_READY.then(()=>{rehydrateOpenDrawer();});
   const sci=SCI_READY.then(()=>{
@@ -540,11 +432,9 @@ function wireHydration(){
   // on the same gate that re-renders the drawer.
   const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();
     if(typeof paintDownloadRows==="function")paintDownloadRows();});
-  // ts_access.json settles the availability facet: until it lands nothing on the page knows which
-  // stations this deployment can hand off, so the Download rows and the Data available options are
-  // repainted here (counts, sizes, the disabled state that was in-flight a moment ago) and
-  // refresh() re-applies a level filter chosen while it was inert. It never rejects - absence is
-  // the honest answer - so there is no failure branch to mirror sci's.
+  // ts_access.json settles the availability facet: until it lands nothing on the page knows which stations
+  // this deployment can hand off, so the Download rows and the Data available options are repainted here
+  // (counts, sizes. See docs: portal internals, main.js.
   const tsa=TSACC_READY.then(()=>{
     if(typeof paintDownloadRows==="function")paintDownloadRows();
     if(typeof paintAvailSelect==="function")paintAvailSelect();
@@ -560,11 +450,9 @@ async function boot(){
     // Phase 1 is the only fatal set: no catalogue or no surveys means there is nothing honest to draw.
     // A phase-2 failure is reported by the consumers that read it, not by blanking the whole portal.
     try{[CAT,SMETA,PROV,COLL,BUILDID,COORD_POLICY]=await p1;}catch(e){showLoadError();return;}
-    // Hydration starts only AFTER phase 1 has its bytes: the phase-2 products are large (tf.json
-    // alone is most of the page weight) and share one connection with the catalogue the dots need,
-    // so issuing them earlier delays the exact first paint the two-phase split exists to protect.
-    // Nothing on the first-paint path awaits these gates, and no consumer can read them before
-    // runInit attaches the UI below, so the later start is invisible everywhere but the network.
+    // Hydration starts only AFTER phase 1 has its bytes: the phase-2 products are large (tf.json alone is
+    // most of the page weight) and share one connection with the catalogue the dots need. See docs: portal
+    // internals, main.js.
     startHydration();
   }
   // The ts_access-driven surfaces are inert and disabled until the index is known: the Download

@@ -40,6 +40,7 @@ nav:
       - survey.yaml reference: reference/survey-yaml.md
       - Per-station products: reference/station-products.md
       - Releases tier: reference/releases.md
+      - Portal internals: reference/portal-internals.md
       - Glossary: reference/glossary.md
       - License: reference/license.md
   - Design rationale:

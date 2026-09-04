@@ -1,33 +1,5 @@
 "use strict";
-// Tour.js - 11-step spotlight tour. Classic script, zero deps,
-// loads LAST (after main.js) so it can call setView()/openStation()/other globals, but nothing in
-// main.js depends on it (a missing/broken tour.js must never break the intro panel or the app — see
-// the typeof guard in main.js).
-//
-// Behaviour: never auto-starts (only "Take the tour" in the intro panel or the header link fires
-// it); steps whose target element is absent (e.g. empty-data state, or an enter action that found
-// nothing to open) render centred with no spotlight instead of crashing or silently skipping; Esc
-// closes; ArrowRight/ArrowLeft navigate; all controls are real <button>s with aria-labels; nothing is
-// persisted — the tour is stateless and re-runnable from either entry point on every visit.
-//
-// Round 2 (operator feedback): the tour now NAVIGATES — it spotlights the header view buttons and
-// actually switches to the Surveys view, then returns to the map at the end, so a first-timer learns
-// the app's two views by watching them happen. Enter actions (run when the tour ARRIVES at a step,
-// forward or back) make that work in both directions: map-view steps force the map view back (so
-// stepping BACK from the Surveys steps re-shows map-only targets like .selbox). _tourOpened records
-// ONLY what the tour itself opened (drawer / hash), so stopTour() from ANY step — including
-// mid-Surveys — returns to the map and closes only tour-opened drawers, never state the visitor had
-// open before starting.
-//
-// Two DEMO steps after the filter-rail overview - Find (types "AusLAMP"
-// with a real input event so the live dropdown + map filter run) and tree browse (scrolls one survey
-// row into view; kalkaroo-2022 preferred, first survey otherwise). Demo steps get an EXIT hook, run
-// on ALL three ways of leaving a step (Next, Back, and stopTour for close/Esc/Done), so demo state
-// (the typed query, the tree scroll) never leaks past the step — the same restore discipline as
-// _tourOpened, extended per-step.
-// Short step copy - the visible text is the authored deck,
-// VERBATIM. Selectors + enter/exit hooks are UNCHANGED (the Find demo still types "AusLAMP", the selbox
-// step still switches rail mode, etc. — only the visible copy changed).
+// Tour.js - 11-step spotlight tour. See docs: portal internals, tour.js.
 const TOUR_STEPS=[
   {sel:"#map",text:"Every dot is an MT station. Click one to see its transfer function.",
    enter:_tourEnterMapView},
@@ -66,18 +38,13 @@ function _tourEnterMapView(){
   if(typeof curView!=="undefined"&&curView!=="map"&&typeof setView==="function")setView("map");
 }
 // Surveys-view step enter action. Named by SELECTOR, not by index: a step inserted mid-deck left every
-// numbered comment in this file one behind, so the numbers are gone. It actually switches to the Surveys
-// view, because the navigation IS the lesson. setView closes any open drawer itself; _tourOpened.drawer
-// is left as-is because closeDrawer() is a safe no-op double-close at restore time.
+// numbered comment in this file one behind, so the numbers are gone. See docs: portal internals, tour.js.
 function _tourEnterSurveysView(){
   if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
 }
-// The .selbox step's target lives in the rail's Select & download mode pane,
-// which is hidden in the default Browse mode (zero rect => the step would fall back to the centred
-// no-spotlight card). Enter: force the map view, save the visitor's rail mode, and switch to
-// Select & download so the target is visible and spotlit. Exit (Next/Back/close - the same three-path
-// discipline as the Find/tree demos): put the saved mode back, so the tour never leaks a mode change.
-// Guarded so a build without the mode split degrades to the plain centred-card behaviour, no crash.
+// The .selbox step's target lives in the rail's Select & download mode pane, which is hidden in the default
+// Browse mode (zero rect => the step would fall back to the centred no-spotlight card). See docs: portal
+// internals, tour.js.
 let _tourSelPrevMode=null;           // rail mode before the selbox step; null = nothing to restore
 function _tourEnterSelbox(){
   _tourEnterMapView();
@@ -90,11 +57,7 @@ function _tourExitSelbox(){
   if(typeof setSidebarMode==="function")setSidebarMode(_tourSelPrevMode);
   _tourSelPrevMode=null;
 }
-// Find demo. Enter: save the visitor's own query (restore discipline - only undo what the
-// tour did), type "AusLAMP" and dispatch a REAL bubbling input event so the live wiring in filters.js
-// (refresh() + renderFind()) filters the map and renders the actual dropdown — the demo is the real
-// code path, not a mock. Exit: restore the saved value with another input event (so the filter state
-// is genuinely restored) and hide the dropdown, matching the click-away behaviour in filters.js.
+// Find demo. See docs: portal internals, tour.js.
 let _tourFindPrev=null;              // visitor's Find value before the demo; null = nothing to restore
 function _tourEnterFindDemo(){
   _tourEnterMapView();
@@ -115,13 +78,7 @@ function _tourExitFindDemo(){
   const fr=document.getElementById("findResults");
   if(fr){fr.style.display="none";fr.innerHTML="";}   // dropdown closed on exit even if a query was restored (click-away state)
 }
-// Tree browse demo. Enter: save the tree scroll AND
-// the expand/collapse state, EXPAND the target row's ancestors (country + org, via the same
-// treeSetCollapsed API the carets use — a collapsed rail must never hide the demo), then bring the
-// row into view — kalkaroo-2022 preferred (via SLUG_TO_SURVEY, the authoritative slug->label map),
-// degrading to the FIRST survey present so a data-dependent id can never crash the tour (empty
-// portal: no-op, step renders centred per the absent-target pattern). No checkbox is touched. Exit:
-// put back the saved scrollTop and the saved collapse set — on all three exit paths (Next/Back/close).
+// Tree browse demo. See docs: portal internals, tour.js.
 let _tourTreePrev=null;              // {scrollTop,collapsed[]} before the demo; null = nothing to restore
 let _tourTreeTarget=null;            // resolved survey label (exposed to the jsdom driver; null = none)
 function _tourEnterTreeDemo(){
@@ -153,10 +110,9 @@ function _tourExitTreeDemo(){
   }
   _tourTreePrev=null;
 }
-// Station-drawer step enter action: open the first VISIBLE station's drawer (reuse openStation), same
-// as clicking its marker — forcing the map view first so it also works stepping back from the Surveys
-// steps. No-op (step renders centred, no spotlight) when nothing is visible — e.g. the empty-data
-// state or every station filtered out — matching the existing "absent target" pattern below.
+// Station-drawer step enter action: open the first VISIBLE station's drawer (reuse openStation), same as
+// clicking its marker - forcing the map view first so it also works stepping back from the Surveys steps.
+// See docs: portal internals, tour.js.
 function _tourEnterStation(){
   _tourEnterMapView();
   if(typeof visible==="undefined"||!visible.length)return;
@@ -166,10 +122,8 @@ function _tourEnterStation(){
   if(!wasOpen)_tourOpened.drawer=true;
   if(prevHash!==location.hash)_tourOpened.hash=prevHash;   // remember what to restore, not just "changed"
 }
-// Final map step enter action (by selector, not index): close whatever drawer the tour opened and
-// land back on the map. The loop's
-// closing beat. Uses the same restore path as stopTour() so behaviour is identical whether a visitor
-// reaches step 8 by stepping through or jumps back to it.
+// Final map step enter action (by selector, not index): close whatever drawer the tour opened and land back
+// on the map. The loop's closing beat. See docs: portal internals, tour.js.
 function _tourEnterMap(){
   _tourRestore();
 }
@@ -188,10 +142,9 @@ function _tourRestore(){
 function _tourBuild(){
   const backdrop=document.createElement("div");backdrop.className="tourbackdrop";backdrop.id="tourBackdrop";
   const spot=document.createElement("div");spot.className="tourspot";spot.id="tourSpot";
-  // The LEADER is an SVG overlay spanning the viewport; a line + arrowhead connect the centred
-  // card to the spotlight. Its z-order sits BETWEEN the spot (which carries the dim) and the card (see CSS),
-  // so the line reads over the dim and the card stays on top. The line element is held directly (not looked
-  // up) so it is robust in jsdom, which does not render SVG; the arrowhead marker is browser-only cosmetics.
+  // The LEADER is an SVG overlay spanning the viewport; a line + arrowhead connect the centred card to the
+  // spotlight. Its z-order sits BETWEEN the spot (which carries the dim) and the card (see CSS), so the
+  // line reads over the dim and the card stays on top. See docs: portal internals, tour.js.
   const SVGNS="http://www.w3.org/2000/svg";
   const leader=document.createElementNS(SVGNS,"svg");
   leader.setAttribute("class","tourleader");leader.id="tourLeader";leader.setAttribute("aria-hidden","true");
@@ -223,26 +176,8 @@ function _tourBuild(){
 // the card re-centres and the leader is recomputed; the card never re-anchors (it is always centred).
 function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 
-// SETTLE-UNTIL-STABLE re-layout. Some steps' enter hooks trigger layout changes on their
-// OWN target that keep going AFTER _tourLayout first measures it. The station-drawer step (index 4) is the
-// worst case: openStation (a) renders the facts panel synchronously, then adds .open, which (b) SLIDES the
-// drawer in via a CSS transform transition (index.html: transform translateX(102%) -> none, .16s ease) so its
-// getBoundingClientRect().left travels leftward over ~160ms; then (c) an ASYNC station.json fetch injects the
-// frame line (drawer.js loadStationFrameLine) and reflows the drawer's HEIGHT; and (d) the deferred map home
-// re-fit can reflow the map column under it. The drawer box therefore MOVES and RESIZES several times across
-// ~1s. A single transitionend re-measure fires after the SLIDE only (stage b) and leaves the spotlight on a
-// Stale early box. The robust
-// fix: after entering a step, POLL the target rect each animation frame; on ANY change — position OR size (a
-// size-only ResizeObserver misses the slide, which MOVES the box) — re-run _tourLayout so the spotlight tracks
-// the box; stop once the rect has held STABLE for _TOUR_SETTLE_STABLE_MS, or after a hard _TOUR_SETTLE_CAP_MS.
-// General, not a step-5 special case: a static target reads stable on the first frame and the watcher stands
-// down immediately; the map steps re-measure an unchanging box harmlessly. The transitionend hook is KEPT as
-// a cheap extra nudge (it re-lays-out the instant a transition ends) but is not relied on alone. The
-// watcher is ATTACHED on arrival and DETACHED on EVERY departure (Next/Back/close/teardown) — the rAF handle
-// is cancelled and the listener removed — so no poll loop or listener leaks past the step or the tour.
-// jsdom has no layout engine and its rAF is driver-controllable, so the pin drives synthetic rect changes +
-// a stubbed clock through the queue to prove the re-run/stop/detach wiring; the sub-second proof is a browser
-// run. _tourLayoutRuns is bumped by _tourLayout purely so the pin (and the browser probe) can observe re-runs.
+// SETTLE-UNTIL-STABLE re-layout. Some steps' enter hooks trigger layout changes on their OWN target that
+// keep going AFTER _tourLayout first measures it. See docs: portal internals, tour.js.
 const _TOUR_SETTLE_STABLE_MS=200,_TOUR_SETTLE_CAP_MS=2000;   // quiet window the rect must hold; hard time cap
 let _tourSettleEl=null;                 // element the current step's settle watcher tracks; null = none attached
 let _tourSettleRAF=0;                   // pending animation-frame handle for the poll; 0 = none scheduled
@@ -292,12 +227,8 @@ function _tourKeydown(e){
   else if(e.key==="ArrowLeft"){_tourPrev();}
 }
 
-// The tour card is CENTRED for EVERY step (the pattern formerly used only as the no-target
-// fallback, now generalised). This PURE fn returns the card's fixed-position box. Base = the viewport
-// centre. OVERLAP RULE: when a target rect would sit under the centred card, nudge the card by the MINIMAL
-// vertical offset so it clears the target by _TOUR_CLEAR — deterministically DOWNWARD when that still fits
-// the viewport (bottom margin _TOUR_M), else UPWARD. No-DOM so the driver pins centred-always + the nudge on
-// synthetic rects (jsdom has no layout engine), exactly as the retired _tourPlace was.
+// The tour card is CENTRED for EVERY step (the pattern formerly used only as the no-target fallback, now
+// generalised). This PURE fn returns the card's fixed-position box. See docs: portal internals, tour.js.
 const _TOUR_M=8,_TOUR_CLEAR=16;   // viewport margin; target->card clearance on an overlap nudge
 function _tourCardBox(cardW,cardH,vpW,vpH,targetRect){
   const M=_TOUR_M,CLEAR=_TOUR_CLEAR;
@@ -315,11 +246,7 @@ function _tourCardBox(cardW,cardH,vpW,vpH,targetRect){
   }
   return{left,top,right:left+cardW,bottom:top+cardH,nudged:top!==baseTop};
 }
-// Geometry of the LEADER from the centred card to the spotlight. PURE - the endpoints are the
-// boundary points where the card-centre<->spot-centre axis crosses each rect, so the line leaves the card
-// edge nearest the target and lands on the spot edge nearest the card (arrowhead at the spot end). visible
-// is false when suppressed — the map steps (the spotlight over the map IS the cue) and the no-target
-// fallback. No-DOM so the driver pins the endpoints + suppression on synthetic rects.
+// Geometry of the LEADER from the centred card to the spotlight. See docs: portal internals, tour.js.
 function _tourLeader(cardBox,spotBox,suppressed){
   if(suppressed)return{x1:0,y1:0,x2:0,y2:0,visible:false};
   const ccx=(cardBox.left+cardBox.right)/2,ccy=(cardBox.top+cardBox.bottom)/2;
@@ -416,10 +343,9 @@ function startTour(){
   if(!TOUR_STEPS.length)return;
   _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
   _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;   // demo state: fresh every run
-  // A COLLAPSED rail hides every child but the collapse button, so the rail steps (Find, the tree, the
-  // Select and Download boxes) would spotlight nothing and narrate controls that are not on screen -
-  // exactly what a returning visitor who collapsed the rail gets from About's ?tour=1 link. Expand it
-  // for the run and record that WE did, so _tourRestore puts the visitor's own choice back.
+  // A COLLAPSED rail hides every child but the collapse button, so the rail steps (Find, the tree. Expand
+  // it for the run and record that WE did, so _tourRestore puts the visitor's own choice back. See docs:
+  // portal internals, tour.js.
   const _sb=document.querySelector("aside.filters");
   if(_sb&&_sb.classList.contains("collapsed")&&typeof setSidebarCollapsed==="function"){
     setSidebarCollapsed(false);_tourOpened.collapsed=true;

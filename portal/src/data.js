@@ -1,22 +1,5 @@
 "use strict";
-// The portal computes nothing. It loads generated JSON products (incl. survey metadata and
-// build provenance). build_provenance.json is optional: older data sets still load without it.
-//
-// POSITIONAL CONTRACT — these files are arrays read BY INDEX (no field names). The SINGLE SOURCE is
-// contract/columns.json, generated into engine/extract/_contract.py + portal/src/contract.js by
-// `python contract/generate.py`; the human reference is docs/docs/developer/data-files.md. The portal
-// reads columns through contract.js's NAMED index maps — r[C.*], sc[SC.*], t[T.*] — so a reorder in
-// columns.json regenerates the indices and no consumer can silently lag. Legend (index -> name):
-//   CAT[i]  r[]  = [0 id,1 survey,2 lat,3 lon,4 pmin,5 pmax,6 nper,7 comps,8 type,9 region,
-//                   10 file,11 coord_flag,12 ausmt_id,13 edi_available,14 sha256,15 site_name]
-//   SCI[i]  sc[] = [0 q,1 qb,2 rr,3 sw,4 alg,5 dim,6 p3d,7 gd,8 ellip,9 skew,10 mre,11 decades]
-//   TFD[i]  t[]  = [0 periods,1 rho_xy,2 rho_yx,3 phs_xy,4 phs_yx_adj,5 tip_mag,6 pt_min,7 pt_max,
-//                   8 pt_az,9 pt_beta,10 rho_xy_err,11 rho_yx_err,12 phs_xy_err,13 phs_yx_err,
-//                   14 tzx_re,15 tzx_im,16 tzy_re,17 tzy_im]   (18 columns; tip_mag kept for compat)
-// To change a column: edit contract/columns.json, run `python contract/generate.py`, then data-files.md. APPEND, never reorder.
-// Data files are produced by the AusMT engine. By default they are served from the portal's own
-// ./data/ directory; a deployment may instead point at a remote base (AUSMT_CONFIG.data_base_url,
-// e.g. the engine's gh-pages URL) so the portal and its data can live in separate repos.
+// The portal computes nothing. It loads generated JSON products (incl. See docs: portal internals, data.js.
 function dataUrl(name){
   // Absolute URLs pass through unchanged — manifest artifact urls built with the producer's --base-url
   // (e.g. an NCI/THREDDS host) are already absolute, so prefixing data_base_url would corrupt them
@@ -28,10 +11,9 @@ function dataUrl(name){
 // One JSON product. REQUIRED semantics: a not-ok response or unparseable body rejects, so the caller can
 // decide whether that is fatal (phase 1) or a hydration failure to be reported honestly (phase 2).
 function fetchJson(name,opts){return fetch(dataUrl(name),opts).then(r=>{if(!r.ok)throw new Error("load "+name);return r.json();});}
-// Hydration fetches carry the low priority hint: they share the connection with anything the user
-// does next (a drawer open, a tile fetch), and none of them is awaited on the first-paint path.
-// Browsers without priority hints ignore the field; the value must stay a VALID hint ("low"), as
-// supporting browsers throw on an unknown one.
+// Hydration fetches carry the low priority hint: they share the connection with anything the user does next
+// (a drawer open, a tile fetch), and none of them is awaited on the first-paint path. See docs: portal
+// internals, data.js.
 var FETCH_LOW={priority:"low"};
 // One OPTIONAL product: absence (404 / network / bad JSON) resolves to `fallback` and never rejects. This is
 // the tolerant-of-absence contract build_provenance / collections / build / coord_policy / manifest have
@@ -40,79 +22,46 @@ function fetchOptional(name,fallback,opts){return fetchJson(name,opts).then(v=>v
 
 // ---- PHASE 1: the first-paint set ---------------------------------------------------------------
 // Everything the map dots, the filter rail and the survey/collection views need, and nothing else:
-// catalogue.json (~320KB, REQUIRED: it IS the dots) + surveys.json (REQUIRED: the per-survey metadata
-// every card and drawer header reads) + the four SMALL optionals. All SIX are issued together.
-// The split is what keeps first paint off the big product: tf.json is 3.2MB raw / ~1MB gzipped, ~3.1s on
-// a live load, so awaiting it in the same Promise.all would hold the dots behind it, and issuing the five
-// optionals sequentially would stack five round trips on top of that wait. The dots must not wait on the
-// transfer functions, and the optionals must not wait on each other.
+// catalogue.json (~320KB, REQUIRED. See docs: portal internals, data.js.
 async function loadPhase1(){
   const [c,sv,prov,coll,build,cpol]=await Promise.all([
     fetchJson("catalogue.json"),
     fetchJson("surveys.json"),
     fetchOptional("build_provenance.json",null),
     fetchOptional("collections.json",{}),
-    // Build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence
-    // (older builds predate it); the footer only renders the "data build …" line when this resolves.
-    // No skew-handshake check here yet (comparing this against a contract hash the portal itself
-    // carries); that waits on the contract-hash plumbing.
+    // Build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence (older
+    // builds predate it); the footer only renders the "data build …" line when this resolves. See docs:
+    // portal internals, data.js.
     fetchOptional("build.json",null),
-    // Optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted
-    // by the engine ONLY when a survey has a non-exact station. Absent for an all-exact corpus (the common
-    // case) => {} => no badges. Same tolerant-of-absence pattern as collections/build above.
+    // Optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted by the engine ONLY
+    // when a survey has a non-exact station. See docs: portal internals, data.js.
     fetchOptional("coord_policy.json",{}),
   ]);
   return [c,sv,prov,coll,build,cpol];
 }
 
-// ---- PHASE 2: background hydration --------------------------------------------------------------
-// The heavy products, issued AFTER phase 1 settles (they would otherwise contend with the catalogue
-// for the same connection) and awaited by NOBODY on the first-paint path.
-// Each assigns its global and settles its own gate, so a consumer waits only for the product it actually
-// reads (a station drawer's plots need tf; the Files tab needs the manifest; neither needs the other).
-// Returns the four gates so a caller (and the headless drivers) can observe hydration.
+// ---- PHASE 2: background hydration -------------------------------------------------------------- The
+// heavy products. See docs: portal internals, data.js.
 function startHydration(){
   HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";HYDR.tsaccess="pending";
-  // A tf/sci FAILURE is not absence. First paint must not depend on them, so a failure is recorded
-  // as "failed" and the products fall back to EMPTY arrays; the empty array keeps every positional deref
-  // safe, and hydrFailed() is what the consumers render, so a broken build is never mistaken for a station
-  // that genuinely has no curves.
+  // A tf/sci FAILURE is not absence. See docs: portal internals, data.js.
   TF_READY=fetchJson("tf.json",FETCH_LOW).then(v=>{TFD=v;HYDR.tf="ready";},()=>{TFD=[];HYDR.tf="failed";});
   SCI_READY=fetchJson("sci.json",FETCH_LOW).then(v=>{SCI=v;HYDR.sci="ready";},()=>{SCI=[];HYDR.sci="failed";});
   // manifest.json is OPTIONAL by contract (older data sets / empty builds ship none), so its 404 IS the
   // honest absence (MANIFEST=null, the exact value every consumer already tolerates), not a failure state.
   MANIFEST_READY=fetchOptional("manifest.json",null,FETCH_LOW).then(v=>{MANIFEST=v;HYDR.manifest="ready";});
-  // ts_access.json is OPTIONAL by contract - the engine writes it only when the
-  // register projects at least one open, verified route, so a 404 IS the honest absence and there
-  // is no "failed" state to report. The fallback is {} rather than null so every consumer reads one
-  // shape, and the difference the Availability controls render is TSACC===null (still in flight)
-  // against an empty object (this deployment publishes no download index).
+  // ts_access.json is OPTIONAL by contract - the engine writes it only when the register projects at least
+  // one open, verified route, so a 404 IS the honest absence and there is no "failed" state to report. See
+  // docs: portal internals, data.js.
   TSACC_READY=fetchOptional("ts_access.json",{},FETCH_LOW).then(v=>{TSACC=v||{};HYDR.tsaccess="ready";});
   return [TF_READY,SCI_READY,MANIFEST_READY,TSACC_READY];
 }
 
 // ---- download manifest resolver: the distribution backbone -----------------------------------
-// manifest.json indexes every downloadable artifact: per-station files (EDI/EMTF-XML) and per-survey
-// bundles (EDI zip / survey MTH5), each with a portal-RELATIVE url + size + sha256 + tier. The portal
-// joins each url onto data_base_url via dataUrl() — so migrating a tier to NCI later is a manifest
-// change with zero consumer edits. tier=nci rows carry an ABSOLUTE NCI fileServer url that dataUrl()
-// passes through unchanged and renders as a live download link (url is null only if a row is unresolvable).
+// manifest.json indexes every downloadable artifact. See docs: portal internals, data.js.
 function mfRows(kind){return (MANIFEST&&Array.isArray(MANIFEST[kind]))?MANIFEST[kind]:[];}
-// ONE ausmt_id -> served-rows index over files[], built once per manifest and shared by every consumer.
-// Filtering the whole files[] array per call is nothing for a drawer opened once and quadratic for the
-// selection panel: paintExportSizes asks it per selected station on every keystroke, so at corpus scale
-// (3k stations selected, ~9k manifest rows) one repaint walks ~27M rows and takes 670ms, on the input
-// path. Measured 18ms at 500 stations, 77ms at 1000, 290ms at 2000: the cost grows with the SQUARE of the
-// corpus, so it is invisible in every fixture and worst on the full selection.
-//
-// The cache is keyed on the MANIFEST OBJECT ITSELF, not on a "loaded" flag or a reset call. MANIFEST is
-// assigned whole (data.js hydration, and the drivers/harnesses that poke it directly) and never mutated in
-// place, so identity is exactly the invalidation signal, and a caller that swaps the manifest cannot forget
-// to invalidate a cache it does not know exists. A cache that had to be reset by hand would go stale
-// silently, showing one manifest's files under another's, which is worse than the cost it saves.
-//
-// The returned array is SHARED and must be treated as read-only: every caller reads it with find/some/
-// filter. Copying per call would defeat the point on the very path this exists for.
+// ONE ausmt_id -> served-rows index over files[], built once per manifest and shared by every consumer. See
+// docs: portal internals, data.js.
 let _MF_IDX=null,_MF_IDX_SRC;
 function mfFileIndex(){
   if(_MF_IDX&&_MF_IDX_SRC===MANIFEST)return _MF_IDX;
@@ -123,11 +72,8 @@ function mfFileIndex(){
 function artifactsFor(ausmt_id){return mfFileIndex().get(ausmt_id)||[];}
 function bundlesForSlug(slug){return slug?mfRows("bundles").filter(r=>r.slug===slug&&r.url):[];}
 // ---- the time-series hand-off index ---------------------------------------------------------------
-// ts_access.json indexes the archive routes this deployment may hand a reader off to:
-// {ausmt_id: {level token: {bytes, url_path}}}. MEMBERSHIP IS THE ACCESS DECISION and it was made in
-// the build - a withheld, coordinate-gated, adjudication-pending or retired station is absent, and
-// level_2 (which holds transfer functions, not time series) never appears at all. So no consumer
-// here re-derives availability from survey metadata; it reads this index and nothing else.
+// ts_access.json indexes the archive routes this deployment may hand a reader off to: {ausmt_id: {level
+// token: {bytes, url_path}}}. See docs: portal internals, data.js.
 function tsAccessKnown(){return TSACC!==null;}
 function tsRoutesFor(ausmt_id){return (TSACC&&TSACC[ausmt_id])||null;}
 // The route the reader is handed: the one string carrying survey/station/level into the front-door
@@ -136,17 +82,12 @@ function tsRoutesFor(ausmt_id){return (TSACC&&TSACC[ausmt_id])||null;}
 function tsGoRoute(s,level){
   if(!s||!s.slug||!s.id||!level)return null;
   return location.origin+"/go/ts/"+encodeURIComponent(s.slug)+"/"+encodeURIComponent(s.id)+"/"+encodeURIComponent(level);}
-// The archive's own address for one register url_path (the reference field beside the route).
-// MIRRORS _stationcheck.ts_access_url (quote(url_path, safe="/")): encodeURIComponent alone eats
-// `/` and leaves !'()* unescaped where Python escapes them, so the set is spelled out. A mirror,
-// not a caller, so the agreement is held by the shared vector file
-// (engine/tests/fixtures/ts_url_vectors.json) pinning both sides; `C5 [REMOTE].zip` is the case.
+// The archive's own address for one register url_path (the reference field beside the route). See docs:
+// portal internals, data.js.
 const TS_FILESERVER="https://thredds.nci.org.au/thredds/fileServer/";
-// The `u` flag is load-bearing, not tidiness: without it the class matches per UTF-16 CODE UNIT, so
-// a code point above the BMP arrives as a lone surrogate and encodeURIComponent throws URIError -
-// which, from #dlTs, would abort the whole hand-off export with no file and no message. With it the
-// replacer receives whole code points and encodes their UTF-8 bytes, which is what the Python leaf
-// does. Pinned by the astral vector in the shared file.
+// The `u` flag is load-bearing, not tidiness: without it the class matches per UTF-16 CODE UNIT, so a code
+// point above the BMP arrives as a lone surrogate and encodeURIComponent throws URIError - which, from
+// #dlTs. See docs: portal internals, data.js.
 function tsArchiveUrl(p){return TS_FILESERVER+String(p==null?"":p).trim().replace(/^\/+/,"")
   .replace(/[^A-Za-z0-9_.~/-]/gu,c=>{const e=encodeURIComponent(c);
     return e===c?"%"+c.charCodeAt(0).toString(16).toUpperCase():e;});}

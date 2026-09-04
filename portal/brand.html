@@ -5,10 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Brand and assets - AusMT</title>
 <meta name="description" content="AusMT logos, the standalone mark and the presentation artwork, with the terms for using them.">
-<!-- Out of the search index and out of the sitemap: this page is an asset shelf reached from About,
-     and a brand page ranking beside the survey and collection pages would spend the site's own
-     discovery surface on it. It stays crawlable on purpose, because a robots.txt Disallow would stop
-     the crawler ever reading the noindex below. -->
+<!-- Out of the search index and out of the sitemap: this page is an asset shelf reached from About, and a
+     brand page ranking beside the survey and collection pages would spend the site's own discovery surface
+     on it. See docs: portal internals, brand.html. -->
 <meta name="robots" content="noindex">
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">
@@ -88,13 +87,8 @@
   .hero{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:.9rem 0 0}
   .hero img{width:100%;height:auto;display:block}
 
-  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
-     CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
-     character, where the zone geometry and the two container states are stated once;
-     tests/test_footer_regions.py holds all seven surfaces identical, so an edit here that is not an
-     edit there fails. STICKY, not fixed: it keeps its own box in flow, so the last line of the page
-     is never hidden under it, which is why body is a viewport-tall column and main takes its free
-     space. Below 560px of viewport it would cover most of a phone screen, so it returns to flow. */
+  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement CENTRE,
+     the AuScope-NCRIS lockup RIGHT. See docs: portal internals, brand.html. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none}
@@ -237,12 +231,11 @@
 <footer>
   <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
   <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a></div>
-  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one
-       link in the line. The year is a literal, the mechanism every page uses. -->
+  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. See docs: portal internals,
+       brand.html. -->
   <div class="fzone fcenter">AusMT is enabled by AuScope &middot; <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> &middot; &copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey</div>
-  <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
-       image is same-origin and vendored, so stating the relationship takes no runtime dependency on
-       the organisation's own host. -->
+  <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. See docs:
+       portal internals, brand.html. -->
   <div class="fzone fright"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
 </footer>
 <script src="config.js"></script>

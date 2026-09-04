@@ -724,14 +724,88 @@ def listing(*globs):
 # time. Every cap counts a page's inline scripts, which is where most of a page's commentary is.
 # The corresponding cap for the pages the engine emits lives in the engine twin.
 SHIPPED_HTML_CAPS = {
-    "index.html": 18_500,
-    "about.html": 8_300,
-    "add-survey.html": 53_000,
-    "releases.html": 5_300,
-    "brand.html": 3_200,
-    "404.html": 1_600,
+    "index.html": 16_500,
+    "about.html": 6_300,
+    "add-survey.html": 35_000,
+    "releases.html": 4_800,
+    "brand.html": 2_400,
+    "404.html": 900,
 }
-SHIPPED_JS_CAP = 240_000
+SHIPPED_JS_CAP = 122_000
+
+# THE LENGTH CLAUSE, on the shipped tier alone. A long constraint is stated in one or two sentences
+# and anything longer belongs in docs/, so a comment a visitor downloads is at most two sentences
+# and at most this many bytes. The pointer that carries a reader to the moved prose is not one of
+# the two: it is the pointer, not the constraint.
+COMMENT_CAP = 320
+COMMENT_SENTENCES = 2
+DOCS_POINTER = re.compile(r"\s*See docs: portal internals, [\w.\-]+\.\s*$")
+# A licence or attribution OBLIGATION is exempt. Its wording is the obligation, and shortening it
+# would change what the portal promises rather than where the reasoning lives.
+OBLIGATION = re.compile(r"\bcopyright\b|SPDX|CC-BY|Creative Commons|\bNOTICE\b|licence term"
+                        r"|attribution (?:obligation|term|requirement|statement)|basemap credit",
+                        re.I)
+# The enumerated exceptions, at most ten, each naming the file and the reason its comment may run
+# long. Empty on purpose: the sweep left nothing that needed one, and an entry here is a claim that
+# a constraint could not be stated in two sentences with its reasoning moved.
+LENGTH_EXCEPTIONS = ()
+# A sentence ends on a full stop that is not part of an abbreviation. The list is short because the
+# shipped prose is short; a false split only ever makes this rule stricter.
+_ABBREVIATION = re.compile(r"(?:\b(?:e\.g|i\.e|cf|etc|vs|approx|Fig|Sec|no|pp|al)\.|\b[A-Z]\.)$")
+
+
+def sentences(text):
+    """The sentences of one comment, as a reader counts them."""
+    said, buf = [], ""
+    for chunk in re.split(r"(?<=[.!?])(\s+)", text):
+        if chunk and not chunk.strip():
+            if _ABBREVIATION.search(buf.strip()):
+                buf += chunk
+                continue
+            said.append(buf)
+            buf = ""
+            continue
+        buf += chunk
+    if buf.strip():
+        said.append(buf)
+    return [s.strip() for s in said if s.strip()]
+
+
+def comment_blocks(path, text):
+    """(line number, joined text) for each RUN of comments a reader reads as one. A block of //
+    lines is one comment to a reader and must be measured as one; measured line by line, a fifteen
+    line block reads as fifteen comments and no cap can bite."""
+    scan = js_comments if path.suffix.lower() == ".js" else html_comments
+    out = []
+    for off, body in scan(text):
+        head = text.rfind("\n", 0, off) + 1
+        own_line = not text[head:off].strip()
+        if (out and own_line and out[-1]["own"]
+                and text[out[-1]["end"]:head].strip() == ""
+                and text.count("\n", out[-1]["end"], head) == 1):
+            out[-1]["end"] = off + len(body)
+            out[-1]["bodies"].append(body)
+        else:
+            out.append({"start": off, "end": off + len(body), "bodies": [body], "own": own_line})
+    return [(text.count("\n", 0, b["start"]) + 1,
+             "\n".join(b["bodies"])) for b in out]
+
+
+def over_length(path, text):
+    """Every comment on a shipped surface that runs past the clause, as report lines."""
+    over = []
+    for lineno, block in comment_blocks(path, text):
+        prose = " ".join(bare(block).split())
+        if not prose or OBLIGATION.search(prose):
+            continue
+        if any(f == path.name and prose.startswith(head) for f, head, _ in LENGTH_EXCEPTIONS):
+            continue
+        size = len(block.encode("utf-8"))
+        said = len(sentences(DOCS_POINTER.sub("", prose)))
+        if size > COMMENT_CAP or said > COMMENT_SENTENCES:
+            over.append("portal/%s:%d: %d bytes, %d sentence(s): %s"
+                        % (path.name, lineno, size, said, prose[:100]))
+    return over
 
 
 def shipped_html():
@@ -817,6 +891,79 @@ def test_each_shipped_document_stays_under_its_comment_cap():
         if got > cap:
             over.append(f"portal/{name}: {got:,} bytes of comments, cap {cap:,}")
     assert not over, "shipped documents over their comment cap (every byte ships to every visitor):\n" + "\n".join(over)
+
+
+def test_a_shipped_comment_is_two_sentences_long_at_most():
+    """H1's length clause, on the tier every visitor downloads: a long constraint is stated in one or
+    two sentences, and anything longer lives in docs/docs/reference/portal-internals.md with the
+    comment carrying the constraint and the bare pointer to it. The exemptions are a licence or
+    attribution obligation, whose wording IS the obligation, and the enumerated list above."""
+    over = []
+    for path in shipped_html() + shipped_js():
+        over += over_length(path, path.read_text(encoding="utf-8"))
+    assert not over, (
+        f"{len(over)} comment(s) on the shipped tier run past the length clause "
+        f"({COMMENT_SENTENCES} sentences, {COMMENT_CAP} bytes); move the reasoning to "
+        "docs/docs/reference/portal-internals.md and leave the constraint with a pointer:\n"
+        + "\n".join(over)
+    )
+
+
+def test_a_licence_obligation_may_run_past_the_length_clause(tmp_path):
+    """The wording of a licence or attribution obligation IS the obligation, so shortening it changes
+    what the portal promises rather than where the reasoning lives. Ordinary prose of the same length
+    is not exempt."""
+    obligation = ("// The basemap credit is a licence term and travels with the layer that draws it, "
+                  "because only that layer knows which provider to name. It is rendered on every map "
+                  "surface the portal ships, at the size the provider's own terms ask for, on every "
+                  "viewport width, and the 240px cap keeps the opened text clear of the legend at "
+                  "560px of map, which is the narrowest map the layout allows.\n")
+    plain = obligation.replace("The basemap credit is a licence term and", "The credit line").replace(
+        "the provider's own terms ask for", "the design asks for")
+    f = tmp_path / "obligation.js"
+    f.write_text(obligation + "var a = 1;\n", encoding="utf-8")
+    assert not over_length(f, f.read_text(encoding="utf-8")), "a licence obligation was cut short"
+    g = tmp_path / "plain.js"
+    g.write_text(plain + "var a = 1;\n", encoding="utf-8")
+    assert over_length(g, g.read_text(encoding="utf-8")), (
+        "prose of the same length that states no obligation was excused"
+    )
+
+
+def test_a_run_of_line_comments_is_measured_as_one_comment(tmp_path):
+    """A block of // lines is ONE comment to the reader. Measured line by line, a fifteen-line block
+    reads as fifteen comments and no length clause can ever bite."""
+    f = tmp_path / "run.js"
+    f.write_text("// one line.\n// two lines.\n// three lines.\nvar a = 1;\n// apart.\n", encoding="utf-8")
+    found = comment_blocks(f, f.read_text(encoding="utf-8"))
+    assert [n for n, _ in found] == [1, 5], found
+    assert found[0][1] == "// one line.\n// two lines.\n// three lines."
+
+
+def test_the_length_clause_carries_at_most_ten_enumerated_exceptions():
+    """An exception is a claim that a constraint cannot be stated in two sentences with its
+    reasoning moved. Ten is the ceiling, and each entry names its file and its reason."""
+    assert len(LENGTH_EXCEPTIONS) <= 10, LENGTH_EXCEPTIONS
+    for entry in LENGTH_EXCEPTIONS:
+        name, head, why = entry
+        assert name in SHIPPED_HTML_CAPS or (PORTAL / "src" / name).exists(), name
+        assert head and why, entry
+
+
+def test_the_docs_page_the_pointers_name_exists_and_carries_a_section_per_file():
+    """A pointer to a page that does not carry the file's section is a dead pointer."""
+    page = ROOT / "docs" / "docs" / "reference" / "portal-internals.md"
+    assert page.exists(), f"{page} is missing and every pointer on the shipped tier is dead"
+    text = page.read_text(encoding="utf-8")
+    missing = []
+    for path in shipped_html() + shipped_js():
+        body = path.read_text(encoding="utf-8")
+        if DOCS_POINTER.search(" ".join(bare(body).split()) + " ") or f"portal internals, {path.name}" in body:
+            rel = str(path.relative_to(ROOT))
+            if f"## {rel}" not in text:
+                missing.append(rel)
+    assert not missing, (
+        "the shipped tier points at sections this page does not carry:\n" + "\n".join(missing))
 
 
 def test_shipped_scripts_stay_under_their_comment_cap():

@@ -1,17 +1,13 @@
-// drawer.js — station/survey/provenance/citation/download rendering for the detail drawer.
-// A station/survey/provenance file split is a tracked deferred refactor:
-// feasible (classic scripts, hoisted globals) but low-priority churn for one cohesive concern, and the
-// no-build smoke harness can't fully verify drawer rendering, so it's its own task — not a loose marker.
+// drawer.js - station/survey/provenance/citation/download rendering for the detail drawer. See docs: portal
+// internals, drawer.js.
 "use strict";
-// Station drawer (science first), survey cards, survey story, citations. All event handling is
-// delegated (no inline onclick): .close buttons, [data-act] card actions, [data-cite] citation
-// copy, [data-prod] product tiles. Cross-module calls (setView/map/refresh) happen at event
-// time only. Citations live here because this is the only consumer.
+// Station drawer (science first), survey cards, survey story, citations. All event handling is delegated
+// (no inline onclick): .close buttons, [data-act] card actions, [data-cite] citation copy, [data-prod]
+// product tiles. See docs: portal internals, drawer.js.
 const drawer=document.getElementById("drawer");
-// The drawer is a dialog. role + a base aria-label are set here (index.html's #drawer
-// element is declared in index.html, so the ARIA is stamped from JS); openStation/openSurvey refine the
-// aria-label per subject. tabindex=-1 lets us move focus onto the container as a fallback. This does not
-// disturb the tab keyboard nav (its handler is scoped to [role="tab"] descendants).
+// The drawer is a dialog. role + a base aria-label are set here (index.html's #drawer element is declared
+// in index.html, so the ARIA is stamped from JS); openStation/openSurvey refine the aria-label per subject.
+// See docs: portal internals, drawer.js.
 if(drawer&&drawer.setAttribute){drawer.setAttribute("role","dialog");drawer.setAttribute("aria-label","Details");drawer.setAttribute("tabindex","-1");}
 // Focus management, mirroring plots.js's modal pattern - remember the invoking element on
 // open, move focus INTO the drawer (its close button, else the container), and RESTORE focus to the opener
@@ -21,15 +17,11 @@ function _rememberDrawerOpener(){_drawerReturnFocus=(typeof document!=="undefine
 function _focusDrawer(){if(!drawer||!drawer.querySelector)return;
   // preventScroll: on the FIRST open the drawer is still transform:translateX(102%) off-screen mid-slide,
   // so focusing its .close button makes the browser scroll documentElement ~428px left to reveal the
-  // off-screen target, then snap back when the .16s slide settles — a visible page-wide bounce. preventScroll
-  // keeps focus (accessibility) without that scroll-into-view. Guarded fallback for engines lacking the option.
+  // off-screen target. See docs: portal internals, drawer.js.
   const t=drawer.querySelector(".close")||drawer;if(t&&t.focus){try{t.focus({preventScroll:true});}catch(e){}}}
 function _restoreDrawerFocus(){const f=_drawerReturnFocus;_drawerReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
-// A dim backdrop shown behind the drawer while it is open on the Surveys /
-// Collections / collection-detail views (where the drawer floats over full-width content). NOT on the
-// map view: there the drawer sits side-by-side with the map, so no scrim. Clicking the backdrop closes
-// the drawer. It lives in #content BENEATH the drawer and the drawer's left-edge resize handle
-// (both higher z-index in index.html), so the resizer keeps working. Guarded for the headless harness.
+// A dim backdrop shown behind the drawer while it is open on the Surveys / Collections / collection-detail
+// views (where the drawer floats over full-width content). See docs: portal internals, drawer.js.
 const _drawerScrim=document.getElementById("drawerScrim");
 function showDrawerScrim(){if(_drawerScrim)_drawerScrim.classList.toggle("hidden",(typeof curView!=="undefined"&&curView==="map"));}
 function hideDrawerScrim(){if(_drawerScrim)_drawerScrim.classList.add("hidden");}
@@ -40,23 +32,16 @@ let _curTf=null;
 // The currently-open station object, stashed alongside _curTf so the expand handler
 // can build the response modal's identity header (id / site / survey / org / type / honest coords).
 let _curStation=null;
-// Two-phase boot: WHAT the drawer is currently showing: {kind:"station",i} | {kind:"survey",sv} | null,
-// so a phase-2 product landing can re-render exactly that subject in place (rehydrateOpenDrawer). null means
-// "nothing that reads a phase-2 product is on screen": the drawer is shut, or something that builds its own
-// markup (the strike rose) owns it.
+// Two-phase boot: WHAT the drawer is currently showing: {kind:"station",i} | {kind:"survey",sv} | null, so
+// a phase-2 product landing can re-render exactly that subject in place (rehydrateOpenDrawer). See docs:
+// portal internals, drawer.js.
 let _drawerSubject=null;
 // A small section-role chip using the engine README taxonomy - "Source data",
 // "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
-// ---- two-phase boot: the loading surfaces ------------------------------------------------------
-// The drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json ->
-// the processing/screening rows; manifest.json -> every served-artifact row, badge and download tile), and
-// almost every one of those surfaces has an HONEST-ABSENCE rendering: "not currently available", "not
-// recorded", "not stated in EDI", "none currently served", "not evaluated". Each of those is a CLAIM about
-// the corpus. None of them may be shown for a product that is merely still in flight, so every such site
-// below routes through hydrGate(): pending -> a loading state; failed -> an explicit could-not-load line;
-// ready -> the untouched pre-existing rendering. The open drawer re-renders when each gate settles
-// (rehydrateOpenDrawer), so nothing that showed a loading state stays showing one.
+// ---- two-phase boot: the loading surfaces ------------------------------------------------------ The
+// drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json -> the
+// processing/screening rows. See docs: portal internals, drawer.js.
 function hydrBlock(what){return `<div class="hydrating" role="status">Loading ${esc(what)}…</div>`;}
 function hydrFailBlock(what){return `<div class="hydrating hydrfail" role="status">Could not load ${esc(what)}.</div>`;}
 function hydrCell(){return `<span class="hydrating hydr-inline">loading…</span>`;}
@@ -68,11 +53,8 @@ function hydrGate(k,what,block){
   if(hydrFailed(k))return block?hydrFailBlock(what):hydrFailCell();
   return "";}
 // A hydration re-render rewrites the whole drawer, which would otherwise snap every expander shut under a
-// reader who opened one, up to three times (once per gate) across a multi-second hydration window. Record
-// which <details> are open by their summary text (stable across a re-render, and the only key that survives
-// an innerHTML rewrite) and put them back. A summary whose text legitimately CHANGES with hydration simply
-// fails to match and reverts to its default state, which is the pre-fix behaviour, never worse. Guarded for
-// the stubbed-DOM smoke harness (querySelectorAll -> []).
+// reader who opened one, up to three times (once per gate) across a multi-second hydration window. See
+// docs: portal internals, drawer.js.
 function _openDetailsKeys(){
   if(!(drawer&&drawer.querySelectorAll))return[];
   return [...drawer.querySelectorAll("details")].filter(d=>d.open)
@@ -88,9 +70,7 @@ function _restoreOpenDetails(keys){
 function drawerPanel(id,content,selected){
   return `<div class="dpanel" id="dp-${id}" role="tabpanel" data-tab="${id}" aria-labelledby="dt-${id}" tabindex="0"${selected?"":" hidden"}>${content}</div>`;}
 // Activate one drawer tab (ARIA roving-tabindex + hidden toggle). Degrades to a no-op under the smoke
-// harness (stubbed drawer with querySelectorAll()->[]). Falls back to the first tab for an unknown name.
-// Two-phase boot: the active tab is remembered so a hydration re-render (rehydrateOpenDrawer) puts the
-// reader back on the panel they were reading, not back on the default Response tab.
+// harness (stubbed drawer with querySelectorAll()->[]). See docs: portal internals, drawer.js.
 let _curDrawerTab="response";
 function selectDrawerTab(name){
   _curDrawerTab=name;
@@ -102,17 +82,12 @@ function selectDrawerTab(name){
   tabs.forEach(tb=>{const on=tb.dataset.tab===name;tb.setAttribute("aria-selected",on?"true":"false");tb.tabIndex=on?0:-1;if(tb.classList)tb.classList.toggle("on",on);});
   panels.forEach(p=>{p.hidden=(p.dataset.tab!==name);});
 }
-// The display gate, factored: the served-EDI descriptor for a station, {sub,st,d}. When access REFUSES
-// (a non-open survey with no served EDI artifact) d is null, so neither the header Download action, the
-// Overview primary-download tile, nor the Files "Transfer function" tile offers a download affordance —
-// they say "embargoed"/"metadata only" instead. An OPEN survey keeps today's exact tile text (byte-for-
-// byte), including the "EDI (via source archive)" fallback the pins assert is ABSENT when embargoed.
+// The display gate, factored: the served-EDI descriptor for a station, {sub,st,d}. See docs: portal
+// internals, drawer.js.
 function ediDescriptor(s,m){
   // Two-phase boot: the manifest is a PHASE 2 product, so before it lands there is no honest answer here:
   // the served-artifact branch and BOTH fallbacks ("EDI (via source archive)" / the embargo wording) are
-  // claims about what this deployment serves. Report the pending state with NO download affordance (d:null,
-  // so headerDownloadBtn renders nothing at all rather than a button that might resolve to the wrong route),
-  // and let MANIFEST_READY re-render the drawer into the real descriptor.
+  // claims about what this deployment serves. See docs: portal internals, drawer.js.
   if(hydrating("manifest"))return {sub:"loading…",st:"unk",d:null};
   const arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
   const ediArt=arts.find(a=>a.format==="edi");
@@ -120,24 +95,16 @@ function ediDescriptor(s,m){
   if(!isOpenAccess(m)) return {sub:accessLevelOf(m)==="metadata_only"?"metadata only":"embargoed",st:"no",d:null};
   return {sub:s.ediAvail?"Download":"EDI (via source archive)",st:s.ediAvail?"ok":"unk",d:{prod:"edi",file:s.file,avail:s.ediAvail?"1":"0",survey:s.survey}};
 }
-// The sticky-header Download EDI action. Renders NOTHING where the gate refuses (no download
-// affordance for an embargoed/metadata-only station) — otherwise a primary button routed through the
-// same [data-prod] dispatch as the product tiles.
-// Two-phase boot: rendering NOTHING is precisely this function's embargo signal, so an in-flight manifest
-// must not be allowed to borrow it. ediDescriptor returns d:null while the manifest is pending (correctly:
-// it cannot yet know the route), which would silently render an OPEN-access station as embargoed for the
-// whole flight: absence by omission, the same defect surveyBundleTiles gets a loading tile for. Say what
-// is happening instead, and claim nothing either way about availability.
+// The sticky-header Download EDI action. Renders NOTHING where the gate refuses (no download affordance for
+// an embargoed/metadata-only station) - otherwise a primary button routed through the same [data-prod]
+// dispatch as the product tiles. See docs: portal internals, drawer.js.
 function headerDownloadBtn(s,m){
   if(hydrating("manifest"))return `<span class="hydrating hydr-inline" role="status">checking file availability…</span>`;
   const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
-// (The Overview "primary download" tile - overviewDownload(), the gated
-// descriptor rendered as a single product tile inside the Station summary - is REMOVED. It
-// duplicated the Files tab's Level 2 EDI row and blurred the summary-vs-downloads separation the tabs draw.
-// ediDescriptor() above is unaffected and still gates BOTH surviving download surfaces: the sticky-header
-// Download EDI action and the Files tab's EDI sub-row.)
+// (The Overview "primary download" tile - overviewDownload(), the gated descriptor rendered as a single
+// product tile inside the Station summary - is REMOVED. See docs: portal internals, drawer.js.
 
 // The PLAIN-TEXT APA sentence: what the citation pack's CITATIONS.txt and the clipboard copy carry.
 // A text file must never receive HTML entities (O'Brien is not O&#39;Brien on disk).
@@ -145,10 +112,7 @@ function apaPlain(m,doi){return `${m.au} (${m.yr||"n.d."}). ${m.ti}${m.ve?" ("+m
 // The HTML rendering of the same sentence. esc() is character-wise, so escaping the assembled string
 // equals escaping each field; the two renderers cannot drift because one wraps the other.
 function apa(m,doi){return esc(apaPlain(m,doi));}
-// The DISPLAY-ONLY APA citation rendered inside the Cite box. Identical to apa() except the trailing
-// DOI is a resolution-aware HYPERLINK: ok/unknown/absent (uncached) -> a doi.org anchor; reserved -> plain
-// text (never a dead link, honouring the r2 reserved-sweep posture). The COPY/EXPORT path stays apa()
-// (plain text) — a citation string that lands on a clipboard must remain text, not markup.
+// The DISPLAY-ONLY APA citation rendered inside the Cite box. See docs: portal internals, drawer.js.
 function apaCiteDisplay(m,doi,doiRes){const base=apa(m,null);   // the APA sentence WITHOUT the DOI suffix
   if(!doi)return base;
   const url="https://doi.org/"+doi;
@@ -166,11 +130,9 @@ function ris(m,doi){return `TY  - DATA\nAU  - ${m.au.replace(/; /g,"\nAU  - ")}\
 // assistive tech gets "EMTF XML: partial" rather than a bare format name in an unreadable colour.
 const _BADGE_STATE={ok:"available",part:"partial",no:"not available"};
 function badge(l,st,title){const c=st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"";const s=st==="ok"?"✓":st==="part"?"◐":st==="no"?"✗":"?";return `<span class="badge ${c}" aria-label="${escAttr(l+": "+(_BADGE_STATE[st]||"unknown"))}"${title?` title="${escAttr(title)}"`:""}>${s} ${esc(l)}</span>`;}
-// Licence class/badge routed through the CANONICAL contract tables (contract.js LICENSES) - never
-// a `startsWith('CC')` guess (which mis-classed CC0/ODbL/ODC-BY and every non-CC open licence, and would
-// have passed a hostile "CCwhatever"). licCanon normalises aliases + case exactly like exports.canonLic.
-// licIsOpen = "redistributable" (openly licensed — the 'Open licence' facet + the 'Licence verified' star).
-// licBadgeState maps the canonical id: redistributable -> ok, recognised-but-not-open -> part, else unk.
+// Licence class/badge routed through the CANONICAL contract tables (contract.js LICENSES), never a
+// `startsWith('CC')` guess: that guess mis-classes CC0, ODbL and ODC-BY along with every non-CC open
+// licence, and passes a hostile "CCwhatever". See docs: portal internals, drawer.js.
 function licCanon(x){const u=String(x==null?"":x).trim().replace(/\s+/g," ").toUpperCase();
   return ((LICENSES.aliases||{})[u]||u);}
 function licIsOpen(lic){return !!lic&&(LICENSES.redistributable||[]).indexOf(licCanon(lic))>=0;}
@@ -207,27 +169,20 @@ function sourcesListHtml(m){const srcs=(m&&m.sources)||[];
     const cust=esc((s.custodian||"unknown custodian").toString().trim());
     const idv=(s.identifier||"").toString().trim();
     const ident=idv?" · "+pidLink(idv):"";
-    // This row is CHROME, not a data slot, and it sits on the same drawer as the licence /
-    // access row, so it takes the human form. licCanon still does the canonicalisation (aliases, case);
-    // licHuman only decides how the canonical id is READ. The SPDX identifier stays untouched wherever a
-    // machine reads it: the exports, the GeoJSON properties and the citation builder.
+    // This row is CHROME, not a data slot, and it sits on the same drawer as the licence / access row, so
+    // it takes the human form. See docs: portal internals, drawer.js.
     const slic=esc(licHuman(licCanon(s.licence))||"licence not stated");
     const stmt=(s.statement||"").toString().trim();
     const attr=stmt?esc(stmt):esc(sourceAttr(s));
     return `<div class="srcitem"><div class="srct">${title}</div><div class="srcm">${cust}${ident} · <span class="prov">${slic}</span></div>${attr?`<div class="srca">${attr}</div>`:""}</div>`;
   }).join("");
   return `<div class="sechead">Source datasets ${roleChip("Source data")}</div><div class="srclist">${rows}</div>`;}
-// A survey's access.level is authoritative for whether the portal has its DISPLAY data. "open" (or
-// absent, which this reader defaults to open) => served, curves present. The producer emits only the three
-// ACCESS_LEVELS values. Anything else (embargoed | metadata_only | an unknown value)
-// => NON-OPEN: the engine emits EMPTY tf series for these stations (the response curves ARE the embargoed
-// data), so the drawer must render an ACCESS PANEL in place of the four plots rather than four blank frames.
+// A survey's access.level is authoritative for whether the portal has its DISPLAY data. "open" (or absent,
+// which this reader defaults to open) => served, curves present. See docs: portal internals, drawer.js.
 function accessLevelOf(m){return (m&&m.access)?String(m.access):"open";}
 function isOpenAccess(m){return accessLevelOf(m)==="open";}
 // Withheld-download copy: the TRUTHFUL access reason for a survey with NO dataset DOI (so no honest
-// source-archive pointer exists). Embargo and licence are DISTINCT access states: a licence-restricted
-// station must never be blanket-labelled as embargoed (same access-integrity discipline as the Kalkaroo
-// Fix). No em/en dashes in this copy; plain punctuation only.
+// source-archive pointer exists). See docs: portal internals, drawer.js.
 function withheldReason(m){
   const org=(m&&m.org)||"unknown";
   const reason=accessLevelOf(m)==="embargoed"
@@ -235,11 +190,8 @@ function withheldReason(m){
     : "not redistributable under its licence";
   return reason+", contact the custodian organisation ("+org+")";
 }
-// The boot-loaded coordinate policy for a station ('generalised' | 'withheld' | null),
-// folded onto s by buildState() from coord_policy.json. The engine masks the VALUE (generalised => 0.1°
-// cell rendered verbatim, withheld => null lat/lon) AND — for a non-exact station — emits this policy
-// marker so the portal can badge honestly WITHOUT re-deriving precision client-side (forbidden by the
-// record). Pure (no DOM/Leaflet) so the jsdom driver exercises it.
+// The boot-loaded coordinate policy for a station ('generalised' | 'withheld' | null), folded onto s by
+// buildState() from coord_policy.json. See docs: portal internals, drawer.js.
 function coordPolicyOf(s){return (s&&s.coordPolicy)||null;}
 // True when a station's SERVED position is masked. A withheld station is detectable from its null coords
 // alone (belt-and-braces if the marker artifact never loaded); a generalised station needs the marker
@@ -248,10 +200,8 @@ function coordsMasked(s){return !hasPosition(s)||coordPolicyOf(s)==="generalised
 // Survey-level honesty predicate: are ALL of a survey's station locations served EXACT? Backs the access-
 // panel stance text: "Station locations are public" is asserted only when this is true.
 function surveyLocationsPublic(sv){return !ST.some(s=>s.survey===sv&&coordsMasked(s));}
-// The drawer's lat/lon cell. Withheld => the honest withheld line (no coords). Generalised => the masked
-// 0.1° cell rendered VERBATIM (never re-rounded — the record forbids client-side re-derivation) PLUS the
-// "position generalised" badge, so a reader knows the ~0.1° number is a custodian generalisation, not a
-// precise fix. Exact => the verbatim 6-dp position.
+// The drawer's lat/lon cell. Withheld => the honest withheld line (no coords). See docs: portal internals,
+// drawer.js.
 function coordCellHtml(s){
   if(!hasPosition(s)) return `<span style="color:var(--muted)">coordinates withheld (custodian policy)</span>`;
   const coords=`${s.lat.toFixed(6)}, ${s.lon.toFixed(6)}`;
@@ -259,11 +209,8 @@ function coordCellHtml(s){
     ? `${coords}<br><span style="color:var(--muted)">position generalised to ~0.1° (custodian policy)</span>`
     : coords;
 }
-// The identity header for the full-station RESPONSE modal (the expand affordance).
-// Station id, the source site name when it differs from the displayed id, and the data-type chip on the
-// first line; survey · organisation on the second; the honest coordinate line on the third. Reuses
-// coordCellHtml VERBATIM so a masked position is never printed raw here (custodian policy holds inside the
-// modal exactly as in the drawer), and orgNameLink so the ROR link styling matches the drawer header.
+// The identity header for the full-station RESPONSE modal (the expand affordance). See docs: portal
+// internals, drawer.js.
 function stationModalHeader(s,m){
   const site=(s.site_name&&s.site_name!==s.id)?`<span class="pm-site">${esc(s.site_name)}</span>`:"";
   const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}${TYPE_INK[s.type]?";color:"+TYPE_INK[s.type]:""}">${esc(s.type)}</span>`;
@@ -277,9 +224,9 @@ function stationModalHeader(s,m){
 function accessPanel(m,sv){
   const lvl=accessLevelOf(m);
   const when=(m&&m.embargo_until)?String(m.embargo_until):"";
-  // The location-publicity clause is only asserted when EVERY station's position is served exact.
-  // When a custodian has generalised/withheld any station, "locations are public" is FALSE — say so.
-  // (Disclosing that a location is generalised/withheld reveals POLICY, not POSITION.)
+  // The location-publicity clause is only asserted when EVERY station's position is served exact. When a
+  // custodian has generalised/withheld any station, "locations are public" is FALSE - say so. See docs:
+  // portal internals, drawer.js.
   const stance=surveyLocationsPublic(sv)
     ? "Station locations and survey metadata are public"
     : "Survey metadata is public; some station locations are generalised or withheld at the custodian's request";
@@ -297,15 +244,9 @@ function accessPanel(m,sv){
   return `<div class="plot accesspanel"><div class="badges" style="margin-bottom:8px">${badge(title,"part")}</div>`+
     `<div class="emptynote" style="padding:8px 4px">${esc(body)}</div></div>`;
 }
-// Dataset-maturity model. Five RECORD-STEWARDSHIP dimensions - how completely a record is
-// archived, licensed and reproducible, NOT its scientific quality (said in the block's subline). Stars =
-// achieved count. PURE so the star count is unit-testable: flip m.doi / m.ts and the count changes.
-// "not recorded" / "not available" phrasing per the honesty rules (never "pending").
-// SPEC §5: the resolution state of the survey's dataset DOI, across BOTH the flat dataset_doi
-// (engine fallback, m.doi_resolution) and the typed related_identifiers DOI rows. Returns "ok" when at
-// least one DOI-typed identifier is live-or-uncached (ok / unknown / absent — anything not "reserved");
-// "reserved" ONLY when a DOI-typed identifier exists and EVERY one is reserved (doi.org's own 404); null
-// when none is recorded. A reserved DOI is not a working identifier, so it must NOT light the DOI star.
+// Dataset-maturity model. Five RECORD-STEWARDSHIP dimensions - how completely a record is archived,
+// licensed and reproducible, NOT its scientific quality (said in the block's subline). See docs: portal
+// internals, drawer.js.
 function datasetDoiResolution(m){m=m||{};
   const res=[];
   if(m.doi)res.push(m.doi_resolution);
@@ -328,46 +269,28 @@ function maturityModel(m,sc){m=m||{};sc=sc||[];
     {key:"ts",label:"Time series",achieved:tsOn,note:tsOn?"linked":"not available"},
   ];
   return {dims,stars:dims.filter(d=>d.achieved).length,total:dims.length};}
-// The AGGREGATE presentation is removed. The "Dataset maturity" heading, the
-// five-star summary row and the "Record-stewardship maturity ... Not a measure of scientific quality."
-// explainer are gone; what a reader gets is the ITEMISED list, where every row states its own dimension in
-// words. The model above is untouched and still drives the per-row stars and their honest notes, so this is
-// a change of presentation, not of information: the summary said in one number what the rows say in five
-// lines, and a single star count invited exactly the scientific-quality reading the explainer had to deny.
+// The AGGREGATE presentation is removed. The "Dataset maturity" heading, the five-star summary row and the
+// "Record-stewardship maturity ... See docs: portal internals, drawer.js.
 function maturityBlock(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
   // Two-phase boot: the "Reproducible" dimension reads sc[SC.sw] (sci.json, PHASE 2). An unlit star is a
   // statement that the dimension was NOT achieved, so the whole LIST waits rather than under-stating a
-  // dimension for a moment and then silently lighting it. With the heading gone the gate is anchored to the
-  // surviving list, and names it in the reader's terms ("stewardship details") rather than by the retired
-  // block title.
+  // dimension for a moment and then silently lighting it. See docs: portal internals, drawer.js.
   const gate=hydrGate("sci","stewardship details",true);
   if(gate)return `<div class="matblock">${gate}</div>`;
   const mod=maturityModel(m,sc);
   const rows=mod.dims.map(d=>`<li class="matdim ${d.achieved?"on":"off"}"><span class="matglyph">${d.achieved?"★":"☆"}</span><span>${esc(d.label)}${d.note?": "+esc(d.note):""}</span></li>`).join("");
   return `<div class="matblock"><ul class="matdims">${rows}</ul></div>`;}
-// The raw-TS pointer. A survey's OWN time_series.collection_pid (SMETA.ts_pid) is authoritative
-// when declared; TS_COLLECTION (the AusLAMP/NCI collection DOI) is only the DEPLOYMENT-WIDE default for
-// surveys that genuinely belong to that shared collection and declare no PID of their own — never a
-// stand-in for a survey's dataset DOI (see tsUrlFor's caller sites vs. fetchEdi/exports.js source-citation).
+// The raw-TS pointer. See docs: portal internals, drawer.js.
 function tsPidRaw(m){return (m&&m.ts_pid)||TS_COLLECTION.doi;}
 function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
 // mth5BundleFor() lived here: the survey's <slug>-tf.h5 bundles[] row, looked up by slug. It is gone
-// because every surface that called it was STATION-scoped and therefore reading the wrong scope. The
-// survey bundle has exactly one surface left, the survey drawer's Downloads grid, and surveyBundleTiles
-// renders it straight off bundlesForSlug with its two sibling bundles; a second, MTH5-only accessor was
-// only ever a way for a station surface to reach a survey fact.
-// A manifest artifact url rendered as the ENDPOINT a reader can GET. A tier=repo row
-// carries a portal-relative path ("edi/<slug>/<file>.edi") which the hosted site serves under /data/;
-// a tier=nci row already carries the ABSOLUTE fileServer url, so it is shown verbatim; prefixing /data/
-// there would print a path that does not exist. Display only; the download path still goes through
-// dataUrl() (which honours a deployment's data_base_url).
+// because every surface that called it was STATION-scoped and therefore reading the wrong scope. See docs:
+// portal internals, drawer.js.
 function apiArtifactPath(u){const v=String(u==null?"":u);
   return /^[a-z][a-z0-9+.\-]*:\/\//i.test(v)?v:"/data/"+v.replace(/^\/+/,"");}
-// The Files tab, structured to the NCI data-level standard as a SINGLE COLUMN of full-width rows
-// (Packed raw / Level 0 / Level 1 time series -> Level 2 derived processed data with EDI/EMTF-XML/MTH5
-// sub-rows -> Level 3 models, when ever served -> Publication). Each row carries an explicit ORIGIN tag
-// ("AusMT-derived" vs "source archive") so there is zero ambiguity about what AusMT computed vs what came
-// from the source. The Phase tensor tile is gone (it is a visual product; it lives in the Response tab).
+// The Files tab, structured to the NCI data-level standard as a SINGLE COLUMN of full-width rows (Packed
+// raw / Level 0 / Level 1 time series -> Level 2 derived processed data with EDI/EMTF-XML/MTH5 sub-rows ->
+// Level 3 models, when ever served -> Publication). See docs: portal internals, drawer.js.
 function relatedProducts(s){const m=SMETA[s.survey]||{};
   const tsDoi=tsUrlFor(m);
   // The reserved-identifier posture: a reserved collection PID or dataset DOI must not open a dead link.
@@ -392,26 +315,16 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     if(idRow&&idRow.identifier){
       if(idRow.resolution==="reserved")return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
       // Scheme guard: only an http(s) href becomes a product-tile open action (its data-url reaches
-      // window.open). A URL-typed identifier is relatedIdHref's raw value, so a javascript:/data: value
-      // would otherwise route straight into window.open — gate it here and fall through to the reserved /
-      // tsOpen branches (escUrl still guards the block anchor edge).
+      // window.open). See docs: portal internals, drawer.js.
       const href=relatedIdHref(idRow.identifier,idRow.identifier_type);
       if(href&&/^https?:/i.test(href))return {n:label,sub:gloss+" · "+(idRow.custodian||"source collection"),origin:"source archive",st:"ok",d:{prod:"open",url:href}};
     }
     if(tsReserved)return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
     return {n:label,sub:gloss+" · "+(m.ts_pid?"survey collection":"NCI collection"),origin:"source archive",st:"ok",d:tsOpen};
   };
-  // THE JOIN RULE, binding. `m.ts_levels` above is CURATOR-DECLARED and SURVEY-scope;
-  // ts_access.json is CRAWL-VERIFIED and STATION-scope, and the two answer different questions. Read
-  // naively, hasLevel() would gate the hand-off too, so a station with a verified Level 1 file whose
-  // curator never ticked `level1` would read NOT AVAILABLE for a level this deployment can hand it
-  // straight to - exactly the falsehood the verified-at fieldnote exists to prevent. So the ACTION is
-  // driven by the INDEX ALONE and never by hasLevel(); ts_levels keeps its own job, the survey-scope
-  // "exists upstream" sub-text above, and where the two disagree the register wins the station row
-  // while the curator census raises the levels_available gap.
-  //
-  // Level 1 is ONE level row with TWO possible actions, format-labelled (the archive publishes MTH5
-  // and NetCDF of the same product); level_2 reaches none of this by design.
+  // THE JOIN RULE, binding. `m.ts_levels` above is CURATOR-DECLARED and SURVEY-scope; ts_access.json is
+  // CRAWL-VERIFIED and STATION-scope, and the two answer different questions. See docs: portal internals,
+  // drawer.js.
   const tsIndexKnown=(typeof tsAccessKnown==="function")&&tsAccessKnown();
   const tsHandoff=(typeof tsRoutesFor==="function")?(tsRoutesFor(s.ausmt_id)||{}):{};
   const tsActionRows=toks=>toks.filter(t=>tsHandoff[t]).map(t=>{
@@ -436,18 +349,8 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     // honest inert not-available sub-line the MTH5 row uses, with no toast overclaim.
     : {n:"EMTF XML",sub:"not currently available",origin:"AusMT-derived",st:"unk",d:null};
   // The Level 2 MTH5 sub-row is THIS STATION's own transfer-function h5: the manifest files[] row with
-  // format mth5 (the h5/<slug>/<station>.h5 family), read from the very same `arts` rows the EDI and
-  // EMTF XML sub-rows beside it read. It must not read mth5BundleFor(m), the SURVEY-aggregated
-  // <slug>-tf.h5 bundles[] row: with a per-station producer in the build (build_portal
-  // emit_station_mth5) that row offers the WHOLE SURVEY under a station heading (reported:
-  // SA026E showed the 1.74 MB survey bundle in place of its own 174,696 B file).
-  // There is deliberately NO fallback to the bundle. A station with no row of its own gets none: the
-  // engine emits no station h5 for a coordinate-generalised or withheld station, exactly as it serves no
-  // EDI for one, so the honest not-available state the EMTF XML row uses is the truthful answer and the
-  // survey bundle is not a substitute for it. That bundle keeps the surface it belongs to, the survey
-  // drawer's Downloads grid (surveyBundleTiles). Download is wired exactly like the EMTF XML row
-  // ({prod:"fetch"}), so the pull is counted by the same masked front-door analytics, and the label
-  // stays TF-only honest ("transfer functions").
+  // format mth5 (the h5/<slug>/<station>.h5 family), read from the very same `arts` rows the EDI and EMTF
+  // XML sub-rows beside it read. See docs: portal internals, drawer.js.
   const mth5=arts.find(a=>a.format==="mth5");
   const mth5Sub=mth5
     ? {n:"MTH5",sub:"Transfer functions only · Download"+(mth5.size?" · "+fmtBytes(mth5.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5.url,name:mth5.url.split("/").pop()}}
@@ -469,10 +372,8 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     // action row states nothing. Say which wait it is rather than letting silence read as "no file".
     (tsIndexKnown?"":hydrBlock("archive hand-off routes"));
   // Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (PHASE 2), and each of
-  // them degrades to a "not currently available" / "via source archive" line, i.e. statements about what the
-  // build actually served. Render the loading state in place of the three rows until the manifest lands
-  // (the time-series rows above and the publication row below read survey metadata from phase 1, so they
-  // are honest immediately and are left alone).
+  // them degrades to a "not currently available" / "via source archive" line, i.e. statements about what
+  // the build actually served. See docs: portal internals, drawer.js.
   const level2Body=hydrating("manifest")?hydrBlock("served files"):level2Subs.map(row).join("");
   const level2=`<div class="fl-group"><div class="fl-ghead">Level 2 derived processed data <small>transfer functions</small></div>`+
     `<div class="fl-sub">${level2Body}</div></div>`;
@@ -480,16 +381,8 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   // so the slot renders nothing: a survey record carrying m.model_doi is what would fill it, as a row
   // whose origin is the source archive and whose link is the doi.org resolver.
   return `<div class="filelist">${tsRows}${level2}${row(pubRow)}</div>`;}
-// The MOST SPECIFIC processing-software string available for a station. The
-// station-level string the source EDI carried (sc[SC.sw], e.g. "Geotools 4.0.5.12583") wins because it
-// is the one that names a VERSION; the survey-level declared software field (m.software, often the bare
-// product name) is the fallback; with neither, the honest "not stated in EDI" stands. No version is ever
-// synthesised. SINGLE SOURCE for the Provenance tab's own row AND the lineage graph node, so the two
-// surfaces in one tab cannot disagree about what processed this station.
-// Two-phase boot: the station-level string lives in sci.json (PHASE 2). The fallbacks are honest ONLY once
-// that row is known: "not stated in EDI" asserts the EDI carried no software field, and the survey-level
-// m.software would silently win over a station string that simply had not arrived. So while sci is
-// unresolved this says so instead. PURE (no DOM) as before; the caller escapes it.
+// The MOST SPECIFIC processing-software string available for a station. See docs: portal internals,
+// drawer.js.
 function processingSoftwareText(m,sc){
   if(hydrating("sci"))return "loading…";
   if(hydrFailed("sci"))return "could not be loaded";
@@ -498,51 +391,33 @@ function processingSoftwareText(m,sc){
   const sv=((m&&m.software)||"").toString().trim();
   return sv||"not stated in EDI";}
 // LINEAGE: programs that WRITE transfer-function files they did not process. MIRRORED from the engine's
-// _edi_catalog.KNOWN_WRITERS — keep the two in step. Matched as a case-insensitive substring, so
-// "WINGLINK EDI 1.0.22" and "Geotools 4.0.5.12583" both hit.
+// _edi_catalog.KNOWN_WRITERS - keep the two in step. See docs: portal internals, drawer.js.
 const KNOWN_WRITERS=["geotools","winglink","mtpy"];
 function isKnownWriter(name){const n=String(name==null?"":name).trim().toLowerCase();
   return !!n&&KNOWN_WRITERS.some(w=>n.indexOf(w)>=0);}
 // The lineage's "File written by" cell: the program that SERIALISED this station's file, from
-// station.json's processing.file_written_by. It must not be shown under the heading "Processing software":
-// that tells the reader Geotools/WinGLink/MTpy processed the data when those tools only exported a file
-// somebody else's code had estimated. The exporter belongs under its own heading, and a known exporter is
-// annotated so the distinction is legible without the reader having to know the tool. PURE (no DOM); the
-// caller escapes it.
+// station.json's processing.file_written_by. See docs: portal internals, drawer.js.
 function fileWrittenByText(fwb){
   const name=String((fwb&&fwb.name)==null?"":fwb.name).trim();
   if(!name)return "not stated in EDI";
   const ver=String((fwb&&fwb.version)==null?"":fwb.version).trim();
   return name+(ver?" "+ver:"")+(isKnownWriter(name)?" (database/file export)":"");}
-// The formats AusMT actually distributes for THIS STATION, dot-separated with no
-// ticks and no "(pipeline)" qualifier. It renders inside the station drawer's lineage graph, so every input
-// must be station-scoped. Availability comes from the SAME sources the Files tab reads: ediDescriptor for
-// the EDI (its manifest artifact first, then the served-here fallback, and "no" for an embargoed/
-// metadata-only station, so a withheld EDI is never listed), and this station's own manifest files[] rows
-// for the two AusMT-derived formats. A format that is not served is simply ABSENT from the list; the old
-// line asserted "EDI ✓ · EMTF XML (pipeline)" unconditionally, claiming an XML for the 8 surveys the build
-// pipeline never produced one for and an EDI for embargoed stations.
+// The formats AusMT actually distributes for THIS STATION, dot-separated with no ticks and no "(pipeline)"
+// qualifier. It renders inside the station drawer's lineage graph, so every input must be station-scoped.
+// See docs: portal internals, drawer.js.
 function distributedFormatsText(s,m){
-  // Two-phase boot: every input here is a manifest row (PHASE 2). Pre-hydration the list would come back
-  // empty and print "none currently served", a false claim about the corpus and exactly the overclaim in
-  // the other direction that this function was written to remove. Say it is loading instead.
+  // Two-phase boot: every input here is a manifest row (PHASE 2). See docs: portal internals, drawer.js.
   if(hydrating("manifest"))return "loading…";
   const arts=(typeof artifactsFor==="function"?artifactsFor(s&&s.ausmt_id):[]);
   const out=[];
   if(ediDescriptor(s,m).st==="ok")out.push("EDI");
   if(arts.some(a=>a&&a.format==="emtfxml"))out.push("EMTF XML");
-  // MTH5 reads the STATION's own files[] row, like its two neighbours. Reading the survey's
-  // bundles[] row (mth5BundleFor) makes one drawer contradict itself the moment the two disagree:
-  // the Files tab, reading the station row, said "not currently available" while this line, reading the
-  // survey bundle, listed MTH5 as distributed for the station. Nothing on the screen told the reader
-  // which of the two was about their station.
+  // MTH5 reads the STATION's own files[] row, like its two neighbours. See docs: portal internals,
+  // drawer.js.
   if(arts.some(a=>a&&a.format==="mth5"))out.push("MTH5");
   return out.length?out.join(" · "):"none currently served";}
-// A publication reduced to a short lineage cite, "FirstAuthor et al. (Year)".
-// Never fabricates a co-author: names split on "; " when the row uses that separator, else on "," where
-// THREE or more parts prove a real list (a single "Last, First" name splits into exactly two, so it is
-// kept verbatim, as does a two-name comma list). Falls back to the title, then the bare DOI, so a row
-// with no author still says something true. Mirrors doi_harvest.formatCitation's ">2 parts" convention.
+// A publication reduced to a short lineage cite, "FirstAuthor et al. (Year)". See docs: portal internals,
+// drawer.js.
 function pubShortCite(p){p=p||{};
   const a=String(p.a==null?"":p.a).trim(),y=String(p.y==null?"":p.y).trim(),t=String(p.t==null?"":p.t).trim();
   const doi=String(p.doi==null?"":p.doi).trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,"");
@@ -552,11 +427,8 @@ function pubShortCite(p){p=p||{};
     who=(sep===";"?parts.length>1:parts.length>2)?parts[0]+" et al.":a;}
   const head=[who||t,y?"("+y+")":""].filter(Boolean).join(" ").trim();
   return head||(doi?"doi:"+doi:"");}
-// The lineage PUBLICATION cell, read from the survey's related publications
-// (pubs[], the same list the survey card renders). It must not read the dataset DOI (m.doi), which is the
-// identifier of the DATA, not an interpretation publication: a survey with a real paper in pubs[] and no
-// dataset DOI then reads "none recorded" (Newer Volcanic Province 2019 and its 2023 paper). The
-// first publication renders as a short cite, DOI-linked when it carries one, with a "+N more" tail.
+// The lineage PUBLICATION cell, read from the survey's related publications (pubs[], the same list the
+// survey card renders). See docs: portal internals, drawer.js.
 function publicationCell(m){
   const ps=(((m||{}).pubs)||[]).filter(p=>p&&typeof p==="object");
   if(!ps.length)return "none recorded";
@@ -581,16 +453,13 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
    ["Raw time series",m.ts==="ok"?tsCollectionCell(m):"not located in source archives"],
    ["Processing software",esc(processingSoftwareText(m,sc))]);
   // "Method" renders only where the source file actually states an algorithm or a remote reference, or
-  // while sci.json is still in flight, where the honest answer is that the answer is not known yet. The
-  // structured fields it draws on are empty for most EDI dialects, so an unconditional row would say
-  // "not stated" on nearly the whole corpus: noise in a six-row graph, crowding out the rows that do
-  // carry lineage.
+  // while sci.json is still in flight, where the honest answer is that the answer is not known yet. See
+  // docs: portal internals, drawer.js.
   if(methodGate||sc[SC.alg]||sc[SC.rr])
     nodes.push(["Method",methodGate||(sc[SC.alg]?esc(sc[SC.alg]):"remote reference (stated)")]);
   // The file-WRITER, under its own heading, next to the processor it is not. Read from station.json
   // (loadStationFrameLine's fetch), so the cell is a placeholder the async resolve fills in; on a re-render
-  // the cache answers synchronously. Rendered only where that fetch actually runs: for a non-open survey
-  // no station.json science is served, and a permanent loading cell would be its own small lie.
+  // the cache answers synchronously. See docs: portal internals, drawer.js.
   if(isOpenAccess(m)){
     const _fw=stationFactsOf(s);
     nodes.push(["File written by",
@@ -622,27 +491,17 @@ function provenanceBox(s){
     ["build date (UTC)", esc(P.generated?P.generated.replace("T"," ").slice(0,19):"n/a")],
     ["Build commit", P.git_commit?`<code>${esc(P.git_commit)}</code>`:"<span class='prov'>unavailable</span>"]
   ];
-  // Titled "AusMT Provenance", not "Processing provenance". Every row below is about the
-  // AUSMT PIPELINE's own run (extractor, pipeline version, build date, build commit), not the custodian's
-  // MT data processing, and readers took the old title to mean the latter. The MT processing software the
-  // custodian used has its own row at the top of this tab (and its own lineage node).
+  // Titled "AusMT Provenance", not "Processing provenance". Every row below is about the AUSMT PIPELINE's
+  // own run (extractor, pipeline version, build date, build commit), not the custodian's MT data
+  // processing, and readers took the old title to mean the latter. See docs: portal internals, drawer.js.
   return `<details class="prov-d"><summary>AusMT Provenance</summary><table class="meta">`+
     rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")+
     `</table><div class="prov" style="margin-top:6px">Every product traces to its input file, the extractor and version`+
     `. Reproducible offline by <i>AusMT</i>.</div></details>`;
 }
-// The engine serves impedances AS STORED in the
-// source's declared acquisition frame and NEVER de-rotates. When that frame is non-trivial we report
-// it to the READER — terse, honest, no interpretation. frameLineText is PURE (DOM-free) so a Node pin
-// (tools/frame_line_test.js) can drive it. Inputs are the VERBATIM station.json `frame` block values:
-//   declared_azimuth_deg        — the recorded acquisition-frame angle (0 => served in the
-//                                 declared-zero / geographic reference; no line by itself).
-//   tipper_declared_azimuth_deg: present ONLY when the tipper's uniform declared frame DIVERGES
-//                                 from the impedance's declared azimuth (the engine omits it when
-//                                 equal or undeclared), so presence itself is the trigger.
-//   survey_frame_note           — the V3-B "mixed declared frames across stations" note (present only
-//                                 for an inconsistent survey).
-// Trigger: a non-zero declared angle, a divergent tipper frame, or a survey mixed-frames note.
+// The engine serves impedances AS STORED in the source's declared acquisition frame and NEVER de-rotates.
+// When that frame is non-trivial we report it to the READER - terse, honest, no interpretation. See docs:
+// portal internals, drawer.js.
 function frameLineText(frame){
   if(!frame||typeof frame!=="object") return "";
   const az=frame.declared_azimuth_deg;
@@ -660,23 +519,8 @@ function frameLineText(frame){
     : "This survey mixes declared acquisition frames across stations; each station is served as stored.");
   return parts.join(" ");
 }
-// Per-station frame facts live ONLY in the per-station station.json (the positional catalogue has no
-// frame column, and adding one would need a contract change). So fetch it lazily at drawer-open — the
-// SAME product the curator workbench reads — and inject the line if the drawer still shows this station.
-// Best-effort: an absent/withheld station.json (older builds, no --products, or a file:// portal) just
-// yields no line, never an error. Only called for OPEN-access surveys (a withheld survey serves no
-// impedances, so a "served in frame X" line would be false).
-// Two-phase boot: a hydration re-render calls this again for the SAME station (the innerHTML rewrite blanks
-// the #frameline placeholder, so it does have to be re-injected), and with three gates that is up to four
-// identical station.json requests per drawer open. Cache the RESOLVED LINE per station instead: "" covers
-// every no-line outcome (absent station.json, no frame block, nothing worth saying, an offline/file:// error)
-// so a station that produced no line is not re-requested either.
-// The SAME fetch also resolves the lineage's "File written by" cell (station.json
-// processing.file_written_by), for the same reason and at the same cost: it is a per-station fact with no
-// catalogue column. One request answers both; the cache holds {line, writer} so a re-render re-injects both
-// without re-requesting. The entry appears only once the request SETTLES, and it settles either way: an
-// unreadable/absent station.json resolves `writer` to the honest failure cell, so the placeholder the graph
-// renders can never stand as a permanent loading state — which would be its own false claim.
+// Per-station frame facts live ONLY in the per-station station.json (the positional catalogue has no frame
+// column, and adding one would need a contract change). See docs: portal internals, drawer.js.
 const _frameLineCache=new Map();                          // ausmt_id -> {line, writer} ("" line = no line)
 function _injectStationFacts(s,facts){
   if(!facts) return;
@@ -707,18 +551,9 @@ function loadStationFrameLine(s){
     _injectStationFacts(s,facts);
   }).catch(()=>{});
 }
-// The five Screening indicators, each derived ONLY from a quantity the pipeline already computes.
-// PURE (no DOM) so the field->indicator->threshold mapping is falsifiable: flip one input and exactly one
-// indicator flips state. Each row is {key,label,state,word}; state ∈ green|amber|red|na and `word` is the
-// plain-language state so meaning never rides on colour alone. A NOT-computable input renders the neutral
-// grey 'not evaluated' — never a fabricated green. Thresholds echo PROV.parameters where the pipeline
-// records one (phase-tensor consistency uses PROV pct_periods_3d_threshold, passed in as pctThr); the
-// others use the documented screen thresholds below.
-//   d.q          completeness/smoothness check (0..5), null on a tipper-only station -> Smoothness  green>=4  amber>=3
-//   d.azR/azN    circular resultant length + count of low-skew PT azimuths -> Strike stability  green>=.9 amber>=.75 (need >=3)
-//   d.beta,betaThr median |β| (deg) vs its PROV threshold skew_3d_deg      -> Phase tensor consistency  green<=thr amber<=2*thr
-//   d.phaseSplit median |φxy − φyx| separation (deg)       -> Phase split           green<=15 amber<=35
-//   d.decades    period band width in decades              -> Coverage              green>=4  amber>=2
+// The five Screening indicators, each derived ONLY from a quantity the pipeline already computes. PURE (no
+// DOM) so the field->indicator->threshold mapping is falsifiable: flip one input and exactly one indicator
+// flips state. See docs: portal internals, drawer.js.
 function screeningIndicators(d){
   d=d||{};
   const na={state:"na",word:"not evaluated"};
@@ -763,12 +598,9 @@ function stationSummaryDetails(s,m,sc){
   stationRows.push(["data type",esc(s.type||"-")]);   // no long-form gloss exists in the corpus yet; show the code
   stationRows.push(["ausmt_id",esc(s.ausmt_id)]);
   if(m.collection&&m.collection.id)stationRows.push(["collection",esc(m.collection.title||m.collection.id)]);
-  // The
-  // "Transfer function / Download" tile is REMOVED from this summary group. It duplicated the Files tab's
-  // Level 2 EDI row and blurred the summary-vs-downloads separation the tabs exist to draw: a summary
-  // states facts, the Files tab serves bytes. overviewDownload() is deleted with its only call site (dead
-  // code is the trap tests/test_no_dead_prov_feature.py enforces against); the EDI stays downloadable from
-  // the sticky header action and the Files tab. _ssGroup keeps its optional `extra` slot for future groups.
+  // The "Transfer function / Download" tile is REMOVED from this summary group. It duplicated the Files
+  // tab's Level 2 EDI row and blurred the summary-vs-downloads separation the tabs exist to draw: a summary
+  // states facts, the Files tab serves bytes. See docs: portal internals, drawer.js.
   const station=_ssGroup("Station",stationRows);
   // Two-phase boot: periods/components/tipper are catalogue columns (phase 1, honest at first paint);
   // "remote reference" and the Processing group read the sci row (PHASE 2), whose absent-value renderings
@@ -788,10 +620,8 @@ function stationSummaryDetails(s,m,sc){
   return `<details class="prov-d ssdetails"><summary>Station summary</summary><div class="prov-dbody ssbody">${station}${tf}${proc}</div></details>`;
 }
 // Two-phase boot: `opts.rehydrate` marks a re-render driven by a phase-2 product LANDING (main.js
-// wireHydration -> rehydrateOpenDrawer), not by a reader opening the drawer. Such a re-render must not
-// re-capture the opener, must not pull focus back into the dialog, must not rewrite the hash, and must leave
-// the reader exactly where they were (same scroll offset, same tab), so the only visible change is the
-// section that was showing a loading state filling in.
+// wireHydration -> rehydrateOpenDrawer), not by a reader opening the drawer. See docs: portal internals,
+// drawer.js.
 function openStation(i,opts){
   const rehydrate=!!(opts&&opts.rehydrate);
   const keepScroll=rehydrate?(drawer.scrollTop||0):0;
@@ -801,9 +631,8 @@ function openStation(i,opts){
   _drawerSubject={kind:"station",i};                  // what rehydrateOpenDrawer re-renders when a gate settles
   const s=ST[i],t=tfRow(i)||[[]],m=SMETA[s.survey]||{},sc=sciRow(i);
   // Sc[SC.dim] (dimensionality) is not surfaced in the drawer screening grid: it is inferable from the
-  // phase tensor + skew, which are shown (strike/|β|/3-D-periods line below). The sc.json field itself
-  // carries it either way, and the map's colour-by-dim mode reads s.dim, so `dim` is deliberately not
-  // destructured here.
+  // phase tensor + skew, which are shown (strike/|β|/3-D-periods line below). See docs: portal internals,
+  // drawer.js.
   const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
   if(!rehydrate)location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
   const azs=[],azPers=[];if(t[T.pt_az])t[T.pt_az].forEach((a,k)=>{if(a!=null&&t[T.pt_beta][k]!=null&&Math.abs(t[T.pt_beta][k])<5){azs.push(((a%180)+180)%180);const _pk=t[T.periods]&&t[T.periods][k];if(_pk!=null)azPers.push(_pk);}});
@@ -850,22 +679,9 @@ function openStation(i,opts){
     `<div class="dactions">${headerDownloadBtn(s,m)}</div>`+
     tabStrip+`</div>`;
   // ---- Panel content -------------------------------------------------------------------------------
-  // Response (default) — the four plots FIRST (the centerpiece; all four always shown — phase tensor +
-  // induction arrows are never collapsed and carry no minimise control), then the collapsible "Station
-  // Summary" which absorbs the former Overview
-  // facts. A non-open station shows the
-  // access panel here INSTEAD of the plots (curves ARE the withheld data). #pt_anchor is kept so the
-  // "Phase tensor" related-product scroll target never dangles; the frame line is populated lazily.
-  // The response section carries exactly ONE expand control, on this heading
-  // row, instead of a ⤢ button per plot block (all four opened the same full-station modal). It is rendered
-  // only for an open-access station: without curves openStationModal has no panels to show and would open
-  // nothing, so a control there would be a dead affordance over the access panel.
+  // Response (default) - the four plots FIRST (the centerpiece. See docs: portal internals, drawer.js.
   const _rspOpen=isOpenAccess(m);
-  // Two-phase boot: the curves live in tf.json (PHASE 2). An empty TF row renders NO plot at all (plotBlock
-  // guards on an empty series), so painting the plots pre-hydration would show an open-access station as
-  // having no response functions, the loudest absence claim in the drawer. While tf is in flight the panel
-  // carries a loading state instead, and the expand control is withheld with it (openStationModal would find
-  // no panels and open an empty overlay). TF_READY re-renders this section with the curves in place.
+  // Two-phase boot: the curves live in tf.json (PHASE 2). See docs: portal internals, drawer.js.
   const _tfGate=_rspOpen?hydrGate("tf","response functions",true):"";
   const responseHtml=`<div class="sechead rsphead">Response functions ${roleChip("AusMT-derived")}`+
     (_rspOpen&&!_tfGate&&typeof responseExpandBtn==="function"?responseExpandBtn():"")+`</div>`+
@@ -877,42 +693,24 @@ function openStation(i,opts){
     `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+
     stationSummaryDetails(s,m,sc);
   // NO SCREENING SURFACE RENDERS in the drawer: the automated indicators are not public, so there is no
-  // "screening" panel and no ["screening","Screening"] TABS entry. The pure model behind them
-  // (screeningIndicators) stays defined and is pinned by tools/interaction_test.js, so it cannot rot
-  // while it is unrendered; screeningIndicatorList, _inds and strikeClause are the render side of the
-  // same model and stay with it.
-  // The check screens an impedance, so sc[SC.q] is null on every tipper-only station; the line says so
-  // from the components column rather than showing a bare "n/a" a reader could mistake for a missing
-  // value. A null q on a station that DOES carry Z is the access gate withholding it, and reads
-  // "not available" instead: the two absences have two reasons and must not share one sentence.
-  // Files: the NCI data-level product list. The section-level role chip is dropped; each product row
-  // now carries its OWN origin tag (AusMT-derived vs source archive), so a single section chip would be
-  // wrong (the list spans both source-archive time series and AusMT-derived deliverables).
+  // "screening" panel and no ["screening","Screening"] TABS entry. See docs: portal internals, drawer.js.
   const filesHtml=`<div class="sechead">Related products</div>`+relatedProducts(s);
-  // Provenance: three source-data rows visible (processing software, transfer function
-  // source file+sha · source archive), then the Dataset-maturity stars, then EVERYTHING ELSE
-  // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
-  // behind collapsed <details>. Nothing is dropped, only demoted; the API box is the last, small expander.
+  // Provenance: three source-data rows visible (processing software, transfer function source file+sha ·
+  // source archive), then the Dataset-maturity stars, then EVERYTHING ELSE (lineage graph, full provenance
+  // table, identifiers, format availability. See docs: portal internals, drawer.js.
   const _srcArchive=sourceArchiveCell(m);
   // This station's served artifact rows (manifest `files`), read once and reused by the format-availability
-  // badge and the API section below. Empty for a withheld/embargoed survey: the engine emits no manifest
-  // rows for one, so absence here IS the embargo, never a "row we failed to find".
-  // Two-phase boot: that reading of an empty list only holds once the manifest has LANDED, so both consumers
-  // below gate on _manGate first: pre-hydration an empty list means "not received yet", not "not served".
+  // badge and the API section below. See docs: portal internals, drawer.js.
   const _manGate=hydrGate("manifest","served files",true);
   const _arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
   // Whether a served EMTF-XML artifact exists for this station (drives the format-availability badge:
   // ok when served, else part — produced via the build pipeline for redistributable surveys).
   const _fmtXmlArt=_arts.some(a=>a.format==="emtfxml");
-  // The same question for MTH5, off the same station rows. It must not be answered by the SURVEY's
-  // <slug>-tf.h5 bundle (mth5BundleFor), which puts a survey fact under a station heading: a station with
-  // no h5 of its own inside a survey that has a bundle then shows a green MTH5 badge two tabs from a Files
-  // row reading "not currently available". A badge in a station drawer answers about the station.
+  // The same question for MTH5, off the same station rows. See docs: portal internals, drawer.js.
   const _fmtH5Art=_arts.some(a=>a.format==="mth5");
   // The writer row rides alongside the processing-software row for the same reason it does in the lineage
-  // graph: this table is the OTHER surface in this tab that names software, and leaving the exporter out of
-  // it would put the two back in disagreement — the failure processingSoftwareText was factored to prevent.
-  // Same cache, same async fill, own element id (two injection targets, one fetch).
+  // graph. Same cache, same async fill, own element id (two injection targets, one fetch). See docs: portal
+  // internals, drawer.js.
   const _fwTop=stationFactsOf(s);
   const provTop=`<table class="meta prov-top">`+
     `<tr><td>Processing software</td><td>${esc(processingSoftwareText(m,sc))}</td></tr>`+
@@ -922,38 +720,13 @@ function openStation(i,opts){
   const metaTable=`<table class="meta">`+
     `<tr><td>ausmt_id</td><td>${esc(s.ausmt_id)}</td></tr>`+
     // Coordinate access: a custodian-withheld station carries null lat/lon (masked VALUE), so show the
-    // honest withheld line instead of null-derefing .toFixed. A generalised station carries the 0.1° cell,
-    // rendered VERBATIM (no client-side re-rounding) with a "position generalised" badge driven by the
-    // engine's coord_policy marker. coordCellHtml encapsulates all three; hasPosition is the shared predicate.
+    // honest withheld line instead of null-derefing .toFixed. See docs: portal internals, drawer.js.
     `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
     `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"-"}</td></tr>`+
     `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`;
-  // The Metadata & API box collapses to a single small "API" expander at the tab's foot.
-  // No /api tier has ever existed on any AusMT deployment, so the section must never advertise one.
-  // What the site serves is read-only static JSON under /data/, and the section lists that LIVE public
-  // surface for the station in front of the reader.
-  // The only public metadata contracts are mtcat.json
-  // and station.json (survey-metadata.json to come); manifest.json is the download index; everything
-  // else under /data is portal-internal and carries no contract, so the drawer must not advertise it.
-  // The rows are therefore:
-  //   * this station's station.json, keyed by the survey slug + the station id (the same path
-  //     loadStationFrameLine() already fetches, so it is provably the real product location).
-  //     station.json is emitted for EVERY station: a non-served one gets a withheld stub that states
-  //     the access level, so the line resolves and is worth pointing at. dimensionality.json is NOT
-  //     listed: it is served alongside station.json but is not a contract (its fate, folding into
-  //     station.json or staying a feature file, is undecided), and it 404s for every
-  //     embargoed / metadata_only station;
-  //   * this station's OWN served EDI, taken from its manifest artifact row. The url is READ, never
-  //     templated: the served filename is genuinely not derivable from the station id (live corpus:
-  //     station A1 of vulcan-2022 is served as edi/vulcan-2022/Vulcan_A1.edi). No row => no line,
-  //     which is exactly the embargo case (withheld by construction, so there is nothing to link);
-  //   * /data/manifest.json, the download index every artifact is located through. The former
-  //     /data/products/manifest.json twin and /data/surveys.json rows are gone: the twin is retired and
-  //     surveys.json is portal-internal (superseded as a contract by survey-metadata.json).
-  // The trailing pointer sends a reader to the docs site's API reference, where the worked patterns
-  // (per-station manifest fetch, bounding box, checksum verification) live; About carries the quickstart
-  // alone. It is the same stable RTD path About links, so the two surfaces agree on where depth lives.
-  // tests/test_drawer_api_endpoints.py pins the URL string against About's.
+  // The Metadata & API box collapses to a single small "API" expander at the tab's foot. No /api tier has
+  // ever existed on any AusMT deployment, so the section must never advertise one. See docs: portal
+  // internals, drawer.js.
   const _apiSlug=s.slug||((SMETA[s.survey]||{}).slug)||"";
   const _apiEdi=_arts.find(a=>a.format==="edi");
   const _apiRows=[];
@@ -961,9 +734,7 @@ function openStation(i,opts){
   if(_apiEdi&&_apiEdi.url)_apiRows.push(apiArtifactPath(_apiEdi.url));
   _apiRows.push("/data/manifest.json");
   // Two-phase boot: the per-station EDI line is READ from a manifest row, and "no row => no line" is a
-  // deliberate embargo signal. Before the manifest lands there is no row for ANY station, so the list would
-  // silently under-state itself; the loading line says which line is still to come rather than omitting it
-  // in silence. The station.json and manifest.json rows above are static and stay listed immediately.
+  // deliberate embargo signal. See docs: portal internals, drawer.js.
   const apiBlock=`<div class="api">Read-only static JSON on the hosted site, no key required:<br>`+
     _apiRows.map(u=>`GET <b>${esc(u)}</b>`).join("<br>")+
     (_manGate?`<br>${_manGate}`:"")+
@@ -974,18 +745,14 @@ function openStation(i,opts){
     // OMIT the Identifiers & instruments expander entirely when there is nothing to show
     // (a zero-identifier survey), rather than rendering an empty disclosure.
     (identifiersHtml(m)?`<details class="prov-d"><summary>Identifiers &amp; instruments</summary><div class="prov-dbody">${identifiersHtml(m)}</div></details>`:"")+
-    // The badge set tells the DISTRIBUTED-FORMATS story - EDI, EMTF XML (via pipeline), MTH5, time
-    // series (from the levels metadata) and the licence badge. The bare "DOI" badge is dropped (it failed
-    // as communication; dataset-DOI presence is already conveyed by the DOI stewardship row and the identifiers
-    // block). States stay honest (ok/unknown/no). EMTF XML is ok when a served artifact exists, else part.
-    // Two-phase boot: the EMTF XML and MTH5 badge STATES are manifest-derived, so the whole badge row waits
-    // rather than briefly showing "part"/"unknown" for formats that are in fact served.
+    // The badge set tells the DISTRIBUTED-FORMATS story - EDI, EMTF XML (via pipeline), MTH5, time series
+    // (from the levels metadata) and the licence badge. See docs: portal internals, drawer.js.
     `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody">${_manGate||`<div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",_fmtH5Art?"ok":"unk","Per-station MTH5 (transfer functions only) is written where the build produced one; the survey's whole-survey bundle, when there is one, is offered on the survey page.")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div>`}</div></details>`+
     `<details class="prov-d"><summary>Record metadata</summary><div class="prov-dbody">${metaTable}</div></details>`+
     `<details class="prov-d"><summary>API</summary><div class="prov-dbody">${apiBlock}</div></details>`;
-  // Cite - the citation box. A no-cite survey is EXPLICIT ("custodian citation not recorded - cite
-  // the survey package") rather than a silent AUSMT_SELF masquerade, and the captured attribution statement
-  // (verbatim, else org(year) synthesis) renders alongside. The copy buttons keep their assembly helpers.
+  // Cite - the citation box. A no-cite survey is EXPLICIT ("custodian citation not recorded - cite the
+  // survey package") rather than a silent AUSMT_SELF masquerade, and the captured attribution statement
+  // (verbatim, else org(year) synthesis) renders alongside. See docs: portal internals, drawer.js.
   const _attn=attributionText(m);
   // The citation box renders the DOI as a resolution-aware hyperlink (apaCiteDisplay); the copy buttons
   // below still assemble plain-text apa()/bibtex()/ris() strings via the [data-cite] handler.
@@ -1013,15 +780,11 @@ function openStation(i,opts){
   if(!rehydrate)_focusDrawer();                    // move focus into the dialog (never on a hydration re-render)
   if(isOpenAccess(m)) loadStationFrameLine(s);     // inject the frame line if this station declares one
 }
-// The hash prefixes that describe SOMETHING OPEN IN THE DRAWER, and which a
-// close must therefore hand back to the plain root. #/collection is deliberately absent: it addresses a
-// full-width PAGE that outlives the drawer (openCollectionPage closes the drawer on its way in), so clearing
-// it on close would blank the URL of a view still on screen.
+// The hash prefixes that describe SOMETHING OPEN IN THE DRAWER, and which a close must therefore hand back
+// to the plain root. See docs: portal internals, drawer.js.
 const HASH_ROUTES_CLEARED_ON_CLOSE=["#/station","#/survey"];
 // Two-phase boot: re-render whatever the drawer is currently showing, IN PLACE, because a phase-2 product
-// just landed and one of its sections was rendering a loading state. A no-op when the drawer is closed, or
-// when it is showing something that reads no phase-2 product (the strike rose writes its own markup and
-// clears the subject). Scroll offset and the active tab are preserved, so nothing jumps under the reader.
+// just landed and one of its sections was rendering a loading state. See docs: portal internals, drawer.js.
 function rehydrateOpenDrawer(){
   if(!_drawerSubject)return;
   if(!(drawer&&drawer.classList&&drawer.classList.contains&&drawer.classList.contains("open")))return;
@@ -1031,22 +794,16 @@ function rehydrateOpenDrawer(){
 function closeDrawer(){const wasOpen=drawer.classList.contains&&drawer.classList.contains("open");
   _drawerSubject=null;                                 // nothing to rehydrate once it is shut
   drawer.classList.remove("open");hideDrawerScrim();   // D: drop the dim backdrop
-  // The SURVEY hash is cleaned up on exactly the same terms the station hash
-  // always was. Leaving it behind means the address bar still claims
-  // #/survey/<slug> while nothing is open: reload or Back re-opens a drawer the reader deliberately
-  // shut, and a copied URL shares a state the page is not in. One list, both prefixes, so the two routes
-  // cannot drift apart again. Every close path goes through here (the close control, the map-background
-  // click, the scrim, Escape, a view switch), so this is the single seam that has to be right.
+  // The SURVEY hash is cleaned up on exactly the same terms the station hash always was. See docs: portal
+  // internals, drawer.js.
   if(HASH_ROUTES_CLEARED_ON_CLOSE.some(p=>location.hash.startsWith(p)))history.replaceState(null,"",location.pathname+location.search);
   // The survey focus dim is a VIEW state owned by the open drawer, so it lifts with it.
   // Opacity only, never a layer rebuild, so nothing reloads on close.
   if(typeof clearSurveyDim==="function")clearSurveyDim();
   if(wasOpen)_restoreDrawerFocus();}               // return focus to the invoking element (only if it was open)
 async function fetchEdi(file,avail,survey){
-  // This EDI isn't redistributable here. Its dataset DOI (m.doi), when the survey has one, is the
-  // TF source archive and is safe to open. There is NO honest substitute when no dataset DOI is
-  // recorded — TS_COLLECTION is the raw TIME-SERIES collection, not a transfer-function source archive,
-  // and silently opening it mislabels a different dataset as "the source archive" (the pre-C7 defect).
+  // This EDI isn't redistributable here. Its dataset DOI (m.doi), when the survey has one, is the TF source
+  // archive and is safe to open. See docs: portal internals, drawer.js.
   if(!avail){const m=SMETA[survey]||{};
     if(m.doi){toast("This EDI isn't redistributable here; opening the source archive.");
       window.open("https://doi.org/"+m.doi,"_blank","noopener,noreferrer");}
@@ -1066,13 +823,9 @@ function copyTxt(t){navigator.clipboard?.writeText(t).then(()=>toast("Copied."))
 // else the year_start(-end) range; "" when neither is declared (caller omits the field). Shared by the
 // slim survey card and the compact list row so both read the same value.
 function acqYearText(m){return m.dates?esc(m.dates):(m.year_start?(m.year_end&&m.year_end!==m.year_start?fmtRange(esc(String(m.year_start)),esc(String(m.year_end))):esc(String(m.year_start))):"");}
-// SLIM survey card. Field set is deliberately reduced to: title · organisation ·
-// collection chip · acquisition year · station count · data-type mixbar · period range · licence + DOI
-// badges · short description · two actions (View survey, Download). The heavier blocks - the
-// persistent-identifiers rollup (identifiersHtml), the APA citation (.cite), the spatial extent, the
-// coordinate-QC flag tally, and the per-format availability matrix (EDI/time-series/MTH5 badges) - do
-// NOT belong on the card; they render in the survey DETAIL (openSurvey) and the station drawer. The automated completeness/smoothness check is intentionally OMITTED from the
-// card (it must never read as a card-level verdict) and stays in the detail + drawer with its framing.
+// SLIM survey card. Field set is deliberately reduced to: title · organisation · collection chip ·
+// acquisition year · station count · data-type mixbar · period range · licence + DOI badges · short
+// description · two actions (View survey, Download). See docs: portal internals, drawer.js.
 function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   const mix={};ss.forEach(s=>mix[s.type]=(mix[s.type]||0)+1);
   const pmin=Math.min(...ss.map(s=>s.pmin)),pmax=Math.max(...ss.map(s=>s.pmax));
@@ -1132,29 +885,21 @@ function orcidLink(o){if(!o)return "";const href="https://orcid.org/"+o;
 // echoes a raw token).
 const CONTRIBUTOR_ROLE_LABELS={ProjectLeader:"led",ProjectMember:"project member",DataCollector:"collected the data",
   ContactPerson:"contact",DataCurator:"curated",Sponsor:"sponsored",RightsHolder:"rights holder",Distributor:"distributed"};
-// The RATIFIED display order for a person's role phrases when they hold several (SPEC §3.1). Pinned
-// explicitly (not left to object-key order) so a grouped person's phrases read in ONE stable sequence
-// regardless of the order their contributor rows were declared in. Keyed against CONTRIBUTOR_ROLE_LABELS.
+// The RATIFIED display order for a person's role phrases when they hold several (SPEC §3.1). See docs:
+// portal internals, drawer.js.
 const CONTRIBUTOR_ROLE_ORDER=["ProjectLeader","ProjectMember","DataCollector","ContactPerson","DataCurator","Sponsor","RightsHolder","Distributor"];
 // An ORCID grouping key: lower-cased, resolver-prefix stripped, trailing slashes dropped, so the bare id
 // and the full https://orcid.org/<id> URL form collapse to the SAME person. "" when no ORCID (the caller
 // then dedupes on name + name_type instead).
 function orcidKey(o){return o?String(o).trim().toLowerCase().replace(/^https?:\/\/orcid\.org\//,"").replace(/\/+$/,""):"";}
 // One contributor's NAME cell (no role phrase): an organisation links to its ROR, a person carries the
-// ORCID icon-link. Shared by the grouped Contributors list. "" for a nameless row (blank-over-placeholder,
-// so the caller drops it silently rather than printing an empty placeholder).
+// ORCID icon-link. Shared by the grouped Contributors list. See docs: portal internals, drawer.js.
 function contributorName(c){
   const name=((c&&c.name)||"").toString().trim();
   if(!name)return "";
   return c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
 // Credit model (SPEC §3/§6): the survey's contributors[] as a COLLAPSED <details> (styled like the
-// Persistent-identifiers rollup), GROUPED by person. The old surface printed one line per (person, role)
-// row; a survey with 7 people across 15 role rows printed 15 lines. Now rows dedupe by ORCID (case /
-// URL-form-insensitive) else by exact name + name_type, preserving first-appearance order, and each distinct
-// person renders ONE line: the name (ORCID/ROR link as before) then their role phrases comma-joined in the
-// RATIFIED role order. An unknown/absent role adds no phrase (never a raw token); a nameless row is dropped
-// silently and never counted. The summary counts the DISTINCT people/orgs. Returns "" (no section, no
-// placeholder) when the list is absent or empty, matching sourcesListHtml/instrumentPidsHtml.
+// Persistent-identifiers rollup), GROUPED by person. See docs: portal internals, drawer.js.
 function contributorsHtml(m){
   const list=((m&&m.contributors)||[]).filter(c=>c&&typeof c==="object");
   const groups=[],byKey=Object.create(null);
@@ -1172,23 +917,15 @@ function contributorsHtml(m){
   return `<details class="prov-d survey-contributors"><summary>Contributors (${groups.length})</summary>`+
     `<div class="prov-dbody"><div class="surveymeta">${rows.join("<br>")}</div></div></details>`;}
 // Credit model (SPEC §2.1): the survey's ORDERED creators[], the attribution-author list. Order IS the
-// attribution order; a person carries the ORCID icon-link, an organisation's name links to its ROR. No role
-// phrase (that is the contributors[] surface). Reads the pinned seam field verbatim; a creator row is the
-// same {name, name_type, orcid, ror} shape as a contributor minus the role. "" for a nameless row.
+// attribution order; a person carries the ORCID icon-link, an organisation's name links to its ROR. See
+// docs: portal internals, drawer.js.
 function creatorRow(c){
   const name=((c&&c.name)||"").toString().trim();
   if(!name)return "";
   return c&&c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
-// ONE attribution box, never two. The engine builds cite.au from creators[] (CONTRIBUTOR-CREDIT-SPEC
-// §2.1, names joined "; "), so a second .attn box for the creator names would carry the SAME names
-// twice. The single box renders the ONE attribution sentence with each creator name ORCID/ROR-linked IN
-// PLACE (creatorRow), keeping the "; " separators and the "(year)" tail of the plain sentence.
-// The links are substituted ONLY when the creators reconstruct the sentence's own name string (the §2.1
-// guarantee: cite.au IS the "; "-joined creators). A verbatim custodian attribution.statement is never
-// rewritten, and a survey whose recorded citation names someone else keeps that recorded string: in both
-// cases the flat escaped sentence renders exactly as today, in the SAME single box. That keeps the drawer
-// byte-identical in TEXT to exports.attributionLine (the CSV / citation-pack / Cite-tab attribution).
-// Returns "" when the survey has no attribution sentence at all, so the caller omits the whole section.
+// ONE attribution box, never two. The engine builds cite.au from creators[] (CONTRIBUTOR-CREDIT-SPEC §2.1,
+// names joined "; "), so a second .attn box for the creator names would carry the SAME names twice. See
+// docs: portal internals, drawer.js.
 function attributionBoxHtml(m){m=m||{};
   const text=attributionText(m);
   if(!text)return "";
@@ -1211,8 +948,8 @@ function funderHtml(f){f=f||{};
 // A ROR value may be a bare id (00892tw58) or a full https://ror.org/... URL - resolve either to
 // the canonical ror.org landing page link.
 function rorLink(r){if(!r)return null;const href=r.startsWith("http")?r:"https://ror.org/"+r;return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(r)}</a>`;}
-// When the organisation carries a ROR, its NAME is the link to the ror.org landing page
-// (replacing the separate ROR logo badge). No ROR -> plain escaped name. esc/escUrl keep a hostile org/ror value inert.
+// When the organisation carries a ROR, its NAME is the link to the ror.org landing page (replacing the
+// separate ROR logo badge). No ROR -> plain escaped name. See docs: portal internals, drawer.js.
 function orgNameLink(name,r){const t=esc(name); if(!r) return t;
   const href=r.startsWith("http")?r:"https://ror.org/"+r;
   return `<a class="orglink" href="${escUrl(href)}" target="_blank" rel="noopener noreferrer" title="ROR: ${escAttr(r)}">${t}</a>`;}
@@ -1220,18 +957,13 @@ function orgNameLink(name,r){const t=esc(name); if(!r) return t;
 // and the validator's format check); a bare id falls back to that same host.
 function raidLink(r){if(!r)return null;const href=r.startsWith("http")?r:"https://raid.org/"+r;return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(r)}</a>`;}
 // PID-schema: an instrument's `pid` is a persistent identifier for an instrument SYSTEM (the AuScope
-// Instrument Registry URL/handle). It is curator-asserted free text — render it as a link ONLY through
-// the same escUrl guard the other PID links use (a non-http(s)/mailto/relative value -> href "#", inert),
-// so a hostile `javascript:...` / `<img onerror=...>` value can never become an executable/anchor. A bare
-// handle falls back to the handle-resolver host, mirroring pidLink. Absent pid -> no link (caller omits it).
+// Instrument Registry URL/handle). See docs: portal internals, drawer.js.
 function instrumentPidLink(p){if(!p)return null;const s=String(p);
   const href=s.startsWith("http")?s:(s.startsWith("10.")?"https://doi.org/"+s:"https://hdl.handle.net/"+s);
   return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
-// PID-schema: the per-instrument PID line, shown only when SMETA carries the structured `instruments`
-// list (the engine attaches it ONLY when at least one instrument declares a pid — see _instruments_of).
-// Each instrument prints its manufacturer/model label with its registry PID as a trailing link; an
-// instrument WITHOUT a pid in that list prints just the (escaped) label. Returns "" when no list -> the
-// existing "Instrument model:" line above remains the sole instrument row (byte-identical old surveys).
+// PID-schema: the per-instrument PID line, shown only when SMETA carries the structured `instruments` list
+// (the engine attaches it ONLY when at least one instrument declares a pid - see _instruments_of). See
+// docs: portal internals, drawer.js.
 function instrumentPidsHtml(m){
   const list=(m.instruments||[]);
   if(!list.length)return "";
@@ -1246,20 +978,13 @@ function instrumentPidsHtml(m){
 const RELATION_LABELS={IsDerivedFrom:"Derived from",IsVariantFormOf:"Variant form of",
   IsSupplementTo:"Supplement to",Cites:"Cites",IsPartOf:"Part of",IsSourceOf:"Source of"};
 // D-L1/D-L4 (SPEC §9): `identifies` states WHAT the identifier points at, in NCI Table 1 data-level terms.
-// When present it labels the row by LEVEL (e.g. "Raw time series", "Collection", "Entire dataset"),
-// falling back to the DataCite relation label for a legacy row that carries no identifies. Table 1 order.
+// See docs: portal internals, drawer.js.
 const IDENTIFIES_LABELS={collection:"Collection",raw_packed:"Raw time series",level0:"Level 0, edited time series",
   level1:"Level 1, transformed time series",level2:"Level 2, processed data",level3:"Level 3, models",
   entire:"Entire dataset"};
 // §2a: a typed provenance identifier -> a link whose resolver host is chosen by identifier_type, ALWAYS
 // through the escUrl guard (a hostile identifier value can never become an executable/relative anchor —
-// same posture as pidLink/instrumentPidLink). DOI -> doi.org (unless already a URL); Handle ->
-// hdl.handle.net; URL -> itself. ANY OTHER type (RAiD, an unknown, or none) -> escaped PLAIN TEXT with NO
-// anchor: we will not invent a resolver for a type we do not model, and an unlinked value stays inert.
-// §2a: the resolver URL for a typed identifier, chosen by identifier_type. DOI -> doi.org (unless already
-// a URL); Handle -> hdl.handle.net; URL -> itself. ANY OTHER type (RAiD, unknown, none) -> null: we do not
-// invent a resolver for a type we do not model. Shared by relatedIdLink (the block anchor) and the files
-// tab (which needs the raw URL for a product tile's data-url). escUrl still guards at the anchor/attr edge.
+// same posture as pidLink/instrumentPidLink). See docs: portal internals, drawer.js.
 function relatedIdHref(id,type){
   const s=String(id==null?"":id).trim(); if(!s)return null;
   const t=String(type==null?"":type);
@@ -1271,11 +996,8 @@ function relatedIdLink(id,type){
   const s=String(id==null?"":id); if(!s.trim())return "<span class='prov'>not recorded</span>";
   const href=relatedIdHref(id,type);
   return href?`<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(s.trim())}</a>`:esc(s);}
-// Render an identifier HONESTLY given its resolution facet from the pid_status
-// cache (attached by build_portal.apply_pid_resolution). "reserved" = doi.org's OWN 404, a reserved-but-
-// not-yet-active DOI (e.g. a freshly-minted NCI PID whose handle mapping is not live) -> plain escaped
-// text + a muted "(reserved — not yet active)" note, NEVER an anchor: we do not ship a dead link. "ok" /
-// "unknown" / absent (no cache) -> the caller's normal link, byte-for-byte as today (unknown = today).
+// Render an identifier HONESTLY given its resolution facet from the pid_status cache (attached by
+// build_portal.apply_pid_resolution). See docs: portal internals, drawer.js.
 function reservedText(text){return `${esc(text)} <span class="prov reserved-note">(reserved, not yet active)</span>`;}
 function resolvedOr(resolution,text,linkHtml){return resolution==="reserved"?reservedText(text):linkHtml;}
 // The raw-TS collection cell: a link to the survey's OWN collection PID (or the NCI default),
@@ -1285,12 +1007,7 @@ function tsCollectionCell(m){
   const label=m.ts_pid?"survey collection":"NCI collection";
   if(m.ts_pid&&m.ts_pid_resolution==="reserved")return reservedText(tsPidRaw(m));
   return `<a href="${escUrl(tsUrlFor(m))}" target="_blank" rel="noopener noreferrer">${label}</a>`;}
-// The Provenance-tab "Source archive" cell. Preference: the related_identifier that IDENTIFIES the source
-// data by NCI data level (raw_packed, then collection, then entire), rendered with the SAME resolution
-// honesty the Files tab / identifiers block use (reserved -> plain text + note, else a typed link); then
-// the flat dataset DOI; then the raw-TS collection cell; else the honest "not recorded". Derives from the
-// same typed provenance the Files tab keys off, so an identifier-bearing survey shows its real archive
-// instead of "not recorded". Pure (reads m only) so the derivation is unit-testable.
+// The Provenance-tab "Source archive" cell. See docs: portal internals, drawer.js.
 function sourceArchiveCell(m){m=m||{};
   const rels=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object");
   for(const lvl of ["raw_packed","collection","entire"]){
@@ -1300,9 +1017,7 @@ function sourceArchiveCell(m){m=m||{};
   if(m.doi)return resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`);
   return m.ts==="ok"?tsCollectionCell(m):"<span class='prov'>not recorded</span>";}
 // §2a: the related-identifiers block — one line per typed relation (SMETA.related_identifiers, served by
-// the engine mapper as always-a-list). The relation prints as a human label, the identifier as a
-// type-linked value, the custodian (when present) in muted text. Empty list -> "" (the section simply
-// does not render, mirroring instrumentPidsHtml). Non-mapping entries are skipped defensively.
+// the engine mapper as always-a-list). See docs: portal internals, drawer.js.
 function relatedIdentifiersHtml(m){
   const list=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object");
   if(!list.length)return "";
@@ -1314,16 +1029,12 @@ function relatedIdentifiersHtml(m){
     const idCell=r.resolution==="reserved"?reservedText(r.identifier):relatedIdLink(r.identifier,r.identifier_type);
     return `${label}: ${idCell}${cust}`;}).join("<br>");
   return `Related identifiers:<br><span class="pidline">${rows}</span>`;}
-// §2a: "a persistent dataset identifier exists in this survey's provenance chain" — the ratified reading
-// of the DOI maturity badge. TRUE when a minted dataset DOI is set OR any typed related_identifier is a
-// DOI, so a curator survey (dataset_doi null, the DOI living in the typed provenance list) still lights
-// the badge. Shared by BOTH badge sites (station format-availability + survey card) via this one predicate.
+// §2a: "a persistent dataset identifier exists in this survey's provenance chain" - the ratified reading of
+// the DOI maturity badge. See docs: portal internals, drawer.js.
 function hasDatasetDoi(m){return !!(m&&(m.doi||(m.related_identifiers||[]).some(r=>r&&r.identifier_type==="DOI")));}
-// The rollup renders ONLY the rows that
-// carry a value. No "not recorded", no "(no PID)", no "not recorded in source metadata" noise; an instrument
-// with a model but no PID shows just the model; a group with no content is omitted (heading included). The
-// underlying keys are still SERVED - only the empty ROWS are dropped, and the retired Survey-PID row
-// stays gone.
+// The rollup renders ONLY the rows that carry a value. No "not recorded", no "(no PID)", no "not recorded
+// in source metadata" noise; an instrument with a model but no PID shows just the model; a group with no
+// content is omitted (heading included). See docs: portal internals, drawer.js.
 function identifiersHtml(m){
   const rows=[];
   if(m.doi)rows.push(`Dataset DOI: <span class="pidline">${resolvedOr(m.doi_resolution,m.doi,pidLink(m.doi))}</span>`);
@@ -1337,11 +1048,7 @@ function identifiersHtml(m){
   // longer duplicates them here.
   if(!rows.length)return "";
   return `<div class="surveymeta"><b>Persistent identifiers &amp; instruments</b><br>${rows.join("<br>")}</div>`;}
-// One related-publication citation. Robust to two real-corpus shapes: (1) a DOI value that is already a
-// full https://doi.org/ URL (the NVP harvester emits URL-form DOIs); the prefix is stripped before the
-// href/label so the resolver gets a single prefix (no doi.org/https://doi.org/ double-prefix) and the
-// label reads doi:<id>; (2) a row missing author/year/journal, the empty "(). ." skeleton is skipped and
-// only the present pieces (title + link) render.
+// One related-publication citation. See docs: portal internals, drawer.js.
 function pubCite(p){p=p||{};
   const doi=String(p.doi==null?"":p.doi).trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,"");
   const a=String(p.a==null?"":p.a).trim(),y=String(p.y==null?"":p.y).trim(),
@@ -1353,10 +1060,8 @@ function pubCite(p){p=p||{};
 function pubsHtml(m){const ps=(m.pubs||[]);
   if(!ps.length)return `<div class="surveymeta"><span class='prov'>No related publications recorded yet; the science pipeline can auto-suggest these from DOIs that cite the dataset.</span></div>`;
   return `<div class="surveymeta">`+ps.map(p=>"• "+pubCite(p)).join("<br><br>")+`</div>`;}
-// Discovery controls for the Surveys view. State lives in this module (the controls are
-// static in index.html; the coordinator/rail filters are untouched). FORBIDDEN by contract: sorting or
-// faceting by the automated completeness/smoothness check — the screen must never become a ranking, so
-// none of the sort modes or facets below reference s.q / the check.
+// Discovery controls for the Surveys view. State lives in this module (the controls are static in
+// index.html; the coordinator/rail filters are untouched). See docs: portal internals, drawer.js.
 let _sortMode="name",_cardLayout="cards";
 // Presence facets. "dl" (Downloadable here) was promoted out of the map rail, where it lived as
 // the Data available dropdown's "tf" option and so could not be asked at all on the Surveys view.
@@ -1386,10 +1091,8 @@ function surveyPassesFacets(sv){const m=SMETA[sv]||{};
 // The promoted facets gate the MAP's own predicates too (filters.js passesCore), and _facets is
 // this module's state, so it is read through one named accessor rather than reached into.
 function surveyFacetOn(k){return !!_facets[k];}
-// The survey-level reading of ONE rule, which lives in filters.js (passesYearWindow); this is not a
-// second verbatim copy of it. Only the field names differ between the two surfaces, so only the field
-// names belong here. Guarded like the other cross-module calls: a harness that loads drawer.js without
-// filters.js has no filter UI either, which is the same no-op the rule itself returns.
+// The survey-level reading of ONE rule, which lives in filters.js (passesYearWindow); this is not a second
+// verbatim copy of it. See docs: portal internals, drawer.js.
 function _surveyPassesYears(m){
   return (typeof passesYearWindow==="function")?passesYearWindow(m.year_start,m.year_end):true;}
 function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
@@ -1445,11 +1148,7 @@ function clearDiscoveryFilters(){
   // refresh() re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
   if(typeof refresh==="function")refresh();else renderCards();
   if(typeof updateCounts==="function")updateCounts();}
-// "View on map" from the survey drawer header. It must not CHECK ONLY this survey in the rail tree
-// and refresh(): that removes every other survey from the map, so the reader loses all context for where
-// the survey sits in the national coverage, and closing the drawer leaves the map still filtered. Other
-// surveys STAY VISIBLE BUT DIMMED, so this touches neither the tree nor the filter
-// state; it dims (opacity only, see setSurveyDim in map.js) and frames. Nothing to reload on close.
+// "View on map" from the survey drawer header. See docs: portal internals, drawer.js.
 function focusSurvey(sv){
   setView("map");
   if(typeof setSurveyDim==="function")setSurveyDim(sv);
@@ -1457,11 +1156,8 @@ function focusSurvey(sv){
   const _fb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);
   if(_fb.length)map.fitBounds(L.latLngBounds(_fb).pad(0.15),drawerFitOptions());}
 // The drawer is position:absolute over the RIGHT of the map (index.html #drawer, z-index 1100), so a plain
-// fitBounds centres the survey in the full container and lands half of it under the panel. Pad the fit's
-// bottom-right by the drawer's CURRENT rendered width (it is user-resizable, so this is measured, never the
-// 420px default) to frame the extent in the map area the drawer does NOT cover. Returns a plain array
-// padding, which Leaflet's toPoint accepts, so the value is inspectable by the jsdom driver. Width 0 (drawer
-// shut, or the headless DOM's zero-size boxes) degrades to today's unpadded fit.
+// fitBounds centres the survey in the full container and lands half of it under the panel. See docs: portal
+// internals, drawer.js.
 function drawerFitOptions(){
   let w=0;
   try{ if(drawer&&drawer.classList&&drawer.classList.contains("open")&&drawer.getBoundingClientRect)
@@ -1469,11 +1165,8 @@ function drawerFitOptions(){
   if(!(w>0&&isFinite(w)))w=0;
   return {paddingTopLeft:[0,0],paddingBottomRight:[w,0]};}
 function selectSurvey(sv){
-  // Stage B (selection-state isolation): scoping the map to one survey is a TEMPORARY LENS. Snapshot the
-  // tree BEFORE mutating it (enterSelectLens, filters.js) and enter Select & download so the downloads this
-  // selection enables are visible (they live in the Select pane). The lens is restored when the visitor
-  // returns to Browse or leaves the map. The Surveys catalogue reads none of this tree state
-  // (surveyVisible), so the scoping can never empty it; the snapshot keeps the MAP tree honest too.
+  // Stage B (selection-state isolation): scoping the map to one survey is a TEMPORARY LENS. See docs:
+  // portal internals, drawer.js.
   if(typeof enterSelectLens==="function")enterSelectLens();
   tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");
   if(typeof setSidebarMode==="function")setSidebarMode("select");
@@ -1485,11 +1178,7 @@ function selectSurvey(sv){
 // with NaN. Empty (all-withheld survey) => a degenerate 0° box so callers never crash on b.e/b.w.
 function bbox(ss){const p=(ss||[]).filter(hasPosition),xs=p.map(s=>s.lon),ys=p.map(s=>s.lat);
   return xs.length?{w:Math.min(...xs),e:Math.max(...xs),so:Math.min(...ys),no:Math.max(...ys)}:{w:0,e:0,so:0,no:0};}
-// Survey footprint mini-scatter. The in-plot corner label is gone; instead the plot box carries OUTSIDE
-// axis ticks: 3 latitude labels down the left margin, 3 longitude labels along the bottom (1 dp, degree
-// suffix, monospace 9px), with a small tick mark on the box edge at each. The SVG is responsive (viewBox +
-// width:100%) so it scales inside the resizable drawer. A degenerate/withheld-coords bbox (0° box) draws
-// no dots and repeated 0.0° labels but never crashes (dx/dy carry the ||1 guard; bbox is empty-safe).
+// Survey footprint mini-scatter. See docs: portal internals, drawer.js.
 function miniScatter(ss){
   const W2=372,H2=210,mL=38,mR=10,mT=10,mB=20;
   const bx0=mL,bx1=W2-mR,by0=mT,by1=H2-mB,bw=bx1-bx0,bh=by1-by0;
@@ -1508,20 +1197,11 @@ function miniScatter(ss){
   const box=`<rect x="${bx0}" y="${by0}" width="${bw}" height="${bh}" fill="none" stroke="var(--line)"/>`;
   return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:#16242f;border:1px solid var(--line);border-radius:6px">`+
     box+latTicks+lonTicks+dots+`</svg>`;}
-// The "Related surveys" section and its relatedSurveys() scorer are REMOVED
-// . The score mixed same-org, bbox-overlap and same-country into one unexplained ranking, so the
-// section asserted a relationship the corpus does not record; a reader could not tell why a survey was
-// listed. Related PUBLICATIONS (a declared, citable relation) stay exactly as they were. Deleted rather
-// than commented out because nothing else called it and a dead scorer is a maintenance trap (the same
-// posture tests/test_no_dead_prov_feature.py enforces for dead survey-metadata branches).
-// Survey-level summary (10-second view): aggregates of already-computed per-station values + survey metadata only 
+// The "Related surveys" section and its relatedSurveys() scorer are REMOVED . See docs: portal internals,
+// drawer.js.
 function surveySummary(ss,m){
-  // The "dimensionality mix (screening only)" row was removed from this table (dimensionality
-  // is inferable from the phase tensor + skew). The per-station dim tally that fed it (dimCount/nClass/
-  // dimPct) is gone with it; sc[SC.dim] itself is untouched (data products unchanged — display only).
-  // Two-phase boot: the remote-reference tally and the derived processing-software mode come from sci.json
-  // (PHASE 2). "not recorded" and the m.software fallback are claims about the source EDIs, so those two
-  // rows wait for SCI_READY; every other row here is catalogue/survey metadata and is honest immediately.
+  // The "dimensionality mix (screening only)" row was removed from this table (dimensionality is inferable
+  // from the phase tensor + skew). See docs: portal internals, drawer.js.
   const sciGate=hydrGate("sci","processing details");
   const typeCount={}, swCount={}; let tipper=0, rr=0, rrKnown=0, pmin=Infinity, pmax=-Infinity;
   ss.forEach(s=>{ const sc=sciRow(s.i);
@@ -1560,9 +1240,7 @@ function releaseNotesHtml(m){
   return `<div class="sechead">Release notes</div><table class="meta">${rows}</table>`;
 }
 // Pre-built per-survey download bundles from the manifest (EDI zip + EMTF-XML zip always when served;
-// survey MTH5 only when the survey_h5_enabled flag produced one). Empty string when the survey isn't
-// served. The MTH5 bundle holds TRANSFER FUNCTIONS ONLY (never time series), and the label says so,
-// matching the engine's <slug>-tf.h5 filename.
+// survey MTH5 only when the survey_h5_enabled flag produced one). See docs: portal internals, drawer.js.
 function surveyBundleTiles(slug){
   // Two-phase boot: the bundle rows live in the manifest (PHASE 2). "" (no tiles) reads as "this survey is
   // not served in bundle form", an absence claim made by OMISSION, which is no more honest than making it
@@ -1578,23 +1256,11 @@ function surveyBundleTiles(slug){
       `<span class="pdot" style="background:var(--ok)"></span><div>${esc(L[0])}<small>${esc(L[1])}${r.size?" · "+esc(fmtBytes(r.size)):""}</small></div></div>`;
   }).join("");
 }
-// ---- the survey DATA AT EVERY LEVEL tile grid ---------------------------
-// The block is a DATA-LEVEL grid: six fixed slots, always all six, rendered in the Downloads tile styling.
-// A collapsed <details> of whatever single-value identifier rows happen to be recorded varies in LENGTH
-// per survey, which hides from the reader what a survey has NOT deposited; six fixed slots cannot.
-// The vocabulary is the citable NCI scheme of Rees et al. 2019 - the same family the STATION Files tab
-// already speaks - and the slot keys ARE the shipped `identifies` enum (engine/schema/mtcat.schema.json),
-// so a slot can never drift from what the survey validator permits to publish. There is deliberately no
-// "Level 4 / models" slot: models ARE level3 in the canonical scheme.
+// ---- the survey DATA AT EVERY LEVEL tile grid --------------------------- The block is a DATA-LEVEL grid:
+// six fixed slots, always all six, rendered in the Downloads tile styling. See docs: portal internals,
+// drawer.js.
 const REES_LEVELS_DOI="https://doi.org/10.1080/22020586.2019.12073015";
-// [identifies key, tile name, one-line description]. WORDING RULE: where a slot names the
-// same level as a station Files-tab row (relatedProducts -> tsLevelRow/level2), the description carries that
-// row's gloss VERBATIM, so the two surfaces read as one vocabulary rather than two paraphrases:
-//   level0 -> "instrument-recorded, full resolution"   level1 -> "calibrated, resampled, filtered"
-//   level2 -> "transfer functions"
-// Level 1 names its MTH5 TIME-SERIES holding explicitly, because the Downloads grid separately offers
-// "Survey MTH5 (transfer functions) / TFs only" - level-2 CONTENT in the same container format. The two
-// must never read as the same object, so one says "time series" and the other keeps saying "TFs only".
+// [identifies key, tile name, one-line description]. See docs: portal internals, drawer.js.
 const DATA_LEVEL_SLOTS=[
   ["collection","Collection","the umbrella record for everything this survey deposited"],
   ["raw_packed","Packed Raw Data","raw time series: telemetry data streamed from site loggers"],
@@ -1603,25 +1269,13 @@ const DATA_LEVEL_SLOTS=[
   ["level2","Level 2","derived frequency-domain processed data: transfer functions"],
   ["level3","Level 3","derived modelling inputs and outputs"],
 ];
-// SLOT ALIASES. `entire` - ONE record covering all levels, the
-// shape the survey template gives a state-survey landing page - IS the umbrella record the Collection
-// slot names, so it FILLS that slot instead of falling through to the extra-tile bucket. Gawler Phase 2
-// is the case that forced this: its only umbrella identifier is the GSSA/SARIG record (identifies:
-// entire), so the drawer read "1 of 6 recorded" with an empty Collection tile and an orphan hanging
-// under the grid, when the survey plainly HAS deposited its umbrella record.
-// COLLISION RULE: when a survey carries BOTH `collection` and `entire`, the EXACT key takes the slot and
-// the alias renders as an EXTRA tile below the six. Two properties this preserves, in order: nothing is
-// ever silently dropped (the extra-tile rule is the section's one answer to "recorded, but not one of the
-// six"), and "N of 6" counts SLOTS, so a colliding pair tallies one, never two. Declaration order in the
-// survey.yaml is irrelevant - the exact match wins wherever it sits in the list.
+// SLOT ALIASES. `entire` - ONE record covering all levels, the shape the survey template gives a
+// state-survey landing page - IS the umbrella record the Collection slot names, so it FILLS that slot
+// instead of falling through to the extra-tile bucket. See docs: portal internals, drawer.js.
 const SLOT_ALIASES={collection:["entire"]};
-// One tile. UNRECORDED is explicit: muted BUT VISIBLE (.prod.dis + a hollow dot +
-// "not yet recorded"), never omitted, so the deposit chain has the same shape on every survey and a gap is
-// legible as a gap. RECORDED renders the identifier with the SAME resolution honesty every other identifier
-// surface in this file uses (reserved -> inert plain text + note, never a dead link) and the custodian as
-// the repository tag. SCHEME GUARD, mirroring the Files tab: only an http(s) href becomes the tile's ACTION,
-// because a URL-typed identifier is relatedIdHref's raw value and a javascript:/data: value would otherwise
-// route straight into window.open; such a row still SHOWS its value, it simply carries no action.
+// One tile. UNRECORDED is explicit: muted BUT VISIBLE (.prod.dis + a hollow dot + "not yet recorded"),
+// never omitted, so the deposit chain has the same shape on every survey and a gap is legible as a gap. See
+// docs: portal internals, drawer.js.
 function dataLevelTile(name,desc,row){
   const head=`${esc(name)}<small>${esc(desc)}</small>`;
   if(!row||!row.identifier)
@@ -1635,17 +1289,11 @@ function dataLevelTile(name,desc,row){
   return `<div class="prod dl-tile" ${attrs}><span class="pdot" style="background:var(--ok)"></span>`+
     `<div>${head}<small class="dl-id">${relatedIdLink(row.identifier,row.identifier_type)}${tag}</small></div></div>`;}
 // The whole section: the six fixed slots, then any identifier NO slot claimed (directly or through
-// SLOT_ALIASES) as an EXTRA tile below them. Nothing is ever silently dropped - the `identifies`
-// vocabulary may grow, and a row this build does
-// not model must still be visible rather than vanishing between releases. "N of 6" counts the six FIXED
-// slots only (an extra tile is not one of the six), per the slot mapping.
+// SLOT_ALIASES) as an EXTRA tile below them. See docs: portal internals, drawer.js.
 function surveyDataLevelsHtml(m){
   m=m||{};
   const rels=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object"&&r.identifier);
-  // Resolve the six slots ONCE, recording which rows they consumed. With aliases in play, "this row's
-  // identifies is not a slot key" is not a safe proxy for "no slot took it", and getting that wrong
-  // would either drop a row or render it twice - so the consumed set is tracked explicitly and the extras
-  // bucket is derived from it. `taken` also makes single-consumption structural: no row can fill two slots.
+  // Resolve the six slots ONCE, recording which rows they consumed. See docs: portal internals, drawer.js.
   const taken=[],slotRows=[];
   DATA_LEVEL_SLOTS.forEach(([k])=>{
     const pick=key=>rels.find(r=>r.identifies===key&&taken.indexOf(r)<0);
@@ -1656,8 +1304,7 @@ function surveyDataLevelsHtml(m){
   const tiles=DATA_LEVEL_SLOTS.map(([,name,desc],i)=>dataLevelTile(name,desc,slotRows[i])).join("");
   // Unclaimed rows: an out-of-slot `identifies`, the alias that LOST a collision (a survey declaring both
   // `collection` and `entire`), or a legacy row that predates the level model and carries only a DataCite
-  // relation. Labelled by the same tables the retired Related-identifiers block used, so the label
-  // vocabulary is unchanged for these rows.
+  // relation. See docs: portal internals, drawer.js.
   const extras=rels.filter(r=>taken.indexOf(r)<0).map(r=>{
     const label=(r.identifies&&IDENTIFIES_LABELS[r.identifies])||RELATION_LABELS[r.relation]||(r.relation?String(r.relation):"Related identifier");
     return dataLevelTile(label,"recorded identifier outside the six data levels",r);}).join("");
@@ -1694,19 +1341,14 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   const keepScroll=rehydrate?(drawer.scrollTop||0):0;
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
   if(!rehydrate)_rememberDrawerOpener();              // capture the invoking element before the rewrite
-  // The survey drawer OWNS its
-  // route the way openStation always has. Without this, opening survey B over survey A left #/survey/<A> in
-  // the address bar - the same stale-URL defect the close path had, one step further along. Skipped on a
-  // hydration re-render (which must never rewrite the URL) and on a survey with no slug to address.
+  // The survey drawer OWNS its route the way openStation always has. Without this, opening survey B over
+  // survey A left #/survey/<A> in the address bar - the same stale-URL defect the close path had, one step
+  // further along. See docs: portal internals, drawer.js.
   if(!rehydrate&&m.slug)location.hash="#/survey/"+encodeURIComponent(m.slug);
   _drawerSubject={kind:"survey",sv};                  // what rehydrateOpenDrawer re-renders when a gate settles
-  // Section order - (1) title+description, (2) geographic footprint, (3) station count +
-  // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
-  // (7) publications, (8) identifiers (the rollup), (9) release history. Content is unchanged from before - 
-  // only the order. Acquisition/processing are carried inside the survey-summary table (sections 3/5 share
-  // That atomic block). Contributors (credit model, SPEC §3) do not trail
-  // below Downloads, they sit inside the ATTRIBUTION block directly beneath the attribution box.
-  // Downloads move up ahead of funding/publications/identifiers; release history moves last.
+  // Section order - (1) title+description, (2) geographic footprint, (3) station count + period-range
+  // stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding, (7)
+  // publications, (8) identifiers (the rollup), (9) release history. See docs: portal internals, drawer.js.
   drawer.innerHTML=
    // "View on map" is a NAVIGATION action, not a download, so it leaves the Downloads grid and
    // sits in the header beside the survey name. The header is sticky (.svhead), so the control stays
@@ -1719,12 +1361,8 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    `<div class="dim" style="margin-top:10px">${esc(m.blurb||"Survey description to be provided by the uploader.")}</div>`+
    miniScatter(ss)+
    surveySummary(ss,m)+
-   // The captured attribution statement rendered where the survey's attribution lives (verbatim
-   // custodian statement, else the org(year) synthesis). That sentence is ONE box
-   // (attributionBoxHtml) carrying the creator names ORCID/ROR-linked in place, never a second names box,
-   // and the collapsed "Contributors (N)" details moves UP to sit directly beneath it (credit reads as one
-   // block: who to attribute, then who did what) instead of trailing below Downloads. The upstream
-   // "Source datasets" list follows.
+   // The captured attribution statement rendered where the survey's attribution lives (verbatim custodian
+   // statement, else the org(year) synthesis). See docs: portal internals, drawer.js.
    (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div>`+attributionBoxHtml(m):"")+
    contributorsHtml(m)+
    sourcesListHtml(m)+
@@ -1741,10 +1379,9 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    `</div>`+
    `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"-"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
-   // The identifiers rollup is the always-open DATA-LEVEL tile grid. The
-   // Organisation ROR row is gone with it - the custodian's ROR still reaches the reader as the
-   // link on the organisation name in the header subline above (orgNameLink) and on the About page.
-   // identifiersHtml() itself is untouched and still serves the STATION drawer's identifiers expander.
+   // The identifiers rollup is the always-open DATA-LEVEL tile grid. The Organisation ROR row is gone with
+   // it - the custodian's ROR still reaches the reader as the link on the organisation name in the header
+   // subline above (orgNameLink) and on the About page. See docs: portal internals, drawer.js.
    surveyDataLevelsHtml(m)+
    releaseNotesHtml(m);   // no "Related surveys" section; release notes are last
   drawer.setAttribute("aria-label",sv+", survey details");
@@ -1759,15 +1396,13 @@ function collLine(m){
   if(m.collection&&m.collection.id) parts.push(`Part of: <a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`);
   return parts.length?`<div class="dsub" style="margin-top:3px">${parts.join(" · ")}</div>`:"";
 }
-// Collections INDEX (the "Collections" tab): one rich card per collection in COLL, opening the
-// full-width collection page. A collection appears automatically when surveys share a collection.id.
-// The participating organisations of a collection, derived from its member surveys' SMETA (deduped, sorted).
+// Collections INDEX (the "Collections" tab): one rich card per collection in COLL, opening the full-width
+// collection page. A collection appears automatically when surveys share a collection.id. See docs: portal
+// internals, drawer.js.
 function collOrgs(c){const set=new Set();((c&&c.surveys)||[]).forEach(sv=>{const o=(SMETA[sv]||{}).org;if(o)set.add(o);});return [...set].sort();}
-// ONE rich collection card at ANY count, with no compact variant beside it.
-// Title + type/status, the FULL abstract (no 240-char truncation, no Show more), the footprint
-// scatter, rollup stats, participating organisations, and a prominent Explore action. Rendered into a
-// responsive auto-fit grid (index.html .collfeature-grid) so it reads from one collection today to
-// several (WA-MT, Vulcan) soon. Keeps the .scard.collfeature class the styling + tests key off.
+// ONE rich collection card at ANY count, with no compact variant beside it. Title + type/status, the FULL
+// abstract (no 240-char truncation, no Show more), the footprint scatter, rollup stats, participating
+// organisations, and a prominent Explore action. See docs: portal internals, drawer.js.
 function collectionCard(cid){const c=COLL[cid];const members=(c.surveys||[]);const ss=ST.filter(s=>members.indexOf(s.survey)>=0);
   const orgs=collOrgs(c);const desc=c.description||"";
   const descHtml=desc?`<div class="desc collfeat-desc">${esc(desc)}</div>`:"";
@@ -1787,20 +1422,10 @@ function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&C
   grid.className="collfeature-grid";                              // ONE responsive grid at any count (index.html)
   grid.innerHTML=ids.map(collectionCard).join("");
 }
-// Collection footprint. Fixed-Australia extent with a simplified coastline + state-
-// boundary outline (vendor/au-outline.js — public-domain Natural Earth, see that file's header) drawn
-// BENEATH the station dots; dots are COLOURED BY MEMBER SURVEY with a small legend. Degrades cleanly when
-// AU_OUTLINE is absent (e.g. the headless harness doesn't load the vendor asset) — dots + legend still
-// render. The projection is a plain equirectangular fit of the fixed AU box, so the outline and the dots
-// stay registered; the canvas aspect matches the box to avoid squashing.
+// Collection footprint. See docs: portal internals, drawer.js.
 const AU_EXTENT={w:112,e:154,so:-44,no:-9};
 // Fluid (viewBox + width:100%) so it scales inside its container; `maxW` optionally raises the max-width
-// cap (the detail-page hero gives it more room than a list card). W stays the viewBox coordinate space so
-// the geometry is identical regardless of rendered size.
-// `mark` puts the AuScope mark in the panel's bottom-left corner, matching the static collection page's
-// figure. Off by default: the list card is a thumbnail with no corner to spare, and the detail hero is the
-// full-size map this belongs on. The mark is a sibling of the SVG inside a panel capped at the same width,
-// never an <image> in the SVG, so the geometry stays what the colour and dot pins measure.
+// cap (the detail-page hero gives it more room than a list card). See docs: portal internals, drawer.js.
 function collScatter(ss,maxW,mark){
   if(!ss.length) return "";
   const W=560,H=Math.round(W*(AU_EXTENT.no-AU_EXTENT.so)/(AU_EXTENT.e-AU_EXTENT.w)),pad=22;
@@ -1816,9 +1441,8 @@ function collScatter(ss,maxW,mark){
     outline=`<g class="au-outline">${coast}${borders}</g>`;
   }
   // The members that PLOT, which is the engine's `present` list (_pages.py _collection_scatter assigns
-  // colours over the members that have positioned stations) expressed with the SPA's own predicate. A
-  // wholly coordinate-withheld member is a live corpus state; counting it here gives this ramp a
-  // different n from the page's and moved every later member's colour one step along it.
+  // colours over the members that have positioned stations) expressed with the SPA's own predicate. See
+  // docs: portal internals, drawer.js.
   const members=[...new Set(ss.filter(hasPosition).map(s=>s.survey))].sort();
   // The SAME ramp the static collection page lays (state.js memberColours, twin of the engine's
   // _member_colours). The old modulo handed the ninth member the first member's colour, so a
@@ -1852,8 +1476,7 @@ function openCollectionPage(cid){
   const v=document.getElementById("collectionview");
   // A two-column HERO on wide screens: the abstract (+ the type/status/counts subline) on the left, the
   // fluid footprint scatter on the right; the stat tiles span full-width below and the member table
-  // breathes to full width. No .collnote explainer renders. Single column on narrow screens
-  // (index.html .collhero).
+  // breathes to full width. See docs: portal internals, drawer.js.
   v.innerHTML=
    `<div class="collpagenav"><button class="collback" data-act="collidx">← All collections</button>`+
    `<button class="collback collmapbtn" data-act="collmap" data-coll="${escAttr(cid)}">View all stations on main map</button></div>`+
@@ -1900,11 +1523,9 @@ function dispatchProd(d){
     if(panel&&panel.dataset&&panel.dataset.tab)selectDrawerTab(panel.dataset.tab);
     if(el.scrollIntoView)el.scrollIntoView({behavior:"smooth"});}}
   else if(d.prod==="toast")toast(d.msg);}
-// Yield to an open plot-expand modal - its own Esc handler (plots.js) closes it, so the drawer
-// must NOT also close underneath it. Otherwise Escape closes the drawer as before.
-// ...and to an open wget/curl dialog, for the same reason: it is aria-modal, its own Esc handler closes
-// it, and without this yield Escape closed the drawer BEHIND an open dialog. Tested by not-hidden rather
-// than by existence: unlike the plot modal, that dialog's markup is always in the document.
+// Yield to an open plot-expand modal - its own Esc handler (plots.js) closes it, so the drawer must NOT
+// also close underneath it. Otherwise Escape closes the drawer as before. See docs: portal internals,
+// drawer.js.
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){
   if(typeof document==="undefined"||!document.getElementById)return void closeDrawer();
   if(document.getElementById("plotmodal"))return;
@@ -1942,10 +1563,8 @@ document.addEventListener("click",e=>{
   else if(act==="doi"&&doi)window.open(escUrl("https://doi.org/"+doi),"_blank","noopener,noreferrer");   // NOT encodeURIComponent — it %2F-escapes the DOI slash -> doi.org 404; escUrl still blocks scheme injection
 });
 
-// Discovery-controls wiring for the Surveys view. Static registrations - the controls
-// live in index.html's #surveysview and exist at parse time (drawer.js loads after them). Each handler
-// mutates this module's discovery state then re-renders the cards; the container listener on #facetChips
-// survives its own innerHTML re-render (the container element is stable, only its children change).
+// Discovery-controls wiring for the Surveys view. Static registrations - the controls live in index.html's
+// #surveysview and exist at parse time (drawer.js loads after them). See docs: portal internals, drawer.js.
 (function(){
   const sortSel=document.getElementById("sortSel");
   if(sortSel&&sortSel.addEventListener)sortSel.addEventListener("change",()=>{_sortMode=sortSel.value||"name";renderCards();});

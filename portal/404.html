@@ -11,13 +11,8 @@
   a{color:#EF7256}
   h1{color:#fff;font-size:1.7rem;margin:.2rem 0 .6rem}
   .crumb{font-size:.85rem;opacity:.8}
-  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement
-     CENTRE, the AuScope-NCRIS lockup RIGHT. The rule set below is index.html's, character for
-     character, with the four colour tokens resolved to the literals this page writes, because it is
-     served for any unmatched path at any depth and carries no token layer;
-     tests/test_footer_regions.py holds all seven surfaces identical. STICKY, not fixed: it keeps its
-     own box in flow, so body is a viewport-tall column and the last line is never hidden under it;
-     below 560px of viewport it returns to ordinary flow. */
+  /* One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement CENTRE,
+     the AuScope-NCRIS lockup RIGHT. See docs: portal internals, 404.html. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid #2B3557;font-size:12.5px;color:#8FA3B0;line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
   footer a{color:#EF7256;text-decoration:none}
   .apilink{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:#8FA3B0;text-decoration:none}
@@ -47,12 +42,11 @@ the <a href="/surveys">survey index</a>.</p>
 <footer>
   <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
   <div class="fzone fleft"><a class="apilink" href="/data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a></div>
-  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one
-       link in the line. The year is a literal, the mechanism every page uses. -->
+  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. See docs: portal internals,
+       404.html. -->
   <div class="fzone fcenter">AusMT is enabled by AuScope &middot; <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> &middot; &copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey</div>
-  <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
-       image is same-origin and vendored, so stating the relationship takes no runtime dependency on
-       the organisation's own host. -->
+  <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. See docs:
+       portal internals, 404.html. -->
   <div class="fzone fright"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
 </footer>
 </body>

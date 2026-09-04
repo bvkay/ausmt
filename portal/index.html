@@ -57,14 +57,15 @@
 <style>
   :root{
     /* DUPLICATED verbatim in about.html and add-survey.html: the five surface tokens must stay identical
-       across all three. --copper carries the Tangerine accent; the token name does not follow it. */
+       across all three. --copper carries the Tangerine accent; the token name does not follow it. See docs:
+       portal internals, index.html. */
     --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
     /* These MUST equal src/state.js TYPE_COL byte-for-byte: a legend swatch and its map dot are one claim
        held in two files. Pinned by tests/test_type_palette_separability.py. */
     --lpmt:#2E8FA3; --bbmt:#3730B8; --amt:#CDA1EC; --gds:#C255A0;
-    /* --no is rendered as TEXT on --panel (5.98:1) and --panel-2 (5.00:1), so it must stay above the
-       WCAG AA 4.5:1 floor on both. Hue-preserving danger red, distinct from --part amber and --copper. */
+    /* --no is rendered as TEXT on --panel (5.98:1) and --panel-2 (5.00:1), so it must stay above the WCAG
+       AA 4.5:1 floor on both. See docs: portal internals, index.html. */
     --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
     --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
     --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
@@ -72,25 +73,21 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
-  /* Three-zone header. The side zones must take equal ZERO-basis shares (flex:1 1 0, min-width:0) or
-     each grows with its own content and the centred tabs land at a different x per view; pinned by
-     tests/test_header_geometry_parity.py. */
+  /* Three-zone header. The side zones must take equal ZERO-basis shares (flex:1 1 0, min-width:0) or each
+     grows with its own content and the centred tabs land at a different x per view; pinned by
+     tests/test_header_geometry_parity.py. See docs: portal internals, index.html. */
   header{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
-  /* The AusMT mark (vendor/brand/ausmt-mark.svg, from tools/gen_brand.py) is a fixed 30x30 box, so it
-     joins the zero-basis .hleft zone without moving the centre tabs. Stated character-identically in
-     engine/extract/_pages.py's sheet; pinned by tests/test_header_geometry_parity.py. */
+  /* The AusMT mark (vendor/brand/ausmt-mark.svg, from tools/gen_brand.py) is a fixed 30x30 box, so it joins
+     the zero-basis .hleft zone without moving the centre tabs. See docs: portal internals, index.html. */
   .brandmark{height:30px;width:30px;display:block;flex:none}
   .tagline{color:var(--muted);font-size:12.5px}
   /* The ACTIVE view is a filled copper box with dark text (#16110b on --copper = 6.44:1, AA), and every
-     view control keeps a 40px click target. Inactive buttons read as buttons, not muted links. */
-  /* The static header and this one must agree on the container's wrap mode: nowrap and wrap hand
-     zero-basis flex children different resolved widths. Pinned pairwise by
-     tests/test_header_geometry_parity.py. */
+     view control keeps a 40px click target. See docs: portal internals, index.html. */
   nav{display:flex;gap:6px;flex-wrap:wrap}
   nav button{flex:1;min-width:112px;min-height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
   nav button:hover{border-color:var(--copper)}
@@ -120,16 +117,14 @@
   #map{flex:1;background:#dfe6e9;position:relative}
   /* Mute the basemap only: station overlays render outside the tile pane, so they keep full colour. */
   #map .leaflet-tile-pane{filter:saturate(.35) brightness(1.04)}
-  /* The AuScope mark, top right of the MAP and nowhere else: a screenshot carries no footer, so this is
-     the attribution that travels with the image, at the brand guide's clear space (32px) with neither
-     tint nor reduced opacity. pointer-events:none and a z-index below Leaflet's control and popup
-     layers keep it out of hit testing. */
+  /* The AuScope mark, top right of the MAP and nowhere else: a screenshot carries no footer, so this is the
+     attribution that travels with the image, at the brand guide's clear space (32px) with neither tint nor
+     reduced opacity. See docs: portal internals, index.html. */
   .mapmark{position:absolute;top:32px;right:32px;height:32px;width:auto;z-index:500;pointer-events:none}
   @media(max-width:560px){.mapmark{display:none}}
   /* The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map,
-     because only the layer that is drawing knows which provider to name, and the 240px cap keeps the
-     opened text clear of the legend at 560px of map. Shared character for character with
-     add-survey.html; pinned by tests/test_map_attribution.py. */
+     because only the layer that is drawing knows which provider to name, and the 240px cap keeps the opened
+     text clear of the legend at 560px of map. See docs: portal internals, index.html. */
   .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-end;gap:4px}
   .mapattrib-toggle{flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--text);font-family:var(--sans);font-size:12px;font-style:italic;line-height:1;cursor:pointer}
   .mapattrib-toggle:hover{border-color:var(--copper)}
@@ -144,15 +139,15 @@
   .typegrid label{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 8px;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;cursor:pointer}
   .typegrid input{accent-color:var(--copper)}
   .dot{width:10px;height:10px;border-radius:50%;flex:none}
-  /* flex-shrink:0 is load-bearing: #filterPane is a column flex, so a tall mode pane squashes this
-     control, and .seg clips its overflow, so it collapses silently to its 2px borders and leaves the
-     rail a one-way door into Select and download. */
+  /* flex-shrink:0 is load-bearing: #filterPane is a column flex, so a tall mode pane squashes this control,
+     and .seg clips its overflow, so it collapses silently to its 2px borders and leaves the rail a one-way
+     door into Select and download. See docs: portal internals, index.html. */
   .seg{display:flex;flex:none;border:1px solid var(--line);border-radius:4px;overflow:hidden}
   .seg button{flex:1;background:var(--panel-2);border:0;color:var(--muted);font-size:12px;padding:6px;cursor:pointer}
   .seg button.on{background:var(--copper);color:#16110b;font-weight:600}
   /* The tree fills the rail's remaining height and scrolls INTERNALLY; the rail must NOT gain a second
      outer scrollbar. The flex chain that allows it (each ancestor min-height:0) is on #browseMode and
-     #treeSection below. */
+     treeSection below. See docs: portal internals, index.html. */
   .tree{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow-y:auto;padding-right:12px}
   .tree .country{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:3px 0;cursor:pointer}
   .tree .country input{accent-color:var(--copper)}
@@ -162,9 +157,8 @@
   .tree .survey{display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer;padding:1px 0 1px 18px}
   .tree .survey input{accent-color:var(--copper)}
   .tree .survey .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-right:4px}
-  /* Disclosure carets are a separate click target inside each label row, and the handler preventDefaults
-     so the label never activates its checkbox. .coll and .treegroup are shared between .tree and
-     .collgroup. */
+  /* Disclosure carets are a separate click target inside each label row, and the handler preventDefaults so
+     the label never activates its checkbox. See docs: portal internals, index.html. */
   .tree .caret{flex:none;width:14px;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
   .tree .caret:hover{color:var(--copper)}
   .tree .treegroup,.collgroup .treegroup{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:4px 0 1px}
@@ -258,9 +252,8 @@
   .sechead .dl-count{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
   .dl-cite{font-size:11.5px;color:var(--muted);margin-top:6px}
   .dl-instr{font-size:12px;color:var(--muted);margin-top:4px}
-  /* The three link sites must be given the site accent, or they take the UA's near-invisible dark blue
-     on the navy tiles and go purple once followed. :visited is stated explicitly, because an identifier
-     is not consumed by being clicked. */
+  /* The three link sites must be given the site accent, or they take the UA's near-invisible dark blue on
+     the navy tiles and go purple once followed. See docs: portal internals, index.html. */
   .dl-id a,.dl-cite a,.dl-instr a{color:var(--copper);text-decoration:none}
   .dl-id a:visited,.dl-cite a:visited,.dl-instr a:visited{color:var(--copper)}
   .dl-id a:hover,.dl-cite a:hover,.dl-instr a:hover{text-decoration:underline}
@@ -347,7 +340,8 @@
   .plotmodal-close{font-size:15px;line-height:1;padding:4px 10px;flex:none}
   .plotmodal-svg{overflow:auto}
   /* min-width is plots.js's design width (W=372), so the modal svg can never render narrower than the
-     drawer's and shrink its axis text; the svg's matching viewBox keeps the aspect ratio at width:100%. */
+     drawer's and shrink its axis text; the svg's matching viewBox keeps the aspect ratio at width:100%. See
+     docs: portal internals, index.html. */
   .plotmodal-svg svg{width:100%;min-width:372px;height:auto;display:block}
   .plotmodal-svg .plot{margin:6px 0 16px}
 
@@ -409,9 +403,8 @@
   .colltable tbody tr:hover{background:var(--panel)}
   .colltable td a{color:var(--copper);text-decoration:none;font-weight:500}.colltable td a:hover{text-decoration:underline}
   .colltable .csub{font-size:12px;color:var(--muted);margin-top:1px}
-  /* FOUR across at the cap and at a plain 1500px viewport, never a fifth: the 352px floor packs four
-     into 1460px of grid content. The floor is min(352px,100%) because a bare minimum cannot shrink and
-     a 375px phone would scroll sideways. */
+  /* FOUR across at the cap and at a plain 1500px viewport, never a fifth: the 352px floor packs four into
+     1460px of grid content. See docs: portal internals, index.html. */
   .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(352px,100%),1fr));gap:14px;max-width:1500px}
   .surveymeta{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
   .surveymeta a{color:var(--copper);text-decoration:none}
@@ -438,11 +431,8 @@
   @keyframes hydrpulse{0%,100%{opacity:.55}50%{opacity:1}}
   @media (prefers-reduced-motion:reduce){.hydrating{animation:none;opacity:.8}}
   .scard .cardbtns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-  /* One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the
-     AuScope-NCRIS lockup RIGHT. THIS IS THE MASTER RULE SET, carried character for character by every
-     other portal document and by engine/extract/_pages.py's _CSS, so nothing here may be tuned for one
-     page. The equal zero-basis side zones, the two queries on the FOOTER's own content width and the
-     lockup's max-width cap are each load-bearing; pinned by tests/test_footer_regions.py. */
+  /* One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope-NCRIS
+     lockup RIGHT. See docs: portal internals, index.html. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
   .fleft{flex:1 1 0;min-width:0}
@@ -456,8 +446,9 @@
   .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px}
   .leaflet-tooltip.qtip::before{display:none}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
-  /* The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can follow an export
-     toast within its dwell). It carries at most one action button; it never carries a progress bar. */
+  /* The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can follow an export toast
+     within its dwell). It carries at most one action button; it never carries a progress bar. See docs:
+     portal internals, index.html. */
   .snackbar{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--panel);
     border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;
     z-index:2000;display:flex;align-items:center;gap:12px;line-height:1.45}
@@ -499,12 +490,11 @@
 
   /* This sheet must carry NO rule for .introoverlay, .intropanel, .introclose, .introhero, .introtiles,
      .introtile or .introtour, and no element here may carry those ids or classes; pinned by
-     tools/interaction_test.js. */
+     tools/interaction_test.js. See docs: portal internals, index.html. */
 
-  /* --- guided tour spotlight (tour.js) --- */
-  /* The dim is JS-driven (tour.js TOUR_DIM): on a targeted step the backdrop stays TRANSPARENT and the
-     spot's box-shadow supplies it, so the element shows through the cutout. z-order backdrop 3000 <
-     spot 3001 = leader < card 3002. */
+  /* --- guided tour spotlight (tour.js) --- The dim is JS-driven (tour.js TOUR_DIM): on a targeted step the
+     backdrop stays TRANSPARENT and the spot's box-shadow supplies it, so the element shows through the
+     cutout. See docs: portal internals, index.html. */
   .tourbackdrop{position:fixed;inset:0;z-index:3000}
   .tourspot{position:fixed;z-index:3001;border:2px solid var(--copper);border-radius:8px;
     pointer-events:none;transition:all .12s ease}
@@ -534,19 +524,17 @@
   #recentStrip a{color:var(--text);text-decoration:none}
   #recentStrip a:hover{color:var(--copper);text-decoration:underline}
 
-  /* ===== map page and sidebar structure ============================================== */
-  /* Wrapping the rail sections in two containers costs them aside.filters' column gap, so it is
-     restored here. */
+  /* ===== map page and sidebar structure ============================================== Wrapping the rail
+     sections in two containers costs them aside.filters' column gap, so it is restored here. See docs:
+     portal internals, index.html. */
   .railmodepane{display:flex;flex-direction:column;gap:16px}
   /* The Browse pane and its tree section are the flex chain that lets #tree flex-fill and scroll
-     internally: each level needs min-height:0 to shrink below its content, or the tree pushes the rail
-     into an outer scrollbar instead. */
+     internally: each level needs min-height:0 to shrink below its content, or the tree pushes the rail into
+     an outer scrollbar instead. See docs: portal internals, index.html. */
   #browseMode{flex:1;min-height:0}
   #treeSection{flex:1;display:flex;flex-direction:column;min-height:0}
-  /* width:36px!important must beat BOTH the 363px base rule and the inline width the resizer writes,
-     which is not !important. */
-  /* Anchored BOTTOM-right (margin-top:auto pushes it past the flex-filling pane and tree). The rail
-     itself never scrolls, so it stays visible. */
+  /* width:36px!important must beat BOTH the 363px base rule and the inline width the resizer writes, which
+     is not !important. See docs: portal internals, index.html. */
   .railcollapse{align-self:flex-end;margin-top:auto;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
     width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:15px;line-height:1;padding:0;flex:none}
   .railcollapse:hover{border-color:var(--copper);color:var(--text)}
@@ -585,8 +573,8 @@
   .maplegend-body{padding:9px 11px;display:flex;flex-direction:column;gap:6px}
   .maplegend .legrow{display:flex;align-items:center;gap:8px;line-height:1.3}
   /* The four TYPE rows are real toggle BUTTONS proxying the rail's #typeBoxes checkboxes (main.js
-     toggleLegendType), so the UA chrome is stripped back to the .legrow look and the affordances a
-     control owes are added. */
+     toggleLegendType), so the UA chrome is stripped back to the .legrow look and the affordances a control
+     owes are added. See docs: portal internals, index.html. */
   .maplegend .legtype{appearance:none;-webkit-appearance:none;background:none;border:0;border-radius:4px;
     padding:2px 4px;margin:0 -4px;font-family:inherit;font-size:inherit;line-height:1.3;color:var(--text);
     text-align:left;cursor:pointer}
@@ -595,11 +583,10 @@
   .maplegend .legtype.legoff{opacity:.4}
   .maplegend .leghint{color:var(--muted);font-size:11px;line-height:1.35}
   /* The metric scale bar, re-parented out of the Leaflet corner (main.js buildScaleBar) under its OWN
-     class, so the legend's dot and parenting pins are untouched. position:static undoes Leaflet's
-     absolute corner placement. */
+     class, so the legend's dot and parenting pins are untouched. See docs: portal internals, index.html. */
   .maplegend .maplegend-scale{position:static;margin:7px 0 0;pointer-events:none;box-shadow:none}
   /* text-shadow:none is the point: Leaflet ships this control with a WHITE text-shadow, which is a halo
-     around near-white text on this dark panel. Weight drops to 500 for the same reason. */
+     around near-white text on this dark panel. See docs: portal internals, index.html. */
   .maplegend .maplegend-scale .leaflet-control-scale-line{background:none;box-shadow:none;
     text-shadow:none;border:2px solid var(--muted);border-top:0;color:var(--text);
     font-family:var(--mono);font-size:11.5px;font-weight:500;line-height:1.5;padding:2px 6px;
@@ -659,9 +646,9 @@
   .collhero-main{min-width:0}
   .collhero-aside{min-width:0}
   .collscatter{margin:10px 0 4px}
-  /* Twin of the static collection page's .collmap/.collmark rule (engine/extract/_pages.py). The panel
-     is capped at the SVG's own width, so the corner the mark is pinned to is the MAP's, not the
-     column's. */
+  /* Twin of the static collection page's .collmap/.collmark rule (engine/extract/_pages.py). The panel is
+     capped at the SVG's own width, so the corner the mark is pinned to is the MAP's, not the column's. See
+     docs: portal internals, index.html. */
   .collscatter-panel{position:relative}
   /* The SVG is inline, so without this its line box leaves a 3px descender gap and the panel's bottom
      edge stops being the MAP's. The static page's sheet blocks its own the same way. */
@@ -679,7 +666,7 @@
 <header>
   <div class="hzone hleft">
     <!-- The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on
-this site carries a second mark of any kind. Same markup and same rule on every surface. -->
+         this site carries a second mark of any kind. See docs: portal internals, index.html. -->
     <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
     <div class="wordmark">AusMT</div>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
@@ -687,8 +674,7 @@ this site carries a second mark of any kind. Same markup and same rule on every 
   <div class="hzone hcenter">
     <nav>
       <!-- Surveys and Collections are served as pages, so these two controls are LINKS; Map stays a
-<button>, because it is the application itself. The ids are unchanged, so the header-parity pins
-and the active-state toggles address the same three elements. -->
+           <button>, because it is the application itself. See docs: portal internals, index.html. -->
       <button id="navMap" class="active">Map</button>
       <a id="navSurveys" href="/surveys">Surveys</a>
       <a id="navCollections" href="/collections">Collections</a>
@@ -699,10 +685,8 @@ on-demand way back into the guided tour, which About links. -->
     <a class="contribute" href="add-survey.html">Contribute a survey →</a>
   </div>
   <div class="hzone hright">
-    <!-- The header's right zone carries only the live counts; the MTCAT machine-readable link lives in
-the footer's bottom-left. -->
-    <!-- One SHELL, a contextual SLOT: .counts is the same element in the same place on every view and
-#countSlot's content is what changes (filters.js updateCounts). The markup here is the MAP form. -->
+    <!-- The header's right zone carries only the live counts; the MTCAT machine-readable link lives in the
+         footer's bottom-left. See docs: portal internals, index.html. -->
     <div class="counts" id="headerCounts"><span id="countSlot" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</span></div>
   </div>
 </header>
@@ -725,11 +709,8 @@ mode toggle, not id churn. -->
       <label title="Geomagnetic depth sounding: vertical-field (tipper) transfer functions only"><input type="checkbox" value="GDS" checked><span class="dot" style="background:var(--gds)"></span>GDS (tipper)</label>
     </fieldset>
   </section>
-  <!-- The single "Recently added" surface is the surveys-view #recentStrip: a rail copy would un-hide
-it on every view and leak onto Surveys and Collections. -->
-  <!-- The Collections group renders here as its OWN block, above the tree header. buildTree()
-(filters.js) fills #collGroup when the boot data has collections; #collGroup:empty hides it
-otherwise. -->
+  <!-- The single "Recently added" surface is the surveys-view #recentStrip: a rail copy would un-hide it on
+       every view and leak onto Surveys and Collections. See docs: portal internals, index.html. -->
   <section data-views="both">
     <details class="advanced" id="advSearch">
       <summary>Advanced search</summary>
@@ -737,9 +718,8 @@ otherwise. -->
     <input type="text" id="find" placeholder="station, survey or collection…" aria-label="Find a station, survey or collection" autocomplete="off">
     <div id="findResults" class="findresults" role="listbox"></div>
     <h2>Data available</h2>
-    <!-- Availability is a single-select VIEWING filter beside data type. The four level options filter on
-ts_access.json membership and are DISABLED until the index settles (filters.js paintAvailSelect),
-because the level filter is never live over data that has not arrived. -->
+    <!-- Availability is a single-select VIEWING filter beside data type. See docs: portal internals,
+         index.html. -->
     <select id="availSel" aria-label="Data available">
       <option value="">Any</option>
       <option value="raw_packed">Packed raw time series</option>
@@ -765,8 +745,9 @@ because the level filter is never live over data that has not arrived. -->
       <div class="btnrow">
         <button class="wide" id="selAll">Select all filtered</button>
       </div>
-      <!-- Discoverability: these arm the SAME rectangle/polygon draw handlers as the map's top-left
-           toolbar icons (map.js armDraw); .armed mirrors the shared armedDrawMode both surfaces read. -->
+      <!-- Discoverability: these arm the SAME rectangle/polygon draw handlers as the map's top-left toolbar
+           icons (map.js armDraw); .armed mirrors the shared armedDrawMode both surfaces read. See docs:
+           portal internals, index.html. -->
       <div class="btnrow">
         <button id="drawRect">Draw rectangle</button>
         <button id="drawPoly">Draw polygon</button>
@@ -777,8 +758,8 @@ because the level filter is never live over data that has not arrived. -->
     </div>
   </section>
   <!-- The DOWNLOAD block. One scope rule, no modes: every count and size reflects the current SELECTION
-when one exists, else the filtered corpus, and the scope line states which. Level 2 is served by
-AusMT; the time-series rows are hand-offs (/go/ts/ 302s) to the archive that holds the files. -->
+       when one exists, else the filtered corpus, and the scope line states which. See docs: portal
+       internals, index.html. -->
   <section data-views="map">
     <h2>Download</h2>
     <div class="dlbox">
@@ -807,17 +788,16 @@ with nothing in scope is .dis with a hollow dot. -->
   </section>
   </div><!-- /#selectMode -->
   <!-- The rail collapse control toggles the 36px icon rail, its state persisted in localStorage. As the
-last rail child with margin-top:auto it stays anchored to the bottom, visible while the tree
-scrolls. -->
+       last rail child with margin-top:auto it stays anchored to the bottom, visible while the tree scrolls.
+       See docs: portal internals, index.html. -->
   <button type="button" id="sidebarCollapse" class="railcollapse" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">‹</button>
 </aside>
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
   <div id="map"><img class="mapmark" src="/vendor/auscope-icon-colour.png" alt="AuScope" width="31" height="32"></div>
   <div id="surveysview">
-    <!-- Discovery controls: search, sort, live count, facet chips, a compact-list toggle and
-clear-filters, all wired in drawer.js where the state lives. There is deliberately NO sort or
-facet for the automated completeness check, which is never a ranking. -->
+    <!-- Discovery controls: search, sort, live count, facet chips, a compact-list toggle and clear-filters,
+         all wired in drawer.js where the state lives. See docs: portal internals, index.html. -->
     <div class="discovery" id="discoveryControls">
       <input type="text" id="surveySearch" class="disc-search" placeholder="Search surveys, organisations or locations..." aria-label="Search surveys by name, organisation, region or description" autocomplete="off">
       <label class="disc-sort">Sort
@@ -844,25 +824,24 @@ facet for the automated completeness check, which is never a ranking. -->
       </div>
       <button type="button" id="clearFilters" class="disc-clear">Clear filters</button>
       <!-- A set year hides every undated survey, which is a SILENT exclusion that a title attribute states
-only to a reader with a mouse. Last child of the bar and full-width, so it wraps without
-breaking the controls' row. -->
+           only to a reader with a mouse. See docs: portal internals, index.html. -->
       <div class="fieldnote disc-yearnote" id="yearRangeNote">Filters on each survey's declared acquisition year(s); surveys with no declared date are hidden once a year is set.</div>
     </div>
     <!-- One wrapping line BELOW the discovery controls, so this reads as a shortcut into the grid rather
-than a preamble to it. The 30-day build-window rule that decides what it lists is untouched. -->
+         than a preamble to it. The 30-day build-window rule that decides what it lists is untouched. See
+         docs: portal internals, index.html. -->
     <div id="recentStrip" class="hidden"></div>
     <div class="cardgrid" id="cardGrid"></div></div>
   <div id="collectionsview"><div class="cardgrid" id="collectionsGrid"></div></div>
   <div id="collectionview"></div>
-  <!-- Dim backdrop behind the drawer on the Surveys, Collections and collection views, never the map
-view. Click-closes the drawer, and sits beneath the drawer and its resize handle (z-index). -->
+  <!-- Dim backdrop behind the drawer on the Surveys, Collections and collection views, never the map view.
+       Click-closes the drawer, and sits beneath the drawer and its resize handle (z-index). See docs:
+       portal internals, index.html. -->
   <div id="drawerScrim" class="drawerscrim hidden"></div>
   <div id="drawer" aria-label="Station details"></div>
   <!-- First-visit welcome popup: role=dialog, focus-managed, closed by Esc, click-out or "Browse
-immediately". "Don't show this again" gates persistence via the localStorage key; ?tour=1 is the
-on-demand way back into the tour. -->
-  <!-- The wget dialog: the command is SHOWN, scrollable, with its run instructions, before anything
-lands on a clipboard. Filled and wired by exports.js showWgetDialog(). -->
+       immediately". "Don't show this again" gates persistence via the localStorage key; ?tour=1 is the
+       on-demand way back into the tour. See docs: portal internals, index.html. -->
   <div id="wgetModal" class="introwelcome hidden" role="dialog" aria-modal="true" aria-labelledby="wgetHeading">
     <div class="introwelcome-box wgetbox" tabindex="-1">
       <h2 class="introwelcome-heading" id="wgetHeading">Fetch from your terminal</h2>
@@ -870,10 +849,8 @@ lands on a clipboard. Filled and wired by exports.js showWgetDialog(). -->
         into per-survey and per-level subfolders of the current directory, and re-running it resumes:
         completed files are skipped, partial ones continue.</p>
       <!-- Per-platform tabs, the DETECTED platform pre-selected: wget -P <survey>/<level> on Linux, curl
-with explicit -o paths elsewhere, so same-named files land in their own directories. The Windows
-tab must name curl.exe in full, because PowerShell aliases bare curl away. -->
-      <!-- role=tab and aria-selected on each button, set by _paintWgetTab alongside the .on class: a
-tablist of plain buttons is an ARIA contract the assistive layer cannot read. -->
+           with explicit -o paths elsewhere, so same-named files land in their own directories. See docs:
+           portal internals, index.html. -->
       <div class="seg" id="wgetOs" role="tablist" aria-label="Choose your operating system">
         <button type="button" role="tab" aria-selected="false" aria-controls="wgetCmd" data-os="linux">Linux</button>
         <button type="button" role="tab" aria-selected="false" aria-controls="wgetCmd" data-os="mac">macOS</button>
@@ -903,21 +880,20 @@ tablist of plain buttons is an ARIA contract the assistive layer cannot read. --
 </main>
 
 <footer>
-  <!-- LEFT. The machine-readable MTCAT link, the same document from every page on both surfaces.
-       The honest link text + href/title are kept verbatim. -->
+  <!-- LEFT. The machine-readable MTCAT link, the same document from every page on both surfaces. See docs:
+       portal internals, index.html. -->
   <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a></div>
-  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the one link
-in the line, so it says where it goes without a title attribute; the year is a literal here and in
-the engine's shell, because a year that moved on rebuild would differ across the tree. -->
+  <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. See docs: portal internals,
+       index.html. -->
   <div class="fzone fcenter">AusMT is enabled by AuScope · <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> · © 2026 AuScope and the AusMT contributors · Data licences vary by survey</div>
-  <!-- RIGHT. The parent organisation's lockup, linked where the centre's URL text links. The image is
-same-origin and vendored, so stating the relationship takes no runtime dependency on its host. -->
+  <!-- RIGHT. The parent organisation's lockup, linked where the centre's URL text links. See docs: portal
+       internals, index.html. -->
   <div class="fzone fright"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
 </footer>
 <div id="toast" role="status"></div>
-<!-- PROGRESS BELONGS TO THE BROWSER: the 302 hands the bytes browser-to-archive, CORS forbids an
-in-page fetch of the payload, and a multi-GB Blob would be a proxy in disguise. So this page carries
-no progress bar, no download-manager panel and no completion claim. -->
+<!-- PROGRESS BELONGS TO THE BROWSER: the 302 hands the bytes browser-to-archive, CORS forbids an in-page
+     fetch of the payload, and a multi-GB Blob would be a proxy in disguise. See docs: portal internals,
+     index.html. -->
 <div id="snackbar" class="snackbar hidden" role="status" aria-live="polite"></div>
 
 <script src="vendor/leaflet.js"></script>
