@@ -151,7 +151,7 @@ if(_drawPoly)_drawPoly.onclick=()=>armDraw("polygon");
 // The LPMT colour split was REMOVED - all LPMT renders the
 // flagship teal (TYPE_COL.LPMT) in type mode regardless of AusLAMP membership, and every colour mode
 // Is membership-blind. Now the map is dots-only NO map surface carries the AusLAMP/legacy
-// distinction at all: it was last held by the D2 clustering split, which the badge rule inherited and
+// distinction at all: it was last held by the clustering split, which the badge rule inherited and
 // Which is now gone.
 // The colour-by control is retired; markers carry the data-type colour, a
 // phase-1 fact (the legend is the surviving colour surface). qColor lives on for the drawer's
@@ -234,7 +234,7 @@ let HOME_BOUNDS=null,_fitWasDegenerate=false;
 // jsdom driver pins it on synthetic sizes (the headless map's getSize() is a Proxy, so it reads degenerate).
 function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeof size.y==="number"&&size.x>0&&size.y>0);}
 // PURE: the corrector fires ONLY when the user has not taken control (never fight a deliberate view) AND the
-// primary fit was degenerate (so a healthy fit — and any later programmatic fit, e.g. E6's collection
+// primary fit was degenerate (so a healthy fit, and any later programmatic fit such as a collection
 // framing — is left untouched). Split out so the no-fight-with-user decision is unit-testable.
 function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
@@ -274,7 +274,7 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
 // One-shot corrector, called from the setView("map") 60ms timer AFTER invalidateSize has
 // repaired the container size. Re-fits HOME_BOUNDS when the gate allows (user hasn't taken control and the
 // primary fit was degenerate), then clears the flag so it runs at most once — a later return to the map, or
-// a programmatic fit like E6, is never clobbered.
+// a programmatic collection fit, is never clobbered.
 function _mapCorrectHomeFit(){
   if(!_mapRefitGate({userInteracted:_mapUserInteracted,fitDegenerate:_fitWasDegenerate}))return;
   if(HOME_BOUNDS)map.fitBounds(HOME_BOUNDS);

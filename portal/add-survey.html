@@ -748,7 +748,7 @@ function relatedIdentifiersEmit(list){
       identifier_type:IDENTIFIER_TYPES.indexOf(String(r.identifier_type||"").trim())>=0?String(r.identifier_type).trim():"",
       custodian:String(r.custodian==null?"":r.custodian).trim()}));
 }
-// ---------- contributor credit model (CONTRIBUTOR-CREDIT-SPEC C1/C2). creators[] is the ORDERED "who
+// ---------- contributor credit model (CONTRIBUTOR-CREDIT-SPEC). creators[] is the ORDERED "who
 // should be credited?" citation list; contributors[] is the typed who-did-what list. NAME_TYPES and
 // CONTRIBUTOR_ROLES are kept byte-in-step with the surveys validator (validate_survey.NAME_TYPES /
 // CONTRIBUTOR_ROLES_ORDERED) so the form only ever offers the fail-closed vocab the server accepts;
@@ -1104,7 +1104,7 @@ function buildSurveyYaml(m){
   const rawDeclared=String(m.declared_date||"").trim();
   const declaredDate=/^\d{4}-\d{2}-\d{2}$/.test(rawDeclared)?rawDeclared:tsUTCDate();
   const emitAttribution=!!m.license_declaration&&(declaredBy||declaredDate);
-  // Identifiers-by-level (tier 2) + publications built from the T1 publication fields. A row/entry is
+  // Identifiers-by-level (tier 2) + publications built from the publication fields. A row/entry is
   // emitted only when it carries an identifier/DOI; empty tiers stay empty lists.
   const relIds=relatedIdentifiersEmit(m.related_identifiers);
   // "Does this dataset already have a citation or DOI?" -> the pasted identifier becomes ONE typed
@@ -1137,7 +1137,7 @@ function buildSurveyYaml(m){
   // and the curator editor models neither - so a form that still wrote them would be producing keys
   // nobody can read or fix. "Who led this survey?" writes a ProjectLeader contributors row instead
   // and the organisations[] block below carries the role statement.
-  // Contributor credit model (CONTRIBUTOR-CREDIT-SPEC C1/C2): creators[] (ORDERED citation names, the
+  // Contributor credit model (CONTRIBUTOR-CREDIT-SPEC): creators[] (ORDERED citation names, the
   // "who should be credited?" question) then contributors[] (the typed who-did-what rows). A row is
   // emitted only when it carries a name; absent -> absent (no empty list) so a bare survey stays lean, and
   // DOM order is preserved as the citation order. name is QUOTED (free text: a bare "2020" / "No" /
@@ -1305,7 +1305,7 @@ function buildSurveyYaml(m){
   // related_identifiers row (identifies: collection). Only levels_available is emitted here.
   L.push("time_series:");
   L.push("  levels_available: []");
-  // publications: built from the R3 DOI-first publication rows (each {author,year,title,journal,doi},
+  // publications: built from the DOI-first publication rows (each {author,year,title,journal,doi},
   // harvested from Crossref/DataCite or hand-entered). The engine's _publications_of reads all five keys.
   // Emitted key order is author, year, title, journal, doi; only NON-EMPTY descriptive keys are written,
   // and doi is always emitted last (null when blank) whenever the row has any descriptive field, so the
@@ -1391,7 +1391,7 @@ var normalizeDoi = _DH.normalizeDoi, looksLikeDoi = _DH.looksLikeDoi, parseCross
 // Fold the repeatable publication rows (each {author,year,title,journal,doi}, harvested or hand-entered) into
 // the emission list buildSurveyYaml writes. Trims + DOI-normalises every field; a row counts when it carries
 // ANY content. LEGACY back-compat: when no publications[] array is supplied, the retired single-field
-// {pub, pub_doi} pair is folded into one row, so a caller (or an old test) built before R3 still emits the
+// {pub, pub_doi} pair is folded into one row, so a caller (or an old test) built on the flat pair still emits the
 // same publications[] shape. Pure; the emission is byte-identical whether the row was harvested or typed.
 function pubRowsOf(m){
   const rows=[];
@@ -1412,7 +1412,7 @@ function pubRowsOf(m){
   }
   return rows;
 }
-// R1 slug-collision awareness: the served surveys.json is {surveyName: SMETA}, each entry carrying its
+// Slug-collision awareness: the served surveys.json is {surveyName: SMETA}, each entry carrying its
 // published `slug`. servedSlugMap folds that into {slug: surveyName} so a derived slug can be checked
 // against the ALREADY-PUBLISHED set. Tolerant of the empty portal ({}), a non-object, or a missing slug.
 // Pure, so the collision states are unit-tested without a fetch/DOM.
@@ -2137,7 +2137,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   // upload paths, so the bytes are identical either way). Reads the submitter's DMS choice, gates on
   // validation FAILs (returns null when blocked), and produces the byte-payload + metadata both
   // callers need. It performs NO DOM writes and NO download/upload side effect, the caller decides
-  // what to do with the blob. Email/ORCID are NEVER written here (C3 / §4): the package is PII-clean
+  // what to do with the blob. Email/ORCID are NEVER written here (design §4): the package is PII-clean
   // whether it goes out as a public-PR attachment OR as a same-origin gateway upload.
   async function buildPackage(meta, pf, ediF, mh, gatewayAvailable, xf){
     xf = xf || [];

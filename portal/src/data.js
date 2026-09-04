@@ -20,7 +20,7 @@
 function dataUrl(name){
   // Absolute URLs pass through unchanged — manifest artifact urls built with the producer's --base-url
   // (e.g. an NCI/THREDDS host) are already absolute, so prefixing data_base_url would corrupt them
-  // ("data/https://…"). This is what makes a tier migration a manifest-only change (audit M11).
+  // ("data/https://…"). This is what makes a tier migration a manifest-only change.
   if(/^[a-z][a-z0-9+.\-]*:\/\//i.test(String(name))) return name;
   var base=(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.data_base_url)||"data";
   return String(base).replace(/\/+$/,"")+"/"+name;
@@ -55,7 +55,7 @@ async function loadPhase1(){
     // Build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence
     // (older builds predate it); the footer only renders the "data build …" line when this resolves.
     // No skew-handshake check here yet (comparing this against a contract hash the portal itself
-    // carries); that is C16, once the contract-hash plumbing exists.
+    // carries); that waits on the contract-hash plumbing.
     fetchOptional("build.json",null),
     // Optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted
     // by the engine ONLY when a survey has a non-exact station. Absent for an all-exact corpus (the common
@@ -122,7 +122,7 @@ function mfFileIndex(){
   _MF_IDX=ix;_MF_IDX_SRC=MANIFEST;return ix;}
 function artifactsFor(ausmt_id){return mfFileIndex().get(ausmt_id)||[];}
 function bundlesForSlug(slug){return slug?mfRows("bundles").filter(r=>r.slug===slug&&r.url):[];}
-// ---- the time-series hand-off index (THREDDS A5) -------------------------------------------------
+// ---- the time-series hand-off index ---------------------------------------------------------------
 // ts_access.json indexes the archive routes this deployment may hand a reader off to:
 // {ausmt_id: {level token: {bytes, url_path}}}. MEMBERSHIP IS THE ACCESS DECISION and it was made in
 // the build - a withheld, coordinate-gated, adjudication-pending or retired station is absent, and

@@ -113,7 +113,7 @@ function renderFind(){const box=document.getElementById("findResults");
   find.setAttribute("aria-expanded","true");
   findActive=-1;find.removeAttribute("aria-activedescendant");}
 function hasShapes(){let a=false;drawn.eachLayer(()=>a=true);return a;}
-// C42 coordinate access: a custodian-withheld station has null lat/lon (no position). It must NOT be
+// Coordinate access: a custodian-withheld station has null lat/lon (no position). It must NOT be
 // spatially selectable — without this guard null coerces to 0 and a polygon over (0,0) would phantom-
 // select it. It stays in ST/visible (counted, findable by name/text), just never in a bbox/shape hit.
 function inShapes(s){if(!hasPosition(s))return false;
@@ -331,7 +331,7 @@ function paintAvailSelect(){
   const empty=known&&!Object.keys(ix).length;
   [...av.querySelectorAll("option")].forEach(o=>{
     // "" is the Any option, which rides the catalogue and is live from first paint. The "tf" option this
-    // also used to skip was DELETED from #availSel by C6 (the capability is a discovery chip now), so no
+    // also used to skip is not in #availSel (the capability is a discovery chip), so no
     // option can reach that branch any more; the harness pin asserts #availSel carries no "tf" value.
     if(o.value==="")return;
     o.disabled=!known||empty;

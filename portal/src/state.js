@@ -56,7 +56,7 @@ let AUSLAMP_SET=new Set();
 // folds it onto each station as s.coordPolicy; the drawer badges from that. It carries POLICY, never a
 // coordinate — positions are already masked in the catalogue (generalised => 0.1° cell, withheld => null).
 let COORD_POLICY={};
-// THREDDS A5: ausmt_id -> {level token: {bytes, url_path}} for stations with a VERIFIED, OPEN route
+// The hand-off index: ausmt_id -> {level token: {bytes, url_path}} for stations with a VERIFIED route
 // into the NCI archive, loaded at phase 2 from the OPTIONAL ts_access.json. `null` means the fetch
 // has not settled; `{}` means it settled on absence, which is the honest answer for a deployment
 // that publishes no download index (a corpus with no verified routes ships no file). Membership is

@@ -485,7 +485,7 @@ function buildCitationFiles(_scope){
   txt.push(...ack);
   return {txt:txt.join("\n"),bib:bib,ris:risT};}
 // Every data download travels with its metadata: the citation files, the
-// station table and the geometry for the SAME station set, written beside the data - the C6
+// station table and the geometry for the SAME station set, written beside the data - the licence
 // rights-travel principle extended from LICENSE.txt to citation and context. Awaits the sci gate
 // so the GeoJSON keeps its honesty rules (the omission note when screening never loaded).
 async function metadataSidecarInto(zip,stations){
@@ -558,7 +558,7 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   let ok=0;const included={};toast("Packaging "+avail.length+" redistributable EDI(s)…",{sticky:true});   // included: survey -> zip subdir
   const ediItems=avail.map(s=>{try{const ea=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).find(a=>a.format==="edi");
     // Namespace the zip entry by survey slug too: a selection can span surveys that reuse an EDI basename
-    // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip (audit M3).
+    // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip.
     return {s,url:bulkUrl(ea?dataUrl(ea.url):dataUrl("edi/"+s.file)),entry:(s.slug?s.slug+"/":"")+s.file};}
     catch(e){return null;}}).filter(Boolean);
   const ediBlobs=await fetchBounded(ediItems,6,it=>it.url);
@@ -718,7 +718,7 @@ async function exportSelectionFormat(fmt){
   let ok=0;const included={},failed=[];toast("Packaging "+have.length+" "+C.label+" file(s)…",{sticky:true});
   const fmtItems=have.map(s=>{const a=selArtifact(s,fmt);
     // Namespace the zip entry by survey slug, exactly as the EDI zip does: a selection can span surveys
-    // that reuse a station id, which would otherwise overwrite each other inside the archive (audit M3).
+    // that reuse a station id, which would otherwise overwrite each other inside the archive.
     return {s,url:bulkUrl(dataUrl(a.url)),entry:(s.slug?s.slug+"/":"")+a.url.split("/").pop()};});
   const fmtBlobs=await fetchBounded(fmtItems,6,it=>it.url);
   fmtItems.forEach((it,i)=>{if(fmtBlobs[i]){f.file(it.entry,fmtBlobs[i]);ok++;included[it.s.survey]=it.s.slug?it.s.slug+"/":"";}

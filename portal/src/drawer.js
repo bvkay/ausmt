@@ -102,11 +102,11 @@ function selectDrawerTab(name){
   tabs.forEach(tb=>{const on=tb.dataset.tab===name;tb.setAttribute("aria-selected",on?"true":"false");tb.tabIndex=on?0:-1;if(tb.classList)tb.classList.toggle("on",on);});
   panels.forEach(p=>{p.hidden=(p.dataset.tab!==name);});
 }
-// C1b gate, factored: the served-EDI descriptor for a station — {sub,st,d}. When the access gate REFUSES
+// The display gate, factored: the served-EDI descriptor for a station, {sub,st,d}. When access REFUSES
 // (a non-open survey with no served EDI artifact) d is null, so neither the header Download action, the
 // Overview primary-download tile, nor the Files "Transfer function" tile offers a download affordance —
 // they say "embargoed"/"metadata only" instead. An OPEN survey keeps today's exact tile text (byte-for-
-// byte), including the "EDI (via source archive)" fallback that the C1b pins assert is ABSENT when embargoed.
+// byte), including the "EDI (via source archive)" fallback the pins assert is ABSENT when embargoed.
 function ediDescriptor(s,m){
   // Two-phase boot: the manifest is a PHASE 2 product, so before it lands there is no honest answer here:
   // the served-artifact branch and BOTH fallbacks ("EDI (via source archive)" / the embargo wording) are
@@ -301,7 +301,7 @@ function accessPanel(m,sv){
 // archived, licensed and reproducible, NOT its scientific quality (said in the block's subline). Stars =
 // achieved count. PURE so the star count is unit-testable: flip m.doi / m.ts and the count changes.
 // "not recorded" / "not available" phrasing per the honesty rules (never "pending").
-// IDCONS D4 (SPEC §5): the resolution state of the survey's dataset DOI, across BOTH the flat dataset_doi
+// SPEC §5: the resolution state of the survey's dataset DOI, across BOTH the flat dataset_doi
 // (engine fallback, m.doi_resolution) and the typed related_identifiers DOI rows. Returns "ok" when at
 // least one DOI-typed identifier is live-or-uncached (ok / unknown / absent — anything not "reserved");
 // "reserved" ONLY when a DOI-typed identifier exists and EVERY one is reserved (doi.org's own 404); null
@@ -370,7 +370,7 @@ function apiArtifactPath(u){const v=String(u==null?"":u);
 // from the source. The Phase tensor tile is gone (it is a visual product; it lives in the Response tab).
 function relatedProducts(s){const m=SMETA[s.survey]||{};
   const tsDoi=tsUrlFor(m);
-  // IDCONS D4 / r2 posture: a reserved collection PID / dataset DOI must not open a dead doi.org link.
+  // The reserved-identifier posture: a reserved collection PID or dataset DOI must not open a dead link.
   // When reserved, the row is left inert (no action) with an honest note rather than routing to a 404.
   const tsReserved=!!(m.ts_pid&&m.ts_pid_resolution==="reserved"),tsOpen=tsReserved?null:{prod:"open",url:tsDoi};
   const doiReserved=!!(m.doi&&m.doi_resolution==="reserved");
@@ -401,7 +401,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     if(tsReserved)return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
     return {n:label,sub:gloss+" · "+(m.ts_pid?"survey collection":"NCI collection"),origin:"source archive",st:"ok",d:tsOpen};
   };
-  // THE JOIN RULE (THREDDS A7, binding). `m.ts_levels` above is CURATOR-DECLARED and SURVEY-scope;
+  // THE JOIN RULE, binding. `m.ts_levels` above is CURATOR-DECLARED and SURVEY-scope;
   // ts_access.json is CRAWL-VERIFIED and STATION-scope, and the two answer different questions. Read
   // naively, hasLevel() would gate the hand-off too, so a station with a verified Level 1 file whose
   // curator never ticked `level1` would read NOT AVAILABLE for a level this deployment can hand it
@@ -895,7 +895,7 @@ function openStation(i,opts){
   // wrong (the list spans both source-archive time series and AusMT-derived deliverables).
   const filesHtml=`<div class="sechead">Related products</div>`+relatedProducts(s);
   // Provenance: three source-data rows visible (processing software, transfer function
-  // source file+sha · source archive), then the Dataset-maturity block (X7 stars), then EVERYTHING ELSE
+  // source file+sha · source archive), then the Dataset-maturity stars, then EVERYTHING ELSE
   // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
   // behind collapsed <details>. Nothing is dropped, only demoted; the API box is the last, small expander.
   const _srcArchive=sourceArchiveCell(m);
@@ -926,7 +926,7 @@ function openStation(i,opts){
     `<tr><td>Source archive</td><td>${_srcArchive}</td></tr></table>`;
   const metaTable=`<table class="meta">`+
     `<tr><td>ausmt_id</td><td>${esc(s.ausmt_id)}</td></tr>`+
-    // C42 coordinate access: a custodian-withheld station carries null lat/lon (masked VALUE) — show the
+    // Coordinate access: a custodian-withheld station carries null lat/lon (masked VALUE), so show the
     // honest withheld line instead of null-derefing .toFixed. A generalised station carries the 0.1° cell,
     // rendered VERBATIM (no client-side re-rounding) with a "position generalised" badge driven by the
     // engine's coord_policy marker. coordCellHtml encapsulates all three; hasPosition is the shared predicate.
@@ -1018,7 +1018,7 @@ function openStation(i,opts){
   selectDrawerTab(keepTab);                        // Response is the default tab (a rehydrate keeps the reader's tab)
   _restoreOpenDetails(keepOpen);                   // and the expanders they had open (empty on a real open)
   if(!rehydrate)_focusDrawer();                    // move focus into the dialog (never on a hydration re-render)
-  if(isOpenAccess(m)) loadStationFrameLine(s);     // C25-V3: inject the frame line if this station declares one
+  if(isOpenAccess(m)) loadStationFrameLine(s);     // inject the frame line if this station declares one
 }
 // The hash prefixes that describe SOMETHING OPEN IN THE DRAWER, and which a
 // close must therefore hand back to the plain root. #/collection is deliberately absent: it addresses a
@@ -1288,7 +1288,7 @@ function relatedIdLink(id,type){
 // "unknown" / absent (no cache) -> the caller's normal link, byte-for-byte as today (unknown = today).
 function reservedText(text){return `${esc(text)} <span class="prov reserved-note">(reserved, not yet active)</span>`;}
 function resolvedOr(resolution,text,linkHtml){return resolution==="reserved"?reservedText(text):linkHtml;}
-// IDCONS D4: the raw-TS collection cell — a link to the survey's OWN collection PID (or the NCI default),
+// The raw-TS collection cell: a link to the survey's OWN collection PID (or the NCI default),
 // rendered as plain text + reserved note when the survey's own ts_pid is reserved. The NCI default
 // collection is a known-live handle, so it is never gated (only the survey's own ts_pid carries a facet).
 function tsCollectionCell(m){
@@ -1411,7 +1411,7 @@ function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
     return da<db?1:da>db?-1:a.localeCompare(b);});
   else arr.sort((a,b)=>a.localeCompare(b));                                                            // "name" (default)
   return arr;}
-// Compact/list layout row (E3): a single line — title, org, acquisition year, station count, licence badge.
+// Compact/list layout row: a single line of title, org, acquisition year, station count, licence badge.
 function surveyRow(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};const yearTxt=acqYearText(m);
   return `<div class="srow"><a class="srow-title" href="/surveys/${escAttr(m.slug||sv)}" title="Open survey">${esc(sv)}</a>`+
     `<span class="srow-org">${esc(m.org||"-")}</span>`+
@@ -1827,7 +1827,7 @@ function collScatter(ss,maxW,mark){
   }
   // The members that PLOT, which is the engine's `present` list (_pages.py _collection_scatter assigns
   // colours over the members that have positioned stations) expressed with the SPA's own predicate. A
-  // wholly coordinate-withheld member is a live corpus state under C42; counting it here gave this ramp a
+  // wholly coordinate-withheld member is a live corpus state; counting it here gives this ramp a
   // different n from the page's and moved every later member's colour one step along it.
   const members=[...new Set(ss.filter(hasPosition).map(s=>s.survey))].sort();
   // The SAME ramp the static collection page lays (state.js memberColours, twin of the engine's
@@ -1900,7 +1900,7 @@ function dispatchProd(d){
   else if(d.prod==="fetch"&&d.url){track("DownloadGenerated",{format:(d.name||"").split(".").pop()});downloadUrl(dataUrl(d.url),d.name);}
   else if(d.prod==="open"&&d.url){window.open(d.url,"_blank","noopener,noreferrer");
     // A time-series hand-off carries the archive's filename and size, so it can say what it just
-    // handed over. Still UNTRACKED, which R8 requires: the request is counted at the front door,
+    // handed over. Still UNTRACKED, as required: the request is counted at the front door,
     // from the /go/ts/ route it names, and a second count here would be a different number.
     if(d.tsname&&typeof handoffSnack==="function")handoffSnack(d.tsname,+d.tsbytes||0);}
   else if(d.prod==="scroll"&&d.sel){const el=document.querySelector(d.sel);if(el){

@@ -77,7 +77,7 @@ function _tourEnterSurveysView(){
 // no-spotlight card). Enter: force the map view, save the visitor's rail mode, and switch to
 // Select & download so the target is visible and spotlit. Exit (Next/Back/close - the same three-path
 // discipline as the Find/tree demos): put the saved mode back, so the tour never leaks a mode change.
-// Guarded so a build without the D2 mode split degrades to the old centred-card behaviour, no crash.
+// Guarded so a build without the mode split degrades to the plain centred-card behaviour, no crash.
 let _tourSelPrevMode=null;           // rail mode before the selbox step; null = nothing to restore
 function _tourEnterSelbox(){
   _tourEnterMapView();
