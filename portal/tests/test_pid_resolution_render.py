@@ -1,4 +1,4 @@
-"""The identifier-consolidation ): the portal renders a RESERVED identifier HONESTLY -
+"""Identifier consolidation: the portal renders a RESERVED identifier HONESTLY -
 plain text + a muted "(reserved, not yet active)" note, NEVER an anchor — at every metadata-DOI link
 surface, while `ok` / `unknown` render as links exactly as today.
 

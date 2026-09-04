@@ -1,4 +1,4 @@
-"""The identifier-consolidation ) - the retired flat identifier keys must SURVIVE an edit
+"""Identifier consolidation: the retired flat identifier keys must SURVIVE an edit
 to an UNRELATED section, byte-preserved on disk.
 
 dataset_doi, time_series.collection_pid, and instruments[].pid are RETIRED from the editor UI (their

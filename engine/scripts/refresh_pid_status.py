@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The identifier-consolidation ) - refresh the DOI resolution cache (pid_status.json).
+"""Identifier consolidation: refresh the DOI resolution cache (pid_status.json).
 
 The portal build is OFFLINE and byte-reproducible: it never touches the network. This tool is the ONLY
 thing that HEADs doi.org. Run it EXPLICITLY (the deploy/Makefile `refresh-pid-status` target, part of the

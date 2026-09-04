@@ -1,4 +1,4 @@
-"""The identifier-consolidation ) - the pid_status.json refresh tool.
+"""Identifier consolidation: the pid_status.json refresh tool.
 
 The tool is the ONLY network-touching piece; these tests keep the BUILD/CI offline by INJECTING a fake
 head function (never a real doi.org HEAD). They pin the alive-rule classifier, the DOI-shape helpers, the

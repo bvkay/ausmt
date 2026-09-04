@@ -209,7 +209,7 @@ def _norm_angle(a: float) -> float:
 
 
 def declared_uniform_angle(ev: dict):
-    """The kind, theta ) of a station's declared frame, for the SURVEY-scope mixed-frames scan.
+    """The (kind, theta) of a station's declared frame, for the SURVEY-scope mixed-frames scan.
     kind: 'none' (zero/undeclared), 'uniform' (one nonzero angle, theta normalised), or
     'per-period' (class - refused at the gate, never enters the survey-uniformity vote).
     Mirrors frame_disposition's evidence hierarchy (ZROT wins on the impedance branch; azimuths

@@ -1,4 +1,4 @@
-"""The identifier-consolidation ) - the curator-side DOI resolution check.
+"""Identifier consolidation: the curator-side DOI resolution check.
 
 The editor's "Identifiers & PIDs" page shows a per-identifier status chip. Unlike the build
 (which is OFFLINE and reads a pre-refreshed pid_status.json cache), the gateway HAS egress, so the chip
