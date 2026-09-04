@@ -866,7 +866,7 @@ if site_data:
                 # for a pre-fix report. Lifted so the ops floor can show the trend build over build.
                 "peak_rss_mib": _peak if isinstance(_peak, (int, float)) else None,
                 "serving": (name == serving_dir),
-                # Cache forensics live in build_provenance.json's top-level `cache` block —
+                # Cache forensics live in build_provenance.json's top-level `cache` block - 
                 # NOT in build.json/build_report.json (verified against build_portal.py). Render what
                 # exists; absent keys (a non-incremental build) stay null.
                 "cache": {"enabled": cache.get("enabled"), "mode": cache.get("mode"),

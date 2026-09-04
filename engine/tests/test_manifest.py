@@ -77,7 +77,7 @@ def test_manifest_integrity_and_license_gate(tmp_path):
         assert row["n_stations"] >= 1
         bfmts.add(row["format"])
         urls_by_fmt[row["format"]] = row["url"]
-    # Three bundle kinds for a served survey with the flag on — EDI zip, EMTF-XML zip, TF MTH5.
+    # Three bundle kinds for a served survey with the flag on - EDI zip, EMTF-XML zip, TF MTH5.
     assert bfmts == {"edi-zip", "xml-zip", "mth5"}, f"expected all three C32 bundle kinds, got {bfmts}"
     # Filename contract: the MTH5 says transfer-functions-only via the -tf suffix, all under bundles/.
     assert urls_by_fmt["edi-zip"].endswith("-edi.zip") and urls_by_fmt["edi-zip"].startswith("bundles/")

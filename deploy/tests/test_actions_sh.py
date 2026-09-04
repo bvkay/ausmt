@@ -340,7 +340,7 @@ def test_update_fixed_recipe_ignores_intent_content(tmp_path):
 
 
 def test_compose_uses_project_file_flag_never_dash_C(tmp_path):
-    """ARG-SHAPE PIN. `docker compose` has NO `-C` flag (that is git) — every compose invocation
+    """ARG-SHAPE PIN. `docker compose` has NO `-C` flag (that is git) - every compose invocation
     must carry `-f`/`--project-directory` pointing at the deployment, never `-C`. FAILS IF a compose
     call is shaped with `-C` (the real-box breakage the shim masked). Exercises BOTH compose-using
     recipes: update (pull + up -d) and restore (stop + up)."""

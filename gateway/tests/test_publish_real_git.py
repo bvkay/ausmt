@@ -578,7 +578,7 @@ def test_real_git_survey_retirement_revert_restores_package_byte_identical(tmp_p
 
 
 def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_env):
-    # TOCTOU — two CONCURRENT retires against a 2-survey corpus must NOT both succeed and EMPTY it.
+    # TOCTOU - two CONCURRENT retires against a 2-survey corpus must NOT both succeed and EMPTY it.
     # The outside-lock guard (handle_survey_retire) is racy: both requests read count=2 before either
     # commits. This drives _commit_retire (the PUBLISH_LOCK holder) directly for BOTH surveys under
     # asyncio.gather, isolating the AUTHORITATIVE inside-lock guard from the TOTP replay counter (whose

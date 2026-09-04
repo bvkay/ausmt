@@ -967,7 +967,7 @@ def test_related_identifiers_validator_fails_bad_relation_non_vacuous(tmp_path):
 
 
 def test_identifies_out_of_vocab_is_fail_closed():
-    """`identifies` is a fail-closed vocab (like relation/identifier_type) — an out-of-vocab level
+    """`identifies` is a fail-closed vocab (like relation/identifier_type) - an out-of-vocab level
     is a SectionError, because a mis-typed level auto-derives a WRONG relation and must block, not ship."""
     with pytest.raises(ef.SectionError):
         ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
@@ -983,7 +983,7 @@ def test_identifies_out_of_vocab_is_fail_closed():
 
 
 def test_relation_auto_derives_from_identifies_server_side():
-    """When a row states `identifies`, the DataCite relation DERIVES from it server-side — the form
+    """When a row states `identifies`, the DataCite relation DERIVES from it server-side - the form
     carries NO explicit relation (the control is hidden on an identifies row), and the assembler writes the
     derived value. Every level maps to its ratified relation. FAILS IF a level does not derive its relation."""
     expected = {"collection": "IsPartOf", "raw_packed": "IsDerivedFrom", "level0": "IsDerivedFrom",

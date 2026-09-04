@@ -1,4 +1,4 @@
-"""Usage-analytics screen (gateway half — record D4/D5).
+"""Usage-analytics screen (gateway half - record D4/D5).
 
 The consumer side of the aggregator: the gateway reads stats.json SERVER-side (serve_state.read_stats,
 the ops-status.json seam) and renders the READ-ONLY Analytics screen (Operations rail). These pins

@@ -61,13 +61,13 @@ class Checklist:
 
     @property
     def has_unacknowledgeable_blocking_fail(self) -> bool:
-        """True if any blocking FAIL is NOT acknowledgeable — that is a hard 409 no
+        """True if any blocking FAIL is NOT acknowledgeable - that is a hard 409 no
         acknowledgement can override (includes every submitter-email hit and every non-PII block)."""
         return any(not c.acknowledgeable for c in self._blocking_fails())
 
     @property
     def has_acknowledgeable_blocking_fail(self) -> bool:
-        """True if there is at least one blocking FAIL and they are ALL acknowledgeable —
+        """True if there is at least one blocking FAIL and they are ALL acknowledgeable - 
         the only case an affirmative ack_pii may proceed past."""
         fails = self._blocking_fails()
         return bool(fails) and all(c.acknowledgeable for c in fails)

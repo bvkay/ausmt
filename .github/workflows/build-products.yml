@@ -320,7 +320,7 @@ jobs:
       # submissions. The real gate runs in ausmt-surveys CI (validate.yml + tests.yml) and again at
       # ingest; this build step only proves the pipeline itself still runs end-to-end.
       #
-      # The CI-PUBLISHED products are built NON-incremental (no --incremental flag) — CI products
+      # The CI-PUBLISHED products are built NON-incremental (no --incremental flag) - CI products
       # are never cache-derived (design §5). The build cache only ever accelerates the production
       # deploy/Makefile rebuild-data; here we prove the full cold pipeline still runs end-to-end.
       - name: Build products (single canonical pipeline; fails on empty output)

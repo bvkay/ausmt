@@ -638,7 +638,7 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
         print(ln)
     ok &= st_ok
 
-    # The cache-consistency gate — armed only with --surveys.
+    # The cache-consistency gate - armed only with --surveys.
     if surveys_root is not None:
         cons_ok, cons_lines = _check_digest_consistency(data_dir, surveys_root)
         for ln in cons_lines:

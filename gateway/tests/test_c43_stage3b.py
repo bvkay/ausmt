@@ -1,4 +1,4 @@
-"""Stage 3b — the collections batch editor WRITE path (record D5-A A6, D13 pins; Invariant 10).
+"""Stage 3b - the collections batch editor WRITE path (record D5-A A6, D13 pins; Invariant 10).
 
 Every write-path pin states its failure criterion and is mutation-proof (shown able to fail). The
 gate-scrutinised four — atomicity (#1), rollback (#2), single-flight/re-validate-under-lock (#3),

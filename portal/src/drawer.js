@@ -426,7 +426,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
             origin:"source archive",st:ok?"ok":"unk",
             d:ok?{prod:"open",url:route,tsname:name,tsbytes:String(e.bytes||0)}:null};});
   // Level 2 sub-rows (the impedance tensors): the source EDI (the custodian's processed transfer function,
-  // gated for non-open surveys — it says "embargoed"/"metadata only", never "via source archive"),
+  // gated for non-open surveys - it says "embargoed"/"metadata only", never "via source archive"),
   // then the AusMT-derived EMTF XML (build pipeline, mt_metadata) and MTH5.
   const ediSub={n:"EDI",...ediDescriptor(s,m),origin:"source archive"};
   const xmlSub=xml
@@ -983,7 +983,7 @@ function openStation(i,opts){
     `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody">${_manGate||`<div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",_fmtH5Art?"ok":"unk","Per-station MTH5 (transfer functions only) is written where the build produced one; the survey's whole-survey bundle, when there is one, is offered on the survey page.")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div>`}</div></details>`+
     `<details class="prov-d"><summary>Record metadata</summary><div class="prov-dbody">${metaTable}</div></details>`+
     `<details class="prov-d"><summary>API</summary><div class="prov-dbody">${apiBlock}</div></details>`;
-  // Cite — the citation box. A no-cite survey is EXPLICIT ("custodian citation not recorded — cite
+  // Cite - the citation box. A no-cite survey is EXPLICIT ("custodian citation not recorded - cite
   // the survey package") rather than a silent AUSMT_SELF masquerade, and the captured attribution statement
   // (verbatim, else org(year) synthesis) renders alongside. The copy buttons keep their assembly helpers.
   const _attn=attributionText(m);
@@ -1068,9 +1068,9 @@ function copyTxt(t){navigator.clipboard?.writeText(t).then(()=>toast("Copied."))
 function acqYearText(m){return m.dates?esc(m.dates):(m.year_start?(m.year_end&&m.year_end!==m.year_start?fmtRange(esc(String(m.year_start)),esc(String(m.year_end))):esc(String(m.year_start))):"");}
 // SLIM survey card. Field set is deliberately reduced to: title · organisation ·
 // collection chip · acquisition year · station count · data-type mixbar · period range · licence + DOI
-// badges · short description · two actions (View survey, Download). The heavier blocks — the
+// badges · short description · two actions (View survey, Download). The heavier blocks - the
 // persistent-identifiers rollup (identifiersHtml), the APA citation (.cite), the spatial extent, the
-// coordinate-QC flag tally, and the per-format availability matrix (EDI/time-series/MTH5 badges) — do
+// coordinate-QC flag tally, and the per-format availability matrix (EDI/time-series/MTH5 badges) - do
 // NOT belong on the card; they render in the survey DETAIL (openSurvey) and the station drawer. The automated completeness/smoothness check is intentionally OMITTED from the
 // card (it must never read as a card-level verdict) and stays in the detail + drawer with its framing.
 function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
@@ -1322,7 +1322,7 @@ function hasDatasetDoi(m){return !!(m&&(m.doi||(m.related_identifiers||[]).some(
 // The rollup renders ONLY the rows that
 // carry a value. No "not recorded", no "(no PID)", no "not recorded in source metadata" noise; an instrument
 // with a model but no PID shows just the model; a group with no content is omitted (heading included). The
-// underlying keys are still SERVED — only the empty ROWS are dropped, and the retired Survey-PID row
+// underlying keys are still SERVED - only the empty ROWS are dropped, and the retired Survey-PID row
 // stays gone.
 function identifiersHtml(m){
   const rows=[];
@@ -1702,7 +1702,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   _drawerSubject={kind:"survey",sv};                  // what rehydrateOpenDrawer re-renders when a gate settles
   // Section order - (1) title+description, (2) geographic footprint, (3) station count +
   // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
-  // (7) publications, (8) identifiers (the rollup), (9) release history. Content is unchanged from before —
+  // (7) publications, (8) identifiers (the rollup), (9) release history. Content is unchanged from before - 
   // only the order. Acquisition/processing are carried inside the survey-summary table (sections 3/5 share
   // That atomic block). Contributors (credit model, SPEC §3) do not trail
   // below Downloads, they sit inside the ATTRIBUTION block directly beneath the attribution box.

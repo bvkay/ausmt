@@ -1,4 +1,4 @@
-"""Stage-3a collections console — page/route pins (record D5-A / D13, Invariant 10).
+"""Stage-3a collections console - page/route pins (record D5-A / D13, Invariant 10).
 
 Drive the two READ-ONLY routes through the in-process app (httpx ASGITransport) with the in-process
 edit seam (inproc_edit_runner — the runner's real job dispatch, no file queue, no yaml in the gateway

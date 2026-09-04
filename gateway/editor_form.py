@@ -7,7 +7,7 @@ the same patch the JSON textareas produced — so the preview/confirm/commit pip
 byte-identical (the round-trip test pins that: render the form from a real survey.yaml, submit it
 unchanged, and the preview shows NO diff).
 
-It is pure stdlib (json only — NOT yaml; the gateway never parses survey content). It does
+It is pure stdlib (json only - NOT yaml; the gateway never parses survey content). It does
 NO git and NO version logic; it only maps form fields <-> section dicts and validates the formats it
 knows (ORCID via gateway.orcid, DOI "10." prefix, ISO date, access.level enum).
 
@@ -62,7 +62,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     "identifiers": [
         ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
         # §2b (identifiers design): the ONE survey/platform-level instrument PID (PIDINST, e.g.
-        # 10.82388/<id>) — the survey-layer counterpart to the deep per-serial instruments[].pid.
+        # 10.82388/<id>) - the survey-layer counterpart to the deep per-serial instruments[].pid.
         # Additive; the surveys validator only WARNS on its format, so it is plain "text" here
         # (a light hint, never a form block) — the same posture as project_raid above.
         ("instrument_pid", "Instrument PID (survey/platform)", "10.82388/… or an https:// URL", "text"),
@@ -265,7 +265,7 @@ _NEVER_NULL_LIST_KEYS: dict[str, frozenset] = {"organisations": frozenset({"ror"
 # access.level enum (validator/normalize; mirrors add-survey.html's <select>).
 ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
 
-# The access.coordinates enum — the SURVEY-LEVEL coordinate-access policy. Declared like ACCESS_LEVELS
+# The access.coordinates enum - the SURVEY-LEVEL coordinate-access policy. Declared like ACCESS_LEVELS
 # and IDENTICAL (key + value spellings) to the engine's extract/_coordaccess.COORDINATE_POLICIES, which
 # parse_coordinate_policy reads from access["coordinates"]. "exact" is the default (absent => exact); the
 # editor never WRITES the key at the default, so a survey that never sets a policy stays byte-unchanged.

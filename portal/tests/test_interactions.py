@@ -40,7 +40,7 @@ def test_portal_interactions(tmp_path):
     # 2 countries (Australia: OrgX+OrgY+OrgW, New Zealand: OrgZ); OrgX owns 2 stations so the org toggle
     # drops >1. edi_available mix (Alpha+Gamma=1, Beta+Delta=0) drives the "downloadable here only" filter
     # test; distinct year_start/year_end per survey (Gamma+Delta undated) drive the year-range filter +
-    # recently-added tests. Delta Survey is EMBARGOED (access!=open) with no embargo_until — its
+    # recently-added tests. Delta Survey is EMBARGOED (access!=open) with no embargo_until - its
     # station D1 drives the drawer access-panel test (no plots; verbatim embargo copy). Its curves are
     # withheld at the ENGINE (empty tf series); the fixture mirrors that so the driver sees what ships.
     stations = [

@@ -18,15 +18,15 @@ GATE 1, rotation/frame guard. mt_metadata 1.0.9 RECORDS rotation but never compe
 So the gate reads BOTH sources — the TF's _rotation_angle AND a cheap lexical parse of the source
 EDI (ZROT/TROT blocks, SPECTRA ROTSPEC attributes, HMEAS azimuths) — cross-checks them, and
 applies frame POLICY v3. The engine NEVER rotates served data - DETECTION stays, CORRECTION goes:
-  * Arm A — survey-uniform declared angle (ANY magnitude): serve AS STORED, record the angle
+  * Arm A - survey-uniform declared angle (ANY magnitude): serve AS STORED, record the angle
     (frame_served="declared-azimuth", declared_azimuth_deg) + a note. The archive respects
     acquisition frames; rotation joins byte-rewriting as a thing the archive does not do. (Absorbs
     the old R3 record + R4 de-rotate — the arbitrary 15deg FRAME_KEEP_MAX_DEG threshold dies.)
-  * Arm B — station-uniform angles INCONSISTENT across one survey (spread beyond
+  * Arm B - station-uniform angles INCONSISTENT across one survey (spread beyond
     SURVEY_ANGLE_SPREAD_MAX_DEG): each station STILL serves as-stored with its own declared angle;
     the SURVEY gains a "mixed declared frames" note (classify_survey_frame; surfaced in
     build_report + station.json + the portal). NO de-rotation, NO refusal.
-  * Arm C — per-period rotation WITHIN a station (PAX class: per-period ZROT/TROT, or per-block
+  * Arm C - per-period rotation WITHIN a station (PAX class: per-period ZROT/TROT, or per-block
     SPECTRA ROTSPEC): REFUSE the station, exactly like a convention-gate refusal — a single served
     curve from period-varying frames is misleading-by-construction; absence is honester. The reason
     names the per-period rotation and the fix ("re-export in a single coherent frame").
@@ -83,11 +83,11 @@ ROT_FILL_MAX = 1e8           # missing-data sentinel threshold — same conventi
 # the coordinate frame we report it. Frame mixing is something we should pick up on and try to
 # minimalize from the data coming in, but the de-rotated we should not do." So the engine NEVER
 # rotates served data — detection stays, correction goes:
-#   * Arm A — a survey-uniform declared angle (ANY magnitude) serves AS STORED, the angle recorded
+#   * Arm A - a survey-uniform declared angle (ANY magnitude) serves AS STORED, the angle recorded
 #            (absorbs the old R3 record + R4 de-rotate; the 15deg FRAME_KEEP_MAX_DEG threshold dies).
-#   * Arm B — survey-inconsistent per-station-uniform angles: each station serves AS STORED with its
+#   * Arm B - survey-inconsistent per-station-uniform angles: each station serves AS STORED with its
 #            own angle recorded; the SURVEY gains a "mixed declared frames" note (no de-rotation).
-#   * Arm C — per-period rotation WITHIN a station (PAX class): REFUSE the station (a single served
+#   * Arm C - per-period rotation WITHIN a station (PAX class): REFUSE the station (a single served
 #            curve from period-varying frames is misleading-by-construction; absence is honester).
 # Only the survey-inconsistency threshold survives (it drives the V3-B note, not any rotation).
 SURVEY_ANGLE_SPREAD_MAX_DEG = 5.0  # Arm B: per-station uniform angles spreading more than this within

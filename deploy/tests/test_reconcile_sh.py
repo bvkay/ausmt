@@ -1,4 +1,4 @@
-"""Serve-reconcile host agent (deploy/scripts/reconcile.sh) — decision-logic tests.
+"""Serve-reconcile host agent (deploy/scripts/reconcile.sh) - decision-logic tests.
 
 The reconcile agent is POSIX sh, so it is tested as a BLACK BOX through `sh` over a fake data tree
 built under tmp_path: a real git origin + a tracking surveys-live checkout, a fabricated served

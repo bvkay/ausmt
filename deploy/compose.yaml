@@ -241,7 +241,7 @@ services:
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/incoming:/gw/incoming:rw
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/jobs:/gw/jobs:rw
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/quarantine:/gw/quarantine:ro
-      # The operator's surveys-live checkout, mounted READ-WRITE — this is the publish target the
+      # The operator's surveys-live checkout, mounted READ-WRITE - this is the publish target the
       # gateway stages into, commits, and pushes (design §5 v2). Demo publish is COMMIT-AND-PUSH ONLY:
       # the gateway writes the git history here and NOTHING ELSE — it does NOT build, so it needs NO
       # Docker socket (keeping the C10 §0 invariant intact). The operator runs `make rebuild-data` by

@@ -417,7 +417,7 @@ def _sweep_products_science(prod, slug):
 
 
 def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
-    """PIN (FAILS pre-fix — the per-station products carried full TF science for every station): after a
+    """PIN (FAILS pre-fix - the per-station products carried full TF science for every station): after a
     3-survey build with --products, NO non-served survey's station.json/dimensionality.json may carry any
     TF-derived science or exact coordinates, and NO dimensionality.json is emitted for a non-served survey;
     the OPEN survey's products are unaffected (science present, dimensionality.json present)."""

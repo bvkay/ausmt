@@ -2370,7 +2370,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // The related-products TF tile must say "embargoed", not "EDI (via source archive)".
   ok(drawerEl.innerHTML.indexOf("EDI (via source archive)") < 0,
     "embargoed station must NOT offer the 'EDI (via source archive)' fallback tile");
-  // An OPEN survey's station still plots — the withholding is CONDITIONAL on access, not a blanket wipe.
+  // An OPEN survey's station still plots - the withholding is CONDITIONAL on access, not a blanket wipe.
   drawerEl.classList.remove("open");
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drawerEl.classList.contains("open"), "#/station route did not open the open station's drawer");
@@ -2385,8 +2385,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   //    SURVEY drawer (openSurvey -> identifiersHtml): each instrument's registry pid from the additive
   //    instruments[] list renders as a REAL clickable <a href>, and the hostile instrument pid
   //    (javascript:alert(1)) must be neutralised by the escUrl guard (rewritten to the safe handle host), so
-  //    NO href carries a javascript: scheme. The legacy "Survey PID" (m.pid) ROW is not displayed —
-  //    never minted, it reads "not recorded" on every real survey — so the drawer must NOT render a
+  //    NO href carries a javascript: scheme. The legacy "Survey PID" (m.pid) ROW is not displayed - 
+  //    never minted, it reads "not recorded" on every real survey - so the drawer must NOT render a
   //    "Survey PID" label nor the m.pid handle link (the field is still served; only the row is gone).
   const dpid = doc.getElementById("drawer");
   dpid.classList.remove("open");
@@ -2497,7 +2497,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(sum.indexOf("tipper availability") >= 0 && sum.indexOf("remote reference") >= 0,
     "survey-story table lost sibling rows that must be KEPT (tipper/remote reference)");
 
-  // TF COMPLETENESS — the induction-arrow panel and the error bars, in the station drawer.
+  // TF COMPLETENESS - the induction-arrow panel and the error bars, in the station drawer.
   //   station A1: tzx_re>0 (only), rho+phase errors present -> arrow panel with the Parkinson label, a REAL
   //       arrow pointing SOUTH (Parkinson north = -tzx_re < 0), and error-bar whiskers on ρ/φ.
   //   station A2: no tipper, no errors -> "no tipper" state (no arrow panel) + no bars.
@@ -2754,7 +2754,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify((drwV.textContent.match(/.{0,24}—.{0,24}/) || [""])[0]));
 
   // (d) the sticky-header primary action: Download EDI (open station). No redundant header Cite
-  //     tab-jump button (.dl-cite) renders — the Cite TAB reaches the same panel.
+  //     tab-jump button (.dl-cite) renders - the Cite TAB reaches the same panel.
   ok(drwV.querySelector(".dtop .dl-edi") != null, "C1: an open station must offer a Download EDI action in the sticky header");
   ok(drwV.querySelector(".dtop .dl-cite") == null, "R1: the redundant header Cite button (.dl-cite) must be removed");
 

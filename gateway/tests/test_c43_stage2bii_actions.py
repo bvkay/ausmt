@@ -1,4 +1,4 @@
-"""Stage 2b-ii: privileged serve-state ACTIONS (gateway half — record D8/D9/D13).
+"""Stage 2b-ii: privileged serve-state ACTIONS (gateway half - record D8/D9/D13).
 
 The gateway WRITES intent files the host actions agent executes (the host-side pins live in
 deploy/tests/test_actions_sh.py). This module pins the GATEWAY half against INDEPENDENT OBSERVABLES:

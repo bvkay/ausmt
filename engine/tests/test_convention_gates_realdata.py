@@ -1,4 +1,4 @@
-"""Convention gates — real-corpus pins (dev-box only; the corpus is not in the repo).
+"""Convention gates - real-corpus pins (dev-box only; the corpus is not in the repo).
 
 Gated on AUSMT_REALDATA pointing at the .audit/realdata harness (and, for the twin pin, a sibling
 ausmt-surveys checkout). In CI these skip with an allow-listed reason (tests/ci_check_skips.py):

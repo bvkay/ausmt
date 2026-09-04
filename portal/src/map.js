@@ -237,7 +237,7 @@ function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeo
 // framing — is left untouched). Split out so the no-fight-with-user decision is unit-testable.
 function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
-  if(!hasPosition(s))return;   // a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
+  if(!hasPosition(s))return;   // a withheld-coordinate station has no position - no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z),weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
   s.marker._survey=s.survey;   // the per-survey cluster facade buckets markers by this stamp
   // A marker click OPENS that station and must never ALSO read as a

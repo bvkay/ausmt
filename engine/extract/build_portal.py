@@ -2352,7 +2352,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                 continue
             if _ck:
                 cache.put_json(_ck, parsed)   # populate for the next warm build
-        # Convention-gate FAIL (fresh or cache-replayed): the station is skipped LOUDLY — stderr names the
+        # Convention-gate FAIL (fresh or cache-replayed): the station is skipped LOUDLY - stderr names the
         # gate, the angles and the fix; the structured drop rides into build_report.json via
         # `report` so the skip is machine-visible, never a silent absence.
         if parsed.get("skip"):
@@ -3837,7 +3837,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     _taken_edi_names = {str(_n).lower() for _n in (reserved_edi_names or ())}
     _use_cache = cache is not None and getattr(cache, "enabled", False)
     for (p, r) in stations:
-        # The coordinate byte gate: a non-exact (generalised/withheld) station's EMTF-XML — a full elevation +
+        # The coordinate byte gate: a non-exact (generalised/withheld) station's EMTF-XML - a full elevation +
         # coordinate bearer (HEAD/INFO/DEFINEMEAS carried through by normalize()) — is NOT served. Skip
         # it here so it is absent from out/xml, the xml zip and the manifest (all derive from `written`).
         # r.get("variant") rides along (fix round 2): a variant record inherits its BASE id's policy.
@@ -5139,7 +5139,7 @@ def _main_build(argv=None):
     validator = None if a.no_validate else _load_validator()
     if validator is None and not a.no_validate and a.surveys:
         # Fail-CLOSED: the sibling ausmt-surveys pytest suite does not run in CI and validate.yml is
-        # path-scoped to surveys/**, so an unresolved validator must NOT merely WARN and proceed — a
+        # path-scoped to surveys/**, so an unresolved validator must NOT merely WARN and proceed - a
         # build that quietly skipped validation would look identical to a validated one. That
         # silently-unvalidated state is a hard error; --no-validate is the only sanctioned opt-out.
         print("ERROR: survey validator not found (ausmt-surveys/_validation/validate_survey.py is not "
@@ -5802,7 +5802,7 @@ def _main_build(argv=None):
                                                         nci_base=nci_base, base_url=base_url,
                                                         custodian=_custodian))
                 _bundle_formats.setdefault(slug, {})["edi-zip"] = _zrel
-            # The per-survey EMTF-XML zip — unconditional (like the EDI zip) whenever served XML
+            # The per-survey EMTF-XML zip - unconditional (like the EDI zip) whenever served XML
             # exists. n_stations = the number of XMLs bundled (the round-trip-verified set), not the
             # station count, so it stays honest if a station had no servable XML.
             _xsrc = [xml_written[r["id"]] for (_pp, r) in stations if xml_written.get(r["id"])]

@@ -1,4 +1,4 @@
-"""Public bridge — front-door + box-side two-walls pins + log-shipping pins.
+"""Public bridge - front-door + box-side two-walls pins + log-shipping pins.
 
 The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader — and,
 since the the rule, the PUBLIC submission subset - to the box's dedicated public-subset
@@ -648,7 +648,7 @@ def test_frontdoor_masking_redproof():
 
 
 # ==================================================================================================
-# CORS on public data — runtime pins
+# CORS on public data - runtime pins
 # ==================================================================================================
 def _acao(headers: dict) -> str | None:
     """The Access-Control-Allow-Origin response header value, case-insensitively (urllib's header dict

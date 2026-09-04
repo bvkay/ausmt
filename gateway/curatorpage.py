@@ -6476,7 +6476,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     # carrying several sections' fields round-trips them all in ONE submit; the sections a form does NOT
     # carry contribute nothing, so per-section scope and the no-clobber promise are preserved):
     #   CORE FIELDS  = scalars (_scalars) + organisation + instruments, three grouped headings.
-    #   IDENTIFIERS & PIDS folds time_series levels (group d) — done inside _identifiers_and_pids_inner.
+    #   IDENTIFIERS & PIDS folds time_series levels (group d) - done inside _identifiers_and_pids_inner.
     # The merged forms keep their per-section keys so each constituent's o_ snapshot / patch scoping is
     # unchanged; the merged sidebar ENTRY carries a human title while the FORM key stays a real section key.
     def _map_inner(section: str, derrs: dict | None = None) -> str:

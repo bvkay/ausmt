@@ -312,8 +312,8 @@ def test_queue_page_is_pure_queue_and_csp_clean(tmp_path):
 
 def test_no_page_renderer_emits_inline_handlers_or_scripts():
     """SOURCE-LEVEL CSP SWEEP: no gateway HTML-emitting module may contain an inline event-handler
-    attribute (ANY on*= — onerror/ontoggle/onkeydown included) or an inline <script>
-    block without src= — all are dead under the strictPages CSP. Three handlers shipped
+    attribute (ANY on*= - onerror/ontoggle/onkeydown included) or an inline <script>
+    block without src= - all are dead under the strictPages CSP. Three handlers shipped
     that way and silently never ran until; behaviours belong in CURATOR_UI_JS's
     data-attribute delegation and scripts belong behind the external routes. FAILS IF: a new inline
     handler or inline script block lands in any listed module — or a listed module is renamed away

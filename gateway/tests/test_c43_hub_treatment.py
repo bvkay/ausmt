@@ -90,7 +90,7 @@ def _live(tmp_path, yaml_text=HUB_YAML):
 # Hub header + tab strip
 # --------------------------------------------------------------------------------------------------
 def test_hub_header_orientation_line_on_every_tab(tmp_path):
-    """HEADER PIN. Every hub tab renders the mockup's header — the survey display TITLE (not the
+    """HEADER PIN. Every hub tab renders the mockup's header - the survey display TITLE (not the
     slug) + a mono slug chip + the orientation line 'v1.0.1 · CC-BY-4.0 · open · collection
     capricorn' (each fact from the metadata read-job fields, in the mockup's order) + the hidden
     counts span survey-hub.js fills from build_report. The tab strip carries data-survey-slug and

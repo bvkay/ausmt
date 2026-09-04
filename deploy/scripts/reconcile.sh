@@ -476,7 +476,7 @@ PYEOF
     head=$(git -C "$SURVEYS_LIVE" rev-parse --short HEAD 2>/dev/null || true)
   fi
   # An empty $head must never reach the prefix compare: `"$head"*` with head="" is the pattern `*`,
-  # which matches ANY built value — a false noop with a lying status. Near-unreachable
+  # which matches ANY built value - a false noop with a lying status. Near-unreachable
   # (rev-parse failing right after a successful pull), but refuse loudly rather than guess.
   if [ -z "$head" ]; then
     printf 'reconcile: cannot resolve surveys-live HEAD in %s — refusing to compare or build\n' "$SURVEYS_LIVE" >&2

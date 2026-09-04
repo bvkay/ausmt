@@ -283,7 +283,7 @@ def _extract_block(text: str, opener: str) -> str:
 @pytest.mark.skipif(shutil.which("caddy") is None,
                     reason="no caddy binary — the masked-log-line pin is the ubuntu/CI leg (wait-for-greens)")
 def test_real_caddy_masks_forwarded_client_ip_in_the_log():
-    """HEADLINE — REAL-CADDY RUNTIME PIN (ubuntu/CI, wait-for-greens). A request carrying
+    """HEADLINE - REAL-CADDY RUNTIME PIN (ubuntu/CI, wait-for-greens). A request carrying
     `X-Forwarded-For: 203.0.113.7` through a running Caddy using the SHIPPED log filter + trusted_proxies
     writes a log line in which the full client IP appears NOWHERE — only the /24-masked form 203.0.113.0.
     FAILS IF 203.0.113.7 appears anywhere in the emitted JSON (fields OR headers). This is the property

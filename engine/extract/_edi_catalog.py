@@ -17,7 +17,7 @@ import _ediparse as ep  # noqa: E402  (shared _norm / cached read_norm)
 
 NUM = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
 
-# Australian bounding box (w, e, s, n) — it guards the AU-only state_of() facet so non-AU
+# Australian bounding box (w, e, s, n) - it guards the AU-only state_of() facet so non-AU
 # coordinates are not mislabelled as Australian states. Generous; matches the validator's box.
 AUS_BBOX = (108.0, 156.0, -45.0, -8.0)
 

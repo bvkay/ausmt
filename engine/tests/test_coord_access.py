@@ -607,7 +607,7 @@ def _aid_by_id(out):
 
 
 def test_coord_policy_marker_emitted_for_non_exact_only(tmp_path):
-    """EMIT PIN. The engine emits coord_policy.json — a boot-loaded map ausmt_id -> policy — carrying
+    """EMIT PIN. The engine emits coord_policy.json - a boot-loaded map ausmt_id -> policy - carrying
     EXACTLY the generalised + withheld stations, with the correct policy string, and NOT the exact one.
     (Red-then-green: drop the r["coord_policy"] stamp or the emit and this fails — the generalised
     station goes unmarked.) FAILS IF an exact station is marked, a non-exact station is missing, the
@@ -626,7 +626,7 @@ def test_coord_policy_marker_emitted_for_non_exact_only(tmp_path):
 
 
 def test_coord_policy_marker_absent_for_all_exact_corpus(tmp_path):
-    """ZERO-CHANGE PIN. An all-exact corpus emits NO coord_policy.json at all — the marker is additive
+    """ZERO-CHANGE PIN. An all-exact corpus emits NO coord_policy.json at all - the marker is additive
     ONLY for non-exact stations, so an existing all-exact survey's served tree is byte-unchanged (no new
     file). FAILS IF the marker file is emitted for an all-exact build."""
     out, r = _build(tmp_path, [
@@ -639,7 +639,7 @@ def test_coord_policy_marker_absent_for_all_exact_corpus(tmp_path):
 
 
 def test_coord_policy_marker_never_co_occurs_with_true_coords(tmp_path):
-    """LEAK PIN (marker/artifact layer — mirrors the D6 leak-sweep spirit). A generalised station is
+    """LEAK PIN (marker/artifact layer - mirrors the D6 leak-sweep spirit). A generalised station is
     MARKED in coord_policy.json AND its catalogue coordinates are the 0.1° CELL — never the true 6-dp
     position; and the marker file itself carries only ausmt_id -> policy, no coordinate. FAILS IF a marked
     station's catalogue coords are its true position, or the marked station's true coords appear anywhere
@@ -1050,7 +1050,7 @@ def test_unit_apply_mask_in_place_and_validates_override_ids():
 
 
 # =====================================================================================================
-# BASE-STATION-ID SURFACE PINS (base_ids.json — the boot artifact keyed by base id for the C43
+# BASE-STATION-ID SURFACE PINS (base_ids.json - the boot artifact keyed by base id for the C43
 # stations-panel override fieldset; D2 fix-round-2 requires override keys to be BASE ids)
 # =====================================================================================================
 
@@ -1063,7 +1063,7 @@ _VAR_B = {"id": "SITE1", "file": "SITE1_Ohmega.edi", "lat": -34.501234, "lon": 1
 
 
 def test_base_id_surface_emitted_and_engine_true_for_variant_stations(tmp_path):
-    """EMISSION + PARITY PIN. A survey with a processing-variant pair emits base_ids.json — a boot map
+    """EMISSION + PARITY PIN. A survey with a processing-variant pair emits base_ids.json - a boot map
     ausmt_id -> BASE station id — containing EXACTLY the variant records mapped to their shared base, and
     NOT the non-variant station (whose base is its own catalogue id). The emitted base ids equal
     base_station_id over the REAL parsed records (engine truth, never a hand-typed map). FAILS IF the
@@ -1094,7 +1094,7 @@ def test_base_id_surface_emitted_and_engine_true_for_variant_stations(tmp_path):
 
 
 def test_base_id_surface_absent_without_variant_stations(tmp_path):
-    """DEFAULT-STABILITY PIN. A corpus with NO processing-variant station emits NO base_ids.json — the
+    """DEFAULT-STABILITY PIN. A corpus with NO processing-variant station emits NO base_ids.json - the
     surface is additive ONLY when it carries information (a variant station's base differs from its served
     id), so a corpus of ordinary stations is byte-unchanged (no new file). Orthogonal to coord policy:
     this build DOES exercise the non-exact mask (GEN/HID) yet still emits no base_ids.json. FAILS IF

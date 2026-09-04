@@ -102,7 +102,7 @@ def test_populated_portal_value_binding(tmp_path):
     for gone in (4.2, "BIRRP", "2-D", "ST1.edi", "error"):
         assert gone not in ex, ("dropped CSV field %r still present: %r" % (gone, ex))
 
-    # (c) the footer's build-id text is a pure function of BUILDID (loaded from build.json) —
+    # (c) the footer's build-id text is a pure function of BUILDID (loaded from build.json) - 
     # Value-binds main.js's buildIdText against the KNOWN fixture build_id/generated above, so a
     # wrong slice/format (or a dropped build.json fetch) fails here, not just "no crash".
     mb = re.search(r"^BUILDID_TEXT (\".*\")\s*$", out, re.M)

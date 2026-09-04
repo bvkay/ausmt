@@ -12,7 +12,7 @@ name: deploy-images
 # the images COPY engine/, portal/, gateway/ and contract/ source (see deploy/docker/*.Dockerfile), so
 # a push touching ANY of those must rebuild + republish, or :latest silently serves stale code. This
 # was real, twice: gateway pushes shipped an untested image (the F1 finding), and engine/portal merges
-# published NO image at all — the "box engine label 1333f4f while main was 18 commits
+# published NO image at all - the "box engine label 1333f4f while main was 18 commits
 # ahead" incident was exactly this hole (C32 merged, no deploy/** change, no image rebuilt). The unit
 # suites still run in build-products.yml / portal-ci.yml / gateway-ci.yml; this workflow owns the
 # packaging + image layer, and its path filter must mirror the Dockerfiles' COPY surface.
@@ -111,7 +111,7 @@ on:
   pull_request:
 
 concurrency:
-  # CI minutes economy, safety note — this cancels superseded runs of the SAME ref, INCLUDING
+  # CI minutes economy, safety note - this cancels superseded runs of the SAME ref, INCLUDING
   # pushes to main. That is safe here because image publishing is last-write-wins on the mutable
   # :latest / :main tags: when several merges land in quick succession, only the FINAL (correct)
   # build must complete and publish; a cancelled intermediate build loses nothing, since its :latest
@@ -707,7 +707,7 @@ jobs:
           # production ModuleNotFoundError (`import gateway` needs the PARENT of the package).
           # HOME/MPLCONFIGDIR are compose truth too (its runner env): uid 10002 has no home on a
           # read-only rootfs, so HOME defaults to / and mt_metadata's ~/.cache writes fail EVERY EDI
-          # parse with Errno 30 (the Olympic Dam incident class — reproduced here the first
+          # parse with Errno 30 (the Olympic Dam incident class - reproduced here the first
           # time this leg actually ran). Point both at the tmpfs, exactly as production compose does.
           docker run -d --name gw-runner --network none \
             --user 10002:10002 --read-only --tmpfs /tmp \
@@ -1004,7 +1004,7 @@ jobs:
             if [ "$i" = 20 ]; then echo "gateway never ready"; docker logs gateway; exit 1; fi
             sleep 1
           done
-          # NO --rm + PYTHONPATH=/opt: as in gateway-e2e — keep a dead runner's logs,
+          # NO --rm + PYTHONPATH=/opt: as in gateway-e2e - keep a dead runner's logs,
           # and use compose.yaml:197's PYTHONPATH (an /opt/gateway value here reproduces the
           # production ModuleNotFoundError). Teardown force-removes gw-runner unconditionally.
           # HOME/MPLCONFIGDIR mirror compose's runner env: a no-home uid 10002 on a read-only rootfs

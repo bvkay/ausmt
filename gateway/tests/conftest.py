@@ -218,7 +218,7 @@ def _patch_uncompressed_size(raw: bytearray, name: bytes, fake: int, *, local: b
 def corrupt_deflate_zip() -> bytes:
     """A zip whose central directory is intact (passes zipsafety.inspect) but whose compressed data
     for one DEFLATED member is corrupted, so decompression at extraction raises zlib.error/BadZipFile
-    — NOT an OSError. This is the crafted zip that can crash the runner."""
+ - NOT an OSError. This is the crafted zip that can crash the runner."""
     import struct
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:

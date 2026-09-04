@@ -1018,7 +1018,7 @@ class Gateway:
                         headers={"Cache-Control": "no-store"})
 
     def handle_surveys_list_js(self, request: Request) -> Response:
-        """GET /gateway/curator/surveys-list.js — the Surveys list's browser-side enrichment:
+        """GET /gateway/curator/surveys-list.js - the Surveys list's browser-side enrichment:
         fill the display name / version / licence / served station-count columns from the
         served /data corpus (surveys.json + build_report.json), the serve-panel pattern (script-src
         'self' blocks inline). Session-gated for consistency; the content is a public-repo constant.
@@ -2137,7 +2137,7 @@ class Gateway:
         publish.commit_station_removal(self._git_runner, surveys_live, slug, new_yaml, removed,
                                        expected_sha, curator, note, pre)
 
-    # ---- survey retirement — the destructive whole-survey removal + its TOTP gate ----------------
+    # ---- survey retirement - the destructive whole-survey removal + its TOTP gate ----------------
 
     def _station_count_for(self, slug: str) -> int | None:
         """The published station (EDI) count for `slug`, via the runner's list_stations job — for the
@@ -2221,7 +2221,7 @@ class Gateway:
         pkg = self._edit_package_or_error(slug)
         if isinstance(pkg, Response):
             return pkg
-        # The last-survey guard — FAST PRE-REJECT: refusing to retire the final survey (an empty
+        # The last-survey guard - FAST PRE-REJECT: refusing to retire the final survey (an empty
         # corpus breaks the next rebuild). Checked before the TOTP gate so a doomed retirement never
         # burns a code, and it surfaces the guard on the confirmation page. It is OUTSIDE PUBLISH_LOCK
         # and racy by design; the AUTHORITATIVE, lock-serialised guard is in _commit_retire_blocking.
@@ -2303,7 +2303,7 @@ class Gateway:
 
     def _commit_retire_blocking(self, surveys_live: Path, slug: str, curator: str, note: str) -> None:
         pre = publish.preflight(self._git_runner, surveys_live)
-        # TOCTOU — the AUTHORITATIVE last-survey guard, re-evaluated INSIDE PUBLISH_LOCK after
+        # TOCTOU - the AUTHORITATIVE last-survey guard, re-evaluated INSIDE PUBLISH_LOCK after
         # preflight from on-disk truth. The check in handle_survey_retire is only a fast, friendly
         # pre-reject (it shows the guard on the confirmation page and avoids burning a TOTP code); it is
         # OUTSIDE the lock and therefore racy — two concurrent retires can both read count>1 there before

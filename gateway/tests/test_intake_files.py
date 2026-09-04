@@ -153,7 +153,7 @@ def test_intake_and_build_state_identical_attribution(tmp_path):
 
 
 def test_readme_carries_declared_metadata(tmp_path):
-    # README skeleton: name, organisation, dates, station count, licence, abstract, citation —
+    # README skeleton: name, organisation, dates, station count, licence, abstract, citation - 
     # all from survey.yaml. FAILS IF a required field is dropped from the skeleton.
     pkg = _make_package(tmp_path, n_edi=2)
     intake.generate_intake_files(pkg, now_utc=_NOW)
