@@ -89,7 +89,7 @@ verified either side of it. The acknowledgement lengthened the centre once when 
 copyright line and again when it went bold; anything that changes a region's content moves this
 number and it has to be re-measured.
 
-The rule and every number this module holds it to: AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md.
+The rule and every number this module holds it to: LANE-CONTRACT-FOOTER-AUSCOPE.md.
 """
 import hashlib
 import re

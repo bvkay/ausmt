@@ -3,9 +3,8 @@
 PERMANENT TEST STAGE (the MTCAT 2.0 rule, inherited by the second public contract): this suite runs
 on every later emitter change, so a future feature can never silently break the identity chain, the
 projection equivalences, the zero-null / zero-empty posture, the schema routes or the document
-budget. Sources: AusMT_2026/AUSMT-METADATA-INTERFACE-CONTRACT.md (identity, citation and projection
-equivalence contracts), run-fixture-suite.py, LANE-CONTRACT-SURVEY-METADATA
-section 2 (the framing invariants).
+budget. The identity, citation and projection-equivalence contracts are pinned here;
+LANE-CONTRACT-SURVEY-METADATA section 2 carries the framing invariants.
 
 Three layers:
 

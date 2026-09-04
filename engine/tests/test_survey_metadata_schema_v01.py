@@ -1,6 +1,6 @@
 """Survey metadata 0.1: the schema DESCRIBES what the build serves, and CONSTRAINS it.
 
-The second public contract, data/products/<survey_id>/survey-metadata.json, ships with the 0.1-draft artifact AusMT_2026/schemas-draft/ausmt-survey-metadata.schema.json copied byte-for-byte to
+The second public contract, data/products/<survey_id>/survey-metadata.json, ships with the 0.1-draft schema copied byte-for-byte to
 engine/schema/ausmt-survey-metadata.schema.json (the MTCAT 2.0 core pattern). This module is the
 schema gate, the sibling of test_mtcat_schema_v20.py:
 

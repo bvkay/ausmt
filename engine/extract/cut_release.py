@@ -599,7 +599,7 @@ def main(argv=None) -> int:
     ap.add_argument("--note", default=None, help="one-line note carried into release.json and DataCite")
     ap.add_argument("--surveys-live", default="<surveys-live>",
                     help="path to the surveys-live git checkout ON THE HOST, used only to print the "
-                         "corpus tag commands the owner runs")
+                         "corpus tag commands, which are run by hand")
     a = ap.parse_args(argv)
 
     try:

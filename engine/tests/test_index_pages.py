@@ -163,7 +163,7 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer rule, which made the parent
 # organisation's acknowledgement the footer's right region on every surface; it is the same
 # same-origin, vendored, cached-once class of asset as the header mark and is allow-listed on
-# the same terms (see AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md).
+# the same terms (see LANE-CONTRACT-FOOTER-AUSCOPE.md).
 ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg"]
 ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-white.png"]
 ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
@@ -1257,7 +1257,7 @@ def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
 
 # THE CONSTANT FOOTER, over BUILT pages: the emitted document's own structure and CSS, where the
 # portal half of this pin (portal/tests/test_footer_regions.py) reads _pages.py's source text.
-# AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, and
+# The rule and every number the two halves hold it to: LANE-CONTRACT-FOOTER-AUSCOPE.md.
 _FLOW_BELOW = 560
 _FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 

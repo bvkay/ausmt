@@ -1071,8 +1071,8 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     return doc
 
 
-# --- survey-metadata.json: the SECOND public contract (AusMT_2026/AUSMT-SURVEY-METADATA-SCOPE.md,
-# AUSMT-METADATA-INTERFACE-CONTRACT.md, engine/schema/ausmt-survey-metadata.schema.json 0.1). One document per
+# --- survey-metadata.json: the SECOND public contract
+# (engine/schema/ausmt-survey-metadata.schema.json 0.1). One document per
 # survey at out/products/<survey_id>/survey-metadata.json (the served root, never the --products dir):
 # the canonical public metadata of one survey dataset/release, generated from the RAW survey.yaml
 # (a discovery side channel; SMETA and surveys.json are untouched). The emitter never invents a
@@ -5034,13 +5034,13 @@ def _main_build(argv=None):
                          "kind=time_series resource rows. Absent => no register is read and the build "
                          "is byte-identical to one built before the flag existed.")
     ap.add_argument("--pid-status", default=None,
-                    help="IDCONS D4: optional path to a pid_status.json cache (written by "
+                    help="optional path to a pid_status.json cache (written by "
                          "scripts/refresh_pid_status.py). When present, each served DOI-typed identifier "
                          "gains a resolution facet (ok|reserved) so the portal renders a reserved-but-404 "
                          "DOI as plain text, not a dead link. The build NEVER hits the network; absent => "
                          "every identifier is 'unknown' (linked as today), byte-identical output.")
     ap.add_argument("--no-validate", action="store_true",
-                    help="skip the survey validator gate. Since C8 this is the ONLY way to build "
+                    help="skip the survey validator gate. This is the ONLY way to build "
                          "--surveys without a resolved validator (an unresolvable validator is "
                          "otherwise a hard error, not a warning) -- pass this to explicitly "
                          "acknowledge building unvalidated.")
@@ -5048,9 +5048,8 @@ def _main_build(argv=None):
                     help="copy EDIs of redistributably-licensed surveys into <out>/edi/ and mark them "
                          "downloadable (the interim static distribution model). License-gated.")
     ap.add_argument("--extractor", choices=["mt_metadata"], default="mt_metadata",
-                    help="EDI parser. Only 'mt_metadata' (the USGS community library) remains; the "
-                         "dependency-free regex extractor was retired (see "
-                         "the 2026-06 regex-parser retirement). Kept as an explicit flag so "
+                    help="EDI parser. Only 'mt_metadata' (the USGS community library) is accepted; there is "
+                         "no second extractor. Kept as an explicit flag so "
                          "provenance records the engine and call sites stay stable.")
     ap.add_argument("--input-format", choices=["auto", "edi", "mth5", "emtfxml"], default="auto",
                     help="transfer-function input for --surveys packages: 'edi', 'mth5', 'emtfxml', "
@@ -5068,7 +5067,7 @@ def _main_build(argv=None):
                     help="if set (e.g. https://org.github.io/ausmt/), write <out>/sitemap.xml "
                          "with the survey and collection landing-page links (station pages are served but deliberately unadvertised)")
     ap.add_argument("--canonical-dir", default=None,
-                    help="ADDITIVE: emit the canonical EMTF XML store (D6) — for each EDI write "
+                    help="ADDITIVE: emit the canonical EMTF XML store - for each EDI write "
                          "<dir>/<slug>/<station>.xml + a derived .edi via mt_metadata's normalize(), "
                          "round-trip verified. Does NOT change the portal products (a separate "
                          "canonical artifact alongside them); requires the mt_metadata stack "
@@ -5079,8 +5078,8 @@ def _main_build(argv=None):
                          "absolute artifact host.")
     ap.add_argument("--survey-h5", action="store_true",
                     help="produce a survey-aggregated transfer-function MTH5 per served survey "
-                         "(out/bundles/<slug>-tf.h5) and list it in the manifest. OFF by default (D4: "
-                         "MTH5 gated pending storage/management sign-off). ORs with portal.config "
+                         "(out/bundles/<slug>-tf.h5) and list it in the manifest. OFF by default "
+                         "(MTH5 is gated pending storage sign-off). ORs with portal.config "
                          "flags.survey_h5_enabled.")
     ap.add_argument("--station-h5", action="store_true",
                     help="produce ONE transfer-function MTH5 per served station "
@@ -5089,8 +5088,8 @@ def _main_build(argv=None):
                          "ORs with portal.config flags.station_h5_enabled. Wired into deploy/Makefile's "
                          "rebuild-data, which is the ONLY enable that reaches a production build.")
     ap.add_argument("--workers", default=None, metavar="N|auto", type=_workers_arg,
-                    help="MTH5 writer processes (the ~68%%-cold / ~99%%-warm seam the 2026-08-27 "
-                         "profile attributed). Default 1: byte-for-byte the pre-pool serial build. "
+                    help="MTH5 writer processes (the ~68%%-cold / ~99%%-warm seam of a build). "
+                         "Default 1: byte-for-byte identical to a serial build. "
                          "'auto' (or 0) = min(6, cpus). Overrides the AUSMT_BUILD_WORKERS env var; "
                          "only the MTH5 writes parallelise (parse, XML, cache and manifest stay in "
                          "the main process), and test_build_parallel pins serial==parallel "
@@ -5102,15 +5101,15 @@ def _main_build(argv=None):
     # verify.py stays full/byte-re-hashing/cache-blind, and a warm build is byte-identical to a
     # --cache-mode refresh build. Switched ON in exactly one place: deploy/Makefile's rebuild-data.
     ap.add_argument("--incremental", action="store_true",
-                    help="C18: consult + populate a content-addressed cache of per-station products "
+                    help="consult + populate a content-addressed cache of per-station products "
                          "(the mt_metadata parse + the served-XML round-trip) so unchanged stations "
                          "skip both. OFF by default; a NO-OP without --cache-dir. A degenerate salt "
                          "(unknown engine commit, or a dirty engine checkout) silently disables it.")
     ap.add_argument("--cache-dir", default=None,
-                    help="C18: cache root (required for --incremental to do anything). Unset => "
+                    help="cache root (required for --incremental to do anything). Unset => "
                          "--incremental is a no-op.")
     ap.add_argument("--cache-mode", choices=list(cache_mod.CACHE_MODES), default="rw",
-                    help="C18: rw (consult+populate) / ro (consult only, CI reproducibility) / "
+                    help="rw (consult+populate) / ro (consult only, CI reproducibility) / "
                          "refresh (ignore hits, forced full rebuild that still repopulates).")
     a = ap.parse_args(argv)
     # Load the pid_status.json cache ONCE per build (or {} when absent). The build

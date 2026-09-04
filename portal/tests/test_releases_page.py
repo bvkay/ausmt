@@ -223,7 +223,7 @@ def test_scripts_are_external_only():
     [data-ver-chip]; no document on this site carries one, and nothing reads what it defines, so on
     this page it was a request that changed nothing a reader could see. The zero-loads-anywhere half
     is held in tests/test_about_uniform_chrome.py across every document the portal ships, which is
-    where the chip's own pins already live. Contract: AusMT_2026/LANE-CONTRACT-ABOUT-PAGE.md."""
+    where the chip's own pins already live. Contract: LANE-CONTRACT-ABOUT-PAGE.md."""
     raw = RELEASES.read_text(encoding="utf-8")
     for src in ("config.js", "releases.js"):
         assert f'<script src="{src}"></script>' in raw, f"releases.html must load {src} as an external script"

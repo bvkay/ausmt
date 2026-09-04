@@ -1,6 +1,6 @@
 """Station metadata 0.1: the schema DESCRIBES the promoted station.json, and CONSTRAINS it.
 
-The third public contract, data/products/<slug>/<station>/station.json, ships with the 0.1-draft artifact AusMT_2026/schemas-draft/ausmt-station.schema.json copied byte-for-byte to
+The third public contract, data/products/<slug>/<station>/station.json, ships with the 0.1-draft schema copied byte-for-byte to
 engine/schema/ausmt-station.schema.json (the MTCAT 2.0 / survey-metadata pattern). This module is the
 schema gate, the sibling of test_survey_metadata_schema_v01.py:
 

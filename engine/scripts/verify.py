@@ -660,7 +660,7 @@ def main(argv=None):
     # the digest-consistency gate (absent => the gate skips loudly).
     ap.add_argument("--surveys", default=None,
                     help="survey-package root (default in self-build mode: ./data). In --data-dir mode "
-                         "this ARMS the C18b cache-staleness digest gate: the served-product digest "
+                         "this ARMS the cache-staleness digest gate: the served-product digest "
                          "stamps are compared against the LIVE survey.yaml sources at this root "
                          "(cache-independent). Absent in --data-dir mode => that gate SKIPS loudly.")
     ap.add_argument("--skip-tests", action="store_true")
@@ -675,11 +675,11 @@ def main(argv=None):
                          "not named there FAILS this run (the build itself still exits 0). Defaults "
                          "to the reviewed in-repo file.")
     ap.add_argument("--data-dir", default=None,
-                    help="C12: validate an EXISTING build output dir in place (mtcat.json schema + "
+                    help="validate an EXISTING build output dir in place (mtcat.json schema + "
                          "manifest.json integrity/schema) instead of running pytest + a fresh build. "
                          "For a post-build gate over an already-produced builds/<timestamp> dir (see "
                          "deploy/Makefile's rebuild-data). --skip-tests is ignored here; --surveys, if "
-                         "given, ARMS the C18b consistency gate (it is NOT ignored — C18b/A3).")
+                         "given, ARMS the consistency gate, which is NOT ignored.")
     a = ap.parse_args(argv)
 
     if a.data_dir is not None:

@@ -183,9 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="CI skip tripwire.")
     parser.add_argument(
         "--allow", action="append", default=None, metavar="SUBSTRING",
-        help="allow-list entry (repeatable); passing it at least once REPLACES the built-in engine "
-             "list. `--allow \"\"` yields an EMPTY allow-list so ANY skip fails (the gateway lane, minus "
-             "its one legitimate skip passed explicitly). Omit entirely to keep the engine built-in list.")
+        help="allow-list entry (repeatable); passing it at least once REPLACES the engine's own "
+             "built-in list. `--allow \"\"` yields an EMPTY allow-list so ANY skip fails (the gateway "
+             "workflow passes its one legitimate skip explicitly). Omit entirely to keep the built-in list.")
     args = parser.parse_args(argv)
     allow_list = _resolve_allow_list(args.allow)
 

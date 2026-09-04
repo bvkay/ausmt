@@ -533,7 +533,10 @@ RULES = (
          # A licence's own clause number is the obligation, not a design document, and the legal
          # code it names is public. The window must carry the licence for the exemption to hold.
          ((re.compile(r"^\u00a7$"),
-           re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)),)),
+           re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)),
+          # An ADR that is a FILE in this tree is a pointer a reader can follow, which is what the
+          # rule asks for. The window must carry the path, not merely the name.
+          (re.compile(r"^ADR-\d"), re.compile(r"/ADR-\d[\w.-]*\.md\b")))),
     Rule(re.compile(r"YOUR-"), "placeholder"),
     Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
     Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),
@@ -852,6 +855,30 @@ def flattened(text):
     return " ".join(text.split())
 
 
+# A pointer names a file a reader of THIS repository can open. A path whose first segment is a
+# directory the repository does not carry names a document that is not here, and the reader is left
+# with exactly the unresolvable reference the citation rule exists to remove. The trees are NAMED
+# rather than resolved: a working directory beside the checkout exists on the author's machine and
+# nowhere else, so existence is not the test, and naming them also lets this rule read the same
+# inside the engine image, where only two of the trees are shipped. A first segment carrying a dot
+# is a file name, so "LICENSE.md/README.md" is an either-or and not a path.
+REPO_TREES = ("portal", "engine", "gateway", "deploy", "contract", "docs", "maintainer", "schema",
+              ".github", "tests", "tools", "scripts", "src", "extract", "data", "environments",
+              "runner", "docker", "systemd", "frontdoor", "fixtures", "vendor", "ausmt_science",
+              "developer", "reference", "architecture", "data-model", "interoperability",
+              "introduction", "operations", "rationale", "science")
+DOCUMENT_IN_PROSE = re.compile(
+    r"(?<![\w/.~-])([A-Za-z_][\w-]*(?:/[\w.-]+)+\.md)(?![\w-])")
+
+
+def paths_outside_this_repository(text):
+    """Every DOCUMENT a comment cites whose first segment is not a tree of this repository. A
+    document is the citation the rule is about; a data path outside the checkout (/srv, out/, a
+    sibling repository the deployment mounts) names a place, not a reference to follow."""
+    return [m.group(1) for m in DOCUMENT_IN_PROSE.finditer(text)
+            if m.group(1).split("/")[0] not in REPO_TREES]
+
+
 def labels_for(comment, cite_contract=False):
     """Every way one comment breaks the rule, as sorted labels."""
     text = flattened(bare(comment))
@@ -860,6 +887,8 @@ def labels_for(comment, cite_contract=False):
         found.add(CONTRACT_CITATION.label)
     if work_item_tags(text):
         found.add("work-item identifier")
+    if paths_outside_this_repository(text):
+        found.add("a path outside this repository")
     if looks_like_code(comment):
         found.add("commented-out code")
     return sorted(found)
@@ -1046,6 +1075,49 @@ def history_offences(files, root=None):
                 found.append("%s:%s: %s: %s"
                              % (where, lineno, ", ".join(sorted(set(shapes))),
                                 " ".join(comment.split())[:110]))
+    return found
+
+
+# THE OPERATOR STRINGS. argparse prints help, description and epilog to whoever runs the tool, so
+# they are read the way a comment is read and carry the same rule. Two guards miss them by
+# construction: a behaviour comparison that blanks docstrings cannot see a description built from
+# __doc__, and a framing classification that reads non-docstring literals sees the bytes without
+# knowing they reach a person.
+ARGPARSE_TEXT = ("help", "description", "epilog")
+
+
+def operator_strings(path):
+    """(line number, text) for every string an argparse module prints to an operator."""
+    if path.suffix.lower() != ".py":
+        return []
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (SyntaxError, UnicodeDecodeError):
+        return []
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        if node.func.attr not in ("add_argument", "ArgumentParser"):
+            continue
+        for keyword in node.keywords:
+            value = keyword.value
+            if (keyword.arg in ARGPARSE_TEXT and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)):
+                found.append((value.lineno, value.value))
+    return found
+
+
+def operator_offences(files, root=None):
+    """Every operator string that breaks the rule, as report lines."""
+    found = []
+    for path in files:
+        where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+        for lineno, text in operator_strings(path):
+            labels = [label for label in labels_for(text) if label != "commented-out code"]
+            if labels:
+                found.append("%s:%s: %s: %s"
+                             % (where, lineno, ", ".join(labels), flattened(text)[:110]))
     return found
 
 
@@ -2294,3 +2366,19 @@ def test_the_same_words_about_data_are_the_code_speaking(tmp_path):
         f = tmp_path / "data.js"
         f.write_text(body, encoding="utf-8")
         assert not history_offences([f]), f"the rule read the data sense as history: {label}"
+
+
+def test_a_path_outside_this_repository_is_an_unresolvable_pointer(tmp_path):
+    """A pointer names something a reader of this repository can open. A working directory beside
+    the checkout exists on one machine, so a document cited through it is dead for everyone else;
+    a document under one of the repository's own trees resolves for every reader."""
+    outside = tmp_path / "outside.py"
+    outside.write_text('"""The rule: AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md."""\n', encoding="utf-8")
+    hits = offences([outside], cite_contract=True)
+    assert hits and "a path outside this repository" in hits[0], "a dead citation went unseen"
+    inside = tmp_path / "inside.py"
+    inside.write_text('"""The rule: maintainer/ADR-001-repo-structure.md."""\n', encoding="utf-8")
+    assert not offences([inside]), "a document under a tree of this repository was flagged"
+    either = tmp_path / "either.py"
+    either.write_text('"""One of LICENSE.md/README.md must be present."""\n', encoding="utf-8")
+    assert not offences([either]), "an either-or list of file names was read as a path"

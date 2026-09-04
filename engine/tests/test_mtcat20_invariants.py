@@ -4,7 +4,7 @@ PERMANENT TEST STAGE (final pre-freeze review section 39): this suite runs on ev
 change, forever - a future feature can never silently break identity, migration, ordering or the
 zero-null/zero-empty posture. Sources:
 
-  * AusMT_2026/schemas-draft/run-fixture-suite.py - the executable fixture suite. Its
+  * the executable fixture suite, whose
     migrate_12_to_20 IS the 1.2 -> 2.0 emitter-change specification and is carried here
     VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example and a
     corpus-shaped 1.2 migration input.

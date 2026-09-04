@@ -16,7 +16,7 @@ Two halves, as before:
      constraining it are not the same act, and only the second one catches a bad build.
 
 The RED set keeps every 1.2-era case whose constraint survives into 2.0 and adds the 2.0 cases
-from the fixture suite (AusMT_2026/schemas-draft/run-fixture-suite.py): subject rows
+from the executable fixture suite: subject rows
 without a scheme, duplicate/empty/non-positive sample rates, has_time_series false, unknown
 coordinates_state, the withheld-footprint leak, empty formats/subjects arrays, identifier-less
 relationship rows, half-null coordinate pairs, and a malformed generated_at (which requires
