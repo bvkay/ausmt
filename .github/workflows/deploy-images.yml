@@ -436,8 +436,8 @@ jobs:
   # verified; engine.Dockerfile now installs the committed lock and the two agree.
   # made this the SOLE in-image engine-suite run: engine.Dockerfile's own in-build stack-less pytest
   # was removed as the least truthful + only ~4-min-per-build of the three engine runs. This lane is
-  # where the D3.1 topology skip ("gateway tree not shipped") legitimately fires — the engine image
-  # ships engine/ only, so /app/gateway is absent — and the tripwire below allow-lists exactly that
+  # where the topology skip ("gateway tree not shipped") legitimately fires: the engine image
+  # ships engine/ only, so /app/gateway is absent, and the tripwire below allow-lists exactly that
   # one skip (engine/tests/ci_check_skips.py). Removing the in-build run does not touch that skip:
   # the image topology here is identical, so the skip still fires and its allow-list entry is still
   # load-bearing.
@@ -825,7 +825,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # AUDIT 1.1: on a PUSH TO MAIN the publish-flow acceptance is the ONLY end-to-end proof of the
+      # On a PUSH TO MAIN the publish-flow acceptance is the ONLY end-to-end proof of the
       # core flow (submission -> curation -> commit to surveys-live). If AUSMT_SURVEYS_URL is unset it
       # silently skips (the gate step below), yet the run stays green and :latest images are already
       # published by the build job — "green" then EXCLUDES the one thing this job exists to prove. Make
@@ -1171,7 +1171,7 @@ jobs:
         run: docker rm -f gateway gw-runner clamd 2>/dev/null || true
 
   # ---------------------------------------------------------------------------------------------
-  # AUDIT 3.1: verify the three published images are ANONYMOUSLY pullable from GHCR. GHCR packages
+  # Verify the three published images are ANONYMOUSLY pullable from GHCR. GHCR packages
   # default to PRIVATE on first push even when the repo is public, so the documented quickstart's
   # `docker compose pull` 403s for everyone but the account holder and an NCI/apptainer evaluation cannot even
   # begin. This job requests a PUBLIC (credential-free) bearer token for each image and GETs its

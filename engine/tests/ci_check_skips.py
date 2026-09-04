@@ -42,11 +42,12 @@ Usage (from the engine/ cwd, both workflows):
 
 a repeatable --allow flag lets a DIFFERENT workflow supply its own allow-list. Passing --allow at
 least once (even `--allow ""`) REPLACES the built-in list entirely; passing it zero times keeps today's
-behaviour (the engine built-in list below). The gateway workflow pipes its report through this with a
-single `--allow ""` - i.e. NO substantive allow entries - so, with the validator oracles running
-via the vendored copy, the gateway suite's ONE legitimate skip (the mt_metadata-needing engine-
-preview oracle) is the only entry it allows; every other skip fails the workflow:
-    pytest -q -rs gateway/tests | python engine/tests/ci_check_skips.py \
+behaviour (the engine built-in list below). The gateway workflow runs gateway/tests AND deploy/tests
+in one report and pipes it through this with a single --allow - i.e. one substantive allow entry - so,
+with the validator oracles running via the vendored copy and every deploy dependency present on the
+runner, the ONE legitimate skip (the mt_metadata-needing engine-preview oracle) is the only entry it
+allows; every other skip, from either tree, fails the workflow:
+    pytest -q -rs gateway/tests deploy/tests | python engine/tests/ci_check_skips.py \
         --allow "real engine stack / sample survey / validator not present"
 
 Exit 0 iff every parsed skip matches an allow-list entry AND the parsed count equals pytest's own
