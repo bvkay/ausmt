@@ -161,7 +161,7 @@ RUN python ../contract/generate.py --check
 #       the HISTORY note at the top of this file, which admits exactly that). Least faithful → dropped.
 #   (b) deploy-images.yml's `engine-full-tests` job — runs `pytest` INSIDE the SHIPPED image with
 # the pinned lock installed, piped through the skip tripwire. This is the real release gate
-#       and is UNCHANGED; it is also where the D3.1 topology skip ("gateway tree not shipped")
+#       and is UNCHANGED; it is also where the topology skip ("gateway tree not shipped")
 #       legitimately fires (engine image ships engine/ only, no /app/gateway), covered by the
 #       ci_check_skips.py allow-list. That skip is unaffected by removing (a): the image topology at
 #       (b) is identical, so the skip still fires there and its allow-list entry stays load-bearing.

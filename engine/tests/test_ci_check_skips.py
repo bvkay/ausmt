@@ -1,7 +1,7 @@
 """The skip tripwire's own pins: the accounting must count SKIPS, not lines.
 
 pytest -rs aggregates identical (location, reason) skips into ONE line carrying a multiplicity,
-"SKIPPED [2] path:line: reason". Two tests skipping through one shared helper (the D3.1 validator
+"SKIPPED [2] path:line: reason". Two tests skipping through one shared helper (the validator-resolution
 seam was the first) produce exactly that shape, and a parser that counts lines undercounts it -
 the PR #164 red, caught by the tripwire's own cross-check against pytest's summary
 total. These pins keep both halves honest: multiplicities are summed, and the cross-check still

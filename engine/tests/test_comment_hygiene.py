@@ -571,7 +571,10 @@ CONTRACT_CITATION = Rule(
 # inside a list carries the same audit trail as one at the head of a comment, so
 # scoping to four positions left the rule reading only where it had already
 # looked.
-_TAG = r"[A-Z]{1,2}\d{1,2}[a-z]?"
+# A work item that cites a CLAUSE of the design it belongs to writes the clause after a dot
+# ("D9.1", "T1.2"), and the citation is the same audit trail as the work item alone. The letters
+# are what make it one: an enumeration written 1.1 or 2.3 is a comment numbering its own list.
+_TAG = r"[A-Z]{1,2}\d{1,2}(?:\.\d{1,2})?[a-z]?"
 _TAGS = r"%s(?:\s*[/,]\s*%s)*" % (_TAG, _TAG)
 
 TAG_PATTERN = re.compile(r"(?<![\w#])(?P<any>%s)(?![\w]|\.\d)" % _TAGS)
@@ -691,7 +694,9 @@ def _inside_a_repo_path(text, start, stop):
     return run != text[start:stop] and bool(REPO_PATH.match(run))
 
 
-QUOTE_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|'[^'\n]*'")
+# An apostrophe inside a word does not open a quoted run. Read as one it reaches to the next
+# apostrophe a sentence away and excuses every tag standing between the two.
+QUOTE_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|(?<![\w'])'[^'\n]*'(?!\w)")
 
 
 def _inside_a_quoted_literal(text, start, stop):

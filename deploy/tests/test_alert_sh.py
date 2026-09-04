@@ -513,7 +513,7 @@ def test_fresh_pause_is_active_not_persistent(tmp_path):
 
 
 def test_persistent_pause_alarms_and_fails(tmp_path):
-    """PERSISTENT-PAUSE PIN (record D9.7). A pause whose CONTINUOUS span (carried first_seen from the
+    """PERSISTENT-PAUSE PIN. A pause whose CONTINUOUS span (carried first_seen from the
     previous ops-status.json) exceeds the cumulative threshold flips ops-status.pause.persistent true
     AND fires the fail ping with a pause message — even though the CURRENT flag is freshly re-armed.
     FAILS IF a slow-drip re-armed pause stays invisible (the single-flag age check it defeats)."""

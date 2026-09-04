@@ -794,7 +794,7 @@ class Gateway:
 
     def _find_build_in_ops(self, build_ref: str):
         """(build_entry_or_None, ops_stale). UX lookup of a retained build against ops-status.json —
-        the gateway-side check is UX only; the host re-validates against the real inventory (D9.2)."""
+        the gateway-side check is UX only; the host re-validates against the real inventory."""
         ops = serve_state.read_ops_status(self.cfg.state_dir)
         ops_stale = serve_state.ops_status_stale(ops)
         return curatorpage.find_build(ops, build_ref), ops_stale
@@ -833,7 +833,7 @@ class Gateway:
     def handle_serve_rollback(self, request: Request, build_ref: str, form: dict) -> Response:
         """POST /gateway/curator/serve/rollback/{build_ref} — write rollback.request naming the build.
         Gates IN ORDER: session, CSRF, the typed-build-id match, and the UX inventory check (the HOST
-        re-validates the id against the REAL retained inventory — D9.2). Single-flight."""
+        re-validates the id against the REAL retained inventory). Single-flight."""
         name = self._session_curator(request)
         if name is None:
             return self._unauthorized_api()

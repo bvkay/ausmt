@@ -506,7 +506,7 @@ def test_verify_self_building_runs_the_station_gate(tmp_path):
     the PASS line must count documents: a gate passing on a zero-station build proves only that it
     printed."""
     pytest.importorskip("mt_metadata")
-    from test_validator_gate import _resolve_validator_dir  # noqa: PLC0415 - the D3.1 seam
+    from test_validator_gate import _resolve_validator_dir  # noqa: PLC0415 - the validator seam
     env = dict(os.environ, AUSMT_VALIDATOR_PATH=str(_resolve_validator_dir()))
     v = subprocess.run([sys.executable, str(VERIFY), "--skip-tests", "--surveys",
                         str(_distinct_slug_corpus(tmp_path))],

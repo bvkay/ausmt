@@ -8,18 +8,18 @@ assertion is an INDEPENDENT OBSERVABLE (the shim's recorded argv, the audit log'
 bytes, the intent file's presence, the process exit code) - never the script's own self-report.
 
 Each test names its failure criterion (Invariant 10). The hardening + pins carried here:
-  * unknown-intent refusal (D9.1) - an unknown *.request is IGNORED + audited, never executed.
-  * rollback id validation (D9.2) - a bad-charset id and an id not in the retained inventory are both
+  * unknown-intent refusal - an unknown *.request is IGNORED + audited, never executed.
+  * rollback id validation - a bad-charset id and an id not in the retained inventory are both
     REFUSED + audited; NO rebuild, NO engine.
-  * restore id validation (D9.2/D9.5) - a snapshot id not in the backup inventory is REFUSED; the live
+  * restore id validation - a snapshot id not in the backup inventory is REFUSED; the live
     DB is byte-untouched.
   * restore drill-first - a FAILING drill ABORTS with the live DB byte-identical (proven against a
     passing-drill control that DOES swap).
   * update fixed-recipe - the executed command sequence is CONSTANT regardless of the intent's
     content (a hostile-content intent runs the identical git-pull + compose-pull + up -d).
-  * single-flight (D9.3) - with two privileged intents pending, exactly ONE recipe runs per invocation.
-  * rate limit (D9.3) - a repeat intent inside the cooldown window is REFUSED + audited.
-  * audit-line-per-action (D9.4) - every executed/refused action appends exactly one audit line.
+  * single-flight - with two privileged intents pending, exactly ONE recipe runs per invocation.
+  * rate limit - a repeat intent inside the cooldown window is REFUSED + audited.
+  * audit-line-per-action - every executed/refused action appends exactly one audit line.
 
 PLATFORM SPLIT (standing rule): the rollback FS-repoint POSITIVE leg (current symlink actually moves +
 the pin file lands) needs a symlink-capable filesystem and is UBUNTU-ONLY (skipped where symlinks are
@@ -144,7 +144,7 @@ def _marks(mark: Path) -> list[str]:
     return [ln for ln in mark.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
-# ---- unknown-intent refusal (D9.1) --------------------------------------------------------------
+# ---- unknown-intent refusal ---------------------------------------------------------------------
 def test_unknown_intent_is_ignored_and_audited(tmp_path):
     """An UNKNOWN *.request in the state dir is IGNORED (no recipe) and audited as such. FAILS IF an
     off-allow-list intent triggers ANY recipe (a shim mark) or is silently dropped without an audit
@@ -159,7 +159,7 @@ def test_unknown_intent_is_ignored_and_audited(tmp_path):
         f"unknown intent must be audited as ignored: {audit}"
 
 
-# ---- rollback id validation (D9.2) --------------------------------------------------------------
+# ---- rollback id validation ---------------------------------------------------------------------
 def test_rollback_invalid_charset_refused(tmp_path):
     """A rollback build id outside the [A-Za-z0-9TZ._-] charset (a traversal token) is REFUSED before
     any use, audited, and no repoint/rebuild happens. FAILS IF a hostile id is acted on."""
@@ -176,8 +176,8 @@ def test_rollback_invalid_charset_refused(tmp_path):
 
 
 def test_rollback_id_not_in_inventory_refused(tmp_path):
-    """A rollback build id that passes the charset but is NOT a real retained build is REFUSED (D9.2 —
-    validated against the REAL inventory, not just a pattern), audited, no rebuild. FAILS IF a
+    """A rollback build id that passes the charset but is NOT a real retained build is REFUSED
+    (validated against the REAL inventory, not just a pattern), audited, no rebuild. FAILS IF a
     well-formed but non-existent id is accepted. Non-vacuous: the charset is clean, so ONLY the
     inventory check can catch it."""
     t = _make_tree(tmp_path)
@@ -359,9 +359,9 @@ def test_compose_uses_project_file_flag_never_dash_C(tmp_path):
                 assert " -C " not in f" {m} ", f"compose has no -C flag — invalid on real docker: {m}"
 
 
-# ---- single-flight + priority (D9.3) ------------------------------------------------------------
+# ---- single-flight + priority -------------------------------------------------------------------
 def test_single_flight_one_recipe_per_invocation(tmp_path):
-    """SINGLE-FLIGHT PIN (record D9.3). With TWO privileged intents pending, exactly ONE recipe runs
+    """SINGLE-FLIGHT PIN. With TWO privileged intents pending, exactly ONE recipe runs
     per invocation (never two concurrently); the other intent remains for the next tick. FAILS IF two
     recipes run in one pass. (True flock concurrency is an ubuntu-only leg; this is the everywhere-true
     one-intent-per-invocation guarantee.)"""
@@ -381,9 +381,9 @@ def test_single_flight_one_recipe_per_invocation(tmp_path):
     assert any(m.startswith("BACKUP") for m in _marks(t["mark"])), "the next tick runs the deferred intent"
 
 
-# ---- rate limit (D9.3) --------------------------------------------------------------------------
+# ---- rate limit ---------------------------------------------------------------------------------
 def test_rate_limit_refuses_rapid_repeat(tmp_path):
-    """RATE-LIMIT PIN (record D9.3). A repeat intent of the same kind inside the cooldown window is
+    """RATE-LIMIT PIN. A repeat intent of the same kind inside the cooldown window is
     REFUSED + audited (the persistent-attack signal). FAILS IF a rapid repeat runs the recipe again.
     Non-vacuous: with the cooldown DISABLED (ratelimit_s=0) the repeat DOES run — proving the window,
     not a broken recipe, is what blocks it."""
@@ -408,9 +408,9 @@ def test_rate_limit_refuses_rapid_repeat(tmp_path):
         "with the cooldown disabled a repeat update must run again"
 
 
-# ---- audit-line-per-action (D9.4) ---------------------------------------------------------------
+# ---- audit-line-per-action ----------------------------------------------------------------------
 def test_audit_line_per_action(tmp_path):
-    """AUDIT-LINE PIN (record D9.4). Every action (executed or refused) appends exactly ONE audit line
+    """AUDIT-LINE PIN. Every action (executed or refused) appends exactly ONE audit line
     carrying intent, requesting curator, id, and outcome. FAILS IF an action leaves no audit trail, or
     the line omits the who/what."""
     t = _make_tree(tmp_path)

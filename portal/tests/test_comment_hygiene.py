@@ -573,7 +573,10 @@ CONTRACT_CITATION = Rule(
 # inside a list carries the same audit trail as one at the head of a comment, so
 # scoping to four positions left the rule reading only where it had already
 # looked.
-_TAG = r"[A-Z]{1,2}\d{1,2}[a-z]?"
+# A work item that cites a CLAUSE of the design it belongs to writes the clause after a dot
+# ("D9.1", "T1.2"), and the citation is the same audit trail as the work item alone. The letters
+# are what make it one: an enumeration written 1.1 or 2.3 is a comment numbering its own list.
+_TAG = r"[A-Z]{1,2}\d{1,2}(?:\.\d{1,2})?[a-z]?"
 _TAGS = r"%s(?:\s*[/,]\s*%s)*" % (_TAG, _TAG)
 
 TAG_PATTERN = re.compile(r"(?<![\w#])(?P<any>%s)(?![\w]|\.\d)" % _TAGS)
@@ -693,7 +696,9 @@ def _inside_a_repo_path(text, start, stop):
     return run != text[start:stop] and bool(REPO_PATH.match(run))
 
 
-QUOTE_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|'[^'\n]*'")
+# An apostrophe inside a word does not open a quoted run. Read as one it reaches to the next
+# apostrophe a sentence away and excuses every tag standing between the two.
+QUOTE_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|(?<![\w'])'[^'\n]*'(?!\w)")
 
 
 def _inside_a_quoted_literal(text, start, stop):
@@ -2066,6 +2071,41 @@ def test_a_tag_is_a_tag_wherever_it_stands(tmp_path):
         f = tmp_path / "cleanpos.js"
         f.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
         assert not offences([f]), f"the tag rule flagged a corpus id: {clean}"
+
+
+def test_a_work_item_that_cites_a_clause_is_still_a_work_item(tmp_path):
+    """A work item that cites a clause of the design it belongs to writes the clause after a dot,
+    and the citation is the same audit trail as the work item alone. The LETTERS are what make it
+    one: a comment that numbers its own list writes 1.1 and 2.3, which name nothing outside it."""
+    for line in ("The four privileged intent files are a fixed enum (D9.1).",
+                 "The rotation guard and the quadrant check (T1.1, T1.2) share a fixture.",
+                 "A key note lives only in sqlite (D2.5), never in the git-bound tree."):
+        f = tmp_path / "dotted.js"
+        f.write_text(f"// {line}\nvar a = 1;\n", encoding="utf-8")
+        hits = offences([f])
+        assert hits and "work-item identifier" in hits[0], f"a dotted work item was missed: {line}"
+    for clean in ("The refusal order is 1.1 the charset, then 1.2 the inventory.",
+                  "A rate limit of 2.5 seconds is the floor the agent honours.",
+                  "The served payload is version 3.1 of the state document."):
+        f = tmp_path / "enum.js"
+        f.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
+        assert not offences([f]), f"an enumeration a comment defines itself was read as a tag: {clean}"
+
+
+def test_an_apostrophe_inside_a_word_does_not_open_a_quoted_run(tmp_path):
+    """The quoted-literal exemption excuses a tag the comment is QUOTING. Read with an apostrophe
+    inside a word as its opening quote, the run reaches to the next apostrophe a sentence away and
+    excuses every tag standing between the two."""
+    f = tmp_path / "apostrophe.js"
+    f.write_text("// The tripwire's own pins: two tests skip through one helper (the D3.1 validator\n"
+                 "// seam was the first), and the tripwire's cross-check keeps both halves honest.\n"
+                 "var a = 1;\n", encoding="utf-8")
+    hits = offences([f])
+    assert hits and "work-item identifier" in hits[0], hits
+    quoted = tmp_path / "quoted.js"
+    quoted.write_text("// The corpus already ships 'C5 [REMOTE].zip', so the encoder must hold.\n"
+                      "var a = 1;\n", encoding="utf-8")
+    assert not offences([quoted]), "a tag inside a genuine quoted literal was no longer excused"
 
 
 def test_the_three_structural_exemptions_and_what_they_do_not_excuse(tmp_path):

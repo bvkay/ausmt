@@ -75,7 +75,7 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # engine-full-tests run - the sole remaining engine-image pytest dropped the
     # In-Dockerfile duplicate - pipes through THIS tripwire). INERT on every checkout workflow: a
     # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the oracle
-    # (D3.1 arm iv), never skips.
+    # (the resolver's arm iv), never skips.
     "engine image build: gateway tree not shipped",   # test_validator_gate.py, image builds only
     # test_mtcat_version_parity.py, the SAME designed-topology class as the entry above, for the
     # other tree the engine image does not ship. The MTCAT schema version has one source (the schema
@@ -155,7 +155,7 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
 
 # `pytest -rs` prints one line per DISTINCT (location, reason): "SKIPPED [N] path:line: <reason>",
 # where N is how many skips aggregated onto it (two tests skipping through one shared helper, e.g.
-# the D3.1 validator seam, share the helper's location and land as [2]). The count is summed, never
+# the validator-resolution seam, share the helper's location and land as [2]). The count is summed, never
 # the lines, or an aggregated line undercounts against pytest's total. The location token
 # (path:line) is a single run of non-whitespace, so a GREEDY `\S+` captures it whole — including the
 # trailing `:line` — and backtracks to the last `:` before the reason. Both CI (ubuntu, `/`) and a

@@ -1,4 +1,4 @@
-"""Convention gates (T1.1 rotation/frame guard + T1.2 sign-convention quadrant check).
+"""Convention gates: the rotation/frame guard and the sign-convention quadrant check.
 
 Every fixture here is generated AT RUNTIME by text-transforming the in-repo clean stations
 (data/sample-survey Vulcan_A1 for the impedance branch; tests/real_dialects phoenix_empower_A01

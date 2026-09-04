@@ -60,7 +60,7 @@ class UploaderKey:
     (audit trail); active == revoked_utc IS NULL.
 
     `note` (schema v3): a free-text curator annotation (who the key is for, expiry intent).
-    PII CONTAINMENT (D2.5): like every other column here it lives ONLY in this sqlite DB — it never
+    PII CONTAINMENT: like every other column here it lives ONLY in this sqlite DB and never
     enters a git-bound artifact (survey.yaml, a commit message, the publication ledger). A grep test
     pins its absence from the git-bound tree."""
     id: int

@@ -64,7 +64,7 @@ _INTENT_LOCK = threading.Lock()
 
 class IntentAlreadyPending(Exception):
     """A privileged intent of this kind is already waiting for the host agent to consume it — the
-    single-flight guard (D9.3). The route surfaces this as 'already pending' UX, never a second write
+    single-flight guard. The route surfaces this as 'already pending' UX, never a second write
     (one privileged action of a kind at a time)."""
 
 
@@ -118,10 +118,10 @@ def write_intent(state_dir: Path, kind: str, *, requested_by: str,
     """Write a privileged INTENT file for the host actions agent. `kind` is one of
     INTENT_FILENAMES (update/backup/rollback/restore); `extra` carries the validated id for the
     parameterised kinds (rollback: {'build_id': ...}; restore: {'snapshot_id': ...}) — the HOST
-    re-validates it against the real inventory (D9.2, gateway-side is UX only). The whole payload is
+    re-validates it against the real inventory (gateway-side is UX only). The whole payload is
     {requested_at, requested_by, **extra}.
 
-    SINGLE-FLIGHT (D9.3): with single_flight True (the default) a pending intent of the SAME kind
+    SINGLE-FLIGHT: with single_flight True (the default) a pending intent of the SAME kind
     raises IntentAlreadyPending — one privileged action of a kind at a time. The check + write are one
     critical section under _INTENT_LOCK so two concurrent requests cannot both pass the check.
     """

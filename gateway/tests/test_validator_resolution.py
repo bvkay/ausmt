@@ -10,7 +10,7 @@ defect cannot ship silently twice: the sibling constant points outside the repo,
 wins, AUSMT_FORCE_VENDORED_VALIDATOR=1 flips the branch, an absent sibling falls back to the pinned
 vendored copy, and neither present FAILS rather than skips (no same-author-mock fallback).
 
-Style follows the engine's D3.1 falsifiability tests (engine/tests/test_validator_gate.py): drive the
+Style follows the engine's falsifiability tests (engine/tests/test_validator_gate.py): drive the
 REAL resolver over a monkeypatched SCRATCH topology, never over the real checkout, so each pin
 asserts the same thing on a dev box (sibling present) as in CI (sibling absent).
 """

@@ -380,7 +380,7 @@ run_pass() {
   #     goes on to noop, fail, or be killed. See prune_builds for why this cannot live only after a
   #     successful swap. Cheap (a readlink, a listing) and never touches the served build.
   [ "$DRY_RUN" -eq 0 ] && prune_builds
-  # 0. PAUSE + ROLLBACK-PIN state (record D9.7). Computed FIRST so EVERY status write below surfaces
+  # 0. PAUSE + ROLLBACK-PIN state. Computed FIRST so EVERY status write below surfaces
   #    it (an authenticated attacker must not be able to keep serving frozen silently). PAUSED == a
   #    pause.flag within its expiry window (honoured); PAUSE_EXPIRED == a stale flag that is IGNORED
   # (auto-expired); PINNED == a manual "serve this build" rollback pin standing.

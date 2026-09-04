@@ -3133,7 +3133,7 @@ def _backups_table(ops, ops_stale: bool, generated_at, *, actions: bool = False)
 
 # ---- privileged ACTION controls on the serve screen ----------------
 # The buttons. All post to session+CSRF-gated routes that write an INTENT the host actions agent
-# executes (the gateway gains no shell). Single-flight (D9.3): a pending intent of a kind
+# executes (the gateway gains no shell). Single-flight: a pending intent of a kind
 # disables its button and shows the pending state. The destructive/id-carrying ones (rollback,
 # restore) are their own confirmation PAGES (typed id; restore also a TOTP code). Everything here
 # rides the shared data-confirm delegation in CURATOR_UI_JS — NO inline handler (strictPages CSP).
@@ -4458,7 +4458,7 @@ def render_rollback_confirm(*, build_ref: str, build, serving: bool, csrf_token:
     a rebuild — it serves an already-verified retained build immediately, and pins reconcile off an
     auto-revert until an explicit rebuild moves forward. Confirmation requires typing the build id. If
     the id is not in the retained inventory (or is the currently-serving build) the form is replaced by
-    the honest refusal — the host re-validates against the real inventory regardless (D9.2)."""
+    the honest refusal: the host re-validates against the real inventory regardless."""
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
     err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
     back = '<p><a href="/gateway/curator/serve">back to serve state</a></p>'

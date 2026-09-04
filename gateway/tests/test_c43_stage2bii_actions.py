@@ -118,7 +118,7 @@ def test_action_posts_require_csrf(tmp_path):
 # ---- simple intents: update / snapshot / force-full / pause / resume ----------------------------
 def test_update_writes_intent_and_is_single_flight(tmp_path):
     """POST update writes update.request once; a second POST while it is pending does NOT write a
-    second (single-flight, D9.3). FAILS IF a duplicate intent is written while one is pending."""
+    second (single-flight). FAILS IF a duplicate intent is written while one is pending."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)

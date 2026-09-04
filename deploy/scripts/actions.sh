@@ -9,21 +9,21 @@
 #
 # THE HARDENING (frozen - implemented in full here; the gateway-side checks are UX only, THIS is the
 # real gate):
-#   D9.1 Fixed-enum intents only. A closed allow-list of intent FILENAMES (update/backup/rollback/
-#        restore .request). An unknown file in the state dir is IGNORED and audited, never executed.
-#   D9.2 Host-side validation is the real gate. The rollback build id is validated against the REAL
-#        retained-build inventory (site-data/builds/); the restore snapshot id against the REAL
-#        snapshot list (backups/); ids must match a strict [A-Za-z0-9TZ._-] charset AND resolve to an
-#        actual inventory entry BEFORE any use. No attacker-controllable string ever reaches a shell:
-#        the recipes are fixed command sequences with allow-listed arguments only.
-#   D9.3 Single-flight + rate limit. A host-side flock serialises the agent (one action at a time); at
-#        most ONE privileged intent is executed per invocation (fixed priority), so two recipes can
-#        never run concurrently. A per-kind cooldown refuses (and audits) a repeat request inside the
-#        rate-limit window.
-#   D9.4 Audit line per action — append-only actions-audit.log in the state dir carrying the intent
-#        kind, the id (rollback/restore only), the requesting curator NAME, and the outcome.
-#   D9.5 Typed confirmation for restore — the snapshot id the curator typed is carried in the intent
-#        and re-checked here against the real snapshot list; a mismatch aborts (audited refused).
+#   * Fixed-enum intents only. A closed allow-list of intent FILENAMES (update/backup/rollback/
+#     restore .request). An unknown file in the state dir is IGNORED and audited, never executed.
+#   * Host-side validation is the real gate. The rollback build id is validated against the REAL
+#     retained-build inventory (site-data/builds/); the restore snapshot id against the REAL
+#     snapshot list (backups/); ids must match a strict [A-Za-z0-9TZ._-] charset AND resolve to an
+#     actual inventory entry BEFORE any use. No attacker-controllable string ever reaches a shell:
+#     the recipes are fixed command sequences with allow-listed arguments only.
+#   * Single-flight + rate limit. A host-side flock serialises the agent (one action at a time); at
+#     most ONE privileged intent is executed per invocation (fixed priority), so two recipes can
+#     never run concurrently. A per-kind cooldown refuses (and audits) a repeat request inside the
+#     rate-limit window.
+#   * Audit line per action: append-only actions-audit.log in the state dir carrying the intent
+#     kind, the id (rollback/restore only), the requesting curator NAME, and the outcome.
+#   * Typed confirmation for restore: the snapshot id the curator typed is carried in the intent
+#     and re-checked here against the real snapshot list; a mismatch aborts (audited refused).
 #   update.request and restore.request are flagged for the pre-NCI hostile re-audit (see README).
 #
 # THE UPDATE RECIPE IS THE ONE BOUNDED EXCEPTION to the no-privileged-action rule: `git pull
@@ -99,10 +99,10 @@ BACKUP_CMD="${AUSMT_ACTIONS_BACKUP:-${CODE_DIR:+$CODE_DIR/deploy/backup.sh}}"
 DRILL_CMD="${AUSMT_ACTIONS_DRILL:-${CODE_DIR:+$CODE_DIR/deploy/scripts/restore-drill.sh}}"
 RATELIMIT_S="${AUSMT_ACTIONS_RATELIMIT_S:-30}"
 
-# The four privileged intent files (fixed enum, D9.1). Ordered by PRIORITY — the agent executes the
-# FIRST pending one per invocation (single-flight, D9.3): a destructive restore before a rollback
+# The four privileged intent files (the fixed enum). Ordered by PRIORITY: the agent executes the
+# FIRST pending one per invocation (single-flight): a destructive restore before a rollback
 # before an update before a backup. rebuild.request + pause.flag are NOT in this set (reconcile owns
-# them); any OTHER *.request in the state dir is UNKNOWN => ignored + audited (D9.1).
+# them); any OTHER *.request in the state dir is UNKNOWN => ignored + audited.
 INTENT_UPDATE="update.request"
 INTENT_BACKUP="backup.request"
 INTENT_ROLLBACK="rollback.request"
@@ -159,7 +159,7 @@ _scrub() {
   printf '%s' "$1" | LC_ALL=C tr -dc '[:print:]' | tr -d '=' | cut -c1-120
 }
 
-# audit <kind> <by> <id> <outcome>: append ONE line to the state-dir audit log (D9.4). The
+# audit <kind> <by> <id> <outcome>: append ONE line to the state-dir audit log. The
 # host-computed `outcome=` is written FIRST so a forged token in the attacker-controlled `by`/`id`
 # fields can never PRECEDE the real outcome (defence-in-depth over the _scrub above). We hold the
 # flock, and a single short append is atomic on POSIX. The log is group-readable (0644) so the
@@ -177,7 +177,7 @@ audit() {
   chmod 0644 "$AUDIT_LOG" 2>/dev/null || true
 }
 
-# valid_id: 0 (true) iff the id is non-empty, matches the strict [A-Za-z0-9TZ._-] charset (D9.2), and
+# valid_id: 0 (true) iff the id is non-empty, matches the strict [A-Za-z0-9TZ._-] charset, and
 # is not a path-traversal token. This is a CHARSET pre-filter — the REAL gate is inventory membership
 # (in_inventory below), so even a charset pass cannot escape the enumerated builds/backups roots.
 valid_id() {
@@ -203,7 +203,7 @@ in_inventory() {
   return 1
 }
 
-# rate_limited <kind>: 0 (true) iff <kind> ran less than RATELIMIT_S seconds ago (D9.3 repeat-request
+# rate_limited <kind>: 0 (true) iff <kind> ran less than RATELIMIT_S seconds ago (the repeat-request
 # refusal). Reads the per-kind last-exec epoch from LAST_FILE ("<kind> <epoch>" lines). RATELIMIT_S=0
 # disables. record_ran stamps it after a recipe runs.
 rate_limited() {
@@ -354,7 +354,7 @@ recipe_restore() {
 # Fixed priority. Consume the intent FIRST (rm — at-most-once, so a failed/hostile recipe never loops),
 # validate, execute, audit. Returns the pass exit code (0 clean / 1 recipe-failed).
 process_one() {
-  # Warn (and audit) any UNKNOWN *.request the gateway should never have written (D9.1) — but do NOT
+  # Warn (and audit) any UNKNOWN *.request the gateway should never have written, but do NOT
   # touch pause.flag or rebuild.request (reconcile owns those). Best-effort visibility.
   for _f in "$STATE_DIR"/*.request; do
     [ -f "$_f" ] || continue
@@ -425,7 +425,7 @@ process_one() {
 }
 
 # ----- lock + run --------------------------------------------------------------------------------
-# flock the whole pass on fd 9 (single-flight, D9.3): if a concurrent run holds it, exit 0 — the other
+# flock the whole pass on fd 9 (single-flight): if a concurrent run holds it, exit 0; the other
 # run owns this tick, and NO second recipe starts (two privileged recipes can never run at once). On a
 # host without flock(1) the pass runs bare (WARN): the one-privileged-intent-per-invocation structure
 # above still guarantees no two recipes run within a single invocation, and the timer cadence bounds

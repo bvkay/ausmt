@@ -619,7 +619,7 @@ def test_key_note_stored_rendered_and_counts(tmp_path):
 
 
 def test_key_note_absent_from_git_bound_artifacts(tmp_path):
-    """PII-CONTAINMENT PIN (D2.5): a key note lives ONLY in sqlite — it NEVER enters surveys-live (the
+    """PII-CONTAINMENT PIN: a key note lives ONLY in sqlite, and NEVER enters surveys-live (the
     git-bound publication ledger). FAILS IF a note byte reaches any file under surveys-live."""
     async def _body():
         from gateway import uploader_keys as uploader_keys_mod

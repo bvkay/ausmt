@@ -580,7 +580,7 @@ IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
 
 def _resolve_validator_dir() -> Path:
     """The REAL survey validator (the sibling ausmt-surveys checkout), else the committed vendored
-    copy (the PINNED contract), else the designed engine-image skip (test_validator_gate.py D3.1)."""
+    copy (the PINNED contract), else the designed engine-image skip (test_validator_gate.py)."""
     sibling = REPO.parent / "ausmt-surveys" / "_validation"
     if (sibling / "validate_survey.py").is_file():
         return sibling

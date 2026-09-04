@@ -23,7 +23,7 @@ import build_portal  # noqa: E402
 # maintainer/C35b-GitTruthDesign.md. The validator is stdlib-only import plumbing here
 # (_load_validator imports the module, no mt_metadata), so the vendored copy resolves in the
 # Stack-less engine workflow too. Every probe anchors off ONE root, _repo_root - no second path
-# Convention - and _repo_root is the monkeypatch seam the D3.1 falsifiability tests use.
+# Convention - and _repo_root is the monkeypatch seam the falsifiability tests use.
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
                               "(designed topology; vendored oracle lives in gateway/tests)")
@@ -31,7 +31,7 @@ IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
 
 def _repo_root() -> Path:
     """The repo root this checkout provides: engine/'s parent (= the monorepo root on a checkout;
-    /app in the engine image, whose Dockerfile COPYs engine/ only). Module-level so the D3.1
+    /app in the engine image, whose Dockerfile COPYs engine/ only). Module-level so the
     falsifiability tests can monkeypatch it to a scratch topology."""
     return REPO.parent
 
@@ -45,7 +45,7 @@ def _vendored_validator_dir() -> Path:
 
 
 def _resolve_validator_dir() -> Path:
-    """D3.1 resolution:
+    """The four-arm resolution:
       (i)   sibling ausmt-surveys checkout -> use it (LIVE cross-repo pair, dev box);
       (ii)  else the committed vendored copy -> use it (PINNED contract, CI / fresh clones);
       (iii) else if the gateway package tree ITSELF is absent from the repo root -> SKIP: this is the
@@ -117,7 +117,7 @@ def test_env_var_path_resolves_real_validator(tmp_path, monkeypatch):
     enumeration in _resolve_validator_dir — sibling, else vendored, else SKIP only in the engine
     image's gateway-less topology (arm iii, unreachable on any monorepo checkout), else FAIL (a true
     broken checkout, arm iv)."""
-    validator_dir = _resolve_validator_dir()  # skips ONLY in the engine-image topology (D3.1 iii)
+    validator_dir = _resolve_validator_dir()  # skips ONLY in the engine-image topology (arm iii)
     monkeypatch.setenv("AUSMT_VALIDATOR_PATH", str(validator_dir))
     v = build_portal._load_validator()
     assert v is not None and hasattr(v, "validate"), "env-var directory form did not resolve"
@@ -137,10 +137,10 @@ def test_env_var_path_resolves_real_validator(tmp_path, monkeypatch):
 # _repo_root is the seam: point it at a scratch topology, never at the real tree.
 # --------------------------------------------------------------------------------------------------
 def test_d31_image_topology_skips_with_exact_reason(tmp_path, monkeypatch):
-    """D3.1 arm (iii) — falsifiability (a): a scratch root shaped like the ENGINE IMAGE (/app: an
-    engine tree, NO gateway dir, no sibling beside it) must SKIP with the exact D3.1 reason string,
-    NOT fail. FAILS IF the resolver raises AssertionError (the pre-D3.1 image-build red) or skips with
-    a different reason (the tripwire allow-list matches this exact substring)."""
+    """Arm (iii), falsifiability (a): a scratch root shaped like the ENGINE IMAGE (/app: an
+    engine tree, NO gateway dir, no sibling beside it) must SKIP with the exact reason string the
+    resolver raises, NOT fail. FAILS IF the resolver raises AssertionError or skips with a different
+    reason (the tripwire allow-list matches this exact substring)."""
     root = tmp_path / "app"
     (root / "engine" / "tests").mkdir(parents=True)
     monkeypatch.setattr(sys.modules[__name__], "_repo_root", lambda: root)
@@ -151,8 +151,8 @@ def test_d31_image_topology_skips_with_exact_reason(tmp_path, monkeypatch):
 
 
 def test_d31_gateway_present_vendored_missing_fails(tmp_path, monkeypatch):
-    """D3.1 arm (iv) — falsifiability (b): a scratch MONOREPO root (gateway/ present) whose vendored
-    fixture is missing must FAIL (broken checkout) — the skip arm must NOT swallow it. FAILS IF the
+    """Arm (iv), falsifiability (b): a scratch MONOREPO root (gateway/ present) whose vendored
+    fixture is missing must FAIL (broken checkout): the skip arm must NOT swallow it. FAILS IF the
     resolver skips (or returns) instead of raising."""
     root = tmp_path / "repo"
     (root / "engine" / "tests").mkdir(parents=True)
