@@ -519,7 +519,7 @@ RULES = (
     # tree, or a docs/ page and its section. A clause number, a SPEC, a design brief and an ADR all
     # name a document that is not here, so the reader is left with an unresolvable reference where
     # the constraint should have been.
-    Rule(re.compile(r"\u00a7|\bSPEC\b|\bdesign brief\s*\d|\bADR-\d"),
+    Rule(re.compile(r"\u00a7|\bSPEC\b|(?i:\bdesign brief\b)|\bADR-\d"),
          "design-document citation",
          # A licence's own clause number is the obligation, not a design document, and the legal
          # code it names is public. The window must carry the licence for the exemption to hold.

@@ -392,7 +392,7 @@ def test_a_single_row_hub_counts_in_the_singular():
 
 def test_a_many_row_hub_still_counts_in_the_plural():
     """The other side of the same pin: the singular branch must not swallow the plural form the
-    design brief names ("27 surveys &#183; 2,625 stations")."""
+    emitted copy names ("27 surveys &#183; 2,625 stations")."""
     pages = _pages_module()
     rows = _synthetic_rows(n_surveys=27, n_stations=2625)
     sv = pages.surveys_index_page(rows=rows, base=BASE)
@@ -405,7 +405,7 @@ def test_a_many_row_hub_still_counts_in_the_plural():
 
 
 def _synthetic_collections(n_colls=6, n_stations=2625, members_each=5):
-    """Six collections at corpus scale: the design brief names six candidates, and the whole
+    """Six collections at corpus scale: the emitted copy names six candidates, and the whole
     served corpus of stations spread across their member surveys."""
     per_coll = n_stations // n_colls
     per_member = per_coll // members_each
@@ -431,7 +431,7 @@ def test_collections_index_shares_one_outline_and_stays_inside_the_budget():
 
     Its cost scales with MEMBER STATION COUNT, not with card count: one card carries a full
     member-coloured scatter of every station in the collection, so the served single-collection
-    page is already ~100 KB. The design brief names six candidate collections, and nothing pinned
+    page is already ~100 KB. The emitted copy names six candidate collections, and nothing pinned
     the size of this page at all while its sibling was held to 300 KB. FAILS IF the outline stops
     being shared or the page grows past the same ceiling the surveys hub answers to."""
     pages = _pages_module()

@@ -689,7 +689,7 @@ def test_an_undeclared_survey_infers_channels_only_from_the_components_it_serves
 
 
 def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
-    """Design brief 15 plus AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md.
+    """AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md.
 
     Two defects at once. The Cite-as box held primary visual space near the top of every survey
     page, and it put the AusMT page URL in the LOCATOR slot unconditionally, which cites the AusMT
@@ -786,7 +786,7 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
 
 
 def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide():
-    """Design brief 16, and a real collision. _TS_LEVELS gave BOTH level0 and raw_packed the badge
+    """a real collision. _TS_LEVELS gave BOTH level0 and raw_packed the badge
     level 0, so a survey carrying both renders two panels badged and a station cell reading
     "L0 3.2 GB &#183; L0 41 KB" with nothing to tell the reader which was which. level1_netcdf, which
     ts_access.json emits and the SPA's own TS_LEVELS names, had no panel at all.
@@ -813,7 +813,7 @@ def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide()
 
 
 def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_details(tmp_path):
-    """Design brief 16: the download section is an interface component, not a run of technical text.
+    """the download section is an interface component, not a run of technical text.
     Every product row gets its own action, and the complete SHA-256 stops competing with format and
     size for attention.
 
@@ -837,7 +837,7 @@ def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_det
 
 
 def test_the_station_page_renders_the_runs_its_own_document_publishes(tmp_path):
-    """Design brief 17's precondition. station_page printed five facts and never touched
+    """The precondition. station_page printed five facts and never touched
     doc["runs"], so every deployment window, dipole geometry, logger and coil PID a station record
     publishes existed on the SURVEY page's wide table and nowhere else. Simplifying that table
     before this lands would delete the metadata from served HTML.
@@ -954,7 +954,7 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
 
 
 def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations(tmp_path):
-    """Design brief 17, and it can only run AFTER the station pages carry the detail.
+    """it can only run AFTER the station pages carry the detail.
 
     The default table was 13 columns wide inside an 840px column, forced to scroll horizontally by
     an unconditional min-width of 1180px that a 5-column table also paid. The deployment and
@@ -1277,7 +1277,7 @@ def _collection_call(pages, n_members=2, **over):
 
 
 def test_the_collection_page_is_an_exploratory_layer(tmp_path):
-    """Design brief 23 to 31. The static collection page was description, small map, two numbers,
+    """The static collection page was description, small map, two numbers,
     a portal link and a bare list of member links: a thin catalogue record, not somewhere a reader
     can understand a programme.
 
@@ -1361,7 +1361,7 @@ def test_the_collection_page_is_an_exploratory_layer(tmp_path):
 
 def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
     """_COLL_PAL has eight entries and cycled, so AusLAMP's fourteen members used six colours twice
-    and the legend could not tell them apart. Design brief 45 also forbids encoding identity by
+    and the legend could not tell them apart. The palette rule also forbids encoding identity by
     colour alone, and the SPA's own scatter already carries per-dot titles while the static one did
     not. FAILS IF two members share a colour, or if a dot cannot name its survey."""
     pages = _pages_module()
@@ -1428,7 +1428,7 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
 
 
 def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
-    """Design brief 3, 4 and 45, as measurable properties of the emitted CSS and SVG.
+    """and 45, as measurable properties of the emitted CSS and SVG.
 
     Four separate debts. The BBMT swatch drifted from the value the portal measured for LP/BB
     separability and deutan-safety (portal/src/state.js), and the drift was TEST-LOCKED. The minimap
