@@ -6,12 +6,15 @@ behaviour guard that compares ASTs with docstrings blanked sees none of that, so
 text can silently change what the tool tells its operator: a leading hyphen eaten off a long flag
 turns `--data-dir` into `-data-dir`, which names a flag argparse does not have.
 
-Three guards, over engine/ and contract/ (the two trees the engine image ships):
+Five guards, over engine/ and contract/ (the two trees the engine image ships):
   1. no comment or docstring anywhere spells a long option with ONE hyphen;
   2. every module that builds an argparse parser answers --help, and every long option it declares
      appears in that output with BOTH hyphens;
-  3. every usage line inside a module docstring names only options that module's parser declares,
-     so a pasted usage line cannot exit 2.
+  3. every usage line inside a module docstring names only options that module's parser declares;
+  4. every such usage line is RUN against that module's own parser, with the parse stopped the
+     instant it returns, so a line that would exit 2 fails here and not in a terminal;
+  5. no usage line writes a value that is a truncation of the example the same module's help
+     offers, which is what a cut token leaves when it takes the end off a value.
 The two operator-facing modules carry their captured text as a pin on top of that.
 
 IMAGE TOPOLOGY. Every path read here is under engine/ or contract/, which deploy/docker/engine.Dockerfile
@@ -26,6 +29,7 @@ import ast
 import hashlib
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -176,6 +180,163 @@ def test_every_argparse_module_answers_help_and_names_its_options():
                 broken.append(f"{rel}: --help does not carry {option}")
     assert not broken, (
         "an argparse module stopped telling an operator what it accepts:\n" + "\n".join(broken))
+
+
+# THE USAGE LINE, RUN. Reading the option NAMES on a usage line is not enough: a value eaten out
+# of one leaves every name intact. So the guard pastes the line. It is tokenised the way a shell
+# tokenises it, an optional group's brackets are dropped, a <placeholder> collapses to one token,
+# and the module runs with argparse stopped the instant the parse returns: the parser answers
+# exactly as it would for an operator and no action runs. The working directory is read off the
+# line itself, so `python scripts/verify.py` runs from the directory that makes that path true.
+PLACEHOLDER = re.compile(r"<[^<>\n]*>")
+DRY_PARSE = (
+    "import argparse, runpy, sys\n"
+    "_args = argparse.ArgumentParser.parse_args\n"
+    "_known = argparse.ArgumentParser.parse_known_args\n"
+    "def _dry(self, args=None, namespace=None):\n"
+    "    _args(self, args, namespace)\n"
+    "    raise SystemExit(0)\n"
+    "def _dry_known(self, args=None, namespace=None):\n"
+    "    _known(self, args, namespace)\n"
+    "    raise SystemExit(0)\n"
+    "argparse.ArgumentParser.parse_args = _dry\n"
+    "argparse.ArgumentParser.parse_known_args = _dry_known\n"
+    "mode, target = sys.argv[1], sys.argv[2]\n"
+    "sys.argv = [target] + sys.argv[3:]\n"
+    "if mode == 'module':\n"
+    "    runpy.run_module(target, run_name='__main__', alter_sys=True)\n"
+    "else:\n"
+    "    runpy.run_path(target, run_name='__main__')\n")
+# An example value a module offers an operator for one of its own options.
+EXAMPLE = re.compile(r"\be\.g\.\s+([^\s,;)\]'\"]+)")
+# The floor under the usage lines that actually ran, so an import failure cannot empty this guard.
+USAGE_FLOOR = 10
+
+
+def usage_invocations(path):
+    """(line, cwd, mode, target, tokens) for every usage line in this module's docstring that
+    invokes this module with options."""
+    try:
+        doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8")))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return []
+    if not doc:
+        return []
+    invoke = re.compile(r"(?:\bpython3?\s+)?(?:-m\s+(?P<module>[\w.]*%s)|(?P<path>[\w./]*%s))"
+                        % (re.escape(path.stem), re.escape(path.name)))
+    found = []
+    for line in doc.splitlines():
+        match = invoke.search(line)
+        if not match:
+            continue
+        rest = line[match.end():].split("#")[0]
+        if not re.search(r"(?<![\w-])--?[A-Za-z]", rest):
+            continue
+        text = PLACEHOLDER.sub("1", rest).replace("[", " ").replace("]", " ")
+        try:
+            tokens = shlex.split(text)
+        except ValueError:
+            continue
+        if match.group("module"):
+            mode, target = "module", match.group("module")
+            rel = target.replace(".", "/") + ".py"
+        else:
+            mode, target = "path", match.group("path")
+            rel = target
+        cwd = path.parents[len(rel.strip("./").split("/")) - 1]
+        if (cwd / rel).resolve() != path.resolve():
+            continue
+        found.append((line.strip(), cwd, mode, target, tokens))
+    return found
+
+
+def dry_parse(cwd, mode, target, tokens):
+    """Run one usage line with the parse stopped the instant it returns."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT), str(ENGINE), env.get("PYTHONPATH", "")])
+    env["COLUMNS"] = "100"
+    proc = subprocess.run([sys.executable, "-c", DRY_PARSE, mode, target] + tokens,
+                          cwd=cwd, env=env, capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL, timeout=180)
+    return proc.returncode, proc.stdout + proc.stderr
+
+
+def declared_examples(path):
+    """option -> the example value this module's OWN help text offers for it."""
+    out = {}
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return out
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        if node.func.attr != "add_argument":
+            continue
+        names = [a.value for a in node.args if isinstance(a, ast.Constant)
+                 and isinstance(a.value, str) and a.value.startswith("--")]
+        for keyword in node.keywords:
+            if keyword.arg != "help" or not isinstance(keyword.value, ast.Constant):
+                continue
+            example = EXAMPLE.search(str(keyword.value.value))
+            if names and example:
+                out[names[0]] = example.group(1).rstrip(".,;)")
+    return out
+
+
+def truncated_values(path):
+    """Every place a module's docstring writes a value for one of its own options that is a
+    TRUNCATION of the example its help offers. A cut token takes the end off the value and leaves
+    the option name standing, which no name check can see."""
+    try:
+        doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"))) or ""
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return []
+    hits = []
+    for option, example in sorted(declared_examples(path).items()):
+        shell = option.lstrip("-").replace("-", "_").upper()
+        patterns = (r"%s[ =]+([^\s'\"]+)" % re.escape(option),
+                    r"(?<![\w-])%s=([^\s'\"]+)" % re.escape(shell))
+        for pattern in patterns:
+            for match in re.finditer(pattern, doc):
+                value = match.group(1).rstrip(".,;)")
+                if not value or value == example:
+                    continue
+                if example.startswith(value) or example.endswith(value):
+                    hits.append("%s: a usage line writes %s %s, but this module's own help says "
+                                "e.g. %s" % (path.name, option, value, example))
+    return hits
+
+
+def test_every_usage_line_in_a_module_docstring_parses():
+    """The pasted line, run. A usage line that names only declared options can still exit 2."""
+    ran, broken, unavailable = 0, [], []
+    for path in argparse_modules():
+        for line, cwd, mode, target, tokens in usage_invocations(path):
+            code, text = dry_parse(cwd, mode, target, tokens)
+            if "ModuleNotFoundError" in text or "ImportError" in text:
+                unavailable.append("%s: %s" % (path.relative_to(ROOT), line))
+                continue
+            ran += 1
+            if code != 0:
+                broken.append("%s: `%s` exits %d when pasted:\n    %s"
+                              % (path.relative_to(ROOT), line, code, text.strip()[-300:]))
+    assert not broken, (
+        "a documented usage line does not parse against its own module's parser:\n"
+        + "\n".join(broken))
+    assert ran >= USAGE_FLOOR, (
+        "only %d usage line(s) ran here (floor %d), so this guard is measuring almost nothing: %s"
+        % (ran, USAGE_FLOOR, ", ".join(unavailable)))
+
+
+def test_no_usage_line_writes_a_truncation_of_its_own_example():
+    """The other half of a usage line: its values. A value that is a prefix or a suffix of the
+    example the same module's help offers is what a cut token leaves behind, and an operator who
+    pastes it cuts a release directory, a tag or a path named after half a value."""
+    hits = []
+    for path in argparse_modules():
+        hits += truncated_values(path)
+    assert not hits, "\n".join(hits)
 
 
 def test_every_usage_line_in_a_module_docstring_names_declared_options():

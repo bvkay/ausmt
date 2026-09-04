@@ -17,13 +17,13 @@ corpus git tag is PRINTED for a person to run; this tool never invokes git.
 
 USAGE (host, against a data root):
 
-    python -m extract.cut_release --data <site-data root> --tag 2026- [--note "one line"]
-    python -m extract.cut_release --data <site-data root> --tag 2026- --doi 10.xxxxx/yyyy
+    python -m extract.cut_release --data <site-data root> --tag 2026-Q3 [--note "one line"]
+    python -m extract.cut_release --data <site-data root> --tag 2026-Q3 --doi 10.xxxxx/yyyy
 
 The production invocation runs INSIDE the build-runner container (site-data mounted at /out), the
 same context rebuild-data builds in, so the release is written by the uid that owns site-data:
 
-    make -C deploy cut-release TAG=2026- NOTE="first citable snapshot"
+    make -C deploy cut-release TAG=2026-Q3 NOTE="first citable snapshot"
 
 INTEGRITY. Every copied bundle is re-hashed from the bytes that landed in the release dir and
 checked against the download manifest's own sha256 claim; ANY mismatch, and any repo-tier bundle the
