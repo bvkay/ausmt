@@ -1,5 +1,5 @@
-"""Approve -> commit to surveys-live (design §5, v2). Publish is COMMIT-AND-PUSH ONLY: the gateway
-writes the approved package into the surveys-live git history (the publication ledger) and pushes it.
+"""The curator approve commits to surveys-live (design §5, v2). Publish is COMMIT-AND-PUSH ONLY: the
+gateway writes the approved submission into the surveys-live git history (the ledger) and pushes it.
 It does NOT build — which is what makes the C10 §0 no-Docker-socket invariant hold cleanly (the
 gateway never invokes the build, never needs the socket). `PUBLISHED` therefore means "committed to
 surveys-live main and pushed", NOT yet served. Since C40 the HOST-side serve-reconcile agent closes
@@ -525,7 +525,7 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- F3: ANY mid-batch error (an OSError from write_bytes, a
+    except Exception as exc:  # noqa: BLE001 -- ANY mid-batch error (an OSError from write_bytes, a
         # subprocess error from the git runner) must still roll the WORKING TREE back — never leave
         # surveys-live on the collbatch/ branch with partial commits. Re-raised AS a PublishError so the
         # caller's fail-closed 409 path holds (main is already protected: the ff-merge is after the loop).

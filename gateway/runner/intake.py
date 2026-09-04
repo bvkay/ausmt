@@ -169,9 +169,9 @@ def _read_survey_yaml(package_root: Path) -> dict:
 
 
 def _license_md_body(y: dict, now_utc: datetime) -> str | None:
-    """The LICENSE.md text, or None when the declared licence is NOT recognised (fail-closed D3: an
+    """The LICENSE.md text, or None when the declared licence is NOT recognised (fail-closed an
     unrecognised id generates nothing so the validator WARNING stands). The rights statement is the
-    engine's single-source license_instrument_text (D2) so LICENSE.md and the bundle LICENSE.txt
+    engine's single-source license_instrument_text so LICENSE.md and the bundle LICENSE.txt
     carry byte-identical rights wording for the same licence id."""
     lic = _license_of(y)
     (license_instrument_text, recognised, redistributable,

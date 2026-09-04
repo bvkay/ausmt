@@ -31,17 +31,17 @@ from pathlib import Path
 # (cfg.state_dir == /gw/state; host: $AUSMT_DATA_DIR/gateway/state). Names fixed by design §3.
 REQUEST_FILENAME = "rebuild.request"
 STATUS_FILENAME = "reconcile-status.json"
-# C43 S2b-i: the ops floor's host-written state file (record D8/D15). Written by the alert timer
+# The ops floor's host-written state file. Written by the alert timer
 # (deploy/scripts/alert.sh) into the SAME state dir, read SERVER-side here (the reconcile-status.json
 # seam — no new mount, C40 intact). The gateway never writes it.
 OPS_STATUS_FILENAME = "ops-status.json"
-# C45 usage analytics (record D4/D5). The host aggregator (deploy/scripts/aggregate_stats.py, a daily
+# Usage analytics (record D4/D5). The host aggregator (deploy/scripts/aggregate_stats.py, a daily
 # timer) folds the Caddy access log into this cumulative stats.json in the SAME state dir; the Analytics
 # screen reads it SERVER-side (the ops-status.json seam — no new mount, no new privilege, C40 intact).
 # The gateway NEVER writes it. It carries aggregates only — counts + dailies, never an address or a UA.
 STATS_FILENAME = "stats.json"
 
-# C43 S2b-ii: the privileged INTENT files the gateway WRITES and the host actions agent
+# The privileged INTENT files the gateway WRITES and the host actions agent
 # (deploy/scripts/actions.sh) executes (record D8/D9). Fixed enum — these names MUST match the host
 # agent's allow-list exactly. The gateway only ASKS (writes an intent); the host validates + acts.
 # `rebuild.request` (above) stays existence-keyed for reconcile; these four ride the actions agent.
@@ -101,8 +101,8 @@ def _atomic_write(state_dir: Path, filename: str, payload: dict) -> Path:
 def write_rebuild_request(state_dir: Path, *, requested_by: str, full: bool = False) -> Path:
     """Write {requested_at, requested_by[, full]} to <state_dir>/rebuild.request ATOMICALLY. Idempotent:
     a second press overwrites the same path (design §3 — "pressing twice = still one file"). The content
-    is AUDIT ONLY for reconcile's existence-keyed consume — EXCEPT the optional `full` boolean (C43
-    S2b-ii Force-full-rebuild): reconcile reads ONLY that one flag and, when true, runs the build in
+    is AUDIT ONLY for reconcile's existence-keyed consume, EXCEPT the optional `full` boolean (the
+    force-full-rebuild flag): reconcile reads ONLY that one flag and, when true, runs the build in
     cache-REFRESH mode (recompute everything, no cache reuse). A bounded parse: the worst a compromised
     gateway can do is force a full — same corpus, just more expensive.
 

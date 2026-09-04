@@ -166,17 +166,17 @@ def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
-    """V4: per-curator TOTP secret for the destructive-op second factor. The
+    """Per-curator TOTP secret for the destructive-op second factor. The
     DB is already the secrets/PII home (never git, WAL-safe backed up, restore-drilled), so the secret
-    lives here beside the session store — a survey deletion needs a valid TOTP code in addition to the
+    lives here beside the session store - a survey deletion needs a valid TOTP code in addition to the
     curator session.
 
     ONE row per curator (curator_name PK):
-      * secret        — the base32 TOTP secret (the ONLY copy; shown once at enrolment, never re-shown);
-      * enrolled_utc  — NULL while an enrolment is PENDING activation, stamped when a valid code proves
+      * secret - the base32 TOTP secret (the ONLY copy; shown once at enrolment, never re-shown);
+      * enrolled_utc - NULL while an enrolment is PENDING activation, stamped when a valid code proves
                         the authenticator works; `enrolled_utc IS NOT NULL` == the factor is ACTIVE and
-                        satisfies the deletion gate (an unactivated row does NOT — fail-closed);
-      * last_used_step— the highest RFC 6238 time-step already consumed, so a code can never be
+                        satisfies the deletion gate (an unactivated row does NOT - fail-closed);
+      * last_used_step - the highest RFC 6238 time-step already consumed, so a code can never be
                         replayed within or across its window (a deletion needs a step STRICTLY GREATER).
 
     Additive-only, which is the migration invariant: a single CREATE TABLE IF NOT EXISTS, no existing column
@@ -643,10 +643,10 @@ class Database:
             return cur.rowcount > 0
 
     def set_uploader_key_note(self, key_id: int, *, note: str) -> bool:
-        """Set the free-text `note` on an ACTIVE uploader key (schema v3, C43 D7). Returns True if a
-        row was updated; False for an unknown id OR a REVOKED key — record D7 rules a revoked key a
-        READ-ONLY audit row, so its note is frozen at revocation time (fix-round F6, overruling the
-        earlier 'editable audit context' reading; the `AND revoked_utc IS NULL` guard is the DB-level
+        """Set the free-text `note` on an ACTIVE uploader key (schema v3). Returns True if a
+        row was updated; False for an unknown id OR a REVOKED key: a revoked key is a
+        READ-ONLY audit row, so its note is frozen at revocation time (the
+        `AND revoked_utc IS NULL` guard is the DB-level
         enforcement, belt-and-braces under the route's own state check). An empty string clears the
         note (stored as NULL so the page renders "—"). This never touches key material or the
         active/revoked state. PII containment: writes ONLY this sqlite column, never a git-bound
@@ -659,8 +659,8 @@ class Database:
             return cur.rowcount > 0
 
     def get_uploader_key(self, key_id: int) -> UploaderKey | None:
-        """One uploader key by id (active or revoked), else None — the route-level state check for the
-        F6 revoked-immutability rule reads this before accepting a note update."""
+        """One uploader key by id (active or revoked), else None. The route-level state check for the
+        revoked-immutability rule reads this before accepting a note update."""
         with self._lock:
             row = self._conn.execute(
                 "SELECT * FROM uploader_keys WHERE id = ?", (key_id,)).fetchone()

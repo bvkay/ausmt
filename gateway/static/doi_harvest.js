@@ -16,7 +16,7 @@
   if (root) root.AusmtDoiHarvest = api;
 })(typeof window !== "undefined" ? window : null, function () {
   "use strict";
-  // R5 DOI normalisation: fold a pasted resolver URL down to the bare DOI the validator records. Strips
+  // DOI normalisation: fold a pasted resolver URL down to the bare DOI the validator records. Strips
   // an http/https doi.org or dx.doi.org (optional www.) resolver prefix and returns the bare 10.x/y
   // suffix; a bare DOI (no resolver prefix) and any non-DOI string are returned UNCHANGED. Only doi.org
   // resolver URLs are folded, a URL-typed identifier row keeps its URL.

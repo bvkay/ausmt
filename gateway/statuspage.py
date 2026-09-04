@@ -27,7 +27,7 @@ _STATE_COLOUR = {
     states.VALIDATED: _PALETTE["ok"],
     states.QUARANTINED: _PALETTE["warn"],
     states.REJECTED_AV: _PALETTE["bad"],
-    # C11 curator-outcome states shown to the submitter.
+    # Curator-outcome states shown to the submitter.
     states.PUBLISHING: _PALETTE["accent"],
     states.PUBLISHED: _PALETTE["ok"],
     states.PUBLISH_FAILED: _PALETTE["warn"],
@@ -58,7 +58,7 @@ _STATE_BLURB = {
 _ABS_POSIX = re.compile(r"(?<![\w])/(?:[\w.\-]+/)*[\w.\-]+")
 _ABS_WIN = re.compile(r"[A-Za-z]:\\(?:[\w.\- ]+\\)*[\w.\- ]+")
 
-# The ONLY states whose last-transition note renders publicly (C11b Amendment A1 / review finding 2):
+# The ONLY states whose last-transition note renders publicly (review finding 2):
 # these are the states where the note is INTENDED for the submitter — the AV verdict, the quarantine
 # cause, the curator's return/reject explanation. Publish-cycle reasons (PUBLISHING / PUBLISHED /
 # PUBLISH_FAILED) are curator/audit/internal text — the PII-ACK acknowledgement prefix with its

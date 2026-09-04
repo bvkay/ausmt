@@ -2,8 +2,8 @@
 computed ENTIRELY from data already on disk (validate.json, preview-summary.json) plus the
 submission row. The gateway does NOT re-parse the package here — it reads the runner's reports.
 
-Each check yields PASS / WARN / FAIL / NA. A FAIL on a BLOCKING check refuses approve SERVER-SIDE
-(the app returns 409 on the approve POST even if the button is hidden — the button being absent is
+Each check yields PASS / WARN / FAIL / NA. A FAIL on a BLOCKING check refuses the curator approve
+SERVER-SIDE (the app returns 409 on the approve POST even if the button is hidden: absence is
 UX, the 409 is the guarantee, design §4). Non-blocking checks (DOI/PID) only ever WARN.
 
 The single most important check is the PII grep: it looks for the submitter's own email (the needle
@@ -39,14 +39,14 @@ class Check:
     label: str
     status: str            # PASS / WARN / FAIL / NA
     detail: str
-    blocking: bool         # a FAIL here refuses approve (design §4)
-    acknowledgeable: bool = False  # C11b §1: a curator may acknowledge PAST this blocking FAIL
+    blocking: bool         # a FAIL here refuses the curator approve (design §4)
+    acknowledgeable: bool = False  # §1: a curator may acknowledge PAST this blocking FAIL
 
 
 @dataclass(frozen=True)
 class Checklist:
     checks: list[Check]
-    # C11b §1: file names (relative to the scanned root) where a GENERIC (non-submitter) email
+    # §1: file names (relative to the scanned root) where a GENERIC (non-submitter) email
     # matched. Curator-only, file names ONLY (never an address). Used to render the classified list
     # and to build the acknowledge audit reason (§2). Empty unless the PII check is acknowledgeable.
     pii_generic_files: tuple[str, ...] = ()
@@ -56,7 +56,7 @@ class Checklist:
 
     @property
     def has_blocking_fail(self) -> bool:
-        """True if any BLOCKING check is FAIL — approve must be refused (design §4/§5 guard)."""
+        """True if any BLOCKING check is FAIL, so the curator approve must be refused (design §4)."""
         return bool(self._blocking_fails())
 
     @property
@@ -185,7 +185,7 @@ def build(*, validate_report: dict | None, preview_summary: dict | None,
     items = _validator_items(validate_report)
     have_validate = validate_report is not None
 
-    # CI/validator green — a FAIL item blocks approve (design §4).
+    # CI/validator green: a FAIL item blocks the curator approve (design §4).
     fails = [i for i in items if _level(i) in ("FAIL", "ERROR")]
     if not have_validate:
         checks.append(Check("validator", "Validator green", NA,
@@ -201,7 +201,7 @@ def build(*, validate_report: dict | None, preview_summary: dict | None,
                             f"{len(items)} checks, {len(warns)} warning(s)", blocking=True))
 
     # ClamAV ran + post-unpack sweep clean — both already recorded by the time a submission is
-    # VALIDATED (a hit would have QUARANTINED it, so reaching the queue IS the pass). Informational.
+    # VALIDATED (a hit QUARANTINES it, so reaching the queue IS the pass). Informational.
     checks.append(Check("clamav", "Antivirus clean", PASS,
                         "raw scan + post-unpack sweep both passed (else the submission would be "
                         "QUARANTINED and not in this queue)", blocking=False))

@@ -1284,11 +1284,11 @@ SURVEY_HUB_JS = r"""
 # source sweep can assert no innerHTML-with-data path exists.
 #
 # THE PHASE FACT (mirrors gateway/phaseqc.py — the authoritative, pinned server-side spec; the
-# EXECUTABLE Node parity pin runs these very functions against phaseqc, fix-round F3):
+# EXECUTABLE Node parity pin runs these very functions against phaseqc):
 #   tf.json t[4] = phs_yx_adj is stored with a +180 presentation shift (engine _edi_tf.norm_phase). The
 #   workbench SUBTRACTS 180 and re-wraps (FLOORED modulo — JS's truncated % diverges on negatives,
-#   fix-round F1) to recover TRUE φyx, plots it on a FULL ±180 axis with the Q3 (−180…−90) band shaded.
-#   φxy (t[3]) is stored true, plotted 0…90 with the Q1 band shaded. ENGINE-GATE ALIGNED (fix-round F4,
+#   diverges on negatives) to recover TRUE φyx, plotted on a FULL ±180 axis with the Q3 band shaded.
+#   φxy (t[3]) is stored true, plotted 0…90 with the Q1 band shaded. ENGINE-GATE ALIGNED (see
 #   _conventions.py Gate 2): a point draws RED only when outside its band by MORE than
 #   QUADRANT_SLACK_DEG (10°, cross-import-pinned equal to the engine constant); the verdict strip
 #   beneath each phase plot is the MEDIAN of classified points vs band+slack (yx median on the
@@ -2401,7 +2401,7 @@ _RAIL = (
     # Security sits under Operations beside Serve state (C41 T2): it is an operator-facing account
     # concern — enrolling the authenticator that gates the destructive workbench actions — not a
     # per-survey editing surface, so Operations is its home rather than Surveys/Intake.
-    # Analytics (C45) sits under Operations beside Serve state: it is a read-only, operator/reporting
+    # Analytics sits under Operations beside Serve state: it is a read-only, operator/reporting
     # surface over the box's own usage aggregates (downloads/visits/countries), the same trust class as
     # the ops floor — not a per-survey editing surface.
     ("Operations", (("serve", "Serve state", "/gateway/curator/serve"),
@@ -2574,7 +2574,7 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
 _ACTION_COLOUR = {
     "rebuilt": _PALETTE["ok"], "noop": _PALETTE["muted"], "failed": _PALETTE["bad"],
     "sync_failed": _PALETTE["bad"],
-    # C43 S2b-i ops-guards render gap (incident-backed): untracked_blocked is a REFUSED rebuild that
+    # The ops-guards render gap: untracked_blocked is a REFUSED rebuild that
     # needs an operator — render it RED, not defaulted to muted, and surface its log_tail (the
     # offending-dir list reconcile wrote as the detail). S2b-ii adds the pause/pinned states.
     "untracked_blocked": _PALETTE["bad"],
@@ -3073,7 +3073,7 @@ def _builds_table(ops, ops_stale: bool, generated_at, *, csrf_token: str = "",
         href = "/gateway/curator/serve/build/" + _esc(d)
         is_serving = bool(b.get("serving"))
         serving = f'<span class="pill" style="background:{_PALETTE["ok"]}">serving</span>' if is_serving else ""
-        # C43 S2b-ii: "serve this build…" = rollback (a link to the typed-id confirm page). The
+        # S2b-ii: "serve this build…" = rollback (a link to the typed-id confirm page). The
         # currently-serving build offers no rollback-to-itself. rollback is a repoint, never a rebuild.
         act = ""
         if actions and d and not is_serving:
@@ -3678,7 +3678,7 @@ def _detail_caveat(stats: dict) -> str:
     WHAT IT POINTS AT MUST ALWAYS BE THERE. This line used to send the reader to "the note under the
     quarterly table", which is built from the THREE months that table shows while this line fires off
     `detail_since` alone. The monthly rollups are never pruned, so the moment a second-seam month ages
-    out of that three-month window the citation named a note the page no longer renders. The export's
+    out of that three-month window the citation names a note the page does not render. The export's
     `detail_days` column carries the same coverage figure for EVERY retained month, so that is what is
     cited; the quarterly note is offered for the months it can actually speak about."""
     since = stats.get("detail_since")
@@ -3839,8 +3839,8 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         # never appear in a quarterly report. The month keeps the peak of its own folded days.
         + _row("Peak networks in a day",
                _currently_measured(lambda c: _esc(_as_int(c.get("networks_peak")))))
-        # The evidence that scripted scientific use exists at all: those clients used to be discarded
-        # as bots, so this row was structurally zero and invisible.
+        # The evidence that scripted scientific use exists at all: discarding those clients as bots
+        # makes this row structurally zero and invisible.
         + _row("Browser / scripted downloads",
                _currently_measured(
                    lambda c: (f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("browser")))}'
@@ -3866,8 +3866,8 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
     # none of the figures the current fold added.
     #
     # And it must state the BIAS IN BOTH DIRECTIONS. Three admission rules changed at that seam, not
-    # one: every request used to count (an over-count), scripted clients used to be discarded as
-    # robots and status 206 used to be refused (two under-counts). Naming only the over-count told a
+    # one: counting every request over-counts, while discarding scripted clients as robots and
+    # refusing status 206 under-count twice over. Naming only the over-count tells a
     # funding-report reader that the older figure is inflated, when its bias is two-sided and its net
     # is not recoverable from anything still on disk.
     later = [c for c in cols
@@ -3987,7 +3987,7 @@ def _country_table(stats: dict) -> str:
     # captions are deliberately the same string.
     #
     # The caption states what the map counts NOW, and the API third of it is younger than the other
-    # two: API requests used to be the one counted class with no geography at all. This map is
+    # two: API requests are the youngest counted class to carry geography at all. This map is
     # cumulative, so on a box with days folded before that change it is a MIXTURE, and the caption
     # alone would overstate the historical portion. The note says so, and only where it is true: a box
     # every folded day of which was counted under the current rules has no such history and gets no
@@ -4365,7 +4365,7 @@ def analytics_monthly_csv(stats) -> str:
         clients = r.get("downloads_by_client") or {}
         # Empty, not zero, for every column the current fold is the sole source of. See the docstring:
         # this file is the artefact a funding report is built from, so a fabricated zero here outlives
-        # the screen that would have said "not measured".
+        # the screen that says "not measured".
         blank = _month_has_no_current_detail(r)
         row = ([r["month"], _as_int(r.get("downloads")), _as_int(r.get("download_bytes")),
                 _as_int(r.get("visits")), _as_int(r.get("api_requests")),
@@ -4424,7 +4424,7 @@ def analytics_country_csv(stats) -> str:
     the only column that always carries a value: it is what the AU state figures reconcile against.
     The four detail columns are forward-only and younger, so a (month, country) folded before they
     existed exports FOUR EMPTY CELLS rather than four zeroes -- this file is what a report is built
-    from, and a fabricated zero here outlives the screen that would have said "not measured".
+    from, and a fabricated zero here outlives the screen that says "not measured".
 
     `geo_days` is the coverage marker the monthly export already carries, repeated on every row
     because it is the number that makes the rest of the row readable: per-month country counts are
@@ -4582,7 +4582,7 @@ def _checklist_panel(cl: "checklist_mod.Checklist") -> str:
         warning = (f'<p style="color:{_PALETTE["bad"]};font-weight:600">'
                    'A blocking check FAILED — approve is refused until it is resolved.</p>')
     elif cl.has_acknowledgeable_blocking_fail:
-        # C11b §3: an acknowledgeable-only block. Approve is available via the acknowledgement
+        # §3: an acknowledgeable-only block. The curator approve is available via the acknowledgement
         # checkbox (a deliberate curator decision), NOT hard-refused. The submitter's own email would
         # be unacknowledgeable and hit the branch above instead.
         warning = (f'<p style="color:{_PALETTE["warn"]};font-weight:600">'
@@ -4644,7 +4644,7 @@ def _reports_panel(*, validate_report: dict | None, preview_summary: dict | None
     return "".join(parts)
 
 
-# C11b §3: the acknowledgement checkbox label. Rendered ONLY when the PII block is acknowledgeable
+# §3: the acknowledgement checkbox label. Rendered ONLY when the PII block is acknowledgeable
 # (non-submitter addresses) and there are NO submitter hits. When a submitter hit exists the checkbox
 # is NOT rendered and the button is hard-disabled — the server-side 409 is the guarantee either way.
 _ACK_PII_LABEL = (
@@ -4759,7 +4759,7 @@ _EDIT_JSON_ONLY = (
 # rendering order never drifts between them.
 # D-L3 (SPEC §9.3): "Source datasets" (sources) is RETIRED from the editor — its acquisition fields are
 # now optional keys on a related_identifiers row, and the standalone sidebar entry + panel are gone. The
-# sources[] schema key stays byte-preserved on disk (never entered into any patch — it is no longer a
+# sources[] schema key stays byte-preserved on disk (never entered into any patch, because it is not a
 # widget section, so build_section_patch never assembles it); the engine keeps reading it this wave.
 # The two retired flat credit entries are GONE, and the ratified
 # MTCAT 2.0 curated homes arrive as their own panels - organisations[] (the full role statement),
@@ -4914,11 +4914,11 @@ def _map_section_panel(section: str, title: str, fields: dict, submitted: dict |
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
                         f'{_text_input(name, val, placeholder, extra_hint=_ROR_HINT, css_class=bad)}'
                         f'{derr_html}</p>')
-        elif kind == "text_source":                 # A2 citation.text_source - fail-closed vocab
+        elif kind == "text_source":                 # Citation.text_source - fail-closed vocab
             rows.append(_typed_vocab_select_widget(name, label, val,
                                                    editor_form.CITATION_TEXT_SOURCES,
                                                    display_labels=_TEXT_SOURCE_DISPLAY))
-        elif kind == "identity_case":               # A2 identity_classification.case - fail-closed
+        elif kind == "identity_case":               # identity_classification.case - fail-closed
             rows.append(_typed_vocab_select_widget(name, label, val,
                                                    editor_form.IDENTITY_CLASSIFICATIONS,
                                                    display_labels=_IDENTITY_CASE_DISPLAY))
@@ -4927,7 +4927,7 @@ def _map_section_panel(section: str, title: str, fields: dict, submitted: dict |
                         f'{_text_input(name, val, placeholder, css_class=bad)}'
                         f'{derr_html}</p>')
     # Citation.preferred_identifier is the NESTED {scheme, identifier} pair, rendered here so the
-    # editor can WRITE it (D18, resolved). additional[] has no widget and rides the snapshot verbatim.
+    # editor can WRITE it (resolved). additional[] has no widget and rides the snapshot verbatim.
     if section == "citation":
         sec_val = fields.get(section)
         rows.append(_identifier_pair_widget(
@@ -5003,7 +5003,7 @@ def _license_option_html(current: str) -> str:
 
 
 def _license_select_widget(name: str, label: str, value) -> str:
-    """A vocab-validated licence <select> for a sources[].licence field (C46). Kills the free-text seam:
+    """A vocab-validated licence <select> for a sources[].licence field. Kills the free-text seam:
     the curator picks a recognised id, never types one. Server-rendered, no JS (CSP unaffected)."""
     return (f'<p><label class="k">{_esc(label)}</label>'
             f'<select name="{_esc(name)}"><option value="">(none)</option>'
@@ -5277,12 +5277,12 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
                    submitted: dict | None = None) -> str:
     """One repeatable row: the per-subkey inputs + a remove button (data-attribute delegated; a no-JS
     submit just leaves an empty row, which the server drops). `values` prefills an existing row.
-    `row_suffix_html` (IDCONS D5) is inserted before the remove button — used to attach the per-identifier
+    `row_suffix_html` (IDCONS D5) is inserted before the remove button - used to attach the per-identifier
     resolution status chip to related_identifiers rows; it rides the row template so a JS-added row carries
     it too. Default empty, so every other list section renders byte-identically.
     `reorderable` (CONTRIBUTOR-CREDIT-SPEC §6) adds up/down move buttons (creators). `needs_review` adds the
     INFERRED-REVIEW chip to a migration-seeded row. `spare` stamps the no-JS add-fallback marker
-    (_SPARE_ROW_ATTR) that editor.js hides on init, see the constant's note. `submitted` (A2) is the
+    (_SPARE_ROW_ATTR) that editor.js hides on init, see the constant's note. `submitted` is the
     raw POST, needed only by the two non-scalar organisations controls (the roles checkbox group and
     the primary-custodian radio) so their state survives a validation-error re-render."""
     from . import editor_form
@@ -5292,10 +5292,10 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
     for subkey, label, placeholder, kind in subfields:
         name = f"l_{section}_{index}_{subkey}"
         val = (values or {}).get(subkey)
-        if kind == "license":                       # C46 sources[].licence — vocab <select>
+        if kind == "license":                       # Sources[].licence - vocab <select>
             cells.append(_license_select_widget(name, label, val))
             continue
-        if kind == "profile":                       # C46 sources[].profile — ga|generic <select>
+        if kind == "profile":                       # Sources[].profile - ga|generic <select>
             cells.append(_profile_select_widget(name, label, val))
             continue
         if kind == "relation":                      # §2a related_identifiers[].relation — vocab <select>
@@ -5313,13 +5313,13 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.CONTRIBUTOR_ROLES,
                                                     display_labels=_ROLE_DISPLAY))
             continue
-        if kind == "org_roles":                     # A2 organisations[].roles - per-row checkbox group
+        if kind == "org_roles":                     # Organisations[].roles - per-row checkbox group
             cells.append(_org_roles_widget(section, index, label, val, submitted))
             continue
-        if kind == "primary_custodian":             # A2 organisations[] - one radio across the rows
+        if kind == "primary_custodian":             # Organisations[] - one radio across the rows
             cells.append(_primary_custodian_widget(section, index, val, submitted))
             continue
-        if kind == "ack_type":                      # A2 acknowledgements[].type - CANDIDATE vocab
+        if kind == "ack_type":                      # Acknowledgements[].type - CANDIDATE vocab
             cells.append(_typed_vocab_select_widget(name, label, val,
                                                     editor_form.ACKNOWLEDGEMENT_TYPES,
                                                     display_labels=_ACK_TYPE_DISPLAY))
@@ -5382,7 +5382,7 @@ def _blank_row(values) -> bool:
 ROW_INDEX_TOKEN = "ROWIDX"
 
 # CONTRIBUTOR-CREDIT-SPEC (§6): sections whose ORDER is meaningful get per-row up/down reorder controls.
-# creators[] is the citation author order (C1); contributors[] is not ordered, so it does not.
+# creators[] is the citation author order; contributors[] is not ordered, so it does not.
 _REORDERABLE_SECTIONS = frozenset({"creators"})
 
 
@@ -5599,7 +5599,7 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
     fall back to)."""
     present = section in fields
     val = _json_text(fields[section]) if present else ""
-    # The o_<section> anchor rides beside the textarea (G1): the textarea is PREFILLED, so an
+    # The o_<section> anchor rides beside the textarea: the textarea is PREFILLED, so an
     # untouched submit posts the stored JSON and must round-trip to no patch, exactly like every
     # widget section. Without the anchor an untouched save would rewrite the block.
     return (
@@ -5791,7 +5791,7 @@ def _people_credit_inner(slug: str, fields: dict, submitted: dict | None, err_ma
     template), and ONE collapsed advanced raw-JSON escape per underlying list (creators, contributors)
     plus their o_<list> round-trip anchors.
 
-    A2 (D7/D19): the legacy-retirement notice and its Convert action are GONE (the migration deleted the
+    the legacy-retirement notice and its Convert action are GONE (the migration deleted the
     two retired flat credit keys corpus-wide and nothing reads them), and so is the citation-author email
     heuristic that read them."""
     heading = ['<h2>People &amp; credit</h2>']
@@ -5879,10 +5879,10 @@ _ACQUISITION_ROW_FIELDS = (
 
 def _related_identifier_row_html(index, values: dict | None, *, spare: bool = False) -> str:
     """D-L (SPEC §9.6): one related_identifiers row. The `identifies` level <select> is FIRST; the DataCite
-    relation is HIDDEN-OR-DERIVED — the relation control renders ONLY for a legacy row (an explicit relation
+    relation is HIDDEN-OR-DERIVED - the relation control renders ONLY for a legacy row (an explicit relation
     but no identifies, backward compatible), because on an identifies row the relation derives server-side
     (editor_form._assemble_list) and is not curator-facing. The acquisition fields sit behind a COLLAPSED
-    disclosure. The per-row resolution chip (D5) + the remove button ride the row like the shared template."""
+    disclosure. The per-row resolution chip + the remove button ride the row like the shared template."""
     from . import editor_form
     v = values or {}
     idf_val = v.get("identifies")
@@ -6184,7 +6184,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
 # populated BROWSER-side from same-origin /data/build_report.json + /data/build.json filtered to this
 # survey (the serve-panel pattern — zero new gateway privileges). The Metadata tab renders the editor
 # as a sticky section TOC + ONE form carrying every section, POSTing to the unchanged
-# /edit/{slug}/preview route (HUB-SINGLE-SAVE - it previously rendered one form per section
+# /edit/{slug}/preview route (HUB-SINGLE-SAVE, rather than one form per section
 # with one save each). The merge seam needs no change either way: build_section_patch assembles
 # whichever s_/l_/c_ widgets + o_<section> snapshots a form carries, and a section that round-trips to
 # its snapshot assembles to _OMIT — so the combined form's patch names exactly the sections the
@@ -6265,8 +6265,8 @@ def _hub_tab_strip(slug: str, active: str) -> str:
 def _hub_overview_body(slug: str) -> str:
     """The Overview & QA tab body (C43-HUB H2 scaffold). Every value is populated BROWSER-side by
     survey-hub.js from /data/build_report.json filtered to THIS survey (data-survey-slug). The
-    server renders only the scaffold + loading placeholders — it has no site-data mount, so it
-    cannot read the served corpus (the serve-panel constraint). A2 (D19): the data-citation-email
+    server renders only the scaffold + loading placeholders - it has no site-data mount, so it
+    cannot read the served corpus (the serve-panel constraint). the data-citation-email
     scaffold attribute and the metadata info row it fed are gone with the heuristic behind them.
     The section sub-lines carry the mockup's framing copy."""
     return (
@@ -6305,7 +6305,7 @@ def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str
     coord_overrides = coord_overrides if isinstance(coord_overrides, dict) else {}
     import json as _json
     overrides_attr = _esc(_json.dumps(coord_overrides, sort_keys=True))
-    # C43 FR2-2 scaffold: THREE thirds. The split container carries THREE slots
+    # THREE thirds. The split container carries THREE slots
     # the JS fills: station FACTS (#station-facts, col 2), the PLOTS column (#station-plots-col, col 3),
     # and the site TABLE (#stations-list, col 1). DOM ORDER is FACTS then PLOTS then TABLE — so on a
     # narrow single column they stack facts / plots / table (the panel-first stacking rule preserved);
@@ -6331,7 +6331,7 @@ def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str
         '</div>'
         '</div>'
         '</div>'
-        # C43 Stage-4: the hidden per-section edit form the drill-down's Save-coordinate-policy button
+        # Stage-4: the hidden per-section edit form the drill-down's Save-coordinate-policy button
         # submits. It round-trips the REST of the access section verbatim (o_access snapshot + the four
         # modelled scalars) so the ONLY diff is coordinate_overrides; the JS fills s_access_coordinate_
         # overrides (the assembled full map) + the release note, then submits to the NORMAL preview route
@@ -6388,8 +6388,8 @@ def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
     for c in commits:
         body = c.get("body") or ""
         note_html = f'<div class="k" style="white-space:pre-wrap">{_esc(body)}</div>' if body else ""
-        # C43-HUB H5 (density polish to the mockup's table): When and Author MERGED into the
-        # Mockup's single 'When · by' column - values verbatim from the
+        # Density: When and Author are MERGED into a
+        # single 'When · by' column, values verbatim from the
         # history read-job, no reformatting. No behaviour change.
         when_by = " · ".join(x for x in (c.get("date") or "", c.get("author") or "") if x)
         rows.append(
@@ -6410,7 +6410,7 @@ def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
 def _toc_state_hint(section: str, fields: dict) -> str:
     """The TOC state hint (C43-HUB H4): render-time facts only: entry COUNTS for list sections, and
     the access level / collection id values. A section with nothing derivable gets no hint (never a
-    placeholder). A2 (D19): the citation-email issue chip is gone with the heuristic that produced it."""
+    placeholder). the citation-email issue chip is gone with the heuristic that produced it."""
     from . import editor_form
     val = fields.get(section)
     if section in editor_form.LIST_SECTIONS and isinstance(val, list) and val:
@@ -6447,7 +6447,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
 
     Every section keeps its advanced-JSON override (inside its panel). Server renders ALL sections
     fully functional without JS (the anchors are ordinary in-page links).
-    C43-HUB H4: TOC entries carry render-time state hints (_toc_state_hint). A2 (D19): the
+    TOC entries carry render-time state hints (_toc_state_hint). The
     citation-email inline error and its TOC issue chip are gone with the heuristic they came from."""
     from . import editor_form
     err_map = _field_error_map(field_errors)
@@ -6476,7 +6476,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     # widget section and assembles whichever widgets + o_<section> snapshots a form carries, so one form
     # carrying several sections' fields round-trips them all in ONE submit; the sections a form does NOT
     # carry contribute nothing, so per-section scope and the no-clobber promise are preserved):
-    #   M3 CORE FIELDS  = scalars (_scalars) + organisation + instruments, three grouped headings.
+    #   CORE FIELDS  = scalars (_scalars) + organisation + instruments, three grouped headings.
     #   M1 IDENTIFIERS & PIDS folds time_series levels (group d) — done inside _identifiers_and_pids_inner.
     # The merged forms keep their per-section keys so each constituent's o_ snapshot / patch scoping is
     # unchanged; the merged sidebar ENTRY carries a human title while the FORM key stays a real section key.
@@ -6532,7 +6532,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     # HUB-SINGLE-SAVE: ONE commit tray for the WHOLE form (bump + required note + Save), pinned to the
     # bottom of the field column so it is reachable from any scroll position. One logical edit — however
     # many sections it spans — is one bump, one release note, one diff, one confirm (the C31 §0.3
-    # discipline is unchanged; it just no longer fires once per section).
+    # discipline is unchanged; it does not fire once per section).
     patch_v, minor_v, major_v = (_suggest_bump(cur, k) for k in ("patch", "minor", "major"))
     tray = (
         '<div class="hub-committray panel" id="hub-commit-tray">'
@@ -6578,7 +6578,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         hint = _toc_state_hint(key, fields)
         toc_links.append(f'<a class="tocitem{on}" href="#{sec_id}" data-hub-section="{_esc(key)}">'
                          f'{_esc(title)}{hint}</a>')
-        # A <section>, no longer a <form>: data-hub-section-form keeps its name so every existing hook
+        # A <section>, not a <form>: data-hub-section-form keeps its name so every existing hook
         # (tests, the CSP sweep, the TOC pairing) still addresses a section block by its key.
         blocks.append(
             f'<section class="hub-section" id="{sec_id}" data-hub-section-form="{_esc(key)}">'
@@ -6593,7 +6593,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
                'highlighted section(s).</p>')
     return (
         f'{err}'
-        # C43 FR2-1: the Metadata tab rides the wide page, but a form input must NOT stretch to
+        # The Metadata tab rides the wide page, but a form input must NOT stretch to
         # 1600px — the field column is CAPPED to a comfortable form measure (~52rem) while the TOC
         # keeps its 12rem rail; the space to the right of the capped column is left for the TOC and
         # future preview real estate. The wide page is for tables/plots, not for stretching a text
@@ -6607,7 +6607,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         '</form>'
         '</div>'
         '</div>'
-        # C41 D2: the danger zone lives at the BOTTOM of the Metadata tab (destructive ops beside the
+        # The danger zone lives at the BOTTOM of the Metadata tab (destructive ops beside the
         # editing surface; History stays read-only), collapsed + visually separated.
         + _hub_danger_zone(slug)
         # doi-harvest.js (shared window.AusmtDoiHarvest for the publications "Look up DOI" button) +
@@ -6671,7 +6671,7 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
     # EXTERNAL same-origin script, ONCE per page (strictPages CSP blocks inline JS). Degrades:
     # placeholders/scaffolds remain, the page never breaks.
     body = f'{head}{strip}{inner}<script src="/gateway/curator/survey-hub.js" defer></script>'
-    # C43 FR2-1: EVERY hub tab fills the viewport (wide-by-default via _shell). The Metadata tab keeps
+    # EVERY hub tab fills the viewport (wide-by-default via _shell). The Metadata tab keeps
     # a comfortable FORM measure INSIDE the wide page (the TOC form caps its own field column — see
     # _hub_metadata_body), so a form input never stretches to 1600px while the Stations/Overview/
     # History tabs use the full width for their tables and the three-thirds split.
@@ -6778,7 +6778,7 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
 # The programme fields whose per-member divergence the console marks with a ◆ (record D5-A A4). Kept in
 # sync with the runner's _COLLECTION_DIVERGENCE_FIELDS. F2 (D5-C): `last_updated` is EXCLUDED — it is a
 # gateway-managed per-member timestamp, not a curator-reconcilable programme field (a Normalise on it
-# would have no form field to fix); it is never a divergence the console reports.
+# has no form field to fix); it is never a divergence the console reports.
 _COLLECTION_FIELDS = ("title", "type", "status", "start_year", "description")
 _COLLECTION_FIELD_LABELS = {"title": "title", "type": "type", "status": "status",
                             "start_year": "start year", "description": "description"}
@@ -6957,7 +6957,7 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
     return _shell("AusMT collections", body, nav=nav)
 
 
-# Record D5-A A2: collection type is validator-unenforced, so the console's select IS the guardrail
+# Record D5-A collection type is validator-unenforced, so the console's select IS the guardrail
 # and these tuples ARE that select's options. app.py imports them for its write-path gates rather than
 # restating them, so the gate can never refuse a value the console offers, or admit one it does not.
 # The ratified vocabulary is docs/docs/developer/collection-ids.md; a value added here must be added
@@ -7599,7 +7599,7 @@ def render_survey_retired(*, slug: str, curator: str) -> str:
 
 # ---- uploader keys (schema v2 — curator-managed submit keys) ---------------------------------
 
-# The rotation runbook the keys page links to (D7). A repo-relative doc path, not an external URL —
+# The rotation runbook the keys page links to. A repo-relative doc path, not an external URL -
 # the strictPages CSP would not block a link, but a same-repo runbook is the honest target (there is
 # no external rotation service). Rendered as plain text + the path so it is useful even where the doc
 # is browsed on the git host rather than fetched.
@@ -7663,7 +7663,7 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
                 note_cell = (f'<span class="k">{_esc(k.note)}</span>' if k.note
                              else '<span class="k">—</span>')
             else:
-                # The unused-key nudge (D7): an active key that has NEVER been used stands out.
+                # The unused-key nudge: an active key that has NEVER been used stands out.
                 if k.last_used_utc:
                     status = f'<span class="badge" style="background:{_PALETTE["ok"]}">active</span>'
                 else:
@@ -7723,7 +7723,7 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
 # ---- C43 D6 quarantine view (read-only) ----------------------------------------------------------
 # A read-only inspection surface for a QUARANTINED submission: the file listing under its extracted
 # package + the refusal reason (the terminal-transition reason). NO action forms — the review flow
-# (approve/return/reject) is deliberately untouched (D6); a quarantined submission is terminal and the
+# (the curator approve/return/reject) is deliberately untouched; a quarantined submission is terminal and the
 # only affordance here is looking at what arrived and why it was refused. The per-file view rides a
 # path-contained route (app.py handle_quarantine_file) mirroring the preview-sandbox containment.
 
@@ -7936,9 +7936,9 @@ def render_detail(*, submission_id: str, state: str, updated_utc: str,
                   validate_report: dict | None, preview_summary: dict | None,
                   cl: "checklist_mod.Checklist", csrf_token: str, note: str = "",
                   has_preview: bool, nav: "NavContext | None" = None) -> str:
-    """The submission review page. C43 FR2-1: full width inside the nav shell (wide-by-default) with a
+    """The curator submission review page: full width inside the nav shell (wide-by-default) with a
     two-column arrangement when a preview exists — the review CONTEXT (submitter PII, checklist, report
-    bundle, last note) on the LEFT, the sandboxed PREVIEW on the RIGHT — and the review ACTION forms
+    bundle, last note) on the LEFT, the sandboxed PREVIEW on the RIGHT, and the curator ACTION forms
     (approve / return / reject) beneath, full width. LAYOUT ONLY: the action logic, the CSRF fields,
     the null-origin sandbox, and the PII split are all unchanged. Without `nav` it renders chrome-less
     (the source-literal render-pin path); the two-column split still applies and collapses on narrow."""
@@ -7948,7 +7948,7 @@ def render_detail(*, submission_id: str, state: str, updated_utc: str,
         # portal JS renders the map/drawer, but the framed document has an OPAQUE origin and cannot
         # read the curator cookie/session, the parent DOM, or make credentialed same-origin requests.
         # A portal-XSS in this UN-curated submitter data therefore cannot steal the curator session or
-        # forge an approve. There is NO "open in a new tab" link — a top-level same-origin navigation
+        # forge a curator approve. There is NO "open in a new tab" link: a top-level same-origin navigation
         # would run the submitter's portal JS in the curator origin, defeating the frame. "Full size"
         # is a CSS expansion of the SAME sandboxed iframe (a class toggle), never a navigation.
         sid = _esc(submission_id)

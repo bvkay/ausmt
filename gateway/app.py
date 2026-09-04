@@ -44,7 +44,7 @@ _UPLOAD_CHUNK = 1024 * 1024
 _POLL_INTERVAL_S = 5.0
 _STATUS_404_BODY = b"not found"  # byte-identical for every unknown/invalid token (design §3)
 
-# C43 fix-round F5: server-side length caps on the uploader-key free-text fields. The caps are the
+# Fix-round server-side length caps on the uploader-key free-text fields. The caps are the
 # GATE (an over-length POST is refused 400, never silently truncated); the form maxlength attributes
 # are client courtesy only. Modest values: a note is "who it's for / expiry intent" (2000 chars is
 # paragraphs), a name is a short operator label, an email caps at the RFC 5321 path limit.
@@ -52,7 +52,7 @@ _NOTE_MAX_CHARS = 2000
 _KEY_NAME_MAX_CHARS = 120
 _KEY_EMAIL_MAX_CHARS = 254
 
-# C43 Stage 3b collections editor — the gateway-side guardrails (record D5-A A2: the console's select
+# Stage 3b collections editor - the gateway-side guardrails (record D5-A the console's select
 # IS the guardrail; type/id/status are validator-WARNING-grade only, so the write path enforces them
 # here before an operation is built). The id vocab is the engine's (docs/.../collection-ids.md). The
 # type and status vocabularies are the select's own tuples, imported above rather than restated: a
@@ -94,7 +94,7 @@ class Gateway:
             d.mkdir(parents=True, exist_ok=True)
         jobs.ensure_dirs(cfg.jobs_dir)
         self.db = db.Database(cfg.db_path)
-        # K3 mail seam (same injected-callable pattern as the scanner/git/edit seams). A test injects a
+        # Mail seam (same injected-callable pattern as the scanner/git/edit seams). A test injects a
         # fake sender so smtplib never touches the network; production uses the real stdlib sender.
         # `mailer` is a callable(*, to_email, key, expires_utc, allowance) -> bool. When it is injected
         # mail is ENABLED regardless of SMTP config (the test controls delivery); when it is None mail
@@ -109,13 +109,13 @@ class Gateway:
         # scanner(data:bytes) -> awaitable[clamd.ScanResult]; default hits the real clamd. Injected
         # in tests so no real daemon is needed and the fail-closed path is exercisable.
         self._scan_bytes = scanner or self._real_scan
-        # C11 publish seam (design §5 v2), same injected-callable pattern as the scanner: git_runner
+        # Publish seam (design §5 v2), same injected-callable pattern as the scanner: git_runner
         # defaults to the real subprocess call and is overridden in tests so no real git is needed.
         # There is NO rebuild seam — demo publish is COMMIT-AND-PUSH ONLY; the operator runs
         # `make rebuild-data` by hand afterward, so the gateway never invokes the build (and never
         # needs the Docker socket the C10 §0 invariant forbids it).
         self._git_runner = git_runner or publish.real_git_runner
-        # C31 metadata-editor seam (same injected-callable pattern as scanner/git). Default ENQUEUES
+        # Metadata-editor seam (same injected-callable pattern as scanner/git). Default ENQUEUES
         # the job on the jobs/edit/ file queue and polls for the gw-runner's result with a bounded
         # timeout — the yaml work happens in the gw-runner service (the ENGINE image, where ruamel
         # lives), never in this process (C31 §0.1 / review FIX 1). The seam BLOCKS while polling, so
@@ -124,13 +124,13 @@ class Gateway:
         self._edit_runner = edit_runner or (
             lambda job: metaedit.default_edit_runner(job, self.cfg.jobs_dir,
                                                      timeout_s=self.cfg.edit_timeout_s))
-        # C11 curator auth (design §2). Keys are parsed LAZILY (curator_keys()) so a malformed config
+        # Curator auth (design §2). Keys are parsed LAZILY (curator_keys) so a malformed config
         # fail-closes each curator route with a 503 rather than aborting startup — the submit half of
         # the gateway must keep working even if curator config is broken. The rate limiter is a single
         # process-global (design §6: no per-source trust on a tailnet).
         self._login_limiter = curator_auth.LoginRateLimiter(
             max_attempts=cfg.login_max_attempts, window_s=cfg.login_window_s)
-        # C41 D2: a SECOND process-global throttle for the destructive-op TOTP factor (the same
+        # A SECOND process-global throttle for the destructive-op TOTP factor (the same
         # login-throttle pattern, a distinct counter so a burst of wrong codes cannot lock out normal
         # login and vice-versa). Reuses the login knobs (5 attempts / 5 min) — a single-digit curator
         # population entering a real 6-digit code will not trip it, but a brute-force stream will.
@@ -551,7 +551,7 @@ class Gateway:
                          "state": sub.state, "updated_utc": sub.updated_utc, "warn_count": warn_count})
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
         nav = self._nav_context(request, active="queue", crumb="<b>Submission queue</b>")
-        # C43 FR2-1: the queue page is purely the queue now. The
+        # The queue page is purely the queue. The
         # serve-state panel moved to /gateway/curator/serve; the ever-present drift chip + that screen
         # own the served-vs-published job, so a second copy here was redundant.
         return self._html(curatorpage.render_queue(curator_name=name, rows=rows, csrf_token=csrf,
@@ -611,7 +611,7 @@ class Gateway:
         pending = serve_state.rebuild_request_pending(self.cfg.state_dir)
         ops = serve_state.read_ops_status(self.cfg.state_dir)
         ops_stale = serve_state.ops_status_stale(ops)
-        # C43 S2b-ii: the privileged-action surface. Pending intents + the audit tail are read
+        # The privileged-action surface. Pending intents + the audit tail are read
         # REAL-TIME straight from the state dir the gateway writes (fresher than ops-status.json's
         # ~15-min snapshot); pause + the rollback pin drive the banners.
         pending_intents = serve_state.pending_intents(self.cfg.state_dir)
@@ -626,10 +626,10 @@ class Gateway:
             audit_tail=audit_tail))
 
     def handle_analytics(self, request: Request) -> Response:
-        """GET /gateway/curator/analytics — the C45 usage-analytics screen (record D4/D5). READ-ONLY:
+        """GET /gateway/curator/analytics: the usage-analytics screen. READ-ONLY:
         renders the host aggregator's stats.json (downloads/visits/countries + a daily series) read
         SERVER-side (serve_state.read_stats — the ops-status.json seam; no new mount, no new privilege,
-        C40 intact). Fail-closed like the ops floor: a missing stats.json shows the honest empty state, a
+        no new mount). Fail-closed like the ops floor: a missing stats.json shows the honest empty state, a
         stale one (old generated_at, the serve_state staleness band — fail-closed both directions) shows
         a STALE banner; the page never 500s and never renders a stale file as live. ZERO JS (the daily
         series is a server-rendered inline SVG), so it is clean under the strictPages CSP. `def`
@@ -1087,7 +1087,7 @@ class Gateway:
         cl = self._build_checklist(sub, validator, preview)
         preview_index = (self.cfg.quarantine_dir / sub.id / "reports" / "preview-data" / "index.html")
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
-        # C43 FR2-1: the detail page joins the nav shell (full width, two-column review layout).
+        # The detail page joins the nav shell (full width, two-column review layout).
         nav = self._nav_context(request, active="queue",
                                 crumb='<a href="/gateway/curator/queue">Submission queue</a> › '
                                       f'<b>{curatorpage._esc(sub.id[:12])}</b>')  # noqa: SLF001
@@ -1117,7 +1117,7 @@ class Gateway:
         if isinstance(name, Response):
             return name
         keys = self.db.list_uploader_keys()
-        # D7 submission counts from the audit trail (best-effort; a DB hiccup must not 500 the page —
+        # Submission counts from the audit trail (best-effort; a DB hiccup must not 500 the page -
         # the counts are an operator aid, and an empty map renders 0 for every key).
         try:
             counts = self.db.submission_counts_by_uploader()
@@ -1185,15 +1185,15 @@ class Gateway:
 
     def handle_uploader_note(self, request: Request, key_id: int, note: str | None,
                              csrf: str | None) -> Response:
-        """POST set-note (C43 D7): session + CSRF gated. Stores a free-text curator annotation on an
-        ACTIVE key — SQLITE ONLY, never a git-bound path (the PII-containment invariant, D2.5).
+        """POST set-note: session + CSRF gated. Stores a free-text curator annotation on an
+        ACTIVE key, SQLITE ONLY, never a git-bound path (the PII-containment invariant).
 
-        F6: a REVOKED key is a READ-ONLY audit row (record D7) - a note
+        A REVOKED key is a READ-ONLY audit row, so a note
         POST to a revoked id is REFUSED with 409 and changes nothing (the UI already hides the editor;
         this is the server-side enforcement, plus the DB layer's own `AND revoked_utc IS NULL` guard).
         An UNKNOWN id keeps the idempotent no-oracle redirect (matching revoke's posture).
 
-        F5 (fix-round): the note is capped at _NOTE_MAX_CHARS server-side — an over-length POST is
+        The note is capped at _NOTE_MAX_CHARS server-side: an over-length POST is
         REFUSED with 400 (rejected, not truncated: silently dropping the tail of a curator's note
         loses information without telling them; the 400 matches the house 'a decision note is
         required' style). The textarea carries maxlength as client courtesy; this is the gate.
@@ -1399,7 +1399,7 @@ class Gateway:
             fields = result.get("fields") or {}
             review_flags = result.get("review_flags") or {}
         else:
-            # C43-HUB H1: every tab renders the mockup's header (title + slug chip + orientation
+            # Every tab renders the same header (title + slug chip + orientation
             # line from version/licence/access/collection), so the read-job runs hub-wide. On the
             # non-metadata tabs it DEGRADES instead of bouncing: a failed read renders the header
             # with the slug and no orientation segments — the tab's own content is unaffected.
@@ -1547,7 +1547,7 @@ class Gateway:
         kept = set(_form_getlist(form, "keep"))
         added = _form_getlist(form, "add")
         # Desired end-state membership: (render-time members that stayed kept) then any adds; removals
-        # are render-time members no longer kept. A slug added AND kept resolves to one 'set'.
+        # are render-time members that are not kept. A slug added AND kept resolves to one 'set'.
         set_slugs: list[str] = []
         for s in rendered:
             if s in kept and s not in set_slugs:
@@ -2163,7 +2163,7 @@ class Gateway:
 
         This is the FAST PRE-REJECT used by the confirmation page + POST handler (good UX, no code
         burned); it reads outside PUBLISH_LOCK and is therefore racy. The AUTHORITATIVE guard against
-        two concurrent retires emptying the corpus lives in _commit_retire_blocking, under the lock (F1)."""
+        two concurrent retires emptying the corpus lives in _commit_retire_blocking, under the lock."""
         slugs = metaedit.list_published_slugs(self.cfg.surveys_live_dir)
         return len(slugs) <= 1
 
@@ -2400,8 +2400,8 @@ class Gateway:
 
     def handle_quarantine_list(self, request: Request) -> Response:
         """GET the quarantine list: every QUARANTINED submission with its refusal reason. Session-gated
-        like the other curator GET pages. Read-only — no action forms (the review flow is untouched,
-        D6). The reason is the last transition's reason (the quarantine outcome cause), read from the
+        like the other curator GET pages. Read-only, with no action forms (the review flow is
+        untouched). The reason is the last transition's reason (the quarantine cause), read from the
         DB the gateway already owns; no new mount, no file read for the LIST view."""
         name = self._require_session(request)
         if isinstance(name, Response):
@@ -2575,8 +2575,8 @@ class Gateway:
             return JSONResponse(
                 {"detail": "a blocking check failed", "reasons": cl.blocking_fail_reasons},
                 status_code=409)
-        # When an acknowledged approve proceeds, prefix the PUBLISHING audit reason so the existing
-        # audit table records who acknowledged what (C11b §2 — no schema change). File names only; the
+        # When an acknowledged curator approve proceeds, prefix the PUBLISHING audit reason so the
+        # audit table records who acknowledged what (no schema change). File names only; the
         # matched address is never in the checklist detail, so it can never reach here either.
         reason = note
         if cl.has_acknowledgeable_blocking_fail:
@@ -2698,7 +2698,7 @@ class Gateway:
         return JSONResponse({"detail": "unauthorized"}, status_code=401,
                             headers={"Cache-Control": "no-store"})
 
-    # ---- self-serve key issuance (K1) --------------------------------------------------------
+    # --- self-serve key issuance --------------------------------------------------------
 
     @staticmethod
     def _client_ip(request: Request) -> str:
@@ -2713,9 +2713,9 @@ class Gateway:
         return client.host if client and client.host else "unknown"
 
     def handle_request_key(self, request: Request, email_field: str | None) -> Response:
-        """POST /gateway/request-key {email}: mint a self-serve email_verified key and mail it (K1).
+        """POST /gateway/request-key {email}: mint a self-serve email_verified key and mail it.
 
-        ALWAYS returns the SAME neutral 202 — for a valid+issued request, an invalid email, a
+        ALWAYS returns the SAME neutral 202 - for a valid+issued request, an invalid email, a
         rate-limited request, an unconfigured-SMTP deploy, or a mail failure alike. No branch leaks
         which case occurred (no account/email enumeration, no rate-limit disclosure). The side effects
         (mint + mail) happen silently behind that uniform response.
@@ -2853,7 +2853,7 @@ def _slug_from_refs(refs: dict) -> str | None:
 
 
 def _collection_spec_violation(cid: str, operations: list, note: str) -> str | None:
-    """Re-enforce the console's own A2 guardrails on the UNTRUSTED client-carried spec at
+    """Re-enforce the console's own guardrails on the UNTRUSTED client-carried spec at
     publish time (an authenticated curator can hand-edit the hidden spec_json). Returns an error string
     or None. The validator only WARNINGs on an out-of-vocab id/status, so without this a crafted spec
     would publish PAST the console's own guardrail; and a control char in cid/note forges git-trailer
@@ -2861,9 +2861,9 @@ def _collection_spec_violation(cid: str, operations: list, note: str) -> str | N
     op-block id not matching _COLLECTION_ID_RE; an out-of-vocab type/status; a non-4-digit start_year;
     a malformed/unknown operation.
 
-    R3 (D5-C round 2): every regex gate here is FULLMATCH, not match — an anchored `$` matches before a
-    trailing newline, so `.match` accepted a crafted block id "auslamp\\n" (executed end-to-end: HTTP
-    200, committed `id: "auslamp\\n"` — a phantom-collection split). The block-id branch also carries
+    Every regex gate here is FULLMATCH, not match: an anchored `$` matches before a
+    trailing newline, so `.match` accepts a crafted block id "auslamp\\n" (executed end-to-end: HTTP
+    200, committed `id: "auslamp\\n"`, a phantom-collection split). The block-id branch also carries
     the _CONTROL_CHAR_RE guard the cid branch has (belt: fullmatch alone already rejects a control
     char, since none is in the id charset)."""
     if _CONTROL_CHAR_RE.search(cid or ""):
@@ -3015,7 +3015,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
         # Liveness only; no auth, no data — used by compose/operator. Deliberately reveals nothing.
         return JSONResponse({"ok": True})
 
-    # K1 self-serve key issuance. PUBLIC (no submit key). ALWAYS returns the same neutral 202; the
+    # Self-serve key issuance. PUBLIC (no submit key). ALWAYS returns the same neutral 202; the
     # handler is the single place the mint/mail side effects live. The route is async ONLY to read
     # the request body (both encodings); the blocking DB rate-limit + smtplib send still run in the
     # threadpool via asyncio.to_thread (the burst-must-not-stall-the-event-loop rationale).
@@ -3108,7 +3108,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_uploader_revoke(request: Request, key_id: int, csrf_token: str = Form(default="")):
         return gw.handle_uploader_revoke(request, key_id, csrf_token)
 
-    # C43 D7: set a free-text note on an uploader key (sqlite only, never git). CSRF-checked in the
+    # Set a free-text note on an uploader key (sqlite only, never git). CSRF-checked in the
     # handler, matching the create/revoke POSTs.
     @app.post("/gateway/curator/uploaders/{key_id}/note")
     def curator_uploader_note(request: Request, key_id: int, note: str = Form(default=""),
@@ -3327,7 +3327,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_edit_form(request: Request, slug: str):
         return gw.handle_edit_form(request, slug)
 
-    # IDCONS D5: the curator DOI-resolution status chip endpoint. Session-gated GET; HEADs doi.org
+    # IDCONS the curator DOI-resolution status chip endpoint. Session-gated GET; HEADs doi.org
     # server-side under the alive-rule and returns {status,label,identifier}. Advisory — never blocks save.
     @app.get("/gateway/curator/pid-check")
     def curator_pid_check(request: Request):
@@ -3380,7 +3380,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
         if action not in ("approve", "return", "reject", "retry"):
             return gw._not_found()
         # Parse confirm_overwrite AND ack_pii as EXACT affirmative tokens, default DENY (design §5.2 /
-        # C11b §2). NOT bool(str): "0"/"false"/any non-empty string would otherwise enable a silent
+        # §2). NOT bool(str): "0"/"false"/any non-empty string would otherwise enable a silent
         # overwrite or a silent PII acknowledgement.
         confirm = confirm_overwrite.strip().lower() in ("1", "yes", "true", "on")
         ack = ack_pii.strip().lower() in ("1", "yes", "true", "on")

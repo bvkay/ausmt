@@ -1,4 +1,4 @@
-"""The submission state machine (design C10 §2, extended by C11 §1). This module is data only —
+"""The submission state machine (design §2). This module is data only:
 no I/O — so the legal-transition set is one auditable table that both the DB layer and the property
 test read.
 
@@ -7,7 +7,7 @@ test read.
                                  \\--(fail paths)--> QUARANTINED
     clamd unreachable => stays RECEIVED
 
-    C11 curator half (VALIDATED stops being terminal; v2 publish = commit-and-push ONLY, no build):
+    The curator half (VALIDATED is not terminal; v2 publish = commit-and-push ONLY, no build):
     VALIDATED --curator Approve--> PUBLISHING --git commit+push OK--> PUBLISHED (committed, not served)
     VALIDATED --curator Return--> RETURNED
     VALIDATED --curator Reject--> REJECTED
@@ -25,7 +25,7 @@ VALIDATED = "VALIDATED"
 QUARANTINED = "QUARANTINED"
 REJECTED_AV = "REJECTED_AV"
 
-# C11 curator states (design §1).
+# Curator states (design §1).
 RETURNED = "RETURNED"
 REJECTED = "REJECTED"
 PUBLISHING = "PUBLISHING"
@@ -37,7 +37,7 @@ ALL_STATES: frozenset[str] = frozenset({
     RETURNED, REJECTED, PUBLISHING, PUBLISHED, PUBLISH_FAILED,
 })
 
-# Terminal = the submission is done advancing. VALIDATED is NO LONGER terminal (C11 §1 — curator
+# Terminal = the submission is done advancing. VALIDATED is NOT terminal (the curator
 # actions reopen it). PUBLISHING/PUBLISH_FAILED are transient/recoverable working states, not
 # terminal. RETURNED is terminal FOR THIS SUBMISSION (design §1: a revision is a fresh upload, which
 # keeps the audit trail append-only) — the submitter cannot silently mutate a returned package.
@@ -53,7 +53,7 @@ ALLOWED: frozenset[tuple[str, str]] = frozenset({
     (RECEIVED, REJECTED_AV),
     (SCANNED, VALIDATED),
     (SCANNED, QUARANTINED),
-    # C11 curator transitions (design §1).
+    # Curator transitions (design §1).
     (VALIDATED, PUBLISHING),
     (VALIDATED, RETURNED),
     (VALIDATED, REJECTED),

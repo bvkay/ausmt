@@ -215,7 +215,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # §2a + D-L (SPEC §9): the single typed list of provenance relations to identifiers AusMT does NOT own.
     # The primary per-row control is `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
     # terms) — FIRST on the row and FAIL-CLOSED like relation/identifier_type. The DataCite `relation`
-    # DERIVES from `identifies` server-side (D-L2), so it is no longer a curator control on an identifies
+    # DERIVES from `identifies` server-side, so it is not a curator control on an identifies
     # row; a legacy row that carries an explicit relation but no identifies still edits its relation
     # (backward compatible). The acquisition fields are the ex-sources[] payload, OPTIONAL (only written
     # back when non-empty or already present) so a corpus row without them round-trips to _OMIT.
@@ -274,7 +274,7 @@ ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
 # expectation).
 COORDINATE_POLICIES = ("exact", "generalised", "withheld")
 
-# C46 licence vocab for the licence <select>s (the top-level `license` and each sources[].licence).
+# Licence vocab for the licence <select>s (the top-level `license` and each sources[].licence).
 # This is the full recognised-id vocab: redistributable ∪ recognised_only, in contract order. It is a
 # BAKED copy because the gateway APP image is CONTENT-BLIND (it ships only gateway/, never engine/ or
 # contract/ — see deploy/docker/gateway.Dockerfile), so a runtime import of the engine/portal contract
@@ -292,7 +292,7 @@ LICENSE_IDS = (
 # The redistributable subset (first 13) — used only to GROUP the <select> (redistributable vs
 # recognised metadata-only). The gate itself is the engine's; this is a display grouping.
 LICENSE_REDISTRIBUTABLE = LICENSE_IDS[:13]
-# C46 custodian attribution-profile vocab (sources[].profile). "generic" is the default synthesis;
+# Custodian attribution-profile vocab (sources[].profile). "generic" is the default synthesis;
 # "ga" prescribes the Geoscience Australia form (and makes attribution.statement required at validate).
 SOURCE_PROFILES = ("ga", "generic")
 
@@ -313,7 +313,7 @@ IDENTIFIER_TYPES = ("DOI", "Handle", "URL", "RAiD")
 
 # "Identifiers by data level". Every related_identifiers
 # row states WHAT it points at in NCI Table 1 data-level terms; the DataCite relation then DERIVES from
-# the level, so `relation` is no longer a curator-facing control on an identifies row. IDENTIFIES_LEVELS
+# the level, so `relation` is not a curator-facing control on an identifies row. IDENTIFIES_LEVELS
 # is the ORDERED vocab (Table 1 order) baked for the <select>; it is a fail-closed preset like relation /
 # identifier_type — an out-of-vocab level publishes a WRONG provenance claim, so it FAILs at the form
 # (SectionError). BAKED copies, PINNED to the surveys validator's IDENTIFIES_TYPES / IDENTIFIES_RELATION
@@ -388,9 +388,9 @@ IDENTITY_DESIGNATION_LISTS = ("represents", "own_identifiers")
 # are NOT assembled by the generic build_section_patch loop (they are decomposed here instead).
 PEOPLE_SECTION = "people"
 _PEOPLE_DECOMPOSED = ("creators", "contributors")
-# The legacy Convert action is GONE. The corpus migration has run (creators/contributors are
-# seeded and the two retired flat keys deleted), the engine no longer reads them, and the editor no
-# longer models them - so there is nothing left to convert and no delete directive to carry. A survey
+# There is NO Convert action. The corpus migration has run (creators/contributors are
+# seeded and the two retired flat keys deleted), the engine reads neither, and the editor models
+# neither, so there is nothing to convert and no delete directive to carry. A survey
 # that somehow still carries a retired key is simply an unmodelled key: byte-preserved, never patched.
 
 # time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
@@ -402,7 +402,7 @@ WIDGET_SECTIONS = tuple(MAP_SECTIONS) + tuple(LIST_SECTIONS)
 
 # Sections rendered as a raw-JSON panel ONLY (schema too nested/open-ended for widgets), still
 # assembled into the patch: j_<section> JSON with the o_<section> round-trip anchor, blank means
-# unchanged. `care` sat outside every assembly loop until the 2026-08 section-3 review (G1): the
+# unchanged. `care` sat outside every assembly loop until the 2026-08 section-3 review: the
 # panel rendered, prefilled and editable, and the curator's Indigenous data-governance edit was
 # silently discarded. A rendered control is a promise that the edit lands, so this register is
 # what build_section_patch iterates BESIDE the widget sections.
@@ -450,7 +450,7 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "date" and not _valid_date(value):
         raise SectionError(section, f"{subkey}: '{value}' is not an ISO date (YYYY-MM-DD)")
     if kind == "select" and section == "access":
-        # Two selects live in the access section: level and (C42) coordinates. Each validates against
+        # Two selects live in the access section: level and coordinates. Each validates against
         # its OWN vocab — a single 'not in ACCESS_LEVELS' check would reject every coordinates value.
         if subkey == "coordinates" and value not in COORDINATE_POLICIES:
             raise SectionError(section, f"coordinate access '{value}' is not one of "
@@ -531,7 +531,7 @@ _ABSENT = object()  # the section had no original value (distinct from a real nu
 # overrides is the one such key: _resolve_coordinate_overrides may deliberately DROP it (the C42 set-all-
 # to-inherit-removes-the-key path), so carrying it back from the snapshot would un-delete a curator's
 # removal. Every other section is fully covered by "modelled subfields ∪ nothing", so the map is sparse.
-# A2 adds two more: citation.preferred_identifier (the nested pair, assembled both-or-neither by
+# Adds two more: citation.preferred_identifier (the nested pair, assembled both-or-neither by
 # _resolve_preferred_identifier, which may deliberately DROP the key) and identity_classification's two
 # designation lists (_resolve_designation_rows, same absent-vs-empty discipline).
 _SPECIAL_MANAGED_KEYS: dict[str, set[str]] = {
@@ -579,7 +579,7 @@ def _assemble_map(form: dict, section: str):
         value = _form_get(form, f"s_{section}_{subkey}")
         _validate_scalar(section, subkey, kind, value)
         if value == "":
-            # Preserve a previously-present key as null; do not introduce an absent one.
+            # Preserve a key the original carried as null; do not introduce an absent one.
             if original_is_str and subkey == "name":
                 # organisation-as-string: the name carried the string; empty name + no ror => the
                 # section becomes empty (handled by the snapshot compare in assemble_section).
@@ -623,7 +623,7 @@ def _assemble_map(form: dict, section: str):
                 out[key] = rows
 
     # IDCONS D2 (SPEC §3) — carry forward UNMODELLED original keys verbatim. Any key the source section
-    # carried that the widget no longer models (the retired flat identifier keys dataset_doi / project /
+    # carried that the widget does not model (the retired flat identifier keys dataset_doi / project /
     # related_publication(_doi), OR any unknown/legacy key the editor never modelled) is re-emitted exactly
     # as stored, so the assembled value still equals the o_<section> snapshot on an untouched section
     # (-> _OMIT, byte-preserved) and, on a real edit elsewhere in the section, apply_patch's surgical merge
@@ -653,7 +653,7 @@ def _resolve_coordinate_overrides(form: dict, original) -> dict:
         map. Re-emit it verbatim from the o_access snapshot (`original`); apply_patch's surgical merge
         then leaves it byte-clean. Absent + no original map => {} (nothing to preserve; byte-unchanged).
       * field PRESENT (the stations-panel coord-policy-form): assemble it. A non-empty map is written
-        verbatim; an empty / all-inherit map returns {} so apply_patch DELETES a previously-pinned key
+        verbatim; an empty / all-inherit map returns {} so apply_patch DELETES a pinned key
         (the intended set-all-to-inherit-removes-the-key — NO over-preservation regression).
 
     The preserved values are NOT re-validated here: they came from the survey's own stored access
@@ -901,7 +901,7 @@ def _assemble_list(form: dict, section: str) -> list:
                         any_value = True
         if any_value:
             rows.append(row)
-    # A2 (validate_survey.py: the primary-custodian selection selects AMONG custodial rows): the radio
+    # (validate_survey.py: the primary-custodian selection selects AMONG custodial rows): the radio
     # is refused on a row that does not tick custodian. Fail-closed at the form so the curator sees why,
     # rather than meeting the validator FAIL only at preview.
     if section == "organisations" and primary_idx is not None:
@@ -1141,7 +1141,7 @@ def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
 
     creators[]/contributors[] are NOT assembled in the generic loop: the unified People & credit panel
     (assemble_people) owns them, decomposing its unified rows back into the two ratified served lists.
-    A2 (D7): there is no delete directive any more - the legacy Convert is gone with the keys it
+    there is no delete directive any more - the legacy Convert is gone with the keys it
     converted, so a patch can only ever carry editable field values."""
     patch: dict = {}
     errors: list[SectionError] = []

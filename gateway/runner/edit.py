@@ -182,7 +182,7 @@ def _dispatch_edit(cfg, job: dict, scratch_dir: Path) -> dict:
     # runner's own mount, reads each `collection` block, and mutates nothing (history-job trust class).
     if job.get("kind") == "collections":
         return run_collections_job(Path(cfg.surveys_root))
-    # C43 Stage 3b (record D5-A A6): the atomic collection batch. Whole-corpus too (it names its own
+    # Stage 3b (record D5-A A6): the atomic collection batch. Whole-corpus too (it names its own
     # affected slugs in the operations list), so it dispatches here before the single-slug gate. The
     # runner is the ONLY place survey.yaml is parsed/patched/emitted (C31 §0.1); this computes each
     # affected member's patched bytes + validator report — the gateway commits them (publish.py).
@@ -427,7 +427,7 @@ def _merge_map_into(node, new_map: dict) -> bool:
         reassign only when the plain values differ (an unchanged leaf is left untouched, so its
         comment/quoting/position survive and it emits no diff line);
       * a sub-key only in new_map: added (quoted per FIX 3);
-      * a sub-key only in node: DELETED (the curator's assembled section no longer carries it — the
+      * a sub-key only in node: DELETED (the curator's assembled section does not carry it, and the
         editor's _assemble_map already models "cleared" as an explicit None rather than a drop, so a
         real deletion here is an intentional removal, e.g. via the advanced-JSON override).
 
@@ -487,7 +487,7 @@ def _run_validator(validator_path: str, package_root: Path) -> dict:
     item so the merge is treated as validator-FAIL (C31 §0.4)."""
     # Reuse the C10 runner's locator AND the ONE canonical argv builder,
     # so this edit-runner and the submission runner invoke the validator identically. This call site
-    # previously assembled the flags --json-first (`--json <file> <folder>`); it now goes through
+    # must not assemble the flags --json-first (`--json <file> <folder>`); it goes through
     # validator_argv (positional-first) — the single form the real-vendored-validator oracles pin.
     from .runner import _validator_file, validator_argv
 
@@ -547,10 +547,10 @@ _INFERRED_REVIEW_MARK = "INFERRED-REVIEW"
 # the curator saves an edit to them. (identifies-style inline markers on related_identifiers rows are NOT
 # surfaced here and are dropped naturally when that list is replaced; only these carry the parent-key
 # comment-above marker that survives a wholesale replace.)
-# Organisations[] joins them because the corpus-wide custodian seeding (T4) marks EVERY row it writes
+# Organisations[] joins them because the corpus-wide custodian seeding marks EVERY row it writes
 # ("custodian seeded from the essential organisation; confirm roles"), and acknowledgements[] because the
 # public form may seed a marked row; without the entry the chip would never appear and the curator would
-# never be asked to confirm. Stripping is PER LIST SECTION (D17), never per row: editing the list IS the
+# never be asked to confirm. Stripping is PER LIST SECTION, never per row: editing the list IS the
 # adjudication for that list, and a sibling list's marker is untouched.
 _CREDIT_LIST_KEYS = ("creators", "contributors", "organisations", "acknowledgements")
 
@@ -816,10 +816,10 @@ _COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_upda
 _COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS
                                       if f not in ("last_updated", "prose"))
 # Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality (D5-C
-# round 2, R1): the editor's no-op check compares str-form (F1), the divergence detector buckets
+# round 2, R1): the editor's no-op check compares str-form, the divergence detector buckets
 # str-form (R1 — else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
 # Normalise then no-ops on: an un-clearable "Need attention"), and emission writes a round-trip-stable
-# decimal as a plain int (R2).
+# decimal as a plain int.
 _COLLECTION_NUMERIC_FIELDS = frozenset({"start_year"})
 # The status vocabulary the engine surfaces (build_portal.py:386). An out-of-vocab rolled-up status is
 # DROPPED (build_portal.py:399-400) — never surfaced as a fake status; it still shows as the member's
@@ -876,7 +876,7 @@ def _collection_divergence(members: list) -> dict:
     order; EMPTY {} when every field agrees. A member that omits a field is not an outlier (it inherits
     the rollup value), so only DECLARED values count."""
     out: dict = {}
-    for fld in _COLLECTION_DIVERGENCE_FIELDS:   # F2: last_updated excluded (gateway-managed timestamp)
+    for fld in _COLLECTION_DIVERGENCE_FIELDS:   # last_updated excluded (gateway-managed timestamp)
         buckets: dict = {}
         order: list = []
         for m in members:
@@ -928,7 +928,7 @@ def run_collections_job(surveys_root: Path) -> dict:
         pkg = surveys_root / "surveys" / slug
         # A malformed survey.yaml (ruamel YAMLError) or a non-mapping top-level must drop
         # THIS survey and keep projecting the rest — mirroring build_portal.py:810-817, which warns and
-        # drops the one bad package. Catching only OSError before would have let one bad file blank the
+        # drops the one bad package. Catching only OSError lets one bad file blank the
         # WHOLE console ({ok:False} -> the gateway's empty state).
         try:
             data = _load_bytes((pkg / "survey.yaml").read_bytes())
@@ -944,7 +944,7 @@ def run_collections_job(surveys_root: Path) -> dict:
         # c.get("id")`), so a falsy id (0/False/"") drops exactly as the engine drops it.
         has_membership = bool(hasattr(coll, "get") and coll.get("id"))
         current_cid = str(coll.get("id")) if has_membership else None
-        # A6 candidate list (Stage 3b add-picker): every published survey, with its CURRENT membership
+        # Candidate list (Stage 3b add-picker): every published survey, with its CURRENT membership
         # so the picker can show `no collection` vs `in "<id>" -> moves`. Membership by SLUG (never the
         # rollup's display labels). Read-only; same trust class as the rollup below.
         all_surveys.append({"slug": slug, "label": label, "n_stations": n_stations,
@@ -993,7 +993,7 @@ def run_collections_job(surveys_root: Path) -> dict:
 
 
 # ---- collection batch (atomic multi-survey collection-block write) job ---------------------------
-# C43 Stage 3b (record D5-A A6). The gateway resolves the desired end-state (collection fields + the
+# Stage 3b (record D5-A A6). The gateway resolves the desired end-state (collection fields + the
 # final member set) into a list of per-survey OPERATIONS and hands them here; the runner — the ONLY
 # YAML parser (C31 §0.1) — applies each survey's `collection`-block patch, bumps its version (patch),
 # appends the ONE shared release note, and validates the patched package on a scratch copy. It returns
@@ -1015,10 +1015,10 @@ def _apply_collection_set(data, block: dict, today: str) -> bool:
     field means 'leave the member's own value as-is', NEVER 'clear it' — clearing a programme field
     stays a per-survey metadata edit (the editor never deletes a field a member declares).
 
-    F1 (D5-C): the desired-state form round-trips EVERY value as a string, so the no-op check is
+    The desired-state form round-trips EVERY value as a string, so the no-op check is
     TYPE-TOLERANT (`str(_plain(cur)) == str(new)` => unchanged), and a numeric field (`start_year`) is
     written as a PLAIN scalar, NOT force-quoted — otherwise a member declaring int `start_year: 2003`,
-    edited only on its title, would have `2003` silently re-typed to `"2003"` (a spurious diff line +
+    edited only on its title, has `2003` silently re-typed to `"2003"` (a spurious diff line +
     a spurious commit on an untouched member, breaking the D13 diff-minimality / N-commits pins)."""
     coll = data.get("collection")
     created = False
@@ -1046,13 +1046,13 @@ def _apply_collection_set(data, block: dict, today: str) -> bool:
 
 
 def _coerce_collection_value(key: str, new_val):
-    """Coerce a form-supplied collection value for emission (F1, hardened per D5-C round 2 R2). A
+    """Coerce a form-supplied collection value for emission. A
     numeric field (_COLLECTION_NUMERIC_FIELDS, defined with the collection constants above) whose value
     is an all-DECIMAL string is written as a PLAIN int (unquoted) — but ONLY when the int round-trips
     to the identical literal: int("0000") -> 0 would silently rewrite the curator's typed "0000", so a
     non-round-trip literal stays a quoted string. isdecimal, NOT isdigit — the executed "2003²" probe
     is isdigit-True but int()-ValueError — plus a defensive try/except so NO input can raise out of the
-    emission path (the gateway form + publish A2 gate both enforce ^[0-9]{4}$ upstream; this is the
+    emission path (the gateway form and the publish gate both enforce ^[0-9]{4}$ upstream; this is the
     belt). Every other value rides quote_ambiguous (FIX 3) so a YAML-1.1-retypeable token is emitted
     quoted."""
     if key in _COLLECTION_NUMERIC_FIELDS and isinstance(new_val, str) and new_val.isdecimal():

@@ -1,11 +1,11 @@
 """RFC 6238 TOTP - the workbench's destructive-op second factor.
 
-STDLIB ONLY, by design (C41: "the TOTP is stdlib by design"): hmac / hashlib / struct / base64 /
-time / secrets — no new dependency. TOTP is RFC 6238 (HOTP-over-time, RFC 4226), SHA-1, 30-second
+STDLIB ONLY, by design ("the TOTP is stdlib by design"): hmac / hashlib / struct / base64 /
+time / secrets - no new dependency. TOTP is RFC 6238 (HOTP-over-time, RFC 4226), SHA-1, 30-second
 steps, a ±1-step verify window for box clock skew, per-curator secret.
 
-The threat this closes (D2): the typed slug protects against a mistaken click; the second factor
-protects against a STOLEN curator session — a different and worse threat. Because the secret lives
+The threat this closes: the typed slug protects against a mistaken click; the second factor
+protects against a STOLEN curator session - a different and worse threat. Because the secret lives
 only in the gateway sqlite (never git, WAL-safe backed up), and verification is stdlib arithmetic,
 the box needs no egress.
 
@@ -87,9 +87,9 @@ def verify(code: str, secret: str, now: float | None = None, *, window: int = 1,
     Returns the MATCHED STEP (an int the caller compares to last_used_step for single-use/replay
     enforcement), or None if the code matches no step in the window OR is malformed.
 
-    ±1 step (30 s) is the box clock-skew tolerance (D2). The comparison is constant-time
+    ±1 step (30 s) is the box clock-skew tolerance. The comparison is constant-time
     (hmac.compare_digest) so no timing oracle reveals how close a wrong guess was. A malformed code
-    (wrong length, non-digit, or an undecodable secret) is a clean None — never an exception — so the
+    (wrong length, non-digit, or an undecodable secret) is a clean None - never an exception - so the
     route returns a uniform 'wrong code' with nothing staged. On a match at multiple steps (cannot
     happen for distinct HOTP outputs, but defensive) the HIGHEST matching step is returned so the
     replay guard advances maximally."""
@@ -115,8 +115,8 @@ def verify(code: str, secret: str, now: float | None = None, *, window: int = 1,
 
 def otpauth_uri(secret: str, *, account: str, issuer: str = "AusMT",
                 digits: int = _DIGITS, step_s: int = _STEP_S) -> str:
-    """The otpauth://totp/ provisioning URI (Key Uri Format) for MANUAL authenticator entry — no QR
-    image dependency (D2: single-digit curator population; a QR needs an image lib the gateway does
+    """The otpauth://totp/ provisioning URI (Key Uri Format) for MANUAL authenticator entry - no QR
+    image dependency (single-digit curator population; a QR needs an image lib the gateway does
     not carry). Issuer + account are percent-encoded; the secret is the bare base32. Algorithm/digits/
     period are stated explicitly so an app that does not assume the SHA-1/6/30 defaults still matches."""
     from urllib.parse import quote

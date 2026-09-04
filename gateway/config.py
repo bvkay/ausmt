@@ -34,7 +34,7 @@ class Config:
     job_timeout_s: int
     clamd_host: str
     clamd_port: int
-    # C11 curator config (design §2/§6). curator_keys is the RAW `name:key,name:key` string; it is
+    # Curator config (design §2/§6). curator_keys is the RAW `name:key,name:key` string; it is
     # parsed (and its fail-closed check applied) in curator_auth, not here — config stays a dumb
     # env carrier. It is a SECRET and is dropped from redacted_items() below, never logged.
     curator_keys: str = ""
@@ -42,7 +42,7 @@ class Config:
     session_ttl_s: int = 12 * 3600
     login_max_attempts: int = 5
     login_window_s: int = 300
-    # C31 metadata editor: how long the gateway's edit seam polls jobs/edit/done/ for the gw-runner's
+    # Metadata editor: how long the gateway's edit seam polls jobs/edit/done/ for the gw-runner's
     # result before surfacing a retryable error to the curator. Bounded by design — the gw-runner may
     # be mid-validation of a long submission job (its loop is single-threaded).
     edit_timeout_s: int = 120
@@ -191,8 +191,9 @@ def operator_env_vars() -> tuple[str, ...]:
     """The operator-facing AUSMT_* env vars the compose gateway service MUST forward from .env into the
     container (the .env->app bridge). DERIVED, never hand-listed: it records every key load_config()
     actually reads and drops the container-fixed paths above, so a knob newly added to load_config is
-    required in compose AUTOMATICALLY. That closes the H1 drift CLASS - the regression pin can no longer
-    restate a stale copy of config's env surface and stay green while a var is silently dropped. Returned in first-read order, de-duplicated."""
+    required in compose AUTOMATICALLY. That closes the drift CLASS: the regression pin cannot restate a
+    stale copy of config's env surface and stay green while a var is silently dropped. Returned in
+    first-read order, de-duplicated."""
     seen: dict[str, None] = {}
 
     class _Recorder(dict):

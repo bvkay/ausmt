@@ -6,10 +6,10 @@ jobs/edit/ namespace. This module only writes job JSON, polls for the result JSO
 back; job files carry a SLUG and form values, never a filesystem path (the two containers mount
 surveys-live at different paths) and never PII.
 
-Adversarial-review FIX 1: the first implementation spawned
-`sys.executable -m gateway.runner.edit` as a CHILD OF THE GATEWAY CONTAINER — whose image
-deliberately has no ruamel — so every real curator edit would have 500'd in deployment (tests passed
-only via an in-process seam). The queue below is the adjudicated replacement: the gateway enqueues,
+The gateway must NOT spawn
+`sys.executable -m gateway.runner.edit` as a CHILD OF THE GATEWAY CONTAINER: that image
+deliberately has no ruamel, so every real curator edit 500s in deployment while an in-process test
+seam still passes. The queue below is what runs instead: the gateway enqueues,
 the gw-runner service (engine image, already polling /gw/jobs) processes, the gateway polls the
 result with a bounded timeout. The polling is BLOCKING by design and must never run on the event
 loop: the sync form route runs in Starlette's threadpool, and the async preview/confirm handlers

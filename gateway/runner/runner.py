@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import jobs
-from ..config import DEFAULT_MAX_UPLOAD_MB  # M2: single source of the 250 MB upload default
+from ..config import DEFAULT_MAX_UPLOAD_MB  # Single source of the 250 MB upload default
 from .safeextract import ExtractionTimeout, cap_for, safe_extract
 
 # Env pins (design §5). AUSMT_VALIDATOR_PATH is the same env the engine's _load_validator() reads;
@@ -88,7 +88,7 @@ class RunnerConfig:
         max_upload_mb = int(env.get("AUSMT_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB)))
         # Fail closed on a zeroed/negative override, IDENTICALLY to the gateway (config._RANGES floors
         # both of these at 1, and fail_closed_startup SystemExits on a breach). The runner reads the
-        # SAME two knobs but historically int()'d them with no floor, so a zeroed AUSMT_JOB_TIMEOUT_S
+        # SAME two knobs, and an int() with no floor lets a zeroed AUSMT_JOB_TIMEOUT_S
         # (every job times out instantly -> everything quarantines) or AUSMT_MAX_UPLOAD_MB (a zero
         # extraction byte-cap) was silently accepted while the gateway rejected it - the runner would
         # crash-loop honestly on a bad numeric knob instead (deploy review section 5, MEDIUM).
@@ -235,7 +235,7 @@ def _do_work(cfg: RunnerConfig, zip_path: Path, package_dir: Path, reports_dir: 
         # crash. (UnsafeMember, the belt-and-braces re-check failure, is included.)
         return jobs.OUTCOME_QUARANTINED, f"unpack failed: {type(exc).__name__}: {exc}", {}
 
-    # C34/D1: generate LICENSE.md + README.md into the extracted package BEFORE the validator runs, so
+    # Generate LICENSE.md + README.md into the extracted package BEFORE the validator runs, so
     # a package that arrived without them carries them by the time the validator checks structure (the
     # two 'missing' WARNINGs flip to PASS in the SAME run) and the curator reviews/approves the COMPLETE
     # package. Best-effort: any failure here must NEVER quarantine an otherwise-valid package — the
@@ -297,7 +297,7 @@ def _run_validator(cfg: RunnerConfig, package_dir: Path, out_json: Path, deadlin
     validator_file = _validator_file(cfg.validator_path)
     target = _single_package_root(package_dir)
     proc = _run_subprocess(
-        validator_argv(validator_file, target, out_json),  # M7: the one canonical argv
+        validator_argv(validator_file, target, out_json),  # The one canonical argv
         cwd=None, deadline=deadline,
     )
     try:
@@ -384,8 +384,8 @@ def _run_preview(cfg: RunnerConfig, package_dir: Path, preview_dir: Path, summar
     proc = _run_subprocess(
         [sys.executable, "-m", cfg.engine_module,
          "--surveys", str(surveys_root), "--out", str(preview_dir), "--products", str(preview_dir / "products")],
-        # Explicit cwd (C37/F8): spawn the engine module from cfg.engine_dir instead of inheriting the
-        # runner's cwd. `extract` is now an installed package so resolution no longer NEEDS this, but
+        # Explicit cwd: spawn the engine module from cfg.engine_dir instead of inheriting the
+        # runner's cwd. `extract` is an installed package so resolution does not NEED this, but
         # pinning it removes the silent dependence on compose's WORKDIR that once broke the runner.
         cwd=cfg.engine_dir, deadline=deadline,
         # Explicit validator pin (same rationale as the cwd above, one layer down): hand the build the
@@ -467,8 +467,8 @@ def _single_package_root(package_dir: Path) -> Path:
 
 
 def _generate_intake_files(package_dir: Path) -> list[str]:
-    """C34/D1: generate LICENSE.md + README.md into the single extracted package root, best-effort.
-    Returns the filenames actually written (for logging); NEVER raises — a generation failure must not
+    """Generate LICENSE.md + README.md into the single extracted package root, best-effort.
+    Returns the filenames actually written (for logging); NEVER raises - a generation failure must not
     quarantine an otherwise-valid package (the validator remains the authority, and the worst case is
     a package that keeps its correct 'file missing' WARNING). `intake` is imported lazily (it reaches
     the engine's _license_text leaf) so this module stays importable without the engine installed."""
@@ -481,7 +481,7 @@ def _generate_intake_files(package_dir: Path) -> list[str]:
 
 def _import_preflight():
     """Resolve the engine's stdlib-only `edi_preflight` leaf, the same way `intake` resolves
-    `_license_text` (C34/D2): on the engine image `extract` is an installed package, and a sibling
+    `_license_text`: on the engine image `extract` is an installed package, and a sibling
     checkout with engine/extract on sys.path resolves the bare name.
 
     This is an IMPORT, not a subprocess, and that is the deliberate exception the runner already
@@ -543,7 +543,7 @@ def _validator_file(validator_path: str) -> Path:
 
 
 def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) -> list[str]:
-    """The ONE canonical argv for invoking the surveys validator as a subprocess (M7, code-health
+    """The ONE canonical argv for invoking the surveys validator as a subprocess (code-health
     review §6). Both the C10 submission runner (_run_validator above) and the C31 metadata-edit
     runner (edit._run_validator) go through this, so the invocation contract lives in exactly one
     place - no second, independently-assembled argv can drift and re-open the ship-blocker
@@ -551,9 +551,9 @@ def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) ->
     submission quarantined).
 
     Canonical shape (the runner's positional-first form): the package folder is the REQUIRED
-    positional and `--json` names the OUTPUT report file. edit.py previously assembled the flags
+    positional and `--json` names the OUTPUT report file. edit.py must not assemble the flags
     --json-first (`--json <file> <folder>`); argparse accepts both, but a single form is the point of
-    M7 — the positional-first order is the one the real-vendored-validator oracles pin. All args are
+    The positional-first order is the one the real-vendored-validator oracles pin. All args are
     stringified here so callers pass Paths and the whole subprocess contract is described in one line."""
     return [sys.executable, str(validator_file), str(target_dir), "--json", str(report_path)]
 
@@ -570,18 +570,18 @@ def _read_json(path: Path):
 
 
 def poll_once(cfg: RunnerConfig) -> bool:
-    """One poll pass (C35b/D4, code-health review M4): drain ALL pending edit jobs, then claim and
+    """One poll pass (code-health review M4): drain ALL pending edit jobs, then claim and
     process AT MOST ONE submission job. Returns True if a submission job was processed this pass,
     False if none was pending (so run_forever knows whether to sleep). Pure extraction of the old
-    run_forever body — byte-equivalent logic, no behaviour change.
+    run_forever body - byte-equivalent logic, no behaviour change.
 
-    Ordering contract (C31): metadata-edit jobs (jobs/edit/*) are drained FIRST — they are
+    Ordering contract: metadata-edit jobs (jobs/edit/*) are drained FIRST - they are
     request/response (a curator is blocked polling for the result) while submission jobs are batch.
     process_edit_job never raises (failures become {ok:False} result files), so the crash-recovery
     contract of the submission queue below is untouched.
 
     Crash-recovery contract: a process_job crash PROPAGATES out of this function WITHOUT writing a
-    done-file, leaving the running-file present for the gateway's dead-job sweep to re-queue — distinct
+    done-file, leaving the running-file present for the gateway's dead-job sweep to re-queue - distinct
     from a handled failure, which already wrote a 'quarantined' done-file inside process_job. This is
     the M4 contract that had no test: it is now pinned by test_runner.py."""
     from . import edit as edit_mod  # lazy: keeps this module importable without ruamel
@@ -605,12 +605,12 @@ def poll_once(cfg: RunnerConfig) -> bool:
 
 
 def run_forever(cfg: RunnerConfig, poll_interval_s: float = 2.0) -> None:  # pragma: no cover
-    """The runner's main loop. run_forever is a thin driver over poll_once (C35b/D4): each pass drains
+    """The runner's main loop. run_forever is a thin driver over poll_once: each pass drains
     edit jobs then processes at most one submission job; when a pass processed nothing pending, sleep
     before the next. The loop's ordering and crash-recovery contracts live in poll_once, which IS
-    unit-tested (test_runner.py) — the M4 correction: this loop is NOT covered by any compose e2e that
+    unit-tested (test_runner.py) - the M4 correction: this loop is NOT covered by any compose e2e that
     boots the runner, so the coverage claim the old docstring made was false; the contracts are pinned
-    at the poll_once seam instead. The single-threaded known limitation stands (C31 report): an edit
+    at the poll_once seam instead. The single-threaded known limitation stands (report): an edit
     job arriving MID submission-job waits for it; the gateway's bounded poll surfaces a retryable
     timeout to the curator."""
     while True:

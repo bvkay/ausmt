@@ -1,11 +1,11 @@
-"""Phase-quadrant classification for the C43 curator-workbench Stations plots (S2a-1, fix-round F4).
+"""Phase-quadrant classification for the curator-workbench Stations plots.
 
 PURE FUNCTIONS, no I/O — the AUTHORITATIVE specification of the workbench's phase handling, so the
 classification logic is unit-testable server-side (record D13 / the contract's "test the classification
 logic at the JS-data seam" — a server-side helper is that seam). The browser-side STATIONS_JS mirrors
 these exact rules; an EXECUTABLE Node parity pin (test_c43_stage2a_js_parity.py) runs the extracted JS
 against this module over a boundary-heavy vector sweep, so the mirror cannot drift semantically (the
-fix-round F1 lesson: a source-string pin let a truncated-vs-floored modulo divergence ship).
+a source-string pin lets a truncated-versus-floored modulo divergence ship).
 
 THE ONE LOAD-BEARING FACT (verified against engine/extract/_edi_tf.py:143):
   tf.json t[4] = phs_yx_adj is stored with a +180 PRESENTATION SHIFT — `norm_phase(pyx, add=180.0)`.
@@ -45,7 +45,7 @@ QUADRANT_SLACK_DEG = 10.0
 def wrap180(phase: float) -> float:
     """Wrap a phase (degrees) into [−180, 180) — Python's floored % (non-negative remainder for the
     positive modulus), the same wrap _edi_tf.norm_phase applies. NOTE for the JS mirror: JS `%` is
-    TRUNCATED (keeps the dividend's sign) — the fix-round F1 divergence (735 sweep mismatches) was
+    TRUNCATED (keeps the dividend's sign), which is a divergence of 735 sweep mismatches
     exactly this. The mirror must ALSO be bit-faithful, not merely floored-in-semantics: CPython's
     float % is fmod + ONE conditional add, so the JS mirror is `floormod` (r = x % y; r < 0 && r !== 0
     ? r + y : r) — the ((x%360)+360)%360 idiom's unconditional add drifts 1 ulp on negative remainders
@@ -71,7 +71,7 @@ def _map_yx(true_yx: float) -> float:
 def in_quadrant_xy(phs_xy: float | None) -> bool | None:
     """True iff φxy (t[3], stored = true) is within Q1 widened by the slack (−slack … 90+slack — the
     engine gate's xy band). None => no flag for a missing point. A False drives a RED dot: the point is
-    outside the band by MORE than the slack (fix-round F4b)."""
+    outside the band by MORE than the slack."""
     if phs_xy is None:
         return None
     return (Q1_LO - QUADRANT_SLACK_DEG) <= phs_xy <= (Q1_HI + QUADRANT_SLACK_DEG)
@@ -99,7 +99,7 @@ def _median(vals: list) -> float:
 
 def classify_series(values: list, *, mode: str) -> dict:
     """Classify a whole phase series (a tf column) into per-point flags + the MEDIAN verdict (fix-round
-    F4c — engine-rule alignment). `mode` is 'xy' (values are stored=true φxy, expected Q1) or 'yx'
+    aligned with the engine rule). `mode` is 'xy' (values are stored=true φxy, expected Q1) or 'yx'
     (values are stored phs_yx_adj, unwrapped to true φyx, expected Q3 on the seam-mapped axis).
 
     Returns {points, any_out, n_classified, median, median_in}:
