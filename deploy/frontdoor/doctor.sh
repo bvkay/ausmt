@@ -133,8 +133,8 @@ zombie_count() {
 }
 
 zombie_kit() {
-	printf 'AusMT front-door zombie-diagnosis kit (O3)\n'
-	printf '===========================================\n'
+	printf 'AusMT front-door zombie-diagnosis kit\n'
+	printf '======================================\n'
 	n="$(zombie_count)"
 	printf 'Z-state (zombie) processes right now: %s  (warn threshold: %s)\n\n' "$n" "$ZOMBIE_WARN"
 	if [ "$n" -eq 0 ] 2>/dev/null; then

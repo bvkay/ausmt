@@ -452,7 +452,7 @@ PYEOF
     if [ -n "$untracked" ]; then
       offenders=$(printf '%s' "$untracked" | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//')
       printf 'reconcile: REFUSING rebuild — surveys-live has UNTRACKED entr(y/ies) under surveys/: %s\n' "$offenders" >&2
-      printf 'reconcile: the build enumerates the FILESYSTEM, so these WOULD be served though git cannot remove them (incident 2026-07-11). Remove (rm -rf) or commit+push them, then the next tick rebuilds.\n' >&2
+      printf 'reconcile: the build enumerates the FILESYSTEM, so these WOULD be served though git cannot remove them. Remove (rm -rf) or commit+push them, then the next tick rebuilds.\n' >&2
       if [ "$DRY_RUN" -eq 1 ]; then
         printf 'reconcile: [dry-run] would write status action=untracked_blocked (no rebuild)\n'
         return 0
@@ -700,7 +700,7 @@ OOM-killed builds that all read as plain failures). Add the user this agent runs
 install step 0c) so the next failure can be named by cause.
 --- last lines of $log_file ---
 $_t"
-    printf 'reconcile: rebuild FAILED (rc=%s); kernel journal unreadable by this user, an OOM kill is NOT ruled out (add %s to systemd-journal). Old build still serving. Log: %s\n' "$rc" "$(id -un 2>/dev/null || echo '?')" "$log_file" >&2
+    printf 'reconcile: rebuild FAILED (rc=%s); kernel journal unreadable by this user, an OOM kill cannot be excluded (add %s to systemd-journal). Old build still serving. Log: %s\n' "$rc" "$(id -un 2>/dev/null || echo '?')" "$log_file" >&2
     return 1
   fi
   write_status "failed" "$head" "$built" "$(read_build_id)" "$log_file"

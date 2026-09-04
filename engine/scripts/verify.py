@@ -645,9 +645,9 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
             print(ln)
         ok &= cons_ok
     else:
-        print("   consistency: SKIPPED — --surveys not given, so the cache-staleness digest gate did "
-              "NOT run (C18b/A3). Pass --surveys <root> to compare served products against live "
-              "survey.yaml sources; the Makefile's rebuild-data passes it.")
+        print("   consistency: SKIPPED, because --surveys was not given, so the cache-staleness "
+              "digest gate did NOT run. Pass --surveys <root> to compare served products against "
+              "live survey.yaml sources; the Makefile's rebuild-data passes it.")
 
     print("VERIFY:", "PASS" if ok else "FAIL")
     return ok

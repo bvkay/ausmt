@@ -224,11 +224,11 @@ def main(argv: list[str] | None = None) -> int:
         for u in unexpected:
             print(f"  UNEXPECTED SKIP: {u}")
         print("\nAllow-list in effect (add an entry with a justifying comment if a new skip is "
-              "legitimate; this lane's list came from --allow if given, else the engine built-in):")
+              "legitimate; this run's list came from --allow if given, else the engine built-in):")
         for s in allow_list:
             print(f"  - {s!r}")
         if not allow_list:
-            print("  (empty — this lane allows NO skips)")
+            print("  (empty: this run allows NO skips)")
 
     if parsed_skips != reported_skips:
         failed = True

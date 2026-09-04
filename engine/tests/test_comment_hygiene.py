@@ -1275,19 +1275,65 @@ def history_offences(files, root=None):
 # __doc__, and a framing classification that reads non-docstring literals sees the bytes without
 # knowing they reach a person.
 ARGPARSE_TEXT = ("help", "description", "epilog")
+# THE LINES A TOOL PRINTS. A result printed to a terminal is read by the operator who ran the tool,
+# exactly as its --help is, and no guard above sees those bytes: argparse text is a keyword argument
+# and a printed line is a bare literal. The operator tools are named, because a print inside a
+# library or a test is a diagnostic for whoever is debugging it rather than a line an operator reads.
+OPERATOR_TOOLS = ("/deploy/scripts/", "/engine/scripts/", "/engine/tests/ci_check_skips.py")
+OPERATOR_SHELL_TREE = "/deploy/"
+# echo and printf, their option flags skipped, carrying one quoted argument. A shell script has no
+# syntax tree to walk, so the line is read as a line; a here-document or an unquoted word is not
+# read, which makes this rule narrower than the Python one rather than wider.
+ECHO_STRING = re.compile(r"""(?<![\w./-])(?:echo|printf)(?:\s+-[A-Za-z]+)*\s+"""
+                         r"""("([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)')""")
+
+
+def is_operator_tool(path):
+    """True for a tool whose printed lines an operator reads on a terminal."""
+    where = path.as_posix()
+    if path.suffix.lower() == ".sh":
+        return OPERATOR_SHELL_TREE in where
+    return any(tool in where for tool in OPERATOR_TOOLS)
+
+
+def echo_strings(path):
+    """(line number, text) for every literal a shell script echoes to the operator."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (UnicodeDecodeError, OSError):
+        return []
+    found = []
+    for lineno, line in enumerate(lines, 1):
+        if line.lstrip().startswith("#"):
+            continue
+        for match in ECHO_STRING.finditer(line):
+            found.append((lineno, match.group(2) if match.group(2) is not None else match.group(3)))
+    return found
 
 
 def operator_strings(path):
-    """(line number, text) for every string an argparse module prints to an operator."""
+    """(line number, text) for every string a tool prints to whoever ran it: argparse's help,
+    description and epilog anywhere a parser is built, and, on the operator tools alone, the lines
+    the tool itself prints."""
+    if path.suffix.lower() == ".sh":
+        return echo_strings(path) if is_operator_tool(path) else []
     if path.suffix.lower() != ".py":
         return []
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, UnicodeDecodeError):
         return []
+    prints = is_operator_tool(path)
     found = []
     for node in ast.walk(tree):
-        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+        if not isinstance(node, ast.Call):
+            continue
+        if prints and isinstance(node.func, ast.Name) and node.func.id == "print":
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    found.append((arg.lineno, arg.value))
+            continue
+        if not isinstance(node.func, ast.Attribute):
             continue
         if node.func.attr not in ("add_argument", "ArgumentParser"):
             continue
@@ -1691,3 +1737,25 @@ def test_an_operator_string_is_read_and_a_plain_one_is_not(tmp_path):
     g.write_text("import argparse\n\n\ndef main():\n    ap = argparse.ArgumentParser()\n"
                  '    ap.add_argument("--cache-dir", help="the cache root.")\n', encoding="utf-8")
     assert not operator_offences([g]), "the rule flagged a plain operator string"
+
+
+def test_a_printed_line_is_an_operator_line_on_an_operator_tool(tmp_path):
+    """A tool that prints its result to a terminal is read by whoever ran it, exactly as its --help
+    is. The tools are named, so the same print inside a library or a test is a diagnostic for
+    whoever is debugging it and is left alone."""
+    tool = tmp_path / "deploy" / "scripts" / "check.py"
+    tool.parent.mkdir(parents=True)
+    tool.write_text('def main():\n    print("C33 compose-guard self-test PASS:")\n', encoding="utf-8")
+    hits = operator_offences([tool])
+    assert hits and "work-item identifier" in hits[0], "a printed operator line went unread"
+    shell = tmp_path / "deploy" / "doctor.sh"
+    shell.write_text("set -eu\nprintf 'AusMT zombie kit (O3)\\n'\n", encoding="utf-8")
+    hits = operator_offences([shell])
+    assert hits and "work-item identifier" in hits[0], "an echoed operator line went unread"
+    library = tmp_path / "engine" / "extract" / "_thing.py"
+    library.parent.mkdir(parents=True)
+    library.write_text('def main():\n    print("C33 compose-guard self-test PASS:")\n', encoding="utf-8")
+    assert not operator_offences([library]), "a diagnostic print inside a library was read as an operator line"
+    clean = tmp_path / "deploy" / "scripts" / "clean.py"
+    clean.write_text('def main():\n    print("compose-guard self-test PASS:")\n', encoding="utf-8")
+    assert not operator_offences([clean]), "the rule flagged a plain printed line"

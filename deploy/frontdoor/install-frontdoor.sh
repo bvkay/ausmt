@@ -115,7 +115,7 @@ if [ -n "$WAS_RUNNING" ]; then
 	else
 		printf '\n' >&2
 		printf 'install-frontdoor: WARNING: caddy reload FAILED (admin disabled, or the container could\n' >&2
-		printf 'install-frontdoor: WARNING: not fork - see the O3 zombie kit in RUNBOOK.md). Falling back\n' >&2
+		printf 'install-frontdoor: WARNING: not fork - see the zombie kit in RUNBOOK.md). Falling back\n' >&2
 		printf 'install-frontdoor: WARNING: to a full restart so the new config still takes effect.\n' >&2
 		printf '\n' >&2
 		docker compose -f compose.yaml restart frontdoor \

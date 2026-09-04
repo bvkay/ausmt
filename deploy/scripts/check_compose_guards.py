@@ -151,10 +151,10 @@ def _self_test() -> int:
     if failures:
         print("\n".join(failures))
         return 1
-    print("C33 compose-guard self-test PASS:")
+    print("compose-guard self-test PASS:")
     print("  - base config resolves with only AUSMT_DATA_DIR + OWNER set (no guard trips)")
     print("  - AUSMT_DATA_DIR and OWNER remain hard :? guards (still abort when unset)")
-    print("  - AUSMT_SUBMIT_KEY and AUSMT_CODE_DIR are no longer hard guards (softened to :-)")
+    print("  - AUSMT_SUBMIT_KEY and AUSMT_CODE_DIR resolve from a :- default (they never abort)")
     return 0
 
 

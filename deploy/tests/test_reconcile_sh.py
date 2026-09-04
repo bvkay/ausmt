@@ -952,7 +952,7 @@ def test_failed_build_with_unreadable_journal_says_oom_not_ruled_out(tmp_path):
     assert "systemd-journal" in tail, "the detail must name the fix"
     assert "simulated build failure" in tail, "the build log tail must still follow the note"
     assert "KILLED BY THE KERNEL" not in tail, "an unread journal is not evidence of a kill"
-    assert "NOT ruled out" in r.stderr and "systemd-journal" in r.stderr, r.stderr
+    assert "cannot be excluded" in r.stderr and "systemd-journal" in r.stderr, r.stderr
     q = qlog.read_text(encoding="utf-8").splitlines()[-1].split()
     assert "-q" not in q, f"-q would suppress the only sign of an unread journal: {q}"
 

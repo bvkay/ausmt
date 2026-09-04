@@ -48,9 +48,10 @@ SKIP_PARTS = {"__pycache__", "node_modules", ".git"}
 # anywhere in these trees, prose included: a flag another tool owns (`--incremental`, `--products`)
 # is quoted in this tree's prose and loses its hyphen the same way one of our own does.
 LONG_OPTION = re.compile(r"--([a-z][a-z0-9]*(?:-[a-z0-9]+)*)")
-# The single-hyphen spelling of such a name. Short flags are one or two characters, so a name of
-# four or more cannot be one: this reads only the spellings no parser could accept.
-MIN_LONG_NAME = 4
+# The single-hyphen spelling of such a name. A short flag is ONE character (argparse groups the
+# clustered ones), so a name of three or more cannot be one and the floor stands at three: at four
+# a three-letter long option losing its leading hyphen, `--tag` written `-tag`, was invisible here.
+MIN_LONG_NAME = 3
 DECLARED = re.compile(r"add_argument\(\s*[\"'](--?[A-Za-z][\w-]*)[\"']")
 # A single-hyphen spelling is only a scar in PROSE. A shell default expansion (${X:-y}), a quoted
 # literal ("-text") and a backticked directive (`-include .env`) all write the same characters and
@@ -140,6 +141,11 @@ def run_help(path):
     return proc.returncode, proc.stdout + proc.stderr
 
 
+def single_hyphen_spelling(names):
+    """The pattern that reads a long option written with ONE hyphen, built from the names in play."""
+    return re.compile(r"(?<![-\w:$])-(%s)\b" % "|".join(sorted(map(re.escape, names))))
+
+
 def test_no_comment_spells_a_long_option_with_one_hyphen():
     """The regression this module exists for. A long flag written in prose at the head of a line
     is one gutter strip away from `-data-dir`, and the operator is then told a flag that does not
@@ -147,7 +153,7 @@ def test_no_comment_spells_a_long_option_with_one_hyphen():
     docstring is prose the extractor reads and prose the operator copies."""
     names = long_option_universe()
     assert names, "no long option was found, so this guard would pass over nothing"
-    pattern = re.compile(r"(?<![-\w:$])-(%s)\b" % "|".join(sorted(map(re.escape, names))))
+    pattern = single_hyphen_spelling(names)
     hits = []
     for path in commented_files():
         try:
@@ -406,3 +412,19 @@ def test_every_path_this_module_reads_is_shipped_in_the_engine_image():
                if not any(p.resolve().is_relative_to(tree) for tree in TREES)]
     assert not outside, (
         "this module reads outside the trees the engine image ships:\n" + "\n".join(outside))
+
+
+def test_a_three_character_long_option_written_with_one_hyphen_is_caught(tmp_path):
+    """A short flag is one character, so a three-character name spelt with one hyphen is a scar and
+    not a flag: `--tag` written `-tag` names an option cut_release.py does not declare, and a
+    four-character floor could not see it. Both halves are held here: the floor admits the name, and
+    the pattern built from it reads the damaged spelling out of a pasted usage line."""
+    assert len({n for n in ("tag",) if len(n) >= MIN_LONG_NAME}) == 1, (
+        "the floor no longer admits a three-character long option")
+    pattern = single_hyphen_spelling({"tag", "data-dir"})
+    f = tmp_path / "usage.md"
+    f.write_text("    python scripts/cut_release.py -tag 2026-Q3\n"
+                 "    python scripts/cut_release.py --tag 2026-Q3\n", encoding="utf-8")
+    hits = [line for line in f.read_text(encoding="utf-8").splitlines()
+            if pattern.search(unquoted(line))]
+    assert len(hits) == 1 and "-tag 2026-Q3" in hits[0], hits
