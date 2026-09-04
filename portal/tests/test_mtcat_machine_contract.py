@@ -72,8 +72,7 @@ def _guide() -> str:
     """The field guide section of the docs MTCAT schema reference, from its heading to the next rule."""
     raw = GUIDE.read_text(encoding="utf-8")
     assert GUIDE_HEADING in raw, (
-        f"{GUIDE} must carry the field guide under {GUIDE_HEADING!r}; it moved there from about.html in "
-        f"the documentation wave")
+        f"{GUIDE} must carry the field guide under {GUIDE_HEADING!r}")
     body = raw.split(GUIDE_HEADING, 1)[1]
     return body.split("\n---", 1)[0]
 
@@ -268,8 +267,8 @@ def test_stated_schema_name_version_and_licence_track_their_single_sources():
     assert "metadata_license" in codes, (
         "the paragraph should name the field the licence is served in, so a reader can find it in the document")
     assert "covers the catalogue metadata only" in _flat(_about_contract()), (
-        "the metadata licence must be scoped explicitly: it is NOT the per-survey data licence, and a "
-        "harvester that conflates the two republishes restricted data under CC0")
+        "the metadata licence must be scoped explicitly: it is not the per-survey data licence, and a "
+        "harvester that conflates the two republishes restricted data under a public-domain mark")
 
 
 # ---------------------------------------------------------------- the field guide, both directions

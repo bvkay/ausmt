@@ -183,7 +183,8 @@ def test_the_engine_carries_the_same_mark_the_portal_serves():
     portal_copy = REPO.parent / "portal" / "vendor" / "auscope-icon-white.png"
     assert engine_copy.is_file(), "the emitter must ship the mark it draws"
     if not portal_copy.is_file():
-        pytest.skip("engine image build: portal tree not shipped (designed topology; the vendored mark is pinned from checkout lanes)")
+        pytest.skip("engine image build: portal tree not shipped "
+                    "(designed topology; the vendored mark is pinned from the checkout workflows)")
     assert engine_copy.read_bytes() == portal_copy.read_bytes(), \
         "the engine's mark and the portal's vendored mark must be one asset, byte for byte"
 
@@ -205,7 +206,8 @@ def test_the_engine_carries_the_portals_own_card_assets(engine_name, portal_rel)
     portal_copy = REPO.parent / portal_rel
     assert engine_copy.is_file(), f"the emitter must ship {engine_name}"
     if not portal_copy.is_file():
-        pytest.skip("engine image build: portal tree not shipped (designed topology; the vendored mark is pinned from checkout lanes)")
+        pytest.skip("engine image build: portal tree not shipped "
+                    "(designed topology; the vendored mark is pinned from the checkout workflows)")
     assert engine_copy.read_bytes() == portal_copy.read_bytes(), \
         f"{engine_name} and {portal_rel} must be one asset, byte for byte"
 

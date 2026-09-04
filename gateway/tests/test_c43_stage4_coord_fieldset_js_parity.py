@@ -216,7 +216,7 @@ def test_fieldset_payload_passes_real_engine_parse_and_validate(tmp_path):
     default, overrides = coordacc.parse_coordinate_policy(assembled)
     assert default == "exact"
     assert overrides == payload, (
-        f"engine parsed {overrides!r}, not the JS-assembled {payload!r} — a key/spelling drift would "
+        f"engine parsed {overrides!r}, not the JS-assembled {payload!r} - a key/spelling drift would "
         f"make the per-station policy a silent no-op")
     coordacc.validate_overrides(overrides, records)   # no raise: every key is a real base id
     # each key is EFFECTIVE, and a BASE override (MBV20) covers BOTH variant records.

@@ -223,7 +223,7 @@ def test_no_sqlite3_refuses_hard_with_actionable_message(tmp_path):
     assert "apt-get install" in r.stderr or "install" in r.stderr.lower(), \
         "the refusal must be actionable (how to install sqlite3)"
     assert "docker" not in r.stderr.lower(), \
-        "the refusal must NOT suggest docker (the fallback was removed 2026-07-10)"
+        "the refusal must NOT suggest docker: there is no docker fallback"
     # And it must NOT have produced a snapshot containing a raw-copied DB.
     assert _snapshots(tree) == [], "no snapshot may be produced without a WAL-safe copy"
 

@@ -183,7 +183,7 @@ def test_raw_mode_build_never_touches_the_cache(tmp_path, clean_salt):
     assert _raw_build(out1) == 0
     c1 = _cache_counters(out1)
     assert c1["hits"] == 0 and c1["misses"] == 0 and c1["writes"] == 0, \
-        f"a --raw build touched the cache (must be inert, Amendment A1a): {c1}"
+        f"a --raw build touched the cache; it must be inert: {c1}"
     assert not any(p.is_file() for p in cache.rglob("*")), "--raw build persisted cache entries"
 
     # Edit the seed's citation source (the exact stale-citation vector the review proved), rebuild.
@@ -528,7 +528,7 @@ def test_c18b_unstamped_cache_meta_reads_as_suspect_not_current(tmp_path, clean_
 
     rc, txt = _verify_data_dir_surveys(warm, surveys)
     assert rc != 0, \
-        f"an UNSTAMPED cache entry was blessed with the current digest — fail-open fallback:\n{txt}"
+        f"an UNSTAMPED cache entry was blessed with the current digest - fail-open fallback:\n{txt}"
     assert f"consistency: FAIL {slug}" in txt, txt
 
 
@@ -569,7 +569,7 @@ def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypat
     # from PRE-edit bytes while the live yaml is post-edit (pre-fix HEAD was blind here — the
     # loop-time digest matched the post-edit yaml, blessing the poisoned products).
     rc, txt = _verify_data_dir_surveys(out1, surveys)
-    assert rc != 0, f"verify.py blessed a STRADDLED build (C18b blindness, incident shape):\n{txt}"
+    assert rc != 0, f"verify.py blessed a STRADDLED build (the cache-staleness blindness):\n{txt}"
 
     # A clean rebuild on the now-stable post-edit tree must serve the POST-edit citation. On
     # pre-fix HEAD every station HIT the poisoned entries and served 'Test Org' from cache.
@@ -698,7 +698,7 @@ def test_corrupt_cached_parse_json_detected_and_recomputed(tmp_path, clean_salt)
 
     for name in ("catalogue.json", "tf.json", "sci.json", "manifest.json"):
         assert _digest(o_warm / name) == _digest(o_pop / name), \
-            f"{name} differs from the populating build — corrupt parse rows shipped"
+            f"{name} differs from the populating build - corrupt parse rows shipped"
 
 
 def test_torn_entry_xml_without_meta_is_a_miss_not_a_phantom_hit(tmp_path, clean_salt):
@@ -765,7 +765,7 @@ def test_transient_write_lock_is_retried_persistent_failure_is_counted(tmp_path,
         f"a single transient lock was not absorbed by the retry: {bc.counters()}"
     fresh = _bc(root=cache_root)
     assert fresh.get_bytes(k1, "xml") == b"payload-1", \
-        "transient lock dropped the entry (no retry) — the silent spurious-miss class is back"
+        "transient lock dropped the entry (no retry) - the silent spurious-miss class is back"
 
     state["fail"] = 10 ** 9                        # persistent: every attempt fails
     k2 = bc.key(edi_sha="s2", survey_digest="y", kind="xml")
@@ -830,7 +830,7 @@ def test_per_survey_instrumentation_sums_to_corpus_total(tmp_path, clean_salt, c
     sum_w = sum(int(r[4]) for r in rows)
 
     m_total = re.search(r"C18 cache \[\w+\]: hits=(\d+) misses=(\d+) writes=(\d+)", both)
-    assert m_total, f"corpus-total C18 cache line missing (tests pin it):\n{both}"
+    assert m_total, f"the corpus-total cache line is missing (tests pin it):\n{both}"
     tot_h, tot_m, tot_w = (int(m_total.group(i)) for i in (1, 2, 3))
     assert (sum_h, sum_m, sum_w) == (tot_h, tot_m, tot_w), \
         f"per-survey deltas {(sum_h, sum_m, sum_w)} != corpus total {(tot_h, tot_m, tot_w)}"
@@ -981,7 +981,7 @@ def test_salt_instability_is_observable_via_salt_fp(tmp_path, clean_salt, monkey
     c1, c2 = _cache_counters(tmp_path / "b1"), _cache_counters(tmp_path / "b2")
     assert c1["salt_fp"] != c2["salt_fp"], "a changed engine commit must change the salt fingerprint"
     assert c2["hits"] == 0 and c2["misses"] == EXPECTED_COLD_MISSES, \
-        f"a flipped salt must full-miss the warm build (the C18c flake shape): {c2}"
+        f"a flipped salt must full-miss the warm build: {c2}"
 
 
 def test_git_commit_memoised_per_process_success_only(tmp_path, monkeypatch):
@@ -1006,7 +1006,7 @@ def test_git_commit_memoised_per_process_success_only(tmp_path, monkeypatch):
         assert calls["n"] == 1, "a memoised success was re-resolved (per-build rev-parse is back)"
         assert build_portal._git_commit_at(repo_b) is None          # failure -> None ...
         assert build_portal._git_commit_at(repo_b) is None          # ... and RETRIED (not memoised)
-        assert calls["n"] == 3, "a FAILED resolution was memoised — later builds stay degenerate"
+        assert calls["n"] == 3, "a FAILED resolution was memoised - later builds stay degenerate"
     finally:
         build_portal._GIT_COMMIT_MEMO.pop(repo_a, None)
         build_portal._GIT_COMMIT_MEMO.pop(repo_b, None)

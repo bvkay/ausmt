@@ -88,7 +88,7 @@ def test_no_badge_constant_survives(name):
     """The thresholds are the seam the feature would grow back from: a surviving constant is a rule
     somebody can wire up again in one line. They go with the layer, not after it."""
     assert not re.search(rf"\b{name}\b\s*=", _map_src()), \
-        f"{name} must be gone: the per-survey badge layer was removed whole on 2026-08-24"
+        f"{name} must be gone: there is no per-survey badge layer"
 
 
 @pytest.mark.parametrize("name", ["badgeIcon", "badgeSizePx", "shouldBadgeSurvey", "partitionForDisplay",
@@ -111,7 +111,7 @@ def test_the_map_builds_no_badge_layer_and_no_pane():
     code = _code(_map_src())
     assert "createPane" not in code, \
         "map.js must create no pane: a pane sits over the station canvas at z 400 and swallows the clicks " \
-        "the stations need (the production outage of 2026-08-19)"
+        "the stations need"
     assert "divIcon" not in code, "a divIcon is a badge; the map draws canvas circleMarkers only"
     assert "L.polyline" not in code, "L.polyline was the leader tail; nothing draws one now"
     assert "badgeLayer" not in code, "the badge layer group must be gone"

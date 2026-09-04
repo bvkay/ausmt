@@ -175,7 +175,7 @@ def test_every_record_opens_with_the_markers_and_survey_id_is_the_slug(built_acc
         slug = key.split("/")[0]
         assert doc["schema"] == "ausmt-station"
         assert doc["version"] == STATION_SCHEMA_VERSION, "version is the generated constant, not a literal"
-        assert doc["survey_id"] == slug, "survey_id is the slug (D4); a display title is not an identifier"
+        assert doc["survey_id"] == slug, "survey_id is the slug; a display title is not an identifier"
         assert doc["survey"] != doc["survey_id"], "the display title stays a separate, legacy surface"
 
 

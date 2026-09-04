@@ -109,8 +109,7 @@ def test_surveys_index_lists_every_survey_with_its_discovery_facts(built):
     assert re.search(r"2 surveys &#183; \d+ stations", page), \
         "the catalogue summary must state surveys and stations, interpunct-separated"
     assert "Explore on the map" not in page, (
-        "the map action was removed (owner 2026-08-31): the global header's Map tab covers it, "
-        "so the hub must not restate it")
+        "the global header's Map tab covers the map action, so the hub must not restate it")
     for slug, title in (("idx-a", "Index A"), ("idx-b", "Index B")):
         assert f'<a href="/surveys/{slug}">{title}</a>' in page, \
             f"{slug}: the title must be the link to its survey page"
@@ -599,7 +598,7 @@ def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor(
     card = page.split('<article class="idxcard">', 1)[1].split("</article>", 1)[0]
     assert card.count("<a ") == 1, f"exactly one real anchor per surveys card, got {card.count('<a ')}"
     assert "<button" not in page, "no buttons in rows, ever: the hierarchy is catalogue, survey, data"
-    assert "&#8594;" in card, "the card reveals a forward arrow for the in-site action (R14)"
+    assert "&#8594;" in card, "the card reveals a forward arrow for the in-site action"
 
 
 def test_the_collections_card_keeps_its_explore_link_above_the_stretched_overlay():
@@ -651,7 +650,7 @@ def test_the_hub_locator_grows_and_its_container_steps_back():
     assert "grid-template-columns:115px 1fr" in css, \
         "the hub locator column must be 115px (about +10% on the 104px it carried)"
     assert pages._INDEX_MAP_WIDTH == 230, \
-        "the shared symbol geometry does not move: R6 grows the rendered width, not the viewBox"
+        "the shared symbol geometry does not move: the rendered width grows, not the viewBox"
     assert page.count("<symbol") == 1 and len(page.encode("utf-8")) < 300_000, \
         "the size budget stays green"
     svg = pages._minimap_svg([], width=230)
@@ -669,7 +668,7 @@ def test_the_card_names_its_organisation_more_loudly_than_its_location():
     org_line = page.split('<p class="idxorg">', 1)[1].split("</p>", 1)[0]
     assert '<span class="idxorgn">Test Org</span>' in org_line
     assert '<span class="idxloc">Tasmania</span>' in org_line
-    assert "Organisation" not in org_line and "Region" not in org_line, "no labels, by ruling"
+    assert "Organisation" not in org_line and "Region" not in org_line, "the org line carries no field labels"
     orgn = re.search(r"\.idxorgn\{color:(#[0-9A-Fa-f]{6})", css)
     loc = re.search(r"\.idxloc\{color:(#[0-9A-Fa-f]{6})", css)
     assert orgn and loc, f"both shades must be declared; got {orgn} / {loc}"
@@ -834,7 +833,7 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
                           f'<a href="{AUSCOPE_URL}" {NEW_TAB}>www.auscope.org.au</a> &#183; '
                           "&#169; 2026 AuScope and the AusMT contributors &#183; "
                           "Data licences vary by survey"), \
-            f"{rel}: centre region is not the owner's acknowledgement line: {centre!r}"
+            f"{rel}: centre region is not the acknowledgement line: {centre!r}"
         assert centre.count("<a") == 1, \
             f"{rel}: the centre region carries exactly one link: {centre!r}"
 
@@ -853,7 +852,7 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
 
         for gone in (">Releases<", "About this build", "aboutbuild", "/releases.html"):
             assert gone not in foot, \
-                f"{rel}: {gone!r} left the footer with the ruling and must not come back: {foot!r}"
+                f"{rel}: {gone!r} is out of the footer and must not come back: {foot!r}"
         assert "fbuild" not in foot and "Build " not in foot, (
             f"{rel}: the build identity stamp stays out of the footer; "
             f"build_provenance.json still carries it: {foot!r}")
@@ -950,8 +949,8 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
             "go back to asking the viewport")
     assert re.search(r"\bmain\{[^}]*padding:1\.6rem 1\.25rem 2\.2rem", css), (
         "the separation above the footer belongs to the reading column, not to the footer: the "
-        "footer's own margin-top left the rule set with the ruling (the SPA's footer cannot carry "
-        "one, its body does not scroll), so main states the space it used to provide")
+        "footer carries no margin-top of its own (the SPA's footer cannot, its body does not "
+        "scroll), so main is where the space is stated")
 
 
 def test_the_footer_lockup_is_sized_in_css_and_never_outgrows_its_zone(built):

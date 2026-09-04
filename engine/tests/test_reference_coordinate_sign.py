@@ -251,7 +251,7 @@ def test_the_served_edi_is_the_custodian_file_byte_for_byte(tmp_path):
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_this_file_is_in_the_pr_gate_subset():
     """Rule 8: the PR gate enumerates test files BY NAME, so a reader-seam test that is not listed
     runs only on push to main, and this seam decides whether a station exists at all."""

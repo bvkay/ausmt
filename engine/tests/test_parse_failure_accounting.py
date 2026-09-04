@@ -260,7 +260,7 @@ WORKFLOW = REPO.parent / ".github" / "workflows" / "build-products.yml"
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_this_file_is_in_the_pr_gate_subset():
     """Rule 8: the PR gate enumerates test files BY NAME, and this file carries the assertions the
     two deploy gates read, so it has to run on the pull request that changes them."""

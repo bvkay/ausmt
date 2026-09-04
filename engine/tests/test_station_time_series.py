@@ -573,7 +573,7 @@ def test_the_level_tokens_are_derived_from_the_crosswalk_and_exclude_level2():
     """The route table's vocabulary keys ARE crosswalk keys, so a level added to the crosswalk
     cannot be silently unroutable here; level2 is absent by rule, not by omission."""
     assert set(bp._TS_LEVEL_ROUTE) == {"raw_packed", "level0", "level1_mth5", "level1_netcdf"}
-    assert "level2" not in bp._TS_LEVEL_ROUTE, "D19: level_2 holds transfer functions, not time series"
+    assert "level2" not in bp._TS_LEVEL_ROUTE, "level_2 holds transfer functions, not time series"
     assert {v["vocab"] for v in bp._TS_LEVEL_ROUTE.values()} <= set(bp.STATION_VOCABULARY_CROSSWALK)
 
 

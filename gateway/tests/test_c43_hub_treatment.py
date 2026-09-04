@@ -228,7 +228,7 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
     assert js.count("var REFUSED_NOTE") == 1
     assert js.count("REFUSED_NOTE") == 2, "REFUSED_NOTE: one declaration + ONE plan use (once-only)"
     assert "citation|author|email" not in js, "the dead warning-string matcher must stay deleted"
-    assert "data-citation-email" not in js, "the citation-email info row is retired (D19)"
+    assert "data-citation-email" not in js, "the citation-email info row stays out"
     assert "metaInfoText" not in js and "truncEmail" not in js
     # The CSP/XSS discipline extends to the rewritten constant.
     assert ".innerHTML" not in js and "<script" not in js.lower()
@@ -244,7 +244,7 @@ def test_station_panel_no_raw_json_outside_collapsed_details():
     returns, the terse lines unwire, or the collapsed dump disappears."""
     js = curatorpage.STATIONS_JS
     assert js.count("el('pre')") == 1, (
-        "exactly ONE pre — the collapsed raw station.json dump — is allowed in the panel")
+        "exactly ONE pre - the collapsed raw station.json dump - is allowed in the panel")
     assert "el('summary', 'raw station.json')" in js
     assert "'Conditioning / QA notes'" not in js, "the visible conditioning JSON block must stay gone"
     assert "el('h2', 'Coordinate QC')" not in js, "the visible coordinate-QC JSON block must stay gone"

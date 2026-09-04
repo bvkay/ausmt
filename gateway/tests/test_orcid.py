@@ -25,7 +25,7 @@ def test_orcid_vectors_cover_gateway():
     # and exactly the offending vector reds. Every impl is pinned to the SAME file, so the gateway,
     # the portal JS, and the validator cannot drift apart silently.
     vectors = [v for v in _load_vectors() if "gateway" in v["applies_to"]]
-    assert vectors, "no gateway-scoped ORCID vectors found — the shared file is empty or mis-scoped"
+    assert vectors, "no gateway-scoped ORCID vectors found - the shared file is empty or mis-scoped"
     mismatches = [(v["input"], v["valid"], is_valid_orcid(v["input"]))
                   for v in vectors if is_valid_orcid(v["input"]) != v["valid"]]
     assert not mismatches, (

@@ -31,6 +31,8 @@ import re
 import tokenize
 from pathlib import Path
 
+import pytest
+
 DEPLOY = Path(__file__).resolve().parent.parent        # deploy/
 ROOT = DEPLOY.parent                                   # repo root
 GATEWAY = ROOT / "gateway"
@@ -404,6 +406,14 @@ HASH_SUFFIXES = {".sh", ".bash", ".yml", ".yaml", ".service", ".timer", ".conf",
 HASH_NAMES = {"Caddyfile", "Makefile", "Dockerfile", ".gitignore", ".dockerignore"}
 
 
+def source_text(path):
+    """One file's text, with a leading byte-order mark removed. Python's own loader strips a BOM, so
+    a module that carries one imports and its tests run; ast.parse does not, so the AST half of this
+    extractor raises on it and the file's docstrings become invisible. A surface a scanner cannot
+    read reports clean, which is the one failure this module may not have."""
+    return path.read_text(encoding="utf-8-sig")
+
+
 def comments(path, text):
     """Every comment in one file, as (line number, text), each counted once."""
     suffix = path.suffix.lower()
@@ -423,7 +433,7 @@ def comments(path, text):
 
 
 def comment_bytes(path):
-    text = path.read_text(encoding="utf-8")
+    text = source_text(path)
     return sum(len(body.encode("utf-8")) for _, body in comments(path, text))
 
 
@@ -962,7 +972,7 @@ def offences(files, cite_contract=False, root=None):
     reader, and a scan that reads each line alone is defeated by the line break between them."""
     found = []
     for path in files:
-        text = path.read_text(encoding="utf-8")
+        text = source_text(path)
         for lineno, comment in comment_runs(path, text):
             labels = labels_for(comment, cite_contract=cite_contract)
             if labels:
@@ -1160,7 +1170,7 @@ def shape_offences(files, root=None):
     """Every comment whose SHAPE is broken across a set of files, as report lines."""
     found = []
     for path in files:
-        text = path.read_text(encoding="utf-8")
+        text = source_text(path)
         where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
         symbols = symbols_in(text)
         names = names_written_inside_a_line(path, text)
@@ -1260,7 +1270,7 @@ def history_offences(files, root=None):
     """Every shipped comment that narrates what was removed, as report lines."""
     found = []
     for path in files:
-        text = path.read_text(encoding="utf-8")
+        text = source_text(path)
         where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
         for lineno, comment in comment_runs(path, text):
             shapes = history_shapes(comment)
@@ -1301,7 +1311,7 @@ def is_operator_tool(path):
 def echo_strings(path):
     """(line number, text) for every literal a shell script echoes to the operator."""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = source_text(path).splitlines()
     except (UnicodeDecodeError, OSError):
         return []
     found = []
@@ -1322,7 +1332,7 @@ def operator_strings(path):
     if path.suffix.lower() != ".py":
         return []
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(source_text(path))
     except (SyntaxError, UnicodeDecodeError):
         return []
     prints = is_operator_tool(path)
@@ -1344,6 +1354,94 @@ def operator_strings(path):
             if (keyword.arg in ARGPARSE_TEXT and isinstance(value, ast.Constant)
                     and isinstance(value.value, str)):
                 found.append((value.lineno, value.value))
+    return found
+
+
+# THE MESSAGES A FAILURE PRINTS. An assertion message and a skip reason are read by whoever is
+# looking at a red run, which is the same reader a comment has, and no guard above sees them: a
+# message is a bare literal and a reason is a keyword argument on a marker. They keep their
+# semantics, which is what tells the reader what broke; what they drop is the audit trail. The dash
+# rule reaches them because a reason is printed on a terminal, where the glyph is not always legible.
+SKIP_CALLS = ("skip", "xfail")
+REASON_CALLS = ("skip", "xfail", "skipif")
+DASHES = ("\u2014", "\u2013")
+
+
+def _static_text(node):
+    """The literal text of a string node, an f-string's constant parts included."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(v.value for v in node.values
+                       if isinstance(v, ast.Constant) and isinstance(v.value, str))
+    return None
+
+
+def message_strings(path):
+    """(line number, text) for every assertion message and every skip or xfail reason in a module."""
+    if path.suffix.lower() != ".py":
+        return []
+    try:
+        tree = ast.parse(source_text(path))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return []
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assert) and node.msg is not None:
+            text = _static_text(node.msg)
+            if text:
+                found.append((node.msg.lineno, text))
+            continue
+        if not isinstance(node, ast.Call):
+            continue
+        name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        if name not in REASON_CALLS:
+            continue
+        # skipif's first positional argument is the CONDITION, so only skip and xfail are read
+        # positionally; all three carry the reason as a keyword.
+        if name in SKIP_CALLS:
+            for arg in node.args:
+                text = _static_text(arg)
+                if text:
+                    found.append((arg.lineno, text))
+        for keyword in node.keywords:
+            if keyword.arg != "reason":
+                continue
+            text = _static_text(keyword.value)
+            if text:
+                found.append((keyword.value.lineno, text))
+    return found
+
+
+# A message is held to the AUDIT TRAIL, not to the whole comment vocabulary. A failure message says
+# what changed, so "no longer" and "used to" are the finding rather than a history note; a TODO or a
+# placeholder inside one is a test's own scaffolding; and a pin may cite the contract it holds. What
+# a message may not carry is who decided, when, and under which work item, wave, round or lane.
+MESSAGE_LABELS = (
+    "decision-owner language", "ruling language", "approval language", "wave identifier",
+    "work-item identifier", "lane name", "design-history vocabulary", "old-to-new history",
+    "dated note", "branch name", "review or slice identifier", "round-of-work identifier",
+    "design-document citation",
+)
+# A message that NAMES the glyph it is about keeps it: the dash inside a quoted run is the data the
+# assertion is talking about, not the message's own punctuation.
+QUOTED_DASH = re.compile(r"['\"`][^'\"`\n]*[\u2014\u2013][^'\"`\n]*['\"`]")
+
+
+def message_offences(files, root=None):
+    """Every message or reason that carries the audit trail or a typographic dash, as report lines."""
+    found = []
+    for path in files:
+        where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+        for lineno, text in message_strings(path):
+            labels = [label for label in labels_for(text, cite_contract=True)
+                      if label in MESSAGE_LABELS]
+            if any(dash in text for dash in DASHES) and any(
+                    dash in QUOTED_DASH.sub("", text) for dash in DASHES):
+                labels.append("an em or en dash")
+            if labels:
+                found.append("%s:%s: %s: %s"
+                             % (where, lineno, ", ".join(labels), flattened(text)[:110]))
     return found
 
 
@@ -1445,7 +1543,7 @@ def test_every_surface_class_is_actually_read():
     for label, files in SURFACES.items():
         found = files()
         assert found, f"{label}: no files matched, so this sweep would pass over nothing"
-        seen = sum(len(comments(p, p.read_text(encoding='utf-8'))) for p in found)
+        seen = sum(len(comments(p, source_text(p))) for p in found)
         if seen == 0:
             empty.append(f"{label}: {len(found)} file(s), zero comments extracted")
     assert not empty, "the extractor read no comments at all on:\n" + "\n".join(empty)
@@ -1458,7 +1556,7 @@ def test_the_non_python_half_of_deploy_is_inside_the_sweep():
     for path in deploy_tree():
         if path.suffix.lower() == ".py":
             continue
-        found = comments(path, path.read_text(encoding="utf-8"))
+        found = comments(path, source_text(path))
         if found:
             kinds.setdefault(path.suffix.lower() or path.name, 0)
             kinds[path.suffix.lower() or path.name] += len(found)
@@ -1645,3 +1743,79 @@ def test_operator_strings_state_what_the_tool_does():
     hits = operator_offences(files, root=ROOT)
     assert not hits, (
         f"{len(hits)} argparse string(s) print provenance to an operator:\n" + "\n".join(hits))
+
+
+def test_every_python_file_in_a_swept_class_parses():
+    """A scanner that cannot read a file reports it clean. Half this extractor is the syntax tree,
+    so a module ast.parse refuses is swept for its # comments and NOT for its docstrings, and the
+    class still reads zero. Python's own loader is more forgiving than ast.parse (a byte-order mark
+    is the case that made this real), so the two must be held to agree here."""
+    broken = []
+    for producer in SURFACES.values():
+        for path in producer():
+            if path.suffix.lower() != ".py":
+                continue
+            try:
+                ast.parse(source_text(path))
+            except SyntaxError as exc:
+                broken.append("%s: %s" % (path.relative_to(ROOT), exc))
+    assert not broken, (
+        "the syntax-tree half of the extractor cannot read these, so their docstrings are swept by "
+        "nothing:\n" + "\n".join(sorted(set(broken))))
+
+
+def test_a_byte_order_mark_does_not_hide_a_module_from_the_extractor(tmp_path):
+    """A module carrying a byte-order mark imports and its tests run, because Python's own loader
+    strips it. ast.parse does not, so the docstring half of the extractor saw nothing and the class
+    reported clean; the # comments in the same file were read the whole time, which is what made it
+    invisible rather than obviously broken."""
+    f = tmp_path / "marked.py"
+    f.write_bytes(b'\xef\xbb\xbf"""The owner ruling of 2026-08-18."""\n# a plain comment\n')
+    with pytest.raises(SyntaxError):
+        ast.parse(f.read_text(encoding="utf-8"))
+    ast.parse(source_text(f))
+    hits = offences([f], cite_contract=True)
+    assert hits and "dated note" in hits[0], hits
+
+
+def test_the_messages_a_failure_prints_carry_no_audit_trail():
+    """An assertion message and a skip reason are what a reader of a red run is handed, so they are
+    held to the audit trail the way a comment is: not who decided, when, or under which work item,
+    wave, round or lane. Their SEMANTICS are untouched, because the message is what says which
+    invariant broke; and the em and en dash go, because a reason is printed on a terminal where the
+    glyph is not always legible. A message may still cite the contract a pin traces itself by."""
+    files = [p for p in deploy_tree() + gateway_tree() if "tests" in p.parts]
+    hits = message_offences(files, root=ROOT)
+    assert not hits, (
+        f"{len(hits)} assertion message(s) or skip reason(s) in the deploy and gateway suites carry "
+        "the audit trail or a typographic dash:\n" + "\n".join(hits))
+
+
+def test_a_message_keeps_its_semantics_and_loses_its_audit_trail(tmp_path):
+    """What a message may say and what it may not. The finding stays; the provenance goes; the dash
+    goes because a reason is printed on a terminal; and a dash the message is NAMING stays, because
+    there it is the data the assertion is about."""
+    caught = tmp_path / "caught.py"
+    caught.write_text(
+        'import pytest\n\n\ndef test_a():\n'
+        '    assert 1, "the C18 cache flag reached the engine (owner round 2)"\n\n\n'
+        '@pytest.mark.skipif(True, reason="dev-box-only real-corpus pins - see the UX6 wave")\n'
+        'def test_b():\n    pass\n', encoding="utf-8")
+    hits = message_offences([caught])
+    assert len(hits) == 2, hits
+    assert "work-item identifier" in hits[0] and "decision-owner language" in hits[0], hits[0]
+    assert "wave identifier" in hits[1], hits[1]
+    kept = tmp_path / "kept.py"
+    kept.write_text(
+        'import pytest\n\n\ndef test_a():\n'
+        '    assert 1, "the cache flag reached the engine; it must stay non-incremental"\n\n\n'
+        '@pytest.mark.skipif(True, reason="dev-box-only real-corpus pins")\n'
+        'def test_b():\n    pass\n\n\ndef test_c():\n'
+        '    assert 1, "a note carrying an `\u2014` explanation must be elided"\n',
+        encoding="utf-8")
+    assert not message_offences([kept]), message_offences([kept])
+    dashed = tmp_path / "dashed.py"
+    dashed.write_text('def test_a():\n    assert 1, "the strip is missing \u2014 this is not the hub"\n',
+                      encoding="utf-8")
+    hits = message_offences([dashed])
+    assert hits and "an em or en dash" in hits[0], hits

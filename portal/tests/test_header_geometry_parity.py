@@ -496,6 +496,6 @@ def test_every_chrome_surface_carries_the_same_zone_geometry():
         rules = _zone_rules(text, where)
         for zone in ZONES:
             assert rules[zone] == reference[zone], (
-                f".{zone} has drifted from the ruled zone geometry:\n"
+                f".{zone} has drifted from the declared zone geometry:\n"
                 f"  portal/index.html            {reference[zone]!r}\n"
                 f"  {where:<28} {rules[zone]!r}")

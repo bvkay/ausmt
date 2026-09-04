@@ -236,8 +236,8 @@ def test_lp_bb_pair_is_separated_by_luminance_not_hue_alone():
     lp, bb = pal["LPMT"], pal["BBMT"]
     d = de00(lp, bb)
     assert d >= LP_BB_FLOOR, (
-        f"LP {lp} vs BB {bb}: dE00 {d:.2f} is under this lane's stated {LP_BB_FLOOR} floor "
-        f"(the pre-lane pair was 26.08 and the owner called it too similar).")
+        f"LP {lp} vs BB {bb}: dE00 {d:.2f} is under the stated {LP_BB_FLOOR} floor "
+        f"(the pair this floor was set against measured 26.08 and read as one colour).")
     l_lp, c_lp, h_lp = lch(lp)
     l_bb, c_bb, _ = lch(bb)
     assert abs(l_lp - l_bb) >= 18.0, (
@@ -262,7 +262,7 @@ def test_lp_bb_pair_survives_simulated_red_green_deficiency():
         assert d >= LP_BB_DEUTAN_FLOOR, (
             f"under simulated {kind}opia LP {lp}->{simulate(lp, kind)} and BB {bb}->{simulate(bb, kind)} "
             f"are only dE00 {d:.2f} apart, under the {LP_BB_DEUTAN_FLOOR} floor. "
-            f"(The pre-lane pair measured 15.26 deutan / 19.23 protan - that is the defect.)")
+            f"(The pair this floor was set against measured 15.26 deutan / 19.23 protan.)")
 
 
 def test_no_data_type_collides_with_the_action_accent():

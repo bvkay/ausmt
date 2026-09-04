@@ -1789,7 +1789,7 @@ def test_nothing_in_the_gateway_reads_the_daily_archive():
     because nothing consumes it, so a reference to it from the serving stack is the change that must
     be caught here rather than in review. FAILS IF any gateway source names the archive file."""
     gateway = _REPO / "gateway"
-    assert gateway.is_dir(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    assert gateway.is_dir(), "this pin runs from a full checkout, never skipped"
     offenders = [str(p.relative_to(_REPO)) for p in sorted(gateway.rglob("*.py"))
                  if "daily_archive" in p.read_text(encoding="utf-8", errors="replace")]
     assert offenders == [], f"the gateway must not read the daily archive: {offenders}"
@@ -2134,7 +2134,7 @@ def test_the_aggregator_and_the_portal_agree_on_the_bulk_flag():
 
     FAILS IF the two tokens drift, or if the portal stops declaring one at all."""
     exports_js = _REPO / "portal" / "src" / "exports.js"
-    assert exports_js.is_file(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    assert exports_js.is_file(), "this pin runs from a full checkout, never skipped"
     m = re.search(r"""SEL_BULK_FLAG\s*=\s*["']([^"']+)["']""", exports_js.read_text(encoding="utf-8"))
     assert m, "portal/src/exports.js must declare SEL_BULK_FLAG; the label has no other source"
     assert m.group(1) == AGG._SELECT_BULK_FLAG, (
@@ -2150,7 +2150,7 @@ def _selection_zip_formats() -> list[str]:
     declares them (portal/src/exports.js SEL_ZIP_BUTTONS). Every one of those buttons writes the bulk
     flag, so this list IS the set of flows the operator copy has to describe."""
     exports_js = _REPO / "portal" / "src" / "exports.js"
-    assert exports_js.is_file(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    assert exports_js.is_file(), "this pin runs from a full checkout, never skipped"
     block = re.search(r"SEL_ZIP_BUTTONS\s*=\s*\[(.*?)\];", exports_js.read_text(encoding="utf-8"), re.S)
     assert block, "portal/src/exports.js must declare SEL_ZIP_BUTTONS; the button set has no other source"
     # Each row is [buttonId, label, format, metaLineId] since the select-panel redesign added the

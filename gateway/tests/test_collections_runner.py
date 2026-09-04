@@ -112,7 +112,7 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
     # member set — the same collections, and every rolled-up field identical.
     assert set(runner_out) == set(engine_out), (set(runner_out), set(engine_out))
     assert "wamt" in runner_out and "auslamp" in runner_out
-    assert "0" not in runner_out and 0 not in runner_out, "a falsy id must not form a collection (F2)"
+    assert "0" not in runner_out and 0 not in runner_out, "a falsy id must not form a collection"
 
     def _norm(v):  # collections.json stringifies a YAML date exactly this way (default=str)
         return json.loads(json.dumps(v, default=str))

@@ -407,10 +407,10 @@ def test_build_json_path_matches_engine_layout():
     assert 'BUILD_JSON="$SITE_DATA/current/build.json"' in script, \
         "reconcile.sh must read build.json at the build ROOT (current/build.json)"
     assert "current/data/build.json" not in script, \
-        "the phantom data/ segment is the exact 2026-07-08 rebuild-loop bug"
+        "the phantom data/ segment is the rebuild-loop bug"
     engine_src = (_REPO / "engine" / "extract" / "build_portal.py").read_text(encoding="utf-8")
     assert '(out / "build.json")' in engine_src, \
-        "engine no longer writes build.json at the build root — update reconcile.sh AND this pin"
+        "engine no longer writes build.json at the build root - update reconcile.sh AND this pin"
 
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
@@ -596,7 +596,7 @@ def test_fresh_pause_flag_suppresses_drift_rebuild(tmp_path):
     assert not tree["marker"].exists(), "a fresh pause.flag must SUPPRESS the drift rebuild (shim not run)"
     st = _status(tree)
     assert st and st.get("action") == "paused", f"expected action=paused, got {st}"
-    assert st.get("paused") is True, "reconcile status must expose the pause state (record D9.7)"
+    assert st.get("paused") is True, "reconcile status must expose the pause state"
 
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
@@ -752,7 +752,7 @@ def test_prune_never_deletes_the_build_being_served(tmp_path):
 
     _run(tree, env_extra={"SHIM_FAIL": "1", "AUSMT_RECONCILE_KEEP_BUILDS": "2"})
     left = sorted(p.name for p in bdir.iterdir() if p.is_dir())
-    assert served in left, f"the SERVED build {served} was pruned — left={left}"
+    assert served in left, f"the SERVED build {served} was pruned - left={left}"
     expected = sorted([served] + names[-2:])              # served + the 2 newest
     assert left == expected, f"served + KEEP_BUILDS=2 newest expected {expected}, got {left}"
 

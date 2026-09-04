@@ -134,7 +134,7 @@ def test_fixture_validates_with_format_checking_and_scans_clean(name):
     nulls, empties = scan_nulls_and_empties(doc)
     assert not nulls and not empties, (nulls, empties)
     assert doc["schema"] == "ausmt-survey-metadata" and doc["version"] == SCHEMA_VERSION
-    assert preferred_identifier_designated(doc), f"{name}: T25 must hold on a committed fixture"
+    assert preferred_identifier_designated(doc), f"{name}: the preferred identifier must be designated on a committed fixture"
 
 
 def test_t20_fixture_is_the_ratified_suite_document_verbatim():
@@ -292,7 +292,7 @@ def test_reference_checks_actually_detect_violations():
     assert nulls == ["$.a", "$.e[0].f"] and empties == ["$.b", "$.c.d"]
     doc = copy.deepcopy(_base())
     doc["citation"]["preferred_identifier"] = {"scheme": "DOI", "identifier": "10.99999/level1-collection"}
-    assert not preferred_identifier_designated(doc), "T25 must detect a preferred identifier not in identifiers[]"
+    assert not preferred_identifier_designated(doc), "a preferred identifier not in identifiers[] must be detected"
     doc["identifiers"] = []
     assert not preferred_identifier_designated(doc)
     doc.pop("citation")

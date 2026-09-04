@@ -417,7 +417,7 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
     flat = _flat(re.sub(r"<[^>]+>", "", docs))
     assert ("Quarterly citable snapshots of the corpus are listed on the releases page; each one is "
             "a frozen tree with its own identifier") in flat, (
-        "section 8 must say what the releases page holds, in the words the ruling gives")
+        "section 8 must say what the releases page holds, in the words the copy declares")
     assert "data-ver-chip" not in docs, (
         "section 8 inherited the route, not the chip")
 

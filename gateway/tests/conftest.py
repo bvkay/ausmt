@@ -59,7 +59,7 @@ def require_validator_dir() -> Path:
     assert d is not None, (
         "no validator available: neither the sibling ausmt-surveys/_validation checkout nor the "
         f"committed vendored copy at {VENDORED_VALIDATOR_DIR} was found. The vendored copy is committed, "
-        "so this is a BROKEN CHECKOUT, not a legitimate skip (C35b/D3, review F7).")
+        "so this is a BROKEN CHECKOUT, not a legitimate skip.")
     return d
 
 

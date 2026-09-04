@@ -78,7 +78,7 @@ def test_manifest_integrity_and_license_gate(tmp_path):
         bfmts.add(row["format"])
         urls_by_fmt[row["format"]] = row["url"]
     # Three bundle kinds for a served survey with the flag on - EDI zip, EMTF-XML zip, TF MTH5.
-    assert bfmts == {"edi-zip", "xml-zip", "mth5"}, f"expected all three C32 bundle kinds, got {bfmts}"
+    assert bfmts == {"edi-zip", "xml-zip", "mth5"}, f"expected all three bundle kinds, got {bfmts}"
     # Filename contract: the MTH5 says transfer-functions-only via the -tf suffix, all under bundles/.
     assert urls_by_fmt["edi-zip"].endswith("-edi.zip") and urls_by_fmt["edi-zip"].startswith("bundles/")
     assert urls_by_fmt["xml-zip"].endswith("-xml.zip") and urls_by_fmt["xml-zip"].startswith("bundles/")
@@ -112,7 +112,7 @@ def test_xml_zip_contains_exactly_the_served_xml_set(tmp_path):
     zpath = out / xrow["url"]
     with zipfile.ZipFile(zpath) as z:
         names = set(z.namelist())
-    assert "LICENSE.txt" in names, "the C6 LICENSE.txt must travel inside the XML zip"
+    assert "LICENSE.txt" in names, "LICENSE.txt must travel inside the XML zip"
     # every served XML on disk for this survey must be in the zip, and vice versa (LICENSE.txt aside)
     slug = xrow["slug"]
     on_disk = {p.name for p in sorted((out / "xml" / slug).glob("*.xml"))}
@@ -186,7 +186,7 @@ def test_manifest_nci_base_flips_tier(tmp_path):
     assert rows, "the CC-BY sample survey should still yield served artifacts"
     # with nci_base set, EVERY served artifact of that survey is tier=nci at the configured base
     assert all(row["tier"] == "nci" for row in rows), \
-        f"nci_base ignored — tiers seen: {sorted({row['tier'] for row in rows})}"
+        f"nci_base ignored - tiers seen: {sorted({row['tier'] for row in rows})}"
     for row in rows:
         assert "://" in row["url"], f"nci url must be absolute: {row['url']}"
         assert row["url"].startswith(base + "/"), f"nci url not under base: {row['url']}"

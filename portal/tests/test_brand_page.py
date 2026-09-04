@@ -158,4 +158,4 @@ def test_about_links_the_brand_page():
         page = (ROOT / name).read_text(encoding="utf-8")
         header = page.split("</header>", 1)[0]
         assert 'href="brand.html"' not in header, \
-            f"{name}: the brand page is not a sixth header item; the header is the five ruled ones"
+            f"{name}: the brand page is not a sixth header item; the header carries five"

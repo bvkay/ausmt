@@ -46,7 +46,7 @@ def test_the_portal_and_the_aggregator_agree_on_the_flag():
     """CROSS-SUBSYSTEM PIN. The producer and the consumer of the label must name the same token. FAILS
     IF either side is edited alone, which is a silent failure everywhere else: the fold keeps working,
     every export simply reclassifies as a single download and nothing goes red."""
-    assert AGGREGATOR.is_file(), "this pin runs from a full checkout (portal-ci lane), never skipped"
+    assert AGGREGATOR.is_file(), "this pin runs from a full checkout, never skipped"
     js, py = _js_flag(), _py_flag()
     assert js == py, (f"portal/src/exports.js writes {js!r} and deploy/scripts/aggregate_stats.py "
                       f"reads {py!r}; a bulk export would be counted as a single download")
@@ -72,7 +72,7 @@ def test_the_public_analytics_page_discloses_the_label():
     reading out of it, and the public analytics page is where that is disclosed. It must name the flag
     exactly, and it must state what is NOT added: no extra request, nothing about who is asking. FAILS
     IF the label ships undisclosed, or if the disclosure is vague about what the flag is."""
-    assert DISCLOSURE.is_file(), "this pin runs from a full checkout (portal-ci lane), never skipped"
+    assert DISCLOSURE.is_file(), "this pin runs from a full checkout, never skipped"
     text = DISCLOSURE.read_text(encoding="utf-8")
     assert f"`{_js_flag()}`" in text, "the disclosure must name the flag it is disclosing"
     assert "No separate request is made for the label" in text, \

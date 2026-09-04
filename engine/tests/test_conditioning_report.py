@@ -53,7 +53,7 @@ def test_aggregate_ccmt_outlier_records_except_complement():
     shared = next(e for e in entries if e["note"] == "shared")
     assert shared["count"] == 27
     assert shared["except"] == ["CC07"], "the single absentee is the small side to enumerate"
-    assert shared["stations"] is None, "27 carriers is too many to list — use the complement"
+    assert shared["stations"] is None, "27 carriers is too many to list - use the complement"
     outlier = next(e for e in entries if e["note"] == "outlier")
     assert outlier["count"] == 1 and outlier["stations"] == ["CC07"]
 

@@ -429,7 +429,7 @@ def test_access_edit_preserves_coordinate_overrides_end_to_end():
     edit.apply_patch(data, patch)
     out_yaml = edit._dump_bytes(data).decode("utf-8")
     assert "coordinate_overrides" in out_yaml, \
-        "an embargo-only access edit deleted coordinate_overrides in the emitted YAML (C42 leak)"
+        "an embargo-only access edit deleted coordinate_overrides in the emitted YAML"
     assert data["access"]["coordinate_overrides"]["SITE1"] == "withheld"
     assert data["access"]["coordinate_overrides"]["SITE2"] == "generalised"
     assert str(data["access"]["embargo_until"]) == "2027-06-30"

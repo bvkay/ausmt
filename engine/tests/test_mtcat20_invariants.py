@@ -321,7 +321,7 @@ def test_reference_checks_actually_detect_violations():
     CATCH a planted violation, or a green scan proves nothing."""
     assert not count_invariant({"survey_id": "s", "n_stations_time_series_verified": 7,
                                 "n_stations": 9}, SPEC_DOC["stations"])
-    assert not projection_shape_ok(SPEC_DOC), "the ratified example satisfies the projection shape"
+    assert not projection_shape_ok(SPEC_DOC), "the schema's own example satisfies the projection shape"
     false_flag = copy.deepcopy(SPEC_DOC)
     false_flag["stations"][0]["has_time_series"] = False
     assert any("not the literal true" in v for v in projection_shape_ok(false_flag))

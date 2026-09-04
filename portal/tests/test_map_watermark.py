@@ -120,7 +120,7 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
     # The clear space, read back off the rule rather than restated: the inset on each edge the mark
     # is near must be at least the mark's own height.
     height = int(re.search(r"height:(\d+)px", PLACEMENT).group(1))
-    assert 28 <= height <= 32, f"the mark's height must sit in the ruled band, got {height}px"
+    assert 28 <= height <= 32, f"the mark's height must sit in the declared band, got {height}px"
     for edge in ("top", "right"):
         inset = int(re.search(edge + r":(\d+)px", PLACEMENT).group(1))
         assert inset >= height, (

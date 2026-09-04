@@ -34,13 +34,13 @@ def test_zero_filled_periods_are_gaps_not_zeros():
     assert periods and comp, "fixture must parse"
     for key in ("RHOXY", "PHSXY", "RHOYX", "PHSYX", "ZXYR", "ZYXR"):
         series = comp.get(key)
-        assert series is not None, f"{key} missing entirely — fixture shape changed?"
+        assert series is not None, f"{key} missing entirely - fixture shape changed?"
         assert series[0] is None and series[1] is None, (
             f"{key}[0:2] are source-MASKED periods and must be None (a gap); got "
-            f"{series[0]!r}, {series[1]!r} — the zero-fill leak (C19b) is back.")
+            f"{series[0]!r}, {series[1]!r} - the zero-fill leak is back.")
         # the rest of the band is real data and must survive the masking untouched
         present = [v for v in series[2:] if v is not None]
-        assert present, f"{key}: masking wiped real data — over-masking"
+        assert present, f"{key}: masking wiped real data - over-masking"
         assert all(v != 0.0 for v in present), f"{key}: unexpected exact zero in real data"
 
 
@@ -67,4 +67,4 @@ def test_phase_never_pinned_at_exact_zero_degrees():
         vals = [v for v in (comp.get(key) or []) if v is not None]
         assert vals, f"{key} empty"
         assert all(not math.isclose(v, 0.0, abs_tol=1e-12) for v in vals), (
-            f"{key} carries an exact-zero phase point — masked period leaking as data")
+            f"{key} carries an exact-zero phase point - masked period leaking as data")

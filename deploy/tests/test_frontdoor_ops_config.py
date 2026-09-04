@@ -35,7 +35,7 @@ def test_frontdoor_admin_is_a_unix_socket_not_a_tcp_port():
     assert len(admin_lines) == 1, f"exactly one admin directive expected: {admin_lines}"
     admin = admin_lines[0]
     assert admin != "admin off", (
-        "admin is off -- `caddy reload` cannot work, so the O1 in-place reload degrades to a restart on "
+        "admin is off -- `caddy reload` cannot work, so the in-place reload degrades to a restart on "
         "every deploy. Use a unix socket instead.")
     assert re.match(r"^admin\s+unix//", admin), (
         f"admin must be on a unix socket (admin unix//...), got: {admin!r}")

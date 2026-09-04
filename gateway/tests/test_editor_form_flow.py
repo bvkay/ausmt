@@ -192,7 +192,7 @@ def test_unchanged_form_submit_produces_no_diff(tmp_path):
             assert r.status_code == 200
             # A true no-op: the runner refuses with "no changes" (nothing reassembled to a diff).
             assert "no changes" in r.text.lower(), (
-                "an unchanged structured-form submit must be a no-op — a diff here means a section "
+                "an unchanged structured-form submit must be a no-op - a diff here means a section "
                 "widget did not round-trip")
     run(_body())
 

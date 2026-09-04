@@ -999,7 +999,7 @@ def test_hub_combined_save_field_error_keeps_other_sections_values(tmp_path):
             assert "new version" not in out, "a failed parse must not reach the preview"
             # We are back on the HUB Metadata tab (not the standalone full form).
             assert 'id="hub-metadata-form"' in out and 'data-hub-section-form="people"' in out
-            assert "?tab=history" in out, "the hub tab strip is missing — this is not the hub"
+            assert "?tab=history" in out, "the hub tab strip is missing - this is not the hub"
             assert "<h1>Edit metadata" not in out, "bounced to the standalone full form"
             # The error is annotated on its OWNING section (the _section_error_html list), and the
             # offending value is preserved there so the curator can see and fix what they typed.

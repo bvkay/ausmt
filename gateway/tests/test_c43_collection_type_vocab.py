@@ -145,4 +145,4 @@ def test_compilation_passes_the_spec_gate_and_renders_selected():
     html = curatorpage._select_html(  # noqa: SLF001
         "f_type", curatorpage._COLLECTION_TYPE_VOCAB, "compilation", blank_label="(unset)")  # noqa: SLF001
     assert '<option value="compilation" selected>compilation</option>' in html
-    assert '<option value="" selected>' not in html, "a ratified value must not render as (unset)"
+    assert '<option value="" selected>' not in html, "a value in the vocabulary must not render as (unset)"

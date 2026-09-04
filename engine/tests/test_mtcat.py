@@ -59,7 +59,7 @@ def _check(node, schema, path="$"):
     if "const" in schema:
         assert node == schema["const"], f"{path}: expected const {schema['const']}"
     if "enum" in schema:
-        assert node in schema["enum"], f"{path}: {node!r} is not in the ratified vocab {schema['enum']}"
+        assert node in schema["enum"], f"{path}: {node!r} is not in the declared vocab {schema['enum']}"
     if "pattern" in schema and isinstance(node, str):
         assert re.search(schema["pattern"], node), f"{path}: {node!r} fails /{schema['pattern']}/"
     if isinstance(node, dict):

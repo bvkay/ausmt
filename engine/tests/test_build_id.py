@@ -110,7 +110,7 @@ def test_build_json_and_provenance_carry_served_tool_versions(tmp_path):
             f"{name} mth5_version {doc.get('mth5_version')!r} != {mth5.__version__!r}"
     # additive only: the identity fields + build_id string format are untouched by the version keys
     assert bj["build_id"] == f"{bj['engine_commit']}-unknown-{bj['generated']}", \
-        "C32 version keys must not alter the C12 build_id string format"
+        "the version keys must not alter the build_id string format"
 
 
 def test_build_json_deterministic_aside_from_generated(tmp_path):

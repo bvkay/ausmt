@@ -85,9 +85,9 @@ def test_preflight_reds_on_non_group_writable_git(tmp_path):
     r = _run_preflight(data)
     out = r.stdout + r.stderr
     assert _FAIL_NEEDLE in out, (
-        f"preflight did not flag the non-g+w .git (incident lock-out) — output:\n{out}")
+        f"preflight did not flag the non-g+w .git (incident lock-out) - output:\n{out}")
     assert "FAIL" in out and "core.sharedRepository group" in out, (
-        f"the FAIL must carry the exact fix command — output:\n{out}")
+        f"the FAIL must carry the exact fix command - output:\n{out}")
 
 
 def test_preflight_passes_on_group_writable_shared_repo_git(tmp_path):
@@ -99,6 +99,6 @@ def test_preflight_passes_on_group_writable_shared_repo_git(tmp_path):
     r = _run_preflight(data)
     out = r.stdout + r.stderr
     assert _FAIL_NEEDLE not in out, (
-        f"a fully group-writable .git must not trip the g+w FAIL — output:\n{out}")
+        f"a fully group-writable .git must not trip the g+w FAIL - output:\n{out}")
     assert _PASS_NEEDLE in out, (
-        f"the shared-group PASS line must render for a hardened .git — output:\n{out}")
+        f"the shared-group PASS line must render for a hardened .git - output:\n{out}")

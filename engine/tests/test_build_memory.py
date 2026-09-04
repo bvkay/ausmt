@@ -203,7 +203,8 @@ def test_peak_rss_is_bounded_per_survey_not_per_corpus(tmp_path):
     assert slope <= SLOPE_MAX_MIB_PER_STATION, (
         f"peak RSS grew {slope:.2f} MiB per station between {counts['A']} and {counts['B']} stations "
         f"({peaks['A']:.0f} -> {peaks['B']:.0f} MiB): the build is holding something per station again "
-        f"(limit {SLOPE_MAX_MIB_PER_STATION} MiB/station; the 2026-08-15 leak measured 7.6)")
+        f"(limit {SLOPE_MAX_MIB_PER_STATION} MiB/station; the leak this pin was written for "
+        "measured 7.6)")
 
 
 @pytest.mark.skipif(not hasattr(os, "wait4"), reason="os.wait4 (POSIX rusage) not available on this platform")

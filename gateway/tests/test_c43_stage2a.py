@@ -69,7 +69,7 @@ def test_quadrant_slack_matches_engine_gate():
         sys.path.remove(str(eng))
     assert phaseqc.QUADRANT_SLACK_DEG == conv.QUADRANT_SLACK_DEG, (
         f"workbench slack {phaseqc.QUADRANT_SLACK_DEG} != engine gate slack "
-        f"{conv.QUADRANT_SLACK_DEG} (_conventions.py) — the two verdicts have diverged")
+        f"{conv.QUADRANT_SLACK_DEG} (_conventions.py) - the two verdicts have diverged")
 
 
 def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
@@ -88,8 +88,8 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
         assert phaseqc.true_phi_yx(round(stored, 1)) is not None
         assert abs(phaseqc.true_phi_yx(round(stored, 1)) - true_yx) < 0.05, (true_yx, stored)
         assert phaseqc.in_quadrant_yx(round(stored, 1)) is True, (
-            f"true φyx={true_yx} (stored t[4]={round(stored, 1)}) must classify IN Q3 after the +180 "
-            "unwrap — reading the stored value directly would mis-classify it")
+            f"true phi_yx={true_yx} (stored t[4]={round(stored, 1)}) must classify in the third quadrant "
+            "unwrap - reading the stored value directly would mis-classify it")
 
 
 def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():
@@ -156,14 +156,14 @@ def test_stations_js_mirrors_phaseqc_constants():
     assert "YX_SHIFT = 180.0" in js, "the +180 presentation shift must be in the JS mirror"
     assert "Q1_LO = 0.0" in js and "Q1_HI = 90.0" in js
     assert "Q3_LO = -180.0" in js and "Q3_HI = -90.0" in js
-    assert "SLACK = 10.0" in js, "the engine-gate slack must be in the JS mirror (fix-round F4)"
+    assert "SLACK = 10.0" in js, "the engine-gate slack must be in the JS mirror"
     # FLOORED modulo: the CPython float-% form, never bare truncated %.
     assert "function floormod" in js and "if (r !== 0 && r < 0) r += y" in js
     # trueYx must SUBTRACT the shift then wrap (the unwrap), and inQ3 must go through trueYx + mapYx.
     assert "wrap180(stored - YX_SHIFT)" in js, "φyx must be unwrapped (stored - shift), not read raw"
     assert "var v = trueYx(stored)" in js, "inQ3 must classify the UNWRAPPED true phase"
     assert "function mapYx" in js and "mapYx(v)" in js, "yx must classify on the seam-mapped axis"
-    assert "function medianOf" in js, "the median verdict (F4c) must be in the JS mirror"
+    assert "function medianOf" in js, "the median verdict must be in the JS mirror"
 
 
 def test_combined_phase_plot_supersedes_separate_plots_source():
@@ -186,8 +186,8 @@ def test_combined_phase_plot_supersedes_separate_plots_source():
     assert "function verdictStrip(" not in js, "the single-component verdict strip is superseded"
     # The combined plot is the FULL ±180 axis carrying both series, with both bands shaded by band ownership.
     assert "var lo = -180, hi = 180;" in js, "the combined phase axis must span the full ±180"
-    assert "comp: 'xy', lo: Q1_LO, hi: Q1_HI" in js, "Q1 band owned by xy"
-    assert "comp: 'yx', lo: Q3_LO, hi: Q3_HI" in js, "Q3 band owned by yx"
+    assert "comp: 'xy', lo: Q1_LO, hi: Q1_HI" in js, "the first band is the xy component"
+    assert "comp: 'yx', lo: Q3_LO, hi: Q3_HI" in js, "the third band is the yx component"
     # renderPlots order: ρa, combined phase (+ its verdict strip), tipper.
     m = re.search(r"function renderPlots\(host, t\)\s*\{(.*?)\n  \}", js, re.DOTALL)
     assert m, "renderPlots must exist"
@@ -287,7 +287,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             # control) is wide too.
             r2 = await client.get("/gateway/curator/survey/s2a-survey")
             assert r2.status_code == 200 and 'class="wrap wide"' in r2.text, (
-                "C43 FR2-1: every hub tab fills the width (the old overview-not-wide control retired)")
+                "every hub tab fills the width")
     run(_body())
 
 
@@ -310,7 +310,7 @@ def test_stations_split_css_layout_mechanism_present():
     # drops to ROW 2 silently. ALL THREE must pin grid-row:1. FAILS IF any grid-row:1 is dropped.
     assert ".stations-split{display:grid" in head, "the split must be a CSS grid"
     assert "grid-template-columns:minmax(21rem,25rem) minmax(0,1fr) minmax(0,1fr)" in head, (
-        "wide: three columns — the table column fits its columns un-truncated (21-25rem), facts + "
+        "wide: three columns - the table column fits its columns un-truncated (21-25rem), facts + "
         "plots split the rest")
     assert ".stations-split .st-list{grid-column:1;grid-row:1}" in head, (
         "the TABLE must be pinned to column 1 ROW 1 (grid auto-placement drops it to row 2 otherwise)")

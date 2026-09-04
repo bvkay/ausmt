@@ -34,7 +34,7 @@ def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
             tokens = m.group(1).split()
             assert "allow-scripts" in tokens, "iframe must allow-scripts so the portal renders"
             assert "allow-same-origin" not in tokens, (
-                "iframe MUST NOT allow-same-origin — that puts submitter JS in the curator origin")
+                "iframe MUST NOT allow-same-origin - that puts submitter JS in the curator origin")
     run(_body())
 
 
@@ -51,7 +51,7 @@ def test_no_unsandboxed_navigation_to_preview(tmp_path):
             # No <a ... href="...preview...">. The preview appears ONLY as an iframe src.
             anchors = re.findall(r'<a\b[^>]*href="([^"]*)"', page)
             assert not any("/preview/" in href for href in anchors), (
-                "an anchor navigates to the preview — that escapes the sandbox")
+                "an anchor navigates to the preview - that escapes the sandbox")
     run(_body())
 
 

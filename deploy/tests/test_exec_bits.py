@@ -69,8 +69,8 @@ def test_all_tracked_shell_scripts_are_executable():
     assert modes, "expected at least one tracked *.sh file; git ls-files returned none"
     not_exec = {p: m for p, m in modes.items() if m != "100755"}
     assert not_exec == {}, (
-        "tracked shell scripts must be git mode 100755 (executable) — these are not, so a direct "
-        f"`./<script>` invocation would exit 126 (the 2026-07-10 incident): {not_exec}")
+        "tracked shell scripts must be git mode 100755 (executable) - these are not, so a direct "
+        f"`./<script>` invocation would exit 126: {not_exec}")
 
 
 def test_deploy_shell_scripts_are_executable():
@@ -82,5 +82,5 @@ def test_deploy_shell_scripts_are_executable():
     assert deploy, "expected tracked *.sh files under deploy/; found none"
     not_exec = {p: m for p, m in deploy.items() if m != "100755"}
     assert not_exec == {}, (
-        "deploy/ shell scripts must be git mode 100755 — these are not (exit-126 on the box, "
-        f"2026-07-10): {not_exec}")
+        "deploy/ shell scripts must be git mode 100755 - these are not, so they exit 126 on the "
+        f"box: {not_exec}")

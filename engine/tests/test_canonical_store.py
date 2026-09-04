@@ -148,4 +148,4 @@ def test_served_and_canonical_xml_citation_is_the_org_not_ausmt(tmp_path):
     for xp in served + canon_xml:
         a = _authors(xp)
         assert a == "Geoscience Australia", f"{xp.name}: authors={a!r}"
-        assert a != "AusMT", f"{xp.name}: citation authors are the portal brand — fabricated"
+        assert a != "AusMT", f"{xp.name}: citation authors are the portal brand - fabricated"

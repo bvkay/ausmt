@@ -63,5 +63,5 @@ def test_neither_call_site_hand_builds_a_validator_argv():
         bespoke = 'sys.executable, str(vfile)' in src or 'sys.executable, str(validator_file), str(target), "--json"' in src.replace(
             "return [sys.executable, str(validator_file), str(target_dir), \"--json\", str(report_path)]", "")
         assert not bespoke, (
-            f"{Path(mod.__file__).name} hand-builds a validator argv again — route it through "
-            "runner.validator_argv (M7 single-source).")
+            f"{Path(mod.__file__).name} hand-builds a validator argv again - route it through "
+            "runner.validator_argv, the single source.")

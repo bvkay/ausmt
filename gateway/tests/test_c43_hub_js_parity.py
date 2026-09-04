@@ -48,8 +48,8 @@ NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(
     NODE is None,
-    reason="node not present — executable JS parity pins need the node binary "
-           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must red the lane)")
+    reason="node not present - executable JS parity pins need the node binary "
+           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must fail loudly)")
 
 
 def _has_engine() -> bool:
@@ -132,7 +132,7 @@ def _conjugate_all(text: str) -> str:
 
 
 def _with_dataid(text: str, station_id: str) -> str:
-    assert 'DATAID="A1"' in text, "sample EDI drifted — the fixture rewrites DATAID=\"A1\""
+    assert 'DATAID="A1"' in text, "sample EDI drifted - the fixture rewrites DATAID=\"A1\""
     return text.replace('DATAID="A1"', f'DATAID="{station_id}"')
 
 
@@ -153,7 +153,7 @@ def warn_report(tmp_path_factory):
     text = (sample / "transfer_functions" / "edi" / "Vulcan_A1.edi").read_text(encoding="latin-1")
     sy = (sample / "survey.yaml").read_text(encoding="utf-8")
     assert "slug: sample-survey" in sy and 'name: "CI Sample Survey"' in sy, (
-        "sample survey.yaml drifted — the fixture derives from its slug/name lines")
+        "sample survey.yaml drifted - the fixture derives from its slug/name lines")
     pkg = base / "package" / SLUG
     edi = pkg / "transfer_functions" / "edi"
     edi.mkdir(parents=True)
@@ -602,7 +602,7 @@ process.stdout.write(JSON.stringify(v.map(function (x) { return shortSha(x); }))
     got = _run_node(tmp_path, driver, vectors)
     assert got[0] == real_sha[:4] + "…" + real_sha[-2:]
     assert got[1] == "ABCD…56", "12-hex boundary truncates"
-    assert got[2] == "abcdef12345", "11 hex chars: below the floor — verbatim"
+    assert got[2] == "abcdef12345", "11 hex chars: below the floor - verbatim"
     assert got[3] == "not-a-hash", "non-hex: verbatim, never hidden"
     assert got[4] == "" and got[5] == ""
 
@@ -687,7 +687,7 @@ def test_stations_list_merged_latlon_and_portal_link_source():
     # as a REGEX (escaped slashes: #\/station\/), drawer.js as the writing literal.
     main_js = (_ENGINE_DIR.parent / "portal" / "src" / "main.js").read_text(encoding="utf-8")
     assert re.search(r"#\\?/station\\?/", main_js), \
-        "portal deep-link route gone — the hub link would dangle"
+        "portal deep-link route gone - the hub link would dangle"
 
 
 # ==================================================================================================
@@ -890,7 +890,7 @@ process.stdout.write(JSON.stringify(out));
             f"{sid}: the +170..+180 seam continuation band (φyx wraps ±180) must be present")
         for b in bands:
             assert not (b["lo"] < 0 < b["hi"]), (
-                f"{sid}: no band may cross 0 — that would merge Q1 and Q3 into one owner: {b}")
+                f"{sid}: no band may cross 0 - that would merge the two quadrants into one band: {b}")
         # verdict: BOTH components (φxy then φyx), out flag = median-out.
         verdict = got[sid]["verdict"]
         assert [p["comp"] for p in verdict] == ["φxy", "φyx"], (sid, verdict)

@@ -27,8 +27,8 @@ NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(
     NODE is None,
-    reason="node not present — executable JS parity pin needs the node binary "
-           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must red the lane)")
+    reason="node not present - executable JS parity pin needs the node binary "
+           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must fail loudly)")
 
 
 def _extract_js_function(js: str, name: str) -> str:

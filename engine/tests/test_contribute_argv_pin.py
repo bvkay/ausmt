@@ -49,7 +49,7 @@ def test_build_portal_still_offers_every_flag_contribute_uses():
     missing = [f for f in CONTRIBUTE_BUILD_PORTAL_FLAGS if f not in present]
     assert not missing, (
         f"build_portal no longer offers flags the surveys contribute.py depends on: {missing}. "
-        "Either restore the flag or coordinate a contribute.py change in ausmt-surveys (M6).")
+        "Either restore the flag or coordinate a contribute.py change in ausmt-surveys.")
 
 
 def test_vendored_flags_match_live_contribute():
@@ -64,8 +64,8 @@ def test_vendored_flags_match_live_contribute():
     # Isolate the `[sys.executable, "-m", "extract.build_portal", ...]` list literal and read the
     # "--flag" string tokens inside it (values like str(...) are ignored — we only pin flag NAMES).
     m = re.search(r'"-m",\s*"extract\.build_portal"(.*?)\]', src, re.DOTALL)
-    assert m, "could not locate contribute.py's extract.build_portal argv list — its shape changed"
+    assert m, "could not locate contribute.py's extract.build_portal argv list - its shape changed"
     live_flags = tuple(dict.fromkeys(re.findall(r'"(--[A-Za-z][A-Za-z0-9-]*)"', m.group(1))))
     assert live_flags == CONTRIBUTE_BUILD_PORTAL_FLAGS, (
         f"contribute.py's build_portal flags {live_flags} drifted from the vendored pin "
-        f"{CONTRIBUTE_BUILD_PORTAL_FLAGS} — update CONTRIBUTE_BUILD_PORTAL_FLAGS (M6).")
+        f"{CONTRIBUTE_BUILD_PORTAL_FLAGS} - update CONTRIBUTE_BUILD_PORTAL_FLAGS.")

@@ -130,5 +130,5 @@ def test_no_web_manifest_was_smuggled_in():
     for name in CHROME_PAGES:
         text = (ROOT / name).read_text(encoding="utf-8")
         assert 'rel="manifest"' not in text, (
-            f"{name}: an installable-PWA manifest is its own owner ruling, not a side effect of the "
+            f"{name}: an installable-PWA manifest is its own decision, not a side effect of the "
             "icon work")

@@ -85,8 +85,8 @@ def test_preflight_reds_on_untracked_survey_dir(tmp_path):
     data = _make_tree(tmp_path, leave_untracked=True)
     r = _run_preflight(data)
     out = r.stdout + r.stderr
-    assert _FAIL_NEEDLE in out, f"preflight did not flag the untracked survey dir — output:\n{out}"
-    assert "test-2026" in out, f"the FAIL must name the offending dir — output:\n{out}"
+    assert _FAIL_NEEDLE in out, f"preflight did not flag the untracked survey dir - output:\n{out}"
+    assert "test-2026" in out, f"the FAIL must name the offending dir - output:\n{out}"
 
 
 def test_preflight_passes_on_clean_survey_tree(tmp_path):
@@ -96,5 +96,5 @@ def test_preflight_passes_on_clean_survey_tree(tmp_path):
     data = _make_tree(tmp_path, leave_untracked=False)
     r = _run_preflight(data)
     out = r.stdout + r.stderr
-    assert _FAIL_NEEDLE not in out, f"a clean survey tree must not trip the untracked FAIL — output:\n{out}"
-    assert _PASS_NEEDLE in out, f"the clean-tree PASS line must render — output:\n{out}"
+    assert _FAIL_NEEDLE not in out, f"a clean survey tree must not trip the untracked FAIL - output:\n{out}"
+    assert _PASS_NEEDLE in out, f"the clean-tree PASS line must render - output:\n{out}"

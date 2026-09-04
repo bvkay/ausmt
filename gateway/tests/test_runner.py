@@ -886,7 +886,7 @@ def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeyp
     for cmd in engine_cmds:
         for flag in ("--incremental", "--cache-dir", "--cache-mode"):
             assert flag not in cmd, \
-                f"gateway runner passed the C18 cache flag {flag} to the engine (must stay non-incremental): {cmd}"
+                f"gateway runner passed the cache flag {flag} to the engine (must stay non-incremental): {cmd}"
 
 
 # --------------------------------------------------------------------------------------------------

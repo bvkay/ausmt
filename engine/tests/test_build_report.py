@@ -156,7 +156,7 @@ def test_report_does_not_disturb_canonical_provenance(tmp_path):
         assert isinstance(per_station, dict), "provenance conditioning is a per-station map, unchanged"
         for _station, notes in per_station.items():
             assert isinstance(notes, list) and all(isinstance(x, str) for x in notes), \
-                "each station keeps its ordered list of note strings — the canonical record is unchanged"
+                "each station keeps its ordered list of note strings - the canonical record is unchanged"
 
     # station.json also still carries the raw per-station notes (persisted, not just aggregated)
     any_station = False

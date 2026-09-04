@@ -61,7 +61,7 @@ def _log_block() -> str:
     """The text of the top-level `log { ... }` block (brace-matched). Fails the test if absent."""
     text = _caddyfile_text()
     m = re.search(r"\n\tlog \{", text)
-    assert m is not None, "the Caddyfile must declare a `log` block for access logging (C45 D5)"
+    assert m is not None, "the Caddyfile must declare a `log` block for access logging"
     start = m.start()
     # brace-match from the opening brace
     i = text.index("{", start)
@@ -155,7 +155,7 @@ def test_access_log_has_rotation_and_7_day_retention():
     block = _log_block()
     assert "output file" in block, "the log must write to a file on the logs volume"
     assert re.search(r"roll_keep_for\s+168h", block), \
-        "retention must be 7 days (roll_keep_for 168h) — the raw log is a short debugging tail (D2)"
+        "retention must be 7 days (roll_keep_for 168h): the raw log is a short debugging tail"
     assert re.search(r"roll_keep\s+\d+", block), "a bounded roll_keep must cap the number of rolled files"
 
 
@@ -175,7 +175,7 @@ def test_portal_promise_matches_logging_behaviour():
     public promise and the implementation diverge (a public commitment must not lie)."""
     text = _PROMISE.read_text(encoding="utf-8").lower()
     assert "no ips stored" not in text, \
-        "the absolute 'no IPs stored' claim is now false (a masked log line lands) — it must be amended"
+        "the absolute 'no IPs stored' claim is now false (a masked log line lands) - it must be amended"
     assert "truncate" in text or "mask" in text, "the promise must state IPs are truncated/masked at the edge"
     assert "/24" in text, "the promise should state the /24 truncation (honest specificity)"
     assert "no cookies" in text, "the promise must state no cookies"
@@ -230,7 +230,7 @@ def _validate(path: Path) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.mark.skipif(shutil.which("caddy") is None,
-                    reason="no caddy binary on PATH — masking is config-asserted; caddy validate runs in CI")
+                    reason="no caddy binary on PATH - masking is config-asserted; caddy validate runs in CI")
 def test_caddyfile_validates_with_caddy(tmp_path):
     """LIVE-VALIDATE LEG. `caddy validate` accepts the Caddyfile (the log block + ip_mask filter +
     trusted_proxies parse under the shipped Caddy). FAILS IF any is syntactically invalid for the
@@ -281,7 +281,7 @@ def _extract_block(text: str, opener: str) -> str:
 
 
 @pytest.mark.skipif(shutil.which("caddy") is None,
-                    reason="no caddy binary — the masked-log-line pin is the ubuntu/CI leg (wait-for-greens)")
+                    reason="no caddy binary - the masked-log-line pin is the ubuntu/CI leg (wait-for-greens)")
 def test_real_caddy_masks_forwarded_client_ip_in_the_log():
     """HEADLINE - REAL-CADDY RUNTIME PIN (ubuntu/CI, wait-for-greens). A request carrying
     `X-Forwarded-For: 203.0.113.7` through a running Caddy using the SHIPPED log filter + trusted_proxies

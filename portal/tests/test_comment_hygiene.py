@@ -404,6 +404,14 @@ HASH_SUFFIXES = {".sh", ".bash", ".yml", ".yaml", ".service", ".timer", ".conf",
 HASH_NAMES = {"Caddyfile", "Makefile", "Dockerfile", ".gitignore", ".dockerignore"}
 
 
+def source_text(path):
+    """One file's text, with a leading byte-order mark removed. Python's own loader strips a BOM, so
+    a module that carries one imports and its tests run; ast.parse does not, so the AST half of this
+    extractor raises on it and the file's docstrings become invisible. A surface a scanner cannot
+    read reports clean, which is the one failure this module may not have."""
+    return path.read_text(encoding="utf-8-sig")
+
+
 def comments(path, text):
     """Every comment in one file, as (line number, text), each counted once."""
     suffix = path.suffix.lower()
@@ -423,7 +431,7 @@ def comments(path, text):
 
 
 def comment_bytes(path):
-    text = path.read_text(encoding="utf-8")
+    text = source_text(path)
     return sum(len(body.encode("utf-8")) for _, body in comments(path, text))
 
 
@@ -962,7 +970,7 @@ def offences(files, cite_contract=False, root=None):
     reader, and a scan that reads each line alone is defeated by the line break between them."""
     found = []
     for path in files:
-        text = path.read_text(encoding="utf-8")
+        text = source_text(path)
         for lineno, comment in comment_runs(path, text):
             labels = labels_for(comment, cite_contract=cite_contract)
             if labels:
@@ -1160,7 +1168,7 @@ def shape_offences(files, root=None):
     """Every comment whose SHAPE is broken across a set of files, as report lines."""
     found = []
     for path in files:
-        text = path.read_text(encoding="utf-8")
+        text = source_text(path)
         where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
         symbols = symbols_in(text)
         names = names_written_inside_a_line(path, text)
@@ -1260,7 +1268,7 @@ def history_offences(files, root=None):
     """Every shipped comment that narrates what was removed, as report lines."""
     found = []
     for path in files:
-        text = path.read_text(encoding="utf-8")
+        text = source_text(path)
         where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
         for lineno, comment in comment_runs(path, text):
             shapes = history_shapes(comment)
@@ -1301,7 +1309,7 @@ def is_operator_tool(path):
 def echo_strings(path):
     """(line number, text) for every literal a shell script echoes to the operator."""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = source_text(path).splitlines()
     except (UnicodeDecodeError, OSError):
         return []
     found = []
@@ -1322,7 +1330,7 @@ def operator_strings(path):
     if path.suffix.lower() != ".py":
         return []
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(source_text(path))
     except (SyntaxError, UnicodeDecodeError):
         return []
     prints = is_operator_tool(path)
@@ -1344,6 +1352,94 @@ def operator_strings(path):
             if (keyword.arg in ARGPARSE_TEXT and isinstance(value, ast.Constant)
                     and isinstance(value.value, str)):
                 found.append((value.lineno, value.value))
+    return found
+
+
+# THE MESSAGES A FAILURE PRINTS. An assertion message and a skip reason are read by whoever is
+# looking at a red run, which is the same reader a comment has, and no guard above sees them: a
+# message is a bare literal and a reason is a keyword argument on a marker. They keep their
+# semantics, which is what tells the reader what broke; what they drop is the audit trail. The dash
+# rule reaches them because a reason is printed on a terminal, where the glyph is not always legible.
+SKIP_CALLS = ("skip", "xfail")
+REASON_CALLS = ("skip", "xfail", "skipif")
+DASHES = ("\u2014", "\u2013")
+
+
+def _static_text(node):
+    """The literal text of a string node, an f-string's constant parts included."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(v.value for v in node.values
+                       if isinstance(v, ast.Constant) and isinstance(v.value, str))
+    return None
+
+
+def message_strings(path):
+    """(line number, text) for every assertion message and every skip or xfail reason in a module."""
+    if path.suffix.lower() != ".py":
+        return []
+    try:
+        tree = ast.parse(source_text(path))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return []
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assert) and node.msg is not None:
+            text = _static_text(node.msg)
+            if text:
+                found.append((node.msg.lineno, text))
+            continue
+        if not isinstance(node, ast.Call):
+            continue
+        name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        if name not in REASON_CALLS:
+            continue
+        # skipif's first positional argument is the CONDITION, so only skip and xfail are read
+        # positionally; all three carry the reason as a keyword.
+        if name in SKIP_CALLS:
+            for arg in node.args:
+                text = _static_text(arg)
+                if text:
+                    found.append((arg.lineno, text))
+        for keyword in node.keywords:
+            if keyword.arg != "reason":
+                continue
+            text = _static_text(keyword.value)
+            if text:
+                found.append((keyword.value.lineno, text))
+    return found
+
+
+# A message is held to the AUDIT TRAIL, not to the whole comment vocabulary. A failure message says
+# what changed, so "no longer" and "used to" are the finding rather than a history note; a TODO or a
+# placeholder inside one is a test's own scaffolding; and a pin may cite the contract it holds. What
+# a message may not carry is who decided, when, and under which work item, wave, round or lane.
+MESSAGE_LABELS = (
+    "decision-owner language", "ruling language", "approval language", "wave identifier",
+    "work-item identifier", "lane name", "design-history vocabulary", "old-to-new history",
+    "dated note", "branch name", "review or slice identifier", "round-of-work identifier",
+    "design-document citation",
+)
+# A message that NAMES the glyph it is about keeps it: the dash inside a quoted run is the data the
+# assertion is talking about, not the message's own punctuation.
+QUOTED_DASH = re.compile(r"['\"`][^'\"`\n]*[\u2014\u2013][^'\"`\n]*['\"`]")
+
+
+def message_offences(files, root=None):
+    """Every message or reason that carries the audit trail or a typographic dash, as report lines."""
+    found = []
+    for path in files:
+        where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+        for lineno, text in message_strings(path):
+            labels = [label for label in labels_for(text, cite_contract=True)
+                      if label in MESSAGE_LABELS]
+            if any(dash in text for dash in DASHES) and any(
+                    dash in QUOTED_DASH.sub("", text) for dash in DASHES):
+                labels.append("an em or en dash")
+            if labels:
+                found.append("%s:%s: %s: %s"
+                             % (where, lineno, ", ".join(labels), flattened(text)[:110]))
     return found
 
 
@@ -1624,7 +1720,7 @@ def test_a_shipped_comment_is_two_sentences_long_at_most():
     enumerated list above."""
     over = []
     for path in shipped_html() + shipped_js() + shipped_page_scripts():
-        over += over_length(path, path.read_text(encoding="utf-8"), root=ROOT)
+        over += over_length(path, source_text(path), root=ROOT)
     assert not over, (
         f"{len(over)} comment(s) on the shipped tier run past the length clause "
         f"({COMMENT_SENTENCES} sentences, {COMMENT_CAP} bytes); move the reasoning to "
@@ -1681,7 +1777,7 @@ def test_the_docs_page_the_pointers_name_exists_and_carries_a_section_per_file()
     text = page.read_text(encoding="utf-8")
     missing = []
     for path in shipped_html() + shipped_js() + shipped_page_scripts():
-        body = path.read_text(encoding="utf-8")
+        body = source_text(path)
         if DOCS_POINTER.search(" ".join(bare(body).split()) + " ") or f"portal internals, {path.name}" in body:
             rel = str(path.relative_to(ROOT))
             if f"## {rel}" not in text:
@@ -1726,7 +1822,7 @@ def test_every_repository_path_a_comment_names_exists():
         if path.name == SELF or "vendored_validation" in path.parts:
             continue
         try:
-            text = path.read_text(encoding="utf-8")
+            text = source_text(path)
         except (UnicodeDecodeError, OSError):
             continue
         for lineno, comment in comments(path, text):
@@ -1755,7 +1851,7 @@ def test_every_document_a_comment_names_is_in_this_repository():
         if path.name == SELF or "vendored_validation" in path.parts:
             continue
         try:
-            text = path.read_text(encoding="utf-8")
+            text = source_text(path)
         except (UnicodeDecodeError, OSError):
             continue
         commentary = "\n".join(body for _, body in comments(path, text))
@@ -1795,7 +1891,7 @@ def test_every_docs_pointer_names_a_page_that_exists():
         if path.name == SELF or path.is_relative_to(ROOT / "docs"):
             continue
         try:
-            text = path.read_text(encoding="utf-8")
+            text = source_text(path)
         except (UnicodeDecodeError, OSError):
             continue
         if "docs:" not in text:
@@ -1820,7 +1916,7 @@ def test_every_stylesheet_pointer_names_a_section_the_docs_page_carries():
     text = page.read_text(encoding="utf-8")
     missing, found = [], 0
     for path in shipped_html():
-        body = path.read_text(encoding="utf-8")
+        body = source_text(path)
         for match in STYLE_POINTER.finditer(body):
             found += 1
             if f"#### {match.group(2)}" not in text:
@@ -1846,7 +1942,7 @@ def test_every_surface_class_is_actually_read():
     for label, files in SURFACES.items():
         found = files()
         assert found, f"{label}: no files matched, so this sweep would pass over nothing"
-        seen = sum(len(comments(p, p.read_text(encoding='utf-8'))) for p in found)
+        seen = sum(len(comments(p, source_text(p))) for p in found)
         if seen == 0:
             empty.append(f"{label}: {len(found)} file(s), zero comments extracted")
     assert not empty, "the extractor read no comments at all on:\n" + "\n".join(empty)
@@ -2471,7 +2567,7 @@ def test_every_pointer_section_names_a_heading_the_docs_page_carries():
         if path.name == SELF or path.is_relative_to(ROOT / "docs"):
             continue
         try:
-            text = path.read_text(encoding="utf-8")
+            text = source_text(path)
         except (UnicodeDecodeError, OSError):
             continue
         if "See docs:" not in text:
@@ -2843,3 +2939,34 @@ def test_a_path_outside_this_repository_is_an_unresolvable_pointer(tmp_path):
     either = tmp_path / "either.py"
     either.write_text('"""One of LICENSE.md/README.md must be present."""\n', encoding="utf-8")
     assert not offences([either]), "an either-or list of file names was read as a path"
+
+
+def test_every_python_file_in_a_swept_class_parses():
+    """A scanner that cannot read a file reports it clean. Half this extractor is the syntax tree,
+    so a module ast.parse refuses is swept for its # comments and NOT for its docstrings, and the
+    class still reads zero. Python's own loader is more forgiving than ast.parse (a byte-order mark
+    is the case that made this real), so the two must be held to agree here."""
+    broken = []
+    for producer in SURFACES.values():
+        for path in producer():
+            if path.suffix.lower() != ".py":
+                continue
+            try:
+                ast.parse(source_text(path))
+            except SyntaxError as exc:
+                broken.append("%s: %s" % (path.relative_to(ROOT), exc))
+    assert not broken, (
+        "the syntax-tree half of the extractor cannot read these, so their docstrings are swept by "
+        "nothing:\n" + "\n".join(sorted(set(broken))))
+
+
+def test_the_messages_a_failure_prints_carry_no_audit_trail():
+    """An assertion message and a skip reason are what a reader of a red run is handed, so they are
+    held to the audit trail the way a comment is: not who decided, when, or under which work item,
+    wave, round or lane. Their SEMANTICS are untouched, because the message is what says which
+    invariant broke; and the em and en dash go, because a reason is printed on a terminal where the
+    glyph is not always legible. A message may still cite the contract a pin traces itself by."""
+    hits = message_offences(guard_tests(), root=ROOT)
+    assert not hits, (
+        f"{len(hits)} assertion message(s) or skip reason(s) under portal/tests carry the audit "
+        "trail or a typographic dash:\n" + "\n".join(hits))

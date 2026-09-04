@@ -184,7 +184,7 @@ def test_about_references_no_nonexistent_federation_doc():
     reference."""
     raw = ABOUT.read_text(encoding="utf-8")
     assert "FEDERATION.md" not in raw, (
-        "about.html must not reference FEDERATION.md — that file does not exist in the repository")
+        "about.html must not reference FEDERATION.md - that file does not exist in the repository")
     assert "https://ausmt.readthedocs.io/en/latest/reference/mtcat-schema/" in raw, (
         "the honest MTCAT specification reference must survive the FEDERATION.md removal (over-deletion)")
     assert "MTCAT v1.0" not in raw, (
@@ -358,7 +358,7 @@ def test_no_page_header_keeps_the_retired_how_to_use_entry():
         header = raw.split("<header>", 1)[1].split("</header>", 1)[0]
         header = re.sub(r"<!--.*?-->", "", header, flags=re.S)
         assert "How to use AusMT" not in header, (
-            f"{path.name}: the 'How to use AusMT' header entry was retired in the docs wave")
+            f"{path.name}: the 'How to use AusMT' header entry stays out of the header")
         assert 'id="howToUse"' not in raw, (
             f"{path.name}: #howToUse was retired with the help panel it opened")
 

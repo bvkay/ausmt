@@ -108,9 +108,9 @@ def test_drawer_copy_removals(tmp_path):
     # check" line it carried) are reversibly commented out in drawer.js. These now assert ABSENCE (flipped from
     # the prior presence pins). Restore both assertions to `in`/`== 1` when the screening surface is re-enabled.
     assert "Screening indicators" not in station, \
-        "station still renders the (owner-hidden) 'Screening indicators' section"
+        "station still renders the withdrawn 'Screening indicators' section"
     assert station.count("Automated completeness/smoothness check") == 0, \
-        "station still renders the (owner-hidden) per-station completeness/smoothness line"
+        "station still renders the withdrawn per-station completeness/smoothness line"
 
     # (d) dataset-maturity AGGREGATE removed: heading, star summary row, explainer sentence.
     assert "Dataset maturity" not in station, \

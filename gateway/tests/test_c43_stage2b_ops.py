@@ -197,7 +197,7 @@ def test_build_detail_renders_a4_cache_counters(tmp_path):
             r = await client.get("/gateway/curator/serve/build/20260710T032000Z")
             assert r.status_code == 200
             html = r.text
-            assert "cafef00dbeef" in html, "the salt_fp (C18-A4) must render"
+            assert "cafef00dbeef" in html, "the salt fingerprint must render"
             assert '<span class="fk">Write errors</span><span class="fv">2</span>' in html
             assert '<span class="fk">Read errors</span><span class="fv">3</span>' in html
             # unknown ref -> a 'no such build' page, never a 500 or a traversal.

@@ -35,8 +35,8 @@ NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(
     NODE is None,
-    reason="node not present — executable JS parity pins need the node binary "
-           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must red the lane)")
+    reason="node not present - executable JS parity pins need the node binary "
+           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must fail loudly)")
 
 
 # --------------------------------------------------------------------------------------------------
@@ -279,7 +279,7 @@ def engine_corpus(tmp_path_factory):
     surveys = {"burra-2017": "Burra Reconnaissance 2017", "burra-2017-18": "Burra 2017-18"}
     sy = (sample / "survey.yaml").read_text(encoding="utf-8")
     assert "slug: sample-survey" in sy and 'name: "CI Sample Survey"' in sy, (
-        "sample survey.yaml drifted — the two-survey fixture derives from its slug/name lines")
+        "sample survey.yaml drifted - the two-survey fixture derives from its slug/name lines")
     pkg = base / "package"
     for slug, label in surveys.items():
         d = pkg / slug
@@ -340,7 +340,7 @@ process.stdout.write(JSON.stringify(out));
         rows = got[slug]
         assert sorted(r["id"] for r in rows) == built, (
             f"slug {slug!r}: filter selected {sorted(r['id'] for r in rows)} but the engine built "
-            f"{built} (products/{slug}/) — a missed station blanks the Stations tab; an extra one "
+            f"{built} (products/{slug}/) - a missed station blanks the Stations tab; an extra one "
             f"leaks a sibling survey across the au.<slug>. boundary")
         for r in rows:
             assert r["ausmt_id"].startswith(f"au.{slug}."), (slug, r)
@@ -377,7 +377,7 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
     assert produced, "fixture sanity: the engine produced no slug-keyed products"
     for slug in produced:
         assert bp.safe_component(slug) == slug, (
-            f"engine-produced slug {slug!r} is not a safe_component fixed point — "
+            f"engine-produced slug {slug!r} is not a safe_component fixed point - "
             f"'au.' + slug + '.' would no longer prefix-match its own ausmt_ids")
         publish.validate_slug(slug)
     # (2) Every on-disk package slug in the fixture tree (engine/data/<pkg>/survey.yaml), read the
@@ -511,7 +511,7 @@ def test_frame_panel_renders_words_and_collapsed_raw_json():
     js = curatorpage.STATIONS_JS
     assert "function frameWords(" in js, "the pure frame-words builder must exist"
     assert "frameWords(station.frame)" in js, "factsPanel must word the served frame"
-    assert "function frameRows(" not in js, "the superseded S2a fact-row table must stay replaced"
+    assert "function frameRows(" not in js, "the superseded fact-row table must stay replaced"
     assert "el('details')" in js, "the raw station.json must be kept in a collapsed <details>"
     assert "el('summary', 'raw station.json')" in js, "the details summary labels the raw JSON"
     # The raw JSON is still present, verbatim, via textContent (never innerHTML) — the WHOLE

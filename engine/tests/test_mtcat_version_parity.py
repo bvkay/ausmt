@@ -222,7 +222,7 @@ DOCS_INDEX = REPO / "docs" / "docs" / "reference" / "index.md"
 
 @pytest.mark.skipif(not DOCS_INDEX.is_file(),
                     reason="engine image build: docs tree not shipped "
-                           "(designed topology; the docs surface is pinned from checkout lanes)")
+                           "(designed topology; the docs surface is pinned from the checkout workflows)")
 def test_docs_current_version_display_agrees():
     """Statement 8: the docs reference index states which schema version the documentation
     describes. Without a pin here, a version bump can leave the whole

@@ -166,7 +166,7 @@ def test_a_phoenix_station_publishes_exactly_what_it_did(tmp_path):
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_this_file_is_in_the_pr_gate_subset():
     """Rule 8: the PR gate enumerates test files BY NAME, and this one decides a published facet."""
     steps = re.split(r"\n(?=      - name: )", WORKFLOW.read_text(encoding="utf-8"))

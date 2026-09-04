@@ -633,7 +633,7 @@ def test_the_pyyaml_refusal_never_asks_the_parser_it_gates(tmp_path, capsys, mon
     sy_text = (surveys / "rd18-probe" / "survey.yaml").read_text(encoding="utf-8")
     parsed = build_portal._mini_yaml(sy_text)
     assert "station_ids" in parsed, \
-        "the 2026-08-25 trailing-comment fix regressed: the fallback lost the block again"
+        "the trailing-comment fix regressed: the fallback lost the block again"
     assert "license" in parsed, \
         "the trailing-comment fix regressed: keys after the commented list vanished again"
     _no_pyyaml(monkeypatch)

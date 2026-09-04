@@ -78,7 +78,7 @@ def test_caddyfile_preserves_gateway_prefix():
     m = re.search(r"^\s*(handle_path|handle)\s+/gateway/\*\s*\{", text, re.MULTILINE)
     assert m is not None, "no /gateway/* routing block found in the Caddyfile"
     assert m.group(1) == "handle", (
-        "Caddy must use `handle /gateway/*` (prefix preserved) — `handle_path` strips /gateway and "
+        "Caddy must use `handle /gateway/*` (prefix preserved): `handle_path` strips /gateway and "
         "404s every request the app serves under /gateway/*"
     )
     # And it must reverse-proxy to the gateway service.

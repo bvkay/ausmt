@@ -162,7 +162,7 @@ def test_uniform_zrot_served_as_stored_v3a(tmp_path):
     parsed = _parse(tmp_path, "rot30.edi", rot_text)
     assert "skip" not in parsed
     fr = parsed["frame"]
-    assert fr["derotated"] is False, "V3-A must serve AS STORED — nothing de-rotated"
+    assert fr["derotated"] is False, "must serve AS STORED - nothing de-rotated"
     assert fr["frame_served"] == "declared-azimuth"
     assert fr["declared_azimuth_deg"] == 30.0
     assert fr["impedance_rotation_deg_source"] is None   # nothing was rotated
@@ -173,8 +173,8 @@ def test_uniform_zrot_served_as_stored_v3a(tmp_path):
     assert n > 10
     worst_vs_base = max(_circ180(a, b) for a, b in zip(az_base[:n], az_srv[:n]))
     assert worst_vs_base > 5.0, (
-        "served pt_az matches the UNROTATED original — the station was silently de-rotated; "
-        "V3-A requires as-stored serving")
+        "served pt_az matches the UNROTATED original - the station was silently de-rotated; "
+        "as-stored serving is the rule")
 
 
 def test_olympic_dam_class_neg60_served_as_stored_v3a(tmp_path):
@@ -191,7 +191,7 @@ def test_olympic_dam_class_neg60_served_as_stored_v3a(tmp_path):
     parsed = _parse(tmp_path, "od.edi", rot_text)
     assert "skip" not in parsed
     fr = parsed["frame"]
-    assert fr["derotated"] is False, "V3-A: −60° must serve AS STORED (no de-rotation)"
+    assert fr["derotated"] is False, "−60° must serve AS STORED (no de-rotation)"
     assert fr["frame_served"] == "declared-azimuth"
     assert fr["declared_azimuth_deg"] == -60.0
     assert fr["impedance_rotation_deg_source"] is None
@@ -200,8 +200,8 @@ def test_olympic_dam_class_neg60_served_as_stored_v3a(tmp_path):
     assert n > 10
     worst = max(_circ180(a, b) for a, b in zip(az_srv[:n], az_zero[:n]))
     assert worst > 5.0, (
-        "served pt_az matches the angle-0 (de-rotated) fixture — the −60° station was de-rotated; "
-        "V3-A requires byte-as-stored serving")
+        "served pt_az matches the angle-0 (de-rotated) fixture - the −60° station was de-rotated; "
+        "byte-as-stored serving is the rule")
 
 
 def test_per_period_zrot_refused_v3c(tmp_path):
@@ -212,7 +212,7 @@ def test_per_period_zrot_refused_v3c(tmp_path):
     n = len(_read_block(VULCAN.read_text(encoding="latin-1"), "ZROT"))
     theta = [5.0 + (35.0 * i / (n - 1)) for i in range(n)]
     parsed = _parse(tmp_path, "pax.edi", _vulcan_rotated(theta))
-    assert "skip" in parsed, "per-period ZROT must be REFUSED (V3-C), not served"
+    assert "skip" in parsed, "per-period ZROT must be REFUSED, not served"
     assert parsed["skip"]["gate"] == "rotation-frame"
     reason = parsed["skip"]["reason"]
     assert "per-period ZROT" in reason
@@ -276,7 +276,7 @@ def test_diagnostic_derotation_wrong_sign_is_caught():
     keep = np.isfinite(Z0) & (np.abs(Z0) > 0) & (np.abs(Z0) < 1e8)
     rel = np.abs(Zback_wrong - Z0)[keep] / np.abs(Z0)[keep]
     assert float(np.median(rel)) > 0.1, \
-        "wrong-signed de-rotation went UNDETECTED — the diagnostic round-trip pin is vacuous"
+        "wrong-signed de-rotation went UNDETECTED - the diagnostic round-trip pin is vacuous"
 
 
 def test_zrot_sentinel_at_data_periods_fails(tmp_path):
@@ -487,7 +487,7 @@ def test_spectra_rotated_blackhill_shape_served_as_stored_v3a(tmp_path):
     parsed = _parse(tmp_path, "blackhill.edi", rot_text)
     assert "skip" not in parsed, f"uniform-rotated spectra must serve as-stored, not fail: {parsed.get('skip')}"
     fr = parsed["frame"]
-    assert fr["derotated"] is False, "V3-A (spectra): serve AS STORED — no de-rotation"
+    assert fr["derotated"] is False, "spectra: serve AS STORED - no de-rotation"
     assert fr["frame_served"] == "declared-azimuth"
     assert fr["declared_azimuth_deg"] == 90.0
     assert fr["impedance_rotation_deg_source"] is None
@@ -496,8 +496,8 @@ def test_spectra_rotated_blackhill_shape_served_as_stored_v3a(tmp_path):
     assert n > 10
     worst = max(_circ180(a, b) for a, b in zip(az0[:n], az1[:n]))
     assert worst > 5.0, (
-        "served spectra pt_az matches the unrotated original — the station was de-rotated; "
-        "V3-A requires as-stored serving")
+        "served spectra pt_az matches the unrotated original - the station was de-rotated; "
+        "as-stored serving is the rule")
 
 
 def test_spectra_rotspec_vs_azimuth_conflict_fails(tmp_path):
@@ -551,7 +551,7 @@ def test_small_uniform_angle_served_as_stored_v3a(tmp_path):
     parsed = _parse(tmp_path, "v3a.edi", rot_text)
     assert "skip" not in parsed
     fr = parsed["frame"]
-    assert fr["derotated"] is False, "V3-A must serve AS STORED — no rotation"
+    assert fr["derotated"] is False, "must serve AS STORED - no rotation"
     assert fr["frame_served"] == "declared-azimuth"
     assert fr["declared_azimuth_deg"] == 8.0
     assert fr["impedance_rotation_deg_source"] is None   # nothing was rotated
@@ -562,8 +562,8 @@ def test_small_uniform_angle_served_as_stored_v3a(tmp_path):
     n = min(len(az_base), len(az_srv))
     worst_vs_base = max(_circ180(a, b) for a, b in zip(az_base[:n], az_srv[:n]))
     assert worst_vs_base > 5.0, (
-        "served pt_az matches the UNROTATED original — the station was silently de-rotated; "
-        "V3-A requires as-stored serving")
+        "served pt_az matches the UNROTATED original - the station was silently de-rotated; "
+        "as-stored serving is the rule")
     assert fr["convention_check"]["verdict"] == "ok"
 
 
@@ -593,23 +593,23 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
     seen_angles = set()
     for (_p, r), row in zip(stations, tf_rows):
         fr = r["frame"]
-        assert fr["derotated"] is False, f"{_p.name}: V3-B must NOT de-rotate — serve as stored"
+        assert fr["derotated"] is False, f"{_p.name}: a mixed-frames survey must NOT de-rotate - serve as stored"
         assert fr["frame_served"] == "declared-azimuth"
         seen_angles.add(fr["declared_azimuth_deg"])
         # each station's survey.json frame carries the mixed-frames note (portal-reachable)
         assert "mixed declared frames across stations" in (fr.get("survey_frame_note") or ""), \
-            f"{_p.name}: missing the V3-B survey_frame_note in station.json frame"
+            f"{_p.name}: missing the survey_frame_note in station.json frame"
         # served products DIFFER from the unrotated original (as-stored, not de-rotated)
         az = [a for a in row[bp.tfmod.TF_COLUMNS.index("pt_az")] if a is not None]
         n = min(len(az), len(base_az))
         worst = max(_circ180(a, b) for a, b in zip(az[:n], base_az[:n]))
-        assert worst > 5.0, f"{_p.name}: served pt_az matches the original — the station was de-rotated"
+        assert worst > 5.0, f"{_p.name}: served pt_az matches the original - the station was de-rotated"
     assert seen_angles == {8.0, 20.0}, "each station must record its OWN declared angle"
     # the survey-level note reaches build_report's frame_notes (aggregated into the `frame` array)
     fnotes = report.get("frame_notes", {})
     all_notes = [n for lst in fnotes.values() for n in lst]
     assert any("mixed declared frames across stations" in n for n in all_notes), \
-        "the V3-B mixed-frames note must reach the caller's report (build_report frame array)"
+        "the mixed-frames note must reach the caller's report (build_report frame array)"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -633,8 +633,8 @@ def test_classify_survey_frame_declared_zero_participates_f1():
         f"[0, 8, 20] must state the FULL range including the 0° members: {n3!r}"
     n4 = conv.classify_survey_frame([u(8), u(20)])
     assert n4 and "8°…20°" in n4, f"[8, 20] unchanged: {n4!r}"
-    assert conv.classify_survey_frame([z, z, z]) is None, "[0, 0, 0]: spread 0 — no note"
-    assert conv.classify_survey_frame([z, u(4)]) is None, "spread 4 <= 5 — no note"
+    assert conv.classify_survey_frame([z, z, z]) is None, "[0, 0, 0]: spread 0 - no note"
+    assert conv.classify_survey_frame([z, u(4)]) is None, "spread 4 <= 5 - no note"
     # per-period stations are refused, never served - they cannot mix a SERVED frame
     assert conv.classify_survey_frame([("per-period", None), z]) is None
     assert conv.classify_survey_frame([]) is None
@@ -658,7 +658,7 @@ def test_survey_zero_member_gets_mixed_frames_note_f1(tmp_path):
         assert fr["derotated"] is False, f"{_p.name}: still served as stored"
         note = fr.get("survey_frame_note") or ""
         assert "mixed declared frames across stations" in note, \
-            f"{_p.name}: the zero-member survey must carry the V3-B note (pre-F1 red)"
+            f"{_p.name}: the zero-member survey must carry the mixed-frames note"
         assert "0°…20°" in note, \
             f"{_p.name}: the note's range must include the 0° member: {note!r}"
     served = {r["frame"]["declared_azimuth_deg"] for (_p, r) in stations}
@@ -724,7 +724,7 @@ def test_divergent_tipper_frame_reported_f2(tmp_path):
     fr2 = parsed2["frame"]
     assert fr2["declared_azimuth_deg"] == -60.0
     assert fr2["tipper_declared_azimuth_deg"] == 0.0, \
-        "a zero tipper frame under a rotated impedance is equally divergent — report it"
+        "a zero tipper frame under a rotated impedance is equally divergent - report it"
 
 
 def test_equal_tipper_frame_not_reported_f2(tmp_path):

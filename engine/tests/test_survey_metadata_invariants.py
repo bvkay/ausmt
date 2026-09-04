@@ -132,8 +132,8 @@ def test_reference_checks_actually_detect_violations():
     good = copy.deepcopy(doc)
     good["identifiers"].append({"scheme": "DOI", "identifier": "10.99999/example-basin-2024"})
     good["citation"]["preferred_identifier"] = {"scheme": "DOI", "identifier": "10.99999/example-basin-2024"}
-    assert doi_chain_ok({"doi": "10.99999/example-basin-2024"}, good), "T31a: the intact chain holds"
-    assert not doi_chain_ok({"doi": "10.99999/level1-collection"}, doc), "T31b: planted collection DOI caught"
+    assert doi_chain_ok({"doi": "10.99999/example-basin-2024"}, good), "the intact chain holds"
+    assert not doi_chain_ok({"doi": "10.99999/level1-collection"}, doc), "a planted collection DOI is caught"
     assert doi_chain_ok({}, doc), "no mtcat doi: vacuous"
     assert raid_rule_ok({"raid": "https://raid.org/10.99999/example"}, doc)
     assert not raid_rule_ok({}, doc), "one activity but no mtcat raid is a projection gap"
@@ -316,12 +316,12 @@ def _assert_documents_clean(out):
     for slug, doc in docs.items():
         errs = [f"{list(e.path)}: {e.message}" for e in v.iter_errors(doc)]
         assert not errs, f"{slug}: {errs}"
-        assert doc["survey_id"] == slug, "survey_id == directory component (T24)"
+        assert doc["survey_id"] == slug, "survey_id == directory component"
         assert slug in mt, "every document names a catalogued survey"
         assert document_invariants(doc, mt[slug]) == [], (slug, document_invariants(doc, mt[slug]))
         size = len((out / "products" / slug / "survey-metadata.json").read_bytes())
         assert size <= DOCUMENT_BUDGET_BYTES, f"{slug}: {size} bytes exceeds the 16 KB budget"
-    assert set(docs) == set(mt), "document slug set == mtcat surveys[].survey_id (T24, both directions)"
+    assert set(docs) == set(mt), "document slug set == mtcat surveys[].survey_id, both directions"
     return docs
 
 

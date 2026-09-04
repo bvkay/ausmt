@@ -300,10 +300,10 @@ def test_leak_sweep_mutation_all_exact_flip_finds_every_value(tmp_path):
     hits = _sweep_non_exact_true_values(out)
     # each of GEN/HID lat+lon must be found somewhere (catalogue at minimum). If the sweep finds nothing,
     # it is blind and the centrepiece test above is worthless.
-    assert hits, "all-exact flip found NO true values — the leak-sweep is blind (vacuous)"
+    assert hits, "all-exact flip found NO true values - the leak-sweep is blind (vacuous)"
     for st in (GEN, HID):
         assert any(st["id"] in lbl for _f, lbl in hits), \
-            f"all-exact flip did not surface {st['id']} — sweep is not covering served coordinates"
+            f"all-exact flip did not surface {st['id']} - sweep is not covering served coordinates"
 
 
 def test_leak_sweep_mutation_planted_3dp_derivative_caught_by_epsilon(tmp_path):
@@ -589,7 +589,7 @@ def test_default_stability_no_policy_field_is_byte_identical(tmp_path):
     assert rB.returncode == 0, rB.stderr
     a = (outA / "catalogue.json").read_bytes()
     b = (outB / "catalogue.json").read_bytes()
-    assert a == b, "declaring the exact default changed the catalogue bytes — the default is not stable"
+    assert a == b, "declaring the exact default changed the catalogue bytes - the default is not stable"
     # non-vacuous: the catalogue actually carries the true positions (so 'identical' isn't 'both empty')
     assert EXACT["id"] in a.decode(), "precondition: the catalogue must carry the stations"
 
@@ -743,7 +743,7 @@ def test_fail_closed_override_typo_drops_only_that_survey(tmp_path):
          "--products", str(out / "products"), "--bundle-edi", "--no-validate"],
         cwd=str(ROOT), capture_output=True, text=True)
     assert r.returncode == 0, \
-        f"one survey's override typo must not abort the whole build (pre-F2 red): rc={r.returncode}\n{r.stderr}"
+        f"one survey's override typo must not abort the whole build: rc={r.returncode}\n{r.stderr}"
     cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
     surveys_served = {row[1] for row in cat}   # r[1] = survey label (positional contract)
     assert "Good Survey" in surveys_served, f"the healthy survey must serve fully; got {surveys_served}"
@@ -1004,7 +1004,7 @@ def test_unit_published_id_resolver_is_a_conservative_superset_of_the_matcher():
     assert coordacc.station_policy_by_published_id("exact", ov, "A1.lemigraph") == "withheld"
     assert coordacc.station_policy_by_published_id("exact", ov, "A2") == "exact"
     assert coordacc.station_policy_by_published_id("exact", ov, "A1x") == "exact", \
-        "the key plus a dot, not a stem: A1x is a different physical site"
+        "the key plus a dot, not a stem: the suffixed id is a different physical site"
     assert coordacc.station_policy_by_published_id("generalised", {}, "A1") == "generalised", \
         "no override: the survey default, exactly as station_policy returns it"
     # The ONE documented over-mask: a natural DATAID carrying a dot after an override key. The build

@@ -98,14 +98,14 @@ def test_data_level_link_rules_reuse_the_established_treatment():
     org = _colour_for(rules, ".dsub a.orglink")
     pubs = _colour_for(rules, ".surveymeta a")
     assert org and pubs, "the established link rules (.dsub a.orglink / .surveymeta a) are gone from index.html"
-    assert org == pubs, f"the two established link treatments disagree: {org!r} vs {pubs!r}"
+    assert org == pubs, f"the two link colours disagree: {org!r} vs {pubs!r}"
     for cls, what in LINK_CONTAINERS.items():
         got = _colour_for(rules, f"{cls} a")
         assert got, f"{what}: index.html declares no colour for '{cls} a' - the UA default ships"
-        assert got == org, f"{what}: '{cls} a' uses {got!r}, not the established treatment {org!r}"
+        assert got == org, f"{what}: '{cls} a' uses {got!r}, not the shared colour {org!r}"
         vis = _colour_for(rules, f"{cls} a:visited")
         assert vis, f"{what}: no ':visited' colour for '{cls} a' - a followed link may go browser-purple"
-        assert vis == org, f"{what}: '{cls} a:visited' uses {vis!r}, not the established treatment {org!r}"
+        assert vis == org, f"{what}: '{cls} a:visited' uses {vis!r}, not the shared colour {org!r}"
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")

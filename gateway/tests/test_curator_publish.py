@@ -395,7 +395,7 @@ def test_submitter_email_with_ack_still_409(tmp_path):
             sid = seed_validated(gw, cfg, email="owner@private.test", pii_in_preview=True)
             await curator_login(client)
             r = await _approve(client, sid, note="trying to force it", ack_pii="yes")
-            assert r.status_code == 409, "ack overrode a submitter-email hit (§0 violated)"
+            assert r.status_code == 409, "ack overrode a submitter-email hit; it must never override"
             assert gw.db.get(sid).state == states.VALIDATED
             assert git.calls == []
             # Mixed: submitter email AND a stranger's email in the same product => still 409 with ack.
@@ -403,7 +403,7 @@ def test_submitter_email_with_ack_still_409(tmp_path):
                                   pii_in_preview=True,
                                   foreign_email_in_preview="stranger@other.test")
             r2 = await _approve(client, sid2, note="trying to force the mixed case", ack_pii="yes")
-            assert r2.status_code == 409, "ack overrode a mixed submitter+generic hit (§0 violated)"
+            assert r2.status_code == 409, "ack overrode a mixed submitter+generic hit; it must never override"
             assert gw.db.get(sid2).state == states.VALIDATED
             assert git.calls == []
             # Case variant: DB says Owner@Private.Test, the artifact carries owner@private.test. That
@@ -411,7 +411,7 @@ def test_submitter_email_with_ack_still_409(tmp_path):
             sid3 = seed_validated(gw, cfg, slug="casesurvey", email="Owner@Private.Test",
                                   foreign_email_in_preview="owner@private.test")
             r3 = await _approve(client, sid3, note="trying the case-variant bypass", ack_pii="yes")
-            assert r3.status_code == 409, "ack overrode a case-variant submitter hit (§0 violated)"
+            assert r3.status_code == 409, "ack overrode a case-variant submitter hit; it must never override"
             assert gw.db.get(sid3).state == states.VALIDATED
             assert git.calls == []
     run(_body())
@@ -443,7 +443,7 @@ def test_submitter_email_case_variants_classified_submitter(tmp_path):
                 # And the curator approve gate must refuse even with ack.
                 r = await _approve(client, sid, note="case-variant bypass attempt", ack_pii="yes")
                 assert r.status_code == 409, (
-                    f"case variant {db_email!r}/{artifact_email!r} was acknowledgeable (§0 bypass)")
+                    f"case variant {db_email!r}/{artifact_email!r} was acknowledgeable; it must not be")
                 assert gw.db.get(sid).state == states.VALIDATED
                 # The detail GET above renders the nav shell, whose drift chip reads the published HEAD
                 # via a read-only `git rev-parse --short HEAD` (the detail page joined the

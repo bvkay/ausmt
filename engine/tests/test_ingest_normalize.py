@@ -197,7 +197,7 @@ def test_citation_authors_are_the_survey_org_not_ausmt(tmp_path):
     rt = _read_back(res)
     authors = rt.survey_metadata.citation_dataset.authors
     assert authors == "Geoscience Australia", authors
-    assert authors != "AusMT", "citation authors are the portal brand — fabricated attribution"
+    assert authors != "AusMT", "citation authors are the portal brand - fabricated attribution"
     # title = survey title + station; DOI carried through (mt_metadata normalises to a doi.org URL)
     assert rt.survey_metadata.citation_dataset.title == "Vulcan MT Survey - A1"
     assert "10.9999/vulcan" in str(rt.survey_metadata.citation_dataset.doi)

@@ -356,7 +356,7 @@ def test_compose_uses_project_file_flag_never_dash_C(tmp_path):
         for m in marks:
             if m.startswith("COMPOSE"):
                 assert " -f " in f" {m} ", f"compose call must use -f, not bare/-C: {m}"
-                assert " -C " not in f" {m} ", f"compose has no -C flag — invalid on real docker: {m}"
+                assert " -C " not in f" {m} ", f"compose has no -C flag - invalid on real docker: {m}"
 
 
 # ---- single-flight + priority -------------------------------------------------------------------

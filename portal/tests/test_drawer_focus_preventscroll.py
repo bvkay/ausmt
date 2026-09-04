@@ -30,5 +30,5 @@ def test_focus_drawer_passes_preventscroll():
     )
     # Guard against a stray bare focus slipping back in alongside the fixed one.
     assert not re.search(r"\.focus\(\s*\)", body), (
-        "_focusDrawer() still contains a bare .focus() (no preventScroll) — would reintroduce the bounce"
+        "_focusDrawer() still contains a bare .focus() (no preventScroll) - would reintroduce the bounce"
     )

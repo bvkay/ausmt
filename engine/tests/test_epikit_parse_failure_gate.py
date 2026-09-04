@@ -144,7 +144,7 @@ def test_the_shipped_allow_file_is_empty():
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_every_epikit_test_file_is_in_the_pr_gate_subset():
     """Rule 8, mechanised over the family rather than over the file added last: the PR gate enumerates
     test files BY NAME, so an EPI-KIT reader test that is not listed runs only on push to main, and

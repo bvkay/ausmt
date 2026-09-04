@@ -166,7 +166,7 @@ def test_dates_coverage_from_the_year_range_and_issued_verbatim():
     assert only_start["dates"] == {"coverage": {"year_start": 2020}}
     unparseable = _doc(dict(MINIMAL, dates={"start": "n/a", "end": None}))
     assert "dates" not in unparseable
-    assert "dataset_version" not in _doc(_full_yaml(version="1.0.1")), "D5: no dataset_version home yet"
+    assert "dataset_version" not in _doc(_full_yaml(version="1.0.1")), "no dataset_version home yet"
 
 
 def test_curated_classes_ride_through_verbatim_with_no_engine_additions():
@@ -176,7 +176,7 @@ def test_curated_classes_ride_through_verbatim_with_no_engine_additions():
     assert doc["creators"] == [{"name": "A. Person", "name_type": "person", "orcid": "0000-0002-1825-0097"},
                                {"name": "Example Org", "name_type": "organisation"}]
     assert doc["contributors"] == [{"name": "B. Person", "name_type": "person", "role": "ProjectLeader"}], \
-        "D9: no HostingInstitution row is appended by the engine"
+        "no HostingInstitution row is appended by the engine"
     assert doc["organisations"] == [
         {"name": "Example Org", "ror": "https://ror.org/00892tw58", "roles": ["custodian", "publisher"],
          "primary_custodian": True},
@@ -187,7 +187,7 @@ def test_curated_classes_ride_through_verbatim_with_no_engine_additions():
         "additional": [{"identifier": {"scheme": "DOI", "identifier": "10.99999/ts-release"},
                         "reason": "repository_product"}]}
     assert doc["acknowledgements"] == [{"text": "Required wording, verbatim.", "type": "required_source",
-                                        "source": "Example Org"}], "D10: no engine-authored row"
+                                        "source": "Example Org"}], "no engine-authored row"
     assert doc["attribution"] == {"declared_by": "A. Curator", "declared_date": "2026-07-25",
                                   "changes_made": True,
                                   "changes_summary": "EMTF XML renditions are producer-derived."}
@@ -220,7 +220,7 @@ def test_extent_is_the_curated_wgs84_bbox_only():
     assert doc["extent"] == {"bbox": {"west": 136.97, "south": -30.22, "east": 137.07, "north": -30.10}}
     gda = _full_yaml(geographic_extent={"west": 136.97, "east": 137.07, "south": -30.22, "north": -30.10,
                                         "datum": "GDA2020"})
-    assert "extent" not in _doc(gda), "D7: only a WGS84 extent is emitted (GDA2020 needs an owner ruling)"
+    assert "extent" not in _doc(gda), "only a WGS84 extent is emitted; GDA2020 has no home yet"
     nodatum = _full_yaml(geographic_extent={"west": 136.97, "east": 137.07, "south": -30.22, "north": -30.10})
     assert "extent" not in _doc(nodatum), "no datum means no WGS84 assertion"
     zero = _full_yaml(geographic_extent={"west": 0, "east": 0, "south": 0, "north": 0, "datum": "WGS84"})
@@ -503,7 +503,7 @@ def test_defaults_build_emits_exactly_the_minimal_key_set_under_the_served_root(
     prov = json.loads((out / "build_provenance.json").read_text(encoding="utf-8"))
     assert doc["provenance"]["generator"] == f"{prov['pipeline']} {prov['pipeline_version']}"
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", doc["provenance"]["generated"])
-    assert not (prod / "min-survey" / "survey-metadata.json").exists(), "never under --products (D2)"
+    assert not (prod / "min-survey" / "survey-metadata.json").exists(), "never under --products"
     _clean(doc)
     # the schema routes: immutable versioned + latest, byte-identical to the in-tree artifact
     in_tree = (ROOT / "schema" / "ausmt-survey-metadata.schema.json").read_bytes()
@@ -540,7 +540,7 @@ def test_d8_every_class_is_emitted_for_open_embargoed_and_metadata_only_alike(tm
     docs = {slug: _read_doc(out, slug) for slug in corpus}
     for slug, doc in docs.items():
         for cls in _RICH_CLASSES:
-            assert cls in doc, f"{slug}: {cls} missing (D8: every curated class on every survey)"
+            assert cls in doc, f"{slug}: {cls} missing; every curated class rides on every survey"
         assert "formats" not in doc and "distribution" not in doc
         assert doc["identifiers"] == [{"scheme": "DOI", "identifier": f"10.99999/{slug}-level2"}]
         assert doc["relationships"] == [{"identifier": f"10.99999/{slug}-ts", "identifier_type": "DOI",

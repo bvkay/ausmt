@@ -198,7 +198,7 @@ def test_the_shipped_allow_file_names_every_row_the_corpus_drops():
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_this_file_is_in_the_pr_gate_subset():
     """Rule 8: the PR gate enumerates test files BY NAME, and this one carries the gate's assertions."""
     steps = re.split(r"\n(?=      - name: )", WORKFLOW.read_text(encoding="utf-8"))

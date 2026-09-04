@@ -99,7 +99,7 @@ def test_one_module_builds_the_collapsed_control_for_every_map_this_site_draws()
     src = _text(MODULE)
     assert "prefix: false" in src or "prefix:false" in src, (
         "the control is mounted with prefix:false: the Leaflet flag and word are a courtesy to a "
-        "library, not a licence term, and the owner asked for them off the map")
+        "library, not a licence term, and they stay off the map")
     assert not re.search(r"\bel\.innerHTML|container\.innerHTML", src), (
         "the module must not write into Leaflet's attribution container: Leaflet rewrites that "
         "container's innerHTML on every attribution update, so anything put inside it is lost the "
@@ -111,7 +111,7 @@ def test_one_module_builds_the_collapsed_control_for_every_map_this_site_draws()
             f"attribution")
         assert "mapattrib-toggle" not in re.sub(r"<style>.*?</style>", "", page, flags=re.S), (
             f"{name}: the toggle is assembled in src/mapattrib.js and styled here; a second "
-            f"assembly is a second answer to one ruling")
+            f"assembly is a second answer to one question")
 
 
 def test_the_toggle_is_a_real_button_a_keyboard_can_reach():
@@ -160,7 +160,7 @@ def test_the_spa_map_mounts_the_collapsed_control_and_credits_the_layer_it_draws
     src = _text(MAP_JS)
     assert re.search(r'L\.map\("map",\s*\{[^}]*attributionControl:\s*false', src), (
         "the map is created with attributionControl:false: Leaflet's default control carries the "
-        "flag and the word the owner asked for off the map")
+        "flag and the word that stay off the map")
     assert "AusmtMapAttrib.mount(" in src, (
         "the SPA mounts the collapsed control in place of the default one")
     attributions = re.findall(r"attribution:\s*([A-Za-z_0-9]+|\"[^\"]*\")", src)
@@ -230,8 +230,8 @@ def test_add_surveys_three_maps_all_wear_the_control_and_keep_their_own_credit()
             f"add-survey.html #{name}: Leaflet's default control carries the flag and the word; "
             f"the map is created without one, got {opts!r}")
     assert page.count("AusmtMapAttrib.mount(") == 3, (
-        "each of the three maps mounts the collapsed control; a map without one is the corner line "
-        "the owner asked to be rid of")
+        "each of the three maps mounts the collapsed control; a map without one is the corner "
+        "line this control replaces")
     tiles = re.findall(r"L\.tileLayer\((.*?)\)\.addTo", page, re.S)
     assert len(tiles) == 3, f"three tile layers, one per map; found {len(tiles)}"
     for tile in tiles:

@@ -182,7 +182,7 @@ def test_coordinate_policy_key_parity_through_real_engine_parser():
         default, overrides = coordacc.parse_coordinate_policy(assembled)
         assert default == policy, (
             f"editor-assembled {assembled!r} parsed by the engine to {default!r}, not the intended "
-            f"{policy!r} — a key/spelling mismatch would make the policy a silent no-op")
+            f"{policy!r} - a key/spelling mismatch would make the policy a silent no-op")
         assert overrides == {}  # survey level only; no per-station overrides written here
 
 
@@ -262,8 +262,8 @@ def test_coordinate_overrides_key_parity_through_real_engine():
     default, overrides = coordacc.parse_coordinate_policy(assembled)
     assert default == "exact"
     assert overrides == overrides_in, (
-        f"engine parsed overrides {overrides!r}, not the editor-assembled {overrides_in!r} "
-        f"— a key/spelling drift would make the per-station policy a silent no-op")
+        f"engine parsed overrides {overrides!r}, not the editor-assembled {overrides_in!r}: "
+        f"a key/spelling drift would make the per-station policy a silent no-op")
     # every key validates against the REAL records (no raise) ...
     coordacc.validate_overrides(overrides, records)
     # ... and is EFFECTIVE: each key changes at least one record's resolved policy vs the bare default.
@@ -271,7 +271,7 @@ def test_coordinate_overrides_key_parity_through_real_engine():
         hits = [r for (_p, r) in records
                 if coordacc.station_policy(default, overrides, r.get("id"), r.get("variant")) == pol
                 and coordacc.station_policy(default, {}, r.get("id"), r.get("variant")) != pol]
-        assert hits, (f"override {key!r}={pol!r} matched no record — a validated-but-inert key "
+        assert hits, (f"override {key!r}={pol!r} matched no record - a validated-but-inert key "
                       f"(the matcher-divergence class)")
 
 
@@ -429,7 +429,7 @@ def test_ordinary_access_edit_preserves_existing_coordinate_overrides():
     assert out is not ef._OMIT
     assert out["embargo_until"] == "2027-06-30"
     assert out["coordinate_overrides"] == {"SITE1": "withheld", "SITE2": "generalised"}, \
-        "an embargo-only access edit dropped the coordinate_overrides map (C42 coordinate-privacy leak)"
+        "an embargo-only access edit dropped the coordinate_overrides map (a coordinate-privacy leak)"
 
 
 def test_access_edit_with_absent_overrides_and_no_original_stays_omit():
@@ -773,7 +773,7 @@ def test_key_parity_mutation_proof(tmp_path):
     _write_survey(folder, _survey_meta_with(patch))
     rep = vv.validate(folder)
     assert any(i["check"] == "attribution" and "custodianX" in i["message"] for i in rep.items), \
-        "validator did not flag a drifted attribution key — the parity pin would be vacuous"
+        "validator did not flag a drifted attribution key - the parity pin would be vacuous"
 
 
 def test_attribution_bool_and_round_trip():
@@ -872,7 +872,7 @@ def test_credit_vocab_matches_surveys_validator():
     # the ordered tuple must match the validator's order too (creators/contributors selects
     # present the roles in the spec's order).
     assert tuple(ef.CONTRIBUTOR_ROLES) == tuple(vv.CONTRIBUTOR_ROLES_ORDERED), \
-        "editor CONTRIBUTOR_ROLES order drifted from the validator's ratified order"
+        "editor CONTRIBUTOR_ROLES order drifted from the validator's declared order"
 
 
 def test_credit_vocab_pin_reads_the_resolved_validator_arm(monkeypatch):
@@ -962,7 +962,7 @@ def test_related_identifiers_validator_fails_bad_relation_non_vacuous(tmp_path):
     _write_survey(folder, meta)
     rep = vv.validate(folder)
     assert any(i["check"] == "related_identifiers" and i["level"] == "FAIL" for i in rep.items), \
-        "validator did not FAIL a bogus relation — the vocab pin would be vacuous"
+        "validator did not FAIL a bogus relation - the vocab pin would be vacuous"
 
 
 def test_identifies_out_of_vocab_is_fail_closed():

@@ -175,7 +175,7 @@ def _docs_display() -> str:
 
 @pytest.mark.skipif(not DOCS_INDEX.is_file(),
                     reason="engine image build: docs tree not shipped "
-                           "(designed topology; the docs surface is pinned from checkout lanes)")
+                           "(designed topology; the docs surface is pinned from the checkout workflows)")
 def test_docs_current_version_display_agrees():
     """Statement 7: the docs reference index states which station schema version the documentation
     describes. Skipped only where the docs tree is not shipped (the engine image)."""

@@ -222,8 +222,7 @@ def _docs_fetch_section():
     """The 'Fetching data today' section of the docs API reference, up to the next h2."""
     raw = APIDOC.read_text(encoding="utf-8")
     assert "## Fetching data today" in raw, (
-        f"{APIDOC} must carry the worked fetch patterns under '## Fetching data today'; they moved there "
-        f"from about.html in the documentation wave")
+        f"{APIDOC} must carry the worked fetch patterns under '## Fetching data today'")
     return raw.split("## Fetching data today", 1)[1].split("\n## ", 1)[0]
 
 
@@ -260,7 +259,7 @@ def test_docs_document_the_manifest_flow():
     sub = _docs_sub("manifest.json", "jq -r")
     assert "/data/manifest.json" in sub, "the per-station pattern starts at the download index"
     assert "/data/products/manifest.json" not in sub, (
-        "the products/ mirror of the manifest is retired (public-surface audit, 2026-08-22); the download "
+        "the products/ mirror of the manifest is not a public surface; the download "
         "index is /data/manifest.json")
     assert "sha256" in sub, "the per-station pattern must tell the reader to verify the sha256"
     for fmt in ("`edi`", "`emtfxml`"):

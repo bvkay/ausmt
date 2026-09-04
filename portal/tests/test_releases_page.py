@@ -371,7 +371,7 @@ def test_about_carries_the_entry_point_the_footer_gave_up():
     els = _footer(INDEX)
     links = [a for (t, a, _ab) in els if t == "a" and a.get("href") == "releases.html"]
     assert not links, (
-        f"index.html's footer must carry no Releases link; the ruling took it out: {links}")
+        f"index.html's footer carries no Releases link: {links}")
 
 
 # --- behaviour ------------------------------------------------------------------------------------

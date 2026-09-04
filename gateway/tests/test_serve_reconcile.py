@@ -324,7 +324,7 @@ def test_no_page_renderer_emits_inline_handlers_or_scripts():
     offenders = []
     for name in ("curatorpage.py", "metaedit.py", "statuspage.py", "uploader_keys.py", "app.py"):
         p = pkg / name
-        assert p.exists(), f"CSP sweep target vanished (renamed?): {name} — update this sweep"
+        assert p.exists(), f"CSP sweep target vanished (renamed?): {name} - update this sweep"
         for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
             if re.search(r"""\bon[a-z]{3,}\s*=\s*['"\\]""", line):
                 offenders.append(f"{name}:{i} (handler): {line.strip()[:90]}")
@@ -349,7 +349,7 @@ def test_c43_external_js_constants_are_raw_and_referenced_externally():
         assert isinstance(js, str) and js.strip(), f"{const_name} vanished or empty"
         assert "<script" not in js, f"{const_name} must be raw JS, not <script>-wrapped"
         assert not re.search(r"""\bon[a-z]{3,}\s*=\s*['"]""", js), \
-            f"{const_name} uses an inline on*= handler (dead under CSP) — use addEventListener"
+            f"{const_name} uses an inline on*= handler (dead under CSP) - use addEventListener"
     # The shell + hub reference the routes externally (src=), never inline.
     src = (Path(curatorpage.__file__)).read_text(encoding="utf-8")
     assert 'src="/gateway/curator/context-bar.js"' in src

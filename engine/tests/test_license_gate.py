@@ -42,7 +42,7 @@ def test_case_insensitive_exact_match():
 
 def test_legacy_bare_aliases_redistribute():
     # Legacy survey.yaml values that predate the -X.Y suffix convention, mapped via licenses.json aliases.
-    assert bp.redistributable("CC0"), "bare CC0 alias -> CC0-1.0"
+    assert bp.redistributable("CC0"), "the bare CC0 licence alias resolves to CC0-1.0"
     assert bp.redistributable("CC-BY"), "bare CC-BY alias -> CC-BY-4.0"
     assert bp.redistributable("odbl"), "bare ODBL alias (case-insensitive) -> ODBL-1.0"
 

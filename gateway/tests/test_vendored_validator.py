@@ -46,7 +46,7 @@ def test_vendored_validator_matches_pin():
     pin = sync.read_pin()
     actual = hashlib.sha256(sync.VENDORED.read_bytes()).hexdigest()
     assert actual == pin.get("sha256"), (
-        f"vendored validator sha256 {actual} != PIN {pin.get('sha256')} — the vendored copy drifted; "
+        f"vendored validator sha256 {actual} != PIN {pin.get('sha256')} - the vendored copy drifted; "
         "run sync_vendored_validator.py --write from a dev box, or revert the edit.")
     # The PIN also records provenance — sane shape so a broken PIN is caught here too.
     assert pin.get("source_commit"), "PIN missing source_commit"
@@ -71,7 +71,7 @@ def test_validator_orcid_checksum_matches_shared_vectors():
     vv = _load_vendored_validator()
     vectors = [v for v in json.loads(_ORCID_VECTORS.read_text(encoding="utf-8"))["vectors"]
                if "validator" in v["applies_to"]]
-    assert vectors, "no validator-scoped ORCID vectors — the shared file is empty or mis-scoped"
+    assert vectors, "no validator-scoped ORCID vectors - the shared file is empty or mis-scoped"
     mismatches = [(v["input"], v["valid"], vv.orcid_checksum_ok(v["input"]))
                   for v in vectors if vv.orcid_checksum_ok(v["input"]) != v["valid"]]
     assert not mismatches, (

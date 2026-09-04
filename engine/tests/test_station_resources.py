@@ -70,7 +70,7 @@ def test_an_open_station_publishes_its_served_renditions(built):
     assert rows["edi"]["kind"] == "transfer_function" and rows["edi"]["format"] == "edi"
     assert rows["emtfxml"]["format"] == "emtfxml"
     assert all("identifiers" not in r for r in doc["resources"]), \
-        "no DOI identifies any exact file AusMT serves today (D3)"
+        "no DOI identifies any exact file AusMT serves today"
 
 
 def test_the_role_axes_are_emitted_only_where_they_are_certain(built):

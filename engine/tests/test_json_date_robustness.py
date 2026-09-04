@@ -101,7 +101,7 @@ def test_build_with_unquoted_declared_date_is_green(tmp_path):
     entry = surveys_json["Unquoted Date Survey"]
     dd = entry["attribution"]["declared_date"]
     assert dd == "2026-07-25" and isinstance(dd, str), \
-        f"declared_date must be carried as the STRING '2026-07-25', got {dd!r}"
+        f"declared_date must be carried as a STRING, got {dd!r}"
 
     # mtcat threads the SAME attribution block verbatim; it too must be a plain JSON string now.
     mtcat = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
