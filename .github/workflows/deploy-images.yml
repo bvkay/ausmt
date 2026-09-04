@@ -8,11 +8,11 @@ name: deploy-images
 # the top of that Dockerfile), so this job is now the ONLY place the engine suite runs against the
 # image itself. Also validates both compose files and smoke-tests the built portal image end-to-end.
 #
-# PATH-SCOPED (ADR-001 monorepo) to every input the three images are BUILT FROM (C35a/F1, extended):
+# PATH-SCOPED (ADR-001 monorepo) to every input the three images are BUILT FROM:
 # the images COPY engine/, portal/, gateway/ and contract/ source (see deploy/docker/*.Dockerfile), so
 # a push touching ANY of those must rebuild + republish, or :latest silently serves stale code. This
 # was real, twice: gateway pushes shipped an untested image (the F1 finding), and engine/portal merges
-# published NO image at all — the 2026-07-06 "box engine label 1333f4f while main was 18 commits
+# published NO image at all — the "box engine label 1333f4f while main was 18 commits
 # ahead" incident was exactly this hole (C32 merged, no deploy/** change, no image rebuilt). The unit
 # suites still run in build-products.yml / portal-ci.yml / gateway-ci.yml; this workflow owns the
 # packaging + image layer, and its path filter must mirror the Dockerfiles' COPY surface.
@@ -78,7 +78,7 @@ on:
       - "contract/**"
       - ".github/workflows/deploy-images.yml"
   # THE PR LEG IS DELIBERATELY UNFILTERED. It carries no `paths:` (and no `branches:`, so the base
-  # branch scope is unchanged from C39) because the owner requires this workflow's checks on PRs to
+  # branch scope is unchanged) because this workflow's checks are required on PRs to
   # main, and a path filter HERE makes that impossible. The asymmetry GitHub gives us: when a
   # WORKFLOW is skipped by a path or branch filter, its checks never report at all and stay Pending
   # forever, so a required check blocks the PR permanently; but a NON-MATRIX job inside a workflow
@@ -88,12 +88,12 @@ on:
   # itself). So the filtering has to move off the trigger and onto the
   # jobs. That is what the `changes` job below does. This was not theoretical: the trimmed trigger
   # meant deploy-images simply never started on most PRs, engine-full-tests never reported, and
-  # three consecutive release-gate failures merged anyway because the gate that would have caught
+  # three consecutive release-gate failures can merge anyway when the gate that catches
   # them was not a gate at all.
   # The same leniency toward `skipped` is why ONE required check is not enough: see the
   # REQUIRE-THREE CONTRACT at the top of this file before changing anything here.
   #
-  # C39 (CI minutes economy), RESTATED HONESTLY. What C39 bought is kept: the heavy jobs (3-image
+  # CI MINUTES ECONOMY, STATED HONESTLY. What it buys is kept: the heavy jobs (3-image
   # build, engine-full-tests, both e2e lanes) still only run when an image INPUT actually changed, so
   # a docs / README / maintainer-notes PR costs one short `changes` job plus three no-op matrix
   # starts, and merges immediately: engine-full-tests reports `skipped` (which branch protection
@@ -111,11 +111,11 @@ on:
   pull_request:
 
 concurrency:
-  # C39 (CI minutes economy) safety note — this cancels superseded runs of the SAME ref, INCLUDING
+  # CI minutes economy, safety note — this cancels superseded runs of the SAME ref, INCLUDING
   # pushes to main. That is safe here because image publishing is last-write-wins on the mutable
   # :latest / :main tags: when several merges land in quick succession, only the FINAL (correct)
   # build must complete and publish; a cancelled intermediate build loses nothing, since its :latest
-  # would have been immediately overwritten by the next merge's build anyway. Per-ref grouping (not a
+  # is immediately overwritten by the next merge's build in any case. Per-ref grouping (not a
   # fixed group) so a PR run and a main-push run never cancel each other — they carry different refs.
   # (An immutable per-tag image, e.g. :vX.Y.Z, only ever has one producing run for that ref, so
   # cancellation cannot orphan a pinned tag.)
@@ -153,7 +153,7 @@ jobs:
   # script and nothing else. The protection settings are load-bearing here, not decorative.
   #
   # COST, NAMED. Every job in this workflow now hangs off `changes`, and that includes the push and
-  # tag PUBLISH path, which previously started building the instant the run did. It now waits for
+  # tag PUBLISH path, which must NOT start building the instant the run does. It waits for
   # one job first. On push, tag and workflow_dispatch that job checks nothing out (see the fetch
   # strategy on the checkout step) and runs a single echo, so the wait is runner acquisition plus a
   # few seconds: call it 15 to 30 seconds of extra latency before :latest lands after a merge. On a
@@ -291,7 +291,7 @@ jobs:
     # THE GATE LIVES ON THE STEPS, NOT THE JOB, and for this job only. A MATRIX job skipped by a
     # job-level `if:` never expands its matrix: GitHub reports ONE check named with the literal,
     # unexpanded expression, so the three required names "build (ausmt-engine|portal|gateway)"
-    # never report and branch protection waits forever. PR #137 (README-only, 2026-08-02) proved
+    # never report and branch protection waits forever. A README-only PR proved
     # it: `changes` passed, engine-full-tests reported its skip, and the PR sat BLOCKED behind
     # three checks that could never arrive. So this job always starts (the matrix expands, the
     # three names report) and every step gates itself on the changes output instead: an
@@ -366,7 +366,7 @@ jobs:
           push: ${{ steps.push_gate.outputs.push == 'true' }}
           load: ${{ steps.push_gate.outputs.push != 'true' }}
           tags: ${{ steps.tags.outputs.tags }}
-          # U2: GIT_SHA build-arg -- ENGINE and GATEWAY images (both declare an ARG GIT_SHA and bake
+          # GIT_SHA build-arg -- ENGINE and GATEWAY images (both declare an ARG GIT_SHA and bake
           # it into a *_COMMIT env for a startup/footer identity line; portal.Dockerfile declares no
           # such ARG). github.sha is the FULL 40-char SHA; short form (matching _git_commit_at's
           # `git rev-parse --short`, ~7 chars) would need a separate shell step to slice, and the
@@ -432,7 +432,7 @@ jobs:
   # ---------------------------------------------------------------------------------------------
   # Full pytest lane INSIDE the built engine image (the committed lock,
   # engine/environments/requirements-mtmetadata-lock.txt, is already installed in the image; this is
-  # the real release gate for the engine stack). Until 2026-07-28 the image carried a build-time
+  # the real release gate for the engine stack). The image must not carry a build-time
   # `locker` resolve of the floating pins instead, so this gate tested a stack the repo had never
   # verified; engine.Dockerfile now installs the committed lock and the two agree. C39
   # made this the SOLE in-image engine-suite run: engine.Dockerfile's own in-build stack-less pytest
@@ -444,7 +444,7 @@ jobs:
   # load-bearing.
   # ---------------------------------------------------------------------------------------------
   engine-full-tests:
-    # The third REQUIRED job, and the one the owner actually cares about (see the REQUIRE-THREE
+    # The third REQUIRED job, and the one that matters most (see the REQUIRE-THREE
     # CONTRACT at the top of this file). It needs `changes` as well as `build` because the `needs`
     # context only carries DIRECT dependencies: without `changes` in this list,
     # `needs.changes.outputs.matched` below would evaluate to null and this gate would never run.
@@ -483,11 +483,11 @@ jobs:
           # the parity module's ENGINE-side assertions still run here, which is the point: the release
           # gate proves the IMAGE's own coherence. Any other skip (e.g. the stack silently missing from
           # the image) reds the release gate here.
-          # -n 4 (ci/engine-suite-speed, 2026-08-18): pytest-xdist, shipped in the image via
+          # -n 4: pytest-xdist, shipped in the image via
           # requirements-dev.txt's lock-constrained tooling install in engine.Dockerfile. Single
           # threaded this job was PR CI's long pole (34.3 min measured; ~650 tests on a 4-vCPU
           # runner); the suite is CPU-bound, so four workers buy roughly the core count back
-          # (dev box, 2026-08-18: 656 tests, 673s serial vs 185s under -n 4, a 3.6x speedup).
+          # (dev box: 656 tests, 673s serial vs 185s under -n 4, a 3.6x speedup).
           # Parallel safety was proven on the dev box BEFORE this flag landed: the full engine
           # suite produced IDENTICAL per-test outcomes serial and under -n 4 (zero xdist-only
           # failures, zero xdist_group serial pins; the one defect found was a nondeterministic
@@ -570,7 +570,7 @@ jobs:
   # reports; submit an EICAR zip -> REJECTED_AV. Wired with `docker run` on a shared network that
   # mirrors the compose gateway profile's topology (C35a/F2 — this now includes the runner's
   # PYTHONPATH=/opt, the value compose.yaml:197 uses; the previous /opt/gateway here was the exact
-  # 2026-07-06 production ModuleNotFoundError, memorialized at compose.yaml:198-201):
+  # production ModuleNotFoundError this reproduces, stated at compose.yaml:198-201):
   #   - clamd + gateway share a user network (gateway reaches clamd:3310 INSTREAM);
   #   - gw-runner runs with --network none, user 10002, read-only rootfs + tmpfs /tmp (design §1) —
   #     it never reaches clamd; the gateway does the raw-zip scan and the post-unpack sweep.
@@ -622,7 +622,7 @@ jobs:
           # The runner needs the validator from the SEPARATE ausmt-surveys repo. Before C35a this step
           # only echoed the repo var into GITHUB_ENV — no clone existed anywhere, so the checkout the
           # gates below test for was NEVER created and the VALIDATED half was permanently skipped even
-          # when the var was set: dead wiring (code-health review F5). Now: if the var is set, REALLY
+          # when the var was set: dead wiring. If the var is set, REALLY
           # clone it into $GITHUB_WORKSPACE/../ausmt-surveys (the exact path every gate below reads),
           # and FAIL LOUDLY if the clone or the _validation check fails — an operator who set the var
           # to enable the VALIDATED half must never get a silent skip. If the var is unset, skip the
@@ -701,13 +701,13 @@ jobs:
           if [ -d "$GITHUB_WORKSPACE/../ausmt-surveys/_validation" ]; then
             SURVEYS_MOUNT="-v $GITHUB_WORKSPACE/../ausmt-surveys:/srv/surveys:ro"
           fi
-          # NO --rm (C35a/F2): a dead runner must leave its logs behind for the liveness assert below
+          # NO --rm: a dead runner must leave its logs behind for the liveness assert below
           # and for teardown's `docker logs`; the Teardown step force-removes it unconditionally.
           # PYTHONPATH=/opt is compose.yaml:197 truth — /opt/gateway (the old value here) was the
-          # 2026-07-06 production ModuleNotFoundError (`import gateway` needs the PARENT of the package).
+          # production ModuleNotFoundError (`import gateway` needs the PARENT of the package).
           # HOME/MPLCONFIGDIR are compose truth too (its runner env): uid 10002 has no home on a
           # read-only rootfs, so HOME defaults to / and mt_metadata's ~/.cache writes fail EVERY EDI
-          # parse with Errno 30 (the 2026-07-06 Olympic Dam incident class — reproduced here the first
+          # parse with Errno 30 (the Olympic Dam incident class — reproduced here the first
           # time this leg actually ran). Point both at the tmpfs, exactly as production compose does.
           docker run -d --name gw-runner --network none \
             --user 10002:10002 --read-only --tmpfs /tmp \
@@ -722,7 +722,7 @@ jobs:
             -v "$GITHUB_WORKSPACE/gateway:/opt/gateway:ro" \
             $SURVEYS_MOUNT \
             "$ENGINE" -m gateway.runner
-          # UNCONDITIONAL liveness assert (C35a/F2): a runner that crashes on import (the exact
+          # UNCONDITIONAL liveness assert: a runner that crashes on import (the exact
           # PYTHONPATH regression) exits within a second. Give it a moment, then require it to be
           # still Running — else dump its logs and fail. A dead runner must never pass green again.
           sleep 5
@@ -925,7 +925,7 @@ jobs:
           # the demo e2e (the box is single-tenant CI, not production).
           # /srv/ausmt itself is ROOT-OWNED (created by the sudo gateway-tree mkdir above), so a plain
           # mkdir under it is Permission denied — surfaced the first time this leg actually ran on the
-          # public repo (it was previously always skipped). Create as root, hand to the runner user;
+          # public repo, where it must not be skipped. Create as root, hand to the runner user;
           # the git init/seed below then runs unprivileged as intended.
           sudo mkdir -p /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
           sudo chown "$(id -u):$(id -g)" /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
@@ -977,7 +977,7 @@ jobs:
           # refuses a repo owned by a different uid, and the seeded checkout is runner-owned while the
           # container's git runs as 10002 — the publish preflight fail-closed EXACTLY here the first
           # time this leg ran ("dubious ownership"), the same failure compose already fixes for the
-          # operator-owned production checkout (and the first live approve hit on 2026-07-06).
+          # operator-owned production checkout.
           # NOTE the env-config mechanism covers CLIENT-side git only: for a local-path push git
           # strips GIT_CONFIG_* before exec'ing receive-pack, so a safe.directory entry for the bare
           # origin can never work — the origin is chown'd to 10002 in the seed step instead.
@@ -1004,8 +1004,8 @@ jobs:
             if [ "$i" = 20 ]; then echo "gateway never ready"; docker logs gateway; exit 1; fi
             sleep 1
           done
-          # NO --rm + PYTHONPATH=/opt (C35a/F2): same fix as gateway-e2e — keep a dead runner's logs,
-          # and use compose.yaml:197's PYTHONPATH (the /opt/gateway value here was the 2026-07-06
+          # NO --rm + PYTHONPATH=/opt: as in gateway-e2e — keep a dead runner's logs,
+          # and use compose.yaml:197's PYTHONPATH (an /opt/gateway value here reproduces the
           # production ModuleNotFoundError). Teardown force-removes gw-runner unconditionally.
           # HOME/MPLCONFIGDIR mirror compose's runner env: a no-home uid 10002 on a read-only rootfs
           # otherwise fails every EDI parse with Errno 30 (~/.cache) — the Olympic Dam incident class.
@@ -1021,7 +1021,7 @@ jobs:
             -v "$GITHUB_WORKSPACE/gateway:/opt/gateway:ro" \
             -v "$GITHUB_WORKSPACE/../ausmt-surveys:/srv/surveys:ro" \
             "$ENGINE" -m gateway.runner
-          # UNCONDITIONAL liveness assert (C35a/F2): a crash-on-import runner exits within a second.
+          # UNCONDITIONAL liveness assert: a crash-on-import runner exits within a second.
           sleep 5
           RUNNING=$(docker inspect -f '{{.State.Running}}' gw-runner 2>/dev/null || echo "missing")
           if [ "$RUNNING" != "true" ]; then
@@ -1048,7 +1048,7 @@ jobs:
             [ "$i" = 60 ] && { echo "never VALIDATED"; docker logs gw-runner; exit 1; }
             sleep 3
           done
-          # Curator login (cookie jar) -> read the detail page (scrape the CSRF token) -> approve.
+          # Curator login (cookie jar) -> read the detail page (scrape the CSRF token) -> decide.
           COOKIES=/tmp/cj.txt
           curl -s -c "$COOKIES" -X POST --data 'curator_key=ci-curator-key-abcdefgh1234' \
             http://127.0.0.1:8444/gateway/curator/login >/dev/null
@@ -1100,7 +1100,7 @@ jobs:
           # re-zip of the same tree. Re-zipping is NOT byte-stable on these runners: Info-ZIP stores
           # access times in its UT extra fields on Linux, and the first zip's own reads advance every
           # atime under relatime, so a second archive of an identical tree hashes differently and the
-          # sha guard CORRECTLY admits it as new content. The 2026-08-04 rerun proved it with full
+          # sha guard CORRECTLY admits it as new content. A rerun proved it with full
           # evidence: the fixed guard answered a clean 201 to what was meant to be a duplicate, and
           # the guard's own history explains itself (its 409 arm had never fired on CI). Same BYTES,
           # not same tree, is what the guard dedupes; only same bytes can test it.
@@ -1110,7 +1110,7 @@ jobs:
             -F 'file=@/tmp/example2.zip' -F 'submitter_name=CI2' -F 'submitter_email=ci2@example.test' \
             http://127.0.0.1:8444/gateway/submit)
           # ANY answer other than the expected 409 dumps the status, the body and the gateway log
-          # BEFORE exiting. On 2026-08-04 this leg went straight from a non-409 into json.load, died
+          # BEFORE exiting. A leg that goes straight from a non-409 into json.load dies
           # with "Expecting value: line 1 column 1", and left the run with no status code, no body
           # and no gateway log to diagnose from. A harness that discards its own evidence turns a
           # one-run diagnosis into a guessing game.
@@ -1174,12 +1174,12 @@ jobs:
   # ---------------------------------------------------------------------------------------------
   # AUDIT 3.1: verify the three published images are ANONYMOUSLY pullable from GHCR. GHCR packages
   # default to PRIVATE on first push even when the repo is public, so the documented quickstart's
-  # `docker compose pull` 403s for everyone but the owner and an NCI/apptainer evaluation cannot even
+  # `docker compose pull` 403s for everyone but the account holder and an NCI/apptainer evaluation cannot even
   # begin. This job requests a PUBLIC (credential-free) bearer token for each image and GETs its
   # manifest with NO auth beyond that anonymous token — exactly what an unauthenticated `docker pull`
   # does under the hood — and asserts HTTP 200.
   #
-  # IT WILL FAIL until the owner flips the three GHCR packages to PUBLIC (Package settings -> Change
+  # IT WILL FAIL until the three GHCR packages are flipped to PUBLIC (Package settings -> Change
   # visibility -> Public, once per package). That is the POINT: this is the regression guard that
   # makes the 403 loud instead of a silent first-contact failure. Runs only AFTER a real publish
   # (push to main / v* tag) — on a PR nothing was pushed, so there is nothing to pull anonymously.

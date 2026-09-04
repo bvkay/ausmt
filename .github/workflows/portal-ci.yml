@@ -53,7 +53,7 @@ on:
       # to a COAST ring changes the mark, and without this path the pin would only fire on the next
       # portal-touching PR.
       - "engine/extract/_au_outline.py"
-      # A3: tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
+      # tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
       # pinned copy on CI) over every survey.yaml the form packages, so a validator refresh is an
       # INPUT to this lane and must gate it, exactly as the docs/branding inputs above do.
       - "gateway/tests/fixtures/vendored_validation/**"
@@ -79,13 +79,13 @@ on:
       # to a COAST ring changes the mark, and without this path the pin would only fire on the next
       # portal-touching PR.
       - "engine/extract/_au_outline.py"
-      # A3: tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
+      # tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
       # pinned copy on CI) over every survey.yaml the form packages, so a validator refresh is an
       # INPUT to this lane and must gate it, exactly as the docs/branding inputs above do.
       - "gateway/tests/fixtures/vendored_validation/**"
       - ".github/workflows/portal-ci.yml"
 
-# C39 (CI minutes economy): cancel a superseded run of the SAME ref. Keyed on github.ref (not a
+# CI minutes economy: cancel a superseded run of the SAME ref. Keyed on github.ref (not a
 # fixed group) so a PR run and a push-to-main run — which have different refs — never cancel each
 # other; only a newer commit on the same branch/PR supersedes the older, still-queued/running one.
 # Matches the per-ref pattern the other three workflows already use (gateway-ci / build-products /

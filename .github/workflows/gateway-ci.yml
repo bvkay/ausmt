@@ -2,12 +2,12 @@ name: gateway-ci
 
 # The gateway (submission intake + antivirus + curator publish flow) is a first-class subsystem
 # that took real community submissions this week, yet before C35a NO workflow ran its unit suite
-# and ruff excluded it entirely (code-health review F1). This job closes that hole: it runs the
+# and ruff excluded it entirely. This job closes that hole: it runs the
 # gateway unit suite and lints gateway/ on every gateway-touching push/PR, so a gateway source
 # change is TESTED before it can ship inside an unrelated deploy-triggered image rebuild.
 #
 # The pytest command below covers gateway/tests AND deploy/tests. Measured on the dev box
-# (2026-08-25, full engine stack installed): ~1,220 tests, ~4 minutes. This header claimed "179
+# (full engine stack installed): ~1,220 tests, ~4 minutes. This header must not claim "179
 # passed, ~10s" long after both had trebled, so read the figures as a dated scale that needs
 # re-measuring, not a contract. The suite drives async bodies via asyncio.run(), so no
 # pytest-asyncio plugin is needed (see gateway/requirements-dev.txt). The runner is STACK-LESS (no
@@ -17,12 +17,12 @@ name: gateway-ci
 # PATH-SCOPED (ADR-001 monorepo): runs when the gateway/ OR deploy/ subtree (or this workflow)
 # changes. deploy/ is here because the deploy unit tests (deploy/tests) were wired into this lane's
 # pytest invocation in PR #19 — but the trigger paths never followed, so a deploy-only change could
-# merge without its own tests ever running in CI (caught 2026-07-10: the backup-hardening branch
-# touched only deploy/** and would have merged hollow-green).
+# merge without its own tests ever running in CI: a branch touching only deploy/** would
+# otherwise merge hollow-green.
 
 on:
   workflow_dispatch:
-  # H4/R27: the ts-routes drift gate below must fire on the change that triggers it, and that change
+  # The ts-routes drift gate below must fire on the change that triggers it, and that change
   # (a register edit) lands in the SEPARATE ausmt-surveys repo, which never touches a path this
   # workflow watches. So the surveys repo's ts-routes-dispatch.yml fires this event on a register
   # change, and it re-runs the gate against the freshly pushed registers. One source of truth: the
@@ -83,7 +83,7 @@ jobs:
         run: pip install -r gateway/requirements-dev.txt
 
       # Install Caddy so the deploy/ access-log masking pins RUN here instead of skipping (C43 S2b-ii,
-      # C45 privacy). The masked-log runtime pin (test_caddy_log_masking.py) is the executable proof
+      # privacy). The masked-log runtime pin (test_caddy_log_masking.py) is the executable proof
       # that the public privacy promise — "a full IP address is never stored" — is TRUE: it drives a
       # real request with X-Forwarded-For through running Caddy and asserts the full IP appears NOWHERE
       # in the log line, only the /24-masked form. A config-syntax assertion is NOT sufficient for a
@@ -124,17 +124,17 @@ jobs:
       # invocation after the clone, or reusing a workspace would move them off the sha-pinned contract with
       # nothing red. gateway/tests/test_validator_resolution.py asserts this env var is set here.
       #
-      # C35b/D5: pipe the report through the skip tripwire with the gateway lane's OWN allow-list
+      # Pipe the report through the skip tripwire with the gateway lane's OWN allow-list
       # (--allow REPLACES the engine built-in). That one reason excuses every pin that needs the real
       # engine stack (mt_metadata), which this runner does not install: 22 tests across four files as of
-      # 2026-08-25 - test_runner.py's two real-engine e2e oracles, test_collections_runner.py's two engine
+      # test_runner.py's two real-engine e2e oracles, test_collections_runner.py's two engine
       # parity pins, and the module-scoped engine-corpus fixtures behind test_c43_stage2a_js_parity.py (3)
       # and test_c43_hub_js_parity.py (15). ci_check_skips.py matches by SUBSTRING, so a new test joins the
       # allow-list simply by copying the string: keep it for engine-stack absence and nothing else. tee
       # keeps the full pytest output in the human log AND feeds the tripwire; `set -o pipefail` so a pytest
       # FAILURE (not just a skip regression) still reds the lane through the pipe. Any OTHER skip - e.g. a
       # validator oracle regressing to skip, the exact F7 hole - fails the lane loudly.
-      # deploy/tests rides this lane too (C40): the reconcile.sh decision-logic tests are plain
+      # deploy/tests rides this lane too: the reconcile.sh decision-logic tests are plain
       # pytest + sh + git, all present on the runner — including flock(1), so the lock-held case that
       # skips on a Windows dev box RUNS here (no new allow-list entry; a skip would trip the wire).
       - name: Gateway unit tests (+ loud skip accounting)
@@ -147,7 +147,7 @@ jobs:
             --allow "real engine stack / sample survey / validator not present" < gateway-pytest.out
 
       # THE ROUTE TABLE'S MEMBERSHIP IS THE R5 SUPPRESSION, so a committed ts-routes.map that names a
-      # route the registers no longer admit is an access decision nobody made. deploy/tests validates
+      # route the registers do not admit is an access decision nobody made. deploy/tests validates
       # the shipped table's SHAPE, but it holds no registers to compare it against, so only
       # `gen_ts_routes.py --check` can catch a register that moved without the table.
       #
@@ -156,9 +156,9 @@ jobs:
       # deploy-images.yml's validator clone, same no-silent-skip posture: with the var set, a clone
       # failure is a hard error and the check gates the lane.
       #
-      # H4/R27 - "cannot check" must NEVER read as "checked and clean". This step used to `exit 0`
-      # green when AUSMT_SURVEYS_URL was unset, so a committed table that no longer matched the
-      # registers merged undetected. Now an inability to run the gate is a HARD FAILURE everywhere the
+      # "cannot check" must NEVER read as "checked and clean". This step must not `exit 0`
+      # green when AUSMT_SURVEYS_URL is unset: a committed table that has drifted from the
+      # registers would merge undetected. An inability to run the gate is a HARD FAILURE everywhere the
       # secret is available (push, same-repo PR, workflow_dispatch, and the ts-registers-changed
       # dispatch that is the gate's real trigger). The ONE documented exception is a fork PR: GitHub
       # withholds this repo's secrets from fork-triggered runs, so a fork legitimately cannot clone a

@@ -4,7 +4,7 @@ name: build-products
 # portal. The portal never runs this stack itself.
 #
 # mt_metadata/mth5 is the SOLE parsing engine (the dependency-free regex extractor was retired
-# in 2026-06), so it is a core dependency, installed here from
+# ), so it is a core dependency, installed here from
 # the pinned lock on the tested Python (3.12). Tier-3 decomposition (the MTpy-v2 fork) is OPTIONAL
 # and installed separately; the build does NOT depend on it, so CI stays green without the fork.
 #
@@ -33,8 +33,8 @@ on:
       - "portal/tools/gen_config.py"
       - "portal/version.js"
       - ".github/workflows/build-products.yml"
-  # M8: also run on pull requests touching the engine subtree, so a fork/branch PR gets the full
-  # engine lane (build + tests + skip accounting) BEFORE merge — previously this workflow triggered
+  # Also run on pull requests touching the engine subtree, so a fork/branch PR gets the full
+  # engine lane (build + tests + skip accounting) BEFORE merge. Triggering
   # only on push, so a PR that broke the engine showed zero checks here (portal-ci.yml and
   # deploy-images.yml already run on pull_request; this brings build-products.yml into line).
   pull_request:
@@ -49,7 +49,7 @@ on:
       - ".github/workflows/build-products.yml"
 
 concurrency:
-  # Keyed on the ref (M8): now that this runs on pull_request as well as push, a fixed group would
+  # Keyed on the ref: because this runs on pull_request as well as push, a fixed group would
   # make a PR run and a push-to-main run cancel each other. Per-ref grouping cancels only superseded
   # runs of the SAME branch/PR (matching gateway-ci.yml's pattern).
   group: build-products-${{ github.ref }}
@@ -100,7 +100,7 @@ jobs:
         run: pip install "mtpy-v2 @ git+https://github.com/bvkay/mtpy-v2.git@${{ vars.DECOMP_COMMIT }}"
 
       # THE PER-PR RUN IS A GATE SUBSET; THE FULL HOST-ENV SUITE RUNS ON PUSH AND DISPATCH.
-      # (ci/engine-suite-speed, 2026-08-18.) Measured per-job Actions timings showed PR CI's ~37 min
+      # Measured per-job Actions timings showed PR CI's ~37 min
       # wall-clock was ONE ~650-test suite run twice, single-threaded: 36.1 min HERE on the host
       # runner and 34.3 min inside the shipped image (deploy-images.yml's engine-full-tests). The
       # in-image run is the trust-invariant one (it tests the artifact that ships), so THAT keeps
@@ -127,12 +127,12 @@ jobs:
       #                                       and the D20 loud skip
       #   tests/test_survey_metadata_invariants.py      the survey-metadata invariant suite (built output:
       #                                       identity chain, projection chains, scans, schema routes)
-      #   tests/test_station_write_path.py    D7: station.json at the served root, with or without --products
+      #   tests/test_station_write_path.py    station.json at the served root, with or without --products
       #   tests/test_station_version_parity.py  the station version single-source pin
       #   tests/test_station_schema_v01.py    the 0.1 schema that constrains the promoted station.json
       #   tests/test_presence_rule.py         no mt_metadata default is ever emitted as a source assertion
       #   tests/test_run_facts.py             the six >INFO dialect extractors for acquisition facts
-      #   tests/test_station_runs.py          runs[] emission: the D2 gate, the D9 channel rule
+      #   tests/test_station_runs.py          runs[] emission: the run gate, the channel rule
       #   tests/test_ts_index_register.py     the offline verified-resource register: the opt-in flag,
       #                                       the closed vocabularies, the unmatched-station stop
       #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
@@ -205,7 +205,7 @@ jobs:
       # already carries both triggers), so main coverage costs no new trigger surface.
       #
       # -n 4 on both forms: pytest-xdist from requirements-dev.txt (installed above, constrained by
-      # the lock). ubuntu-latest exposes 4 vCPUs and the suite is CPU-bound (dev box, 2026-08-18:
+      # the lock). ubuntu-latest exposes 4 vCPUs and the suite is CPU-bound (dev box:
       # 656 tests, 673s serial vs 185s under -n 4, a 3.6x speedup). Parallel safety was proven on
       # the dev box first: identical per-test outcomes serial and under -n 4, zero xdist-only
       # failures, zero xdist_group serial pins (the one defect found was a nondeterministic
@@ -213,7 +213,7 @@ jobs:
       # format was proven to survive xdist against ci_check_skips.py (green and red legs) at the
       # pinned pytest 8.2.0 + pytest-xdist 3.8.0.
       #
-      # -rs surfaces every skip reason (M5): ~20 files importorskip mt_metadata/mth5, so if the pinned
+      # -rs surfaces every skip reason: ~20 files importorskip mt_metadata/mth5, so if the pinned
       # lock ever silently stopped installing that stack the release gate would go green over a
       # hollowed-out suite. The tripwire fails on any skip not on tests/ci_check_skips.py's
       # allow-list. In THIS lane the mt_metadata/mth5 stack IS installed (the lock above) and there is
@@ -281,7 +281,7 @@ jobs:
 
       # Full suite. With mt_metadata present the canonical-ingest / parity / canonical-store /
       # mth5-roundtrip gates RUN (they importorskip only when the stack is absent), so this single
-      # job covers what the old separate extractor-parity job did. C18: this suite also carries
+      # job covers extractor parity as well. This suite also carries
       # the build-cache tests (tests/test_build_cache.py), INCLUDING the §4.5 warm-vs-refresh
       # byte-equivalence guard and the ★ stale-cache refusal — so a cache change that altered output
       # bytes fails CI here.
@@ -292,7 +292,7 @@ jobs:
           pytest -q -rs -n 4 tests | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out
 
-      # C18: exercise the incremental cache end-to-end in CI while the checkout is still CLEAN (this
+      # Exercise the incremental cache end-to-end in CI while the checkout is still CLEAN (this
       # step runs BEFORE the product build below, which writes site-data/ into the tree and would make
       # git status non-empty -> a degenerate salt that self-disables the cache). A full --cache-mode
       # refresh build POPULATES a scratch cache; a warm rw build must then HIT it with zero misses.
@@ -320,7 +320,7 @@ jobs:
       # submissions. The real gate runs in ausmt-surveys CI (validate.yml + tests.yml) and again at
       # ingest; this build step only proves the pipeline itself still runs end-to-end.
       #
-      # C18: the CI-PUBLISHED products are built NON-incremental (no --incremental flag) — CI products
+      # The CI-PUBLISHED products are built NON-incremental (no --incremental flag) — CI products
       # are never cache-derived (design §5). The build cache only ever accelerates the production
       # deploy/Makefile rebuild-data; here we prove the full cold pipeline still runs end-to-end.
       - name: Build products (single canonical pipeline; fails on empty output)
@@ -328,10 +328,10 @@ jobs:
           python -m extract.build_portal \
             --surveys data --out site-data --products products --bundle-edi --no-validate
 
-      # CI guard (C3, PII scrub): derived JSON/XML must never carry an email address (station.json
+      # CI guard, PII scrub: derived JSON/XML must never carry an email address (station.json
       # processing.note is the known vector -- proc_note() redacts it, this is the belt-and-braces
       # net for anything else that scrapes free text). Excludes edi/** -- those are the served
-      # ORIGINAL .edi bytes, the custodian's published record, never mutated (D1) and out of scope
+      # ORIGINAL .edi bytes, the custodian's published record, never mutated and out of scope
       # here. Fails loudly and prints offenders rather than silently passing a dirty build.
       #
       # BOTH trees the build step above writes are scanned. The guard grepped --out alone, which left
@@ -364,11 +364,11 @@ jobs:
             engine/site-data/
             engine/mth5_roundtrip.json
 
-      # NOTE (2026-07-06): the gh-pages "Deploy portal data to Pages" step that lived here was
+      # NOTE: no gh-pages "Deploy portal data to Pages" step runs here; it was
       # REMOVED. It was vestigial first-CI wiring (predates the EliteDesk deployment), had NEVER
       # succeeded (no gh-pages branch was ever created; the read-only GITHUB_TOKEN 403'd the push,
       # reddening every engine-touching push to main), and publishing even sample data publicly
-      # should be a deliberate owner decision (hostile-review item O-4: public read mirror), not a
+      # should be a deliberate decision (a public read mirror), not a
       # CI side effect. If a Pages data mirror is ever wanted, design it against the REAL corpus
       # (surveys-live) with explicit `permissions: contents: write` scoped to that job — do not
       # resurrect this step as-was.
