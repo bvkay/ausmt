@@ -4344,13 +4344,13 @@ rule changes on either side, change BOTH. The 30-day window and 3-item cap below
 display rules for the strip; feed.xml keeps every dated survey.
 ```
 
-#### Brief 9, Option A: ONE concise horizontal line, wrapping - "Recently ...
+#### ONE concise horizontal line, wrapping - "Recently added: Vulcan ...
 
 ```text
-Brief 9, Option A: ONE concise horizontal line, wrapping - "Recently added: Vulcan 2022 (interpunct)
-AusLAMP Queensland Phase 3" - not a heading over a column of rows. The old block form left a large
-sparse box of mostly empty space between the reader and the catalogue, which is precisely what the
-brief says not to keep just because the information exists. The date is what makes an entry recent, so
+ONE concise horizontal line, wrapping - "Recently added: Vulcan 2022 (interpunct)
+AusLAMP Queensland Phase 3" - not a heading over a column of rows. A block form leaves a large
+sparse box of mostly empty space between the reader and the catalogue, which is information kept
+only because it exists. The date is what makes an entry recent, so
 it is not dropped: it rides each link as its title rather than spending a second line.
 ```
 
