@@ -2596,8 +2596,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "PTIA b: a station that collected NEITHER pt nor tipper must render neither block (absent, no empty box)");
   drwC.classList.remove("open");
 
-  // U. CITATION HONESTY (pre-release hostile-review finding
-  //  - state.js publisher placeholder). A NO-DOI survey's
+  // U. CITATION HONESTY (the state.js publisher placeholder). A NO-DOI survey's
   // generated .bib/.ris must carry NO placeholder text a reference manager would ingest as real: the
   // AUSMT_SELF.pb publisher read "AusMT (DOI to be minted per release via Zenodo)" and leaked
   // into EVERY no-DOI citation's publisher/PB field (the doi=/DO/UR FIELDS were already guarded by

@@ -249,7 +249,7 @@ def _yaml() -> YAML:
     matches the survey template's 2-space dash offset; the None representer re-emits the literal
     `null` the templates and existing surveys write. preserve_quotes keeps quoting styles intact.
 
-    Residual (documented for the adversarial review): intra-node horizontal alignment inside a FLOW
+    Residual: intra-node horizontal alignment inside a FLOW
     map (e.g. `{  name: "x",     orcid: "y"}`) is not preserved by any YAML round-tripper — ruamel
     normalises the internal spacing of a flow collection. Block style (the dominant form in the
     templates) round-trips exactly; the merge test uses a well-formed block-style exemplar."""

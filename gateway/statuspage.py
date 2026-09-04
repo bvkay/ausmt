@@ -58,7 +58,7 @@ _STATE_BLURB = {
 _ABS_POSIX = re.compile(r"(?<![\w])/(?:[\w.\-]+/)*[\w.\-]+")
 _ABS_WIN = re.compile(r"[A-Za-z]:\\(?:[\w.\- ]+\\)*[\w.\- ]+")
 
-# The ONLY states whose last-transition note renders publicly (review finding 2):
+# The ONLY states whose last-transition note renders publicly:
 # these are the states where the note is INTENDED for the submitter — the AV verdict, the quarantine
 # cause, the curator's return/reject explanation. Publish-cycle reasons (PUBLISHING / PUBLISHED /
 # PUBLISH_FAILED) are curator/audit/internal text — the PII-ACK acknowledgement prefix with its

@@ -1,4 +1,4 @@
-"""Runner-side edit tests (+ adversarial-review fixes). These exercise
+"""Runner-side edit tests. These exercise
 gateway.runner.edit DIRECTLY — the same in-suite-reaches-the-runner pattern as test_runner.py.
 ruamel.yaml is a runner (engine-image) dependency; these tests run wherever ruamel is installed
 (the ausmt env locally; the engine lock in CI's full workflow).
@@ -467,7 +467,7 @@ def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
 
 
 def test_patched_ambiguous_map_keys_reread_as_strings_under_pyyaml(tmp_path):
-    # Re-review finding: quote_ambiguous recursed only over dict VALUES, so a curator-
+    # quote_ambiguous recursed only over dict VALUES, so a curator-
     # supplied ambiguous KEY in a JSON-edited map ('on'/'no'/'12:34:56') emitted bare and PyYAML
     # retyped it (key True / False / 45296) while ruamel's re-read kept it a string — the same
     # differential as FIX 3, one axis over, with diff/sha-pin/confirm all self-consistently blind.

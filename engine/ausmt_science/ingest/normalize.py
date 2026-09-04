@@ -32,7 +32,7 @@ distinct conditioning failures occur that way, and item 7 below is a different c
   6. Site.project pattern is ^[a-zA-Z0-9-_]*$ (no spaces) — survey project names like "Stuart Shelf
      2009" fail the write; sanitized (the readable name stays in survey.yaml). Found by the
      remote-reference data inspection across real dialects (EDL/BIRRP).
-  7. Library-default metadata the XML asserts as fact (final hostile audit 4.2): for EDI sources the
+  7. Library-default metadata the XML asserts as fact: for EDI sources the
      sign convention, declination epoch/model, and degenerate-geometry channel orientations are
      mt_metadata defaults the source never stated. The values stay (the writer requires them) but
      each gets a machine-readable NOT-asserted conditioning note, like the rotation zero-fill.
@@ -363,7 +363,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
         tf._rotation_angle = np.zeros(n_periods)
         notes.append("rotation: unknown — writer requires array; zeros written, frame NOT asserted")
 
-    # Issue #7 (final hostile audit 4.2): fields mt_metadata fills with LIBRARY DEFAULTS that an EDI
+    # Issue #7: fields mt_metadata fills with LIBRARY DEFAULTS that an EDI
     # cannot state machine-readably, yet the written XML asserts as station facts — the sign
     # convention (<SignConvention>+), the declination epoch/model, and channel orientations
     # synthesised from degenerate EMEAS geometry (zero-length, azimuth-less dipoles => Ey "north").

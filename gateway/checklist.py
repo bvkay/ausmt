@@ -140,8 +140,8 @@ def _grep_pii(package_dir: Path, preview_dir: Path, submitter_email: str) -> _Pi
     source EDI - a curator may acknowledge it). The scan visits the WHOLE tree so the curator sees
     every affected file, not just the first.
 
-    Submitter-needle matching is CASE-INSENSITIVE by contract (as amended / review finding
-    1): email addresses are case-insensitive in practice, and the generic regex already matches any
+    Submitter-needle matching is CASE-INSENSITIVE by contract: email addresses are
+    case-insensitive in practice, and the generic regex already matches any
     case — a byte-exact needle would let 'User@Example.com' (DB) with 'user@example.com' in an artifact
     slide into the ACKNOWLEDGEABLE class, i.e. a bypass. Both the needle and the scanned bytes are
     ASCII-lowercased before the containment test; a non-ASCII address falls back to byte-exact

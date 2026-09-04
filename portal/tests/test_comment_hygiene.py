@@ -499,14 +499,19 @@ RULES = (
     # the other ordinary paths stay paths.
     Rule(re.compile(r"\b(?:feat|fix|chore|docs)/[a-z0-9]+(?:-[a-z0-9]+)+(?![\w/-]|\.\w)"),
          "branch name"),
-    # A slice, a review round and a lettered review finding are all names for
-    # the piece of work a change belonged to.
+    # A slice, a review round, a numbered or lettered review finding and a numbered audit item are
+    # all names for the piece of work a change belonged to. A NAMED review (adversarial, hostile,
+    # security, code-health) is the sitting itself; an audit item is that sitting's numbering. The
+    # ordinary sense of audit (an audit log, an audit tail) carries no number, which is why the
+    # number is what the rule reads.
     Rule(re.compile(r"\bslices?\s*#"
                     r"|\breviews?\s*#\s*\d"
                     r"|\breviews?\s+(?-i:[A-Z]\d)\b"
+                    r"|\breviews?\s+findings?\b"
                     r"|\b(?:in|during|from) the review\b"
                     r"|\breview[- ]rounds?\b"
-                    r"|\bcode-health review\b", re.I), "review or slice identifier"),
+                    r"|\b(?:adversarial|hostile|security|code-health)[- ]reviews?\b"
+                    r"|\baudits?\s*#?\s*\d+(?:\.\d+)*\b", re.I), "review or slice identifier"),
     # A ROUND is the run of work a change belonged to, named beside the kind of work it was. The
     # ordinary senses of the word (a retry round, rounding a number) carry none of those words.
     # The numbered form is the audit trail whatever joins the word to its number, so the separator
@@ -2345,6 +2350,34 @@ def test_a_numbered_review_finding_is_provenance(tmp_path):
     clean.write_text('"""The curator reviews the submission before it is published."""\n',
                      encoding="utf-8")
     assert not offences([clean]), "the rule flagged the ordinary verb"
+
+
+def test_every_spelling_of_a_review_finding_and_an_audit_item_is_provenance(tmp_path):
+    """The sitting a change came out of, in each spelling the tree actually used: the finding
+    numbered or named, the review named after its kind, and the audit item numbered. The ordinary
+    senses (an audit log, an audit tail, a curator reviewing a submission) carry no number and no
+    kind, which is what keeps them out."""
+    caught = {
+        "numbered.py": '"""The states whose note renders publicly (review finding 2)."""\n',
+        "named.py": '"""The list numbering (adversarial-review finding, LOW)."""\n',
+        "hostile.py": '"""Citation honesty (pre-release hostile-review finding)."""\n',
+        "audit.py": '"""Submission paths, honest to the infrastructure (audit 5.1)."""\n',
+        "audit_flat.py": '"""Library defaults asserted as fact (final hostile audit 4.2)."""\n',
+    }
+    for name, body in caught.items():
+        f = tmp_path / name
+        f.write_text(body, encoding="utf-8")
+        hits = offences([f])
+        assert hits and "review or slice identifier" in hits[0], f"{name} went unseen: {hits}"
+    allowed = {
+        "log.py": '"""Publish-cycle reasons are curator and audit text, never public."""\n',
+        "tail.py": '"""The pending intents and the actions audit tail are read-only."""\n',
+        "verb.py": '"""The curator reviews the submission before it is published."""\n',
+    }
+    for name, body in allowed.items():
+        f = tmp_path / name
+        f.write_text(body, encoding="utf-8")
+        assert not offences([f]), f"{name}: the ordinary sense was flagged"
 
 
 def test_a_switched_off_ternary_arm_is_commented_out_code(tmp_path):

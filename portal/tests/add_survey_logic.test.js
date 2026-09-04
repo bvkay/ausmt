@@ -67,7 +67,7 @@ ok(/region: "South Australia"/.test(y), "survey.yaml emits region");
 ok(!/coordinate_resolution:/.test(M.buildSurveyYaml({ ...base, data_types: ["BBMT"] })),
    "no coordinate_resolution when nothing was resolved");
 
-// ---- access block: embargo_until + contact (audit 5.2) ----
+// ---- access block: embargo_until + contact ----
 const yEmb = M.buildSurveyYaml({ ...base, access: "embargoed",
                                  embargo_until: "2027-02-01", access_contact: "custodian@agency.gov.au" });
 ok(/access:\s*\n\s*level: embargoed\s*\n\s*embargo_until: 2027-02-01/.test(yEmb),

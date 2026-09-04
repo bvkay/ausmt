@@ -24,7 +24,7 @@ PII_NAME = "Detailview Submittername"
 class _BlockingGit(FakeGit):
     """A FakeGit whose FIRST invocation blocks until `release` is set, holding the publish task at
     its pre-flight git call so the submission stays deterministically in PUBLISHING while the test
-    inspects the public status page (review finding 2 — the PUBLISHING-window leak). The git call
+    inspects the public status page (the PUBLISHING-window leak). The git call
     runs inside asyncio.to_thread, so blocking on a threading.Event does not stall the event loop."""
 
     def __init__(self):
@@ -322,7 +322,7 @@ def test_public_status_identical_for_ack_vs_nonack(tmp_path):
 
 
 def test_publishing_window_hides_ack_details_from_public(tmp_path):
-    # Review finding 2 (HIGH): the PII-ACK-prefixed reason lands on the VALIDATED->PUBLISHING
+    # The PII-ACK-prefixed reason lands on the VALIDATED->PUBLISHING
     # transition, and the public status page rendered the LAST transition reason for ANY state with a
     # truthy note — so during the real PUBLISHING window (git runs for seconds) the submitter-visible
     # page showed 'PII-ACK', the flagged file names, and the curator's private note.
@@ -360,7 +360,7 @@ def test_publishing_window_hides_ack_details_from_public(tmp_path):
 
 
 def test_public_page_identical_ack_vs_nonack_while_publishing(tmp_path):
-    # Review finding 2, identity form (extends the terminal-state identity test to the PUBLISHING
+    # Identity form (extends the terminal-state identity test to the PUBLISHING
     # window): the public page must be byte-identical (after normalising id/slug/timestamp) for an
     # acknowledged vs a non-acknowledged submission BOTH sitting in PUBLISHING. Deterministic: the
     # first publish is blocked inside its git call; the second waits on the global publish lock — so

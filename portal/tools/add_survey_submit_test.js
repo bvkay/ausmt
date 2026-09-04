@@ -309,7 +309,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 4b. EMBARGO DATE + ACCESS CONTACT REVEAL AND EMIT (audit 5.2). The embargo/contact inputs are hidden
+  // 4b. EMBARGO DATE + ACCESS CONTACT REVEAL AND EMIT. The embargo/contact inputs are hidden
   //     for an 'open' level and revealed for any non-open level; a filled date reaches survey.yaml as a
   //     bare ISO scalar. Reads the REAL packaged survey.yaml via the download path (createObjectURL).
   async function packagedSurveyYaml(win, record) {
@@ -396,7 +396,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 5. SUBMISSION.md "How to submit" LIST NUMBERING (adversarial-review finding, LOW): the packaged
+  // 5. SUBMISSION.md "How to submit" LIST NUMBERING: the packaged
   //    instructions are an ordered list and must number strictly sequentially (1., 2., ...) in BOTH
   //    branches. The gateway-ABSENT branch (the PRIMARY path on static-only/file:// deploys) regressed
   //    to "1." then "3." with no "2." — this section reads the REAL packaged bytes from both transports
@@ -433,7 +433,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 5c. NO PR FICTION IN SUBMISSION.md (audit 5.1). The ausmt-surveys repo is private forever, so a
+  // 5c. NO PR FICTION IN SUBMISSION.md. The ausmt-surveys repo is private forever, so a
   //     "pull request (always available)" instruction is impossible to follow. The packaged SUBMISSION.md
   //     must NOT instruct opening a PR against that repo, and MUST carry the honest email-the-operator
   //     fallback. Checked on BOTH transports (the file travels inside the zip either way).

@@ -1950,7 +1950,7 @@ if(typeof document!=="undefined"&&document.getElementById){
       `- validation: PASS ${counts.PASS} · WARNING ${counts.WARNING} · FAIL ${counts.FAIL}\n\n`+
       `## Submitter\n- name: ${meta.uploader_name}\n`+
       `- authority to submit: ${meta.authority_to_submit?"yes":"NO"}\n- licence/access confirmed: ${meta.license_declaration?"yes":"NO"}\n\n`;
-    // Submission paths, honest to the current infrastructure (audit 5.1): the gateway upload is the primary
+    // Submission paths, honest to the current infrastructure: the gateway upload is the primary
     // path where detected; the fallback is emailing the packaged zip to the operator (the ausmt-surveys
     // repo is private, so there is no public PR path). See docs: portal internals, add-survey.html.
     const direct=

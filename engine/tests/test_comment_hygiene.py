@@ -497,14 +497,19 @@ RULES = (
     # the other ordinary paths stay paths.
     Rule(re.compile(r"\b(?:feat|fix|chore|docs)/[a-z0-9]+(?:-[a-z0-9]+)+(?![\w/-]|\.\w)"),
          "branch name"),
-    # A slice, a review round and a lettered review finding are all names for
-    # the piece of work a change belonged to.
+    # A slice, a review round, a numbered or lettered review finding and a numbered audit item are
+    # all names for the piece of work a change belonged to. A NAMED review (adversarial, hostile,
+    # security, code-health) is the sitting itself; an audit item is that sitting's numbering. The
+    # ordinary sense of audit (an audit log, an audit tail) carries no number, which is why the
+    # number is what the rule reads.
     Rule(re.compile(r"\bslices?\s*#"
                     r"|\breviews?\s*#\s*\d"
                     r"|\breviews?\s+(?-i:[A-Z]\d)\b"
+                    r"|\breviews?\s+findings?\b"
                     r"|\b(?:in|during|from) the review\b"
                     r"|\breview[- ]rounds?\b"
-                    r"|\bcode-health review\b", re.I), "review or slice identifier"),
+                    r"|\b(?:adversarial|hostile|security|code-health)[- ]reviews?\b"
+                    r"|\baudits?\s*#?\s*\d+(?:\.\d+)*\b", re.I), "review or slice identifier"),
     # A ROUND is the run of work a change belonged to, named beside the kind of work it was. The
     # ordinary senses of the word (a retry round, rounding a number) carry none of those words.
     # The numbered form is the audit trail whatever joins the word to its number, so the separator

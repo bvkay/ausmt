@@ -362,12 +362,12 @@ def test_fieldnotes_drop_is_targeted_not_wholesale(tmp_path):
     assert "fieldnotes.datalogger.id" not in c2.value
 
 
-# --- Final-audit 4.2: library-default metadata the XML asserts must carry conditioning notes. ------
+# --- Library-default metadata the XML asserts must carry conditioning notes. ----------------------
 def test_edi_library_defaults_are_noted_not_silently_asserted(tmp_path):
     """FAILS IF: normalize writes a canonical XML that asserts a sign convention, a declination
     epoch/model, or channel orientations for an EDI source WITHOUT a conditioning note saying the
-    source never stated them. This is the LG-2 fabrication class the fix did not cover (final
-    hostile audit 4.2, reproduced on this very fixture: Vulcan_A1's XML asserts <SignConvention>+,
+    source never stated them. This is the fabrication class the earlier fix did not cover
+    (reproduced on this very fixture: Vulcan_A1's XML asserts <SignConvention>+,
     Declination epoch="1995", and Ey orientation 0.0 = NORTH — from zero-length, azimuth-less EMEAS
     lines — none of it source-stated). The values may stay (the writer requires them, exactly like
     the Issue-#4 rotation zero-fill), but each must be flagged NOT-asserted in the conditioned list."""

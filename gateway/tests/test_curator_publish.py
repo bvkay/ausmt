@@ -385,8 +385,8 @@ def test_generic_email_with_ack_publishes_and_audits(tmp_path):
 def test_submitter_email_with_ack_still_409(tmp_path):
     # - THE CONTRACT TEST. The submitter's OWN email present + ack_pii=yes => 409. No
     # acknowledgement can override a submitter-email hit. Also the MIXED case (submitter + generic) is
-    # a 409 with ack, and a CASE-VARIANT of the submitter email is still a submitter hit (review
-    # finding 1 — submitter-needle matching is case-insensitive by contract). Failure criterion: fails
+    # a 409 with ack, and a CASE-VARIANT of the submitter email is still a submitter hit
+    # (submitter-needle matching is case-insensitive by contract). Failure criterion: fails
     # if ANY acknowledged curator approve is not 409, or the state left VALIDATED, or any git ran.
     async def _body():
         git = FakeGit()
@@ -418,7 +418,7 @@ def test_submitter_email_with_ack_still_409(tmp_path):
 
 
 def test_submitter_email_case_variants_classified_submitter(tmp_path):
-    # Review finding 1 (SHIP-BLOCKER): the submitter needle was byte-exact while the generic regex is
+    # SHIP-BLOCKER: the submitter needle was byte-exact while the generic regex is
     # case-insensitive, so 'User@Example.com' (DB) with 'user@example.com' in an artifact landed in
     # generic_hits => acknowledgeable => ack_pii published the submitter's own address. Both case
     # orientations must classify as SUBMITTER hits: approve with ack => 409, no ack checkbox rendered,
