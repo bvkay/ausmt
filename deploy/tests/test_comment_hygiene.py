@@ -464,28 +464,53 @@ TAG_PATTERN = re.compile(
     % (_TAGS, _TAGS, _TAGS, _WORK, _TAGS, _TAGS, _WORK)
 )
 
-# The false positives, one test per entry: a token shaped like a tag that names
-# a licence, a digest, an object store, an address family, a contrast level, a
-# projection, a percentile or a heading level is not lane vocabulary.
-TAG_NOT_A_TAG = re.compile(
-    r"^(?:CC0|MD5|SHA1|S3|IPv4|IPv6|AA|AAA|EPSG|WGS84|GDA94|GDA2020|UTM"
-    r"|H1|H2|H3|H4|H5|H6|P50|P95|P99|L1|L2|L3|D50|D55|D65|D75)$")
-# A station, site or survey id is data the corpus carries rather than a work
-# item, so the words that name one excuse the token beside them.
-TAG_NEAR_AN_ID = re.compile(
-    r"\b(?:station|stations|site|sites|id|ids|identifier|identifiers|survey"
-    r"|surveys|code|codes|Wp|Vulcan)\b|\bau\.[a-z]", re.I)
+# The false positives, one entry per MEANING: what the token names, the token
+# itself, and the words that must stand beside it for that meaning to be the one
+# in play. The context test is what keeps an entry from buying a false negative:
+# without it, a genuine work item spelled S3 or H1 would be permanently
+# invisible. Every entry is held by a test that the same token in work-item
+# position, without those words, is still caught.
+TAG_NOT_A_TAG = (
+    ("the object store", re.compile(r"^S3$"),
+     re.compile(r"bucket|object|store|endpoint|MinIO|\bR2\b", re.I)),
+    ("a heading level", re.compile(r"^H[1-6]$"),
+     re.compile(r"heading|<h\d|\btags?\b", re.I)),
+    ("a CIE standard illuminant", re.compile(r"^D(?:50|55|65|75)$"),
+     re.compile(r"illuminant|CIE|CIELAB|sRGB|white ?point|colou?r|\bLab\b", re.I)),
+    ("a data level", re.compile(r"^L[0-3]$"),
+     re.compile(r"\blevels?\b|\btiers?\b|\bproducts?\b", re.I)),
+    ("a release quarter", re.compile(r"^Q[1-4]$"),
+     re.compile(r"Release |20\d\d-Q|quarter", re.I)),
+    ("a public-domain dedication", re.compile(r"^CC0$"),
+     re.compile(r"licen[cs]|dedication|public domain|Creative Commons", re.I)),
+    ("a DATAID example", re.compile(r"^(?:ST|A)\d{2}$"),
+     re.compile(r"DATAID|data ?id|example", re.I)),
+    ("a message digest", re.compile(r"^MD5$"),
+     re.compile(r"digest|checksum|hash|manifest|sha\d", re.I)),
+    ("a percentile", re.compile(r"^P(?:50|95|99)$"),
+     re.compile(r"percentile|median|\btail\b|budget|threshold|profile", re.I)),
+)
+# A token that IS an id is named by the noun that says so, immediately before it
+# with one space between. The test is on the TOKEN. A window wide enough to hold
+# a sentence excuses any token standing NEAR the word, and on a corpus about
+# stations and surveys those words stand beside everything.
+TAG_ID_NOUN = re.compile(r"(?:station|site|survey|run|channel|filter|fixture) \Z", re.I)
+_TAG_GROUPS = ("head", "colon", "paren", "after", "before")
 
 
 def work_item_tags(text):
     """Every work-item tag in a bare comment, as (match, tag)."""
     found = []
     for match in TAG_PATTERN.finditer(text):
-        tag = next(group for group in match.groups() if group)
-        window = text[max(0, match.start() - WINDOW):match.end() + WINDOW]
-        if all(TAG_NOT_A_TAG.match(part.strip()) for part in re.split(r"[/,]", tag)):
+        group = next(name for name in _TAG_GROUPS if match.group(name))
+        tag = match.group(group)
+        start, stop = match.span(group)
+        window = text[max(0, start - WINDOW):stop + WINDOW]
+        parts = [part.strip() for part in re.split(r"[/,]", tag)]
+        if all(any(token.match(part) and near.search(window)
+                   for _, token, near in TAG_NOT_A_TAG) for part in parts):
             continue
-        if TAG_NEAR_AN_ID.search(window):
+        if TAG_ID_NOUN.search(text[:start]):
             continue
         found.append((match, tag))
     return found

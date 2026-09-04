@@ -464,28 +464,53 @@ TAG_PATTERN = re.compile(
     % (_TAGS, _TAGS, _TAGS, _WORK, _TAGS, _TAGS, _WORK)
 )
 
-# The false positives, one test per entry: a token shaped like a tag that names
-# a licence, a digest, an object store, an address family, a contrast level, a
-# projection, a percentile or a heading level is not lane vocabulary.
-TAG_NOT_A_TAG = re.compile(
-    r"^(?:CC0|MD5|SHA1|S3|IPv4|IPv6|AA|AAA|EPSG|WGS84|GDA94|GDA2020|UTM"
-    r"|H1|H2|H3|H4|H5|H6|P50|P95|P99|L1|L2|L3|D50|D55|D65|D75)$")
-# A station, site or survey id is data the corpus carries rather than a work
-# item, so the words that name one excuse the token beside them.
-TAG_NEAR_AN_ID = re.compile(
-    r"\b(?:station|stations|site|sites|id|ids|identifier|identifiers|survey"
-    r"|surveys|code|codes|Wp|Vulcan)\b|\bau\.[a-z]", re.I)
+# The false positives, one entry per MEANING: what the token names, the token
+# itself, and the words that must stand beside it for that meaning to be the one
+# in play. The context test is what keeps an entry from buying a false negative:
+# without it, a genuine work item spelled S3 or H1 would be permanently
+# invisible. Every entry is held by a test that the same token in work-item
+# position, without those words, is still caught.
+TAG_NOT_A_TAG = (
+    ("the object store", re.compile(r"^S3$"),
+     re.compile(r"bucket|object|store|endpoint|MinIO|\bR2\b", re.I)),
+    ("a heading level", re.compile(r"^H[1-6]$"),
+     re.compile(r"heading|<h\d|\btags?\b", re.I)),
+    ("a CIE standard illuminant", re.compile(r"^D(?:50|55|65|75)$"),
+     re.compile(r"illuminant|CIE|CIELAB|sRGB|white ?point|colou?r|\bLab\b", re.I)),
+    ("a data level", re.compile(r"^L[0-3]$"),
+     re.compile(r"\blevels?\b|\btiers?\b|\bproducts?\b", re.I)),
+    ("a release quarter", re.compile(r"^Q[1-4]$"),
+     re.compile(r"Release |20\d\d-Q|quarter", re.I)),
+    ("a public-domain dedication", re.compile(r"^CC0$"),
+     re.compile(r"licen[cs]|dedication|public domain|Creative Commons", re.I)),
+    ("a DATAID example", re.compile(r"^(?:ST|A)\d{2}$"),
+     re.compile(r"DATAID|data ?id|example", re.I)),
+    ("a message digest", re.compile(r"^MD5$"),
+     re.compile(r"digest|checksum|hash|manifest|sha\d", re.I)),
+    ("a percentile", re.compile(r"^P(?:50|95|99)$"),
+     re.compile(r"percentile|median|\btail\b|budget|threshold|profile", re.I)),
+)
+# A token that IS an id is named by the noun that says so, immediately before it
+# with one space between. The test is on the TOKEN. A window wide enough to hold
+# a sentence excuses any token standing NEAR the word, and on a corpus about
+# stations and surveys those words stand beside everything.
+TAG_ID_NOUN = re.compile(r"(?:station|site|survey|run|channel|filter|fixture) \Z", re.I)
+_TAG_GROUPS = ("head", "colon", "paren", "after", "before")
 
 
 def work_item_tags(text):
     """Every work-item tag in a bare comment, as (match, tag)."""
     found = []
     for match in TAG_PATTERN.finditer(text):
-        tag = next(group for group in match.groups() if group)
-        window = text[max(0, match.start() - WINDOW):match.end() + WINDOW]
-        if all(TAG_NOT_A_TAG.match(part.strip()) for part in re.split(r"[/,]", tag)):
+        group = next(name for name in _TAG_GROUPS if match.group(name))
+        tag = match.group(group)
+        start, stop = match.span(group)
+        window = text[max(0, start - WINDOW):stop + WINDOW]
+        parts = [part.strip() for part in re.split(r"[/,]", tag)]
+        if all(any(token.match(part) and near.search(window)
+                   for _, token, near in TAG_NOT_A_TAG) for part in parts):
             continue
-        if TAG_NEAR_AN_ID.search(window):
+        if TAG_ID_NOUN.search(text[:start]):
             continue
         found.append((match, tag))
     return found
@@ -887,41 +912,55 @@ def test_the_work_item_rule_does_not_flag_ordinary_prose(tmp_path):
     assert not offences([f]), "the work-item rule flagged ordinary prose"
 
 
-def test_each_false_positive_on_the_tag_list_stays_clean(tmp_path):
-    """One case per entry on the exemption list: a token shaped like a tag that names a thing."""
+def test_each_false_positive_names_its_meaning_and_is_caught_without_it(tmp_path):
+    """One entry per meaning on the exemption list. The token standing beside the words that give
+    it that meaning is clean; the SAME token in work-item position, without them, is caught."""
     cases = [
-        "CC0: a dedication is not a licence with conditions.",
-        "MD5: the digest the manifest carries beside the sha256.",
-        "S3: the object store the mirror writes to.",
-        "IPv4: the address family the edge truncates to /24.",
-        "IPv6: the address family the edge truncates to /48.",
-        "AA: the contrast floor every text pair must clear.",
-        "AAA: the contrast level the large type clears.",
-        "EPSG4326: the coordinate reference the corpus publishes in.",
-        "WGS84: the datum every published position is on.",
-        "GDA94: the datum a custodian record may arrive on.",
-        "GDA2020: the datum a custodian record may arrive on.",
-        "UTM55: the projected grid a custodian record may arrive on.",
-        "H1: one per document, and the page title is it.",
-        "H2: the section heading level the pages use.",
-        "H3: the subsection heading level the pages use.",
-        "H4: a heading level the emitted pages do not reach.",
-        "H5: a heading level the emitted pages do not reach.",
-        "H6: a heading level the emitted pages do not reach.",
-        "P50: the median build time the profile reports.",
-        "P95: the tail the build budget is set against.",
-        "P99: the tail the alert threshold is set against.",
-        "L1: the data level a raw time series is served at.",
-        "L2: the data level a processed product is served at.",
-        "L3: the data level a model is served at.",
-        "The station id RD18-007 rides every row.",
-        "Site A1 is the reference the survey record names.",
+        ("S3: the object store the mirror writes to.",
+         "S3 reshaped the download panel."),
+        ("H1: the heading level a document carries once.",
+         "H1 reshaped the download panel."),
+        ("D65: the CIE illuminant the colour maths is computed under.",
+         "D65 reshaped the download panel."),
+        ("L2: the data level a processed product is served at.",
+         "L2 reshaped the download panel."),
+        ("Q3: Release 2026-Q3 is the snapshot a citation names.",
+         "Q3 reshaped the download panel."),
+        ("CC0: a public domain dedication is not a licence with conditions.",
+         "CC0 reshaped the download panel."),
+        ("ST01: the DATAID the dialect note carries.",
+         "ST01 reshaped the download panel."),
+        ("MD5: the digest the manifest carries beside the sha256.",
+         "MD5 reshaped the download panel."),
+        ("P95: the percentile the build budget is set against.",
+         "P95 reshaped the download panel."),
+        ("station A1: the reference this survey record names.",
+         "Amendment A1: the colour set is frozen."),
     ]
-    for i, case in enumerate(cases):
-        f = tmp_path / f"case{i}.js"
-        f.write_text(f"// {case}\nvar a = 1;\n", encoding="utf-8")
-        assert not offences([f]), f"the tag rule flagged a false positive: {case}"
+    for i, (clean, work_item) in enumerate(cases):
+        ok = tmp_path / f"ok{i}.js"
+        ok.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
+        assert not offences([ok]), f"the tag rule flagged a false positive: {clean}"
+        bad = tmp_path / f"bad{i}.js"
+        bad.write_text(f"// {work_item}\nvar a = 1;\n", encoding="utf-8")
+        hits = offences([bad])
+        assert hits and "work-item identifier" in hits[0], (
+            f"the same token in work-item position was excused: {work_item}"
+        )
 
+
+def test_the_id_exemption_tests_the_token_and_not_its_neighbourhood(tmp_path):
+    """The exemption exists to protect a token that IS an id. A window wide enough to hold a
+    sentence excuses any token standing NEAR the word, and on a portal about stations and surveys
+    those words stand beside everything."""
+    for line in ("C42: only POSITIONED stations reach the layer.",
+                 "C46: the recognised licence-id vocabulary."):
+        near = tmp_path / "near.js"
+        near.write_text(f"// {line}\nvar a = 1;\n", encoding="utf-8")
+        hits = offences([near])
+        assert hits and "work-item identifier" in hits[0], (
+            f"a work-item tag was excused by a word standing near it: {line}"
+        )
 
 def test_history_and_alternatives_narrative_is_caught(tmp_path):
     cases = [
