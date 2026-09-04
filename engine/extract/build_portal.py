@@ -1667,7 +1667,8 @@ def _related_identifiers_of(y: dict) -> list:
         entry = {"identifier": r.get("identifier"), "identifier_type": r.get("identifier_type"),
                  "relation": r.get("relation"), "custodian": r.get("custodian")}
         if r.get("identifies") not in (None, ""):
-            entry["identifies"] = r.get("identifies")   # D-L1: level label the drawer/files-tab key off
+            # "identifies" is the field the drawer and the files tab label a related row by.
+            entry["identifies"] = r.get("identifies")
         out.append(entry)
     return out
 

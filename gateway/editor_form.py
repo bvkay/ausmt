@@ -477,8 +477,9 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "identifier_type" and value not in IDENTIFIER_TYPES:
         raise SectionError(section, f"identifier type '{value}' is not one of "
                                     f"{', '.join(IDENTIFIER_TYPES)}")
-    # D-L1: the data level a related_identifiers row points at. Fail-closed like relation/identifier_type
-    # — an out-of-vocab level auto-derives a wrong relation, so it must block, not ship.
+    # A related_identifiers row's "identifies" field names the data level the row points at, and is
+    # fail-closed like relation and identifier_type: an out-of-vocabulary level derives a wrong
+    # relation, so it must block rather than ship.
     if kind == "identifies" and value not in IDENTIFIES_LEVELS:
         raise SectionError(section, f"data level '{value}' is not one of "
                                     f"{', '.join(IDENTIFIES_LEVELS)}")

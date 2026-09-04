@@ -1021,7 +1021,8 @@ function relatedIdentifiersHtml(m){
   const list=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object");
   if(!list.length)return "";
   const rows=list.map(r=>{
-    // D-L1: label by the data LEVEL when identifies is present; else fall back to the relation label.
+    // A related_identifiers row's "identifies" field is what labels it; the relation label is the
+    // fallback when the field is absent.
     const label=(r.identifies&&IDENTIFIES_LABELS[r.identifies])||RELATION_LABELS[r.relation]||(r.relation?esc(r.relation):"Related");
     const cust=r.custodian?` <span class='prov'>(${esc(r.custodian)})</span>`:"";
     // A reserved identifier renders as plain text + note, not an anchor (never a dead link).

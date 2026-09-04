@@ -551,14 +551,19 @@ TAG_PATTERN = re.compile(
 # invisible. Every entry is held by a test that the same token in work-item
 # position, without those words, is still caught.
 TAG_NOT_A_TAG = (
+    # Every alternative is word-bounded. Without the boundary an alternative opens on any word
+    # that merely CONTAINS it, and "store" inside "restore" and "stored" is enough to excuse a
+    # work item called S3 for the life of the pin.
     ("the object store", re.compile(r"^S3$"),
-     re.compile(r"bucket|object|store|endpoint|MinIO|\bR2\b", re.I)),
+     re.compile(r"\bbuckets?\b|\bobjects?\b|\bstores?\b|\bendpoints?\b|\bMinIO\b|\bR2\b", re.I)),
     ("a heading level", re.compile(r"^H[1-6]$"),
      re.compile(r"heading|<h\d|\btags?\b", re.I)),
     ("a CIE standard illuminant", re.compile(r"^D(?:50|55|65|75)$"),
      re.compile(r"illuminant|CIE|CIELAB|sRGB|white ?point|colou?r|\bLab\b", re.I)),
+    # The bare noun is not enough: a clause label written L1 is naturally ABOUT levels, so the
+    # word that would excuse it stands beside it by construction. The level must be named.
     ("a data level", re.compile(r"^L[0-3]$"),
-     re.compile(r"\blevels?\b|\btiers?\b|\bproducts?\b", re.I)),
+     re.compile(r"\bdata levels?\b|\blevels?\s+[0-3]\b|\bL[0-3]\s+products?\b", re.I)),
     ("a release quarter", re.compile(r"^Q[1-4]$"),
      re.compile(r"Release |20\d\d-Q|quarter", re.I)),
     ("a public-domain dedication", re.compile(r"^CC0$"),
@@ -587,8 +592,12 @@ def work_item_tags(text):
         start, stop = match.span(group)
         window = text[max(0, start - WINDOW):stop + WINDOW]
         parts = [part.strip() for part in re.split(r"[/,]", tag)]
-        if all(any(token.match(part) and near.search(window)
-                   for _, token, near in TAG_NOT_A_TAG) for part in parts):
+        # A token joined by a hyphen to what stands before it is a COMPOUND label ("D-L1",
+        # "C35b-D5"), which is the shape a clause or a work item takes and never the shape of the
+        # id an exemption exists for. No entry on the table excuses one.
+        compound = start >= 2 and text[start - 1] == "-" and text[start - 2].isalnum()
+        if not compound and all(any(token.match(part) and near.search(window)
+                                    for _, token, near in TAG_NOT_A_TAG) for part in parts):
             continue
         if TAG_ID_NOUN.search(text[:start]):
             continue
