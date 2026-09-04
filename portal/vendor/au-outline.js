@@ -10,7 +10,7 @@
 // SOURCE / LICENCE ------------------------------------------------------------------
 //   Natural Earth 5.1.1, layer ne_50m_admin_0_countries (the ADMIN=Australia feature), commit 9380cca83db5;
 //   public domain (Natural Earth terms of use; CC0-equivalent, no attribution required);
-//   Douglas-Peucker tolerance 0.08 degrees; islands above 0.1 square degrees; derived 2026-08-31.
+//   Douglas-Peucker tolerance 0.08 degrees; islands above 0.1 square degrees.
 //   Inter-state boundaries are the legislated meridian/parallel segments, which are plain
 //   geographic facts. No rights are claimed over this file - reuse freely. It is a LOCATOR
 //   BACKDROP for context, NOT a survey-grade or legal boundary.

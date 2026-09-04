@@ -1018,6 +1018,12 @@ SHIPPED_HTML_CAPS = {
     "404.html": 900,
 }
 SHIPPED_JS_CAP = 122_000
+# The page scripts a visitor also downloads: the four at the top of portal/ and the coastline this
+# repository generates into vendor/. They are not modules under src/, so a glob anchored there read
+# none of them and none of their bytes counted anywhere. Third-party libraries under vendor/ are
+# somebody else's prose and stay out. The length clause reads the modules and the pages; these
+# scripts are held by the byte cap and by the vocabulary.
+SHIPPED_PAGE_SCRIPT_CAP = 9_600
 
 # THE LENGTH CLAUSE, on the shipped tier alone. A long constraint is stated in one or two sentences
 # and anything longer belongs in docs/, so a comment a visitor downloads is at most two sentences
@@ -1105,6 +1111,16 @@ def shipped_js():
     return listing((PORTAL / "src", "*.js"))
 
 
+AUTHORED_VENDOR_SCRIPTS = ("au-outline.js",)
+
+
+def shipped_page_scripts():
+    """The scripts a page loads by name rather than as a module of src/. au-outline.js is generated
+    by engine/extract/_au_outline_build.py, so its comments are the generator's template."""
+    return (listing((PORTAL, "*.js"))
+            + [PORTAL / "vendor" / name for name in AUTHORED_VENDOR_SCRIPTS])
+
+
 def emitter():
     return [ROOT / "engine" / "extract" / "_pages.py"]
 
@@ -1134,6 +1150,7 @@ def config_files():
 SURFACES = {
     "shipped HTML": shipped_html,
     "shipped JS": shipped_js,
+    "the shipped page scripts": shipped_page_scripts,
     "the page emitter": emitter,
     "the generators": generators,
     "the guard tests": guard_tests,
@@ -1150,6 +1167,32 @@ def test_shipped_html_comments_state_constraints_only():
         f"{len(hits)} comment(s) in the shipped HTML carry provenance rather than a constraint:\n"
         + "\n".join(hits)
     )
+
+
+def test_shipped_page_script_comments_state_constraints_only():
+    hits = offences(shipped_page_scripts(), root=ROOT)
+    assert not hits, (
+        f"{len(hits)} comment(s) in the page scripts every visitor downloads carry provenance "
+        "rather than a constraint:\n" + "\n".join(hits)
+    )
+
+
+def test_shipped_page_scripts_stay_under_their_comment_cap():
+    got = sum(comment_bytes(p) for p in shipped_page_scripts())
+    assert got <= SHIPPED_PAGE_SCRIPT_CAP, (
+        f"the page scripts carry {got:,} bytes of comments, cap {SHIPPED_PAGE_SCRIPT_CAP:,}; "
+        "every one of them is downloaded by a visitor"
+    )
+
+
+def test_the_vendored_third_party_libraries_are_left_alone():
+    """vendor/ holds two kinds of file: what this repository generates and what it copies in.
+    Only the first is ours to sweep, and naming it by file keeps the second out."""
+    ours = {p.name for p in shipped_page_scripts() if p.parent.name == "vendor"}
+    assert ours == set(AUTHORED_VENDOR_SCRIPTS), ours
+    third_party = [p.name for p in sorted((PORTAL / "vendor").glob("*.js"))
+                   if p.name not in AUTHORED_VENDOR_SCRIPTS]
+    assert third_party, "vendor/ carries no third-party library, so this exclusion would be silent"
 
 
 def test_shipped_js_comments_state_constraints_only():

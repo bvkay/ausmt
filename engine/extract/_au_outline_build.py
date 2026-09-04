@@ -53,7 +53,6 @@ NE_SOURCE = (f"https://raw.githubusercontent.com/nvkelso/natural-earth-vector/{N
              f"/geojson/{NE_LAYER}.geojson")
 NE_SHA256 = "3e458fc036ad0a66411f2c1e6cac49c5d7bfb81cb1123bc513b22511a2b7fdeb"
 NE_LICENCE = "public domain (Natural Earth terms of use; CC0-equivalent, no attribution required)"
-NE_DERIVED = "2026-08-31"
 
 # THE TOLERANCE, MEASURED RATHER THAN GUESSED. Candidates from 0.01 to 0.80 degrees were rendered and
 # scored on worst-case deviation from the full-resolution ring, per region and overall. 0.08 is the
@@ -229,7 +228,7 @@ def _provenance_lines():
             f"commit {NE_COMMIT[:12]};",
             f"{NE_LICENCE};",
             f"Douglas-Peucker tolerance {TOLERANCE_DEG} degrees; islands above "
-            f"{MIN_ISLAND_AREA_DEG2} square degrees; derived {NE_DERIVED}.")
+            f"{MIN_ISLAND_AREA_DEG2} square degrees.")
 
 
 def render_py(rings) -> str:
