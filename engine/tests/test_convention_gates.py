@@ -744,16 +744,17 @@ def test_equal_tipper_frame_not_reported_f2(tmp_path):
 def test_conventions_header_states_the_same_rotation_sign_as_the_derotation_docstring():
     """The module header's de-rotation transform and the de-rotation function's own docstring
     must state the same sign; a header that reads R(theta) while the function applies R(-theta)
-    documents the wrong frame for every served station."""
+    documents the wrong frame for every served station. Read from the source text, so the
+    statement is held whether the header is a docstring or a comment block."""
     import inspect
     import re
 
     from extract import _conventions
 
-    header = inspect.getmodule(_conventions).__doc__ or ""
-    assert "R(-θi) Z(i) R(-θi)^T" in header, "the header's impedance de-rotation must carry R(-θi) on both sides"
-    assert "T(i) R(-θi)^T" in header, "the header's tipper de-rotation must carry R(-θi)"
-    assert "first quadrant (0..90°)" in header and "third quadrant (-180..-90°)" in header, (
-        "the impedance quadrants are named with their signed bounds")
     src = inspect.getsource(_conventions)
+    assert "R(-θi) Z(i) R(-θi)^T" in src, "the header's impedance de-rotation must carry R(-θi) on both sides"
+    assert "T(i) R(-θi)^T" in src, "the header's tipper de-rotation must carry R(-θi)"
+    assert "first quadrant (0..90°)" in src and "third quadrant (-180..-90°)" in src, (
+        "the impedance quadrants are named with their signed bounds")
     assert re.search(r"applies R\(-θ\)\)", src), "the de-rotation docstring states R(-θ)"
+    assert "R(θi) Z(i)" not in src and "(180..-90°)" not in src, "no unsigned copy of either statement may stand"
