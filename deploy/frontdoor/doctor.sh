@@ -27,10 +27,10 @@
 #       (probed on the pinned vulcan-2022 slug; explicit https:// with --resolve). Skipped cleanly
 #       when the edge gives no response at all (the container check is the authority on a down
 #       edge).
-#   4d. the TIME-SERIES HAND-OFF TABLE (R3/R5): map hash parity, open-302, unlisted-404. Detail at
+#   4d. the TIME-SERIES HAND-OFF TABLE: map hash parity, open-302, unlisted-404. Detail at
 #       the check itself; skips cleanly on a routeless table or an unresponsive edge.
 #   5. tailscale is up and the box peer is visible
-#   5b. the tailnet path to the box is DIRECT, not DERP-relayed (the 2026-08-28 relay trap: a
+#   5b. the tailnet path to the box is DIRECT, not DERP-relayed (the relay trap: a
 #       relayed path serves the whole portal through a shared third-party relay with multi-second
 #       TTFB outliers and capped throughput, and nothing else surfaces it)
 #   6. the zombie-process count is under the warn threshold (see the `zombies` subcommand for the kit)
@@ -113,7 +113,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # =================================================================================================
-# O3 zombie-diagnosis kit — count Z-state procs, GROUP by parent to NAME the leaker, list the fixes.
+# Zombie-diagnosis kit - count Z-state procs, GROUP by parent to NAME the leaker, list the fixes.
 # =================================================================================================
 # Shared by the `zombies` subcommand (full kit) and the default report's check 6 (count only). Reads
 # ps once. Reaped zombies vanish, so a nonzero count means a parent that has not wait()ed for its dead
@@ -321,7 +321,7 @@ check_pathurl_redirect() {
 		warn "pathurl: AUSMT_PUBLIC_NAME unset in $ENV_FILE (cannot probe the path-URL contract)"
 		return
 	fi
-	# vulcan-2022 is PINNED as the probe slug: it is the owner's published Vulcan 2022 survey, in
+	# vulcan-2022 is PINNED as the probe slug: it is the published Vulcan 2022 survey, in
 	# the served corpus since the portal's first public build, and its slug is frozen by the
 	# url-registry freeze test (portal/data/url_registry.json), so the probe cannot rot silently.
 	slug="vulcan-2022"
@@ -467,7 +467,7 @@ check_tailscale() {
 }
 
 check_tailnet_path() {
-	# The relay trap (2026-08-28): the VPS<->box WireGuard path can silently regress to a DERP
+	# The relay trap: the VPS<->box WireGuard path can silently regress to a DERP
 	# relay (stale tailscaled state held it there until a daemon restart), and every portal byte
 	# then rides a shared third-party relay. tailscale ping names the path per pong; the LAST pong
 	# is the verdict, because hole punching can upgrade the path mid-probe and a run that ENDS

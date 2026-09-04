@@ -1,8 +1,8 @@
 #!/bin/sh
-# AusMT curator-workbench ACTIONS agent (C43 Stage 2b-ii, record D8/D9). POSIX sh — one pass, timer-
+# AusMT curator-workbench ACTIONS agent. POSIX sh, one pass, timer-
 # driven (deploy/systemd/ausmt-actions.timer fires it every ~2 min). It is the HOST-SIDE half of the
-# privileged-action lane: the gateway (which has NO shell, NO docker socket, NO site-data mount — the
-# C40 trust boundary) writes an INTENT FILE into the shared gateway state dir; THIS agent, running as
+# privileged-action split: the gateway (which has NO shell, NO docker socket, NO site-data mount, the
+# Trust boundary) writes an INTENT FILE into the shared gateway state dir; THIS agent, running as
 # the operator uid that owns the code checkout and can drive `docker compose`, scans the state dir and
 # executes a FIXED RECIPE for each recognised intent. The gateway can only ASK; the host decides and
 # acts. (design C43 D8 "operations floor / actions"; D9 "request-file hardening spec".)
@@ -24,11 +24,11 @@
 #        kind, the id (rollback/restore only), the requesting curator NAME, and the outcome.
 #   D9.5 Typed confirmation for restore — the snapshot id the curator typed is carried in the intent
 #        and re-checked here against the real snapshot list; a mismatch aborts (audited refused).
-#   D9.6 update.request + restore.request are flagged for the pre-NCI hostile re-audit (see README).
+#   update.request and restore.request are flagged for the pre-NCI hostile re-audit (see README).
 #
-# THE UPDATE RECIPE IS THE ONE BOUNDED C40 EXCEPTION (record D8, owner-ruled): `git pull --ff-only` on
-# the code checkout + `docker compose pull` + `up -d` — the standing refresh recipe, NOTHING
-# parameterised from the intent. Trust analysis (record D8): the recipe can only deploy what branch-
+# THE UPDATE RECIPE IS THE ONE BOUNDED EXCEPTION to the no-privileged-action rule: `git pull
+# --ff-only` on the code checkout + `docker compose pull` + `up -d`, the standing refresh recipe, with
+# NOTHING parameterised from the intent. The recipe can only deploy what branch-
 # protected main already built and published, i.e. the same bytes an operator deploys by hand. The
 # intent's CONTENT is read ONLY for the audit's `by=` field (the requesting curator) — never for a
 # command argument (the "update fixed-recipe" pin proves this by construction + a hostile-content pin).
@@ -150,7 +150,7 @@ PYEOF
 }
 
 # _scrub <value>: return the value stripped of EVERYTHING that could forge an audit line under a
-# compromised gateway (D9, S4). `LC_ALL=C tr -dc '[:print:]'` keeps ONLY ASCII printable bytes 0x20-
+# compromised gateway. `LC_ALL=C tr -dc '[:print:]'` keeps ONLY ASCII printable bytes 0x20-
 # 0x7E — dropping all C0/C1 control chars (\n\r\t\v\f) AND every byte of a multibyte UTF-8 sequence,
 # so unicode line separators U+2028/U+2029 (which the gateway's splitlines-free reader also ignores)
 # cannot survive. Then drop `=` so an attacker-controlled `by`/`id` can never inject a `key=value`
@@ -286,7 +286,7 @@ PYEOF
   return 0
 }
 
-# recipe_restore <snapshot_id> <by>: the guarded, drill-first DB restore (record D8, owner-ruled). In
+# recipe_restore <snapshot_id> <by>: the guarded, drill-first DB restore. In
 # ORDER: stop the gateway container -> DRILL the snapshot FIRST (a failing drill ABORTS with the live
 # DB byte-untouched, then the gateway is restarted) -> swap the DB -> restart. Returns 0 on a completed
 # swap, 1 on any failure; sets $RESTORE_OUTCOME to a human phrase for the audit line.

@@ -1,12 +1,12 @@
-// AusMT public bridge — tailnet ACL stanza (C47). This is the EXACT policy the owner PASTES into the
-// Tailscale admin console (Access controls) — merge these entries into the existing tailnet policy;
+// AusMT public bridge - tailnet ACL stanza. This is the EXACT policy to PASTE into the
+// Tailscale admin console (Access controls): merge these entries into the existing tailnet policy;
 // do not replace the whole policy with this file. It defines the dedicated front-door tag and the
 // port-granular fence: the front door reaches the box's READER port and NOTHING ELSE.
 //
 // This is deliberately the ONLY place a box tailnet IP appears, and it lives in the Tailscale admin
 // console, not in git. Fill the two <PLACEHOLDER> values from your tailnet:
 //   * the box's tailnet IP:            run `tailscale ip -4` on the box (a 100.x.y.z address)
-//   * the admin owner for the new tag: your admin user or group (e.g. "autogroup:admin")
+//   * the tag's administrator: your admin user or group (e.g. "autogroup:admin")
 //
 // WHY A HOST ALIAS FOR THE BOX (not a new tag on the box): tagging the box would change its identity
 // and could disturb its EXISTING tailnet grants (its curator `tailscale serve`). A `hosts` alias

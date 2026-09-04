@@ -6,8 +6,8 @@
 #   ANY check FAIL -> ping   $AUSMT_ALERT_URL/fail       with the failure summary as the body,
 #                     then EXIT NONZERO so the failure is also journal-visible on the box.
 #
-# WHY A DEAD-MAN PING AND NOT A BOX-SENT EMAIL (design decision 2026-07-10, do not relitigate):
-#   * The SERVICE routes the email (to the curator — ben@auscope.org.au today). The box holds NO SMTP
+# WHY A DEAD-MAN PING AND NOT A BOX-SENT EMAIL:
+#   * The SERVICE routes the email (to the curator). The box holds NO SMTP
 #     credentials and NO recipient config, so changing who is alerted is a DASHBOARD change at the
 #     service — zero repo edits, zero box edits, nothing to redeploy.
 #   * A fully DEAD box (power/network/kernel) can never send its own "I am dead" email. The monitoring
@@ -18,7 +18,7 @@
 #     runbook step at the service (deploy/README.md "Alerting").
 #
 # SILENT-STALL MODES THIS CATCHES (all real or design-known):
-#   * gw-runner crash-loop  -> "submissions stuck at SCANNED" (the 2026-07-06 incident) — the runner
+#   * gw-runner crash-loop  -> "submissions stuck at SCANNED" (a known incident): the runner
 #     has NO compose healthcheck by design, so a not-running / restart-looping runner is caught here by
 #     STATE, the only observable compose exposes for it.
 #   * a service down / unhealthy (portal, gateway, clamd have healthchecks; a failed rebuild leaves the
@@ -66,20 +66,20 @@ BACKUP_MAX_H="${AUSMT_ALERT_BACKUP_MAX_H:-26}"
 DRILL_MAX_H="${AUSMT_ALERT_DRILL_MAX_H:-192}"
 COMPOSE_CMD="${AUSMT_ALERT_COMPOSE:-docker compose}"
 CURL_CMD="${AUSMT_ALERT_CURL:-curl}"
-# C43 S2b-ii (record D9.7): a curator pause of auto-rebuild that is active or slow-re-armed past this
+# A curator pause of auto-rebuild that is active or slow-re-armed past this
 # CUMULATIVE threshold flips the ops-floor Freshness/Serve card amber AND fails a check here — so an
 # authenticated attacker (stolen session / curator-page XSS) cannot silently keep serving frozen
 # forever by re-arming the pause once per expiry window (which would slip a single-flag age check).
 PAUSE_MAX_H="${AUSMT_ALERT_PAUSE_MAX_H:-24}"
-# S5(a): the alarm must key on the SAME freshness reconcile honours — an EXPIRED pause.flag reconcile
+# The alarm must key on the SAME freshness reconcile honours: an EXPIRED pause.flag reconcile
 # IGNORES is NOT freezing serving, so it must not alarm (and does not extend the cumulative span). Kept
 # in step with reconcile's AUSMT_RECONCILE_PAUSE_EXPIRY_MIN (default 6 h).
 PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"
-# S5(b): a standing rollback.pin freezes auto-rebuild with NO expiry — give it the same persistent-
+# A standing rollback.pin freezes auto-rebuild with NO expiry, so it takes the same persistent-
 # freeze visibility as a pause: a pin held continuously past this many hours raises an ops fact + fails.
 PIN_MAX_H="${AUSMT_ALERT_PIN_MAX_H:-$PAUSE_MAX_H}"
 
-# C43 S2b-i: this timer is ALSO the ops-status.json writer (record D8/D15). Its cadence (the systemd
+# This timer is ALSO the ops-status.json writer. Its cadence (the systemd
 # ausmt-alert.timer period, ~15 min) is the staleness clock the curator ops floor reads: a file older
 # than ~2 periods flips every dependent card STALE. Override only if you retimed the unit.
 TIMER_PERIOD_MIN="${AUSMT_ALERT_PERIOD_MIN:-15}"
@@ -95,7 +95,7 @@ SITE_DATA="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/site-data}"
 # these globals as each check runs so the ops writer reuses them (one `docker compose ps`, one `df`).
 OPS_PS_JSON=""
 OPS_DISK_PCT=""
-# C43 S2b-ii persistent-pause tracking (record D9.7). check_pause computes these ONCE (carrying the
+# Persistent-pause tracking. check_pause computes these ONCE (carrying the
 # continuous-span first_seen forward from the previous ops-status.json) so BOTH the fail-ping and the
 # ops-status.json pause fact use the same verdict.
 OPS_PAUSE_ACTIVE=0
@@ -103,7 +103,7 @@ OPS_PAUSE_PAUSED_AT=""
 OPS_PAUSE_FIRST_SEEN=""
 OPS_PAUSE_CUMULATIVE_H=""
 OPS_PAUSE_PERSISTENT=0
-# S5(b): rollback-pin persistent-freeze tracking, parallel to the pause block above.
+# Rollback-pin persistent-freeze tracking, parallel to the pause block above.
 OPS_PIN_ACTIVE=0
 OPS_PIN_BUILD=""
 OPS_PIN_FIRST_SEEN=""
@@ -113,7 +113,7 @@ OPS_PIN_PERSISTENT=0
 # The four long-running compose services this box monitors. build-runner is EXCLUDED on purpose: it is
 # a one-shot job (compose profile "jobs") that is SUPPOSED to be absent between builds, so "not running"
 # is its normal state — alerting on it would fire constantly. gw-runner IS included: it is long-running
-# and its silent death is the headline failure mode (2026-07-06). Kept in sync with compose.yaml.
+# and its silent death is the headline failure mode. Kept in sync with compose.yaml.
 MONITORED_SERVICES="portal gateway clamd gw-runner"
 # The services that HAVE a compose healthcheck (compose.yaml). gw-runner deliberately does NOT (see its
 # comment there), so an EMPTY Health for gw-runner is expected, not a fault — we never fail it on Health,
@@ -309,7 +309,7 @@ check_disk() {
 #     * last_run is older than AUSMT_ALERT_RECONCILE_MAX_MIN (the timer stalled), OR
 #     * action == "failed" (a build/verify failure — the C40 fail-closed state), OR
 #     * action == "untracked_blocked" (the reconcile agent REFUSED to rebuild because surveys-live has
-#       untracked survey dirs the build would serve — incident 2026-07-11; needs an operator, no self-heal).
+#       untracked survey dirs the build would serve; needs an operator, no self-heal).
 #   noop/rebuilt/sync_failed are all healthy timer outcomes (they exit 0) and do NOT fail here — a
 #   sync_failed is an operator-visible panel state, not a monitoring alert (README §4).
 # --------------------------------------------------------------------------------------------------
@@ -457,8 +457,8 @@ check_pause() {
   [ -n "$data_dir" ] || return 0            # AUSMT_DATA_DIR gaps are already reported by other checks
   pause_flag="$data_dir/gateway/state/pause.flag"
   [ -f "$pause_flag" ] || return 0          # no pause => nothing to track (globals stay at defaults)
-  # S5(a): key on the SAME freshness reconcile honours. An EXPIRED flag (mtime older than the expiry)
-  # is IGNORED by reconcile — it is NOT freezing serving, so it must not alarm and must NOT extend the
+  # Key on the SAME freshness reconcile honours. An EXPIRED flag (mtime older than the expiry)
+  # is IGNORED by reconcile: it is NOT freezing serving, so it must not alarm and must NOT extend the
   # cumulative span (leave the globals at their defaults => active=0 => the carried span resets).
   if [ -n "$(find "$pause_flag" -maxdepth 0 -mmin "+$PAUSE_EXPIRY_MIN" 2>/dev/null)" ]; then
     return 0
@@ -601,8 +601,8 @@ PYEOF
 }
 
 # --------------------------------------------------------------------------------------------------
-# C43 S2b-i: write ops-status.json for the curator ops floor (record D8/D15). SEPARATE from the ping:
-# it runs every pass — INCLUDING when alerting is unconfigured — because the ops floor must reflect
+# Write ops-status.json for the curator ops floor. SEPARATE from the ping:
+# it runs every pass, INCLUDING when alerting is unconfigured, because the ops floor must reflect
 # box state before (and independently of) the external dead-man monitor being wired. Atomic (mktemp +
 # chmod 0644 + mv, the reconcile.sh posture) so the gateway container (uid 10002, group-shared state
 # dir) never reads a half-written file and can always read a complete one. Best-effort: ANY failure
@@ -612,11 +612,11 @@ PYEOF
 #   * freshness: code checkout AND surveys-live, each local short HEAD vs its last-fetched tracking
 #     ref (@{u}). NO fetch here (a network side effect in the alert timer is itself a failure mode,
 #     and a fetch that cannot reach origin is exactly the reconcile sync-strip's job) — so this
-#     reflects the last SUCCESSFUL fetch; behind => the card's row goes amber. (Record D15: the two
+#     reflects the last SUCCESSFUL fetch; behind => the card's row goes amber. (The two
 #     signals are complementary — the sync strip catches "cannot reach origin", freshness catches
 #     "reached it, but the checkout is behind".)
 #   * reconcile sync state: action + a sync_failed STREAK (count + since), derived by carrying the
-#     previous ops-status.json forward — so a 4-hour hidden sync_failed (incident 2026-07-11) reads
+#     previous ops-status.json forward, so a 4-hour hidden sync_failed reads
 #     as "failing for N ticks since T", not a silent single line.
 #   * retained-build inventory: each site-data/builds/<ts> dir's build.json (id/engine/source) +
 #     build_report.json (stations) + build_provenance.json `cache` block (the C18-A4 forensics:
@@ -965,7 +965,7 @@ check_pin
 SUMMARY="$(printf '%s' "$FAILURES" | sed '/^$/d')"
 
 # --------------------------------------------------------------------------------------------------
-# C43 S2b-i: write the ops-status.json for the curator ops floor — EVERY pass, BEFORE the ping and
+# Write the ops-status.json for the curator ops floor on EVERY pass, BEFORE the ping and
 # BEFORE the not-configured short-circuit, so the floor reflects box state even on a box whose
 # external monitor is not yet wired. Best-effort: it never changes the pass's exit code.
 #   arg1 = checks_ok (1 when the summary is empty), arg2 = alert_installed (1 when a URL is set).

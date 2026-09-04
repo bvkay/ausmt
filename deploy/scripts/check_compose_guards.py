@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""C33 compose-guard proof (semantic).
+"""Compose-guard proof (semantic).
 
-This is NOT a substitute for `docker compose config` — the repo's CI
+This is NOT a substitute for `docker compose config`: the repo's CI
 (.github/workflows/deploy-images.yml) runs the real thing on every push, and an operator with the
 compose CLI should run `docker compose -f compose.yaml config` themselves. This script exists so the
-C33 `${VAR:?}`->`${VAR:-}` guard change can be proven *deterministically* on a box where the docker
+`${VAR:?}` and `${VAR:-}` guards can be proven *deterministically* on a box where the docker
 compose CLI is not installed, by implementing compose's documented variable-interpolation rules and
 reporting which variables would ABORT config for a given environment.
 
@@ -24,7 +24,7 @@ guards in the file, evaluate them against a supplied environment, and report eve
 
 Usage:
     python3 check_compose_guards.py <compose.yaml> KEY=VALUE [KEY=VALUE ...]
-    python3 check_compose_guards.py --self-test        # runs the C33 assertions, exits non-zero on fail
+    python3 check_compose_guards.py --self-test        # runs the guard assertions, non-zero on fail
 
 Exit code: 0 if config would resolve (no guard trips), 1 if any guard trips (or a self-test fails).
 """

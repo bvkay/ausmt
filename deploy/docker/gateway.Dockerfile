@@ -13,9 +13,9 @@
 # installs the COMMITTED lock + the gateway package, and sets the entrypoint to `python -m gateway`
 # (uvicorn on :8000, container-internal).
 #
-# REPRODUCIBILITY (2026-07-28). This file used to carry a `locker` stage that resolved
+# REPRODUCIBILITY. There is NO `locker` stage here. A stage that resolves
 # gateway/requirements.txt (deliberate FLOORS: fastapi>=..., starlette>=..., the tested majors) into a
-# lock INSIDE the build and threw it away with the stage. Nothing was committed, so two builds of the
+# lock INSIDE the build throws it away with the stage. Nothing is committed, so two builds of the
 # same commit could ship different dependency versions and a PyPI release could break the image with
 # no repo change at all. That is a sharper risk here than in a typical web app: gateway/upload.py
 # imports starlette.formparsers.MultiPartParser DIRECTLY (a non-public API, see that module's header)
@@ -36,7 +36,7 @@ FROM python:3.12-slim AS runtime
 ARG GIT_SHA=unknown
 ENV AUSMT_GATEWAY_COMMIT=${GIT_SHA}
 
-# C11 publish flow (design §5 v2) shells out to `git` ONLY — stage/commit/push into surveys-live. It
+# Publish flow (design §5 v2) shells out to `git` ONLY - stage/commit/push into surveys-live. It
 # does NOT invoke the build: demo publish is COMMIT-AND-PUSH ONLY, and the operator runs
 # `make rebuild-data` by hand afterward. So NO `make` here, and crucially NO Docker socket — which is
 # exactly what keeps the C10 §0 no-socket invariant intact. `git` is not in python:3.12-slim, so
@@ -68,7 +68,7 @@ COPY gateway/ /app/gateway/
 
 # The entrypoint wrapper sets umask 0002 before exec'ing the gateway, so the sqlite WAL sidecars the
 # gateway mints stay group-writable for the shared-group host backup across container recreates
-# (incident 2026-07-11 — see the script header). `chmod` because a Windows/MSYS build host does not
+# (see the script header). `chmod` because a Windows/MSYS build host does not
 # carry the exec bit through COPY. Installed root-owned before the USER drop below.
 COPY deploy/docker/gateway-entrypoint.sh /usr/local/bin/gateway-entrypoint.sh
 RUN chmod 0755 /usr/local/bin/gateway-entrypoint.sh
@@ -86,7 +86,7 @@ USER gwuser
 
 EXPOSE 8000
 
-# The entrypoint wrapper sets umask 0002 (durable group-writable WAL sidecars, incident 2026-07-11)
+# The entrypoint wrapper sets umask 0002 (durable group-writable WAL sidecars, incident)
 # then execs `python -m gateway`, which runs create_app() (fail-closes on a missing submit key) then
 # uvicorn on 0.0.0.0:8000 — container-internal; compose publishes it loopback-only and Caddy fronts it
 # same-origin (design §1). No CMD args: the config surface is env-only (design §7).

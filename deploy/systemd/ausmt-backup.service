@@ -12,7 +12,7 @@
 # NOTE: the production box keeps the checkout under the operator's HOME, not /srv/ausmt/code (that path
 # does not exist there); use YOUR real checkout path.
 # The script reads AUSMT_DATA_DIR from the EnvironmentFile (.env), so this unit depends on NO shell
-# profile (the 2026-07-08 "works interactively, fails from the timer" class — the vars live in .env,
+# profile (the "works interactively, fails from the timer" class: the vars live in .env,
 # loaded here, not in ~/.bashrc).
 
 [Unit]

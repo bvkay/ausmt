@@ -49,7 +49,7 @@
 #
 # Dependency-light on purpose: POSIX sh, coreutils, and a host `sqlite3` (required whenever a gateway
 # DB exists — it is the ONLY WAL-safe snapshot path; a docker/Python fallback was tried and REMOVED
-# after 2026-07-10: a live WAL DB cannot be opened through a read-only mount, and the mktemp out-dir is
+# for two reasons: a live WAL DB cannot be opened through a read-only mount, and the mktemp out-dir is
 # 0700-operator-owned so the container uid cannot write into it — the fallback failed both ways on the
 # first real run). Read it top to bottom. Run ONE restore drill after installing it
 # (deploy/scripts/restore-drill.sh): a backup that has never been restored is a hypothesis, not a
@@ -79,7 +79,7 @@ die() { printf 'backup: ERROR: %s\n' "$*" >&2; exit 1; }
 # 0. Fail LOUD AND EARLY if the state dir is missing/unreadable (the missing one-time ownership prep).
 #    The state dir is uid 10002-owned with the shared group 10002 g+rwX,g+s (README step 0b); the
 #    operator is in that group. If we cannot read/list it, the backup cannot proceed — say so with the
-#    one actionable next step instead of dribbling scattered errors later (the 2026-07-08 lesson).
+#    one actionable next step instead of dribbling scattered errors later.
 # --------------------------------------------------------------------------------------------------
 if [ ! -d "$STATE_DIR" ]; then
   die "gateway state dir does not exist: $STATE_DIR
@@ -118,7 +118,7 @@ fi
 
 # --------------------------------------------------------------------------------------------------
 # 0b. Preflight the backups dir — BEFORE the snapshot, so we never do a successful snapshot only to die
-#     at publish time because the parent is root-owned (the 2026-07-10 trap: /srv/ausmt is root-owned,
+#     at publish time because the parent is root-owned (the trap: /srv/ausmt is root-owned,
 #     so the script's `mkdir -p $BACKUPS_DIR` at publish time fails AFTER the snapshot succeeded). If
 #     the backups dir does not yet exist and its parent is not writable by us, refuse now with the exact
 #     one-time create command (pre-create it owned by the operator, like every other one-time prep).
@@ -179,7 +179,7 @@ snapshot_sqlite() {
   else
     # Hard refusal — NOT a raw cp. A raw cp of a live WAL DB can miss committed transactions still in the
     # -wal sidecar (torn snapshot). sqlite3 is the one WAL-safe copier; installing it is one line on any
-    # host. A docker/Python fallback was tried and removed (2026-07-10): it cannot open a live WAL DB
+    # host. A docker/Python fallback was tried and removed: it cannot open a live WAL DB
     # through a read-only mount, and cannot write into the 0700-operator-owned staging dir as the
     # container uid — it failed both ways on the first real run.
     die "host sqlite3 not found ('$sqlite_bin') and a gateway DB exists at $DB — refusing to raw-copy a

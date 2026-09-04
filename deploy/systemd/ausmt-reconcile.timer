@@ -1,4 +1,4 @@
-# AusMT serve-reconcile timer (C40). Fires ausmt-reconcile.service every 15 minutes. Install:
+# AusMT serve-reconcile timer. Fires ausmt-reconcile.service every 15 minutes. Install:
 #   sudo cp deploy/systemd/ausmt-reconcile.{service,timer} /etc/systemd/system/
 #   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)
 #   sudo systemctl daemon-reload

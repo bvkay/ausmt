@@ -1,5 +1,5 @@
 #!/bin/sh
-# AusMT serve reconcile agent (C40). POSIX sh — no bashisms, shellcheck-clean. Runs ONE pass and
+# AusMT serve reconcile agent. POSIX sh - no bashisms, shellcheck-clean. Runs ONE pass and
 # exits; a systemd timer (deploy/systemd/ausmt-reconcile.timer) re-invokes it every ~15 min. The
 # NCI end-state has a shell-less curator, so "run make rebuild-data by hand" is not an operation the
 # responsible person can perform — this closes the published-not-served gap with no human in the loop
@@ -9,7 +9,7 @@
 #   1. sync   — git -C surveys-live pull --ff-only. On failure: write status action=sync_failed and
 #               exit 0 WITHOUT rebuilding (never build from a state we cannot fast-forward to, §4).
 #   1b. untracked-guard — if surveys-live has UNTRACKED entries under surveys/ (a leftover survey dir
-#               the build would enumerate and SERVE, but git can never remove — incident 2026-07-11):
+#               the build would enumerate and SERVE, but git can never remove):
 #               write status action=untracked_blocked naming the dirs, exit 1, DO NOT rebuild.
 #   2. compare — built = source_commit from site-data/current/build.json; head = short HEAD of
 #               surveys-live (matched to the STORED short-hash length by prefix). Missing/unreadable
@@ -70,9 +70,9 @@ SURVEYS_LIVE="$AUSMT_DATA_DIR/surveys-live"
 SITE_DATA="$AUSMT_DATA_DIR/site-data"
 # build.json lives at the BUILD ROOT (the engine writes `out/build.json`; see build_portal.py C12).
 # The /data/build.json URL the panel fetches maps to the SAME file because Caddy's handle_path
-# STRIPS the /data prefix (deploy/docker/caddy/Caddyfile) — do NOT re-add a data/ segment here.
-# The 2026-07-08 first install had a phantom data/ segment in this path: build.json was never found,
-# every tick read as drift, and only missing dir permissions stopped a rebuild-every-15-min loop.
+# STRIPS the /data prefix (deploy/docker/caddy/Caddyfile), so a data/ segment must NOT appear here.
+# A phantom data/ segment in this path means build.json is never found,
+# every tick reads as drift, and only missing dir permissions stop a rebuild-every-15-min loop.
 BUILD_JSON="$SITE_DATA/current/build.json"
 LOG_DIR="$SITE_DATA/logs"
 STATE_DIR="$AUSMT_DATA_DIR/gateway/state"
@@ -81,8 +81,8 @@ STATUS_FILE="$STATE_DIR/reconcile-status.json"
 LOCK_FILE="${AUSMT_RECONCILE_LOCK:-$AUSMT_DATA_DIR/reconcile.lock}"
 MAKE_CMD="${AUSMT_RECONCILE_MAKE:-make -C $AUSMT_CODE_DIR/deploy rebuild-data}"
 JOURNALCTL="${AUSMT_RECONCILE_JOURNALCTL:-journalctl}"
-# C43 S2b-ii (record D8/D9/D13): the curator "pause auto-rebuild" flag + the "serve this build"
-# rollback pin — both host-written by the actions agent (deploy/scripts/actions.sh) / the gateway, and
+# The curator "pause auto-rebuild" flag + the "serve this build"
+# rollback pin: both host-written by the actions agent (deploy/scripts/actions.sh) / the gateway, and
 # RESPECTED here (this agent never writes them). A FRESH pause.flag suppresses the drift rebuild; a
 # pause older than PAUSE_EXPIRY_MIN is IGNORED (auto-expired — a stale flag never freezes serving
 # forever, D13 pause-expiry). rollback.pin holds reconcile off an auto-revert of a manual rollback
@@ -101,9 +101,9 @@ now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 #
 # WHY ON ENTRY. The Makefile prunes inside its SWAP step, which only runs after build AND verify both
 # succeed. A rebuild that never finishes therefore leaves its half-written builds/<ts> behind forever.
-# Observed live 2026-08-11: TimeoutStartSec killed the rebuild at 60 minutes, once an hour, and each
-# killed attempt left ~0.5 GB of partial products (bundled EDIs + per-station MTH5) that nothing ever
-# collected. A run of failures must not become a disk leak, so the cleanup runs where it is reachable
+# Observed live: TimeoutStartSec killing the rebuild at 60 minutes, once an hour, leaves each
+# killed attempt's ~0.5 GB of partial products (bundled EDIs + per-station MTH5) with nothing to
+# collect them. A run of failures must not become a disk leak, so the cleanup runs where it is reachable
 # whatever the outcome — not only on the happy path.
 #
 # SAFETY. The build `current` points at is skipped UNCONDITIONALLY, before any retention arithmetic,
@@ -141,7 +141,7 @@ prune_builds() {
   done; }
 }
 
-# The signal trap (2026-08-11). systemd's TimeoutStartSec SIGTERMs a rebuild that overruns, and the
+# The signal trap. systemd's TimeoutStartSec SIGTERMs a rebuild that overruns, and the
 # script had no handler: it died mid-build WITHOUT writing reconcile-status.json. Two consequences,
 # both observed live — the curator panel kept showing the last CLEAN outcome while hours of rebuilds
 # were failing, and the loop guard (which arms off a WRITTEN action=failed) never armed, so the timer
@@ -181,9 +181,9 @@ done
 [ -n "$PY" ] || { printf 'reconcile: no working python3/python on PATH (needed to parse build.json)\n' >&2; exit 1; }
 
 # Fail LOUD AND EARLY if the status file cannot be written: every non-dry pass ends by reporting its
-# outcome, so a pass that cannot report must not half-run. (The 2026-07-08 first install failed
-# exactly here — site-data/ is uid-10001-owned and gateway/state/ is 10002-owned, and the runbook
-# was missing the one-time ownership prep — but the symptom was three scattered errors mid-pass
+# outcome, so a pass that cannot report must not half-run. (A first install fails
+# exactly here when the one-time ownership prep is skipped: site-data/ is uid-10001-owned and
+# gateway/state/ is 10002-owned, and the symptom is three scattered errors mid-pass
 # instead of one actionable line.) Probe with the same tmp name pattern the status writer uses.
 # mktemp (not a hand-rolled `> file.tmp.$$`): the state dir is DELIBERATELY group-writable to the
 # gateway's uid (README step 0b), and a predictable tmp name would let a compromised container
@@ -231,8 +231,8 @@ except Exception:
 PYEOF
 }
 
-# C43 S2b-ii Force-full-rebuild: echo "1" iff rebuild.request carries a truthy `full` flag (the ONLY
-# field reconcile ever parses from the request — the rest stays audit-only, existence-keyed). A full
+# Force-full-rebuild: echo "1" iff rebuild.request carries a truthy `full` flag (the ONLY
+# field reconcile ever parses from the request; the rest stays audit-only, existence-keyed). A full
 # rebuild runs the engine in cache-REFRESH mode (recompute everything, no cache reuse). A missing/
 # malformed request or a false flag => empty (=> default cache-rw). Never fails the script.
 read_full_flag() {
@@ -253,10 +253,10 @@ PYEOF
 # (a journalctl --since expression), oldest first, at most the last 5; empty when there were none. Never
 # fails the script. ALSO sets OOM_JOURNAL_UNREADABLE: empty when the kernel journal was actually READ (so
 # an empty answer is a real negative), else a one-line reason it was not, so the caller can say "an OOM
-# kill cannot be ruled out" instead of silently reporting a plain failure over an unread journal. Both
+# kill cannot be excluded" instead of silently reporting a plain failure over an unread journal. Both
 # are globals (not echoed) because a $(...) caller would run this in a subshell and lose the second one.
 #
-# WHY (incident 2026-08-15, P350): the engine build was OOM-killed by the kernel five nights running
+# WHY (incident, P350): the engine build was OOM-killed by the kernel five nights running
 # ("Out of memory: Killed process 398616 (python) ... anon-rss:13740244kB ... UID:10001") and every one
 # of them reached the operator as "rebuild FAILED (rc=2), see log tail". The log tail ends mid-survey
 # with no error at all, because the process was killed, not failed: the truth was two layers down, in
@@ -314,7 +314,7 @@ write_status() {
     printf 'reconcile: cannot create status tmp under %s\n' "$STATE_DIR" >&2; return 1; }
   # mktemp creates 0600 — but the status CONSUMER is the gateway CONTAINER (uid 10002) reading via
   # the shared state dir, so open it up before the rename. Without this the panel shows "no status
-  # yet" while the file sits there operator-only (the 2026-07-08 panel regression: the symlink-safe
+  # yet" while the file sits there operator-only (the panel regression: the symlink-safe
   # mktemp change silently revoked the group read the old umask-created tmp had). Status content is
   # non-secret operational metadata (actions, commits, log tail).
   chmod 0644 "$_tmp" || { printf 'reconcile: cannot chmod status tmp %s\n' "$_tmp" >&2; rm -f "$_tmp"; return 1; }
@@ -434,7 +434,7 @@ PYEOF
     return 0
   fi
 
-  # 1b. UNTRACKED-SURVEY-DIR GUARD (incident 2026-07-11). The engine build enumerates the FILESYSTEM
+  # 1b. UNTRACKED-SURVEY-DIR GUARD (incident). The engine build enumerates the FILESYSTEM
   # under surveys-live/surveys/ (Makefile rebuild-data passes --surveys …/surveys/surveys), NOT git —
   # so a leftover UNTRACKED survey dir (a `test-2026` left on the box) is SERVED even though `git rm`/
   # pushes can never remove what was never tracked, and the drift compare below reads "current"
@@ -492,10 +492,10 @@ PYEOF
   full_rebuild=0
   if [ -f "$REQUEST_FILE" ]; then
     request_present=1
-    [ "$(read_full_flag)" = "1" ] && full_rebuild=1     # C43 S2b-ii Force-full-rebuild flag
+    [ "$(read_full_flag)" = "1" ] && full_rebuild=1     # the force-full-rebuild flag
   fi
 
-  # LOOP GUARD (the 2026-07-08 class): an unreadable built-identity reads as drift, and a rebuild
+  # LOOP GUARD (the class): an unreadable built-identity reads as drift, and a rebuild
   # SHOULD make build.json readable — so if the LAST pass already rebuilt (or already tripped this
   # guard) at this SAME head and the identity was STILL unreadable afterwards, something structural
   # (a layout or permission mismatch) is eating every rebuild. Do not burn one build per tick
@@ -614,7 +614,7 @@ PYEOF
   fi
   rm -f "$_lprobe"
   log_file="$LOG_DIR/$(date -u +%Y%m%dT%H%M%SZ).build.log"
-  # C43 S2b-ii Force-full-rebuild: a `full` rebuild.request runs the engine in cache-REFRESH mode (the
+  # Force-full-rebuild: a `full` rebuild.request runs the engine in cache-REFRESH mode (the
   # Makefile reads AUSMT_BUILD_CACHE_MODE, defaulting to rw). Empty otherwise => the default cache-rw.
   if [ "$full_rebuild" -eq 1 ]; then
     _cache_mode="refresh"
@@ -661,8 +661,8 @@ PYEOF
   # Build/verify failed: the atomic swap left the OLD build serving. Report failed + the log tail so
   # the panel shows why WITHOUT the operator needing shell access; the request file is already
   # consumed, so there is no crash-loop (§4). Exit 1 so `systemctl status`/monitoring flags it.
-  # FIRST ask the kernel journal whether the build was OOM-KILLED in its own window (incident
-  # 2026-08-15: six "rebuild FAILED, see log tail" while the cause was a kernel kill two layers down).
+  # FIRST ask the kernel journal whether the build was OOM-KILLED in its own window (six "rebuild
+  # FAILED, see log tail" reports have had a kernel kill two layers down as their cause).
   # If it was, say so BY NAME, kernel lines first, then the log tail; and flag oom_kill in the status.
   # If the journal could NOT be read by this user (journalctl present, no access), say THAT: a plain
   # "failed" over an unread journal is exactly how the incident hid for a week.
@@ -687,7 +687,7 @@ $_t"
   fi
   # journalctl is on the host but this user could not read the kernel journal (not in systemd-journal /
   # adm): the negative above is NOT evidence. Keep the ordinary failed status (oom_kill=false: nothing
-  # was seen) but lead the detail with the fact that a kill cannot be ruled out and how to make it
+  # was seen) but lead the detail with the fact that a kill cannot be excluded and how to make it
   # visible. A host with no journalctl at all (non-systemd, cron/PBS) keeps the plain path unchanged.
   if [ -n "$OOM_JOURNAL_UNREADABLE" ] && [ "$OOM_JOURNAL_UNREADABLE" != "no journalctl on this host" ]; then
     _t=$(tail -n 30 "$log_file" 2>/dev/null || true)

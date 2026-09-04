@@ -25,9 +25,9 @@ coordinate-policy change) touches no path gateway-ci watches: ausmt-surveys fire
 what re-runs this gate against the new registers. doctor-box.sh's ts-route key-set parity leg is the
 post-publication backstop on the box. An absent register root STOPS rather than passing vacuously.
 
-A survey this reader cannot resolve drops ITS OWN routes only, recorded as an `# UNRESOLVED` line:
-failing the whole generation left the previously committed table serving routes the build had
-already suppressed.
+A survey this reader cannot resolve drops ITS OWN routes only, recorded as an `# UNRESOLVED` line.
+Failing the whole generation leaves the committed table serving routes the build has already
+suppressed.
 """
 from __future__ import annotations
 

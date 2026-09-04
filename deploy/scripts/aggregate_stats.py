@@ -128,7 +128,7 @@ DEFAULT_DAILY_KEEP_DAYS = 92
 # The engine produces per-station MTH5 files there, so
 # the exclusion had to go with it. It is worth naming why the interlock matters: an excluded family
 # classifies as `ignore`, and an ignored path is absent from `unattributed` as well, so every
-# station-h5 download would have vanished from the analytics rather than surfacing as build/serve skew.
+# station-h5 download vanishes from the analytics rather than surfacing as build/serve skew.
 # Silent absence, not undercounting. Pinned in deploy/tests/test_aggregate_stats.py.
 _DOWNLOAD_FAMILIES = ("edi", "xml", "h5", "bundles")
 _DATA_PREFIX = "/data/"
@@ -235,7 +235,7 @@ _SELECT_BULK_FLAG = "sel=bulk"
 _SELECT_SINGLE = "single"
 _SELECT_BULK = "bulk"
 
-# CLIENT CLASSES (record D2: "user-agent for bot filtering only" -- read transiently, NEVER stored).
+# CLIENT CLASSES (record "user-agent for bot filtering only" -- read transiently, NEVER stored).
 # The old binary was bot-or-human, which put curl, wget and python-requests on the bot side. Those are
 # the exact clients the public API documentation hands people, so scripted scientific use was invisible
 # and the API-requests figure degenerated toward a footer-click counter. Three classes now:
@@ -284,7 +284,7 @@ def _run_datetime() -> dt.datetime:
 
 
 # --------------------------------------------------------------------------------------------------
-# Geo lookup: a stdlib bisect over a flat `start,end,VALUE` range CSV (record D2: no maxminddb, no
+# Geo lookup: a stdlib bisect over a flat `start,end,VALUE` range CSV (record no maxminddb, no
 # geoipupdate, no MaxMind EULA custody). Two tables ride this one shape:
 #   * GeoIP     - the db-ip "IP to Country Lite" CSV (start,end,CC), covering the whole internet;
 #   * AuStates  - the compact AU-only state table deploy/scripts/prep_au_states.py distils from the
@@ -680,7 +680,7 @@ def _handoff_row(ts_access: dict, rel: str) -> dict | None:
     direction that would be ambiguous.
 
     A no-match is DRIFT, not a crash: the table lives on the front door and the data on the box, so a
-    302 can arrive for a route the served index no longer publishes. It is counted in the hand-off
+    302 can arrive for a route the served index does not publish. It is counted in the hand-off
     family's own unattributed bucket, exactly as an unknown download path is counted in that family's,
     and never dropped."""
     if not isinstance(ts_access, dict):
@@ -750,7 +750,7 @@ def _empty_handoffs(*, geo: bool = False) -> dict:
 
     `geo` adds the by-country map, and it is added at the CUMULATIVE and CALENDAR-MONTH grains ONLY.
     That is the one line that must not move (see _count_geo): a named country on a named day is a
-    smaller cell than the named-state-in-a-named-month already ruled out, so no day row and
+    smaller cell than the named-state-in-a-named-month the small-cell rule excludes, so no day row and
     no archive line carries one."""
     out = {"requests": 0, "bytes": 0, "unattributed": 0,
            "by_survey": {}, "by_level": {}, "by_destination": {}}
@@ -1077,10 +1077,10 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
               ts_access: dict | None = None) -> dict:
     """Fold every COMPLETE day in `lines` into `prev`, returning the new cumulative stats dict.
 
-    Only dates d with last_folded_date < d < run_dt.date() are folded (a strictly-earlier complete
-    day), so the CURRENT (partial) day is never counted and re-runs never double-count. `run_dt.date()`
+    Only dates d with last_folded_date < d < run_dt.date are folded (a strictly-earlier complete
+    day), so the CURRENT (partial) day is never counted and re-runs never double-count. `run_dt.date`
     becomes the new last_folded_date, so a day rotated away before it could be folded is simply skipped
-    (record D4: losing a raw log loses nothing already folded, and nothing not-yet-folded is re-read).
+    (record losing a raw log loses nothing already folded, and nothing not-yet-folded is re-read).
 
     Each counted request lands in THREE places at once: the cumulative totals, its day row, and its
     calendar-month rollup. Accumulating the month AS THE DAY FOLDS (rather than summing the daily tail
@@ -1218,8 +1218,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             day["api_requests"] = _as_int(day.get("api_requests")) + 1
             month["api_requests"] += 1
             arc["api"] += 1
-            # The API line used to be the one counted class with no geography, so any reach claim built
-            # from the country table silently excluded programmatic consumers.
+            # The API line is a counted class WITH geography: leaving it out makes any reach claim
+            # built from the country table silently exclude programmatic consumers.
             _count_geo(geoip, au_states, rec["address"], countries, by_country_detail, by_state,
                        by_state_detail, month, metric="api")
             geo_days_seen[date] = date[:7]
@@ -1648,7 +1648,7 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 # THE GEO BOUNDARY, which is the one line that must not move. The ratified exclusion of
 # day-by-state data generalises: NO country and NO state below month grain, rendered OR archived. A
 # named country on a named day is a smaller cell than a named state on a named month, and the
-# small-cell argument that ruled out a city column rules it out too. So these rows carry counts,
+# small-cell argument that excludes a city column excludes it too. So these rows carry counts,
 # volumes, formats, kinds, client classes, surveys, datasets and collections, and no geography at all.
 # The leak sweep is extended over the archive for the same reason it covers stats.json.
 # --------------------------------------------------------------------------------------------------

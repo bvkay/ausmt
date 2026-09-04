@@ -6,8 +6,8 @@
 # The box gets NO inbound internet exposure and NO firewall changes. The curator/admin workbench stays
 # tailnet-only exactly as before; this file routes ONLY the PUBLIC submission subset of /gateway (submit,
 # request-key, healthz, status) plus the public Add Survey page, and refuses every other /gateway surface
-# (owner ruling 2026-07-24: an MT user who clicks Add Survey must be able to reach the page and lodge a
-# survey, so the contribution flow is public while the workbench stays walled — see WALL 1 below).
+# (an MT user who clicks Add Survey must be able to reach the page and lodge a
+# survey, so the contribution flow is public while the workbench stays walled: see WALL 1 below).
 #
 # This Caddy is the TRUE edge: nothing sits in front of it (no Cloudflare — a rejected alternative,
 # see the record). So the direct peer IS the real client, and this file deliberately sets NO
@@ -22,7 +22,7 @@
 	# only — no personal hostname. Supplied from .env.
 	email {$AUSMT_ACME_EMAIL}
 
-	# Admin API on a UNIX SOCKET, not a TCP port (ops-hardening O1, 2026-07-25). The original rationale
+	# Admin API on a UNIX SOCKET, not a TCP port (ops-hardening O1). The original rationale
 	# for `admin off` was "a static edge needs no extra LISTENING PORT" — a unix socket honours that
 	# exactly: it opens NO network port (the socket lives in the container's own /run, not on the host,
 	# even under network_mode: host), so there is no new internet- or host-reachable surface. What it
@@ -38,7 +38,7 @@
 	# forwarded address; client_ip == the real remote peer, which the log block masks at write time.
 }
 
-# ---- The ONE transport to the box reader (2026-08-28 serve-path tuning) --------------------------
+# ---- The ONE transport to the box reader (serve-path tuning) --------------------------
 # Every proxy to the box imports this snippet, so there is exactly one place the upstream transport
 # can be got wrong. It dials h2c: tailscale serve forwards :8445 as a RAW TCP tunnel (RUNBOOK
 # `--tcp=8445`), so the h2c bytes pass end to end to the box reader listener, which accepts h2c
@@ -100,7 +100,7 @@
 					ipv4 24
 					ipv6 48
 				}
-				# R28: redact the /gateway/status/<token> capability from the logged URI - this is the
+				# Redact the /gateway/status/<token> capability from the logged URI - this is the
 				# PUBLIC edge where a status hit actually lands. The token is a secrets.token_urlsafe(32)
 				# bearer whose DB form is SHA-256 hashed; un-redacted it lands in this masked log verbatim
 				# and ships to the box. The regexp field op rewrites ONLY the token segment (the
@@ -129,8 +129,8 @@
 	}
 
 	# ---- WALL 1: explicit PUBLIC-SUBSET allowlist, deny-by-default for the gateway surface -----------
-	# Wall 1 is no longer a blanket "refuse the whole gateway" deny. The Add Survey contribution flow is
-	# now PUBLIC (owner ruling 2026-07-24), so wall 1 is an ALLOWLIST of the exact FIVE public entry
+	# Wall 1 is not a blanket "refuse the whole gateway" deny. The Add Survey contribution flow is
+	# PUBLIC, so wall 1 is an ALLOWLIST of the exact FIVE public entry
 	# points, with a deny-by-default 404 for everything else under /gateway. The allow `handle`s run
 	# BEFORE the deny `handle`, and `handle` blocks are mutually exclusive and evaluated in SOURCE ORDER,
 	# so a public route is proxied and every other /gateway path falls through to the explicit 404. Every
@@ -140,9 +140,9 @@
 	#
 	# THE PUBLIC SUBSET (read gateway/app.py — these are the ONLY routes reachable at the public name):
 	#   * GET  /add-survey.html (+ trailing slash) — the contribution page (map, ROR autocomplete, the
-	#                        C13 Submit-to-AusMT button). Static; served by the box reader.
+	#                        Submit-to-AusMT button). Static; served by the box reader.
 	#   * POST /gateway/submit          — the direct-upload endpoint the Submit button POSTs to.
-	#   * POST /gateway/request-key     — self-serve email key issuance (K1).
+	#   * POST /gateway/request-key - self-serve email key issuance.
 	#   * GET  /gateway/healthz         — the liveness probe the page uses to reveal the Submit button.
 	#   * GET  /gateway/status/*        — the capability-token submission-status page (design §3).
 	# Everything else under /gateway — the ENTIRE curator/admin workbench (login, queue, publish, serve
@@ -229,7 +229,7 @@
 	}
 	# ---- end path-url contract ----------------------------------------------------------------------
 
-	# ---- TIME-SERIES HAND-OFF ROUTES (owner ruling R3/R5, namespace D12, table D15) ------------------
+	# ---- TIME-SERIES HAND-OFF ROUTES --------------------------------------------------------------
 	# /go/ts/<survey>/<station>/<level> answers 302 to the ONE NCI THREDDS fileServer URL for that exact
 	# file. AusMT hands the reader off; it never proxies, re-hosts or re-zips a byte.
 	#
@@ -243,7 +243,7 @@
 	# (deploy/tests/test_frontdoor_ts_routes.py drives these directives against a real Caddy).
 	#
 	# KEYED ON {ausmt_pathurl_rest} (declared at :202-205), the raw URI up to the first '?'. That is
-	# the OPPOSITE of the preserve-the-query ruling at :190-194, by design: a query must not ride
+	# the OPPOSITE of the preserve-the-query rule at :190-194, by design: a query must not ride
 	# onto an NCI URL, so it is stripped BEFORE the lookup and can never reach the Location - which is
 	# also what stops `?u=https://evil.example` turning this into an open redirect. Chained maps resolve
 	# LAZILY (the point of the note at :187), so this map may read the other map's output.
@@ -284,7 +284,7 @@
 }
 
 # >>> legacy-redirect
-# ---- Legacy-name permanent redirect (canonical-name ruling, 2026-08-18) -------------------------
+# ---- Legacy-name permanent redirect ---------------------------------------------------
 # {$AUSMT_LEGACY_REDIRECT_NAME} (the retired public name, e.g. ausmt.au) answers every request with
 # a 301 to the SAME path and query on {$AUSMT_PUBLIC_NAME} (the canonical AuScope name). The block
 # is REDIRECT-ONLY by design: no reverse_proxy (a request must never reach the reader wall under
