@@ -459,7 +459,7 @@ PYEOF
       fi
       head_short=$(git -C "$SURVEYS_LIVE" rev-parse --short HEAD 2>/dev/null || true)
       built_now=$(read_source_commit)
-      _detail="REFUSED: untracked entr(y/ies) under surveys/ - the build enumerates the filesystem, so these would be SERVED though git cannot remove them (incident 2026-07-11): $offenders. Remove (rm -rf) or commit+push them, then the next tick rebuilds."
+      _detail="REFUSED: untracked entr(y/ies) under surveys/ - the build enumerates the filesystem, so these would be SERVED though git cannot remove them: $offenders. Remove (rm -rf) or commit+push them, then the next tick rebuilds."
       write_status "untracked_blocked" "$head_short" "$built_now" "$(read_build_id)" "" "$_detail"
       return 1
     fi
@@ -694,8 +694,8 @@ $_t"
     write_status "failed" "$head" "$built" "$(read_build_id)" "$log_file" \
 "rebuild FAILED (rc=$rc); the previous build is still being served.
 NOTE: the KERNEL JOURNAL COULD NOT BE READ by this user ($OOM_JOURNAL_UNREADABLE),
-so a kernel out-of-memory kill during this build CANNOT BE RULED OUT (incident 2026-08-15: five
-OOM-killed builds that all read as plain failures). Add the user this agent runs as
+so a kernel out-of-memory kill during this build CANNOT BE EXCLUDED: an unread journal is not
+evidence, and an OOM-killed build reads as a plain failure. Add the user this agent runs as
 ($(id -un 2>/dev/null || echo '?')) to the systemd-journal group (deploy/README.md, 'Serve reconcile'
 install step 0c) so the next failure can be named by cause.
 --- last lines of $log_file ---

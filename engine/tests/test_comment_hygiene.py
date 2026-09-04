@@ -27,6 +27,8 @@ that reads nothing must not report PASS over it).
 import ast
 import io
 import re
+import subprocess
+import sys
 import tokenize
 from pathlib import Path
 
@@ -1518,6 +1520,178 @@ def operator_offences(files, root=None):
     return found
 
 
+# WHAT A TOOL ACTUALLY PUTS IN FRONT OF AN OPERATOR. The rule above reads the literal standing
+# inside print() or echo, so a line ASSEMBLED somewhere else and printed later is invisible to it:
+# a failure appended to a list and joined at the end, a status detail held in a variable and handed
+# to the writer that puts it in the document the serve screen reads. Two surfaces close that. The
+# tool is RUN in a mode an operator can run without a box and everything it writes to stdout and
+# stderr is read; and, because a passing run does not print its failure lines and a tool that
+# reconciles a live box cannot be run here at all, every literal that reaches an output through a
+# NAME or a LIST is read where it is written.
+#
+# The vocabulary is the audit-trail subset, as it is for a message and for the same reason: a
+# printed result says what it found, so "no longer a hard guard" is the finding rather than a
+# history note. What it may not carry is who decided, when, and under which work item. The glyph
+# rule rides with it, because these bytes land on a terminal.
+OUTPUT_WRITERS = ("stdout", "stderr")
+# The shell function that writes the status document an operator reads on the serve screen. It is
+# an output as surely as echo is; the bytes simply reach the reader through a file.
+STATUS_WRITER = "write_status"
+SHELL_OUTPUT_COMMAND = re.compile(r"(?:\A|[\n;&|(])[ \t]*(?:[A-Za-z_]\w*=\S*[ \t]+)*"
+                                  r"(?:echo|printf|write_status)(?![\w./-])")
+SHELL_STATUS_CALL = re.compile(r"(?:\A|[\n;&|(])[ \t]*write_status(?![\w./-])")
+SHELL_ASSIGNMENT = re.compile(r"(?m)^[ \t]*(_?[A-Za-z_]\w*)=(\"(?:[^\"\\]|\\.)*\"|'[^']*')")
+
+
+def _quoted_arguments(text, at):
+    """Every quoted argument of the command starting at `at`, read to the command's END rather than
+    to the end of the line: a status detail is a double-quoted string that runs across a dozen
+    lines, and a line-wise reader sees only its first."""
+    found = []
+    i = at
+    while i < len(text):
+        ch = text[i]
+        if ch == "\n":
+            if not (i and text[i - 1] == "\\"):
+                break
+            i += 1
+            continue
+        if ch in "'\"":
+            j = i + 1
+            while j < len(text):
+                if text[j] == "\\" and ch == '"':
+                    j += 2
+                    continue
+                if text[j] == ch:
+                    break
+                j += 1
+            found.append((text.count("\n", 0, i) + 1, text[i + 1:j]))
+            i = j + 1
+            continue
+        i += 1
+    return found
+
+
+def status_writer_strings(path):
+    """(line number, text) for every literal a shell tool puts in front of an operator other than
+    on a terminal line: an argument of the status writer, and a literal held in a NAME that is
+    later handed to an output command."""
+    try:
+        text = source_text(path)
+    except (UnicodeDecodeError, OSError):
+        return []
+    found = []
+    for match in SHELL_STATUS_CALL.finditer(text):
+        found += _quoted_arguments(text, match.end())
+    handed = set()
+    for match in SHELL_OUTPUT_COMMAND.finditer(text):
+        stop = text.find("\n", match.end())
+        line = text[match.end():len(text) if stop < 0 else stop]
+        handed.update(re.findall(r"\$\{?(\w+)\}?", line))
+    for match in SHELL_ASSIGNMENT.finditer(text):
+        if match.group(1) in handed:
+            found.append((text.count("\n", 0, match.start()) + 1, match.group(2)[1:-1]))
+    return sorted(set(found))
+
+
+def _names_that_reach_output(tree):
+    """Every NAME whose value a tool prints, however it is assembled on the way."""
+    reached = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name) and node.func.id == "print":
+            printed = list(node.args)
+        elif (isinstance(node.func, ast.Attribute) and node.func.attr == "write"
+              and isinstance(node.func.value, ast.Attribute)
+              and node.func.value.attr in OUTPUT_WRITERS):
+            printed = list(node.args)
+        else:
+            continue
+        for arg in printed:
+            reached.update(inner.id for inner in ast.walk(arg) if isinstance(inner, ast.Name))
+    return reached
+
+
+def _literals_in(node):
+    """Every literal inside one expression, each read ONCE: an f-string is one line to the reader,
+    not a line per constant part, so the walk stops where it finds text rather than descending
+    into it."""
+    text = _static_text(node)
+    if text is not None:
+        return [(node.lineno, text)] if text.strip() else []
+    found = []
+    for child in ast.iter_child_nodes(node):
+        found += _literals_in(child)
+    return found
+
+
+def indirect_operator_strings(path):
+    """(line number, text) for every literal that reaches a printed line through a name or a list.
+    A failure appended to a list and joined at the end is read by the operator exactly as a literal
+    inside print() is."""
+    try:
+        tree = ast.parse(source_text(path))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return []
+    reached = _names_that_reach_output(tree)
+    found = []
+    for node in ast.walk(tree):
+        names, values = [], []
+        if isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            values = [node.value]
+        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
+            names, values = [node.target.id], [node.value]
+        elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+              and node.func.attr in ("append", "extend", "add")
+              and isinstance(node.func.value, ast.Name)):
+            names, values = [node.func.value.id], list(node.args)
+        if not set(names) & reached:
+            continue
+        for value in values:
+            found += _literals_in(value)
+    return sorted(set(found))
+
+
+def output_labels(text):
+    """The audit trail and the glyph a line an operator reads may not carry."""
+    labels = [label for label in labels_for(text, cite_contract=True) if label in MESSAGE_LABELS]
+    if any(dash in text for dash in DASHES) and any(
+            dash in unquoted(text) for dash in DASHES):
+        labels.append("an em or en dash")
+    return labels
+
+
+def assembled_output_offences(files, root=None):
+    """Every literal a tool assembles and then puts in front of an operator, as report lines."""
+    found = []
+    for path in files:
+        where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+        read = (status_writer_strings(path) if path.suffix.lower() == ".sh"
+                else indirect_operator_strings(path))
+        for lineno, text in read:
+            labels = output_labels(text)
+            if labels:
+                found.append("%s:%s: %s: %s"
+                             % (where, lineno, ", ".join(labels), flattened(text)[:110]))
+    return found
+
+
+def run_output_offences(path, mode, root=None, python=None, cwd=None):
+    """Everything the tool writes to stdout and stderr in one mode, held to the same rule. The exit
+    code is not read: a tool that reports a real failure is still a tool whose words an operator
+    has to read."""
+    where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+    got = subprocess.run([python or sys.executable, str(path)] + list(mode),
+                         capture_output=True, text=True, cwd=str(cwd) if cwd else None)
+    said = (got.stdout or "") + (got.stderr or "")
+    labels = output_labels(said)
+    if not labels:
+        return []
+    return ["%s %s: %s: %s" % (where, " ".join(mode), ", ".join(labels), flattened(said)[:160])]
+
+
 # --- shared extractor and vocabulary: end -----------------------------------
 
 
@@ -1885,6 +2059,44 @@ def test_operator_strings_state_what_the_tool_does():
     hits = operator_offences(files, root=ROOT)
     assert not hits, (
         f"{len(hits)} argparse string(s) print provenance to an operator:\n" + "\n".join(hits))
+
+
+# The engine operator tools and the mode each answers on a checkout. The skip tripwire is a tool an
+# operator runs from a workflow, so it is read here beside the two under scripts/.
+RUNNABLE_TOOLS = (
+    (ENGINE / "scripts" / "verify.py", ("--help",)),
+    (ENGINE / "scripts" / "refresh_pid_status.py", ("--help",)),
+    (ENGINE / "tests" / "ci_check_skips.py", ("--help",)),
+)
+
+
+def test_every_operator_tool_under_scripts_is_run_here():
+    """The surface cannot go quiet: every module under engine/scripts is on the list, so a tool
+    added later fails here rather than going unread."""
+    listed = {path for path, _ in RUNNABLE_TOOLS}
+    tools = set(scripts())
+    assert tools and not tools - listed, sorted(str(p) for p in tools - listed)
+
+
+def test_what_a_tool_prints_when_it_is_run_states_what_it_does():
+    """The tool is RUN and everything it writes to stdout and stderr is read. A module docstring
+    handed to argparse as a description reaches an operator through argparse's own formatting
+    rather than as a literal any rule above can see."""
+    hits = []
+    for path, mode in RUNNABLE_TOOLS:
+        hits += run_output_offences(path, mode, root=ROOT, cwd=ROOT)
+    assert not hits, (
+        f"{len(hits)} operator tool(s) print the audit trail or a typographic dash:\n"
+        + "\n".join(hits))
+
+
+def test_what_a_tool_assembles_before_it_prints_it_states_what_it_does():
+    """The lines a passing run does not print. A failure held in a name or a list reaches an
+    operator exactly as a literal inside print() does, and no rule above reads it."""
+    hits = assembled_output_offences([path for path, _ in RUNNABLE_TOOLS], root=ROOT)
+    assert not hits, (
+        f"{len(hits)} assembled operator line(s) carry the audit trail or a typographic dash:\n"
+        + "\n".join(hits))
 
 
 def test_an_operator_string_is_read_and_a_plain_one_is_not(tmp_path):

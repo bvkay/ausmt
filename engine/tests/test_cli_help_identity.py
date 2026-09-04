@@ -69,7 +69,7 @@ CI_CHECK_SKIPS_DESCRIPTION = "CI skip tripwire."
 # verify.py passes __doc__ straight to argparse under RawDescriptionHelpFormatter, so its module
 # docstring IS the body an operator reads. The digest pins those bytes; the two lines below are the
 # ones a sweep ate a hyphen from, pinned in the clear so a failure names the damage rather than a hash.
-VERIFY_DOC_SHA256 = "e3154a7588a10806d6514659b580054f328929bf04175b29b7ce130922f83db4"
+VERIFY_DOC_SHA256 = "fc38c9cdf5cf3be2432643d5667133af69cc09ce52053f787aee0b0a817a9b37"
 VERIFY_DOC_LINES = (
     "--data-dir mode: validate an EXISTING build output dir (e.g. a deploy/Makefile rebuild-data run's",
     "    python scripts/verify.py [--surveys data] [--skip-tests]",

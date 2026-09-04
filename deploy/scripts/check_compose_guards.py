@@ -146,7 +146,7 @@ def _self_test() -> int:
     for softened in ("AUSMT_SUBMIT_KEY", "AUSMT_CODE_DIR"):
         trips = find_guard_trips(compose, minimal)
         if any(t.var == softened for t in trips):
-            failures.append(f"FAIL: {softened} still trips a :? guard (C33 wanted :- default)")
+            failures.append(f"FAIL: {softened} still trips a :? guard (it must resolve from a :- default)")
 
     if failures:
         print("\n".join(failures))

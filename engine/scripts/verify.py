@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""On-demand verification for the AusMT engine — runs the whole flow this repo's CI runs, locally.
+"""On-demand verification for the AusMT engine: runs the whole flow this repo's CI runs, locally.
 
   1. the test suite (pytest)
   2. a full build with mt_metadata (the sole extractor since the regex retirement)
@@ -11,7 +11,7 @@
 
 mt_metadata is REQUIRED to build, so this fails loudly if it is not installed.
 
-Usage (from the repo root, in a CLEAN Python 3.12 all-pip venv — see environments/README.md for the
+Usage (from the repo root, in a CLEAN Python 3.12 all-pip venv; see environments/README.md for the
 conda/pip ABI note):
 
     pip install -r requirements-dev.txt                          # core engine + tests
@@ -21,10 +21,10 @@ conda/pip ABI note):
 Exit code 0 only if every step passed.
 
 --data-dir mode: validate an EXISTING build output dir (e.g. a deploy/Makefile rebuild-data run's
-just-produced builds/<timestamp>) in place, WITHOUT rebuilding or running pytest — the post-build gate
+just-produced builds/<timestamp>) in place, WITHOUT rebuilding or running pytest: the post-build gate
 `make rebuild-data` runs inside the build-runner container before the atomic `current` symlink swap.
 Mutually exclusive with the default self-building invocation (--surveys/--skip-tests are ignored, with
-a warning, if --data-dir is also given — the two modes read from different places and running both
+a warning, if --data-dir is also given, because the two modes read from different places and both
 would silently discard whichever result lost):
 
     python scripts/verify.py --data-dir /out/builds/20260705T120000Z

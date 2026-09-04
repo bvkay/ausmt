@@ -14,7 +14,7 @@ pinned equal by gateway/tests/test_pidcheck.py::test_alive_rule_parity_with_engi
 
   Only doi.org's OWN 404 = `unregistered` (reserved). Every other doi.org answer (200 / 30x redirect to
   the publisher / 403 bot-block / 5xx landing error) = `resolved`. A network failure = `error` (unknown;
-  the build links it as today). Redirects are NOT followed — a publisher 404 after a 30x is not doi.org's
+  the build links it as today). Redirects are NOT followed: a publisher 404 after a 30x is not doi.org's
   404. The gate is an honesty guard, not a liveness monitor.
 
 SWEEP SCOPE: during migration the corpus holds DOIs in BOTH the typed related_identifiers

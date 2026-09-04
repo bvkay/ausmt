@@ -947,7 +947,7 @@ def test_failed_build_with_unreadable_journal_says_oom_not_ruled_out(tmp_path):
     assert st.get("oom_kill") is False, f"nothing was seen, so oom_kill must not be claimed: {st}"
     tail = st.get("log_tail") or ""
     assert "KERNEL JOURNAL COULD NOT BE READ" in tail, tail[:400]
-    assert "CANNOT BE" in tail and "RULED OUT" in tail, tail[:400]
+    assert "CANNOT BE" in tail and "EXCLUDED" in tail, tail[:400]
     assert "not seeing messages from" in tail, "the detail must quote journalctl's own notice"
     assert "systemd-journal" in tail, "the detail must name the fix"
     assert "simulated build failure" in tail, "the build log tail must still follow the note"
