@@ -2999,7 +2999,7 @@ def station_time_series_resources(rows, collection_identifiers, run_ids=()) -> l
         placed = [dict(e) for e in collection_identifiers if e.get("identifies") == scope]
         if placed:
             res["related_collection_identifiers"] = placed
-        # As amended by rule 14 forbids a network call inside the build, so the build
+        # Rule 14 forbids a network call inside the build, so the build
         # verifies nothing. The date is the crawler's, carried through unchanged.
         res["note"] = f"verified against NCI THREDDS on {row['verified']}"
         out.append(res)

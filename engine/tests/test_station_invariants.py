@@ -235,7 +235,7 @@ def _published_run_rates(out: Path) -> dict:
 
 
 def test_projection_1_the_flag_follows_the_register_and_rows_imply_it(built):
-    """SCOPE:308-310 as amended at the mtcat flag follows the REGISTER (existence), and a
+    """SCOPE:308-310: the mtcat flag follows the REGISTER (existence), and a
     served kind=time_series resource IMPLIES the flag - never the reverse, because a withheld or
     embargoed station keeps its flag while serving no row. Fixture oracle, independent of the
     code under test: EXAMPLE01 has live register rows, EXAMPLE02 only pending/retired ones, and

@@ -1623,12 +1623,12 @@ def test_the_bulk_line_does_not_claim_the_export_produces_a_citation_pack(tmp_pa
 def test_the_screen_states_the_one_thing_the_portal_adds_to_the_log(tmp_path):
     """DISCLOSURE PIN. A preamble saying, truthfully, that nothing here is a beacon and nothing
     new is collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
-    the second half of that sentence is not true as written and must be amended rather than left
-    standing. The amendment has to be specific: WHAT is added (a query flag), to WHAT (fetches that
+    the second half of that sentence is not true as written and must be restated rather than left
+    standing. The restatement has to be specific: WHAT is added (a query flag), to WHAT (fetches that
     already happen), and what is NOT added (a request, an identity).
 
     FAILS IF the screen still claims nothing new is collected, if the beacon claim is dropped along
-    with it (it is still true), or if the amendment is vague about what the flag is."""
+    with it (it is still true), or if the restatement is vague about what the flag is."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)

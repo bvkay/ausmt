@@ -496,6 +496,14 @@ RULES = (
     # name. Everything else that says lane is.
     Rule(re.compile(r"\blanes?\b(?!-[A-Z])", re.I), "lane name"),
     Rule(re.compile(r"\btreatments?\b", re.I), "design-history vocabulary"),
+    # An amendment is a change to a DECISION, which is the provenance git carries: "CVD amendment",
+    # "as amended by D18", "FROZEN, with its amendments" each name a revision of a design rather
+    # than the constraint that holds now, and a cut that takes the item number leaves the reader a
+    # preposition with nothing after it. The ordinary English sense (a claim that must be amended)
+    # is reworded rather than exempted, for the reason the wave rule gives. A LICENCE is amended by
+    # its own instrument and that obligation survives, so the window must carry the licence.
+    Rule(re.compile(r"\bamend(?:ment|ments|ed|s|ing)?\b", re.I), "design-amendment language",
+         ((None, re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)),)),
     Rule(re.compile(r"old\s*->\s*new", re.I), "old-to-new history"),
     Rule(re.compile(r"\b20\d\d-[01]\d-[0-3]\d\b"), "dated note"),
     # A note dated to the MONTH is the same audit trail with one field dropped.
@@ -2457,6 +2465,32 @@ def test_the_work_item_rule_does_not_flag_ordinary_prose(tmp_path):
     f.write_text("/* IPv4 addresses are truncated to /24; WCAG AA (4.5:1) is the floor. */\na{color:red}\n",
                  encoding="utf-8")
     assert not offences([f]), "the work-item rule flagged ordinary prose"
+
+
+def test_an_amendment_to_a_design_is_caught_and_an_amended_licence_is_not(tmp_path):
+    """An amendment is a change to a DECISION, so a comment that names one is carrying the audit
+    trail whatever grammar it uses; and where the cut took the item number, the preposition is
+    left with nothing after it. The one surviving sense is the legal one, in which an instrument
+    amends a licence, and the licence has to stand in the window for that to hold."""
+    caught = (
+        '"""CVD amendment: the completeness ramp is a sequential progression."""\n',
+        '"""As amended by rule 14 forbids a network call inside the build."""\n',
+        '"""The design is FROZEN, with its amendments."""\n',
+        "# The entry is retained per the amendment so an older checkout stays allow-listed.\nA = ()\n",
+    )
+    for body in caught:
+        f = tmp_path / "amended.py"
+        f.write_text(body, encoding="utf-8")
+        hits = offences([f])
+        assert hits and "design-amendment language" in hits[0], f"{body!r} went unseen: {hits}"
+    clean = (
+        '"""The deed is CC-BY-4.0 as amended by its own porting instrument."""\n',
+        '"""The licence text governs, as amended, and the notice file carries it."""\n',
+    )
+    for body in clean:
+        f = tmp_path / "licence.py"
+        f.write_text(body, encoding="utf-8")
+        assert not offences([f]), f"the licence sense was read as design provenance: {body!r}"
 
 
 def test_each_false_positive_names_its_meaning_and_is_caught_without_it(tmp_path):

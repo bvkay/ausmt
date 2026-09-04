@@ -498,6 +498,14 @@ RULES = (
     # name. Everything else that says lane is.
     Rule(re.compile(r"\blanes?\b(?!-[A-Z])", re.I), "lane name"),
     Rule(re.compile(r"\btreatments?\b", re.I), "design-history vocabulary"),
+    # An amendment is a change to a DECISION, which is the provenance git carries: "CVD amendment",
+    # "as amended by D18", "FROZEN, with its amendments" each name a revision of a design rather
+    # than the constraint that holds now, and a cut that takes the item number leaves the reader a
+    # preposition with nothing after it. The ordinary English sense (a claim that must be amended)
+    # is reworded rather than exempted, for the reason the wave rule gives. A LICENCE is amended by
+    # its own instrument and that obligation survives, so the window must carry the licence.
+    Rule(re.compile(r"\bamend(?:ment|ments|ed|s|ing)?\b", re.I), "design-amendment language",
+         ((None, re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)),)),
     Rule(re.compile(r"old\s*->\s*new", re.I), "old-to-new history"),
     Rule(re.compile(r"\b20\d\d-[01]\d-[0-3]\d\b"), "dated note"),
     # A note dated to the MONTH is the same audit trail with one field dropped.

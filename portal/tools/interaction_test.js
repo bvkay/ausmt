@@ -449,7 +449,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "  if(!window.__sciBackup)window.__sciBackup=SCI.map(r=>r.slice());" +
   "  const r=SCI[s.i].slice();Object.keys(patch).forEach(k=>{r[SCI_COLUMNS.indexOf(k)]=patch[k];});SCI[s.i]=r;}," +
   "restoreSciRows:()=>{if(window.__sciBackup){SCI=window.__sciBackup;window.__sciBackup=null;}}," +
-  // CVD amendment hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
+  // The CVD ramp hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
   "qColor," +
   // (map off-centre fix) hooks. The off-centre-on-load bug is a fitBounds computed at a
   // degenerate (stale/0x0) container size; the fix invalidates size BEFORE the primary fit and adds a

@@ -194,7 +194,7 @@ def test_a_derived_row_links_to_the_runs_this_record_publishes(built_with_runs):
 
 
 def test_the_fieldnote_names_the_crawl_and_not_the_build(built):
-    """As amended by rule 14 forbids a network call inside the build, so a build cannot
+    """Rule 14 forbids a network call inside the build, so a build cannot
     say it verified anything. The date is the crawler's, carried through unchanged."""
     for row in _rows(_station(built, "example-survey", "EXAMPLE01")):
         assert row["note"] == "verified against NCI THREDDS on 2026-08-24", row

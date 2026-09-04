@@ -9,7 +9,7 @@ tests an INDEPENDENT observable, never cache-metadata self-consistency. The load
     payload, verified on read - a bit-flipped entry is counted (`corrupt`), deleted and recomputed,
     so the poison can never ship. verify.py guards POST-BUILD tampering of served files only: the
     manifest sha is computed FROM the served bytes, so a poison that flowed through the build would
-    verify self-consistently - the outer gate cannot see it (the review proved this; as amended).
+    verify self-consistently - the outer gate cannot see it.
   * raw-mode exclusion: --raw builds never touch the cache (seed-meta feeds served
     citations but is not a key component).
   * salt invalidations (engine commit / library version / survey.yaml edit) each force misses.

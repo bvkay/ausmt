@@ -63,10 +63,10 @@ import sys
 # for that skip to be allowed. Add an entry ONLY with a comment saying which test/workflow produces it and
 # why it is legitimate.
 #
-# Note: test_validator_gate.py::test_env_var_path_resolves_real_validator does NOT skip -
-# Made it resolve to the committed vendored validator when the sibling is absent, so it RUNS in the
-# Engine workflows too. This entry is therefore DEFENSIVE now (it matches a skip the current suite does not
-# emit); it is retained per the amendment so an older checkout or a re-introduced sibling-gated
+# Note: test_validator_gate.py::test_env_var_path_resolves_real_validator does NOT skip: it
+# resolves to the committed vendored validator when the sibling is absent, so it RUNS in the
+# engine workflows too. This entry is therefore DEFENSIVE now (it matches a skip the current suite does not
+# emit); it is retained so an older checkout or a re-introduced sibling-gated
 # skip stays allow-listed, and the accounting check below catches any genuinely unaccounted skip.
 ALLOWED_SKIP_REASON_SUBSTRINGS = [
     "sibling ausmt-surveys/_validation not present",  # test_validator_gate.py - sibling gate (now defensive)
