@@ -562,8 +562,8 @@ def test_time_series_levels_checkboxes():
 
 def test_list_rows_assemble_and_blank_rows_dropped():
     """A list section assembles filled rows; an all-empty spare row is dropped. FAILS IF a blank spare
-    row lands in the yaml as a row of nulls (the no-JS degradation must be inert). retargeted off
-    the retired principal_investigators section onto publications, an all-scalar list of the same shape
+    row lands in the yaml as a row of nulls (the no-JS degradation must be inert). The section read
+    here is publications, an all-scalar list of the same shape
     (creators/contributors are assembled by the unified People panel, not this generic path)."""
     form = {
         "l_publications_0_author": "Alice Example",

@@ -30,7 +30,7 @@ def test_no_m_prov_references():
 
 def test_doi_badge_is_ok_or_no_only():
     # The DOI badge must stay a TWO-STATE ok/no check — never the dead three-way "part" prov branch.
-    # broadened the predicate from a bare m.doi to hasDatasetDoi(m) ("a persistent dataset identifier
+    # The predicate is hasDatasetDoi(m) rather than a bare m.doi ("a persistent dataset identifier
     # exists in this survey's provenance chain" — a minted dataset_doi OR a DOI-typed related_identifier),
     # shared by both badge sites. That is still ok/no only; this pins the new expression and that the badge
     # never regains a "part" state.

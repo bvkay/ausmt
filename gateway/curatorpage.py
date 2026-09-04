@@ -2576,7 +2576,8 @@ _ACTION_COLOUR = {
     "sync_failed": _PALETTE["bad"],
     # The ops-guards render gap: untracked_blocked is a REFUSED rebuild that
     # needs an operator — render it RED, not defaulted to muted, and surface its log_tail (the
-    # offending-dir list reconcile wrote as the detail). adds the pause/pinned states.
+    # offending-dir list reconcile wrote as the detail). The same table carries the pause and
+    # pinned states.
     "untracked_blocked": _PALETTE["bad"],
     "paused": _PALETTE["warn"], "pinned": _PALETTE["warn"],
 }

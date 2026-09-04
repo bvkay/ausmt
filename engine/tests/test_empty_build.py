@@ -41,7 +41,7 @@ def test_empty_build_generates_valid_json(tmp_path):
     assert catalogue == []
     assert surveys == {}
     assert collections == {}
-    # the download manifest has a valid empty shape (no downloadable artifacts yet). adds the
+    # the download manifest has a valid empty shape (no downloadable artifacts yet). It carries the
     # document-level mth5/mt_metadata version pin (additive keys, present even on an empty build so the
     # manifest self-declares the library it was written with — mirroring mtcat/build_provenance); the
     # values are the installed versions, or None when the stack is absent (an EDI-only build env).

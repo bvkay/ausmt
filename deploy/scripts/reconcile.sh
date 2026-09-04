@@ -27,7 +27,7 @@
 # state.
 #
 # LOCK: flock -n on a lock file (default $AUSMT_DATA_DIR/reconcile.lock). If another run holds it,
-# exit 0 SILENTLY without touching the status file (two overlapping ticks must not both build,;
+# exit 0 SILENTLY without touching the status file (two overlapping ticks must not both build;
 # the second is a no-op, not an error). On a host without flock(1) the script still runs the pass
 # WITHOUT the lock (a WARN to stderr) — the timer's 15-min cadence + the atomic rebuild swap bound
 # the worst case to a redundant build, never a corrupt one. NCI note: the timer becomes a

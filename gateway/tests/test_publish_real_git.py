@@ -2,7 +2,7 @@
 
 `real_git_runner` (publish.py:86) is the ONLY place the gateway executes the git binary, yet ALL
 pytest coverage went through FakeGit, which returned rc=0 for any unmodeled verb. The
-sole real-git workflow (curator-e2e) was. So the fail-closed rollback (publish.py _rollback)
+sole real-git workflow (curator-e2e) could not be run. So the fail-closed rollback (publish.py _rollback)
 — the core publication-ledger guarantee — had NEVER run against a real repository, and the first live
 curator approve failed twice on real-git behaviours FakeGit cannot represent.
 

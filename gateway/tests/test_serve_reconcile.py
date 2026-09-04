@@ -118,8 +118,8 @@ def test_rebuild_requires_csrf(tmp_path):
 def test_rebuild_success_writes_valid_request_and_redirects(tmp_path):
     """A valid session + CSRF writes a well-formed rebuild.request attributed to the curator and
     redirects (303) to the SERVE-STATE screen's panel.
-    moved the serve panel off the queue page to /gateway/curator/serve, so the redirect follows it
-    there — that is where the curator now sees the 'rebuild requested — pending' state. FAILS IF: the
+    The serve panel is at /gateway/curator/serve rather than on the queue page, so the redirect
+    follows it there: that is where the curator sees the pending-rebuild state. FAILS IF: the
     file is absent/malformed, the curator is not recorded, or the response is not a redirect to the
     serve screen."""
     async def _body():

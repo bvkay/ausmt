@@ -1,7 +1,7 @@
 """Portal bundle tiles (Invariant 10).
 
-The survey drawer renders per-survey download tiles from the manifest's `bundles` rows. adds a
-second always-on bundle (EMTF-XML zip) beside the EDI zip, and re-labels the flag-gated survey MTH5 as
+The survey drawer renders per-survey download tiles from the manifest's `bundles` rows. It renders a
+second always-on bundle (EMTF-XML zip) beside the EDI zip, and labels the flag-gated survey MTH5 as
 TRANSFER FUNCTIONS ONLY (it holds TFs, never time series — matching the engine's <slug>-tf.h5 file).
 
 This boots the REAL portal modules in jsdom (tools/bundle_tiles_test.js) against a synthetic MANIFEST

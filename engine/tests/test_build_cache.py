@@ -586,8 +586,8 @@ def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypat
 def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
     """FAILS IF: a cache populated under a PRE-BUMP entry-format tag is read (hit) by the current
     build instead of MISSING cleanly. Each tag bump re-keys every blob, so a pre-bump entry's key
-    never resolves - a clean miss counted as a miss, never a replay of a stale-shape parse. bumped
-    the tag v3 -> v4 (parse product grew 10 -> 18 columns + placeholder-tipper mask); this simulates a
+    never resolves - a clean miss counted as a miss, never a replay of a stale-shape parse. The tag
+    is bumped whenever the parse product's shape changes; this simulates a
     PRE-BUMP cache by monkeypatching the fixed-salt tag back to the PREVIOUS tag, populates, then builds
     normally (current tag) and asserts zero hits + a full re-derive. (Kept under its historical name; the
     concrete tags move with each bump - v3->v4, v4->v5 for the XML Copyright truth fix.)"""

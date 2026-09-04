@@ -64,8 +64,8 @@ def available() -> bool:
 #
 # THE REMEDY IS PARSE-ONLY. The normalised copy lives in a TemporaryDirectory that is destroyed
 # before this function returns, is never returned to a caller, and never reaches the served tree or
-# the sha256 integrity gate (both of which take the ORIGINAL path). stands: source EDI bytes are
-# never edited, and what AusMT serves stays byte-identical to what the custodian released.
+# the sha256 integrity gate (both of which take the ORIGINAL path). The rule stands: source EDI
+# bytes are never edited, and what AusMT serves stays byte-identical to what the custodian released.
 INFO_JSON_DELIMITER_DEFECT = (
     "mt_metadata could not read the >INFO JSON block: a JSON scalar kept its trailing delimiter; "
     "reparsed from a normalised temporary copy (the source file is untouched and is what is served)"
@@ -348,8 +348,8 @@ DATAID_CHARSET_DEFECT = (
 # happened to finish on".
 #
 # Applied ON A TEMPORARY COPY, exactly like the >INFO delimiter repair: the copy keeps the head, the
-# info block, the measurement definitions and the chosen section alone. stands: the served bytes
-# are the custodian's file.
+# info block, the measurement definitions and the chosen section alone. The rule stands: the
+# served bytes are the custodian's file.
 SECTION_OF_RECORD_RULE = "<DATAID>_avg, else the section named for the DATAID, else the first"
 
 _SECTID_RE = re.compile(rb"^\s*SECTID\s*=\s*(.*?)\s*$", re.IGNORECASE)

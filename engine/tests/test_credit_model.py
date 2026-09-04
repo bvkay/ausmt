@@ -164,7 +164,7 @@ def test_orcid_url_canonicalises_or_none():
 
 def test_project_lead_prefers_projectleader_contributor_then_creator_and_never_a_retired_facet():
     """The mth5 project_lead is the lead-most credited party: a ProjectLeader contributor first, else the
-    lead creator. inverts the third rung: the retired investigators facet is not a fallback, so a
+    lead creator. There is no third rung: the retired investigators facet is not a fallback, so a
     SMETA carrying only that stale key yields None. Pre-change it returned {"name": "Inv, I"}."""
     proj = bp._mth5_project_lead({
         "creators": [{"name": "Creator, C", "orcid": "0000-0002-1825-0097"}],

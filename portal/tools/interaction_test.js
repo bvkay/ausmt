@@ -382,7 +382,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // hooks verify draw/select flows still COUNT a re-classified station (which may move map containers) —
   // the counting logic reads `visible`/ST, not layer membership, so it stays membership-agnostic.
   "isAuslampSurvey,radiusForZoom,weightForZoom,markerColor,tooltipText,buildAuslampSet," +
-  // The map paint pass. invokes it and reads what it returned, which is the only readable record of
+  // The map paint pass. This driver invokes it and reads what it returned, which is the only record of
   // what reached the ONE dot container (the stubbed layer group's own contents are Proxies).
   "routeVisibleToLayers," +
   "auslampSet:()=>AUSLAMP_SET,setAuslampSet:(arr)=>{AUSLAMP_SET=new Set(arr);}," +
@@ -4853,8 +4853,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // Driven on Delta, which every earlier section has finished with, so nothing above is perturbed.
   //
   // (1) `entire` FILLS the Collection slot. `entire` means ONE record covering all levels - the umbrella
-  //     record the Collection slot names - so it belongs in that slot, not in the extra-tile bucket that
-  //     to fall into. The fixture is Gawler Phase 2's real shape: a GSSA/SARIG umbrella landing page
+  //     record the Collection slot names - so it belongs in that slot and not in the extra-tile
+  //     bucket. The fixture is Gawler Phase 2's real shape: a GSSA/SARIG umbrella landing page
   // (identifies: entire, NO `collection` row) plus its level3 models record. RED on the earlier build:
   //     the Collection tile stayed muted, the head read "1 of 6 recorded", and the umbrella record hung
   //     below the grid as an orphan seventh tile.

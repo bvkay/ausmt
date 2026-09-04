@@ -1,8 +1,8 @@
 """Serve-state helpers curator serve-reconcile panel.
 
 The gap closes: `PUBLISHED` means "committed to surveys-live and pushed", NOT "served" - the
-portal keeps serving the old build until a rebuild runs. adds a host-side reconcile timer that
-rebuilds on drift, and this module is the GATEWAY half: the curator's front-door view of that state
+portal keeps serving the old build until a rebuild runs. A host-side reconcile timer rebuilds on
+drift, and this module is the GATEWAY half: the curator's front-door view of that state
 (published HEAD vs served build, last reconcile outcome, a pending-rebuild indicator) plus the
 zero-argument "request rebuild" button's write.
 

@@ -545,7 +545,10 @@ RULES = (
     # tree, or a docs/ page and its section. A clause number, a SPEC, a design brief and an ADR all
     # name a document that is not here, so the reader is left with an unresolvable reference where
     # the constraint should have been.
-    Rule(re.compile(r"\u00a7|\bSPEC\b|(?i:\bdesign brief\b)|\bADR-\d"),
+    # A numbered CLAUSE with no document in front of it is the same unresolvable reference with the
+    # document's name taken off: "SPEC 6" reworded to "clause 6" leaves the reader with a number and
+    # nowhere to look it up, which is what this rule exists to prevent rather than to relocate.
+    Rule(re.compile(r"\u00a7|\bSPEC\b|(?i:\bdesign brief\b)|\bADR-\d|(?i:\bclause\s+\d)"),
          "design-document citation",
          # A licence's own clause number is the obligation, not a design document, and the legal
          # code it names is public. The window must carry the licence for the exemption to hold.
@@ -553,7 +556,10 @@ RULES = (
            re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)),
           # An ADR that is a FILE in this tree is a pointer a reader can follow, which is what the
           # rule asks for. The window must carry the path, not merely the name.
-          (re.compile(r"^ADR-\d"), re.compile(r"/ADR-\d[\w.-]*\.md\b")))),
+          (re.compile(r"^ADR-\d"), re.compile(r"/ADR-\d[\w.-]*\.md\b")),
+          # A licence's numbered clause is the same obligation the section mark names, written out.
+          (re.compile(r"(?i)^clause\s+\d"),
+           re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)))),
     Rule(re.compile(r"YOUR-"), "placeholder"),
     Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
     Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),
@@ -1049,6 +1055,28 @@ DOUBLED_WORD = re.compile(r"(?<![\w-])(the|a|of|to|is|in|and)\s+\1(?![\w-])", re
 # meaning of."), so the list is determiners and coordinators alone. Lower case only, because a
 # capital letter followed by a full stop is a list marker.
 ORPHANED_DETERMINER = re.compile(r"(?<![\w-])(?:the|an|a|and|or|nor|than|per|whose)[ \t]*[.;](?:\s|\Z)")
+# THE SUBJECT A CUT TOOK AWAY, which is the same family read at the head of the sentence rather than
+# its tail. Where the cut token WAS the subject, the verb is left with nothing doing it: "C40 adds a
+# host-side reconcile timer" becomes "adds a host-side reconcile timer". A sentence opening in lower
+# case is ordinary in this tree (a thousand of them open on an identifier or a shell variable), so
+# what is read is a CLOSED LIST of finite verbs, none of which can open an English sentence. The
+# list is a floor rather than a grammar: it holds the verbs this tree's prose actually uses this
+# way, and a verb it does not name is a site this rule will not find.
+SUBJECTLESS_SENTENCE = re.compile(
+    r"(?<![A-Z0-9])[.!?]\s+("
+    r"adds|stands|splits|inverts|makes|made|moves|moved|bumped|broadened|retargeted|routes|"
+    r"carries|invokes|keeps|holds|removes|replaces|extends|narrows|widens|closes|fixes|"
+    r"introduces|retires|supersedes|renames|drops|folds|lifts|raises|lowers|gives|takes|"
+    r"turns|puts|sets|reads|writes|runs|leaves|brings|sends|pins|gates|blocks|allows)\b")
+# The same cut at the other end of the sentence: where what a bracketed aside was ABOUT is taken
+# away, the copula is left with nothing after it ("the sole real-git workflow (curator-e2e) was.").
+# A pronoun subject makes that ordinary English ("git carries what was."), so the shape is anchored
+# to the bracket that closes hard in front of the verb.
+ORPHANED_COPULA = re.compile(r"[)\]][ \t]+(?:was|were|is|are|be|been|being)[ \t]*[.;](?:\s|\Z)")
+# Two sentence marks standing together, where the cut took the token that stood between them
+# ("must not both build,;"). A decimal and an ellipsis carry a digit or a further dot after the
+# mark, so neither is this.
+MARKS_TOGETHER = re.compile(r"[\w)\]][,;][.,;](?![.\d])")
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
 # fragment of a cut sentence, which the reader is handed as a file name.
@@ -1256,6 +1284,14 @@ def shape_offences(files, root=None):
             if orphaned:
                 said.append("a sentence ending on the word that introduced its noun (%s)"
                             % orphaned.group(0).strip())
+            if ORPHANED_COPULA.search(unquoted(flat)):
+                said.append("a sentence ending on the verb whose complement was cut")
+            headless = SUBJECTLESS_SENTENCE.search(unquoted(flat))
+            if headless:
+                said.append("a sentence opening on a verb with no subject (%s)"
+                            % headless.group(1))
+            if MARKS_TOGETHER.search(unquoted(flat)):
+                said.append("two sentence marks with nothing between them")
             if any(DANGLING_HYPHEN.search(line) for line in clean.splitlines()):
                 said.append("a hyphen with nothing after it")
             orphan = POINTER_ORPHAN.search(bare_flat)
@@ -1688,7 +1724,8 @@ def run_output_offences(path, mode, root=None, python=None, cwd=None):
     has to read."""
     where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
     got = subprocess.run([python or sys.executable, str(path)] + list(mode),
-                         capture_output=True, text=True, cwd=str(cwd) if cwd else None)
+                         capture_output=True, text=True, encoding="utf-8",
+                         cwd=str(cwd) if cwd else None)
     said = (got.stdout or "") + (got.stderr or "")
     labels = output_labels(said)
     if not labels:
