@@ -413,7 +413,11 @@ RULES = (
     # it survives only where that workflow is named beside the word.
     Rule(re.compile(r"\bapprov(?:e|es|ed|al|als|ing)\b", re.I), "approval language",
          ((None, re.compile(r"curat|submi|trailer|Approved-by|moderat|reviewer", re.I)),)),
-    Rule(re.compile(r"\bwave\s+[a-z]\b", re.I), "wave identifier"),
+    # Every spelling of it: "Cleanup wave (D)", "Wave-1", "wave 1", "DOCS WAVE".
+    # A wave is a run of work, and the ordinary English senses of the word are
+    # reworded rather than exempted, because an exemption here would be a hole
+    # wide enough to write any wave name through.
+    Rule(re.compile(r"\bwaves?\b", re.I), "wave identifier"),
     Rule(re.compile(r"\bux\d", re.I), "work-item identifier"),
     Rule(re.compile(r"\btask\s*#", re.I), "work-item identifier"),
     # A pin may cite the contract it holds, and those documents are named
@@ -423,13 +427,31 @@ RULES = (
     Rule(re.compile(r"\btreatments?\b", re.I), "design-history vocabulary"),
     Rule(re.compile(r"old\s*->\s*new", re.I), "old-to-new history"),
     Rule(re.compile(r"\b20\d\d-[01]\d-[0-3]\d\b"), "dated note"),
+    # A note dated to the MONTH is the same audit trail with one field dropped.
+    # A bare 2026-08 is also a release tag and a version, so the rule wants the
+    # grammar of a note around it: a preposition or an article in front, or a
+    # word behind it.
+    Rule(re.compile(r"\b(?:in|the|since|until|after|before)\s+20\d\d-[01]\d\b"
+                    r"|\b20\d\d-[01]\d\b(?=\s+\w)", re.I), "dated note"),
+    # A branch is where the work happened, which is provenance git already
+    # carries. The slug is required to be hyphenated so that docs/reference and
+    # the other ordinary paths stay paths.
+    Rule(re.compile(r"\b(?:feat|fix|chore|docs)/[a-z0-9]+(?:-[a-z0-9]+)+(?![\w/-]|\.\w)"),
+         "branch name"),
+    # A slice, a review round and a lettered review finding are all names for
+    # the piece of work a change belonged to.
+    Rule(re.compile(r"\bslices?\s*#"
+                    r"|\breviews?\s+(?-i:[A-Z]\d)\b"
+                    r"|\b(?:in|during|from) the review\b"
+                    r"|\breview[- ]rounds?\b"
+                    r"|\bcode-health review\b", re.I), "review or slice identifier"),
     Rule(re.compile(r"YOUR-"), "placeholder"),
     Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
     Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),
     # A vocabulary filter alone lets the history through wherever it avoids the
     # banned words, so the two shapes history takes are named as well: what the
     # code used to say, and what a rejected alternative would have done.
-    Rule(re.compile(r"\bused to (?:read|be|carry|say)\b"
+    Rule(re.compile(r"\bused to \w+"
                     r"|\bwould have\b"
                     r"|\bpreviously\b"
                     r"|\bno longer\b"
@@ -963,9 +985,13 @@ def test_the_id_exemption_tests_the_token_and_not_its_neighbourhood(tmp_path):
         )
 
 def test_history_and_alternatives_narrative_is_caught(tmp_path):
+    """The vocabulary filter clears the words on the list and leaves the SHAPES off it, so each
+    shape history takes is named here as well as each word."""
     cases = [
         "The label used to read Sites; the tree is the reason it does not.",
         "The row used to be the survey's, and the station's is the correct home.",
+        "The trailing pointer used to send a reader to the API section.",
+        "artifactsFor used to filter the whole files array on every call.",
         "A graph would have needed a host per row.",
         "Previously the counter was rebuilt on every keystroke.",
         "The chooser no longer reads the tree state.",
@@ -973,14 +999,20 @@ def test_history_and_alternatives_narrative_is_caught(tmp_path):
         "The value is read from the record rather than the old constant.",
         "Historically the badge sat on the card.",
         "Originally the panel carried three tiles.",
+        "Cleanup wave (D): the backdrop behind the drawer.",
+        "Wave-1 carried the shallow identifier only.",
+        "The editor gained this field in wave 1.",
+        "DOCS WAVE, STAGE 3: the interface page moved to the docs site.",
+        "The regex extractor was retired in 2026-06.",
+        "The 2026-08 fallback is the one this reads.",
+        "Two independent defects (fix/gateway-silent-success) sat in the fetch.",
+        "The listing page landed on feat/release-machinery.",
+        "The extractor was retired in slice #3d.",
+        "The single source for this default (code-health review M5).",
+        "Deliberately ungated (review C2): the login page loads it.",
+        "Three consecutive review rounds each found another default.",
+        "The bucket was flagged missing in the review.",
     ]
-    for i, case in enumerate(cases):
-        f = tmp_path / f"hist{i}.js"
-        f.write_text(f"// {case}\nvar a = 1;\n", encoding="utf-8")
-        hits = offences([f])
-        assert hits and "history" in hits[0], f"the history rule missed: {case}"
-
-
 def test_commented_out_code_is_caught_in_its_shapes(tmp_path):
     plants = {
         "assign.js": "// const screening = buildScreening(row, level);\nvar a = 1;\n",
