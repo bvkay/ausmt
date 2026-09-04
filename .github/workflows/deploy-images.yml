@@ -431,13 +431,13 @@ jobs:
   # ---------------------------------------------------------------------------------------------
   # Full pytest lane INSIDE the built engine image (the committed lock,
   # engine/environments/requirements-mtmetadata-lock.txt, is already installed in the image; this is
-  # the real release gate for the engine stack). The image must not carry a build-time
-  # `locker` resolve of the floating pins instead, so this gate tested a stack the repo had never
-  # verified; engine.Dockerfile now installs the committed lock and the two agree.
-  # made this the SOLE in-image engine-suite run: engine.Dockerfile's own in-build stack-less pytest
-  # was removed as the least truthful + only ~4-min-per-build of the three engine runs. This lane is
-  # where the topology skip ("gateway tree not shipped") legitimately fires: the engine image
-  # ships engine/ only, so /app/gateway is absent, and the tripwire below allow-lists exactly that
+  # the real release gate for the engine stack). The image must install the COMMITTED lock and not
+  # a build-time `locker` resolve of the floating pins: a resolve would make this gate test a stack
+  # the repo has never verified. engine.Dockerfile installs that lock, so the two agree, and this
+  # is the SOLE in-image engine-suite run: engine.Dockerfile carries no in-build stack-less pytest
+  # of its own, that being the least truthful and only ~4-min-per-build of the three engine runs.
+  # This lane is where the topology skip ("gateway tree not shipped") legitimately fires: the
+  # engine image ships engine/ only, so /app/gateway is absent, and the tripwire below allow-lists exactly that
   # one skip (engine/tests/ci_check_skips.py). Removing the in-build run does not touch that skip:
   # the image topology here is identical, so the skip still fires and its allow-list entry is still
   # load-bearing.

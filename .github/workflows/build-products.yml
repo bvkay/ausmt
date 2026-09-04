@@ -3,8 +3,8 @@ name: build-products
 # Generates AusMT derived products offline from the engine/ subtree, then publishes them for the
 # portal. The portal never runs this stack itself.
 #
-# mt_metadata/mth5 is the SOLE parsing engine (the dependency-free regex extractor was retired
-# ), so it is a core dependency, installed here from
+# mt_metadata/mth5 is the SOLE parsing engine, the dependency-free regex extractor having been
+# retired, so it is a core dependency, installed here from
 # the pinned lock on the tested Python (3.12). Tier-3 decomposition (the MTpy-v2 fork) is OPTIONAL
 # and installed separately; the build does NOT depend on it, so CI stays green without the fork.
 #
@@ -33,9 +33,9 @@ on:
       - "portal/tools/gen_config.py"
       - ".github/workflows/build-products.yml"
   # Also run on pull requests touching the engine subtree, so a fork/branch PR gets the full
-  # engine lane (build + tests + skip accounting) BEFORE merge. Triggering
-  # only on push, so a PR that broke the engine showed zero checks here (portal-ci.yml and
-  # deploy-images.yml already run on pull_request; this brings build-products.yml into line).
+  # engine lane (build + tests + skip accounting) BEFORE merge. On the push trigger alone a PR
+  # that broke the engine shows zero checks here (portal-ci.yml and
+  # deploy-images.yml already run on pull_request; this keeps build-products.yml in line).
   pull_request:
     paths:
       - "engine/**"
