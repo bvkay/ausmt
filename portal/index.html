@@ -55,17 +55,11 @@
 <link rel="stylesheet" href="vendor/leaflet.css">
 <link rel="stylesheet" href="vendor/leaflet.draw.css">
 <style>
+  /* See docs: portal internals, index.html, tokens, header and map chrome. */
   :root{
-    /* DUPLICATED verbatim in about.html and add-survey.html: the five surface tokens must stay identical
-       across all three. --copper carries the Tangerine accent; the token name does not follow it. See docs:
-       portal internals, index.html. */
     --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
-    /* These MUST equal src/state.js TYPE_COL byte-for-byte: a legend swatch and its map dot are one claim
-       held in two files. Pinned by tests/test_type_palette_separability.py. */
     --lpmt:#2E8FA3; --bbmt:#3730B8; --amt:#CDA1EC; --gds:#C255A0;
-    /* --no is rendered as TEXT on --panel (5.98:1) and --panel-2 (5.00:1), so it must stay above the WCAG
-       AA 4.5:1 floor on both. See docs: portal internals, index.html. */
     --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
     --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
     --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
@@ -73,27 +67,18 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
-  /* Three-zone header. The side zones must take equal ZERO-basis shares (flex:1 1 0, min-width:0) or each
-     grows with its own content and the centred tabs land at a different x per view; pinned by
-     tests/test_header_geometry_parity.py. See docs: portal internals, index.html. */
   header{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
   .hleft{flex:1 1 0;min-width:0}
   .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
-  /* The AusMT mark (vendor/brand/ausmt-mark.svg, from tools/gen_brand.py) is a fixed 30x30 box, so it joins
-     the zero-basis .hleft zone without moving the centre tabs. See docs: portal internals, index.html. */
   .brandmark{height:30px;width:30px;display:block;flex:none}
   .tagline{color:var(--muted);font-size:12.5px}
-  /* The ACTIVE view is a filled copper box with dark text (#16110b on --copper = 6.44:1, AA), and every
-     view control keeps a 40px click target. See docs: portal internals, index.html. */
   nav{display:flex;gap:6px;flex-wrap:wrap}
   nav button{flex:1;min-width:112px;min-height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
   nav button:hover{border-color:var(--copper)}
   nav button.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
-  /* Two of these controls are links and one is a button, so they take the same box, token and active
-     look and read as one control group. */
   nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;
     background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;
     padding:0 16px;border-radius:5px;text-decoration:none;cursor:pointer}
@@ -104,7 +89,6 @@
   .contribute:hover{border-color:var(--copper)}
   .about{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
   .about:hover{border-color:var(--copper)}
-  /* The MTCAT link lives in the footer's bottom-left; the footer's flex gap handles its spacing. */
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
   .apilink:hover{color:var(--copper)}
   .counts{font-family:var(--mono);font-size:13px;color:var(--muted)}
@@ -115,16 +99,9 @@
   .resizer:hover,.resizer.drag{background:var(--copper)}
   .content{flex:1;min-width:0;position:relative;display:flex}
   #map{flex:1;background:#dfe6e9;position:relative}
-  /* Mute the basemap only: station overlays render outside the tile pane, so they keep full colour. */
   #map .leaflet-tile-pane{filter:saturate(.35) brightness(1.04)}
-  /* The AuScope mark, top right of the MAP and nowhere else: a screenshot carries no footer, so this is the
-     attribution that travels with the image, at the brand guide's clear space (32px) with neither tint nor
-     reduced opacity. See docs: portal internals, index.html. */
   .mapmark{position:absolute;top:32px;right:32px;height:32px;width:auto;z-index:500;pointer-events:none}
   @media(max-width:560px){.mapmark{display:none}}
-  /* The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map,
-     because only the layer that is drawing knows which provider to name, and the 240px cap keeps the opened
-     text clear of the legend at 560px of map. See docs: portal internals, index.html. */
   .mapattrib{position:relative;z-index:900;display:flex;flex-direction:row-reverse;align-items:flex-end;gap:4px}
   .mapattrib-toggle{flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--text);font-family:var(--sans);font-size:12px;font-style:italic;line-height:1;cursor:pointer}
   .mapattrib-toggle:hover{border-color:var(--copper)}
@@ -139,15 +116,9 @@
   .typegrid label{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 8px;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;cursor:pointer}
   .typegrid input{accent-color:var(--copper)}
   .dot{width:10px;height:10px;border-radius:50%;flex:none}
-  /* flex-shrink:0 is load-bearing: #filterPane is a column flex, so a tall mode pane squashes this control,
-     and .seg clips its overflow, so it collapses silently to its 2px borders and leaves the rail a one-way
-     door into Select and download. See docs: portal internals, index.html. */
   .seg{display:flex;flex:none;border:1px solid var(--line);border-radius:4px;overflow:hidden}
   .seg button{flex:1;background:var(--panel-2);border:0;color:var(--muted);font-size:12px;padding:6px;cursor:pointer}
   .seg button.on{background:var(--copper);color:#16110b;font-weight:600}
-  /* The tree fills the rail's remaining height and scrolls INTERNALLY; the rail must NOT gain a second
-     outer scrollbar. The flex chain that allows it (each ancestor min-height:0) is on #browseMode and
-     treeSection below. See docs: portal internals, index.html. */
   .tree{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow-y:auto;padding-right:12px}
   .tree .country{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:3px 0;cursor:pointer}
   .tree .country input{accent-color:var(--copper)}
@@ -157,8 +128,6 @@
   .tree .survey{display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer;padding:1px 0 1px 18px}
   .tree .survey input{accent-color:var(--copper)}
   .tree .survey .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-right:4px}
-  /* Disclosure carets are a separate click target inside each label row, and the handler preventDefaults so
-     the label never activates its checkbox. See docs: portal internals, index.html. */
   .tree .caret{flex:none;width:14px;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
   .tree .caret:hover{color:var(--copper)}
   .tree .treegroup,.collgroup .treegroup{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:4px 0 1px}
@@ -166,7 +135,6 @@
   .tree .coll input,.collgroup .coll input{accent-color:var(--copper)}
   .tree .collmember{display:flex;align-items:center;font-size:12px;color:var(--muted);padding:1px 0 1px 39px}
   .tree .collmember .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;padding-right:4px}
-  /* With no collections in the boot data this stays empty, and :empty removes it so no gap remains. */
   .collgroup{display:flex;flex-direction:column;gap:2px}
   #collGroup:empty{display:none}
   #find{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;color:var(--text);font-size:13px;padding:7px 9px}
@@ -181,7 +149,6 @@
   select,input[type=text]{width:100%;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
   select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
   .selbox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:12px}
-  /* Reuses the drawer's Related-products tile language verbatim: the whole tile is the action. */
   .dlbox{background:transparent;border:0;padding:0}
   .dlbox .scopeline{margin:0 0 4px;font-family:var(--mono)}
   .dlbox .sechead{margin-top:14px}
@@ -203,17 +170,13 @@
   a.primary{display:inline-block;border:1px solid var(--copper);border-radius:4px;padding:6px 12px;text-decoration:none;font-size:13px}
   .card-locator{margin:10px 0 4px}
   .card-locator svg{width:100%;height:auto;display:block;background:#16242f;border:1px solid var(--line);border-radius:6px}
-  /* .armed: a draw button reflecting the shared armedDrawMode (its tool is live) — matches the copper
-     active look of .primary / .seg button.on, so it reads as "currently on". */
   button.armed{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
   button:disabled{opacity:.35;cursor:not-allowed}
   .wide{grid-column:1/-1}
 
-  /* drawer */
+  /* See docs: portal internals, index.html, drawer. */
   #drawer{position:absolute;top:0;right:0;bottom:0;width:420px;max-width:100%;background:var(--panel);border-left:1px solid var(--line);transform:translateX(102%);transition:transform .16s ease;z-index:1100;overflow-y:auto;padding:16px 18px}
   #drawer.open{transform:none}
-  /* Dim backdrop behind the drawer, never on the map view. Its z-index sits BELOW the drawer (1100) and
-     its resize handle (#drawerResizer, 1101), so the resizer keeps working. */
   .drawerscrim{position:absolute;inset:0;z-index:1050;background:rgba(11,15,18,.5);cursor:pointer}
   .dhead{display:flex;align-items:baseline;gap:10px}
   .dhead .sid{font-family:var(--mono);font-weight:800;font-size:22px}
@@ -243,8 +206,6 @@
   .dhead.svhead{position:sticky;top:-16px;z-index:6;background:var(--panel);margin:-16px -18px 6px;
     padding:16px 18px 10px;border-bottom:1px solid var(--line)}
   .dhead .dhead-act{font-size:12px;padding:4px 10px;white-space:nowrap}
-  /* Tiles reuse .prod/.prodgrid verbatim. An UNRECORDED level stays visible as .prod.dis with a HOLLOW
-     dot, so the six-slot chain keeps its shape on every survey. */
   .prod .pdot.hollow{background:transparent;border:1.5px solid var(--muted);box-sizing:border-box}
   .dl-tile{align-items:flex-start}
   .dl-tile .dl-state{font-style:italic}
@@ -252,8 +213,6 @@
   .sechead .dl-count{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
   .dl-cite{font-size:11.5px;color:var(--muted);margin-top:6px}
   .dl-instr{font-size:12px;color:var(--muted);margin-top:4px}
-  /* The three link sites must be given the site accent, or they take the UA's near-invisible dark blue on
-     the navy tiles and go purple once followed. See docs: portal internals, index.html. */
   .dl-id a,.dl-cite a,.dl-instr a{color:var(--copper);text-decoration:none}
   .dl-id a:visited,.dl-cite a:visited,.dl-instr a:visited{color:var(--copper)}
   .dl-id a:hover,.dl-cite a:hover,.dl-instr a:hover{text-decoration:underline}
@@ -273,15 +232,10 @@
   .citebox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:10px;margin:6px 0;font-size:12px;line-height:1.5}
   .citebox .cb-row{display:flex;gap:6px;margin-top:8px}
   .meta td{font-size:12px;padding:2px 0;vertical-align:top}.meta td:first-child{color:var(--muted);padding-right:12px;white-space:nowrap}.meta td:last-child{font-family:var(--mono)}
-  /* Links inside .meta tables must be given the site accent, or they fall back to the UA default dark
-     blue, unreadable on the dark panel. */
   .meta td a{color:var(--copper);text-decoration:none}.meta td a:hover{text-decoration:underline}
-  /* Self-hosted identifier logos (ORCID next to an investigator, ROR next to an organisation) — small,
-     baseline-aligned, non-shrinking; vendor pngs are same-origin (CSP-safe). */
   .idlogo{height:14px;width:auto;vertical-align:-2px;display:inline-block}
   .api{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 8px;margin-top:6px;word-break:break-all}
   .api b{color:var(--copper)}
-  /* Copper like every other in-drawer link, and not word-break:break-all material. */
   .api a{color:var(--copper);text-decoration:none;word-break:normal}
   .api a:hover{text-decoration:underline}
 
@@ -292,7 +246,6 @@
   .dactions{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 8px}
   .dactions button{font-size:12.5px;padding:7px 12px}
   .dactions .primary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
-  /* Tab strip reuses .seg; six tabs need a tighter type scale and horizontal scroll safety on narrow drawers */
   .seg.dtabs{margin-bottom:2px}
   .seg.dtabs button{font-size:11px;padding:7px 3px;letter-spacing:-.2px;white-space:nowrap}
   .seg.dtabs button[aria-selected="true"]{background:var(--copper);color:#16110b;font-weight:600}
@@ -300,8 +253,6 @@
   .dpanel[hidden]{display:none}
   .rolechip{display:inline-block;font-size:10.5px;font-weight:600;text-transform:none;letter-spacing:.02em;
     color:var(--muted);background:var(--panel-2);border:1px solid var(--line);border-radius:3px;padding:1px 6px;vertical-align:1px}
-  /* The expand affordance is SECTION-level: .plotexp rides the "Response functions" heading row and
-     never sits inside a .ptitle. */
   .sechead.rsphead{display:flex;align-items:center;gap:8px}
   .sechead.rsphead .plotexp{margin-left:auto}
   .plotexp{flex:none;font-size:12px;line-height:1;padding:2px 6px;border:1px solid var(--line);border-radius:4px;
@@ -318,14 +269,10 @@
   details.plotcollapse[open]>summary::before{content:"▾"}
   details.plotcollapse .plotbody{position:relative;margin-top:4px}
   .prov-dbody{padding:8px 10px}
-  /* Full-station RESPONSE modal, closing on Esc, click-out or the button. The panels reuse
-     .plot / .ptitle / .psubline. */
   .plotmodal{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;
     background:rgba(11,15,18,.72);padding:24px}
   .plotmodal-box{background:var(--panel);border:1px solid var(--copper);border-radius:10px;padding:14px 16px;
     max-height:92vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.55)}
-  /* The modal content column is CAPPED, not viewport-filling: plots.js puts .plotmodal-capw on the box,
-     so this rule IS the cap (about 760px, 92vw ceiling). */
   .plotmodal-capw{width:100%;max-width:min(92vw,760px)}
   .plotmodal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
     padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line)}
@@ -339,20 +286,16 @@
   .plotmodal-ident .pm-coord{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
   .plotmodal-close{font-size:15px;line-height:1;padding:4px 10px;flex:none}
   .plotmodal-svg{overflow:auto}
-  /* min-width is plots.js's design width (W=372), so the modal svg can never render narrower than the
-     drawer's and shrink its axis text; the svg's matching viewBox keeps the aspect ratio at width:100%. See
-     docs: portal internals, index.html. */
   .plotmodal-svg svg{width:100%;min-width:372px;height:auto;display:block}
   .plotmodal-svg .plot{margin:6px 0 16px}
 
-  /* ===== drawer density, Station summary, screening indicators, record stewardship ===== */
+  /* See docs: portal internals, index.html, drawer density and stewardship. */
   #drawer .plot{margin:12px 0 5px}
   .ssdetails{margin-top:16px}
   .ssbody{padding:11px 12px}
   .ssgroup{margin:0 0 13px}.ssgroup:last-child{margin-bottom:0}
   .ssg-h{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 4px;font-weight:600}
   .ssgroup .prodgrid{margin-top:6px}
-  /* Screening indicator list: glyph, label and state word, so a colour-blind reader sees the word too. */
   .indlist{list-style:none;margin:12px 0 6px;padding:0;display:flex;flex-direction:column;gap:7px}
   .indrow{display:flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);
     border-left-width:3px;border-radius:5px;padding:9px 11px;font-size:12.5px}
@@ -370,8 +313,6 @@
   .matglyph{flex:none;width:14px;text-align:center;color:var(--part)}
   .matdim.off .matglyph{color:var(--unk)}
   .prov-top{margin:6px 0 12px}
-  /* The ramp's dark low end cannot be a text colour on this panel, so it rides the dot and the value
-     stays plain readable text. */
   .qvdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px;
     border:1px solid rgba(232,237,241,.35)}
   .attn{font-size:12.5px;line-height:1.5;margin:5px 0 2px;background:var(--panel-2);border:1px solid var(--line);
@@ -403,8 +344,6 @@
   .colltable tbody tr:hover{background:var(--panel)}
   .colltable td a{color:var(--copper);text-decoration:none;font-weight:500}.colltable td a:hover{text-decoration:underline}
   .colltable .csub{font-size:12px;color:var(--muted);margin-top:1px}
-  /* FOUR across at the cap and at a plain 1500px viewport, never a fifth: the 352px floor packs four into
-     1460px of grid content. See docs: portal internals, index.html. */
   .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(352px,100%),1fr));gap:14px;max-width:1500px}
   .surveymeta{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
   .surveymeta a{color:var(--copper);text-decoration:none}
@@ -413,26 +352,18 @@
   .scard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column}
   .scard .cardbtns{margin-top:auto;padding-top:10px}
   .scard h3{font-size:18px;margin-bottom:2px}.scard .cust{font-size:12px;color:var(--muted)}
-  /* The card title is a real link, so it must not take the browser's link colour: the heading keeps the
-     body colour and the link says so on hover. */
   .scard h3 a{color:inherit;text-decoration:none}
   .scard h3 a:hover{text-decoration:underline}
   .scard .stats{font-family:var(--mono);font-size:12px;margin:10px 0;line-height:1.7}.scard .stats b{color:var(--copper)}
   .mixbar{display:flex;height:7px;border-radius:3px;overflow:hidden;margin:8px 0}
   .scard .cite{font-size:12px;line-height:1.5;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}.scard .cite a{color:var(--copper)}
-  /* Absence markers use neutral --muted, not amber --part: absence is ordinary, and amber is reserved
-     for genuine attention. 12px is the size floor. */
   .prov{font-size:12px;color:var(--muted)}
-  /* The LOADING state a section shows while its heavy product is still in flight. Deliberately quiet
-     and NOT an absence marker, which is the muted --prov styling above. */
   .hydrating{font-size:12px;color:var(--muted);font-style:italic;padding:6px 0;animation:hydrpulse 1.4s ease-in-out infinite}
   .hydr-inline{display:inline;padding:0}
   .hydrfail{color:var(--part);font-style:normal;animation:none}
   @keyframes hydrpulse{0%,100%{opacity:.55}50%{opacity:1}}
   @media (prefers-reduced-motion:reduce){.hydrating{animation:none;opacity:.8}}
   .scard .cardbtns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-  /* One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope-NCRIS
-     lockup RIGHT. See docs: portal internals, index.html. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
   .fleft{flex:1 1 0;min-width:0}
@@ -446,9 +377,6 @@
   .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px}
   .leaflet-tooltip.qtip::before{display:none}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
-  /* The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can follow an export toast
-     within its dwell). It carries at most one action button; it never carries a progress bar. See docs:
-     portal internals, index.html. */
   .snackbar{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--panel);
     border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;
     z-index:2000;display:flex;align-items:center;gap:12px;line-height:1.45}
@@ -457,8 +385,6 @@
   .snackbar .snack-act{flex:none;background:var(--copper);color:#16110b;border:0;border-radius:4px;
     padding:6px 10px;font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer}
   @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}
-    /* At narrow widths the three zones stack full-width and left-align, so the centred nav and the
-       right-aligned counts do not read as stranded fragments once they wrap. */
     .hzone{flex:1 1 100%;justify-content:flex-start}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
@@ -471,38 +397,29 @@
 .emptystate p{margin:0;color:var(--muted,#9fb0bd);line-height:1.5}
 .emptystate a{color:var(--accent,#5BC0BE);text-decoration:none}
 .emptystate a:hover{text-decoration:underline}
-  /* --- left panel, selection, drawer and collection --- */
+  /* See docs: portal internals, index.html, left panel, selection and collection. */
   aside.filters{width:363px}
   .filters h2{text-align:center}
   .tree .org{padding-left:18px}
   .tree .survey{padding-left:52px}
   .tree .org .osv{text-transform:none;font-weight:400}
-  /* #tree flex-fills on every view; body.tree-tall is still toggled by main.js and is inert here. */
   .selbox .selnum{text-align:center;margin-bottom:2px}
   .selbox .biglab{font-size:12px;color:var(--muted)}
   .dsub a{color:var(--copper);text-decoration:none}
-  /* The org NAME is the ROR link, given the accent colour so the <a> is readable on the dark panel. */
   .dsub a.orglink, .cust a.orglink{color:var(--copper);text-decoration:none}
   .dsub a.orglink:hover, .cust a.orglink:hover{text-decoration:underline}
   .chip.collchip{background:var(--panel-2);color:var(--text);border:1px solid var(--copper);font-weight:600;cursor:pointer}
   .scard .scardhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .scard .scardhead h3{margin:0}
 
-  /* This sheet must carry NO rule for .introoverlay, .intropanel, .introclose, .introhero, .introtiles,
-     .introtile or .introtour, and no element here may carry those ids or classes; pinned by
-     tools/interaction_test.js. See docs: portal internals, index.html. */
 
-  /* --- guided tour spotlight (tour.js) --- The dim is JS-driven (tour.js TOUR_DIM): on a targeted step the
-     backdrop stays TRANSPARENT and the spot's box-shadow supplies it, so the element shows through the
-     cutout. See docs: portal internals, index.html. */
+  /* See docs: portal internals, index.html, guided tour spotlight. */
   .tourbackdrop{position:fixed;inset:0;z-index:3000}
   .tourspot{position:fixed;z-index:3001;border:2px solid var(--copper);border-radius:8px;
     pointer-events:none;transition:all .12s ease}
   .tourleader{position:fixed;inset:0;width:100%;height:100%;z-index:3001;pointer-events:none}
   .tourleader line{stroke:var(--copper);stroke-width:2}
   .tourleader #tourLeaderHead path{fill:var(--copper)}
-  /* The card must be a CONSTANT size and centred position on EVERY step: _tourCardBox centres via
-     (viewport - offsetWidth/offsetHeight)/2, so a variable size shifts it off centre. */
   .tourcard{position:fixed;z-index:3002;width:340px;box-sizing:border-box;min-height:170px;
     display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--copper);
     border-radius:8px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
@@ -511,30 +428,20 @@
   .tourtext{font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:14px}
   .tourbtns{display:flex;justify-content:flex-end;gap:8px}
   .tourbtns button{font-size:12px;padding:7px 12px}
-  /* Primary advance button (Next/Done): copper fill with dark text
-     (#16110b on --copper = 6.44:1, AA). */
   .tourbtns .tourprimary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
   .tourbtns .tourprimary:hover{border-color:var(--copper)}
 
-  /* --- year range, downloadable-only, go-to-place, recently-added --- */
+  /* See docs: portal internals, index.html, filter controls. */
   .fieldnote{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}
-  /* ONE wrapping line, capped with the grid and the discovery bar so all three line up. */
   #recentStrip{max-width:1500px;margin:0 0 16px;font-size:12.5px;line-height:1.9;color:var(--muted)}
   #recentStrip .ra-label{color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-size:12px}
   #recentStrip a{color:var(--text);text-decoration:none}
   #recentStrip a:hover{color:var(--copper);text-decoration:underline}
 
-  /* ===== map page and sidebar structure ============================================== Wrapping the rail
-     sections in two containers costs them aside.filters' column gap, so it is restored here. See docs:
-     portal internals, index.html. */
+  /* See docs: portal internals, index.html, map page and sidebar structure. */
   .railmodepane{display:flex;flex-direction:column;gap:16px}
-  /* The Browse pane and its tree section are the flex chain that lets #tree flex-fill and scroll
-     internally: each level needs min-height:0 to shrink below its content, or the tree pushes the rail into
-     an outer scrollbar instead. See docs: portal internals, index.html. */
   #browseMode{flex:1;min-height:0}
   #treeSection{flex:1;display:flex;flex-direction:column;min-height:0}
-  /* width:36px!important must beat BOTH the 363px base rule and the inline width the resizer writes, which
-     is not !important. See docs: portal internals, index.html. */
   .railcollapse{align-self:flex-end;margin-top:auto;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
     width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:15px;line-height:1;padding:0;flex:none}
   .railcollapse:hover{border-color:var(--copper);color:var(--text)}
@@ -542,8 +449,6 @@
   aside.filters.collapsed > *:not(.railcollapse){display:none!important}
   aside.filters.collapsed .railcollapse{align-self:center}
   .exporthint{font-size:12px;color:var(--muted);line-height:1.45;margin-top:10px}
-  /* The drawer's resize handle is parented to .content, NOT to #drawer, whose innerHTML drawer.js
-     rewrites on every open; parented there it would be wiped. */
   #drawerResizer{position:absolute;top:0;bottom:0;width:8px;cursor:col-resize;background:transparent;z-index:1101}
   #drawerResizer:hover,#drawerResizer.drag{background:var(--copper)}
   .introwelcome{position:absolute;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;
@@ -565,16 +470,12 @@
   .introwelcome-actions button{font-size:13.5px;padding:10px 14px;border-radius:6px}
   .introwelcome-dismiss{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer}
   .introwelcome-dismiss input{accent-color:var(--copper)}
-  /* The data-type dots read the live --lpmt/--bbmt/--amt/--gds tokens; no hard-coded colours here. */
   .maplegend{position:absolute;left:10px;bottom:10px;z-index:600;background:var(--panel);border:1px solid var(--line);
     border-radius:8px;font-size:12px;color:var(--text);box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:210px}
   .maplegend-toggle{display:none;width:100%;background:none;border:0;color:var(--muted);padding:7px 11px;
     text-align:left;cursor:pointer;font-size:12px;font-family:var(--sans)}
   .maplegend-body{padding:9px 11px;display:flex;flex-direction:column;gap:6px}
   .maplegend .legrow{display:flex;align-items:center;gap:8px;line-height:1.3}
-  /* The four TYPE rows are real toggle BUTTONS proxying the rail's #typeBoxes checkboxes (main.js
-     toggleLegendType), so the UA chrome is stripped back to the .legrow look and the affordances a control
-     owes are added. See docs: portal internals, index.html. */
   .maplegend .legtype{appearance:none;-webkit-appearance:none;background:none;border:0;border-radius:4px;
     padding:2px 4px;margin:0 -4px;font-family:inherit;font-size:inherit;line-height:1.3;color:var(--text);
     text-align:left;cursor:pointer}
@@ -582,20 +483,14 @@
   .maplegend .legtype:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
   .maplegend .legtype.legoff{opacity:.4}
   .maplegend .leghint{color:var(--muted);font-size:11px;line-height:1.35}
-  /* The metric scale bar, re-parented out of the Leaflet corner (main.js buildScaleBar) under its OWN
-     class, so the legend's dot and parenting pins are untouched. See docs: portal internals, index.html. */
   .maplegend .maplegend-scale{position:static;margin:7px 0 0;pointer-events:none;box-shadow:none}
-  /* text-shadow:none is the point: Leaflet ships this control with a WHITE text-shadow, which is a halo
-     around near-white text on this dark panel. See docs: portal internals, index.html. */
   .maplegend .maplegend-scale .leaflet-control-scale-line{background:none;box-shadow:none;
     text-shadow:none;border:2px solid var(--muted);border-top:0;color:var(--text);
     font-family:var(--mono);font-size:11.5px;font-weight:500;line-height:1.5;padding:2px 6px;
     letter-spacing:.02em;text-align:center}
-  /* Collapsible ONLY on small widths. On desktop the body is always shown and the toggle hidden, so a
-     narrow-built legend can never get stuck collapsed with no way to expand it. */
   @media(max-width:760px){.maplegend-toggle{display:block}.maplegend:not(.expanded) .maplegend-body{display:none}}
 
-  /* ===== discovery controls, compact list, collections landing, feature card ========= */
+  /* See docs: portal internals, index.html, discovery, collections and feature card. */
   .discovery{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:16px;max-width:1500px}
   .disc-sort{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
   .disc-sort select{width:auto;min-width:150px}
@@ -630,28 +525,18 @@
   .srow-stn{flex:0 0 92px;font-family:var(--mono);font-size:12px;color:var(--muted)}
   .srow-lic{flex:0 0 auto}
   @media(max-width:620px){.srow-org,.srow-year{display:none}}
-  /* auto-FILL, not -fit: with one collection the card keeps its half-width column instead of stretching
-     full-bleed. */
   .collfeature-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(560px,1fr));gap:16px;max-width:1500px}
   @media(max-width:520px){.collfeature-grid{grid-template-columns:1fr}}
   .scard.collfeature{padding:20px 22px}
   .scard.collfeature h3{font-size:22px}
-  /* Half-width cards clamp the abstract; the full text lives on the collection page itself. */
   .collfeat-desc{font-style:normal;display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
   .coll-orgs{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
-  /* Collection DETAIL two-column hero: abstract left, footprint scatter right on wide screens, single
-     column on narrow. */
   .collhero{display:grid;grid-template-columns:1fr;gap:20px;margin:14px 0 10px;align-items:start}
   @media(min-width:820px){.collhero{grid-template-columns:minmax(0,1fr) minmax(0,360px)}}
   .collhero-main{min-width:0}
   .collhero-aside{min-width:0}
   .collscatter{margin:10px 0 4px}
-  /* Twin of the static collection page's .collmap/.collmark rule (engine/extract/_pages.py). The panel is
-     capped at the SVG's own width, so the corner the mark is pinned to is the MAP's, not the column's. See
-     docs: portal internals, index.html. */
   .collscatter-panel{position:relative}
-  /* The SVG is inline, so without this its line box leaves a 3px descender gap and the panel's bottom
-     edge stops being the MAP's. The static page's sheet blocks its own the same way. */
   .collscatter-panel svg{display:block}
   .collscatter-panel .collmark{position:absolute;left:14px;bottom:14px;height:28px;width:auto;opacity:.82;pointer-events:none}
   @media(max-width:640px){.collscatter-panel .collmark{left:9px;bottom:9px;height:20px}}

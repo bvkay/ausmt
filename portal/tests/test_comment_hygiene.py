@@ -876,9 +876,9 @@ def listing(*globs):
 # time. Every cap counts a page's inline scripts, which is where most of a page's commentary is.
 # The corresponding cap for the pages the engine emits lives in the engine twin.
 SHIPPED_HTML_CAPS = {
-    "index.html": 16_500,
+    "index.html": 5_800,
     "about.html": 6_300,
-    "add-survey.html": 35_000,
+    "add-survey.html": 20_100,
     "releases.html": 4_800,
     "brand.html": 2_400,
     "404.html": 900,
@@ -891,7 +891,10 @@ SHIPPED_JS_CAP = 122_000
 # the two: it is the pointer, not the constraint.
 COMMENT_CAP = 320
 COMMENT_SENTENCES = 2
-DOCS_POINTER = re.compile(r"\s*See docs: portal internals, [\w.\-]+\.\s*$")
+# A pointer names the page and, on the two documents whose stylesheets are pointed at as a whole,
+# the section of that page it stands for.
+DOCS_POINTER = re.compile(r"\s*See docs: portal internals, [\w.\-]+(?:, [\w \-,]+?)?\.\s*$")
+STYLE_POINTER = re.compile(r"See docs: portal internals, ([\w.\-]+), ([\w \-,]+?)\.")
 # A licence or attribution OBLIGATION is exempt. Its wording is the obligation, and shortening it
 # would change what the portal promises rather than where the reasoning lives.
 OBLIGATION = re.compile(r"\bcopyright\b|SPDX|CC-BY|Creative Commons|\bNOTICE\b|licence term"
@@ -1222,6 +1225,23 @@ def test_every_docs_pointer_names_a_page_that_exists():
     assert not dangling, (
         f"{len(dangling)} comment pointer(s) name a docs/ page that does not exist under "
         "docs/docs:\n" + "\n".join(dangling))
+
+
+def test_every_stylesheet_pointer_names_a_section_the_docs_page_carries():
+    """A stylesheet is pointed at one section at a time, so each pointer must find its section on
+    the page. A pointer at a section that does not exist is the dead reference the rule forbids."""
+    page = ROOT / "docs" / "docs" / "reference" / "portal-internals.md"
+    text = page.read_text(encoding="utf-8")
+    missing, found = [], 0
+    for path in shipped_html():
+        body = path.read_text(encoding="utf-8")
+        for match in STYLE_POINTER.finditer(body):
+            found += 1
+            if f"#### {match.group(2)}" not in text:
+                missing.append("%s: %s, %s" % (path.name, match.group(1), match.group(2)))
+    assert found, "no stylesheet pointer was read, so this test would pass over nothing"
+    assert not missing, (
+        "the shipped stylesheets point at sections this page does not carry:\n" + "\n".join(missing))
 
 
 def test_shipped_scripts_stay_under_their_comment_cap():

@@ -352,6 +352,234 @@ in-page fetch of the payload, and a multi-GB Blob would be a proxy in disguise. 
 no progress bar, no download-manager panel and no completion claim.
 ```
 
+### index.html stylesheet
+
+#### tokens, header and map chrome
+
+```text
+DUPLICATED verbatim in about.html and add-survey.html: the five surface tokens must stay identical
+       across all three. --copper carries the Tangerine accent; the token name does not follow it. See docs:
+       portal internals, index.html.
+
+These MUST equal src/state.js TYPE_COL byte-for-byte: a legend swatch and its map dot are one claim
+       held in two files. Pinned by tests/test_type_palette_separability.py.
+
+--no is rendered as TEXT on --panel (5.98:1) and --panel-2 (5.00:1), so it must stay above the WCAG
+       AA 4.5:1 floor on both. See docs: portal internals, index.html.
+
+Three-zone header. The side zones must take equal ZERO-basis shares (flex:1 1 0, min-width:0) or each
+     grows with its own content and the centred tabs land at a different x per view; pinned by
+     tests/test_header_geometry_parity.py. See docs: portal internals, index.html.
+
+The AusMT mark (vendor/brand/ausmt-mark.svg, from tools/gen_brand.py) is a fixed 30x30 box, so it joins
+     the zero-basis .hleft zone without moving the centre tabs. See docs: portal internals, index.html.
+
+The ACTIVE view is a filled copper box with dark text (#16110b on --copper = 6.44:1, AA), and every
+     view control keeps a 40px click target. See docs: portal internals, index.html.
+
+Two of these controls are links and one is a button, so they take the same box, token and active
+     look and read as one control group.
+
+The MTCAT link lives in the footer's bottom-left; the footer's flex gap handles its spacing.
+
+Mute the basemap only: station overlays render outside the tile pane, so they keep full colour.
+
+The AuScope mark, top right of the MAP and nowhere else: a screenshot carries no footer, so this is the
+     attribution that travels with the image, at the brand guide's clear space (32px) with neither tint nor
+     reduced opacity. See docs: portal internals, index.html.
+
+The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map,
+     because only the layer that is drawing knows which provider to name, and the 240px cap keeps the opened
+     text clear of the legend at 560px of map. See docs: portal internals, index.html.
+
+flex-shrink:0 is load-bearing: #filterPane is a column flex, so a tall mode pane squashes this control,
+     and .seg clips its overflow, so it collapses silently to its 2px borders and leaves the rail a one-way
+     door into Select and download. See docs: portal internals, index.html.
+
+The tree fills the rail's remaining height and scrolls INTERNALLY; the rail must NOT gain a second
+     outer scrollbar. The flex chain that allows it (each ancestor min-height:0) is on #browseMode and
+     treeSection below. See docs: portal internals, index.html.
+
+Disclosure carets are a separate click target inside each label row, and the handler preventDefaults so
+     the label never activates its checkbox. See docs: portal internals, index.html.
+
+With no collections in the boot data this stays empty, and :empty removes it so no gap remains.
+
+Reuses the drawer's Related-products tile language verbatim: the whole tile is the action.
+
+.armed: a draw button reflecting the shared armedDrawMode (its tool is live) - matches the copper
+     active look of .primary / .seg button.on, so it reads as "currently on".
+
+```
+
+#### drawer
+
+```text
+drawer
+
+Dim backdrop behind the drawer, never on the map view. Its z-index sits BELOW the drawer (1100) and
+     its resize handle (#drawerResizer, 1101), so the resizer keeps working.
+
+Tiles reuse .prod/.prodgrid verbatim. An UNRECORDED level stays visible as .prod.dis with a HOLLOW
+     dot, so the six-slot chain keeps its shape on every survey.
+
+The three link sites must be given the site accent, or they take the UA's near-invisible dark blue on
+     the navy tiles and go purple once followed. See docs: portal internals, index.html.
+
+Links inside .meta tables must be given the site accent, or they fall back to the UA default dark
+     blue, unreadable on the dark panel.
+
+Self-hosted identifier logos (ORCID next to an investigator, ROR next to an organisation) - small,
+     baseline-aligned, non-shrinking; vendor pngs are same-origin (CSP-safe).
+
+Copper like every other in-drawer link, and not word-break:break-all material.
+
+Tab strip reuses .seg; six tabs need a tighter type scale and horizontal scroll safety on narrow drawers
+
+The expand affordance is SECTION-level: .plotexp rides the "Response functions" heading row and
+     never sits inside a .ptitle.
+
+Full-station RESPONSE modal, closing on Esc, click-out or the button. The panels reuse
+     .plot / .ptitle / .psubline.
+
+The modal content column is CAPPED, not viewport-filling: plots.js puts .plotmodal-capw on the box,
+     so this rule IS the cap (about 760px, 92vw ceiling).
+
+min-width is plots.js's design width (W=372), so the modal svg can never render narrower than the
+     drawer's and shrink its axis text; the svg's matching viewBox keeps the aspect ratio at width:100%. See
+     docs: portal internals, index.html.
+
+```
+
+#### drawer density and stewardship
+
+```text
+===== drawer density, Station summary, screening indicators, record stewardship =====
+
+Screening indicator list: glyph, label and state word, so a colour-blind reader sees the word too.
+
+The ramp's dark low end cannot be a text colour on this panel, so it rides the dot and the value
+     stays plain readable text.
+
+FOUR across at the cap and at a plain 1500px viewport, never a fifth: the 352px floor packs four into
+     1460px of grid content. See docs: portal internals, index.html.
+
+The card title is a real link, so it must not take the browser's link colour: the heading keeps the
+     body colour and the link says so on hover.
+
+Absence markers use neutral --muted, not amber --part: absence is ordinary, and amber is reserved
+     for genuine attention. 12px is the size floor.
+
+The LOADING state a section shows while its heavy product is still in flight. Deliberately quiet
+     and NOT an absence marker, which is the muted --prov styling above.
+
+One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope-NCRIS
+     lockup RIGHT. See docs: portal internals, index.html.
+
+The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can follow an export toast
+     within its dwell). It carries at most one action button; it never carries a progress bar. See docs:
+     portal internals, index.html.
+
+At narrow widths the three zones stack full-width and left-align, so the centred nav and the
+       right-aligned counts do not read as stranded fragments once they wrap.
+
+```
+
+#### left panel, selection and collection
+
+```text
+--- left panel, selection, drawer and collection ---
+
+#tree flex-fills on every view; body.tree-tall is still toggled by main.js and is inert here.
+
+The org NAME is the ROR link, given the accent colour so the <a> is readable on the dark panel.
+
+This sheet must carry NO rule for .introoverlay, .intropanel, .introclose, .introhero, .introtiles,
+     .introtile or .introtour, and no element here may carry those ids or classes; pinned by
+     tools/interaction_test.js. See docs: portal internals, index.html.
+
+```
+
+#### guided tour spotlight
+
+```text
+--- guided tour spotlight (tour.js) --- The dim is JS-driven (tour.js TOUR_DIM): on a targeted step the
+     backdrop stays TRANSPARENT and the spot's box-shadow supplies it, so the element shows through the
+     cutout. See docs: portal internals, index.html.
+
+The card must be a CONSTANT size and centred position on EVERY step: _tourCardBox centres via
+     (viewport - offsetWidth/offsetHeight)/2, so a variable size shifts it off centre.
+
+Primary advance button (Next/Done): copper fill with dark text
+     (#16110b on --copper = 6.44:1, AA).
+
+```
+
+#### filter controls
+
+```text
+--- year range, downloadable-only, go-to-place, recently-added ---
+
+ONE wrapping line, capped with the grid and the discovery bar so all three line up.
+
+```
+
+#### map page and sidebar structure
+
+```text
+===== map page and sidebar structure ============================================== Wrapping the rail
+     sections in two containers costs them aside.filters' column gap, so it is restored here. See docs:
+     portal internals, index.html.
+
+The Browse pane and its tree section are the flex chain that lets #tree flex-fill and scroll
+     internally: each level needs min-height:0 to shrink below its content, or the tree pushes the rail into
+     an outer scrollbar instead. See docs: portal internals, index.html.
+
+width:36px!important must beat BOTH the 363px base rule and the inline width the resizer writes, which
+     is not !important. See docs: portal internals, index.html.
+
+The drawer's resize handle is parented to .content, NOT to #drawer, whose innerHTML drawer.js
+     rewrites on every open; parented there it would be wiped.
+
+The data-type dots read the live --lpmt/--bbmt/--amt/--gds tokens; no hard-coded colours here.
+
+The four TYPE rows are real toggle BUTTONS proxying the rail's #typeBoxes checkboxes (main.js
+     toggleLegendType), so the UA chrome is stripped back to the .legrow look and the affordances a control
+     owes are added. See docs: portal internals, index.html.
+
+The metric scale bar, re-parented out of the Leaflet corner (main.js buildScaleBar) under its OWN
+     class, so the legend's dot and parenting pins are untouched. See docs: portal internals, index.html.
+
+text-shadow:none is the point: Leaflet ships this control with a WHITE text-shadow, which is a halo
+     around near-white text on this dark panel. See docs: portal internals, index.html.
+
+Collapsible ONLY on small widths. On desktop the body is always shown and the toggle hidden, so a
+     narrow-built legend can never get stuck collapsed with no way to expand it.
+
+```
+
+#### discovery, collections and feature card
+
+```text
+===== discovery controls, compact list, collections landing, feature card =========
+
+auto-FILL, not -fit: with one collection the card keeps its half-width column instead of stretching
+     full-bleed.
+
+Half-width cards clamp the abstract; the full text lives on the collection page itself.
+
+Collection DETAIL two-column hero: abstract left, footprint scatter right on wide screens, single
+     column on narrow.
+
+Twin of the static collection page's .collmap/.collmark rule (engine/extract/_pages.py). The panel is
+     capped at the SVG's own width, so the corner the mark is pinned to is the MAP's, not the column's. See
+     docs: portal internals, index.html.
+
+The SVG is inline, so without this its line box leaves a 3px descender gap and the panel's bottom
+     edge stops being the MAP's. The static page's sheet blocks its own the same way.
+
+```
+
 ## portal/about.html
 
 #### Search snippet and link preview
@@ -1464,6 +1692,403 @@ in a URL, never in a track() payload, never echoed to the DOM, never written int
 ```text
 §2 response rendering, EVERY server-derived string goes through esc(). The status link is an
 anchor ONLY when statusUrlSafe() accepts the server's status_url (else the id is shown, no link).
+```
+
+### add-survey.html, the collapsed commentary
+
+```text
+canonical esc/escAttr/escUrl, shared with the portal (single source)
+
+Generated licence vocabulary (LICENSES), the single source for the licence selects; never hand-copied.
+
+DOI citation-harvest core (window.AusmtDoiHarvest); single source, shared byte-for-byte with the curator editor
+
+the collapsed map attribution control, shared with the portal map (single source)
+
+Without an apple-touch-icon iOS renders a screenshot of the page instead of the mark. Same lattice as the favicon, at 180px.
+
+The one true URL for this page. It is substantive, indexable, linked from the root and advertised in sitemap.xml, so it must say which address it is served at.
+
+The description is the first three sentences of this page's own lede, verbatim and cut at a sentence boundary.
+
+--no carries the danger red that clears WCAG AA as text; see index.html.
+
+The AusMT mark, generated by tools/gen_brand.py, is the header identity on every surface of the site. Same file, same markup and character-identical rule on index.html, brand.html and the generated pages (engine/extract/_pages.py). See docs: portal internals, add-survey.html.
+
+originalname.edi → ROX000.edi rename preview
+
+missing DATAID, blocks submission
+
+AA text contrast on the status-chip tints: the PASS tint is light enough for --ok text to clear 4.5:1 (4.65:1), the FAIL tint for --no text (4.74:1) and the WARNING tint for --part (4.56:1). See docs: portal internals, add-survey.html.
+
+A non-blocking "slug already served" context warning, distinct from valid and invalid. Amber like a WARNING chip, and allowed to wrap.
+
+One footer, three regions: the MTCAT machine-readable link LEFT, the AuScope acknowledgement CENTRE, the AuScope-NCRIS lockup RIGHT. See docs: portal internals, add-survey.html.
+
+Direct upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes.
+
+---- tiered contribution layout (files first, five minutes, enrich later) ----
+
+slug chip: the auto-derived folder name, editable inline
+
+Wide enough to show a full-length folder name (SLUG_MAX = 40 mono characters) without scrolling: the slug becomes au.<slug>.<station> in every id and URL and is expensive to change once a DOI is minted, so the submitter must be able to READ it. See docs: portal internals, add-survey.html.
+
+The map's attribution, collapsed to one glyph. The credit is a licence term and stays with the map, because only the layer that is drawing knows which provider to name, and the 240px cap keeps the opened text clear of the legend at 560px of map. See docs: portal internals, add-survey.html.
+
+DATAID auto-derived from filename (curator-flagged, not blocking)
+
+The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on this site carries a second mark of any kind. See docs: portal internals, add-survey.html.
+
+============================ TIER 0, the only required screen ============================
+
+(1) FILE DROP FIRST: EDIs land, auto-extraction runs, the station map + count render at once.
+
+the wow moment: stations plotted the instant files land
+
+The DMS resolver appears ONLY when a HEAD/INFO conflict is detected; otherwise a plain informational nudge.
+
+keep the confirm checkbox in the DOM even when no conflicts (harmless when non-blocking)
+
+Always-visible disclosure of what each access level actually exposes, and truthful to current behaviour: every level lists the survey publicly and emits its stations with lat/lon, and only 'open' serves data bytes. See docs: portal internals, add-survey.html.
+
+==================== TIER 1, "Helps us publish faster" (visible, optional) ====================
+
+The plain-language citation-authorship question feeds creators[], an ORDERED citation list. Basic tier: a name per row, with an Organisation checkbox that sets name_type; ORCID and ROR optional. See docs: portal internals, add-survey.html.
+
+One plain-language question, ONE typed contributors row (role ProjectLeader). It is a who-did-what fact, not a citation fact: it never touches creators[].
+
+contributors[] (who did what) sits in this tier, because it is the only home for who led, collected, holds or distributes.
+
+Citation block. TWO outputs, never a third: the custodian's own wording verbatim, and a typed related_identifiers row for a pasted identifier. See docs: portal internals, add-survey.html.
+
+organisations[]. The essential Organisation above stays the custodial discovery value AND seeds the first row, marked for curator review; extra rows say who else was involved and how. See docs: portal internals, add-survey.html.
+
+==================== CARD 4, "Collection / program" ================================ Its own tier-style disclosure, collapsed by default, so the common single-survey submission is not slowed by programme fields. See docs: portal internals, add-survey.html.
+
+==================== TIER 2, "I know my metadata" (collapsed disclosure) ====================
+
+contributors[] ("Who did what?") sits beside the citation-authorship question, because it is the only home for who led the survey.
+
+Identifiers by data level, mirroring the curator editor. Each row states WHAT the identifier points at in NCI Table 1 terms; the DataCite relation is DERIVED server-side from the level and is never asked here. See docs: portal internals, add-survey.html.
+
+7. VALIDATE / PREVIEW / PACKAGE
+
+Key request. It always shows the same neutral message regardless of the response, so it can never confirm whether an address exists.
+
+CENTRE. Who enables AusMT, then the attribution and the licence note. See docs: portal internals, add-survey.html.
+
+RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. See docs: portal internals, add-survey.html.
+
+MAINTAINER NOTE: this page is the largest single file in the portal. It is intentionally one file while it stays manageable.
+
+INFO-block coords, decimal (Geotools style) or DMS ('LATITUDE : -28:31:33.45', NSW re-export style) + DMS sign-bug detection. See docs: portal internals, add-survey.html.
+
+64 KB: bounded prefix, never the whole file
+
+Line-anchored, indentation-tolerant (^\s* absorbs the EDL/Phoenix leading spaces). Captures a quoted value up to the closing quote, or an unquoted token up to end-of-line/whitespace.
+
+packagedEdiName: the zip entry / MANIFEST filename for an EDI, derived from its DATAID.
+
+effectiveDataId: the id a packaged EDI is named by, its real DATAID when present, else the filename- derived fallback. Single source for both the rename preview and the packaged filename. See docs: portal internals, add-survey.html.
+
+ediNameGate: the SUBMISSION-time COLLISION guard (design: fail loud, no silent auto-suffixing). Input is the EDI entries [{name, dataid}] in list order; output is a list of blocking error strings (empty = clean). See docs: portal internals, add-survey.html.
+
+---------- identifiers-by-level (tier 2; mirrors the curator editor IDENTIFIES_LEVELS/_IDENTIFIES_DISPLAY + editor_form.IDENTIFIER_TYPES). See docs: portal internals, add-survey.html.
+
+relatedIdentifiersEmit: filter a meta.related_identifiers list to the rows worth writing (an identifier value is the signal) and vocab-guard `identifies`/`identifier_type` so a hand-crafted out-of-vocab value (buildSurveyYaml is a pure export callable with. See docs: portal internals, add-survey.html.
+
+---------- contributor credit model. creators[] is the ORDERED "who should be credited?" citation list; contributors[] is the typed who-did-what list. See docs: portal internals, add-survey.html.
+
+creditRowsEmit: filter a creators/contributors list to the rows worth writing (a name is the signal) and vocab-guard name_type (both lists) + role (contributors) so a hand-crafted out-of-vocab value (buildSurveyYaml is a pure export callable with arbitrary. See docs: portal internals, add-survey.html.
+
+hosting_institution is AusMT's own export-side role (who hosts the archive), never a contributor's claim about their survey, so the form OFFERS every other role and simply does not show it. See docs: portal internals, add-survey.html.
+
+A contributor's citation wording is ALWAYS source_provided: they are telling us how the dataset is already cited. `ausmt_generated` describes wording AusMT composed and is never a contributor value. See docs: portal internals, add-survey.html.
+
+The marker written above the row seeded from the essential Organisation, and the note written above a pasted citation identifier. See docs: portal internals, add-survey.html.
+
+organisationsEmit: the organisations[] rows to write. See docs: portal internals, add-survey.html.
+
+a row needs a name to count
+
+a named row with no role ticked states nothing: dropped
+
+acknowledgementsEmit: rows worth writing (the wording IS the row, so a textless row is dropped) with a vocab-guarded bare type token and an optional quoted source.
+
+citationIdentifierRow: the ONE related_identifiers row a pasted citation identifier becomes. See docs: portal internals, add-survey.html.
+
+not an identifier shape we can type honestly
+
+Required (browser/full submission): small set; everything else is a warning at most.
+
+16 chars: 15 digits + final check char
+
+Message mapping: HTTP status (+ parsed JSON body or null) -> plain human text (NO HTML; the page escapes it through esc at render time). See docs: portal internals, add-survey.html.
+
+deriveSlug: the project name -> the auto folder name shown in the slug chip. See docs: portal internals, add-survey.html.
+
+64 KB: bounded prefix, never the whole file
+
+submitter + declarations (submission envelope; email stays private, never published)
+
+recommended (warnings only)
+
+Provenance-identifier completeness: the hint now keys off the NEW carrier, the identifiers-by-level related_identifiers list (the single place a dataset DOI / collection PID / archive handle is recorded, matching the curator editor's "This dataset elsewhere"). See docs: portal internals, add-survey.html.
+
+DATAID naming gate: a MISSING DATAID does not block, the station id auto-derives from the filename and is flagged for curator review (a WARNING, and a package note). See docs: portal internals, add-survey.html.
+
+Station-location gate (softened): BLOCKING only when the DMS resolver actually found a HEAD/INFO conflict/anomaly. Otherwise the stations are just plotted with an informational nudge (no checkbox wall). See docs: portal internals, add-survey.html.
+
+dms_sign_ambiguous | info_anomalous
+
+Attribution capture: persist the uploader's licence declaration (who + when), and any upstream source dataset. declared_date is a bare ISO scalar derived from the tsUTC seam (or an explicit m.declared_date). See docs: portal internals, add-survey.html.
+
+Identifiers-by-level (tier 2) + publications built from the publication fields. A row/entry is emitted only when it carries an identifier/DOI; empty tiers stay empty lists.
+
+"Does this dataset already have a citation or DOI?" -> the pasted identifier becomes ONE typed related_identifiers row, deduped against an existing "This dataset elsewhere" row (a contributor who listed it in both places gets one row, not two). See docs: portal internals, add-survey.html.
+
+backward-compatible alias
+
+semver; see release policy
+
+optional finer geographic facet
+
+The two RETIRED flat credit keys are NEVER written. See docs: portal internals, add-survey.html.
+
+"Who led this survey?" -> ONE ProjectLeader contributors row, FIRST (it is the question asked first), deduped against an identical typed row so naming the lead twice does not credit them twice. See docs: portal internals, add-survey.html.
+
+submitter resolved a HEAD/INFO DMS conflict on the confirmation map
+
+Optional acquisition window. Bare scalars; a year or an ISO date. See docs: portal internals, add-survey.html.
+
+primary, backward-compatible
+
+related_identifiers (identifiers by data level). Each row states WHAT it points at (`identifies`, an NCI Table 1 level); the DataCite `relation` DERIVES from that server-side and is NOT emitted here. See docs: portal internals, add-survey.html.
+
+The contributor's intent survives into curation as a COMMENT above the row: they told us this identifier is how the dataset is cited, and only a curator may turn that into a designation. See docs: portal internals, add-survey.html.
+
+bare vocab scalar (guarded)
+
+bare vocab scalar (guarded)
+
+bare guarded vocab token
+
+organisations[] (survey scope section 3). Row 0 is the marked custodian seeded from the essential Organisation; every other row is what the contributor ticked. See docs: portal internals, add-survey.html.
+
+bare vocab scalar (guarded)
+
+bare vocab scalar (guarded)
+
+QUOTED ISO string (validated shape / tsUTC-derived). See docs: portal internals, add-survey.html.
+
+time_series: pointers only. The hard-coded collection_pid null is retired, a collection DOI/PID is a related_identifiers row (identifies: collection). See docs: portal internals, add-survey.html.
+
+publications: built from the DOI-first publication rows (each {author,year,title,journal,doi}, harvested from Crossref/DataCite or hand-entered). See docs: portal internals, add-survey.html.
+
+YYYYMMDDTHHMMSSZ
+
+YYYY-MM-DD from the tsUTC seam
+
+ROR response parsing, robust across API v1 ({name, country.country_name, acronyms}) and v2 ({names:[{value,types}], locations:[{geonames_details.country_name}]}). See docs: portal internals, add-survey.html.
+
+v1
+
+v2
+
+v1
+
+v2
+
+v1
+
+v1
+
+v2
+
+query items are bare orgs; affiliation items wrap in .organization, handle both
+
+drop anything un-nameable / un-identifiable
+
+Fold the repeatable publication rows (each {author,year,title,journal,doi}, harvested or hand-entered) into the emission list buildSurveyYaml writes. See docs: portal internals, add-survey.html.
+
+legacy single-field fallback: the flat pub/pub_doi pair.
+
+Slug-collision awareness: the served surveys.json is {surveyName: SMETA}, each entry carrying its published `slug`. servedSlugMap folds that into {slug: surveyName} so a derived slug can be checked against the ALREADY-PUBLISHED set. See docs: portal internals, add-survey.html.
+
+first published slug wins (survey names are unique keys anyway)
+
+Station-count context: surveys.json carries no per-survey station count, so the "(N stations)" the collision warning shows is derived from the served catalogue.json (an array of station rows whose index 1 is the survey NAME). See docs: portal internals, add-survey.html.
+
+---------- UI wiring (browser only) ----------
+
+----- identifiers-by-level rows (tier 2). Mirrors the curator "This dataset elsewhere" editor: an `identifies` level <select> FIRST (human labels, exact vocab value), then the identifier, its type, and an optional custodian. See docs: portal internals, add-survey.html.
+
+Normalise a pasted DOI resolver URL ONLY when this row's type is DOI; a URL-typed row keeps its URL.
+
+----- instrument systems: manufacturer + model rows (models depend on manufacturer) -----
+
+----- funding rows (organisation + ROR + grant id/title + DOI); ROR reuses the lookup helper.
+
+reuse ROR lookup for the funding organisation field
+
+Normalise a pasted resolver URL in the funding DOI slot
+
+----- DOI-first publication rows. See docs: portal internals, add-survey.html.
+
+not a complete DOI yet, stay quiet
+
+harvestDoi is total (never throws)
+
+a newer edit in THIS row superseded this reply
+
+PII-free
+
+degrade to manual, PREFILL partial without clobbering anything the contributor already typed
+
+PII-free
+
+debounce
+
+one publication row present by default
+
+----- Credit: creators[] (the plain-language citation-authorship question). Basic tier: an ordered list of citation names, each a person or (org checkbox) an organisation, ORCID/ROR optional. See docs: portal internals, add-survey.html.
+
+ORCID for a person, ROR for an organisation
+
+a credited party needs a name; order = citation order
+
+one creator row visible by default (the primary credit question)
+
+----- Credit: contributors[] (who did what). Advanced tier: typed rows adding a name_type <select> and the fail-closed role <select> (the 8 DataCite tokens, CONTRIBUTOR_ROLES). See docs: portal internals, add-survey.html.
+
+----- organisations[] rows ("Which organisations were involved, and how?"). See docs: portal internals, add-survey.html.
+
+a row needs a name to count
+
+----- acknowledgements[] rows ("Is there wording you must include?"). The wording IS the row, so a textless row is dropped at emit time; the type <select> only offers the candidate vocab. See docs: portal internals, add-survey.html.
+
+the wording is the row
+
+----- The citation question's "what does it point at?" <select>. Same NCI Table 1 vocabulary and labels as the tier-2 identifier rows; its DEFAULT is "let the curator decide", which omits the key rather than guessing a level on the contributor's behalf. See docs: portal internals, add-survey.html.
+
+----- ORCID format check (format only; no API/auth) -----
+
+PII-free
+
+URL/Handle/RAiD row: leave as-is
+
+----- slug: AUTO-DERIVED from the project name (charset-safe, so it always passes slugValid), shown as an editable chip. The derived value is a live convenience; the moment the submitter edits the slug themselves it stops tracking the name (slugTouched). See docs: portal internals, add-survey.html.
+
+Slug-collision awareness: the derived slug can already match a PUBLISHED survey (e.g. "vulcan 2022" -> vulcan-2022, already served). See docs: portal internals, add-survey.html.
+
+charset-valid: check the collision set (exists-with-context). Never blocks, only informs.
+
+----- ROR organisation lookup (live, debounced; suggestions only; name shown first) -----
+
+Use the name-search `query` endpoint, NOT `affiliation`: the affiliation matcher is built for parsing full publication affiliation strings (NER-style) and mis-ranks bare names, e.g. "University of Adelaide" returns "University of Aden" (score 0.97. See docs: portal internals, add-survey.html.
+
+wires an organisation text input -> ROR suggestion box -> fills a ROR field; on pick, also normalises the (user-confirmed) organisation name. See docs: portal internals, add-survey.html.
+
+PII-free: no org name/ID sent
+
+offline/aborted, silent; manual entry still works
+
+----- access level: reveal the embargo date + access contact only for a non-open level (audit 5.2). Same show/hide idiom as #gatewayBlock / #dmsChoice. See docs: portal internals, add-survey.html.
+
+Per-EDI rename preview: shows "originalname.edi → ROX000.edi" so the submitter sees the DATAID-based packaged name BEFORE uploading. See docs: portal internals, add-survey.html.
+
+Softened DATAID gate: a missing DATAID auto-derives from the filename and is flagged for the curator (amber), it does not block. A real DATAID renames the packaged file (copper).
+
+Per-row remove: one delegated listener (data-i indexes the `files` array). See docs: portal internals, add-survey.html.
+
+EMTF XML is a TEXT format like EDI, so it is read as text and its bytes are the UTF-8 encoding of that text, the same convention the EDI branch uses for its sha256. See docs: portal internals, add-survey.html.
+
+dataid: extracted once at ingest from the >HEAD block (bounded prefix). null when absent - the validation gate turns that into a blocking FAIL. See docs: portal internals, add-survey.html.
+
+----- map picker -----
+
+THE THREE MAPS ON THIS PAGE WEAR THE PORTAL MAP'S ATTRIBUTION CONTROL: Leaflet's default one carries the flag and the word, which must appear on no map on this site. See docs: portal internals, add-survey.html.
+
+----- confirm station locations (catch wrong coords + resolve HEAD/INFO DMS conflicts) -----
+
+The inline map: stations are plotted the instant files land. Guarded on Leaflet, so it degrades to just the count when the map library is unavailable (e.g. the jsdom interaction driver). See docs: portal internals, add-survey.html.
+
+dms_sign_ambiguous | info_anomalous
+
+The DMS resolver + confirmation checkbox appear ONLY when a real conflict/anomaly is found.
+
+No conflict -> an informational nudge, no checkbox wall.
+
+Only EDIs are parsed in the browser, so only their stations plot. See docs: portal internals, add-survey.html.
+
+PII-free
+
+----- shared package builder: ONE builder feeds BOTH the download and the direct- upload paths, so the bytes are identical either way). See docs: portal internals, add-survey.html.
+
+MTH5 files are NOT renamed (they carry no single EDI DATAID; a station map lives inside the HDF5). source_filename == the packaged name here, uniform provenance across every tf entry.
+
+PII-free
+
+DOM build = injection-safe
+
+offline / file:// / none yet -> silent; manual entry still works
+
+exact id match -> prefill the EMPTY fields only, never clobber what the contributor typed
+
+a case/space-only variant of an existing id is almost certainly a typo -> warn
+
+PII-free, no ids
+
+ancient/file://, degrade silently
+
+network error/timeout/HTML -> ABSENT; stay hidden
+
+----- key request (a client-side stub; the endpoint is the sibling security work's). See docs: portal internals, add-survey.html.
+
+Same neutral message whatever happens, no enumeration. Fire-and-forget; never reveal the result.
+
+count only, no email, no result
+
+Submit flow. The submit key is RADIOACTIVE: it lives only in the password input and, transiently, in the X-AusMT-Submit-Key request header. See docs: portal internals, add-survey.html.
+
+the live XMLHttpRequest, so Cancel can abort it
+
+engaged SYNCHRONOUSLY on click (before the async build) so a fast
+
+double-click cannot start a second build/upload (double-submit guard)
+
+double-submit guard
+
+Cancel only meaningful while the XHR is live
+
+already building or in flight
+
+1. Validation gate, same gate as packaging; any FAIL blocks.
+
+2. Submitter-ORCID CHECKSUM (fail fast, the server enforces ISO 7064 MOD 11-2 and would 400 after a full upload). See docs: portal internals, add-survey.html.
+
+3. Empty submit key blocks.
+
+Engage the double-submit guard NOW, synchronously, before the async package build, and clear the previous result panel. Any failure below re-enables via setSubmitting(false).
+
+4. Build the package via the SHARED builder (byte-identical to the download path).
+
+5. POST via XMLHttpRequest (upload progress + Cancel). See docs: portal internals, add-survey.html.
+
+count only, no ids, no key, no email
+
+literal same-origin relative path
+
+the ONLY place the key goes on the wire
+
+code only, no id, no key, no email
+
+Response rendering: EVERY server-derived string goes through esc. The status link is an anchor ONLY when statusUrlSafe accepts the server's status_url (else the id is shown, no link). See docs: portal internals, add-survey.html.
+
+plain text (no HTML) from the pure mapper
+
+start with one funding row
+
 ```
 
 ## portal/releases.html
