@@ -23,7 +23,7 @@ const TOUR_STEPS=[
 ];
 
 // Overlay dim, raised from 0.65 to 0.78 (+13pp). Single source of truth, applied inline by
-// _tourLayout — on a targeted step it colours the spot's box-shadow (leaving the backdrop transparent so
+// _tourLayout - on a targeted step it colours the spot's box-shadow (leaving the backdrop transparent so
 // the cutout shows the element fully); on a no-target step it colours the centred backdrop directly.
 const TOUR_DIM=0.78;
 
@@ -128,7 +128,7 @@ function _tourEnterMap(){
   _tourRestore();
 }
 // Shared restore: closes a tour-opened drawer, puts back a tour-changed hash, and returns to the map
-// view — but ONLY undoes state _tourOpened recorded as the tour's own doing.
+// view - but ONLY undoes state _tourOpened recorded as the tour's own doing.
 function _tourRestore(){
   if(_tourOpened.collapsed){                     // put the visitor's own collapsed rail back (see startTour)
     if(typeof setSidebarCollapsed==="function")setSidebarCollapsed(true);
@@ -190,7 +190,7 @@ function _tourRectKey(el){
   const r=el.getBoundingClientRect();
   return r.left+"|"+r.top+"|"+r.width+"|"+r.height;
 }
-function _tourOnSettle(){if(_tourStep>=0)_tourLayout();}   // transitionend nudge — re-measure the instant a transition ends
+function _tourOnSettle(){if(_tourStep>=0)_tourLayout();}   // transitionend nudge - re-measure the instant a transition ends
 function _tourAttachSettle(){
   _tourDetachSettle();                  // never stack a watcher or listener across steps
   const step=TOUR_STEPS[_tourStep];
@@ -201,11 +201,11 @@ function _tourAttachSettle(){
   const start=_tourNow();
   let lastKey=_tourRectKey(target),stableSince=start;
   const tick=()=>{
-    if(_tourStep<0||_tourSettleEl!==target)return;   // stepped away / closed since this frame was queued — stand down, touch nothing
+    if(_tourStep<0||_tourSettleEl!==target)return;   // stepped away / closed since this frame was queued - stand down, touch nothing
     _tourSettleRAF=0;
     const now=_tourNow();
     const key=_tourRectKey(target);
-    if(key!==lastKey){                  // the box MOVED or RESIZED — re-measure the spotlight against the new box
+    if(key!==lastKey){                  // the box MOVED or RESIZED - re-measure the spotlight against the new box
       lastKey=key;stableSince=now;
       _tourLayout();
     }
@@ -240,7 +240,7 @@ function _tourCardBox(cardW,cardH,vpW,vpH,targetRect){
     if(overlaps){
       const down=Math.round(targetRect.bottom+CLEAR),up=Math.round(targetRect.top-CLEAR-cardH);
       // prefer downward; upward only when downward won't fit; if NEITHER fits (a target too tall to clear
-      // vertically) stay centred — an on-screen card over the target beats one nudged off the viewport.
+      // vertically) stay centred - an on-screen card over the target beats one nudged off the viewport.
       top=(down+cardH<=vpH-M)?down:(up>=M?up:baseTop);
     }
   }
@@ -252,7 +252,7 @@ function _tourLeader(cardBox,spotBox,suppressed){
   const ccx=(cardBox.left+cardBox.right)/2,ccy=(cardBox.top+cardBox.bottom)/2;
   const scx=(spotBox.left+spotBox.right)/2,scy=(spotBox.top+spotBox.bottom)/2;
   const dx=scx-ccx,dy=scy-ccy;
-  if(dx===0&&dy===0)return{x1:ccx,y1:ccy,x2:scx,y2:scy,visible:false};   // concentric — impossible once nudged clear
+  if(dx===0&&dy===0)return{x1:ccx,y1:ccy,x2:scx,y2:scy,visible:false};   // concentric - impossible once nudged clear
   const edge=(cx,cy,hw,hh,vx,vy)=>{                                      // boundary point from a centre along (vx,vy)
     const t=Math.min(vx!==0?hw/Math.abs(vx):Infinity,vy!==0?hh/Math.abs(vy):Infinity);
     return[cx+vx*t,cy+vy*t];
@@ -276,13 +276,13 @@ function _tourLayout(){
   const target=step.sel?document.querySelector(step.sel):null;
   const rect=target?target.getBoundingClientRect():null;
   const hasTarget=!!(rect&&(rect.width>0||rect.height>0));
-  const isMapStep=step.sel==="#map";                       // the map is the backdrop — the spotlight alone is the cue, no leader
+  const isMapStep=step.sel==="#map";                       // the map is the backdrop - the spotlight alone is the cue, no leader
   const{spot,card,backdrop,leader,line}=_tourEls;
   // The card is CENTRED for EVERY step (fixed-position, computed by _tourCardBox), nudged clear of the
   // target if it would sit under it. It never re-anchors to a side; a resize only re-centres + redraws.
   const cardW=card.offsetWidth||340,cardH=card.offsetHeight||160;   // fall back when there's no layout engine (jsdom)
   // The overlap nudge applies to DISCRETE targets only. A map step's target is the whole map (the backdrop),
-  // so it never nudges — the card centres over the map spotlight; the leader is suppressed there anyway.
+  // so it never nudges - the card centres over the map spotlight; the leader is suppressed there anyway.
   const box=_tourCardBox(cardW,cardH,window.innerWidth,window.innerHeight,(hasTarget&&!isMapStep)?rect:null);
   card.style.left=box.left+"px";card.style.top=box.top+"px";
   if(!hasTarget){
@@ -325,7 +325,7 @@ function _tourLayout(){
 function _tourExitCurrent(){
   const s=TOUR_STEPS[_tourStep];
   if(s&&typeof s.exit==="function")s.exit();
-  _tourDetachSettle();   // drop this step's settle watcher + listener on every way out (Next/Back/close) — symmetric with attach
+  _tourDetachSettle();   // drop this step's settle watcher + listener on every way out (Next/Back/close) - symmetric with attach
 }
 function _tourNext(){
   if(_tourStep>=TOUR_STEPS.length-1){stopTour();return;}   // stopTour runs the exit hook itself

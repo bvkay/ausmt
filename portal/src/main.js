@@ -138,7 +138,7 @@ function setView(v){
   document.querySelectorAll('#filterPane [data-views]').forEach(sec=>{
     const a=sec.getAttribute("data-views");sec.classList.toggle("hidden",!(a==="both"||a===v));});
   // The map legend sits over the map, so it belongs to the map view only. (The
-  // first-visit welcome popup is a modal dismissed by user action, not tied to the view — no toggle here.)
+  // first-visit welcome popup is a modal dismissed by user action, not tied to the view - no toggle here.)
   const _leg=document.getElementById("mapLegend");if(_leg)_leg.classList.toggle("hidden",v!=="map");
   // The left filter rail (+ its resize handle) belong to the MAP view. On Surveys and Collections the
   // rail's controls don't apply (search + facet chips live in the discovery bar there), so hide both and
@@ -221,7 +221,7 @@ function setSidebarCollapsed(collapsed){
   if(btn){btn.setAttribute("aria-expanded",String(!collapsed));
     btn.setAttribute("aria-label",collapsed?"Expand sidebar":"Collapse sidebar");
     btn.title=collapsed?"Expand sidebar":"Collapse sidebar";btn.textContent=collapsed?"›":"‹";}
-  try{localStorage.setItem(SB_COLLAPSE_KEY,collapsed?"1":"0");}catch(e){/* storage unavailable — don't persist */}
+  try{localStorage.setItem(SB_COLLAPSE_KEY,collapsed?"1":"0");}catch(e){/* storage unavailable - don't persist */}
   if(curView==="map"&&typeof map!=="undefined"&&map.invalidateSize)map.invalidateSize();
 }
 (function(){
@@ -284,10 +284,10 @@ function showEmptyState(){
 // surface is a small centred MODAL popup (#introWelcome). See docs: portal internals, main.js.
 const INTRO_KEY="ausmt_intro_dismissed";
 function introSeen(){try{return localStorage.getItem(INTRO_KEY)==="1";}catch(e){return false;}}
-function markIntroSeen(){try{localStorage.setItem(INTRO_KEY,"1");}catch(e){/* storage unavailable (e.g. privacy mode) — just don't persist */}}
+function markIntroSeen(){try{localStorage.setItem(INTRO_KEY,"1");}catch(e){/* storage unavailable (e.g. privacy mode) - just don't persist */}}
 // startTour lives in tour.js (loaded after main.js); guard so a missing/broken tour.js can't break wiring.
 function startTourSafe(){if(typeof startTour==="function")startTour();}
-// Welcome popup: focus is moved INTO the box on show and RESTORED to the opener on close — the same
+// Welcome popup: focus is moved INTO the box on show and RESTORED to the opener on close - the same
 // best-effort/guarded pattern the drawer uses (so the headless harness, with no real focus, never throws).
 let _welcomeReturnFocus=null;
 function welcomeDismissChecked(){const c=document.getElementById("welcomeDismiss");return !!(c&&c.checked);}
@@ -402,7 +402,7 @@ function buildIdText(){
   return " · data build "+short+(date?" · "+date:"");
 }
 // Uses textContent (not innerHTML+esc()) - never parses markup at all, the strictest available
-// guard — even though build_id/generated are engine-generated, not user input. The full raw id (even
+// guard - even though build_id/generated are engine-generated, not user input. The full raw id (even
 // when display-defended above) rides in the title attr so it's still inspectable, not lost.
 function renderBuildId(){
   const el=document.getElementById("buildId");

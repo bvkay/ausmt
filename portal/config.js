@@ -1,4 +1,4 @@
-// AUTO-GENERATED from portal.config.yaml by tools/gen_config.py — do not edit by hand.
+// AUTO-GENERATED from portal.config.yaml by tools/gen_config.py - do not edit by hand.
 // This is the browser-side reflection of the portal configuration (branding, version, analytics).
 // To change branding/version/deployment, edit portal.config.yaml and regenerate this file.
 window.AUSMT_CONFIG = {

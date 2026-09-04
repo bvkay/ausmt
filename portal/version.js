@@ -1,5 +1,5 @@
 // Renders the build/version label into the header chip on every page. The values come from the
-// centralised config (config.js, generated from portal.config.yaml) — this file derives the label and
+// centralised config (config.js, generated from portal.config.yaml) - this file derives the label and
 // fills any element carrying the data-ver-chip attribute. To change the version, edit
 // portal.config.yaml and regenerate config.js; do not hard-code version strings here or in the HTML.
 //

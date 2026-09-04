@@ -1,7 +1,7 @@
 "use strict";
 // The portal computes nothing. It loads generated JSON products. See docs: portal internals, data.js.
 function dataUrl(name){
-  // Absolute URLs pass through unchanged — manifest artifact urls built with the producer's --base-url
+  // Absolute URLs pass through unchanged - manifest artifact urls built with the producer's --base-url
   // (e.g. an NCI/THREDDS host) are already absolute, so prefixing data_base_url would corrupt them
   // ("data/https://…"). This is what makes a tier migration a manifest-only change.
   if(/^[a-z][a-z0-9+.\-]*:\/\//i.test(String(name))) return name;

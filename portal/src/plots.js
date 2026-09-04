@@ -46,7 +46,7 @@ function phaseSvg(t){const per=t[T.periods];if(!per.length)return"";if(!t[T.phs_
    `<path d="${path(per,t[T.phs_yx_adj],x,y)}" fill="none" stroke="#2E8FA3" stroke-width="1.1"/>`+sqs(per,t[T.phs_yx_adj],x,y,"#2E8FA3")+`</svg>`;}
 // Induction-arrow panel - REPLACES the |T|-magnitude plot, rendered below the phase tensor. See docs:
 // portal internals, plots.js.
-const ARROW_UNIT_PX=54;        // pixels per unit |T| (so a |T|=0.5 arrow is 27 px) — the fixed scale
+const ARROW_UNIT_PX=54;        // pixels per unit |T| (so a |T|=0.5 arrow is 27 px) - the fixed scale
 function arrowHead(x0,y0,x1,y1,c){const dx=x1-x0,dy=y1-y0,L=Math.hypot(dx,dy);if(L<0.5)return"";
   const ux=dx/L,uy=dy/L,hl=4.2,hw=2.4;const bx=x1-ux*hl,by=y1-uy*hl,px=-uy,py=ux;
   return `<polygon points="${x1.toFixed(1)},${y1.toFixed(1)} ${(bx+px*hw).toFixed(1)},${(by+py*hw).toFixed(1)} ${(bx-px*hw).toFixed(1)},${(by-py*hw).toFixed(1)}" fill="${c}"/>`;}

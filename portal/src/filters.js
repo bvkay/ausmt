@@ -180,7 +180,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
     cc.insertBefore(_caret("c:"+country),cc.firstChild);   // disclosure caret ahead of the checkbox
     tree.appendChild(cc);
     Object.keys(hier[country]).sort().forEach(org=>{
-      const okey=country+"||"+org;   // org names can repeat across countries — namespace the toggle key
+      const okey=country+"||"+org;   // org names can repeat across countries - namespace the toggle key
       const orow=document.createElement("label");orow.className="org";
       const _nsv=Object.keys(hier[country][org]).length;
       orow.innerHTML=`<input type="checkbox" data-org="${escAttr(okey)}" checked>${esc(org)} <span class="osv">(${_nsv} survey${_nsv===1?"":"s"})</span>`;
@@ -191,7 +191,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
         l.innerHTML=`<input type="checkbox" value="${escAttr(sv)}" data-country="${escAttr(country)}" data-org="${escAttr(okey)}" checked>${esc(sv.replace(/^AusLAMP /,""))}<span class="n">${hier[country][org][sv]|0}</span>`;
         tree.appendChild(l);});});});
   // Country checkbox toggles all its orgs + surveys; org checkbox toggles its surveys. The PARENT
-  // checkboxes have NO `value` attribute (surveys do), so identify them with hasAttribute("value") — NOT
+  // checkboxes have NO `value` attribute (surveys do), so identify them with hasAttribute("value") - NOT
   // .value, which is "on" for a value-less checkbox (the bug that made the country/org toggles no-ops).
   tree.querySelectorAll('input[data-country]').forEach(inp=>{if(inp.hasAttribute("value"))return;
     inp.addEventListener("change",()=>{

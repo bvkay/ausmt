@@ -264,7 +264,7 @@ function maturityModel(m,sc){m=m||{};sc=sc||[];
     {key:"repro",label:"Reproducible",achieved:!!(sc[SC.sw]&&m.ts==="ok"),note:""},
     {key:"licence",label:"Licence verified",achieved:licBadgeState(m.lic)!=="unk",note:""},
     // The DOI star lights only for a RESOLVED (ok/unknown) dataset DOI. A reserved DOI shows a
-    // hollow star with honest wording — never a green "minted" off a DOI that 404s at doi.org today.
+    // hollow star with honest wording - never a green "minted" off a DOI that 404s at doi.org today.
     {key:"doi",label:"DOI",achieved:doiRes==="ok",note:doiRes==="ok"?"minted":doiRes==="reserved"?"reserved (not yet active)":"not recorded"},
     {key:"ts",label:"Time series",achieved:tsOn,note:tsOn?"linked":"not available"},
   ];
@@ -355,7 +355,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     ? {n:"MTH5",sub:"Transfer functions only · Download"+(mth5.size?" · "+fmtBytes(mth5.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5.url,name:mth5.url.split("/").pop()}}
     : {n:"MTH5",sub:"Transfer functions only · not currently available",origin:"AusMT-derived",st:"unk",d:null};
   const level2Subs=[ediSub,xmlSub,mth5Sub];
-  // Publication (interpretation) — the parenthetical separates the dataset citation from an interpretation
+  // Publication (interpretation) - the parenthetical separates the dataset citation from an interpretation
   // publication. Reserved-DOI honesty applies (inert + note).
   const pubRow={n:"Publication (interpretation)",sub:m.doi?(doiReserved?"reserved, not yet active":"DOI"):"none recorded",origin:"source archive",st:m.doi?(doiReserved?"part":"ok"):"no",d:(m.doi&&!doiReserved)?{prod:"open",url:"https://doi.org/"+m.doi}:null};
   const attrs=d=>d?Object.entries(d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
@@ -536,7 +536,7 @@ function _injectStationFacts(s,facts){
 function stationFactsOf(s){return _frameLineCache.get(s&&s.ausmt_id);}
 function loadStationFrameLine(s){
   const slug=s.slug||((SMETA[s.survey]||{}).slug);
-  if(!slug||!s.id) return Promise.resolve();              // cannot locate station.json — skip
+  if(!slug||!s.id) return Promise.resolve();              // cannot locate station.json - skip
   if(_frameLineCache.has(s.ausmt_id)){_injectStationFacts(s,_frameLineCache.get(s.ausmt_id));return Promise.resolve();}
   const url=dataUrl("products/"+encodeURIComponent(slug)+"/"+encodeURIComponent(s.id)+"/station.json");
   // The catch sits on the FETCH, not on the whole chain, so a withheld/offline/file:// station caches its
@@ -590,7 +590,7 @@ function _ssGroup(title,rows,extra){
     rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")+`</table>${extra||""}</div>`;}
 function stationSummaryDetails(s,m,sc){
   // The Station group. Rows APPEND after coordinates (never reorder): the source station/site name
-  // (only when it differs from the displayed, sanitised id — the SA28_2B -> SA282B case), the data type,
+  // (only when it differs from the displayed, sanitised id - the SA28_2B -> SA282B case), the data type,
   // the ausmt_id, and the collection title (row omitted entirely when the survey is in no collection).
   const stationRows=[["coordinates",coordCellHtml(s)]];
   if(s.site_name&&s.site_name!==s.id)stationRows.push(["site name",esc(s.site_name)]);
@@ -638,7 +638,7 @@ function openStation(i,opts){
   // Per-period 3-D screening threshold echoed from the build's own provenance (never hard-coded); when
   // build_provenance.json isn't loaded the degree figure is simply omitted rather than fabricated.
   const _bp=(typeof PROV!=="undefined"&&PROV&&PROV.parameters&&PROV.parameters.dimensionality)||{};const _betaThr=_bp.beta_per_period_deg;
-  // Strike circular concentration (mean resultant length R on the doubled axial angles) — the Strike-
+  // Strike circular concentration (mean resultant length R on the doubled axial angles) - the Strike-
   // stability indicator's input, and the same doubled-angle mean feeds the strike clause below.
   let strikeClause=`median phase-tensor strike <b>not estimated</b> <span style="color:var(--muted)">(insufficient low-skew data)</span>`;
   let _azR=null;
@@ -647,7 +647,7 @@ function openStation(i,opts){
     _azR=Math.hypot(_S,_C)/azs.length;
     if(azs.length>=3){const mean=Math.atan2(_S,_C)/2*180/Math.PI;const st=((mean%180)+180)%180;
       strikeClause=`median phase-tensor strike <b>~N${st.toFixed(0)}°E / N${((st+90)%180).toFixed(0)}°E</b> <span style="color:var(--muted)">(90° ambiguous)</span>${_perTxt}`;}}
-  // Median xy/yx phase split (deg) — the Phase-split indicator's input (φyx already +180°-adjusted).
+  // Median xy/yx phase split (deg) - the Phase-split indicator's input (φyx already +180°-adjusted).
   let _phaseSplit=null;
   if(t[T.phs_xy]&&t[T.phs_yx_adj]){const _sp=[];t[T.phs_xy].forEach((v,k)=>{const w=t[T.phs_yx_adj][k];if(v!=null&&w!=null)_sp.push(Math.abs(v-w));});
     if(_sp.length){_sp.sort((a,b)=>a-b);_phaseSplit=_sp[Math.floor(_sp.length/2)];}}
@@ -702,7 +702,7 @@ function openStation(i,opts){
   const _manGate=hydrGate("manifest","served files",true);
   const _arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
   // Whether a served EMTF-XML artifact exists for this station (drives the format-availability badge:
-  // ok when served, else part — produced via the build pipeline for redistributable surveys).
+  // ok when served, else part - produced via the build pipeline for redistributable surveys).
   const _fmtXmlArt=_arts.some(a=>a.format==="emtfxml");
   // The same question for MTH5, off the same station rows. See docs: portal internals, drawer.js.
   const _fmtH5Art=_arts.some(a=>a.format==="mth5");
@@ -970,7 +970,7 @@ function instrumentPidsHtml(m){
     return link?`${label}: ${link}`:label;}).join("<br>");
   return `Instrument PIDs:<br><span class="pidline">${rows}</span>`;}
 // The related-identifiers model: a DataCite relation maps to a human label. An
-// out-of-vocab relation (should never publish — the validator FAILs it) falls back to the escaped raw
+// out-of-vocab relation (should never publish - the validator FAILs it) falls back to the escaped raw
 // value; a blank relation to a neutral "Related".
 const RELATION_LABELS={IsDerivedFrom:"Derived from",IsVariantFormOf:"Variant form of",
   IsSupplementTo:"Supplement to",Cites:"Cites",IsPartOf:"Part of",IsSourceOf:"Source of"};
@@ -980,7 +980,7 @@ const IDENTIFIES_LABELS={collection:"Collection",raw_packed:"Raw time series",le
   level1:"Level 1, transformed time series",level2:"Level 2, processed data",level3:"Level 3, models",
   entire:"Entire dataset"};
 // A typed provenance identifier resolves to a link whose host is chosen by identifier_type, ALWAYS
-// through the escUrl guard (a hostile identifier value can never become an executable/relative anchor —
+// through the escUrl guard (a hostile identifier value can never become an executable/relative anchor -
 // same posture as pidLink/instrumentPidLink). See docs: portal internals, drawer.js.
 function relatedIdHref(id,type){
   const s=String(id==null?"":id).trim(); if(!s)return null;
@@ -1516,7 +1516,7 @@ function dispatchProd(d){
     if(d.tsname&&typeof handoffSnack==="function")handoffSnack(d.tsname,+d.tsbytes||0);}
   else if(d.prod==="scroll"&&d.sel){const el=document.querySelector(d.sel);if(el){
     // The scroll target (#pt_anchor) lives in the Response tab, with the phase tensor + induction
-    // arrows now always-shown blocks — activate its tab so the scroll actually reveals it.
+    // arrows now always-shown blocks - activate its tab so the scroll actually reveals it.
     const panel=el.closest?el.closest('[role="tabpanel"]'):null;
     if(panel&&panel.dataset&&panel.dataset.tab)selectDrawerTab(panel.dataset.tab);
     if(el.scrollIntoView)el.scrollIntoView({behavior:"smooth"});}}
@@ -1558,7 +1558,7 @@ document.addEventListener("click",e=>{
   else if(act==="collmap"){e.preventDefault();if(typeof viewCollectionOnMap==="function")viewCollectionOnMap(el.dataset.coll);}   // switch to map + fitBounds to the collection
   else if(act==="focus")focusSurvey(sv);
   else if(act==="select")selectSurvey(sv);
-  else if(act==="doi"&&doi)window.open(escUrl("https://doi.org/"+doi),"_blank","noopener,noreferrer");   // NOT encodeURIComponent — it %2F-escapes the DOI slash -> doi.org 404; escUrl still blocks scheme injection
+  else if(act==="doi"&&doi)window.open(escUrl("https://doi.org/"+doi),"_blank","noopener,noreferrer");   // NOT encodeURIComponent - it %2F-escapes the DOI slash -> doi.org 404; escUrl still blocks scheme injection
 });
 
 // Discovery-controls wiring for the Surveys view. Static registrations - the controls live in index.html's

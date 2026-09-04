@@ -44,13 +44,13 @@ function routeVisibleToLayers(){
 }
 const drawn=new L.FeatureGroup().addTo(map);
 // Plain-language labels for the draw toolbar buttons. These override the generic
-// leaflet.draw defaults ("Draw a polygon" etc.) and MUST be set BEFORE the control is constructed — the
+// leaflet.draw defaults ("Draw a polygon" etc.) and MUST be set BEFORE the control is constructed - the
 // control reads L.drawLocal at build time to set each button's title (its accessible name).
 L.drawLocal.draw.toolbar.buttons.polygon="Draw polygon selection";
 L.drawLocal.draw.toolbar.buttons.rectangle="Draw rectangle selection";
 L.drawLocal.edit.toolbar.buttons.remove="Clear drawn shapes";
 // Kept as a named reference (was an inline `map.addControl(new ...)`) so the SELECTION panel's
-// Draw rectangle/polygon buttons can REUSE this control's own mode handlers — see armDraw below.
+// Draw rectangle/polygon buttons can REUSE this control's own mode handlers - see armDraw below.
 const drawControl=new L.Control.Draw({draw:{polyline:false,circle:false,circlemarker:false,marker:false,
   polygon:{shapeOptions:{color:"#EF7256",weight:2}},rectangle:{shapeOptions:{color:"#EF7256",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}});
 map.addControl(drawControl);
@@ -69,7 +69,7 @@ labelToolbar();
 // Discoverability: the SELECTION panel's "Draw rectangle"/"Draw polygon" buttons ARM the SAME
 // leaflet.draw handlers the map's top-left toolbar icons arm, so the panel need not point a reader at
 // a tool in the opposite corner. See docs: portal internals, map.js.
-let armedDrawMode=null;                                   // null | "rectangle" | "polygon" — the shared armed state
+let armedDrawMode=null;                                   // null | "rectangle" | "polygon" - the shared armed state
 // The exact handler object the matching toolbar icon enables (leaflet.draw keys _modes by handler.type).
 // Guarded navigation so a missing/stubbed control (the jsdom harness stubs L) is a no-op, never a throw.
 function drawModeHandler(mode){const tb=drawControl&&drawControl._toolbars&&drawControl._toolbars.draw;
@@ -147,7 +147,7 @@ let HOME_BOUNDS=null,_fitWasDegenerate=false;
 function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeof size.y==="number"&&size.x>0&&size.y>0);}
 // PURE: the corrector fires ONLY when the user has not taken control (never fight a deliberate view) AND the
 // primary fit was degenerate (so a healthy fit, and any later programmatic fit such as a collection
-// framing — is left untouched). Split out so the no-fight-with-user decision is unit-testable.
+// framing - is left untouched). Split out so the no-fight-with-user decision is unit-testable.
 function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // a withheld-coordinate station has no position - no (0,0) phantom marker, no crash
@@ -170,7 +170,7 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
     _fitWasDegenerate=_mapSizeDegenerate(typeof map.getSize==="function"?map.getSize():null);
     map.fitBounds(HOME_BOUNDS);
     // The primary fit above runs BEFORE the flex layout has settled, so it fits a wrong-but-nonzero box.
-    // Schedule an unconditional re-fit once layout settles — the real correction (see _mapDeferredHomeRefit).
+    // Schedule an unconditional re-fit once layout settles - the real correction (see _mapDeferredHomeRefit).
     _scheduleDeferredHomeRefit();
   }
 }
@@ -251,7 +251,7 @@ function drawSelectionMsg(n,layerType){const shape=layerType==="rectangle"?"rect
 // recomputes `selected` from the new shape, THEN we toast the fresh count and surface the exports by
 // auto-switching the rail to Select & download. See docs: portal internals, map.js.
 function onDrawCreated(e){e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();
-  setArmedDraw(null);   // a completed draw disarms the mode — the panel button must not stay lit
+  setArmedDraw(null);   // a completed draw disarms the mode - the panel button must not stay lit
   if(typeof toast==="function")toast(drawSelectionMsg(selected.size,e&&e.layerType));
   if(typeof setSidebarMode==="function")setSidebarMode("select");}
 map.on(L.Draw.Event.CREATED,onDrawCreated);
