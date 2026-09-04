@@ -931,7 +931,7 @@ function validateSurvey(meta, edis, mth5s, xmls){
   const counts={PASS:0,WARNING:0,FAIL:0}; items.forEach(i=>counts[i.level]++);
   return {items,counts};
 }
-function recommendedExtractor(edis){ return "mt_metadata"; }  // mt_metadata is the SOLE engine (reads standard + Phoenix spectra EDIs); the regex extractor was retired
+function recommendedExtractor(edis){ return "mt_metadata"; }  // mt_metadata is the SOLE engine (it reads standard and Phoenix spectra EDIs); there is no second extractor
 function footprintFromStations(edis, padFrac){
   const lats=edis.map(e=>e.parsed.lat).filter(v=>v!=null), lons=edis.map(e=>e.parsed.lon).filter(v=>v!=null);
   if(!lats.length) return null;

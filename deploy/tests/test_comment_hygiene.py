@@ -1015,7 +1015,7 @@ HISTORY_SHAPE = re.compile(
     r"|\b(?:is|are|was|were)\s+(?:[\w-]+\s+){0,2}(?:gone|removed|retired|deleted|dropped)\b",
     re.I)
 HANDLED_THING = re.compile(
-    r"(?:\ba|\ban|\bany|\bevery|\beach|\bno)\s+(?:[\w-]+\s+){0,3}$"
+    r"(?:\ba|\ban|\bany|\bevery|\beach|\bno)\s+(?:[\w-]+\s+){0,6}$"
     r"|\b(?:rows|stations|values|entries|slashes|characters|keys|bindings|bytes|ids)"
     r"\s+(?:[\w-]+\s+){0,2}$", re.I)
 NEGATED = re.compile(r"\b(?:never|not|cannot|no)\b\s+(?:[\w-]+\s+){0,2}$", re.I)

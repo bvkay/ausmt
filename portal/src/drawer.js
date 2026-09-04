@@ -103,8 +103,8 @@ function headerDownloadBtn(s,m){
   const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
-// The Overview "primary download" tile - overviewDownload, the gated descriptor rendered as a
-// single product tile inside the Station summary - is REMOVED. See docs: portal internals, drawer.js.
+// The Station summary carries no "primary download" tile; the Files tab is the one surface that
+// offers bytes. See docs: portal internals, drawer.js.
 
 // The PLAIN-TEXT APA sentence: what the citation pack's CITATIONS.txt and the clipboard copy carry.
 // A text file must never receive HTML entities (O'Brien is not O&#39;Brien on disk).
@@ -269,8 +269,8 @@ function maturityModel(m,sc){m=m||{};sc=sc||[];
     {key:"ts",label:"Time series",achieved:tsOn,note:tsOn?"linked":"not available"},
   ];
   return {dims,stars:dims.filter(d=>d.achieved).length,total:dims.length};}
-// The AGGREGATE presentation is removed. The "Dataset maturity" heading, the five-star summary row and the
-// "Record-stewardship maturity ... See docs: portal internals, drawer.js.
+// The dimensions are listed one by one and never aggregated: no "Dataset maturity" heading, no
+// five-star summary row. See docs: portal internals, drawer.js.
 function maturityBlock(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
   // Two-phase boot: the "Reproducible" dimension reads sc[SC.sw] (sci.json, PHASE 2). An unlit star is a
   // statement that the dimension was NOT achieved, so the whole LIST waits rather than under-stating a
@@ -283,9 +283,8 @@ function maturityBlock(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
 // The raw-TS pointer. See docs: portal internals, drawer.js.
 function tsPidRaw(m){return (m&&m.ts_pid)||TS_COLLECTION.doi;}
 function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
-// mth5BundleFor lived here: the survey's <slug>-tf.h5 bundles[] row, looked up by slug. It is gone
-// because every surface that called it was STATION-scoped and therefore reading the wrong scope. See docs:
-// portal internals, drawer.js.
+// There is no survey-scoped MTH5 lookup here: the <slug>-tf.h5 bundles[] row is survey-scoped and
+// every surface on this side is STATION-scoped. See docs: portal internals, drawer.js.
 function apiArtifactPath(u){const v=String(u==null?"":u);
   return /^[a-z][a-z0-9+.\-]*:\/\//i.test(v)?v:"/data/"+v.replace(/^\/+/,"");}
 // The Files tab, structured to the NCI data-level standard as a SINGLE COLUMN of full-width rows (Packed
@@ -598,9 +597,8 @@ function stationSummaryDetails(s,m,sc){
   stationRows.push(["data type",esc(s.type||"-")]);   // no long-form gloss exists in the corpus yet; show the code
   stationRows.push(["ausmt_id",esc(s.ausmt_id)]);
   if(m.collection&&m.collection.id)stationRows.push(["collection",esc(m.collection.title||m.collection.id)]);
-  // The "Transfer function / Download" tile is REMOVED from this summary group. It duplicated the Files
-  // tab's Level 2 EDI row and blurred the summary-vs-downloads separation the tabs exist to draw: a summary
-  // states facts, the Files tab serves bytes. See docs: portal internals, drawer.js.
+  // This summary group offers no download tile: a summary states facts and the Files tab serves
+  // bytes, which is the separation the tabs exist to draw. See docs: portal internals, drawer.js.
   const station=_ssGroup("Station",stationRows);
   // Two-phase boot: periods/components/tipper are catalogue columns (phase 1, honest at first paint);
   // "remote reference" and the Processing group read the sci row (PHASE 2), whose absent-value renderings
@@ -674,8 +672,8 @@ function openStation(i,opts){
     `<div class="dsub">${esc(s.survey)} · ${orgNameLink(s.org,m.org_ror)} · ${esc(s.country)}</div>`+
     collLine(m)+
     `<div class="dchips">${yearChip}${licBadge}</div>`+
-    // The header "Cite" tab-jump button (.dl-cite) is removed as redundant - the Cite TAB already
-    // reaches the same panel; the header keeps only the Download EDI primary action.
+    // The header carries no "Cite" tab-jump button: the Cite TAB already reaches that panel, so
+    // the header keeps only the Download EDI primary action.
     `<div class="dactions">${headerDownloadBtn(s,m)}</div>`+
     tabStrip+`</div>`;
   // ---- Panel content -------------------------------------------------------------------------------
@@ -1197,11 +1195,11 @@ function miniScatter(ss){
   const box=`<rect x="${bx0}" y="${by0}" width="${bw}" height="${bh}" fill="none" stroke="var(--line)"/>`;
   return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:#16242f;border:1px solid var(--line);border-radius:6px">`+
     box+latTicks+lonTicks+dots+`</svg>`;}
-// The "Related surveys" section and its relatedSurveys scorer are REMOVED. See docs: portal internals,
+// There is no "Related surveys" section and no relatedSurveys scorer. See docs: portal internals,
 // drawer.js.
 function surveySummary(ss,m){
-  // The "dimensionality mix (screening only)" row was removed from this table (dimensionality is inferable
-  // from the phase tensor + skew). See docs: portal internals, drawer.js.
+  // This table carries no "dimensionality mix" row: dimensionality is inferable from the phase
+  // tensor and skew. See docs: portal internals, drawer.js.
   const sciGate=hydrGate("sci","processing details");
   const typeCount={}, swCount={}; let tipper=0, rr=0, rrKnown=0, pmin=Infinity, pmax=-Infinity;
   ss.forEach(s=>{ const sc=sciRow(s.i);
@@ -1366,9 +1364,9 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div>`+attributionBoxHtml(m):"")+
    contributorsHtml(m)+
    sourcesListHtml(m)+
-   // Downloads is the THREE whole-survey bundles (surveyBundleTiles) and nothing else that
-   // competes with them. "All EDIs (select & download)" is gone - the EDI bundle already covers the whole
-   // survey, and per-station selection belongs to the station drawers; "View on map" moved to the header.
+   // Downloads is the THREE whole-survey bundles (surveyBundleTiles) and nothing else that competes
+   // with them: the EDI bundle already covers the whole survey, per-station selection belongs to
+   // the station drawers, and "View on map" belongs to the header.
    `<div class="sechead">Downloads</div><div class="prodgrid">`+
      surveyBundleTiles(m.slug)+
      // A reserved dataset DOI is shown as an inert, honestly-labelled chip, never a green
@@ -1379,8 +1377,8 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    `</div>`+
    `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"-"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
-   // The identifiers rollup is the always-open DATA-LEVEL tile grid. The Organisation ROR row is gone with
-   // it - the custodian's ROR still reaches the reader as the link on the organisation name in the header
+   // The identifiers rollup is the always-open DATA-LEVEL tile grid and carries no Organisation ROR
+   // row: the custodian's ROR reaches the reader as the link on the organisation name in the header
    // subline above (orgNameLink) and on the About page. See docs: portal internals, drawer.js.
    surveyDataLevelsHtml(m)+
    releaseNotesHtml(m);   // no "Related surveys" section; release notes are last

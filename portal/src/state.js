@@ -22,8 +22,8 @@ function hydrUsable(k){return HYDR[k]==="ready";}
 function sciRow(i){return (SCI&&SCI[i])||[];}
 function tfRow(i){return (TFD&&TFD[i])||null;}
 let ST=[],surveys=[],visible=[],selected=new Set(),curView="map",qMin=0;
-// The period-window predicate is HEADLESS (the slider control is retired; passesCore reads
-// these bounds, harnesses set them). Full-range defaults = the filter is off.
+// The period-window predicate is HEADLESS: no slider control drives it, passesCore reads these
+// bounds and harnesses set them. Full-range defaults = the filter is off.
 let periodLo=0.001,periodHi=100000;
 let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState; backs the #/survey/<slug> route
 // The set of survey SLUGS that belong to the `auslamp` collection, built once at boot (buildAuslampSet,

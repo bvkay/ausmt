@@ -119,7 +119,7 @@
 
   // "AusMT contributors (<year>). AusMT Data Portal, Release <tag>. AuScope."
   // The year comes from the release's own cut timestamp. If that is missing or unparseable the
-  // parenthetical is dropped rather than guessed: an invented year in a citation is worse than none.
+  // parenthetical is omitted rather than guessed: an invented year in a citation is worse than none.
   function citationText(tag, cut) {
     var y = year(cut);
     return "AusMT contributors" + (y ? " (" + y + ")" : "") +

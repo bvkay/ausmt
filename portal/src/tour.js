@@ -37,8 +37,8 @@ let _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
 function _tourEnterMapView(){
   if(typeof curView!=="undefined"&&curView!=="map"&&typeof setView==="function")setView("map");
 }
-// Surveys-view step enter action. Named by SELECTOR, not by index: a step inserted mid-deck left every
-// numbered comment in this file one behind, so the numbers are gone. See docs: portal internals, tour.js.
+// Surveys-view step enter action. Named by SELECTOR, not by index, because a step inserted mid-deck
+// puts every numbered comment in this file one behind. See docs: portal internals, tour.js.
 function _tourEnterSurveysView(){
   if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
 }
@@ -183,7 +183,7 @@ let _tourSettleEl=null;                 // element the current step's settle wat
 let _tourSettleRAF=0;                   // pending animation-frame handle for the poll; 0 = none scheduled
 let _tourLayoutRuns=0;                  // observability: total _tourLayout calls this session (settle-pin observable)
 function _tourNow(){return (typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();}
-// Compact position+size signature of an element's box; null when the element is gone. Captures BOTH the
+// Compact position+size signature of an element's box; null when the element is absent. Captures BOTH the
 // slide's left travel and the frame-line inject's height growth, so any reflow that moves OR resizes shows up.
 function _tourRectKey(el){
   if(!el)return null;

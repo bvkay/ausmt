@@ -1015,7 +1015,7 @@ HISTORY_SHAPE = re.compile(
     r"|\b(?:is|are|was|were)\s+(?:[\w-]+\s+){0,2}(?:gone|removed|retired|deleted|dropped)\b",
     re.I)
 HANDLED_THING = re.compile(
-    r"(?:\ba|\ban|\bany|\bevery|\beach|\bno)\s+(?:[\w-]+\s+){0,3}$"
+    r"(?:\ba|\ban|\bany|\bevery|\beach|\bno)\s+(?:[\w-]+\s+){0,6}$"
     r"|\b(?:rows|stations|values|entries|slashes|characters|keys|bindings|bytes|ids)"
     r"\s+(?:[\w-]+\s+){0,2}$", re.I)
 NEGATED = re.compile(r"\b(?:never|not|cannot|no)\b\s+(?:[\w-]+\s+){0,2}$", re.I)
@@ -2249,3 +2249,48 @@ def test_a_phrase_wrapped_across_two_line_comments_is_still_the_phrase(tmp_path)
     whole.write_text("// The rollup names them once.\n// The card carries the grant ids.\nvar a = 1;\n",
                      encoding="utf-8")
     assert not offences([whole]), "the run rule flagged two ordinary sentences"
+
+
+# ---------------------------------------------------------------------------
+# What IS, not what was: the shipped tier and the tier the engine emits.
+# ---------------------------------------------------------------------------
+def test_a_shipped_comment_states_what_is():
+    hits = history_offences(shipped_html() + shipped_js() + shipped_page_scripts(), root=ROOT)
+    assert not hits, (
+        f"{len(hits)} shipped comment(s) narrate what was there rather than what is; a visitor "
+        "cannot open the file they talk about:\n" + "\n".join(hits))
+
+
+def test_each_history_shape_is_caught_in_its_own_sense(tmp_path):
+    """One case per shape, each in the sense that makes it history: a part the page is MADE OF,
+    named and definite."""
+    cases = {
+        "is gone": '// The #tfAvail CHECKBOX is gone.\nvar a = 1;\n',
+        "lived here": "// mth5BundleFor lived here, looked up by slug.\nvar a = 1;\n",
+        "was removed": '// The "dimensionality mix" row was removed from this table.\nvar a = 1;\n',
+        "folded into": '// The checkbox is folded into the Browse single-select.\nvar a = 1;\n',
+        "retired": "// the retired tickbox's flag, read by the exports.\nvar a = 1;\n",
+        "is dropped": "// The Organisation ROR row is dropped from the rollup.\nvar a = 1;\n",
+    }
+    for label, body in cases.items():
+        f = tmp_path / "was.js"
+        f.write_text(body, encoding="utf-8")
+        hits = history_offences([f])
+        assert hits and label in hits[0], f"{label} went unseen: {hits}"
+
+
+def test_the_same_words_about_data_are_the_code_speaking(tmp_path):
+    """The negative for each shape. A thing the code HANDLES arrives with an indefinite article or
+    as a bare plural, and a negated clause is a constraint rather than a history; both stay."""
+    cases = {
+        "a row": "// A textless row is dropped before the type guard runs.\nvar a = 1;\n",
+        "bare plural": "// Trailing slashes are dropped so the bare id is the key.\nvar a = 1;\n",
+        "every entry": "// Every entry whose payload checksum fails is deleted on read.\nvar a = 1;\n",
+        "a negation": "// The acknowledgement is never folded into the citation.\nvar a = 1;\n",
+        "no station": "// No station is removed by the projection; only its routes are.\nvar a = 1;\n",
+        "an element": "// null when an element is gone from the document.\nvar a = 1;\n",
+    }
+    for label, body in cases.items():
+        f = tmp_path / "data.js"
+        f.write_text(body, encoding="utf-8")
+        assert not history_offences([f]), f"the rule read the data sense as history: {label}"

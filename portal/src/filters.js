@@ -27,9 +27,9 @@ function passesCore(s){
   // Two-phase boot: s.q comes from sci.json, a PHASE 2 product. See docs: portal internals, filters.js.
   if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
   if(!passesYearRange(s))return false;
-  // "Downloadable here" is the s.ediAvail licence predicate (the retired tickbox's, then the Data available
-  // dropdown's "tf" option, the same flag the selection exports read for their not-included honesty). See
-  // docs: portal internals, filters.js.
+  // "Downloadable here" is the s.ediAvail licence predicate: the flag behind the Data available
+  // dropdown's "tf" option and the one the selection exports read for their not-included honesty.
+  // See docs: portal internals, filters.js.
   if(typeof surveyFacetOn==="function"&&surveyFacetOn("dl")&&!s.ediAvail)return false;
   // Data available: the single-select TIME-SERIES level chooser in Browse. See docs: portal internals,
   // filters.js.
@@ -320,8 +320,9 @@ const yearFrom=document.getElementById("yearFrom"),yearTo=document.getElementByI
 if(yearFrom)yearFrom.addEventListener("input",refresh);
 if(yearTo)yearTo.addEventListener("input",refresh);
 
-// Availability > Transfer functions: the #tfAvail CHECKBOX is gone, folded into the Browse "Data available"
-// single-select (#availSel, its "tf" option). See docs: portal internals, filters.js.
+// Availability > Transfer functions lives in the Browse "Data available" single-select (#availSel,
+// its "tf" option) and nowhere else: there is no #tfAvail checkbox. See docs: portal internals,
+// filters.js.
 
 // No "Go to place" control exists: no goToPlace, no #goPlace input and no AU_PLACES list, here or
 // in index.html or state.js.

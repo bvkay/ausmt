@@ -21,9 +21,9 @@ if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
 // Mounted after the basemap so the control collects the layer already on the map, which is the order
 // Leaflet's own default control is created in. See docs: portal internals, map.js.
 window.AusmtMapAttrib.mount(map,"Map data attribution");
-// SITE LOCATIONS ONLY, at every zoom. The per-survey badge bubbles that replaced proximity clustering are
-// removed with it - no badge, no leader tail, no decoration pane, no zoom threshold. See docs: portal
-// internals, map.js.
+// SITE LOCATIONS ONLY, at every zoom: no proximity clustering and no per-survey badge bubbles, so
+// no badge, no leader tail, no decoration pane and no zoom threshold. See docs: portal internals,
+// map.js.
 const dotLayer=L.layerGroup();
 map.addLayer(dotLayer);
 // AusLAMP membership is COLLECTION membership, not a data type - a station is AusLAMP iff its survey slug
@@ -92,9 +92,8 @@ const _drawRect=document.getElementById("drawRect"),_drawPoly=document.getElemen
 if(_drawRect)_drawRect.onclick=()=>armDraw("rectangle");
 if(_drawPoly)_drawPoly.onclick=()=>armDraw("polygon");
 
-// The LPMT colour split was REMOVED - all LPMT renders the flagship teal (TYPE_COL.LPMT) in type mode
-// regardless of AusLAMP membership, and every colour mode Is membership-blind. See docs: portal internals,
-// map.js.
+// All LPMT renders the flagship teal (TYPE_COL.LPMT) in type mode whatever its AusLAMP membership:
+// every colour mode is membership-blind. See docs: portal internals, map.js.
 function markerColor(s){return TYPE_COL[s.type]||"#999";}
 function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // withheld-coord stations have no marker
 // ---- the survey FOCUS DIM -------------------------------------------------------- "View on map" with a
@@ -117,9 +116,9 @@ function applySurveyDim(){
   ST.forEach(s=>{if(s.marker&&s.marker.setStyle)s.marker.setStyle(dimStyleFor(s.survey,_dimFocusSurvey));});}
 function setSurveyDim(sv){_dimFocusSurvey=sv||null;applySurveyDim();}
 function clearSurveyDim(){if(_dimFocusSurvey===null)return;_dimFocusSurvey=null;applySurveyDim();}
-// The station hover tooltip is SLIMMED to station name + survey name ONLY -
-// the TF completeness/smoothness diagnostic (Q) and the type/AusLAMP label were removed; the diagnostic
-// stays in the click drawer. PURE + Leaflet-free so the jsdom driver tests the exact string shipped.
+// The station hover tooltip carries station name + survey name ONLY: the TF completeness/smoothness
+// diagnostic (Q) and the type/AusLAMP label belong to the click drawer. PURE + Leaflet-free so the
+// jsdom driver tests the exact string shipped.
 function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
 // Zoom-scaled marker geometry. See docs: portal internals, map.js.
 const DOT_R_FLOOR=1.8, DOT_R_CEIL=6.5, DOT_R_SLOPE=0.5, DOT_R_Z0=4;
@@ -134,8 +133,8 @@ function weightForZoom(z){return z<=4?1.0:1.5;}
 // Proxy (not a number), and even Number(proxy) throws ("cannot convert object to primitive"), so read it
 // defensively and default to 4 (national) when it isn't already a finite number.
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
-// One radius for every marker on the map (the per-type split is gone), so this stamps the same zoom-derived
-// size across the set. A zoom must not re-route: which stations are on the map is a FILTER answer, and
+// One radius for every marker on the map, with no per-type split, so this stamps the same
+// zoom-derived size across the set. A zoom must not re-route: which stations are on the map is a FILTER answer, and
 // dots do not collapse, so a restyle-AND-re-route pass has nothing left to re-route.
 function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z);
   ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}

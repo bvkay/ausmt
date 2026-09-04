@@ -1013,7 +1013,7 @@ HISTORY_SHAPE = re.compile(
     r"|\b(?:is|are|was|were)\s+(?:[\w-]+\s+){0,2}(?:gone|removed|retired|deleted|dropped)\b",
     re.I)
 HANDLED_THING = re.compile(
-    r"(?:\ba|\ban|\bany|\bevery|\beach|\bno)\s+(?:[\w-]+\s+){0,3}$"
+    r"(?:\ba|\ban|\bany|\bevery|\beach|\bno)\s+(?:[\w-]+\s+){0,6}$"
     r"|\b(?:rows|stations|values|entries|slashes|characters|keys|bindings|bytes|ids)"
     r"\s+(?:[\w-]+\s+){0,2}$", re.I)
 NEGATED = re.compile(r"\b(?:never|not|cannot|no)\b\s+(?:[\w-]+\s+){0,2}$", re.I)
@@ -1381,3 +1381,25 @@ def test_a_broken_shape_is_caught_and_whole_prose_is_not(tmp_path):
     whole = tmp_path / "whole.py"
     whole.write_text('"""Normalise an angle to (-180, 180] for reporting."""\n', encoding="utf-8")
     assert not shape_offences([whole]), "interval notation was read as a broken shape"
+
+
+def test_the_served_tier_states_what_is():
+    """The rule that holds the shipped tier holds the tier the engine emits: the emitter's own
+    comments and the stylesheet it inlines into every page in the corpus."""
+    hits = history_offences(emitter(), root=ROOT)
+    for comment in served_css_comments():
+        if history_shapes(comment):
+            hits.append("engine/extract/_pages.py (served CSS): %s"
+                        % " ".join(comment.split())[:110])
+    assert not hits, (
+        f"{len(hits)} comment(s) on the served tier narrate what was there rather than what is:\n"
+        + "\n".join(hits))
+
+
+def test_a_history_shape_is_caught_and_the_data_sense_is_not(tmp_path):
+    was = tmp_path / "was.py"
+    was.write_text('# The "Dataset maturity" heading is removed from the panel.\na = 1\n', encoding="utf-8")
+    assert history_offences([was]), "a removed-panel narrative went unseen"
+    data = tmp_path / "data.py"
+    data.write_text("# A station is dropped by the gate before the mask runs.\na = 1\n", encoding="utf-8")
+    assert not history_offences([data]), "the rule read the data sense as history"
