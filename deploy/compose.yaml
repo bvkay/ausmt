@@ -125,7 +125,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    # Immutable rootfs + a size-limited tmpfs (review #5). The multipart intake spools onto the
+    # Immutable rootfs + a size-limited tmpfs. The multipart intake spools onto the
     # MEASURED /gw/incoming volume (see gateway/upload.py) rather than /tmp, so the headroom check
     # actually covers where uploads land; read_only + a bounded tmpfs mean a spool that did reach /tmp
     # can never fill the container overlay. TMPDIR points at /tmp (the bounded tmpfs) so any stdlib

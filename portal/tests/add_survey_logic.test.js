@@ -475,7 +475,7 @@ ok(/schema_version: "0.3"/.test(yAttr), "a package carrying attribution declares
 ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false })),
    "no attribution block when the licence declaration is not made");
 
-// ============================ ROUND 2 =================================================
+// ==================== Slug collision and zip paths =====================================
 
 // ---- slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
 //      stationCountsByName counts catalogue.json rows (index 1 = survey name) per survey. The chip warns

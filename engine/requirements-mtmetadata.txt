@@ -1,8 +1,7 @@
 # Direct pins for the mt_metadata/mth5 engine.
 #
-# NOTE: since the 2026-06 regex retirement (see the extractor note at the top of
-# extract/build_portal.py)
-# this stack is the SOLE parser, so it is a CORE dependency (requirements.txt / pyproject
+# NOTE: this stack is the SOLE parser (see the extractor note at the top of
+# extract/build_portal.py), so it is a CORE dependency (requirements.txt / pyproject
 # [project].dependencies), not an optional extra. This file remains as the direct-pin view and a
 # back-compat install target.
 #
@@ -11,18 +10,17 @@
 # what CI installs, on Python 3.12:
 #   environments/requirements-mtmetadata-lock.txt   (the full transitive closure)
 #
-# ABI NOTE (2026-06-16) — the tested dev env is a HYBRID (conda-forge python+numpy/MKL + pip
+# ABI NOTE - the tested dev env is a HYBRID (conda-forge python+numpy/MKL + pip
 # scipy/pandas/xarray/h5py/mt_metadata/mth5) and it WORKS; CI is all-pip on Linux and also works
-# (the ingest round-trip passes in both). The old "0xC06D007F crash if you mix conda numpy with pip
-# scipy" was version-specific and is no longer the default. If you DO hit 0xC06D007F, realign the
+# (the ingest round-trip passes in both). A 0xC06D007F crash from mixing conda numpy with pip
+# scipy is version-specific and is not the default. If you DO hit 0xC06D007F, realign the
 # BLAS-linked packages to one source: pip install --force-reinstall --no-deps numpy scipy pandas xarray
 # See environments/README.md.
 
-# PERF FORK PINS (2026-08-27, owner-ruled). Measured on the full corpus: 3.4x on the whole
-# rebuild (cold 118 -> ~35 min, warm 74 -> ~22 min projected), byte-identical products modulo
-# version/timestamp stamps, engine battery 1105 passed. Evidence and phase attribution:
-# AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md. Pinned by COMMIT SHA, never by branch name, so the
-# install can never move under us. SWAP to upstream releases when the corresponding PRs merge
-# (bvkay/mt-metadata perf-update -> mt_metadata >= next release; bvkay/mth5 perf-update likewise).
+# PERF FORK PINS. Measured on the full corpus: 3.4x on the whole rebuild (cold 118 -> ~35 min,
+# warm 74 -> ~22 min projected), byte-identical products modulo version/timestamp stamps.
+# Pinned by COMMIT SHA, never by branch name, so the install can never move under us. SWAP to
+# upstream releases when the corresponding PRs merge (bvkay/mt-metadata perf-update ->
+# mt_metadata >= next release; bvkay/mth5 perf-update likewise).
 mt_metadata @ git+https://github.com/bvkay/mt-metadata.git@58285e106a25dbe2eb028bc093dbfd715852e1e1
 mth5 @ git+https://github.com/bvkay/mth5.git@eebdf20b80eb6099c3e952bb57dff3311f775ac0

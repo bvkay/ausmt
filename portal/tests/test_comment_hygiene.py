@@ -396,8 +396,11 @@ def python_comments(text):
     return sorted(out)
 
 
+# .txt is here because the configuration classes LIST it: a requirements file and an allow-list
+# carry a # comment like any other declared configuration, and a class the extractor cannot read
+# reports green over whatever is written in it.
 HASH_SUFFIXES = {".sh", ".bash", ".yml", ".yaml", ".service", ".timer", ".conf",
-                 ".example", ".map", ".dockerfile", ".toml", ".cfg", ".ini"}
+                 ".example", ".map", ".dockerfile", ".toml", ".cfg", ".ini", ".txt"}
 HASH_NAMES = {"Caddyfile", "Makefile", "Dockerfile", ".gitignore", ".dockerignore"}
 
 
@@ -499,15 +502,19 @@ RULES = (
     # A slice, a review round and a lettered review finding are all names for
     # the piece of work a change belonged to.
     Rule(re.compile(r"\bslices?\s*#"
+                    r"|\breviews?\s*#\s*\d"
                     r"|\breviews?\s+(?-i:[A-Z]\d)\b"
                     r"|\b(?:in|during|from) the review\b"
                     r"|\breview[- ]rounds?\b"
                     r"|\bcode-health review\b", re.I), "review or slice identifier"),
     # A ROUND is the run of work a change belonged to, named beside the kind of work it was. The
     # ordinary senses of the word (a retry round, rounding a number) carry none of those words.
+    # The numbered form is the audit trail whatever joins the word to its number, so the separator
+    # is a hyphen, an underscore or a space: a rule that demanded the hyphen read one spelling.
+    # "round 3 OF the retry loop" is the counted sense and is the one shape the number keeps.
     Rule(re.compile(r"\b(?:feedback|fix(?:es|ed)?|review|re-gate|UX|work)\b[^\n]{0,30}?\brounds?\s*#?\s*\d"
                     r"|\brounds?\s*#?\s*\d[^\n]{0,30}?\b(?:feedback|fix(?:es|ed)?|review|re-gate|UX|work)\b"
-                    r"|\bROUND-\d", re.I), "round-of-work identifier"),
+                    r"|\bround[-_ ]#?\s?\d+(?!\s*of\b)", re.I), "round-of-work identifier"),
     # Who settled the argument, and the sitting it was settled in, are the same provenance the
     # word owner carries. "Operator" alone is a role the console serves and stays.
     # "live session" is also an ordinary HTTP session, so only the provenance grammar is named: a
@@ -774,6 +781,9 @@ CODE_LINE_TERSE = tuple(re.compile(p) for p in (
     # operator is excluded by the terse-line limit above and by requiring the call's own brackets.
     r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*(?:\+|-|\*|/|&&|\|\||\?\?)\s*$",
     r"^(?:\[.*\]|\{.*\})\s*(?:\+|&&|\|\||\?\?)\s*$",
+    # A ternary arm switched off inside a live expression ends on the : that joined it to the arm
+    # below. Prose is excluded by the terse-line limit and by requiring the ? and the : both.
+    r"^[\w$][\w$.\[\]()]*\s*\?[^?:]*:\s*$",
     # A member chain left dangling on its own dot. It must carry a call with ARGUMENTS or a
     # subscript, because the other shapes are prose: a file name closing a sentence
     # ("drawer.js."), an abbreviation, and a sentence that ends by naming a function
@@ -835,9 +845,16 @@ def looks_like_code(comment):
     return False
 
 
+def flattened(text):
+    """One line of prose: every newline and every run of spaces becomes one space. Every rule that
+    names two words is otherwise defeated by the line wrap between them, and a comment is not
+    cleaner for being wrapped at column 100."""
+    return " ".join(text.split())
+
+
 def labels_for(comment, cite_contract=False):
     """Every way one comment breaks the rule, as sorted labels."""
-    text = bare(comment)
+    text = flattened(bare(comment))
     found = {rule.label for rule in RULES if rule.hits(text)}
     if not cite_contract and CONTRACT_CITATION.hits(text):
         found.add(CONTRACT_CITATION.label)
@@ -2032,3 +2049,90 @@ def test_a_run_of_line_comments_is_one_shape(tmp_path):
     assert len(comment_runs(f, f.read_text(encoding="utf-8"))) == 1
     assert not shape_offences([f])
 
+
+# ---------------------------------------------------------------------------
+# The instrument reaches what the classes declare.
+# ---------------------------------------------------------------------------
+def test_every_declared_configuration_suffix_is_read_by_the_extractor(tmp_path):
+    """A class that LISTS a suffix the extractor cannot dispatch on reads zero comments and
+    reports green over whatever is written in those files. Every suffix a configuration class
+    names must reach a scanner."""
+    unread = []
+    for suffix in CONFIG_SUFFIXES:
+        f = tmp_path / ("declared" + suffix)
+        f.write_text("# the only comment\nname==1.0\n", encoding="utf-8")
+        if [c for _, c in comments(f, f.read_text(encoding="utf-8"))] != ["# the only comment"]:
+            unread.append(suffix)
+    assert not unread, (
+        "the configuration classes list suffixes the extractor does not read, so those files are "
+        "inside the sweep and outside the scanner: " + ", ".join(unread))
+
+
+def test_a_wrapped_phrase_is_still_the_phrase(tmp_path):
+    """Every multi-word rule is defeated by the line wrap between its words unless the prose is
+    flattened first. A comment is not cleaner for being wrapped at column 100."""
+    cases = {
+        "design-document citation":
+            '"""FAILS IF the card carries the whole rollup (the tall card the design\n'
+            '    brief 12 names) or cuts it mid-word."""\n',
+        "review or slice identifier":
+            '"""The ONE canonical argv for the validator subprocess (code-health\n'
+            '    review). Both runners go through this."""\n',
+        "history or alternatives narrative":
+            '"""Every shipped header is five items. Releases carries a sixth that About no\n'
+            '    longer has."""\n',
+    }
+    for label, body in cases.items():
+        f = tmp_path / "wrapped.py"
+        f.write_text(body, encoding="utf-8")
+        hits = offences([f])
+        assert hits and label in hits[0], f"a line wrap hid {label}: {hits}"
+        one_line = tmp_path / "oneline.py"
+        one_line.write_text(" ".join(body.split()) + "\n", encoding="utf-8")
+        assert offences([one_line]), f"{label} was not caught unwrapped either"
+
+
+def test_a_round_of_work_is_provenance_in_every_spelling(tmp_path):
+    """The numbered round is the audit trail whatever joins the word to its number."""
+    for i, spelling in enumerate(("ROUND-2", "ROUND 2", "ROUND_2", "Round 3", "round 2")):
+        f = tmp_path / f"round{i}.js"
+        f.write_text(f"// {spelling}: slug-collision awareness, zip-path visibility\nvar a = 1;\n",
+                     encoding="utf-8")
+        hits = offences([f])
+        assert hits and "round-of-work identifier" in hits[0], f"{spelling} was not read as one"
+    for clean in ("the retry loop rounds the value up before the compare",
+                  "Round 3 of the retry loop is the last one the budget allows.",
+                  "a round trip through the encoder must be lossless"):
+        f = tmp_path / "cleanround.js"
+        f.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
+        assert not offences([f]), f"the round rule flagged ordinary prose: {clean}"
+
+
+def test_a_numbered_review_finding_is_provenance(tmp_path):
+    """A numbered review finding names the sitting a change came out of, which is what the slice
+    and task numbers already name."""
+    f = tmp_path / "finding.py"
+    f.write_text('"""Duplicate member names (review #13): a zip may carry two entries."""\n',
+                 encoding="utf-8")
+    hits = offences([f])
+    assert hits and "review or slice identifier" in hits[0], "a numbered review finding went unseen"
+    clean = tmp_path / "clean.py"
+    clean.write_text('"""The curator reviews the submission before it is published."""\n',
+                     encoding="utf-8")
+    assert not offences([clean]), "the rule flagged the ordinary verb"
+
+
+def test_a_switched_off_ternary_arm_is_commented_out_code(tmp_path):
+    """A ternary arm switched off inside a live expression ends on the colon that joined it to the
+    arm below, so a shape anchored to a statement end never reaches it."""
+    f = tmp_path / "ternary.js"
+    f.write_text("var a = cond\n  // screeningPanel ? drawerPanel(\"screening\") :\n"
+                 "  otherPanel ? other() : none();\n", encoding="utf-8")
+    hits = offences([f])
+    assert hits and "commented-out code" in hits[0], "a switched-off ternary arm went unseen"
+    for clean in ("the two seams must agree:",
+                  "a station is dropped by the gate, so the row is absent.",
+                  "either shape is accepted: bare or quoted."):
+        c = tmp_path / "cleanternary.js"
+        c.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
+        assert not offences([c]), f"the ternary shape ate prose: {clean}"

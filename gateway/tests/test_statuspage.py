@@ -1,4 +1,4 @@
-"""Status-page rendering (review #8/#11). The validator table renders from the REAL
+"""Status-page rendering. The validator table renders from the REAL
 validator JSON shape ({"items":[...]}), and every rendered surface — validator rows, preview values,
 AV note — is absolute-path-stripped and html.escaped.
 """
@@ -37,7 +37,7 @@ def test_validator_rows_strip_absolute_paths():
 
 
 def test_preview_values_strip_absolute_paths():
-    # review #11: preview values were rendered WITHOUT the abs-path strip that validator rows and the
+    # preview values were rendered WITHOUT the abs-path strip that validator rows and the
     # AV note get. A warning echoing a build path would leak it. proven failing: the raw
     # C:\... / /srv/... path appeared verbatim in the preview panel.
     summary = {"station_count": 3, "warnings": "build wrote /srv/ausmt/gateway/quarantine/01/reports"}

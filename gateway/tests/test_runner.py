@@ -535,7 +535,7 @@ def test_corrupt_deflate_quarantines_not_crashes(tmp_path):
 
 
 def test_safe_extract_byte_cap_on_actual_bytes(tmp_path):
-    # Byte accounting (review #10): the extraction cap is enforced on BYTES READ, not on
+    # Byte accounting: the extraction cap is enforced on BYTES READ, not on
     # the central-directory file_size, so a member whose real inflated size exceeds the cap is caught
     # even if its header lied small. Build a 3 MiB STORED member; cap at 1 MiB -> UnsafeMember.
     # Proven failing: with the old safe_extract (no byte counter, trusting file_size) the
@@ -554,7 +554,7 @@ def test_safe_extract_byte_cap_on_actual_bytes(tmp_path):
 
 
 def test_safe_extract_deadline_aborts(tmp_path):
-    # A deadline already in the past aborts extraction with ExtractionTimeout (review #7), before any
+    # A deadline already in the past aborts extraction with ExtractionTimeout, before any
     # member is written.
     zpath = tmp_path / "pkg.zip"
     zpath.write_bytes(good_package_zip())
@@ -741,7 +741,7 @@ def test_process_job_full_success(tmp_path, monkeypatch):
 
 def test_validator_passed_items_shape():
     # The real validator writes {"items":[{level:...}]}. A FAIL/ERROR item => False; all PASS/WARN
-    # => True. (review #8 — the runner must interpret the shape the status page renders.)
+    # => True. (the runner must interpret the shape the status page renders.)
     assert runner._validator_passed({"items": [{"level": "PASS"}, {"level": "WARN"}]}) is True
     assert runner._validator_passed({"items": [{"level": "PASS"}, {"level": "FAIL"}]}) is False
     assert runner._validator_passed({"items": [{"level": "ERROR"}]}) is False

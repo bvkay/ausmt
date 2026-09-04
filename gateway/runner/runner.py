@@ -543,8 +543,8 @@ def _validator_file(validator_path: str) -> Path:
 
 
 def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) -> list[str]:
-    """The ONE canonical argv for invoking the surveys validator as a subprocess (code-health
-    review). Both the submission runner (_run_validator above) and the metadata-edit
+    """The ONE canonical argv for invoking the surveys validator as a subprocess. Both the
+    submission runner (_run_validator above) and the metadata-edit
     runner (edit._run_validator) go through this, so the invocation contract lives in exactly one
     place - no second, independently-assembled argv can drift and re-open the ship-blocker
     (the folder had been passed as the --json VALUE with no positional, argparse exited 2, every real

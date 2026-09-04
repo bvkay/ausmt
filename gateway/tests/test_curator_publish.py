@@ -10,7 +10,7 @@ Guards under test, each with a stated failure criterion + proven-failing evidenc
 - rollback on ANY git step (commit hook rejection, push rejection) => surveys-live restored, PUBLISH_
   FAILED. Rollback restores the CAPTURED branch/ref even when HEAD started on a stale submit branch.
 - retry from PUBLISH_FAILED works for the git-only flow.
-- confirm_overwrite parsed as an EXACT token (review #7): "0" does NOT overwrite.
+- confirm_overwrite parsed as an EXACT token: "0" does NOT overwrite.
 - reconciliation: a PUBLISHING row with no live task => poll loop moves it to PUBLISH_FAILED.
 """
 from __future__ import annotations
@@ -110,7 +110,7 @@ def test_commit_carries_no_submitter_email(tmp_path):
 
 
 def test_git_runner_env_scrubs_secrets(tmp_path, monkeypatch):
-    # review #6: the env handed to git must NOT carry AUSMT_SUBMIT_KEY / AUSMT_CURATOR_KEYS (a hook
+    # the env handed to git must NOT carry AUSMT_SUBMIT_KEY / AUSMT_CURATOR_KEYS (a hook
     # Could read them). Failure criterion: fails if either secret var is present in scrubbed_env.
     # Proven failing: real_git_runner passed env=None → git inherited os.environ including
     # Both secrets; scrubbed_env drops them.
@@ -153,7 +153,7 @@ def test_pii_in_preview_blocks_approve(tmp_path):
 
 
 def test_foreign_email_in_preview_blocks_approve(tmp_path):
-    # review #5: the PII sweep must ALSO fire on a DIFFERENT person's email via the generic pattern,
+    # the PII sweep must ALSO fire on a DIFFERENT person's email via the generic pattern,
     # not only the submitter's own. Failure criterion: fails if a package containing a stranger's
     # Email is approvable. proven failing: the generic _EMAIL_RE was defined but never
     # used — only the submitter-email needle was checked, so a co-author's email sailed through.
@@ -171,7 +171,7 @@ def test_foreign_email_in_preview_blocks_approve(tmp_path):
 
 
 def test_dirty_checkout_aborts_before_staging(tmp_path):
-    # review #2 / step 1: a dirty surveys-live checkout => pre-flight ABORT, PUBLISH_FAILED,
+    # Step 1: a dirty surveys-live checkout => pre-flight ABORT, PUBLISH_FAILED,
     # NOTHING staged. Failure criterion: fails if a survey was staged, or if the state is not
     # PUBLISH_FAILED. proven failing: with no pre-flight, staging proceeded on a dirty tree
     # and the survey dir appeared under surveys-live before the (unrelated) later steps.
@@ -191,7 +191,7 @@ def test_dirty_checkout_aborts_before_staging(tmp_path):
 
 
 def test_commit_fail_rolls_back_and_fails_closed(tmp_path):
-    # review #1: a failure at the COMMIT step (e.g. a commit-hook rejection) — which was OUTSIDE the
+    # a failure at the COMMIT step (e.g. a commit-hook rejection) - which was OUTSIDE the
     # old try/except — must roll surveys-live back and land PUBLISH_FAILED. Failure criterion: fails
     # if the state is not PUBLISH_FAILED or no rollback reset happened.
     # Proven failing: with checkout/add/commit outside the guard, a commit failure raised
@@ -222,7 +222,7 @@ def test_push_fail_rolls_back(tmp_path):
 
 
 def test_rollback_restores_original_branch(tmp_path):
-    # review #4: rollback must restore the CAPTURED branch/ref, not "whatever is currently checked
+    # rollback must restore the CAPTURED branch/ref, not "whatever is currently checked
     # out". Here the checkout starts on a stale submit branch (a prior failed publish left it there),
     # so a naive rollback that reset the current branch would corrupt it. Pre-flight requires main —
     # so we start on main but assert the rollback checked out the captured branch explicitly.
@@ -270,7 +270,7 @@ def test_retry_from_publish_failed(tmp_path):
 
 
 def test_confirm_overwrite_exact_token(tmp_path):
-    # review #7: confirm_overwrite must be an EXACT affirmative token, default DENY. "0" must NOT
+    # confirm_overwrite must be an EXACT affirmative token, default DENY. "0" must NOT
     # enable overwrite. Failure criterion: fails if confirm_overwrite=0 overwrote an existing survey.
     # Proven failing: with bool(confirm_overwrite), the string "0" was truthy → the guard
     # was bypassed and the existing survey was replaced.

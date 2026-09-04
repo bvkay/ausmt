@@ -1,5 +1,5 @@
 # EXACT all-pip lock of the mt_metadata / mth5 ingest stack — the FULL transitive closure of
-# `mt_metadata==1.0.9` + `mth5==0.6.8`, captured 2026-06-16 from a clean-room venv install and
+# `mt_metadata==1.0.9` + `mth5==0.6.8`, captured from a clean-room venv install and
 # VERIFIED: the ingest round-trip (ausmt_science.ingest.normalize) passes green in this exact env
 # (Phoenix spectra fixture, impedance maxdiff 6.3e-5).
 #
@@ -17,7 +17,7 @@
 #   win32_setctime  loguru 0.7.3: 'win32-setctime>=1.0.0; sys_platform == "win32"'
 #   tzdata          pandas 3.0.3: 'tzdata; sys_platform == "win32"' and '...== "emscripten"'
 # All three ship as pure-python py3-none-any wheels, so an unmarked `pip install -r` of this file
-# has always SUCCEEDED on Linux (verified 2026-07-28: every pin here resolves to a linux/amd64
+# has always SUCCEEDED on Linux (every pin here resolves to a linux/amd64
 # CPython 3.12 wheel, win32_setctime-1.2.0-py3-none-any.whl included). The markers are for honesty
 # and to keep three inert packages out of the Linux image, NOT a fix for an install failure. Keep
 # them when regenerating: `pip freeze` on Windows emits these three unmarked.
@@ -39,11 +39,11 @@ loguru==0.7.3
 matplotlib==3.11.0
 mt-io==0.0.4
 mt-timeseries==0.0.2
-# 2026-08-27: the two direct pins move to the perf-fork SHAs (see requirements-mtmetadata.txt
-# for the why and the swap-to-release note). The TRANSITIVE closure below stays the 2026-06-16
-# capture DELIBERATELY: old-closure + these two installs is the exact combination the full
-# battery and the corpus equivalence run validated; a fresh re-resolve would move 12 packages
-# and shed the platform-marker pins, none of it validated.
+# The two direct pins below name the perf-fork SHAs (see requirements-mtmetadata.txt for the
+# why and the swap-to-release note). The TRANSITIVE closure below stays the ORIGINAL capture
+# DELIBERATELY: that closure plus these two installs is the exact combination the full battery
+# and the corpus equivalence run validated; a fresh re-resolve would move 12 packages and shed
+# the platform-marker pins, none of it validated.
 mt_metadata @ git+https://github.com/bvkay/mt-metadata.git@58285e106a25dbe2eb028bc093dbfd715852e1e1
 mth5 @ git+https://github.com/bvkay/mth5.git@eebdf20b80eb6099c3e952bb57dff3311f775ac0
 numpy==2.4.6
@@ -56,9 +56,9 @@ pyparsing==3.3.2
 pyproj==3.7.2
 python-dateutil==2.9.0.post0
 PyYAML==6.0.3
-# C31 curator metadata editor: round-trip survey.yaml merge in the gw-runner (this engine image).
-# Added by hand 2026-07-06 (not part of the mt_metadata/mth5 freeze above) — pure-python wheel, no
-# transitive deps on CPython 3.12, verified by the C31 edit test lane. Keep it when regenerating.
+# The curator metadata editor round-trips survey.yaml in the gw-runner (this engine image), so
+# this pin is added by hand: it is not part of the mt_metadata/mth5 freeze above. Pure-python
+# wheel, no transitive deps on CPython 3.12. Keep it when regenerating.
 ruamel.yaml==0.19.1
 scipy==1.17.1
 six==1.17.0

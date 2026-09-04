@@ -809,8 +809,8 @@ def _empty_month(month: str) -> dict:
     only), so the screen can say which months carry partial detail instead of implying a real zero;
     `geo_days` counts the days that actually contributed a country, which is what makes the forward-only
     country seam MACHINE-visible rather than a matter of reading the prose beside the table;
-    `networks_peak` is the largest distinct-network count any of its folded days saw. That figure used
-    to live on daily rows ONLY, so it expired with the 92-day window and could never reach a quarterly
+    `networks_peak` is the largest distinct-network count any of its folded days saw. Daily rows
+    alone expire with the 92-day window and can never reach a quarterly
     report, which is exactly the horizon a funding report asks about. It accumulates as each day folds
     and is never recomputed from a tail that is about to be pruned.
 

@@ -664,7 +664,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 8. ROUND 2: slug-collision awareness, zip-path visibility, the collection
+  // 8. Slug-collision awareness, zip-path visibility, the collection
   // card, the credit questions' emission, DOI normalisation. Live-DOM behaviours the pure tests
   //    (add_survey_logic.test.js) cannot cover.
   const JSON_OK_BODY = { status: 200, text: () => Promise.resolve('{"ok":true}') };
@@ -816,7 +816,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   //      URL-typed row keeps its URL).
   {
     const e = await boot({ probe: probeAbsent });
-    // Round 3 replaced the single m_pubdoi field with repeatable #pubRows rows (one present by default);
+    // Publication DOIs live in repeatable #pubRows rows (one present by default);
     // the normalisation now rides each row's .p-doi input.
     const pub = e.doc.querySelector("#pubRows .pubrow .p-doi");
     ok(pub, "R5: a default publication row with a .p-doi input exists at boot");

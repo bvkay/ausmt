@@ -158,8 +158,8 @@ def _centre_order(path):
 def test_header_parity_releases_matches_about():
     """Every shipped header is FIVE items, namely Map, Surveys,
     Collections, About, Contribute. Releases arrived on main carrying the retired sixth entry, a
-    "How to use AusMT" link to about.html#howto, so this pin held it to a six-item order that About no
-    longer has. Non-vacuous in both halves: run against that six-item header, the RELEASES assertion
+    "How to use AusMT" link to about.html#howto, so this pin holds it to the five-item order the
+    shipped header carries. Non-vacuous in both halves: run against that six-item header, the RELEASES assertion
     below fails with other:about.html#howto in slot four."""
     assert _nav_ids(RELEASES) == ["navMap", "navSurveys", "navCollections"], (
         f"releases.html nav must be navMap, navSurveys, navCollections in that order; "

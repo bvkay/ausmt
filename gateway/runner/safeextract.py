@@ -3,10 +3,10 @@ ran zipsafety.inspect before queueing; the runner re-applies the same rules AT E
 member that somehow slips the central-directory pass cannot land outside the target tree. Every
 resolved destination is confirmed to stay under the target root before a single byte is written.
 
-Byte accounting (review #10): the total extracted size and each member's extracted
+Byte accounting: the total extracted size and each member's extracted
 size are counted from the bytes ACTUALLY READ, never trusted from the central-directory file_size —
 a lying header can't make extraction write more than the caps. A per-member or total overrun aborts
-the whole extraction. A deadline (review #7) is checked as bytes flow so a slow/huge extraction is
+the whole extraction. A deadline is checked as bytes flow so a slow/huge extraction is
 bounded even though it runs no subprocess.
 
 stdlib zipfile only — the runner is content-blind about EDI/YAML just like the gateway; this module
@@ -35,7 +35,7 @@ class UnsafeMember(Exception):
 
 
 class ExtractionTimeout(Exception):
-    """Extraction ran past the job deadline (review #7). The caller quarantines with a timeout
+    """Extraction ran past the job deadline. The caller quarantines with a timeout
     reason, distinct from a hostile-member abort."""
 
 

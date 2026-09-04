@@ -1,4 +1,4 @@
-"""Routing contract (security review #1). The FastAPI routes are registered UNDER /gateway/* and the
+"""Routing contract. The FastAPI routes are registered UNDER /gateway/* and the
 upload response emits a /gateway-prefixed status_url, so the Caddy ingress MUST preserve the prefix
 (`handle`, not the prefix-stripping `handle_path`). A handle_path there 404s every request through
 the production origin while the :8444 debug publish still works — the exact trap that shipped green.

@@ -53,8 +53,8 @@ def state_of(lat, lon):
     geography (border cases misclassify).
 
     SCOPE: this is now a minor helper. The catalogue's region facet (r[9]) comes from the
-    survey's `survey.yaml` `region`/`country`, NOT from this function. `state_of` is only used to
-    seed the AusLAMP **raw/bulk-mode** per-state survey split (`build_portal` `--raw`), where there
+    survey's `survey.yaml` `region`/`country`, NOT from this function. `state_of` seeds ONLY
+    the AusLAMP **raw/bulk-mode** per-state survey split (`build_portal` `--raw`), where there
     is no per-survey metadata to read. Non-AU coordinates return "" (the region guard).
 
     The dense threshold ladder below (especially the VIC/NSW split) is deliberately crude and its

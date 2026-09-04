@@ -19,7 +19,7 @@ from gateway.tests.conftest import app_client, curator_login, run, seed_validate
 
 
 def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
-    # review #8 /: the iframe must be sandbox="allow-scripts" WITHOUT allow-same-origin
+    # the iframe must be sandbox="allow-scripts" WITHOUT allow-same-origin
     # (opaque origin — the framed submitter JS cannot read the curator cookie/DOM or make credentialed
     # same-origin requests). Failure criterion: fails if allow-same-origin is present, or allow-scripts
     # Is absent. proven failing: the first pass had the tokens INVERTED
@@ -39,7 +39,7 @@ def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
 
 
 def test_no_unsandboxed_navigation_to_preview(tmp_path):
-    # review #8 /: there must be NO anchor/link that top-level-navigates to the preview
+    # there must be NO anchor/link that top-level-navigates to the preview
     # (that would run submitter JS in the curator origin, escaping the frame). Failure criterion:
     # Fails if the detail page contains an <a href> pointing at /preview/. proven failing:
     # the first pass had an "open preview in a new tab" link (a target=_blank same-origin nav).

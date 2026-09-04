@@ -126,7 +126,7 @@ def inspect(zip_path, max_upload_bytes: int) -> list[str]:
             total_uncompressed += info.file_size
 
             name = info.filename
-            # Duplicate member names (review #13): a zip may legally carry two entries with the same
+            # Duplicate member names: a zip may legally carry two entries with the same
             # name, and extraction is last-wins — so the file the validator/engine reads can differ
             # from what a reviewer saw in the central-directory listing. Reject outright: one survey
             # package has no legitimate reason to name a file twice.

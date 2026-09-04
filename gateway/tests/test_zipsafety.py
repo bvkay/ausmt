@@ -176,7 +176,7 @@ def test_disallowed_char_rejected():
 
 
 def test_duplicate_member_name_rejected():
-    # review #13: a zip with two entries of the same name extracts last-wins, so the file the
+    # a zip with two entries of the same name extracts last-wins, so the file the
     # validator/engine reads can differ from the central-directory view a reviewer inspected. Reject.
     # Proven failing: before the seen_names check, the duplicate passed inspect (both
     # entries counted) and only the last survived extraction.

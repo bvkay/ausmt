@@ -276,7 +276,7 @@ class Database:
         path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False: the DB is touched from the poll-loop task on the event-loop thread
         # AND from the status route, which runs in Starlette's threadpool (declared `def` so a burst
-        # of GET /status does not block the loop — review #9). There is still exactly ONE writer
+        # of GET /status does not block the loop). There is still exactly ONE writer
         # process. `_lock` serialises access across those threads (sqlite connections are not safe
         # for concurrent use even with check_same_thread=False); it is an RLock so a method that
         # calls another locked method (e.g. transition -> get) does not deadlock. A short busy

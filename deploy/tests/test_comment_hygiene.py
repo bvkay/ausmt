@@ -396,8 +396,11 @@ def python_comments(text):
     return sorted(out)
 
 
+# .txt is here because the configuration classes LIST it: a requirements file and an allow-list
+# carry a # comment like any other declared configuration, and a class the extractor cannot read
+# reports green over whatever is written in it.
 HASH_SUFFIXES = {".sh", ".bash", ".yml", ".yaml", ".service", ".timer", ".conf",
-                 ".example", ".map", ".dockerfile", ".toml", ".cfg", ".ini"}
+                 ".example", ".map", ".dockerfile", ".toml", ".cfg", ".ini", ".txt"}
 HASH_NAMES = {"Caddyfile", "Makefile", "Dockerfile", ".gitignore", ".dockerignore"}
 
 
@@ -499,15 +502,19 @@ RULES = (
     # A slice, a review round and a lettered review finding are all names for
     # the piece of work a change belonged to.
     Rule(re.compile(r"\bslices?\s*#"
+                    r"|\breviews?\s*#\s*\d"
                     r"|\breviews?\s+(?-i:[A-Z]\d)\b"
                     r"|\b(?:in|during|from) the review\b"
                     r"|\breview[- ]rounds?\b"
                     r"|\bcode-health review\b", re.I), "review or slice identifier"),
     # A ROUND is the run of work a change belonged to, named beside the kind of work it was. The
     # ordinary senses of the word (a retry round, rounding a number) carry none of those words.
+    # The numbered form is the audit trail whatever joins the word to its number, so the separator
+    # is a hyphen, an underscore or a space: a rule that demanded the hyphen read one spelling.
+    # "round 3 OF the retry loop" is the counted sense and is the one shape the number keeps.
     Rule(re.compile(r"\b(?:feedback|fix(?:es|ed)?|review|re-gate|UX|work)\b[^\n]{0,30}?\brounds?\s*#?\s*\d"
                     r"|\brounds?\s*#?\s*\d[^\n]{0,30}?\b(?:feedback|fix(?:es|ed)?|review|re-gate|UX|work)\b"
-                    r"|\bROUND-\d", re.I), "round-of-work identifier"),
+                    r"|\bround[-_ ]#?\s?\d+(?!\s*of\b)", re.I), "round-of-work identifier"),
     # Who settled the argument, and the sitting it was settled in, are the same provenance the
     # word owner carries. "Operator" alone is a role the console serves and stays.
     # "live session" is also an ordinary HTTP session, so only the provenance grammar is named: a
@@ -774,6 +781,9 @@ CODE_LINE_TERSE = tuple(re.compile(p) for p in (
     # operator is excluded by the terse-line limit above and by requiring the call's own brackets.
     r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*(?:\+|-|\*|/|&&|\|\||\?\?)\s*$",
     r"^(?:\[.*\]|\{.*\})\s*(?:\+|&&|\|\||\?\?)\s*$",
+    # A ternary arm switched off inside a live expression ends on the : that joined it to the arm
+    # below. Prose is excluded by the terse-line limit and by requiring the ? and the : both.
+    r"^[\w$][\w$.\[\]()]*\s*\?[^?:]*:\s*$",
     # A member chain left dangling on its own dot. It must carry a call with ARGUMENTS or a
     # subscript, because the other shapes are prose: a file name closing a sentence
     # ("drawer.js."), an abbreviation, and a sentence that ends by naming a function
@@ -835,9 +845,16 @@ def looks_like_code(comment):
     return False
 
 
+def flattened(text):
+    """One line of prose: every newline and every run of spaces becomes one space. Every rule that
+    names two words is otherwise defeated by the line wrap between them, and a comment is not
+    cleaner for being wrapped at column 100."""
+    return " ".join(text.split())
+
+
 def labels_for(comment, cite_contract=False):
     """Every way one comment breaks the rule, as sorted labels."""
-    text = bare(comment)
+    text = flattened(bare(comment))
     found = {rule.label for rule in RULES if rule.hits(text)}
     if not cite_contract and CONTRACT_CITATION.hits(text):
         found.add(CONTRACT_CITATION.label)
@@ -1012,7 +1029,18 @@ def gateway_tree():
     return under(GATEWAY, "*.py")
 
 
-SURFACES = {"the deploy tree": deploy_tree, "the gateway tree": gateway_tree}
+CONFIG_SUFFIXES = (".toml", ".txt", ".cfg", ".yaml", ".yml")
+
+
+def gateway_config():
+    """The gateway's own declared configuration. gateway_tree() globs *.py, so the requirements
+    files and the lock the image installs sat outside every class while carrying prose like any
+    module does. deploy/ needs no twin of this: its class is every commented file under the tree."""
+    return [p for p in under(GATEWAY) if p.suffix.lower() in CONFIG_SUFFIXES]
+
+
+SURFACES = {"the deploy tree": deploy_tree, "the gateway tree": gateway_tree,
+            "the gateway configuration": gateway_config}
 
 
 def test_deploy_comments_state_constraints_only():
@@ -1026,6 +1054,14 @@ def test_gateway_comments_state_constraints_only():
     hits = offences([p for p in gateway_tree() if "tests" not in p.parts], root=ROOT)
     assert not hits, (
         f"{len(hits)} comment(s) in gateway/ carry provenance rather than a constraint:\n" + "\n".join(hits)
+    )
+
+
+def test_gateway_configuration_comments_state_constraints_only():
+    hits = offences([p for p in gateway_config() if "tests" not in p.parts], root=ROOT)
+    assert not hits, (
+        f"{len(hits)} comment(s) in the gateway's configuration carry provenance rather than a "
+        "constraint (the image installs these files):\n" + "\n".join(hits)
     )
 
 

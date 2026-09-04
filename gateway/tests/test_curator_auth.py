@@ -219,7 +219,7 @@ def test_login_actor_is_named_in_audit(tmp_path):
 
 
 def test_duplicate_key_value_rejected():
-    # review #10: two curators sharing a KEY VALUE mis-attribute actions (match returns the last name).
+    # two curators sharing a KEY VALUE mis-attribute actions (match returns the last name).
     # Failure criterion: fails if two identical keys parse without error.
     # Proven failing: parse only rejected duplicate NAMES; two names with the same key
     # parsed fine, so an action by 'amy' would be logged as 'curator1' (whichever was configured last).
@@ -229,7 +229,7 @@ def test_duplicate_key_value_rejected():
 
 
 def test_rate_limiter_evaluate_is_thread_safe():
-    # Review #9: the login route is sync `def` (threadpool), so evaluate must serialize the
+    # the login route is sync `def` (threadpool), so evaluate must serialize the
     # blocked-check + key-match + record so a burst cannot slip past the cap. Failure criterion: fails
     # if MORE than max_attempts wrong-key evaluations return 'denied' (i.e. reached the key check)
     # within a window when hammered concurrently.

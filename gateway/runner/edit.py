@@ -4,9 +4,9 @@ network-none — where ruamel.yaml + the real surveys validator live. NEVER in t
 source-assertion test AND the subprocess import-hygiene test).
 
 Transport is the file-queue pattern, in its own namespace so the crash-only submission queue is
-untouched (adversarial review FIX 1 — the first implementation spawned `sys.executable -m ...` as a
-child of the GATEWAY container, whose image deliberately has no ruamel, so every real edit would
-have 500'd; tests passed only via an in-process seam):
+untouched. It must never be spawned as `sys.executable -m ...` from the GATEWAY container, whose
+image deliberately carries no ruamel: a real edit run there 500s, and only an in-process seam
+makes it look as though it worked:
 
     jobs/edit/pending/<id>.json   gateway enqueues (tmp+rename, atomic)
     jobs/edit/running/<id>.json   this runner claims via os.replace (the rename IS the lock)
@@ -814,10 +814,10 @@ _COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_upda
 # editing the member survey.yaml files, not in the console.
 _COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS
                                       if f not in ("last_updated", "prose"))
-# Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality (
-# round 2): the editor's no-op check compares str-form, the divergence detector buckets
-# str-form (else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
-# Normalise then no-ops on: an un-clearable "Need attention"), and emission writes a round-trip-stable
+# Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality:
+# the editor's no-op check compares str-form, and the divergence detector buckets str-form too
+# (an int 2003 against a string "2003" would flag a divergence showing two IDENTICAL values that
+# Normalise then no-ops on: an un-clearable "Need attention"). Emission writes a round-trip-stable
 # decimal as a plain int.
 _COLLECTION_NUMERIC_FIELDS = frozenset({"start_year"})
 # The status vocabulary the engine surfaces (build_portal.py:386). An out-of-vocab rolled-up status is

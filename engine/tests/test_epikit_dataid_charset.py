@@ -69,8 +69,8 @@ def test_the_reader_accepts_these_dataids_so_nothing_touches_them(dataid):
 
 
 def test_normalisation_replaces_only_the_characters_the_reader_refuses():
-    """Each offending character becomes '_', and the result is what mt_metadata's own rewrite would
-    have produced had it not raised: the space/hyphen/stop/plus class it already maps, extended to
+    """Each offending character becomes '_', and the result is what mt_metadata's own rewrite
+    produces where it does not raise: the space/hyphen/stop/plus class it already maps, extended to
     the class it refuses. Nothing else moves."""
     assert mtm.normalise_dataid("53(RR)") == "53_RR_"
     assert mtm.normalise_dataid("500/4759") == "500_4759"

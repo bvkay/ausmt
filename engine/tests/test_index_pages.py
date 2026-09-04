@@ -246,8 +246,8 @@ def test_collections_index_explains_the_concept_and_lists_the_rollup(built):
 
 
 def test_collections_index_truncates_the_description_at_a_sentence(built):
-    """FAILS IF the card carries the whole rollup description (the excessively tall card the design
-    brief names) or cuts it mid-word. The full text belongs on the collection page."""
+    """FAILS IF the card carries the whole rollup description (an excessively tall card) or cuts it
+    mid-word. The full text belongs on the collection page."""
     page = (built / "pages" / "collections" / "index.html").read_text(encoding="utf-8")
     assert "A grouping of index fixtures. It exists to exercise the card." in page
     assert "And a third sentence that must not render." not in page, \

@@ -115,8 +115,8 @@ def _esc(value) -> str:
 
 
 def _validator_section(report: dict) -> str:
-    # The real validator (ausmt-surveys/_validation/validate_survey.py --json) writes {"items":[...]}
-    # (review #8); accept that FIRST, then the historical checks/rows shapes so a shape change on
+    # The real validator (ausmt-surveys/_validation/validate_survey.py --json) writes {"items":[...]};
+    # accept that FIRST, then the historical checks/rows shapes so a shape change on
     # either side degrades gracefully rather than silently dropping the whole table. Every rendered
     # cell is html.escaped AND absolute-path-stripped (a leaked status URL must not leak
     # a server path; keeping the strip on these rows is why fixing the key does not re-open a leak).
@@ -159,7 +159,7 @@ def _preview_section(summary: dict) -> str:
     items = []
     for key in ("station_count", "types", "coord_flags", "warnings"):
         if key in summary:
-            # Strip absolute paths from preview values too (review #11) — warnings can echo a build
+            # Strip absolute paths from preview values too - warnings can echo a build
             # path; the strip keeps's "no absolute paths in the status page" invariant
             # uniform across validator rows, the AV note, AND preview values.
             value = _preview_value(summary[key])
