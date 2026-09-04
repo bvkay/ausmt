@@ -60,7 +60,7 @@ def test_build_json_present_with_expected_keys_and_null_source_commit_outside_gi
     for k in ("build_id", "engine_commit", "source_commit", "generated"):
         assert k in doc, f"build.json missing key {k}"
     assert doc["source_commit"] is None, f"expected null source_commit outside a git repo, got {doc['source_commit']!r}"
-    # Build_id renders a None source_commit as the WORD "unknown" in the join, never Python's
+    # build_id renders a None source_commit as the WORD "unknown" in the join, never Python's
     # str(None) "None" (this is the exact live-footer bug: "None - None - <date>").
     assert "None" not in doc["build_id"], f"literal 'None' leaked into build_id: {doc['build_id']!r}"
     assert doc["build_id"] == f"{doc['engine_commit']}-unknown-{doc['generated']}"

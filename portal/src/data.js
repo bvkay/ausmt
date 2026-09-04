@@ -29,7 +29,7 @@ async function loadPhase1(){
     fetchJson("surveys.json"),
     fetchOptional("build_provenance.json",null),
     fetchOptional("collections.json",{}),
-    // Build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence (older
+    // build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence (older
     // builds predate it); the footer only renders the "data build …" line when this resolves. See docs:
     // portal internals, data.js.
     fetchOptional("build.json",null),

@@ -1007,6 +1007,81 @@ def symbols_in(text):
     return found
 
 
+# THE CAPITAL A CUT LEFT BEHIND. A sweep that takes the last token off a comment line leaves the
+# word below it standing at the head of the line, and the word was capitalised to make the line
+# read: "a substring that must appear in a skip's reason / For that skip to be allowed". The
+# sentence now carries a capital in its middle and the reader meets a new sentence that is really
+# half of the one above.
+#
+# The shape is a line INSIDE a run, whose previous line did not finish a sentence, opening on a
+# Capitalised-then-lower-case word. Three things are not that: a name the code uses (an
+# identifier), a word in all capitals (this tree shouts for emphasis), and a proper noun, which is
+# recognised without a list, from the same file writing the same word INSIDE a line.
+BANNER = " \t-*=#/+.|<>~_"
+# The decoration at the end of a banner line, which is not the end of a sentence.
+RULE_OFF = " \t-=*#|~"
+SENTENCE_END = re.compile(r"[.!?:;][)\"'`\]]*$")
+CAPITALISED = re.compile(r"\A[A-Z][a-z]")
+LIST_MARKER = re.compile(r"[*+.o]\s|\d{1,2}[.)]\s|[a-z][.)]\s|-\s|\|")
+# The closed class: a word that cannot open a sentence of its own, so a capital on it says
+# the sentence in front of it was cut away. An open-class word (a noun, a verb) opens plenty
+# of sentences and would make this rule a guess.
+FUNCTION_WORDS = frozenset(
+    "For In On At To From With Without Of By Into Onto Over Under Between Through During "
+    "Against Per Via Among Because Although Though Whereas Unless Until Since And But Or "
+    "Nor So Yet Which That Who Whom Whose Than Then Also Too Plus Instead Rather".split())
+WORDS_IN_LINE = re.compile(r"(?<=\S[ \t])([A-Z][a-z]+)")
+# What makes a token a NAME rather than an English word: a digit, a separator, or a dot
+# inside it.
+NAME_MARK = re.compile(r"_|\w\.\w")
+
+
+def names_written_inside_a_line(path, text):
+    """Every Capitalised word this file writes INSIDE a comment line rather than at its head. A
+    proper noun turns up mid-line; a word capitalised only where a cut left it does not."""
+    found = set()
+    for _, comment in comment_runs(path, text):
+        for line in bare(comment).splitlines():
+            found.update(WORDS_IN_LINE.findall(line))
+    return found
+
+
+def head_capital_of_a_name(comment, text):
+    """The word a run opens on when it is a NAME wearing a capital it does not have: a sweep that
+    cut the words in front of it capitalised what was left, and `station.json` became
+    `Station.json`, which names no file. A name is told by the characters it carries; the proof is
+    that the same file writes the lower-case spelling somewhere else."""
+    flat = flattened(bare(comment)).lstrip(BANNER)
+    word = flat.split(" ", 1)[0].strip("\"'`(,:;")
+    if not word[:1].isupper() or not NAME_MARK.search(word[1:]) or not word[1:].islower():
+        return None
+    lowered = word[0].lower() + word[1:]
+    return word if lowered in text else None
+
+
+def capitals_mid_sentence(comment, symbols, names):
+    """Every word inside one run that opens a line, is capitalised, and continues the sentence the
+    line above left unfinished."""
+    lines = bare(comment).splitlines()
+    found = []
+    for before, line in zip(lines, lines[1:]):
+        # A blank line, a finished sentence and a list marker all start something new; only a line
+        # that carried on is continued by the line under it.
+        if not before.strip() or not line.strip():
+            continue
+        if SENTENCE_END.search(unquoted(before).rstrip(RULE_OFF)):
+            continue
+        if LIST_MARKER.match(line.strip()) or LIST_MARKER.match(before.strip()):
+            continue
+        word = unquoted(line).strip(BANNER).split(" ", 1)[0].strip("\"'`(")
+        if not CAPITALISED.match(word or ""):
+            continue
+        if word not in FUNCTION_WORDS or word in names:
+            continue
+        found.append(word)
+    return found
+
+
 def reads_as_an_identifier(word, symbols):
     """True when the word a sentence opens on is a name out of the code rather than English."""
     bare_word = word.strip("`\"'*,;:").rstrip(".")
@@ -1058,6 +1133,7 @@ def shape_offences(files, root=None):
         text = path.read_text(encoding="utf-8")
         where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
         symbols = symbols_in(text)
+        names = names_written_inside_a_line(path, text)
         for lineno, comment in comment_runs(path, text):
             lines = bare(comment).splitlines()
             body = [line for line in lines if line.strip()]
@@ -1098,6 +1174,12 @@ def shape_offences(files, root=None):
             orphan = POINTER_ORPHAN.search(bare_flat)
             if orphan and not reads_as_an_identifier(orphan.group(1), symbols):
                 said.append("a pointer standing in front of a sentence fragment")
+            wrong_case = head_capital_of_a_name(comment, text)
+            if wrong_case:
+                said.append("a name wearing a capital it does not have (%s)" % wrong_case)
+            carried = capitals_mid_sentence(comment, symbols, names)
+            if carried:
+                said.append("a capital in the middle of a sentence (%s)" % ", ".join(carried[:3]))
             if any(m is None for _, m in pointer_fragments(flat)):
                 said.append("a pointer that is not of the pointer grammar")
             if said:

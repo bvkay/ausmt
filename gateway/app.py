@@ -1523,7 +1523,7 @@ class Gateway:
         if fstatus and fstatus not in _COLLECTION_STATUS_VOCAB:
             return None, "Invalid collection status."
         fstart = (form.get("f_start_year") or "").strip()
-        # Start_year is empty or EXACTLY a 4-digit year - a clear 400 naming the
+        # start_year is empty or EXACTLY a 4-digit year - a clear 400 naming the
         # field. Kills the executed traps: "2003²" (isdigit-True but int()-ValueError -> an opaque
         # internal error) and "007" (a silent literal rewrite to 7).
         if fstart and not re.fullmatch(r"[0-9]{4}", fstart):

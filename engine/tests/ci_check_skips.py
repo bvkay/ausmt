@@ -59,7 +59,7 @@ import re
 import sys
 
 # The ENGINE workflows' built-in allow-list. Each entry is a substring that must appear in a skip's reason
-# For that skip to be allowed. Add an entry ONLY with a comment saying which test/workflow produces it and
+# for that skip to be allowed. Add an entry ONLY with a comment saying which test/workflow produces it and
 # why it is legitimate.
 #
 # Note: test_validator_gate.py::test_env_var_path_resolves_real_validator does NOT skip -
@@ -115,7 +115,7 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     "set AUSMT_PREFLIGHT_CORPUS to a directory of EDIs",
     # test_url_registry.py's real-build arm re-runs the slug/id freeze check against an actual BUILT
     # data tree (mtcat.json), named by AUSMT_URL_REGISTRY_DATA - a built corpus exists on the dev box
-    # And on the deployed box, never in a CI engine workflow (the workflows build no corpus). Same
+    # and on the deployed box, never in a CI engine workflow (the workflows build no corpus). Same
     # dev-box-only class as the three entries above. The freeze invariant is NOT unguarded in CI:
     # the fixture tests in the same module prove the checker's fail/pass/refuse behaviour on every
     # run, and the committed registry file itself is validated structurally; this entry excuses the

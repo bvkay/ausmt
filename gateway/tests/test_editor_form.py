@@ -1050,7 +1050,7 @@ def test_instrument_pid_persists_and_round_trips():
 # ==================================================================================================
 
 def test_retired_flat_credit_keys_are_no_longer_editor_sections():
-    """Lead_investigator and principal_investigators are GONE from the editor registries,
+    """lead_investigator and principal_investigators are GONE from the editor registries,
     and with them the legacy Convert surface (_LEGACY_CREDIT_KEYS / convert_requested /
     _apply_legacy_convert / DELETE_DIRECTIVE). FAILS IF any of them survives - a curator control that
     edits a key the migration deleted and the engine does not read."""
@@ -1087,7 +1087,7 @@ def test_citation_text_source_out_of_vocab_fails_closed():
 
 
 def test_citation_text_source_without_preferred_text_fails_closed():
-    """Text_source states where preferred_text came from, so it is meaningless without one.
+    """text_source states where preferred_text came from, so it is meaningless without one.
     FAILS IF a bare text_source assembles (it would claim provenance for wording that is not there)."""
     form = {"s_citation_preferred_text": "", "s_citation_text_source": "source_provided",
             **_snap("citation", {})}

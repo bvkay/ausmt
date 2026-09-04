@@ -120,7 +120,7 @@ const recGroup = () => {
   return recProxy(own);
 };
 // The panes the app creates, by name. It must create NONE: a pane is stacked over the station canvas,
-// Which is the outage. Recorded rather than stubbed away so the absence is assertable.
+// which is the outage. Recorded rather than stubbed away so the absence is assertable.
 const panesMade = Object.create(null);
 // getZoom is deliberately NOT recorded: curZoom falls back to 4 (national), which is the zoom the map
 // pins are written at. project/unproject are not recorded either - they existed only to make the retired
@@ -941,7 +941,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // predicate over it.
 
   // ZOOM-SCALED RADII. The four-step ladder (2.5/3.5/4.5/5) became a CONTINUOUS ramp with a floor
-  // And a ceiling; the drawer polish then removed the per-TYPE base, so ONE curve
+  // and a ceiling; the drawer polish then removed the per-TYPE base, so ONE curve
   // serves every data type - "the same size as the icons set for the AusLAMP sites". The pinned PROPERTY is
   // unchanged and still asserted here (monotone non-decreasing in z); the exact curve, its bounds and the
   // type-uniformity are pinned in tools/map_dots_test.js against the named constants.

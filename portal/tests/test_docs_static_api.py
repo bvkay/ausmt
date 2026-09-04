@@ -269,7 +269,7 @@ def test_embargo_is_documented_as_omission_not_as_an_access_error():
 
 
 def test_the_withheld_station_record_is_documented_as_the_emitter_writes_it():
-    """Station.json IS written for a withheld station (a stub carrying the access state), and
+    """station.json IS written for a withheld station (a stub carrying the access state), and
     dimensionality.json is NOT written at all. Both halves are pinned to EMITTED DOCUMENTS, because a
     doc that swapped them would send a consumer's loop into a 404 it treats as a transport failure.
 

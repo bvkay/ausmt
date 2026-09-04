@@ -53,7 +53,7 @@ def resolve_validator_dir() -> Path | None:
 
 
 def require_validator_dir() -> Path:
-    """Resolve_validator_dir or FAIL loudly (never skip). The vendored copy is committed, so a None
+    """resolve_validator_dir or FAIL loudly (never skip). The vendored copy is committed, so a None
     result means a broken checkout - an assert, not a skip (no more silent same-author-mock fallback)."""
     d = resolve_validator_dir()
     assert d is not None, (

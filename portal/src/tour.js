@@ -1,5 +1,5 @@
 "use strict";
-// Tour.js - 11-step spotlight tour. See docs: portal internals, tour.js.
+// tour.js - 11-step spotlight tour. See docs: portal internals, tour.js.
 const TOUR_STEPS=[
   {sel:"#map",text:"Every dot is an MT station. Click one to see its transfer function.",
    enter:_tourEnterMapView},

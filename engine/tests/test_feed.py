@@ -1,4 +1,4 @@
-"""Feed.xml -- a minimal Atom feed of surveys sorted by their latest release date (fallback:
+"""feed.xml -- a minimal Atom feed of surveys sorted by their latest release date (fallback:
 dates end/start year), for a modeller to watch "what's new" without polling the whole portal.
 
 FAILS IF (pre-fix): build_portal has no feed_entries/build_feed_xml at all (AttributeError);

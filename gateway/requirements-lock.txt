@@ -19,7 +19,7 @@
 #      Redirect that output into this file, then restore this header above the pins.
 #   2. Run the gateway suite against the new versions before committing:
 #        python -m pytest -q gateway/tests
-#      In particular the multipart/upload tests: they are the tripwire for a starlette move.
+#      The multipart/upload tests in particular: they are the tripwire for a starlette move.
 #   3. Bump any FLOOR in requirements.txt that the refresh has outgrown, in the same commit, so the
 #      two files never tell different stories.
 #   4. Commit the refresh on its own, with the reason (a CVE, a needed feature, routine currency).

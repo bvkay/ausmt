@@ -110,7 +110,7 @@ def test_the_embargo_date_is_string_or_null_but_conditional_on_the_level():
 
 
 def test_the_station_vocabularies_are_closed():
-    """Processing_level and packaging are closed on the tokens the scope declares, so an
+    """processing_level and packaging are closed on the tokens the scope declares, so an
     NCI-native or legacy-mtcat token cannot be inherited into the station vocabulary."""
     resource = SCHEMA["definitions"]["resource"]["properties"]
     assert resource["processing_level"]["enum"] == ["raw", "level0", "level1", "level2", "level3"]

@@ -663,7 +663,7 @@ def test_coord_policy_marker_never_co_occurs_with_true_coords(tmp_path):
 
 
 def test_station_json_carries_policy_for_non_exact_only(tmp_path):
-    """Products/station.json carries coordinate_policy for a non-exact station and
+    """products/station.json carries coordinate_policy for a non-exact station and
     NOT for an exact one (an exact station.json gains no coordinate_policy key; the three promotion
     markers are the separate exception, pinned key-for-key in test_access_gate.py). FAILS IF the exact
     station.json gains a coordinate_policy key, or a non-exact one lacks/mislabels it."""

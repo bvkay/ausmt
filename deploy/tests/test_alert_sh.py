@@ -252,7 +252,7 @@ def test_reconcile_action_failed_pings_fail(tmp_path):
 
 
 def test_reconcile_action_failed_oom_kill_pings_fail_naming_the_kernel(tmp_path):
-    """Reconcile-status.json with action=failed AND oom_kill=true => the fail ping SAYS the build was KILLED BY
+    """reconcile-status.json with action=failed AND oom_kill=true => the fail ping SAYS the build was KILLED BY
     THE KERNEL FOR RUNNING OUT OF MEMORY, so the operator's first read names the cause. FAILS IF: the
     ping is the generic 'action=failed' (the incident's silence), or an oom_kill=false status is dressed
     up as an OOM (a false alarm sends an operator shopping for RAM)."""
@@ -273,7 +273,7 @@ def test_reconcile_action_failed_oom_kill_pings_fail_naming_the_kernel(tmp_path)
 
 
 def test_reconcile_action_untracked_blocked_pings_fail_naming_dir(tmp_path):
-    """Reconcile-status.json with action=untracked_blocked => a fail ping quoting the
+    """reconcile-status.json with action=untracked_blocked => a fail ping quoting the
     refusal AND naming the offending dir from log_tail, nonzero exit. This is the deploy-side loud
     surface for the guard (#15) — the curator's dead-man monitor emails on it, like action=failed.
     FAILS IF: the refusal is treated as a healthy panel state (no fail ping), or the offending dir does

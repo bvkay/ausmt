@@ -1,4 +1,4 @@
-"""Install-frontdoor.sh in-place reload logic (ops-hardening).
+"""install-frontdoor.sh in-place reload logic (ops-hardening).
 
 Black-box over `sh`: a copy of the real install script is run in a tmp dir with a fabricated
 .env/Caddyfile/compose.yaml and a PATH of stubs (docker, sudo) that record every docker invocation, so

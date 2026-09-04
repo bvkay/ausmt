@@ -1,4 +1,4 @@
-"""Station.json emission semantics, pinned against the real emitter over BUILT output.
+"""station.json emission semantics, pinned against the real emitter over BUILT output.
 
 PERMANENT TEST STAGE (the MTCAT 2.0 rule, inherited by the third public contract): this suite runs on
 every later emitter change, so a future feature can never silently move a frozen key, widen a branch,

@@ -193,7 +193,7 @@ services:
       AUSMT_SMTP_PORT: ${AUSMT_SMTP_PORT:-587}              # 465 implicit TLS; 587/25 STARTTLS
       AUSMT_SMTP_USER: ${AUSMT_SMTP_USER:-}                 # SMTP auth login
       AUSMT_SMTP_PASS: ${AUSMT_SMTP_PASS:-}                 # SECRET — redacted from the config dump
-      AUSMT_MAIL_FROM: ${AUSMT_MAIL_FROM:-}                 # From + Reply-To on issued-key email
+      AUSMT_MAIL_FROM: ${AUSMT_MAIL_FROM:-}                 # sender and Reply-To on issued-key email
       AUSMT_SUBMIT_PAGE_URL: ${AUSMT_SUBMIT_PAGE_URL:-}     # woven into the email; omit for no link line
       # SELF-SERVE KEY ISSUANCE CAPS + KEY SHAPE (deploy/.env.example "Daily issuance rate limits" block)
       # - the abuse-control knobs the request-key endpoint enforces: per-email / per-ip / global daily

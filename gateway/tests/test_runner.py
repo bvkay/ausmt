@@ -332,7 +332,7 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
     # FOLLOW-UP: once the surveys validator gains EMTF-XML input and the vendored copy
     # + PIN are resynced, the stub can go and this test can run against require_validator_dir.
     # The stub honours BOTH contracts the real validate_survey.py serves, because both are exercised
-    # In this flow: build_portal IMPORTS it (validate(folder) -> report with worst/counts) while
+    # in this flow: build_portal IMPORTS it (validate(folder) -> report with worst/counts) while
     # the gw-runner SPAWNS it as a subprocess (folder positional + --json output file).
     stub_dir = tmp_path / "validator-stub"
     stub_dir.mkdir()

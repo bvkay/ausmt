@@ -413,7 +413,7 @@ def test_write_intent_single_flight_raises(tmp_path):
 
 
 def test_audit_tail_reader_does_not_fabricate_lines_from_unicode_separators(tmp_path):
-    """Read_actions_audit_tail must split on '\n' ONLY, so a crafted
+    """read_actions_audit_tail must split on '\n' ONLY, so a crafted
     line carrying a unicode line separator (U+2028) — even if one ever reached the host log — stays ONE
     entry, not two. FAILS IF splitlines-style splitting fabricates an extra tail entry from one line."""
     state = tmp_path / "state"

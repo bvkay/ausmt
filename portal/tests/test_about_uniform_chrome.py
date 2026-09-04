@@ -1,4 +1,4 @@
-"""About.html carries the SAME header/footer chrome as index.html.
+"""about.html carries the SAME header/footer chrome as index.html.
 
 The ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and
 the site's one footer, so chrome is uniform across pages. These are STRUCTURAL assertions parsed

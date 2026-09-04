@@ -52,7 +52,7 @@ FILESERVER = "https://thredds.nci.org.au/thredds/fileServer/"
 # The API reference states ts_access.json's stability promise in prose. engine.Dockerfile COPYs
 # contract/ + engine/ and one generated portal file, never docs/, so in the engine image this file
 # does not exist and the prose legs below skip on the reason ci_check_skips.py already allow-lists
-# For that designed topology. On every checkout workflow the docs tree is present and they assert.
+# for that designed topology. On every checkout workflow the docs tree is present and they assert.
 API_REFERENCE = REPO / "docs" / "docs" / "interoperability" / "api-reference.md"
 DOCS_SKIP_REASON = ("engine image build: docs tree not shipped "
                     "(designed topology; the docs surface is pinned from checkout lanes)")

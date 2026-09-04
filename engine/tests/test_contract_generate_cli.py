@@ -1,4 +1,4 @@
-"""Contract/generate.py CLI argument handling (Invariant 10).
+"""contract/generate.py CLI argument handling (Invariant 10).
 
 Before this test: generate.py had no argparse, so `if "--check" in argv:` was the ONLY branch test —
 ANY other argv (no args, --write, a typo, or --help) fell through to the unconditional write at the

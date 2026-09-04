@@ -126,7 +126,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
          "the custodian's own citation wording, exactly as given", "text"),
         ("text_source", "Where that wording came from", "", "text_source"),
     ],
-    # Identity_classification is the DESIGNATION
+    # identity_classification is the DESIGNATION
     # HOME - the mapping {case, represents[] (case_a) | own_identifiers[] (case_b)} that says which
     # identifiers this record IS. Only `case` is an ordinary scalar; the two pair LISTS are managed
     # (_resolve_designation_rows) with the absent-vs-empty rule, because citation.preferred_identifier
@@ -602,20 +602,20 @@ def _assemble_map(form: dict, section: str):
         if overrides:
             out["coordinate_overrides"] = overrides
 
-    # Citation.preferred_identifier is the NESTED {scheme, identifier} pair, assembled both-or-
+    # citation.preferred_identifier is the NESTED {scheme, identifier} pair, assembled both-or-
     # neither and resolved with the SAME absent-vs-empty discipline as coordinate_overrides (a form
     # that does not render the pair PRESERVES the stored one; a rendered-and-emptied pair deletes it).
     if section == "citation":
         pref = _resolve_preferred_identifier(form, original)
         if pref:
             out["preferred_identifier"] = pref
-        # Text_source states where preferred_text came from, so it cannot stand alone.
+        # text_source states where preferred_text came from, so it cannot stand alone.
         if out.get("text_source") and not out.get("preferred_text"):
             raise SectionError(section,
                                "citation text source states where the preferred citation TEXT came "
                                "from; add the preferred citation text, or clear the source")
 
-    # Identity_classification's two designation lists, same absent-vs-empty discipline. A present
+    # identity_classification's two designation lists, same absent-vs-empty discipline. A present
     # list is NON-EMPTY at the validator (absent-not-empty), so an emptied list drops its key.
     if section == "identity_classification":
         for key in IDENTITY_DESIGNATION_LISTS:

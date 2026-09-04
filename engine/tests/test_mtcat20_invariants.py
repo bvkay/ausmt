@@ -111,7 +111,7 @@ def migrate_12_to_20(doc):
 # ---------------------------------------------------------------- reference invariant implementations
 
 def count_invariant(survey, stations):
-    """N_stations_time_series_verified equals the count of has_time_series true rows."""
+    """n_stations_time_series_verified equals the count of has_time_series true rows."""
     n = survey.get('n_stations_time_series_verified')
     if n is None:
         return True

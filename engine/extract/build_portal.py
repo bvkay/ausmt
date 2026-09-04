@@ -161,7 +161,7 @@ def lib_versions() -> dict:
 
 
 def _json_default(obj):
-    """Json.dumps `default=` hook for EVERY product emit (surveys.json, mtcat, catalogue, products,
+    """json.dumps `default=` hook for EVERY product emit (surveys.json, mtcat, catalogue, products,
     ...). A survey.yaml that carries an UNQUOTED ISO date
     is implicit-typed by PyYAML safe_load into a datetime.date, which survey_meta_from_yaml threads
     VERBATIM into SMETA — plain json.dumps could not serialise it and the whole build CRASHED at the
@@ -3241,7 +3241,7 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
                        "remote_site": r.get("remote_site"),
                        "file_written_by": r.get("file_written_by") or {"name": None, "version": None},
                        "note": r.get("processing_note")},
-        # Edi_served folds in the per-station coordinate byte-gate. A non-exact station is NOT
+        # edi_served folds in the per-station coordinate byte-gate. A non-exact station is NOT
         # distributed even inside a served survey, so its distribution must not advertise an EDI.
         "distribution": {"edi_available": edi_served, "license": lic,
                          "edi_path": edi_rel},
@@ -3618,7 +3618,7 @@ def run_extraction_report(run_facts_by_station: dict) -> dict:
 
 
 def build_identity(surveys_root) -> dict:
-    """Build.json - the build<->data handshake a served portal needs to trace itself back to the
+    """build.json - the build<->data handshake a served portal needs to trace itself back to the
     exact engine + surveys commits that produced it. Deterministic
     aside from `generated` (an ISO UTC timestamp), so two builds of identical inputs differ only there.
 
@@ -5279,7 +5279,7 @@ def _main_build(argv=None):
     # the coordinate mask seam and the deferred station jobs, because the extent follows the post-mask
     # coordinate state, into out/products/<slug>/ (the served root).
     _survey_metadata_jobs: dict = {}
-    # Ausmt_ids whose survey is NOT served (embargoed/metadata_only/unrecognised level). The access gate
+    # ausmt_ids whose survey is NOT served (embargoed/metadata_only/unrecognised level). The access gate
     # withholds the BYTES, and additionally withholds the DERIVED DISPLAY products (the thinned tf.json
     # curves + the science-derived sci.json fields) at EMISSION, because for an embargoed dataset the
     # response curves ARE the data — a portal that plots them has published what the byte gate withheld.
@@ -5813,7 +5813,7 @@ def _main_build(argv=None):
                                                         custodian=_custodian))
                 _bundle_formats.setdefault(slug, {})["xml-zip"] = _xrel
             if flags["survey_h5_enabled"]:
-                # Emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
+                # emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
                 # (TF(fn=...)), bypassing the masked record entirely — an unfiltered station list served
                 # a withheld station's exact lat/lon/elev inside the h5 while every JSON surface was
                 # correctly null (the leak-sweep's HDF5 leg pins this). Filter to the byte-gated

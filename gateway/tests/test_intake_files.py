@@ -171,7 +171,7 @@ def test_readme_carries_declared_metadata(tmp_path):
 def test_readme_station_count_covers_emtf_xml_submissions(tmp_path):
     # The README station count is what a curator reads to decide whether a submission arrived intact,
     # so it must count the transfer functions the engine will actually ingest. EMTF XML has been one
-    # Of those since the rule. FAILS IF an XML-only package is described as having no
+    # of those since the rule. FAILS IF an XML-only package is described as having no
     # stations, or a mixed one counts only half of what it carries. RED against the pre-rule
     # _station_count (edi/ alone): "Stations: 0" for the first, "Stations: 1" for the second.
     xml_only = _make_package(tmp_path / "x", n_edi=0, n_xml=3)

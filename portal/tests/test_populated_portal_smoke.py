@@ -50,7 +50,7 @@ def test_populated_portal_value_binding(tmp_path):
     (data / "tf.json").write_text(json.dumps([tf_row]))
     (data / "surveys.json").write_text(json.dumps(
         {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}}))
-    # Build.json - a KNOWN, distinctive build_id/generated so the footer's VALUE binding
+    # build.json - a KNOWN, distinctive build_id/generated so the footer's VALUE binding
     # (BUILDID -> buildIdText) can be asserted against the source, not just "didn't crash".
     (data / "build.json").write_text(json.dumps(
         {"build_id": "eng1234-src5678-2026-07-05T01:02:03+00:00",

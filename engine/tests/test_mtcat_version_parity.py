@@ -278,7 +278,7 @@ def test_no_portal_site_carries_a_version_literal():
 
 @portal_surface
 def test_version_js_sentinel_states_no_version_rather_than_a_stale_one():
-    """Version.js is the one surface that CANNOT derive the version (no build step, no way to read the
+    """version.js is the one surface that CANNOT derive the version (no build step, no way to read the
     schema at render time), so its config-missing sentinel is honest instead: an explicit null, and a
     label that stops after the schema name. The jsdom driver asserts the rendered chip; this asserts the
     source, so the sentinel cannot quietly grow a number back in a workflow that skips when Node is absent."""

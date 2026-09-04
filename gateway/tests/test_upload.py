@@ -120,7 +120,7 @@ def test_ratio_bomb_rejected_at_upload(tmp_path):
 
 
 def test_oversize_aborts_and_leaves_no_part_file(tmp_path):
-    # Max_upload_mb=1 (conftest); send > 1 MiB. proven failing: without the mid-stream
+    # max_upload_mb=1 (conftest); send > 1 MiB. proven failing: without the mid-stream
     # cap, the whole 2-MiB body was written and a .part file remained after the 413.
     async def _body():
         big = make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/S.edi": b"A" * (2 * 1024 * 1024)})

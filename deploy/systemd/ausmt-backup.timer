@@ -5,7 +5,7 @@
 #   sudo systemctl enable --now ausmt-backup.timer
 #   systemctl list-timers ausmt-backup.timer         # confirm the next run
 #   sudo systemctl start ausmt-backup.service        # take one backup NOW to test
-# Then run the FIRST restore drill: deploy/scripts/restore-drill.sh (a backup never restored is a
+# Run the FIRST restore drill next: deploy/scripts/restore-drill.sh (a backup never restored is a
 # hypothesis, not a backup). See deploy/README.md "Backups & restore".
 
 [Unit]
