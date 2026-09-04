@@ -915,6 +915,12 @@ def labels_for(comment, cite_contract=False):
     return sorted(found)
 
 
+# A cut that takes the leading token off a line leaves the marker hard against the punctuation that
+# belonged to the words above it ("#. proven failing"), and that line is still the next line of the
+# run a reader reads. The lead is read past such a mark so the run the rules read is that run.
+PUNCTUATION_LEAD = re.compile(r"\A([#/])[.,;:!?]")
+
+
 def comment_runs(path, text):
     """(line number, text) for each run of comments a reader reads as one. A block of // or #
     lines is one comment to a reader, and a shape read line by line sees a bracket opened on one
@@ -934,7 +940,7 @@ def comment_runs(path, text):
 
     out = []
     for lineno, body in comments(path, text):
-        lead, span = body[:2], body.count("\n")
+        lead, span = PUNCTUATION_LEAD.sub(r"\1 ", body[:2]), body.count("\n")
         at, _ = where(lineno, body)
         if (out and lead in ("//", "# ", "#\n", "#") and out[-1][2] == lead
                 and lineno == out[-1][3] + 1 and at >= 0 and at == out[-1][4]):
@@ -975,6 +981,9 @@ ENUMERATOR = re.compile(r"^[ \t]*(?:\d{1,2}|[a-z])\)")
 DEFINITION_ROW = re.compile(r"^\s*\S+[ ]+:[ ]", re.M)
 SPACE_BEFORE_PUNCT = re.compile(r"\w[ ]+[.,;!?](?:\s|$)")
 SPACE_BEFORE_COLON = re.compile(r"\w[ ]+:(?:\s|$)")
+# The same scar read from the other side: a run that OPENS on the punctuation of a sentence whose
+# words were taken away. An ellipsis and a decimal point carry a character after the mark.
+OPENS_ON_PUNCTUATION = re.compile(r"\A[.,;:!?](?:\s|\Z)")
 # A gap between the last word of a bracketed group and the bracket that closes
 # it is where the rest of the group stood.
 SPACE_BEFORE_BRACKET = re.compile(r"\w[ ]+[)\]](?!\w)")
@@ -1172,6 +1181,8 @@ def shape_offences(files, root=None):
                 if SPACE_BEFORE_PUNCT.search(line) or (not table and SPACE_BEFORE_COLON.search(line)):
                     said.append("a space before punctuation")
                     break
+            if OPENS_ON_PUNCTUATION.match(unquoted(flat)):
+                said.append("a run opening on the punctuation of a cut sentence")
             if SPACE_BEFORE_BRACKET.search(unquoted(flat)):
                 said.append("a space before the bracket that closes a group")
             if EMPTY_GROUP.search(unquoted(flat)):

@@ -3052,7 +3052,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ["--lpmt", "--bbmt", "--amt", "--gds"].forEach(tok =>
     ok(legDots.some(d => (d.getAttribute("style") || "").indexOf("var(" + tok + ")") >= 0),
       "D6: no legend dot reads the live token " + tok + " (a hard-coded hex would fail this)"));
-  //. THE SCALE BAR, constructed deliberately (metric only, capped at 120px) and RE-PARENTED
+  // THE SCALE BAR, constructed deliberately (metric only, capped at 120px) and RE-PARENTED
   // into the legend body, where a reader looks for the map's key, rather than left in the Leaflet
   // corner it would otherwise take on top of the dots.
   ok(scaleControls.length === 1, "A8: exactly one scale control must be constructed, got " + scaleControls.length);

@@ -22,7 +22,7 @@ from gateway.tests.conftest import app_client, curator_login, run
 # ---- the pure alive-rule -------------------------------------------------------------------------
 
 def test_classify_only_doi_org_404_is_unregistered():
-    """: ONLY a 404 from doi.org is `unregistered`. FAILS IF a 404 is not caught."""
+    """ONLY a 404 from doi.org is `unregistered`. FAILS IF a 404 is not caught."""
     assert pidcheck.classify(404, False) == pidcheck.STATUS_UNREGISTERED
 
 

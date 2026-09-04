@@ -5086,7 +5086,7 @@ _ROLE_DISPLAY = {
 
 def _typed_vocab_select_widget(name: str, label: str, value, options: tuple,
                                display_labels: dict | None = None) -> str:
-    """: a FAIL-CLOSED <select> for a typed related-identifiers preset - relation (RELATION_TYPES)
+    """A FAIL-CLOSED <select> for a typed related-identifiers preset - relation (RELATION_TYPES)
     or identifier_type (IDENTIFIER_TYPES). Same vocab-select discipline as _profile_select_widget:
     a leading blank leaves it unset, and an out-of-vocab STORED value is shown as its own selected
     option so the curator sees and can correct it (never silently coerced, never crashes). Server-

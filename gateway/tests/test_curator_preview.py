@@ -116,8 +116,8 @@ def test_invalid_id_is_404(tmp_path):
 
 
 def test_unlisted_content_type_refused(tmp_path):
-    # A file with an extension outside the allow-list is 404 rather than served with a guessed type
-    #. Failure criterion: fails if a .exe/.bin under preview-data is served.
+    # A file with an extension outside the allow-list is 404 rather than served with a guessed type.
+    # Failure criterion: fails if a .exe/.bin under preview-data is served.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):
             sid = seed_validated(gw, cfg)

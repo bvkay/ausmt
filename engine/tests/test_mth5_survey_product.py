@@ -54,7 +54,7 @@ def _open(hp):
 # --------------------------------------------------------------------- metadata mapping + DOI injection
 
 def test_survey_metadata_and_dataset_doi_injected(tmp_path):
-    """: the survey.yaml scholarly fields map onto survey_metadata and the DATASET DOI is
+    """The survey.yaml scholarly fields map onto survey_metadata and the DATASET DOI is
     injected (it is the one field genuinely absent from every EDI). The bare '10.…' DOI is normalised to a
     resolvable URL, and all of it survives the write -> reopen round-trip."""
     rel, hp, n = bp.emit_survey_mth5(_stations(), "example-survey", "Example", tmp_path, smeta=_SMETA)
@@ -130,7 +130,7 @@ def test_metadata_thin_survey_still_builds_and_groups(tmp_path):
 # --------------------------------------------------------------------- round-trip gate
 
 def test_roundtrip_gate_passes_on_faithful_build(tmp_path):
-    """: a faithful build is lossless - every impedance + coordinate matches its source EDI to
+    """A faithful build is lossless - every impedance + coordinate matches its source EDI to
     float precision (the measured Tumby result was 0.0), the payload is TF-only, and the producer returns
     the bundle."""
     rel, hp, n = bp.emit_survey_mth5(_stations(), "rt", "RT", tmp_path, smeta=None)
@@ -161,7 +161,7 @@ def test_roundtrip_gate_RED_on_corrupted_impedance(tmp_path):
 
 
 def test_producer_withholds_survey_when_gate_fails(tmp_path, monkeypatch):
-    """: when the round-trip gate fails, the PRODUCER withholds the whole survey - deletes the h5
+    """When the round-trip gate fails, the PRODUCER withholds the whole survey - deletes the h5
     and returns no bundle — so a mismatch never reaches the manifest. Withholds the survey, not the corpus."""
     monkeypatch.setattr(bp, "mth5_survey_roundtrip_ok",
                         lambda *a, **k: (False, {"checked": 2, "z_max_abs_diff": 9.9,
@@ -175,7 +175,7 @@ def test_producer_withholds_survey_when_gate_fails(tmp_path, monkeypatch):
 # --------------------------------------------------------------------- tier 3 collection (designed, disabled)
 
 def test_collection_producer_groups_members_distinctly(tmp_path):
-    """: the tier-3 producer concatenates surveys, each under its OWN survey group keyed by slug,
+    """The tier-3 producer concatenates surveys, each under its OWN survey group keyed by slug,
     so a station id shared across members never collides. Here two members carry the SAME station id and
     must land as two distinct groups, each round-tripping against its own source EDI."""
     edis = example_edis()

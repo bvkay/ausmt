@@ -69,7 +69,7 @@ def test_survey_meta_never_crashes_on_bad_shapes():
 
 
 def test_parity_comment_after_quoted_scalar():
-    """: an inline comment after a QUOTED scalar must strip like PyYAML strips it; a hash
+    """An inline comment after a QUOTED scalar must strip like PyYAML strips it; a hash
     inside the quotes is data. The credit migration's review notes exposed the divergence."""
     import yaml
     from extract.build_portal import _mini_yaml

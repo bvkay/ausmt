@@ -110,7 +110,7 @@ def _mtcat_survey_entry(meta):
 
 
 def test_datacite_export_adds_ausmt_hosting_institution():
-    """: the mtcat (DataCite/federation) export appends AusMT as the HostingInstitution to every
+    """The mtcat (DataCite/federation) export appends AusMT as the HostingInstitution to every
     record's contributors, after the survey's own contributors, verbatim. Pre-change mtcat carried no
     contributors field at all."""
     entry = _mtcat_survey_entry({"org": "Org", "access": "open",
@@ -122,7 +122,7 @@ def test_datacite_export_adds_ausmt_hosting_institution():
 
 
 def test_datacite_hosting_institution_added_even_with_no_survey_contributors():
-    """: AusMT hosts every survey, so the HostingInstitution row is emitted even when the survey declares
+    """AusMT hosts every survey, so the HostingInstitution row is emitted even when the survey declares
     no contributors of its own."""
     entry = _mtcat_survey_entry({"org": "Org", "access": "open"})
     assert entry["contributors"] == [
@@ -130,7 +130,7 @@ def test_datacite_hosting_institution_added_even_with_no_survey_contributors():
 
 
 def test_hosting_institution_is_export_only_never_in_surveys_json_seam():
-    """: AusMT is EXPORT-only - it must never leak into the surveys.json (SMETA) contributors seam,
+    """AusMT is EXPORT-only - it must never leak into the surveys.json (SMETA) contributors seam,
     which stays the verbatim curator surface."""
     y = {"organisation": {"name": "Org"},
          "contributors": [{"name": "Lead, L", "name_type": "person", "role": "ProjectLeader"}]}

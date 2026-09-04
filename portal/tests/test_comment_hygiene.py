@@ -915,6 +915,12 @@ def labels_for(comment, cite_contract=False):
     return sorted(found)
 
 
+# A cut that takes the leading token off a line leaves the marker hard against the punctuation that
+# belonged to the words above it ("#. proven failing"), and that line is still the next line of the
+# run a reader reads. The lead is read past such a mark so the run the rules read is that run.
+PUNCTUATION_LEAD = re.compile(r"\A([#/])[.,;:!?]")
+
+
 def comment_runs(path, text):
     """(line number, text) for each run of comments a reader reads as one. A block of // or #
     lines is one comment to a reader, and a shape read line by line sees a bracket opened on one
@@ -934,7 +940,7 @@ def comment_runs(path, text):
 
     out = []
     for lineno, body in comments(path, text):
-        lead, span = body[:2], body.count("\n")
+        lead, span = PUNCTUATION_LEAD.sub(r"\1 ", body[:2]), body.count("\n")
         at, _ = where(lineno, body)
         if (out and lead in ("//", "# ", "#\n", "#") and out[-1][2] == lead
                 and lineno == out[-1][3] + 1 and at >= 0 and at == out[-1][4]):
@@ -975,6 +981,9 @@ ENUMERATOR = re.compile(r"^[ \t]*(?:\d{1,2}|[a-z])\)")
 DEFINITION_ROW = re.compile(r"^\s*\S+[ ]+:[ ]", re.M)
 SPACE_BEFORE_PUNCT = re.compile(r"\w[ ]+[.,;!?](?:\s|$)")
 SPACE_BEFORE_COLON = re.compile(r"\w[ ]+:(?:\s|$)")
+# The same scar read from the other side: a run that OPENS on the punctuation of a sentence whose
+# words were taken away. An ellipsis and a decimal point carry a character after the mark.
+OPENS_ON_PUNCTUATION = re.compile(r"\A[.,;:!?](?:\s|\Z)")
 # A gap between the last word of a bracketed group and the bracket that closes
 # it is where the rest of the group stood.
 SPACE_BEFORE_BRACKET = re.compile(r"\w[ ]+[)\]](?!\w)")
@@ -1172,6 +1181,8 @@ def shape_offences(files, root=None):
                 if SPACE_BEFORE_PUNCT.search(line) or (not table and SPACE_BEFORE_COLON.search(line)):
                     said.append("a space before punctuation")
                     break
+            if OPENS_ON_PUNCTUATION.match(unquoted(flat)):
+                said.append("a run opening on the punctuation of a cut sentence")
             if SPACE_BEFORE_BRACKET.search(unquoted(flat)):
                 said.append("a space before the bracket that closes a group")
             if EMPTY_GROUP.search(unquoted(flat)):
@@ -2407,6 +2418,8 @@ def test_each_broken_shape_is_caught(tmp_path):
             '"""Reconstruct the PRE- per-station station.json shape."""\n',
         "a pointer standing in front of a sentence fragment":
             '"""See docs: portal internals, add-survey.html. like a nameless row."""\n',
+        "a run opening on the punctuation of a cut sentence":
+            '""": the export appends the hosting institution to every record."""\n',
     }
     for label, body in cases.items():
         f = tmp_path / "broken.py"
@@ -2513,6 +2526,30 @@ def test_a_connector_at_the_end_of_a_run_is_caught(tmp_path):
     f.write_text('"""The rollup the portal shows readers, first-declarer -"""\n', encoding="utf-8")
     hits = shape_offences([f])
     assert hits and "a connector left standing" in hits[0], hits
+
+
+def test_a_marker_against_punctuation_is_still_the_next_line_of_its_run(tmp_path):
+    """A cut that takes the leading token off a line leaves the marker hard against the punctuation
+    that belonged to the words above it. The line is still the next line of the run a reader reads,
+    and read as a run of its own it carries no scar at all."""
+    f = tmp_path / "lead.py"
+    f.write_text("# A done-file with an unknown outcome must NOT drive any transition\n"
+                 "#. proven failing: read_done returned a DoneFile\n"
+                 "# and _apply_done attempted a transition.\nX = 1\n", encoding="utf-8")
+    runs = comment_runs(f, f.read_text(encoding="utf-8"))
+    assert len(runs) == 1, runs
+    hits = shape_offences([f])
+    assert hits and "a space before punctuation" in hits[0], hits
+
+
+def test_a_run_may_open_on_a_decimal_or_an_ellipsis(tmp_path):
+    """The head rule reads punctuation a cut left standing, which is followed by a space. A decimal
+    point and an ellipsis carry a character after the mark, and neither is a scar."""
+    for body in ('"""...and the remainder of the sentence is the comment."""\n',
+                 '""".25 of the header budget is the type block."""\n'):
+        f = tmp_path / "whole.py"
+        f.write_text(body, encoding="utf-8")
+        assert not shape_offences([f]), body
 
 
 def test_a_run_of_line_comments_is_one_shape(tmp_path):
