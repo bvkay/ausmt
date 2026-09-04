@@ -39,7 +39,7 @@ CORRECTION goes:
     facts recorded; Gate 2 still checks the convention. Azimuths on the impedance branch are
     ACQUISITION metadata, not the stored-tensor frame — the >ZROT declaration wins when present
     (USArray: physical sensor azimuths ±19° with ZROT=0 = processed-to-zero, served as-is).
-The de-rotation MATH (Z0(i) = R(θi) Z(i) R(θi)^T, T0(i) = T(i) R(θi)^T, R(β) = [[cosβ, sinβ],
+The de-rotation MATH (Z0(i) = R(-θi) Z(i) R(-θi)^T, T0(i) = T(i) R(-θi)^T, R(β) = [[cosβ, sinβ],
 [-sinβ, cosβ]]) is RETAINED below for DIAGNOSTICS only — no serve-path caller invokes it (v3). It is
 pinned by the synthetic round-trips and the AusLAMP-SA custodian-twin proof for future diagnostic use.
 FRAME-LABEL HONESTY: the recorded reference is the file's DECLARED ZERO-AZIMUTH REFERENCE —

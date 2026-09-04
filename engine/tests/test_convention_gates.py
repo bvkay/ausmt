@@ -739,3 +739,20 @@ def test_equal_tipper_frame_not_reported_f2(tmp_path):
             f"{name}: equal declarations must NOT emit the divergence field"
         assert not any("divergent" in n for n in parsed["frame_notes"]), \
             f"{name}: equal declarations must NOT emit the divergence note"
+
+
+def test_conventions_header_states_the_same_rotation_sign_as_the_derotation_docstring():
+    """The module header's de-rotation transform and the de-rotation function's own docstring
+    must state the same sign; a header that reads R(theta) while the function applies R(-theta)
+    documents the wrong frame for every served station."""
+    import inspect
+    import re
+
+    from extract import _conventions
+
+    header = inspect.getmodule(_conventions).__doc__ or ""
+    assert "R(-θi) Z(i) R(-θi)^T" in header, "the header's impedance de-rotation must carry R(-θi) on both sides"
+    assert "T(i) R(-θi)^T" in header, "the header's tipper de-rotation must carry R(-θi)"
+    assert "(-180..-90°)" in header, "the third impedance quadrant is (-180..-90°)"
+    src = inspect.getsource(_conventions)
+    assert re.search(r"applies R\(-θ\)\)", src), "the de-rotation docstring states R(-θ)"
