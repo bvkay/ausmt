@@ -101,7 +101,7 @@ def test_capped_body_is_reused_by_the_handler_json_parse():
 
 def test_capped_body_is_reused_by_the_handler_form_parse():
     # The request-key handler accepts BOTH encodings, so the urlencoded branch must survive the cap
-    # Too. FAILS IF the capped read leaves .form with a consumed stream.
+    # too. FAILS IF the capped read leaves .form with a consumed stream.
     payload = b"email=form%40example.test"
     request, _feed = _request([payload], content_type="application/x-www-form-urlencoded")
 

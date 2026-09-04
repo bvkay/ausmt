@@ -38,14 +38,14 @@ STATE_JS = ROOT / "src" / "state.js"
 INDEX = ROOT / "index.html"
 # The third consumer, and the reason this file rather than the engine's suite carries the parity
 # pin: portal-ci runs on portal/** and on the engine files portal tests read, so a change to either
-# Palette fires it. The engine workflow triggers on engine/** alone and would not see a state.js edit.
+# palette fires it. The engine workflow triggers on engine/** alone and would not see a state.js edit.
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
 TYPES = ("LPMT", "BBMT", "AMT", "GDS")
 TOKEN_OF = {"LPMT": "--lpmt", "BBMT": "--bbmt", "AMT": "--amt", "GDS": "--gds"}
 
 # Stated floors. PAIR_FLOOR is the palette-wide invariant established and this module preserves (the
-# Binding pair is AMT/GDS at 21.1, untouched here). LP_BB_FLOOR is this module's own promise: the pair the
+# binding pair is AMT/GDS at 21.1, untouched here). LP_BB_FLOOR is this module's own promise: the pair the
 # reported must stay far clear of the general floor, not merely legal. LP_BB_DEUTAN_FLOOR is the
 # same promise under simulated deuteranopia, where the old pair collapsed to 15.3.
 PAIR_FLOOR = 21.0

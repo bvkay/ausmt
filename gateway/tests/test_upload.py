@@ -352,8 +352,8 @@ def test_concurrent_submits_respect_inflight_cap(tmp_path):
     # Cap TOCTOU: fire 8 concurrent submits at max_inflight=3. The scanner is held open so any row
     # that gets inserted stays RECEIVED (non-terminal, i.e. in-flight) for the whole race; a barrier
     # inside the body-parse holds EVERY handler after its capacity check but before its insert, so
-    # All 8 have passed the gate with durable count_inflight==0 - only the in-memory reservation
-    # Can hold the cap. proven failing (reservation disabled): 8/8 returned 201.
+    # all 8 have passed the gate with durable count_inflight==0 - only the in-memory reservation
+    # can hold the cap. proven failing (reservation disabled): 8/8 returned 201.
     from gateway import upload as upload_intake
 
     async def _body():

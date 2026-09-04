@@ -31,7 +31,7 @@ _PALETTE = {
     "bg": "#13202B", "panel": "#1B2C3A", "ink": "#E8EDF1", "muted": "#8FA3B0",
     "accent": "#E0782F", "ok": "#5BAE6A", "warn": "#D9A23B", "bad": "#A85454",
     # The blue INFO severity (mockup semantics: red fail / amber warn / blue info). The
-    # Dark palette had no info hue before the survey-hub styling needed one; steel blue in the
+    # dark palette had no info hue before the survey-hub styling needed one; steel blue in the
     # same lightness family as ok/warn/bad — an ADDITION for the third severity, not a repaint.
     "info": "#5B84AE",
 }
@@ -1275,7 +1275,7 @@ SURVEY_HUB_JS = r"""
 # pattern, ZERO new gateway privileges (the gateway has no site-data mount). The catalogue/sci/tf
 # arrays are INDEX-ALIGNED (station i is catalogue[i]/sci[i]/tf[i] — the engine appends them in one
 # pass); we filter to this survey's rows by ausmt_id prefix ('au.<slug>.', surveyRows below) — the
-# Catalogue `survey` column carries the display LABEL, never the slug.
+# catalogue `survey` column carries the display LABEL, never the slug.
 #
 # CSP + XSS discipline (the same rules SURVEY_HUB_JS follows, extended to SVG): served external under
 # script-src 'self'; EVERY value goes in via textContent or a DOM property, NEVER innerHTML with data;

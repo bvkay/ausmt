@@ -122,7 +122,7 @@ def contract_schema_digest(engine_root: Path) -> str:
 # NOTE: the per-survey yaml digest is not derived here. It is
 # computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from,
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
-# Metadata does not match. The path-taking helper that
+# metadata does not match. The path-taking helper that
 # lived here was deliberately DELETED, not deprecated: any reappearance of a read-the-yaml-again
 # digest call site is the incident's window reopening.
 

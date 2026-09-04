@@ -31,7 +31,7 @@ _ALLOWED_NAME_CHARS = set(
 )
 
 # Extensions that make a member count as a transfer function for the "package is not empty" shape
-# Rule. EDI and EMTF XML are both first-class submission inputs. Checked on
+# rule. EDI and EMTF XML are both first-class submission inputs. Checked on
 # the lowercased basename suffix; see inspect for why this is a shape heuristic, not an allowlist.
 _TF_SUFFIXES = (".edi", ".xml")
 

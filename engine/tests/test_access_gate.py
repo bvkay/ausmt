@@ -223,7 +223,7 @@ def test_embargoed_survey_smeta_badges_honestly(tmp_path):
 
 
 # -------------------------------------------------------------------------- DISPLAY-PRODUCT gate
-# Withholds the BYTES (manifest/edi/xml/bundles); extends the gate to the DERIVED DISPLAY products
+# withholds the BYTES (manifest/edi/xml/bundles); extends the gate to the DERIVED DISPLAY products
 # the portal PLOTS. For an embargoed dataset the response curves ARE the data — a portal that plots the
 # thinned tf.json curves for an embargoed survey has published the data it withheld from download. So for
 # a non-served survey the tf.json series columns become EMPTY ARRAYS and the sci.json science-derived

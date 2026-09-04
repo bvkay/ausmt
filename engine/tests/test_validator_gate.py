@@ -22,8 +22,8 @@ import build_portal  # noqa: E402
 # validator resolves via the FOUR-arm environment enumeration recorded in
 # maintainer/C35b-GitTruthDesign.md. The validator is stdlib-only import plumbing here
 # (_load_validator imports the module, no mt_metadata), so the vendored copy resolves in the
-# Stack-less engine workflow too. Every probe anchors off ONE root, _repo_root - no second path
-# Convention - and _repo_root is the monkeypatch seam the falsifiability tests use.
+# stack-less engine workflow too. Every probe anchors off ONE root, _repo_root - no second path
+# convention - and _repo_root is the monkeypatch seam the falsifiability tests use.
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
                               "(designed topology; vendored oracle lives in gateway/tests)")
@@ -74,7 +74,7 @@ def _resolve_validator_dir() -> Path:
 def _empty_surveys(tmp_path):
     # An EMPTY --surveys dir + --allow-empty keeps this stack-less: discover_work finds zero
     # packages, process_edis (which hard-requires mt_metadata, build_portal.py:628) is never
-    # Called, so these tests isolate the validator-gate branch in main from the extractor.
+    # called, so these tests isolate the validator-gate branch in main from the extractor.
     d = tmp_path / "surveys"; d.mkdir()
     return d
 

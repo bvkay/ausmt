@@ -238,7 +238,7 @@ def test_threshold_death_14_vs_16_serve_identically_as_stored(tmp_path):
 
 # ---------------------------------------------------------------------------------------------
 # De-rotation MATH — DIAGNOSTIC-ONLY under v3 (no serve-path caller). Pinned so the transform stays
-# Documented + verified for future diagnostic use.
+# documented + verified for future diagnostic use.
 # ---------------------------------------------------------------------------------------------
 def test_diagnostic_derotation_math_roundtrip():
     """FAILS IF: the retained de-rotation math (Z' = R(-θ) Z R(-θ)^T) stops reproducing the

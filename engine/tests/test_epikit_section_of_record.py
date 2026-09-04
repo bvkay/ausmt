@@ -153,7 +153,7 @@ def test_the_selection_rule_prefers_avg_then_the_dataid_then_the_first():
     # GSSA Roxby Downs 2018 release write DATAID="222 " against SECTID="222 _avg", so the trailing
     # space lands INSIDE the section name. Both put the averaged block first, so a raw comparison
     # still lands on it through the last clause; ordered the other way it would publish a
-    # Realisation, silently, which is the whole defect this module exists to remove.
+    # realisation, silently, which is the whole defect this module exists to remove.
     assert pick("222 ", ["XPR-0", "222 _avg", "XPR-1"]) == ("222 _avg", 1, 3)
     assert pick("222 ", ["222 _avg", "XPR-0"]) == ("222 _avg", 0, 2)
     assert pick("500/4759", ["XPR-0", "500/4759_avg"]) == ("500/4759_avg", 1, 2)

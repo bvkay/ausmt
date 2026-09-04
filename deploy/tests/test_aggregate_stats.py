@@ -23,7 +23,7 @@ _MANIFEST = _FIXTURES / "manifest.engine-truth.json"
 _DBIP = _FIXTURES / "dbip-country-lite.sample.csv"
 
 # PROVENANCE of manifest.engine-truth.json, recorded because it is SHARED test data that several pins
-# Join against and it had silently drifted from the engine before the tier-1 workflow regenerated it.
+# join against and it had silently drifted from the engine before the tier-1 workflow regenerated it.
 # It is the real build's own manifest, never hand-typed rows:
 #
 #   cd engine && python -m extract.build_portal --surveys data --out <tmp> \

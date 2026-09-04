@@ -335,14 +335,14 @@ class FakeGit:
         # every verb this fake serves is enumerated below; the final `else` RAISES on any unmodeled
         # verb rather than returning a silent rc=0 (the old behaviour, which made push/merge/a typo'd
         # flag look like unconditional success). Extending the fake is now a deliberate act — add an
-        # Explicit branch here, with the REAL-git workflow (test_publish_real_git.py) as the reference for
+        # explicit branch here, with the REAL-git workflow (test_publish_real_git.py) as the reference for
         # what honest behaviour is.
         if verb == "checkout":
             # -B <branch> creates+switches; -f <branch> / <branch> switches. NOTE (nit #8): the branch
             # target is modeled as args[-1], correct for the forms publish.py actually issues
             # (`checkout -B <b>`, `checkout -f <b>`, `checkout main`). A bare `checkout -f` with no
             # branch is never issued by the publish code, so it is intentionally NOT modeled — the
-            # Real-git workflow covers the true checkout semantics.
+            # real-git workflow covers the true checkout semantics.
             target = args[-1]
             self.branch = target
         elif verb == "commit":

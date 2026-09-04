@@ -1058,7 +1058,7 @@ def test_no_page_kind_carries_the_auscope_org_mark_in_its_header(built):
 
 # The FILE, bounded per page kind, which is the portal surface's pin restated on this one. The mark
 # pin above counts the whole anchor literal and the src allow-list holds each kind's src attributes
-# Exactly and in order; neither bounds how often the image is NAMED, so a url in the inline CSS or
+# exactly and in order; neither bounds how often the image is NAMED, so a url in the inline CSS or
 # a preload link would carry it a second time and pass both.
 ORG_ASSET = "auscope-icon-white.png"
 

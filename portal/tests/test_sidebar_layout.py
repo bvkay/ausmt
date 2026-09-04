@@ -61,7 +61,7 @@ def test_tree_flex_fills_and_scrolls_internally():
 
 def test_tree_has_no_fixed_height_or_resize_handle():
     # FAILS if the retired fixed-height / resizable-box styling reappears (it would break flex-fill and
-    # Could reintroduce the outer rail scrollbar). Non-vacuous: pre-tree carried both.
+    # could reintroduce the outer rail scrollbar). Non-vacuous: pre-tree carried both.
     body = _rule(_style(_html()), ".tree")
     # a fixed/capped height (height:300px, max-height:60vh, ...) must be gone; min-height:0 is allowed.
     assert re.search(r"(?<!min-)height:\s*[0-9]", body) is None, \

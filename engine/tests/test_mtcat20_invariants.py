@@ -82,7 +82,7 @@ def migrate_12_to_20(doc):
     for sv in out.get('surveys', []):
         for row in sv.pop('sources', None) or []:
             # sources rows MAP to relationship rows (spec 6.9); statement/licence/retrieved
-            # Detail moves to survey-metadata - the workflow must capture it, so its presence
+            # detail moves to survey-metadata - the workflow must capture it, so its presence
             # here is a hard stop, not a silent deletion. Live corpus: zero occurrences.
             if any(row.get(k) for k in ('statement', 'licence', 'retrieved', 'profile')):
                 raise NotImplementedError(

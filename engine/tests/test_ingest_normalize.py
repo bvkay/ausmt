@@ -56,7 +56,7 @@ def test_normalize_rejects_empty_tf(tmp_path):
 
 
 # -- The round-trip gate must not vacuously pass a re-read with fewer periods or a dropped
-# Tipper (a prefix-`min`-and-allclose gate would happily "verify" either).
+# tipper (a prefix-`min`-and-allclose gate would happily "verify" either).
 # We simulate a broken re-read by monkeypatching TF.read so ONLY the SECOND call inside normalize
 # (the canonical-XML round-trip re-read) is mutated afterward — the first call (reading `src`) is
 # untouched. This is the least invasive way to produce "an XML re-read that lost data" without

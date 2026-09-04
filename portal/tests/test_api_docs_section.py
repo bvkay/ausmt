@@ -376,7 +376,7 @@ def test_bbox_states_the_generalisation_caveat_and_its_contract_fields():
         assert value in frag, f"the prose must name the coordinates_state value {value}"
     # The docs name station.json's coordinate_policy, so an EMITTED record must actually carry it, and
     # only where the position is non-exact (an exact record gaining the key would tell a reader every
-    # Position is qualified). Emitted documents rather than emitter source text: this module installs no
+    # position is qualified). Emitted documents rather than emitter source text: this module installs no
     # engine stack, and a grep for a source literal survives no refactor of the emitter.
     def _emitted(station):
         return json.loads((STATION_PRODUCTS / "open-survey" / station / "station.json")

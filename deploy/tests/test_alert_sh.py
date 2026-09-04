@@ -327,7 +327,7 @@ def test_curl_failure_on_success_path_exits_nonzero(tmp_path):
 # (e) alert.sh ALSO writes ops-status.json for the curator ops floor.
 # The producer half of the serve-state operations floor. Same shim/black-box posture — every
 # assertion reads the emitted ops-status.json (an independent on-disk observable), never the script's
-# Self-report. All run on the gateway-ci workflow (sh + python + git present); no skip-tripwire entry.
+# self-report. All run on the gateway-ci workflow (sh + python + git present); no skip-tripwire entry.
 # ==================================================================================================
 _OPS_TOP_KEYS = ("generated_at", "timer_period_min", "reconcile", "backups", "alerts", "box",
                  "freshness", "builds", "logs")

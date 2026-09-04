@@ -71,7 +71,7 @@ import sys
 ALLOWED_SKIP_REASON_SUBSTRINGS = [
     "sibling ausmt-surveys/_validation not present",  # test_validator_gate.py - sibling gate (now defensive)
     # test_validator_gate.py's oracle skips (exact reason below) when the gateway package
-    # Tree itself is absent from the repo root - legitimately reachable ONLY in the engine-image workflows
+    # tree itself is absent from the repo root - legitimately reachable ONLY in the engine-image workflows
     # (the engine image COPYs engine/ only, so /app/gateway never exists: deploy-images' in-image
     # engine-full-tests run, the sole remaining engine-image pytest now that no in-Dockerfile
     # duplicate stands beside it, pipes through THIS tripwire). INERT on every checkout workflow: a
@@ -87,7 +87,7 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # three tests that read them skip with the exact reason below; the ENGINE-side statements (schema
     # title, contract parser, generated _contract constant, the real build's emitted portal block,
     # build_portal.py's own literal guard) keep ASSERTING in the image, so the release gate still
-    # Proves the image's internal coherence. INERT on the checkout workflows: build-products.yml checks
+    # proves the image's internal coherence. INERT on the checkout workflows: build-products.yml checks
     # out the whole monorepo and its path filter names all five portal files, so there these tests RUN
     # (a checkout missing one of them fails the read rather than skipping; the guard opens as soon as
     # any pinned portal file is present).
@@ -95,13 +95,13 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # test_mtcat_version_parity.py again, the SAME designed-topology class, for the docs tree: the
     # MTCAT 2.0 version machinery added a pin on the docs current-version display
     # (docs/docs/reference/index.md), and engine.Dockerfile does not COPY docs/ either, so in the
-    # Image workflow that one test skips with the exact reason below. INERT on checkout workflows, where the
+    # image workflow that one test skips with the exact reason below. INERT on checkout workflows, where the
     # docs tree is always present and the pin asserts.
     "engine image build: docs tree not shipped",      # test_mtcat_version_parity.py docs pin, image builds only
     # Test_convention_gates_realdata.py - the real-corpus convention-gate pins (the three
     # named USArray negative controls, the ccmt-2017 de-rotation acceptance, the AusLAMP-SA
     # custodian-twin proof) run only where the .audit/realdata harness exists (the dev box; the
-    # Corpus is not in the repo and not in any CI workflow). Same dev-box-only class as the
+    # corpus is not in the repo and not in any CI workflow). Same dev-box-only class as the
     # sibling-validator skip above. The synthetic gate pins in test_convention_gates.py RUN
     # everywhere — this entry never excuses those.
     "realdata corpus not present (AUSMT_REALDATA unset)",
@@ -120,13 +120,13 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # dev-box-only class as the three entries above. The freeze invariant is NOT unguarded in CI:
     # the fixture tests in the same module prove the checker's fail/pass/refuse behaviour on every
     # run, and the committed registry file itself is validated structurally; this entry excuses the
-    # Real-corpus leg only. (Added when the path-URL contract module's first CI run tripped this
+    # real-corpus leg only. (Added when the path-URL contract module's first CI run tripped this
     # tripwire on the new skip - the tripwire working exactly as designed.)
     "AUSMT_URL_REGISTRY_DATA does not name a built data dir",
     # test_mtcat20_invariants.py's corpus arms: the zero-null/zero-empty + reference-invariant
     # scans over a REAL full-corpus build (AUSMT_MTCAT20_DATA) and the 1.2 -> 2.0 emitter
     # equivalence dict-test against a pre-2.0 baseline document (AUSMT_MTCAT20_BASELINE). A built
-    # Corpus exists on the dev box and the deployed box, never in a CI engine workflow (the workflows
+    # corpus exists on the dev box and the deployed box, never in a CI engine workflow (the workflows
     # build no corpus). Same dev-box-only class as the entries above; the invariants are NOT
     # unguarded in CI - the same checks run against the committed fixtures and a real build of the
     # vendored fixture surveys on every run; these arms extend the identical assertions to corpus

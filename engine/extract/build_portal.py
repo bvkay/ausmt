@@ -3551,7 +3551,7 @@ def aggregate_conditioning(notes_by_station: dict) -> list:
         elif absentees and len(absentees) <= CONDITIONING_ENUM_LIMIT and len(absentees) < count:
             # `absentees and`: a note carried by ALL stations has an EMPTY absentee list, which
             # passed the small-complement check and shipped except=[] — truthy in JS, so the first
-            # Production panel render showed "[all except: ]" on every fleet-wide note.
+            # production panel render showed "[all except: ]" on every fleet-wide note.
             # All-carriers => both sides None; count == the survey total tells the story.
             ex = sorted(absentees)
         entries.append({"note": note, "count": count,
@@ -4899,7 +4899,7 @@ def discover_work(a, ap, validator):
                     surveys_skipped_validation.append(d.name)
                     continue
             # Single-read coherence: read survey.yaml's bytes ONCE and derive BOTH
-            # The parsed metadata and the cache-key digest from them. The incident was a
+            # the parsed metadata and the cache-key digest from them. The incident was a
             # build that read this file twice (meta here, digest at its per-survey loop iteration,
             # minutes later on a full corpus): an edit landing between the reads wrote served XML
             # embedding the PRE-edit metadata KEYED under the POST-edit digest — poisoning the cache
@@ -4926,7 +4926,7 @@ def discover_work(a, ap, validator):
             mh = sorted((d / "transfer_functions" / "mth5").glob("*.h5")) \
                 + sorted((d / "transfer_functions" / "mth5").glob("*.mth5"))
             # EMTF XML is a FIRST-CLASS submission input, alongside EDI and
-            # Transfer_functions/emtfxml/ in a SUBMITTED package is therefore an ingest folder;
+            # transfer_functions/emtfxml/ in a SUBMITTED package is therefore an ingest folder;
             # the build's own canonical re-emission still lands in the served tree (out/xml/<slug>/),
             # never back into the package, so the two never collide.
             xmls = sorted((d / "transfer_functions" / "emtfxml").glob("*.xml"))
@@ -5753,7 +5753,7 @@ def _main_build(argv=None):
             # per-station coordinate byte-gate (_cserved) is captured too: even inside a served survey, a
             # non-exact station's EDI is withheld, so station.json's distribution must not advertise it.
             # The SURVEY access-serve state (_acc["served"], the SAME result the byte gate and the
-            # Tf/sci withholding use, never re-derived) is captured so the deferred emitter withholds
+            # tf/sci withholding use, never re-derived) is captured so the deferred emitter withholds
             # the derived science products for a non-served survey, exactly as tf.json/sci.json are.
             # edi_served is the ACTUAL served-EDI outcome for this station, not the gate alone:
             # an EMTF-XML-sourced station whose canonical emission failed passes both gates yet
@@ -6345,7 +6345,7 @@ def _main_build(argv=None):
     # The digest-stamp sidecar. out/products/survey_digests.json maps each served survey's
     # slug -> {yaml_digest_current, xml_digest_stamped:{station_id:digest}}. This is the independent
     # observable the verify.py --surveys consistency gate needs to catch a product served under a stale
-    # Cache digest: it recomputes the LIVE survey.yaml digest and asserts the
+    # cache digest: it recomputes the LIVE survey.yaml digest and asserts the
     # stamps agree. Emitted for EVERY served survey (non-served/embargoed surveys have no served XML and
     # so no stamps). NOT a byte-equivalence surface - the digests are stable inputs, but this file
     # is deliberately kept out of the manifest/mtcat products the cache-equivalence test pins.

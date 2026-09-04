@@ -305,7 +305,7 @@ def test_stations_split_css_layout_mechanism_present():
     FAILS IF any mechanism piece is dropped from the shell CSS."""
     head = curatorpage._HEAD
     # (a) three-column grid with explicit table-left / facts-middle / plots-right placement. grid-ROW
-    # Is load-bearing, not decoration: with only grid-COLUMN set,
+    # is load-bearing, not decoration: with only grid-COLUMN set,
     # auto-placement cannot move backwards within a row, so a DOM-later item wanting an earlier column
     # drops to ROW 2 silently. ALL THREE must pin grid-row:1. FAILS IF any grid-row:1 is dropped.
     assert ".stations-split{display:grid" in head, "the split must be a CSS grid"

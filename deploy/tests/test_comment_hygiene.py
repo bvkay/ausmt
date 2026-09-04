@@ -1277,6 +1277,15 @@ LIST_MARKER = re.compile(r"[*+.o]\s|\d{1,2}[.)]\s|[a-z][.)]\s|-\s|\|")
 # The closed class: a word that cannot open a sentence of its own, so a capital on it says
 # the sentence in front of it was cut away. An open-class word (a noun, a verb) opens plenty
 # of sentences and would make this rule a guess.
+#
+# THE HOLE THIS LEAVES IS SEVENTY-SEVEN SITES WIDE, and it is a standing hole, not a backlog.
+# A sweep that lifts the last token off a comment line leaves the word below it at the head of
+# the line still wearing the capital that made the line read, and where that word is open-class
+# ("several pins Join against", "a digest their Metadata does not match", "so every data download
+# Can carry them") nothing here can see it: the same word opens a sentence honestly on the line
+# above and below it. Seventy-seven such sites were measured against origin/main word for word
+# and swept BY HAND, one commit, each restored to the spelling origin/main writes. The rule as
+# written finds none of them, and a later round that cuts prose will make more.
 FUNCTION_WORDS = frozenset(
     "For In On At To From With Without Of By Into Onto Over Under Between Through During "
     "Against Per Via Among Because Although Though Whereas Unless Until Since And But Or "

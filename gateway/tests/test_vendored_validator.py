@@ -55,7 +55,7 @@ def test_vendored_validator_matches_pin():
 
 def test_sync_check_mode_agrees():
     # The CLI --check gate (a maintainer can run it by hand) must agree with the pytest assertion: the
-    # Committed vendored copy is in sync, so do_check returns 0. FAILS IF the two accounting paths
+    # committed vendored copy is in sync, so do_check returns 0. FAILS IF the two accounting paths
     # disagree (a check that cannot fail when the file is corrupt would be vacuous).
     sync = _load_sync()
     assert sync.do_check() == 0

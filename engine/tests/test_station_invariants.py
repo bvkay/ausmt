@@ -334,7 +334,7 @@ def test_the_built_records_carry_both_members_the_drawer_reads(built):
 
 
 # The two station-named test files that are NOT part of the promoted contract's family: the survey.yaml
-# Station-id override and the stations GeoJSON emitter. Both predate the workflow and neither gates this
+# station-id override and the stations GeoJSON emitter. Both predate the workflow and neither gates this
 # contract. Naming them is what lets the glob below catch a NEW contract test file that goes unlisted.
 _NOT_CONTRACT_FAMILY = {"test_station_ids.py", "test_stations_geojson.py"}
 

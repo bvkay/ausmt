@@ -115,7 +115,7 @@ def test_preview_failure_summary_carries_build_diagnostics(tmp_path, monkeypatch
 def test_preview_refuses_package_without_survey_folder(tmp_path, monkeypatch):
     # The discovery guard: a package with NO <slug>/survey.yaml anywhere reports the specific
     # 'no survey folder found in package' message — distinct from zero stations BUILT — and never
-    # Spawns the engine. proven failing on main 8587866: the engine subprocess ran
+    # spawns the engine. proven failing on main 8587866: the engine subprocess ran
     # anyway and the summary carried only the generic 'preview build failed'.
     cfg = _runner_cfg(tmp_path)
     pkg_root = tmp_path / "package"
@@ -459,8 +459,8 @@ def test_run_validator_against_the_real_validator(tmp_path):
     # {counts, items, ...} report and a True (no-FAIL) verdict on a minimal valid package.
     #
     # UNCONDITIONAL - resolves the sibling validator if present, else the
-    # Committed vendored copy; require_validator_dir FAILS (never skips) if neither is present. The
-    # Validator is stdlib+yaml so this runs in the stack-less gateway workflow too.
+    # committed vendored copy; require_validator_dir FAILS (never skips) if neither is present. The
+    # validator is stdlib+yaml so this runs in the stack-less gateway workflow too.
     #
     # Proven failing on main d645743: the argv was
     #   [python, validate_survey.py, --json, <package-root>]
@@ -608,7 +608,7 @@ def test_heartbeat_keeps_running_file_fresh(tmp_path):
 
 def test_safe_extract_refuses_traversal(tmp_path):
     # A member with a '..' segment must be refused at extraction (re-check), and NOTHING
-    # Is written outside target. proven failing: with check_member removed from
+    # is written outside target. proven failing: with check_member removed from
     # safe_extract, the member wrote to the parent dir (escape) and no UnsafeMember was raised.
     zpath = tmp_path / "evil.zip"
     zpath.write_bytes(make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/../escape.edi": b"x"}))
@@ -893,7 +893,7 @@ def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeyp
 # run_forever's loop contracts, pinned at the poll_once seam.
 # run_forever's body is now poll_once(cfg); these tests enforce the ordering + crash-recovery
 # contracts the finding said were enforced NOWHERE (the old run_forever docstring falsely claimed
-# Compose-e2e coverage in a workflow where the runner never boots).
+# compose-e2e coverage in a workflow where the runner never boots).
 # --------------------------------------------------------------------------------------------------
 def test_poll_once_drains_edit_jobs_before_submission_jobs(tmp_path, monkeypatch):
     # FAILS IF a submission job is processed before a pending edit job in the same pass. Edit

@@ -195,7 +195,7 @@ def proc_note(text, dataid=None):
 # --- LINEAGE: the file WRITER is not the transfer-function PROCESSOR --------------------------
 # The EDI HEAD's PROGNAME/PROGVERS names the program that SERIALISED the file. For most of the
 # corpus that is a database/plotting exporter (Geotools, WinGLink, MTpy) which did no processing at
-# All: over the GA AusLAMP holdings, 1743 files say `PROGVERS="WINGLINK EDI
+# all: over the GA AusLAMP holdings, 1743 files say `PROGVERS="WINGLINK EDI
 # 1.0.22"` and 337 say `PROGVERS="Geotools 4.0.5.12583"`, while the program that actually estimated
 # the transfer function is named ONLY in the >INFO free text ("Processing code: LEMIMT" on 296 of
 # those Geotools files; "processing.software.name = ['Birrp 5.0', ' 5.2']" on the MTpy-written

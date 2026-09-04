@@ -89,7 +89,7 @@ WILL_NOT_READ = "will_not_read"      # no code path in AusMT reads this file; it
 #
 # BOUNDARY, stated rather than hidden: `transfer_function.processed_date` is the one other unguarded
 # field an >INFO scrape can reach that raises on junk, but it is a DATE, not a number, and it was
-# Measured to accept a trailing comma happily. Predicting it would mean
+# measured to accept a trailing comma happily. Predicting it would mean
 # mirroring mt_metadata's date grammar, a far larger and more brittle surface than the delimiter
 # class this exists for, and no EDI in either corpus carries the key at all. It is left unmodelled on
 # purpose: a missed failure costs a build that fails the way it does today, a false alarm costs trust.

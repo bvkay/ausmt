@@ -86,7 +86,7 @@ def test_the_role_axes_are_emitted_only_where_they_are_certain(built):
 def test_the_survey_archives_ride_every_station_whose_bytes_are_in_them(built):
     """An archive row is a CONTAINMENT claim, so a bundle rides the stations that actually put bytes
     into it, not every station of its survey. In this all-exact fixture that is every station; the
-    Arm in test_station_emission.py is where the two differ."""
+    arm in test_station_emission.py is where the two differ."""
     doc = _station(built, "example-survey", "EXAMPLE01")
     archives = [r for r in doc["resources"] if r["kind"] == "archive"]
     assert {r["format"] for r in archives} == {"zip"}

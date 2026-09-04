@@ -37,7 +37,7 @@ SCHEMA = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encodin
 sys.path.insert(0, str(ROOT / "extract"))
 # The module's engine-produced coordinate fixtures (one EDI per station, distinctive positions) and
 # its survey.yaml writer. Reused so the byte gate is exercised against the SAME fixture shape the
-# Coordinate-access workflow proves the gate on.
+# coordinate-access workflow proves the gate on.
 from test_coord_access import EXACT, GEN, HID, _stage_survey, _sweep_h5_for_non_exact   # noqa: E402
 
 
@@ -149,7 +149,7 @@ def test_a_non_exact_station_is_byte_gated_out_of_tier_one(tmp_path):
     on_disk = sorted(p.name for p in (out / "h5" / "gate-survey").glob("*"))
     assert on_disk == [f"{EXACT['id']}.h5"], on_disk
     # And the true positions of the two gated stations appear nowhere in the h5 tree. Checked with the
-    # Leak-sweep's OWN numeric HDF5 leg (the engine's mth5 reader, values compared as floats), not
+    # leak-sweep's OWN numeric HDF5 leg (the engine's mth5 reader, values compared as floats), not
     # a byte-string search: a search for b"-33.555551" inside an HDF5 file is the check this
     # module documents as structurally blind, because an IEEE-754 double has no decimal spelling
     # in the container.

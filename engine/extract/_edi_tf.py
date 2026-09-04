@@ -93,7 +93,7 @@ def tf_from_components(periods, comp):
     def at(arr, i):
         # The single accessor every per-point read flows through — so non-finite values are
         # filtered HERE, once, instead of per column. MTpy writes literal `inf` into error
-        # Arrays for dead points, and inf survives round
+        # arrays for dead points, and inf survives round
         # (round(inf,1)=inf) while norm_phase would mint a NaN ((inf+180)%360). A leaked
         # non-finite poisons tf.json: Python json emits non-RFC `Infinity`, browsers' JSON.parse
         # rejects the whole file. Non-finite -> None = "no value here", the path every column

@@ -17,7 +17,7 @@ from pathlib import Path
 
 # Make the engine's stdlib-only _license_text leaf importable (the runner's intake module reaches it
 # via `from extract._license_text import ...`, falling back to the bare sibling name — this insert
-# Feeds that fallback in the local/gateway test workflow where `extract` is not pip-installed).
+# feeds that fallback in the local/gateway test workflow where `extract` is not pip-installed).
 _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
 sys.path.insert(0, str(_ENGINE_DIR / "extract"))
 

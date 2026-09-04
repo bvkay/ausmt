@@ -351,7 +351,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "tourSettleEl:()=>_tourSettleEl&&_tourSettleEl.id,tourLayoutRuns:()=>_tourLayoutRuns," +
   "tourSettling:()=>_tourSettleRAF!==0," +   // whether a poll frame is still pending (true=watching, false=stood down/detached)
   // Welcome-popup helpers: showWelcome/closeWelcome drive the first-visit modal directly (the
-  // Checkbox-persistence matrix pokes #welcomeDismiss then closes each way). the
+  // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). the
   // side-picking _tourPlace is retired for a CENTRED card + a LEADER to the spotlight. _tourCardBox is the
   // PURE centred-card box (with the overlap nudge) and _tourLeader the PURE leader geometry (endpoints +
   // suppression) - both unit-tested with synthetic rects since jsdom has no layout engine. TOUR_DIM is
@@ -849,7 +849,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // settles on failure too, so a 404 on sci.json re-enabled the completeness controls, emptied the map at any
   // qMin, painted every marker the "not evaluated" grey and wrote remote_ref:false into an exported file.
   // Phase 2 is what made a sci.json failure survivable at all (pre-split it rode the required Promise.all and
-  // Blanked the portal), so this state is this module's to answer.
+  // blanked the portal), so this state is this module's to answer.
   const _noSci = Object.assign({}, DATAMAP); delete _noSci["data/sci.json"];
   const sciFailWin = await bootFreshWindow(_noSci);
   const sfDoc = sciFailWin.document, sfA = sciFailWin.__api;
@@ -2883,7 +2883,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C1b: the embargoed access panel must render inside the Response tab; got: " + dRes.textContent.slice(0, 200));
   ok(dRes.querySelectorAll("svg path").length === 0, "C1b: the embargoed Response tab must render no plot paths");
   // ...and NO expand control either: with the curves withheld the modal has no panels to open, so an
-  // Affordance over the access panel would be a dead control.
+  // affordance over the access panel would be a dead control.
   ok(dRes.querySelectorAll('[data-act="expand"]').length === 0,
     "C1b: an embargoed station's Response tab must carry no expand control (there is nothing to expand)");
   ok(dFiles.innerHTML.indexOf("EDI (via source archive)") < 0,

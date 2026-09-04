@@ -238,7 +238,7 @@ process.stdout.write(JSON.stringify(out));
 # hand-built rows are banned here by design.
 #
 # Skip posture: the engine stack (mt_metadata) is absent in the stackless gateway CI workflow, so these
-# Pins skip there with EXACTLY the module's one allow-listed tripwire reason (gateway-ci.yml --allow);
+# pins skip there with EXACTLY the module's one allow-listed tripwire reason (gateway-ci.yml --allow);
 # On the dev box (ausmt env) and the engine workflows they RUN. Node-absent boxes hit the file-level
 # pytestmark above, which is deliberately NOT allow-listed.
 # ==================================================================================================
@@ -486,7 +486,7 @@ process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(
     assert any(g == "declared-zero · no rotation declared" for g in got), got
     # Synthetic engine-shaped variants exercise the OTHER branches (values in the engine's own
     # field vocabulary; the real corpus is all-clean so cannot reach them). The third is the
-    # Panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances),
+    # panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances),
     # tipper_declared_azimuth_deg is emitted by the engine ONLY when divergent, so its presence
     # must surface a 'tipper declared azimuth' part.
     variants = [{"frame_served": "declared-zero", "derotated": True,

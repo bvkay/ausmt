@@ -106,7 +106,7 @@ def test_round_trip_fidelity_edit_touches_only_field_version_notes(tmp_path):
     # edit ONE field (region); the emitted diff touches ONLY region + version + the appended
     # release_notes entry. The comment lines and the unknown custom key are byte-identical.
     # Proven-failing (design phase): with ruamel defaults the no-op diff already showed
-    # Spurious null->empty and re-wrap changes - the tuned _yaml config is what makes this hold.
+    # spurious null->empty and re-wrap changes - the tuned _yaml config is what makes this hold.
     _write_package(tmp_path / "surveys-live")
     result = _merge(_cfg(tmp_path))
     assert result["ok"] is True
@@ -146,7 +146,7 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 # [FC-4] Stage-1 diff-minimality pins. The editor submits WHOLE sections as plain
 # JSON dicts; the apply_patch replaced the section's CommentedMap wholesale, so editing ONE
 # sub-field re-emitted every sibling line and dropped intra-section comments. These pin the surgical
-# In-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter (a
+# in-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter (a
 # single organisation.ror edit rewrote organisation.name and lost its trailing comment); see the
 # report's red-then-green evidence.
 # --------------------------------------------------------------------------------------------------
@@ -760,7 +760,7 @@ custom_note: "unknown key survives"
 """
 
 # Resolve the validator UNCONDITIONALLY - sibling if present, else the committed
-# Vendored pinned copy; require_validator_dir FAILS (never skips) if neither is present.
+# vendored pinned copy; require_validator_dir FAILS (never skips) if neither is present.
 from gateway.tests.conftest import require_validator_dir  # noqa: E402
 
 

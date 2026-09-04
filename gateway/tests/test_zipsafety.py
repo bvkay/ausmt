@@ -49,7 +49,7 @@ def test_absolute_path_rejected():
 
 def test_backslash_rejected():
     # zipfile normalises '\\' -> '/' in its writer, reader, AND the ZipInfo constructor, so a
-    # Backslash cannot reach inspect via a python-parsed archive - the guard is belt-and-braces
+    # backslash cannot reach inspect via a python-parsed archive - the guard is belt-and-braces
     # against a foreign zip tool whose bytes some other parser might surface un-normalised. Tested at
     # Check_member's seam by setting .filename directly (bypassing the constructor's normalisation)
     # to prove the branch fires on a literal backslash.

@@ -154,7 +154,7 @@ CORPUS_SHAPED = {
                 {"name": "AusMT", "name_type": "organisation", "role": "HostingInstitution"},
             ],
             # discovery is universal, distribution is not: the footprint and station rows are
-            # Public while the bytes are withheld. 2.0 OMITS formats here: an
+            # public while the bytes are withheld. 2.0 OMITS formats here: an
             # empty list would falsely assert that no formats are KNOWN for the withheld holdings.
         },
     ],

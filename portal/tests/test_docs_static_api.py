@@ -63,7 +63,7 @@ MANIFEST_SCHEMA = REPO / "engine" / "schema" / "manifest.schema.json"
 MTCAT_SCHEMA = REPO / "engine" / "schema" / "mtcat.schema.json"
 COLUMNS = REPO / "contract" / "columns.json"
 # A per-station products tree the REAL build emitted (an open survey with an exact and a generalised
-# Station, plus an embargoed one), committed so this stackless workflow can pin the docs against emitted
+# station, plus an embargoed one), committed so this stackless workflow can pin the docs against emitted
 # DOCUMENTS rather than against emitter source text.
 STATION_PRODUCTS = ROOT / "tests" / "fixtures" / "station-products"
 STATION_SCHEMA = REPO / "engine" / "schema" / "ausmt-station.schema.json"

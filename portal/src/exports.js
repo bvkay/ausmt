@@ -353,7 +353,7 @@ async function tsLevelList(tok){
 // should state the absence. See docs: portal internals, exports.js.
 function citeLine(c,doi){return "  "+apaPlain(c,doi)+(doi?"":"  [no DOI assigned]");}
 // The citation files for a station set, extracted from the click handler so every data download
-// Can carry them: the selection zips embed these beside LICENSE.txt, and the
+// can carry them: the selection zips embed these beside LICENSE.txt, and the
 // time-series hand-offs travel with a metadata pack. Output is byte-identical to the pack the
 // Citation pack button always built.
 function buildCitationFiles(_scope){

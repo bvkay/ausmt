@@ -94,7 +94,7 @@ def test_published_status_pages_say_not_yet_served(tmp_path):
 
 def test_commit_carries_no_submitter_email(tmp_path):
     # THE PII guarantee for publish (house rule): the submitter email appears in NO git
-    # Argument. proven failing: injecting the submitter email into the commit body made
+    # argument. proven failing: injecting the submitter email into the commit body made
     # this assertion break (verified by patching a leak in).
     async def _body():
         git = FakeGit()
@@ -111,9 +111,9 @@ def test_commit_carries_no_submitter_email(tmp_path):
 
 def test_git_runner_env_scrubs_secrets(tmp_path, monkeypatch):
     # the env handed to git must NOT carry AUSMT_SUBMIT_KEY / AUSMT_CURATOR_KEYS (a hook
-    # Could read them). Failure criterion: fails if either secret var is present in scrubbed_env.
+    # could read them). Failure criterion: fails if either secret var is present in scrubbed_env.
     # Proven failing: real_git_runner passed env=None → git inherited os.environ including
-    # Both secrets; scrubbed_env drops them.
+    # both secrets; scrubbed_env drops them.
     monkeypatch.setenv("AUSMT_SUBMIT_KEY", "submit-secret")
     monkeypatch.setenv("AUSMT_CURATOR_KEYS", "curator1:curator-secret")
     monkeypatch.setenv("PATH", "/usr/bin")  # a benign var that MUST survive
@@ -155,7 +155,7 @@ def test_pii_in_preview_blocks_approve(tmp_path):
 def test_foreign_email_in_preview_blocks_approve(tmp_path):
     # the PII sweep must ALSO fire on a DIFFERENT person's email via the generic pattern,
     # not only the submitter's own. Failure criterion: fails if a package containing a stranger's
-    # Email is approvable. proven failing: the generic _EMAIL_RE was defined but never
+    # email is approvable. proven failing: the generic _EMAIL_RE was defined but never
     # used — only the submitter-email needle was checked, so a co-author's email sailed through.
     async def _body():
         git = FakeGit()

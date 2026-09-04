@@ -127,7 +127,7 @@ def test_reject_records_actor_and_note(tmp_path):
 def test_empty_note_refused_every_action(tmp_path):
     # EVERY action requires a non-empty note (no reject exemption). An empty
     # note on return OR reject => 400, no transition. Failure criterion: fails if either action
-    # Transitions on an empty note. proven failing: the `action != "reject"` exemption let
+    # transitions on an empty note. proven failing: the `action != "reject"` exemption let
     # a reject with an empty note through, so a submission could be REJECTED with no recorded reason.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):

@@ -253,7 +253,7 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
 
     # Exact counter arithmetic (deterministic): the edited station misses parse + xml (2) and
     # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each). On failure, dump
-    # Both builds' full counters + the cache listing (the failures left nothing
+    # both builds' full counters + the cache listing (the failures left nothing
     # to diagnose from; salt_fp/degenerate/write_errors in the dump now name the class directly).
     assert counters["misses"] == 2, \
         f"the byte-changed EDI did not miss exactly (parse+xml): {counters}\n{_forensics(cache, out1, out2)}"
