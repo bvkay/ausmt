@@ -25,7 +25,7 @@ function _focusDrawer(){if(!drawer||!drawer.querySelector)return;
   // keeps focus (accessibility) without that scroll-into-view. Guarded fallback for engines lacking the option.
   const t=drawer.querySelector(".close")||drawer;if(t&&t.focus){try{t.focus({preventScroll:true});}catch(e){}}}
 function _restoreDrawerFocus(){const f=_drawerReturnFocus;_drawerReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
-// Cleanup wave (D): a dim backdrop shown behind the drawer while it is open on the Surveys /
+// A dim backdrop shown behind the drawer while it is open on the Surveys /
 // Collections / collection-detail views (where the drawer floats over full-width content). NOT on the
 // map view: there the drawer sits side-by-side with the map, so no scrim. Clicking the backdrop closes
 // the drawer. It lives in #content BENEATH the drawer and the drawer's left-edge resize handle
@@ -580,11 +580,11 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
   nodes.push(
    ["Raw time series",m.ts==="ok"?tsCollectionCell(m):"not located in source archives"],
    ["Processing software",esc(processingSoftwareText(m,sc))]);
-  // "Method" used to render unconditionally and read "not stated" on almost every station, because the
-  // structured algorithm/remote-reference fields it draws on are empty for most EDI dialects. A row that
-  // says nothing on nearly the whole corpus is noise in a six-row graph, and it crowded out the rows that
-  // do carry lineage. It renders only where the source file actually states one of the two — or while
-  // sci.json is still in flight, where the honest answer is that the answer is not known yet.
+  // "Method" renders only where the source file actually states an algorithm or a remote reference, or
+  // while sci.json is still in flight, where the honest answer is that the answer is not known yet. The
+  // structured fields it draws on are empty for most EDI dialects, so an unconditional row would say
+  // "not stated" on nearly the whole corpus: noise in a six-row graph, crowding out the rows that do
+  // carry lineage.
   if(methodGate||sc[SC.alg]||sc[SC.rr])
     nodes.push(["Method",methodGate||(sc[SC.alg]?esc(sc[SC.alg]):"remote reference (stated)")]);
   // The file-WRITER, under its own heading, next to the processor it is not. Read from station.json
@@ -929,10 +929,9 @@ function openStation(i,opts){
     `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"-"}</td></tr>`+
     `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`;
   // The Metadata & API box collapses to a single small "API" expander at the tab's foot.
-  // The section used to advertise a "Read API (planned)" over three paths under an /api
-  // prefix (station json, survey json, station edi). No such tier has ever existed on any AusMT
-  // deployment; those three lines were fiction. What the site actually serves is read-only static JSON
-  // under /data/, so the section lists the LIVE public surface for the station in front of the reader.
+  // No /api tier has ever existed on any AusMT deployment, so the section must never advertise one.
+  // What the site serves is read-only static JSON under /data/, and the section lists that LIVE public
+  // surface for the station in front of the reader.
   // The only public metadata contracts are mtcat.json
   // and station.json (survey-metadata.json to come); manifest.json is the download index; everything
   // else under /data is portal-internal and carries no contract, so the drawer must not advertise it.
@@ -951,11 +950,10 @@ function openStation(i,opts){
   //   * /data/manifest.json, the download index every artifact is located through. The former
   //     /data/products/manifest.json twin and /data/surveys.json rows are gone: the twin is retired and
   //     surveys.json is portal-internal (superseded as a contract by survey-metadata.json).
-  // Docs wave, stage 2: the trailing pointer used to send readers to About's
-  // "Fetching data via API". About is now a front door carrying a quickstart, and the worked
-  // patterns (per-station manifest fetch, bounding box, checksum verification) live on the docs site's
-  // API reference. The pointer goes there, to the same stable RTD path About links, so the two surfaces
-  // agree on where depth lives. tests/test_drawer_api_endpoints.py pins the URL string against About's.
+  // The trailing pointer sends a reader to the docs site's API reference, where the worked patterns
+  // (per-station manifest fetch, bounding box, checksum verification) live; About carries the quickstart
+  // alone. It is the same stable RTD path About links, so the two surfaces agree on where depth lives.
+  // tests/test_drawer_api_endpoints.py pins the URL string against About's.
   const _apiSlug=s.slug||((SMETA[s.survey]||{}).slug)||"";
   const _apiEdi=_arts.find(a=>a.format==="edi");
   const _apiRows=[];
@@ -1070,11 +1068,10 @@ function copyTxt(t){navigator.clipboard?.writeText(t).then(()=>toast("Copied."))
 function acqYearText(m){return m.dates?esc(m.dates):(m.year_start?(m.year_end&&m.year_end!==m.year_start?fmtRange(esc(String(m.year_start)),esc(String(m.year_end))):esc(String(m.year_start))):"");}
 // SLIM survey card. Field set is deliberately reduced to: title · organisation ·
 // collection chip · acquisition year · station count · data-type mixbar · period range · licence + DOI
-// badges · short description · two actions (View survey, Download). The heavier blocks that used to live
-// on the card — the persistent-identifiers rollup (identifiersHtml), the APA citation (.cite), the
-// spatial extent, the coordinate-QC flag tally, and the per-format availability matrix (EDI/time-series/
-// MTH5 badges) — are NOT deleted from the codebase; they still render in the survey DETAIL (openSurvey)
-// and the station drawer. The automated completeness/smoothness check is intentionally OMITTED from the
+// badges · short description · two actions (View survey, Download). The heavier blocks — the
+// persistent-identifiers rollup (identifiersHtml), the APA citation (.cite), the spatial extent, the
+// coordinate-QC flag tally, and the per-format availability matrix (EDI/time-series/MTH5 badges) — do
+// NOT belong on the card; they render in the survey DETAIL (openSurvey) and the station drawer. The automated completeness/smoothness check is intentionally OMITTED from the
 // card (it must never read as a card-level verdict) and stays in the detail + drawer with its framing.
 function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   const mix={};ss.forEach(s=>mix[s.type]=(mix[s.type]||0)+1);
@@ -1182,12 +1179,10 @@ function creatorRow(c){
   const name=((c&&c.name)||"").toString().trim();
   if(!name)return "";
   return c&&c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
-// ONE attribution box, never two. The Attribution section used to render
-// the sentence and the creator names as two separate, visually identical .attn boxes, and because the
-// engine builds cite.au from creators[] (CONTRIBUTOR-CREDIT-SPEC §2.1, names joined "; "), those two boxes
-// carried the SAME names twice. They merge here: the single box renders the ONE attribution sentence with
-// each creator name ORCID/ROR-linked IN PLACE (creatorRow, the same per-name link rendering as before),
-// keeping the "; " separators and the "(year)" tail of the plain sentence.
+// ONE attribution box, never two. The engine builds cite.au from creators[] (CONTRIBUTOR-CREDIT-SPEC
+// §2.1, names joined "; "), so a second .attn box for the creator names would carry the SAME names
+// twice. The single box renders the ONE attribution sentence with each creator name ORCID/ROR-linked IN
+// PLACE (creatorRow), keeping the "; " separators and the "(year)" tail of the plain sentence.
 // The links are substituted ONLY when the creators reconstruct the sentence's own name string (the §2.1
 // guarantee: cite.au IS the "; "-joined creators). A verbatim custodian attribution.statement is never
 // rewritten, and a survey whose recorded citation names someone else keeps that recorded string: in both
@@ -1391,8 +1386,8 @@ function surveyPassesFacets(sv){const m=SMETA[sv]||{};
 // The promoted facets gate the MAP's own predicates too (filters.js passesCore), and _facets is
 // this module's state, so it is read through one named accessor rather than reached into.
 function surveyFacetOn(k){return !!_facets[k];}
-// The survey-level reading of ONE rule, which lives in filters.js (passesYearWindow) and used to live
-// here as a second verbatim copy. Only the field names differ between the two surfaces, so only the field
+// The survey-level reading of ONE rule, which lives in filters.js (passesYearWindow); this is not a
+// second verbatim copy of it. Only the field names differ between the two surfaces, so only the field
 // names belong here. Guarded like the other cross-module calls: a harness that loads drawer.js without
 // filters.js has no filter UI either, which is the same no-op the rule itself returns.
 function _surveyPassesYears(m){
@@ -1768,8 +1763,8 @@ function collLine(m){
 // full-width collection page. A collection appears automatically when surveys share a collection.id.
 // The participating organisations of a collection, derived from its member surveys' SMETA (deduped, sorted).
 function collOrgs(c){const set=new Set();((c&&c.surveys)||[]).forEach(sv=>{const o=(SMETA[sv]||{}).org;if(o)set.add(o);});return [...set].sort();}
-// Cleanup wave (E): ONE rich collection card at ANY count; the earlier feature/compact two-branch split
-// is gone. Title + type/status, the FULL abstract (no 240-char truncation, no Show more), the footprint
+// ONE rich collection card at ANY count, with no compact variant beside it.
+// Title + type/status, the FULL abstract (no 240-char truncation, no Show more), the footprint
 // scatter, rollup stats, participating organisations, and a prominent Explore action. Rendered into a
 // responsive auto-fit grid (index.html .collfeature-grid) so it reads from one collection today to
 // several (WA-MT, Vulcan) soon. Keeps the .scard.collfeature class the styling + tests key off.
@@ -1855,10 +1850,10 @@ function openCollectionPage(cid){
       `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtRange(fmtPeriod(pmn),fmtPeriod(pmx))+" s":"-"}</td></tr>`;
   }).join("");
   const v=document.getElementById("collectionview");
-  // Cleanup wave (E): a two-column HERO on wide screens; the abstract (+ the type/status/counts subline)
-  // on the left, the fluid footprint scatter on the right; the stat tiles span full-width below; the member
-  // table breathes to full width. The .collnote explainer is deleted (it duplicated the list-page intro,
-  // itself deleted). Single column on narrow screens (index.html .collhero).
+  // A two-column HERO on wide screens: the abstract (+ the type/status/counts subline) on the left, the
+  // fluid footprint scatter on the right; the stat tiles span full-width below and the member table
+  // breathes to full width. No .collnote explainer renders. Single column on narrow screens
+  // (index.html .collhero).
   v.innerHTML=
    `<div class="collpagenav"><button class="collback" data-act="collidx">← All collections</button>`+
    `<button class="collback collmapbtn" data-act="collmap" data-coll="${escAttr(cid)}">View all stations on main map</button></div>`+

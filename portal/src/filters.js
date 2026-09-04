@@ -329,9 +329,9 @@ function paintAvailSelect(){
   const ix=(typeof TSACC!=="undefined"&&TSACC)||{};
   const empty=known&&!Object.keys(ix).length;
   [...av.querySelectorAll("option")].forEach(o=>{
-    // "" is the Any option, which rides the catalogue and is live from first paint. The "tf" option this
-    // also used to skip is not in #availSel (the capability is a discovery chip), so no
-    // option can reach that branch any more; the harness pin asserts #availSel carries no "tf" value.
+    // "" is the Any option, which rides the catalogue and is live from first paint. There is no "tf"
+    // option in #availSel (the capability is a discovery chip), so no option reaches that branch; the
+    // harness pin asserts #availSel carries no "tf" value.
     if(o.value==="")return;
     o.disabled=!known||empty;
     o.title=known?(empty?"Availability by level: "+TS_NONE_HINT:""):TS_PENDING_HINT;});

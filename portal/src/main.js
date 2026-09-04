@@ -170,7 +170,7 @@ function setView(v){
   // The map legend sits over the map, so it belongs to the map view only. (The
   // first-visit welcome popup is a modal dismissed by user action, not tied to the view — no toggle here.)
   const _leg=document.getElementById("mapLegend");if(_leg)_leg.classList.toggle("hidden",v!=="map");
-  // Cleanup wave (C): the left filter rail (+ its resize handle) belong to the MAP view. On Surveys and
+  // The left filter rail (+ its resize handle) belong to the MAP view. On Surveys and
   // Collections the rail's controls don't apply (search + facet chips live in the discovery bar there),
   // so hide both and let the content span the width. The map view restores them, and the invalidateSize
   // on its setTimeout below reclaims the space. openCollectionPage mirrors this on its manual path.
@@ -211,12 +211,11 @@ function routeFromHash(){
     if(s){if(curView!=="map")setView("map");openStation(s.i);}return;}
   const msv=location.hash.match(/^#\/survey\/(.+)$/);
   if(msv){const slug=decodeURIComponent(msv[1]),sv=SLUG_TO_SURVEY[slug];
-    // The entity page's button for this route is labelled "View all stations on the main map", and it
-    // used to open a drawer over whatever view was showing with the map at its default national
-    // extent: openSurvey rewrites the hash and renders, it never framed anything, and the setView
-    // above is on the station branch only. focusSurvey is the seam the drawer's own "View on map"
-    // control uses, so the route now delivers the same framing and the same Option-A dim. Called
-    // AFTER openSurvey so the fit padding measures the drawer that is actually open.
+    // The entity page's button for this route is labelled "View all stations on the main map", so the
+    // route must FRAME the survey: openSurvey rewrites the hash and renders but frames nothing, and the
+    // setView above is on the station branch only. focusSurvey is the seam the drawer's own "View on
+    // map" control uses, so the route delivers the same framing and the same Option-A dim. Called AFTER
+    // openSurvey so the fit padding measures the drawer that is actually open.
     // Called directly, as filters.js does: focusSurvey is a top-level declaration in drawer.js,
     // which index.html loads before this file, so a typeof guard here could never be false and
     // would only turn a real regression into a silent no-op.
@@ -336,9 +335,9 @@ function showEmptyState(){
 // GATES persistence — ticked, every close path (tour / browse / Esc / click-out) persists the dismissal
 // via the existing localStorage key; unticked, the popup may return next visit. Esc and click-out behave
 // as "Browse immediately". First-visit show fires from runInit() (populated AND empty-data paths).
-// Docs wave, stage 2: the header's "How to use AusMT" item and the #introOverlay
-// "How AusMT works" panel it opened are both retired, which took the on-demand tour button with them.
-// The replacement is the ?tour=1 query parameter handled in maybeShowIntro() below, which About links as
+// There is no header "How to use AusMT" item and no #introOverlay "How AusMT works" panel, so there is
+// no on-demand tour button either.
+// The tour is reached by the ?tour=1 query parameter handled in maybeShowIntro() below, which About links as
 // "start the guided tour". It is checked BEFORE the seen flag on purpose: someone who ticked "don't show
 // this again" months ago is exactly the person who follows that link, so the flag must not swallow it.
 const INTRO_KEY="ausmt_intro_dismissed";

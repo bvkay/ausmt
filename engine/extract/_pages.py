@@ -75,7 +75,7 @@ _TYPE_COL = {"LPMT": "#2E8FA3", "BBMT": "#3730B8", "AMT": "#CDA1EC", "GDS": "#C2
 _TYPE_FALLBACK = "#4FC3D9"
 
 # The portal collections view's member palette (portal/src/drawer.js COLL_PAL), same order. It has
-# eight entries and used to CYCLE, so a collection with more members than that gave two surveys the
+# eight entries and must NOT cycle: a collection with more members than that would give two surveys the
 # same colour and its legend could not disambiguate them (AusLAMP: 14 members, 8 colours, 6 reused).
 _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
 
@@ -692,10 +692,10 @@ def _site_header(active="", status="") -> str:
     and not 180 circles inlined into 2,655 documents. Everything else in this header stays inline,
     and the src allow-list in engine/tests/test_index_pages.py names this path and nothing else.
 
-    The AuScope parent mark used to close the right zone. It is withdrawn from every header on the
-    site: the relationship is stated in words, in the footer this sheet also emits and in About's
-    "Who enables AusMT" section, and a symbol repeated in a corner said nothing either of those does
-    not. The right zone keeps the contextual status slot alone.
+    NO AuScope parent mark closes the right zone, on this header or any other on the site: the
+    relationship is stated in words, in the footer this sheet also emits and in About's "Who enables
+    AusMT" section, and a symbol repeated in a corner says nothing either of those does not. The right
+    zone keeps the contextual status slot alone.
 
     VERSION SKEW, STATED HONESTLY FOR THE FIRST DEPLOY. /vendor/* is served from the portal image and
     the pages tree from the data volume, so the two can be a deploy apart. Once both carry the mark
@@ -1026,9 +1026,9 @@ def _survey_kind(served_types) -> str:
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
                 base, extent=None, discovery=None, build=None, og_image=None) -> str:
     """`og_image` is the absolute URL of the card the EMITTER has already written for this survey,
-    or None for the portal's root card. The page used to derive it from "is Pillow importable",
-    which is a claim about the environment rather than about the file: a card whose write failed
-    still left the page advertising it, and a link preview then fetched a 404."""
+    or None for the portal's root card. It must never be derived from "is Pillow importable", which is
+    a claim about the environment rather than about the file: a card whose write failed would leave the
+    page advertising it, and a link preview would then fetch a 404."""
     smeta = smeta or {}
     title = ((sm_doc or {}).get("title")) or label
     blurb = smeta.get("blurb") or ""
@@ -1397,10 +1397,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                  if pub_rows else "")
 
     # ---- the station table ----
-    # The five default columns of design brief 17. Deployment and instrument metadata used to live
-    # here in eight more columns, which is why the station pages had to grow their Runs section
-    # FIRST: the survey table is a chooser, and the per-station detail belongs behind the station
-    # link this table's first column already carries.
+    # The five default columns of design brief 17. Deployment and instrument metadata do NOT belong
+    # here in eight more columns: the survey table is a chooser, and the per-station detail belongs
+    # behind the station link this table's first column already carries, in the station pages' Runs
+    # section.
     header = ["Station", "Lat", "Lon", "T max (s)", "Time series"]
     rows_html = []
     for doc in docs:

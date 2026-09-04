@@ -529,11 +529,11 @@ function writeLicenseFiles(folder,included){
 // The SELECTION-ZIP EVENT SHAPE, shared by all three bulk buttons. `format` is what the reader receives
 // and `files` is what is inside it, so the three flows are one comparable series: an operator can ask "how
 // often is a selection taken as an archive" and "which format is asked for" separately, and the answers
-// still add up. They used to disagree: the EDI zip reported format:"zip" while the two derived-format
-// zips reported format:"emtfxml"/"mth5", which put ONE action in two vocabularies. Nothing downstream can
-// tell a naming difference from a behaviour difference, so a chart of "zip exports" silently excluded two
-// of the three buttons and a chart by format double-counted the third against the single-file downloads,
-// which report their own extension through the drawer's dispatchProd.
+// still add up. The three must not disagree: an EDI zip reporting format:"zip" beside derived-format
+// zips reporting format:"emtfxml"/"mth5" puts ONE action in two vocabularies. Nothing downstream can
+// tell a naming difference from a behaviour difference, so a chart of "zip exports" would silently
+// exclude two of the three buttons and a chart by format would double-count the third against the
+// single-file downloads, which report their own extension through the drawer's dispatchProd.
 // Bounded-concurrency fetch for the bulk zips. Results keep the INPUT order (zip entries stay
 // deterministic across runs) and a failure lands as null in its slot, so per-file accounting is
 // the caller's, unchanged. Six in flight matches a browser's per-host default; the sequential

@@ -91,7 +91,7 @@ function startHydration(){
   return [TF_READY,SCI_READY,MANIFEST_READY,TSACC_READY];
 }
 
-// ---- download manifest resolver (slice #4 — the distribution backbone) ------------------------
+// ---- download manifest resolver: the distribution backbone -----------------------------------
 // manifest.json indexes every downloadable artifact: per-station files (EDI/EMTF-XML) and per-survey
 // bundles (EDI zip / survey MTH5), each with a portal-RELATIVE url + size + sha256 + tier. The portal
 // joins each url onto data_base_url via dataUrl() — so migrating a tier to NCI later is a manifest
@@ -99,11 +99,11 @@ function startHydration(){
 // passes through unchanged and renders as a live download link (url is null only if a row is unresolvable).
 function mfRows(kind){return (MANIFEST&&Array.isArray(MANIFEST[kind]))?MANIFEST[kind]:[];}
 // ONE ausmt_id -> served-rows index over files[], built once per manifest and shared by every consumer.
-// artifactsFor used to FILTER the whole files[] array on every call, which is nothing for a drawer opened
-// once and quadratic for the selection panel: paintExportSizes asks it per selected station on every
-// keystroke, so at corpus scale (3k stations selected, ~9k manifest rows) one repaint walked ~27M rows and
-// took 670ms, on the input path. Measured 18ms at 500 stations, 77ms at 1000, 290ms at 2000: the cost grew
-// with the SQUARE of the corpus, so it was invisible in every fixture and worst on the full selection.
+// Filtering the whole files[] array per call is nothing for a drawer opened once and quadratic for the
+// selection panel: paintExportSizes asks it per selected station on every keystroke, so at corpus scale
+// (3k stations selected, ~9k manifest rows) one repaint walks ~27M rows and takes 670ms, on the input
+// path. Measured 18ms at 500 stations, 77ms at 1000, 290ms at 2000: the cost grows with the SQUARE of the
+// corpus, so it is invisible in every fixture and worst on the full selection.
 //
 // The cache is keyed on the MANIFEST OBJECT ITSELF, not on a "loaded" flag or a reset call. MANIFEST is
 // assigned whole (data.js hydration, and the drivers/harnesses that poke it directly) and never mutated in

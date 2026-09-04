@@ -5,10 +5,9 @@
 // UX feedback round 1: default to a fixed Australia extent on load (was an arbitrary centre/zoom pair
 // that didn't reliably frame the continent on typical viewport sizes). Bounds: [[south,west],[north,east]]
 // chosen to cover the AU mainland + Tasmania with a small margin.
-// BuildMarkers() USED to re-fit to the tight station-marker extent once data
-// loaded — but because no station sits north of ~-22.5 lat, that fit dropped the view SOUTH (centre ~-33.6)
-// And clipped northern Australia. This fixed
-// Australia framing, so the home view is now ALWAYS this box (below): every station (lon 115.85..148.17,
+// buildMarkers() must NOT re-fit to the tight station-marker extent once data loads: no station sits
+// north of ~-22.5 lat, so that fit drops the view SOUTH (centre ~-33.6) and clips northern Australia.
+// The home view is ALWAYS this fixed box (below): every station (lon 115.85..148.17,
 // lat -43.44..-22.48) falls inside it, so it shows all dots AND frames the whole continent. Defined ONCE
 // here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_BOUNDS so the two frames
 // cannot drift apart.
