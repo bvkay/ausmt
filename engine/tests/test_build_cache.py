@@ -618,7 +618,7 @@ def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-#self-verifying cache entries (checksum-on-read; corrupt => delete + recompute)
+# Self-verifying cache entries (checksum-on-read; corrupt => delete + recompute)
 # --------------------------------------------------------------------------------------------------
 
 def _flip_payload_byte(blob: Path):

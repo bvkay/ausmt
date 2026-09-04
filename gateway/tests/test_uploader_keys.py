@@ -268,7 +268,7 @@ def test_uploader_email_absent_from_public_status(tmp_path):
     run(_body())
 
 
-# ---- keys-page layout - full width, short datetimes, usable note editor ----
+# ---- Keys-page layout - full width, short datetimes, usable note editor ----
 # Feedback: "use the full width of the page, to spread out the issued
 # keys table to make it easier to tell what is going on." The shipped page rendered inside the
 # shell's 960px .wrap: the note textarea was a few characters wide and the Created/Last-used ISO

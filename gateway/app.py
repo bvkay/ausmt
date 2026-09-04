@@ -700,7 +700,7 @@ class Gateway:
         return self._html(curatorpage.render_build_detail(
             build=build, generated_at=generated_at, log_tail=log_tail, ops_stale=ops_stale, nav=nav))
 
-    # ---- privileged serve-state ACTIONS. Every write is session + CSRF
+    # ---- Privileged serve-state ACTIONS. Every write is session + CSRF
     # gated; the intent file is the ONLY thing the gateway does — the host actions agent validates and
     # executes (the gateway gains no shell, intact). Single-flight (one pending intent of a kind)
     # is enforced in serve_state.write_intent under a lock; a StateDirUnwritable fails CLOSED (503).
@@ -2396,7 +2396,7 @@ class Gateway:
         }
         return Response(content=data, media_type=media_type, headers=headers)
 
-    # ---- quarantine view (read-only) --------------------------------------------------
+    # ---- Quarantine view (read-only) --------------------------------------------------
 
     def handle_quarantine_list(self, request: Request) -> Response:
         """GET the quarantine list: every QUARANTINED submission with its refusal reason. Session-gated
@@ -3079,7 +3079,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_preview(request: Request, submission_id: str, subpath: str):
         return gw.handle_curator_preview(request, submission_id, subpath)
 
-    # ---- quarantine view (read-only). GET pages: blocking sqlite/file reads -> threadpool,
+    # ---- Quarantine view (read-only). GET pages: blocking sqlite/file reads -> threadpool,
     # `def` (matching the queue/detail rationale). No POSTs — the surface is inspection only.
     @app.get("/gateway/curator/quarantine")
     def curator_quarantine_list(request: Request):
@@ -3155,7 +3155,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_serve_build_detail(request: Request, build_ref: str):
         return gw.handle_serve_build_detail(request, build_ref)
 
-    # ---- usage-analytics screen. READ-ONLY: renders the host aggregator's
+    # ---- Usage-analytics screen. READ-ONLY: renders the host aggregator's
     # stats.json (downloads/visits/countries + a daily series). `def` (blocking file read -> threadpool,
     # matching the serve-screen rationale). No POST, no privileged action — a reporting surface.
     @app.get("/gateway/curator/analytics")
@@ -3177,7 +3177,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_analytics_countries_csv(request: Request):
         return gw.handle_analytics_csv(request, "countries")
 
-    # ---- privileged serve-state actions. Session + CSRF checked in the handlers; each
+    # ---- Privileged serve-state actions. Session + CSRF checked in the handlers; each
     # writes an intent the host actions agent executes (the gateway gains no shell). The destructive
     # id-carrying ones (rollback, restore) are typed-confirmation POSTs; restore adds the TOTP factor.
     @app.post("/gateway/curator/serve/update")
@@ -3269,7 +3269,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_surveys_list_js(request: Request):
         return gw.handle_surveys_list_js(request)
 
-    # ---- metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
+    # ---- Metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
     # do blocking directory/subprocess work so they are `def` (threadpool), matching the
     # rationale; the POSTs are async (they take the PUBLISH_LOCK / await to_thread for git).
     @app.get("/gateway/curator/edit")
@@ -3282,7 +3282,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_survey_hub(request: Request, slug: str, tab: str = "overview"):
         return gw.handle_survey_hub(request, slug, tab)
 
-    # ---- collections console. Index (3a) + the Stage-3b editor/create/preview/publish WRITE path
+    # ---- Collections console. Index (3a) + the Stage-3b editor/create/preview/publish WRITE path
     # (-A). GET pages are `def` (blocking whole-corpus read-job -> threadpool); the POSTs
     # are async (they await the runner seam / take the PUBLISH_LOCK for git). The preview POSTs pass the
     # RAW FormData (not a collapsed dict) so the repeated keep/add checkboxes survive. NOTE: the /new

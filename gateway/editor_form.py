@@ -1143,7 +1143,7 @@ def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
 
     creators[]/contributors[] are NOT assembled in the generic loop: the unified People & credit panel
     (assemble_people) owns them, decomposing its unified rows back into the two served lists.
-    there is no delete directive any more - the legacy Convert is gone with the keys it
+    There is no delete directive any more - the legacy Convert is gone with the keys it
     converted, so a patch can only ever carry editable field values."""
     patch: dict = {}
     errors: list[SectionError] = []

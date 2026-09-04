@@ -116,7 +116,7 @@ def test_project_lead_url_and_grant_id_round_trip(tmp_path):
 
 
 def test_metadata_thin_survey_still_builds_and_groups(tmp_path):
-    """caveat 2: a raw/CSV-only survey with no SMETA still builds a valid TF payload; the slug is
+    """Caveat 2: a raw/CSV-only survey with no SMETA still builds a valid TF payload; the slug is
     seeded so stations do NOT collapse into one survey group '0'."""
     rel, hp, n = bp.emit_survey_mth5(_stations(), "thin-survey", "Thin", tmp_path, smeta=None)
     assert n == 2 and hp.exists()

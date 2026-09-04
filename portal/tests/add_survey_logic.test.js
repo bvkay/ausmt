@@ -405,7 +405,7 @@ ok(/submitter:\{[^}]*name:\s*meta\.uploader_name/.test(pkgBlock), "MANIFEST subm
 ok(!/uploader_email/.test(pkgBlock), "the packager block does NOT reference uploader_email");
 ok(/m_up_email/.test(html), "the uploader email form field itself is still present (feeds Stage-2 gateway)");
 
-// ============================ direct-upload pure logic (unchanged) ============================
+// ============================ Direct-upload pure logic (unchanged) ============================
 const ORCID_VECTORS = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "..", "gateway", "tests", "fixtures", "orcid_vectors.json"), "utf8"));
 for (const v of ORCID_VECTORS.vectors.filter(v => v.applies_to.includes("portal")))
@@ -477,7 +477,7 @@ ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false 
 
 // ==================== Slug collision and zip paths =====================================
 
-// ---- slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
+// ---- Slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
 //      stationCountsByName counts catalogue.json rows (index 1 = survey name) per survey. The chip warns
 //      (never blocks) when a charset-valid slug matches a served slug.
 const SURVEYS_FIXTURE = { "Vulcan 2022": { slug: "vulcan-2022", org: "GA" },

@@ -186,7 +186,7 @@ def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
     sidecar reads. The sidecar keeps being written byte-unchanged through 1.x, so the two must
     never be able to disagree.
 
-    what the fold carries is bound to the sidecar; what the sidecar states as null is ABSENT
+    What the fold carries is bound to the sidecar; what the sidecar states as null is ABSENT
     here, never copied across."""
     full, _ = _split(built_open)
     for key, doc in full.items():

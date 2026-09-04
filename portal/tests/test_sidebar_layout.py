@@ -7,13 +7,13 @@ non-vacuous against a source that carries the exact thing it forbids:
   * tree flex-fill/scroll: the base .tree rule must flex-grow and scroll internally, with NO fixed
     height and NO resize handle. Pre-it was `height:300px;max-height:60vh;resize:vertical` and had no
     `flex:` — so this rule FAILS on the old CSS.
-  * flex chain: #browseMode and #treeSection must carry `min-height:0` (so the tree can shrink below
+  * Flex chain: #browseMode and #treeSection must carry `min-height:0` (so the tree can shrink below
     its content and scroll instead of pushing the rail into an outer scrollbar). Pre-neither selector
     existed — FAILS on the old CSS.
-  * collapse anchored bottom: #sidebarCollapse must be the LAST child of <aside class="filters">
+  * Collapse anchored bottom: #sidebarCollapse must be the LAST child of <aside class="filters">
     (after both mode panes) and .railcollapse must carry `margin-top:auto`. Pre-the button was the
     FIRST child and had no margin-top — FAILS on the old markup/CSS.
-  * collections above the tree: #collGroup must appear BEFORE #treeSection/#tree in source order.
+  * Collections above the tree: #collGroup must appear BEFORE #treeSection/#tree in source order.
     Pre-there was no #collGroup at all - FAILS on the old markup.
 """
 import re
@@ -119,7 +119,7 @@ def test_collections_block_is_above_the_tree_in_source():
     assert i_cg < i_ts, "#collGroup must appear before #treeSection (collections render above the tree)"
 
 
-# ---- equal-width nav min-width token ----------------------------------------------------
+# ---- Equal-width nav min-width token ----------------------------------------------------
 
 def test_nav_button_min_width_fits_collections_label_across_pages():
     """The equal-width header nav (nav button on index, nav a on about) must reserve

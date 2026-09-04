@@ -222,7 +222,7 @@ def sha256(p: Path) -> str:
 from _license_text import canon_license, license_instrument_text, redistributable  # noqa: E402
 
 
-# --- access gate: access.level (open|metadata_only|embargoed) + embargo_until gate BYTE DISTRIBUTION,
+# --- Access gate: access.level (open|metadata_only|embargoed) + embargo_until gate BYTE DISTRIBUTION,
 # ORTHOGONAL to the licence gate above (a survey must be BOTH openly licensed AND access=open+un-embargoed
 # to be served). Discovery is universal — a withheld survey still appears fully in catalogue/tf/sci/mtcat;
 # only the bytes (manifest rows, edi/xml/bundle emission, edi_available) are withheld. The pure logic lives
@@ -285,7 +285,7 @@ def access_serve_state(level, embargo_until, today=None) -> dict:
     return {"served": False, "embargo_active": False, "warnings": warnings}
 
 
-# --- display-product withholding: the derived DISPLAY data the portal plots for a station. When a
+# --- Display-product withholding: the derived DISPLAY data the portal plots for a station. When a
 # survey's ACCESS state is not served, the byte gate already withholds manifest/edi/xml/bundles; the
 # additionally empties the derived display products at EMISSION so nothing is hidden only client-side — the
 # withheld content simply is not in the served tf.json/sci.json. Width + station alignment are preserved
@@ -4341,7 +4341,7 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
     if not n:
         hpath.unlink(missing_ok=True)
         return 0
-    # blocking round-trip gate: withhold this file (never the corpus) on any mismatch.
+    # Blocking round-trip gate: withhold this file (never the corpus) on any mismatch.
     ok, rep = mth5_survey_roundtrip_ok(hpath, stations)
     if not ok:
         print(f"  [h5] WITHHOLD {hpath.name}: round-trip gate FAILED "
@@ -4847,7 +4847,7 @@ def discover_work(a, ap, validator):
     yaml_digest is the sha256 of the SAME survey.yaml bytes the meta was parsed from (one read
     feeds both, so an edit landing mid-build can never split them; "" for --raw entries).
 
-    also returns coord_policy = {label: (default, overrides)} - the coordinate-access policy per
+    Also returns coord_policy = {label: (default, overrides)} - the coordinate-access policy per
     survey. Carried in a SIDE CHANNEL (not on SMETA, which is emitted to surveys.json - putting
     the always-'exact' default there would break the default-stability pin). Absent field => ('exact',
     {}); --raw entries have no survey.yaml so are always 'exact'. An UNKNOWN enum value raises
@@ -5207,11 +5207,11 @@ def _main_build(argv=None):
     # build<->data handshake a served portal needs to trace itself to its inputs. a.surveys is None
     # in --raw mode (no ausmt-surveys checkout involved) -> source_commit stays None, gracefully. ===
     BUILD_ID = build_identity(a.surveys)
-    # resolve the served-tool versions ONCE (the single source of truth) - reused
+    # Resolve the served-tool versions ONCE (the single source of truth) - reused
     # cache salt below and folded into build.json / build_provenance.json / mtcat as additive keys.
     LIB_VERSIONS = lib_versions()
 
-    # === incremental build cache ===
+    # === Incremental build cache ===
     # OFF by default; a no-op without --cache-dir. Keyed by source-EDI content sha + the COARSE
     # engine-commit salt (BUILD_ID["engine_commit"]) + mt_metadata/mth5 versions + the positional/
     # schema contract + each survey's whole-yaml digest (cache.py derives the key). A degenerate salt
@@ -6293,7 +6293,7 @@ def _main_build(argv=None):
     # generated) — deploy/Makefile's rebuild-data names each builds/<timestamp> dir by wall-clock time,
     # not this id, so this file is what lets an operator (or the portal footer) trace a *specific*
     # already-built dir back to the commits that produced it, without re-deriving from build_provenance.
-    # additive served-tool version keys alongside the identity fields (build id string
+    # Additive served-tool version keys alongside the identity fields (build id string
     # format is UNCHANGED — versions ride beside it, never inside the commit-commit-timestamp id).
     (out / "build.json").write_text(_jdump(
         {**BUILD_ID, "mt_metadata_version": LIB_VERSIONS.get("mt_metadata"),

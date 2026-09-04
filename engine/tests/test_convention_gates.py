@@ -535,7 +535,7 @@ def test_process_edis_reports_gate_drops(tmp_path):
 
 
 # ---------------------------------------------------------------------------------------------
-# serve-as-stored (any angle) + survey-inconsistency
+# Serve-as-stored (any angle) + survey-inconsistency
 # ---------------------------------------------------------------------------------------------
 def test_small_uniform_angle_served_as_stored_v3a(tmp_path):
     """FAILS IF: a survey-uniform declared frame (here 8° - the ccmt-2017 class) is ROTATED,

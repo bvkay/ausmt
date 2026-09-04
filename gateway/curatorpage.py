@@ -2561,7 +2561,7 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
     return _page("AusMT curator queue", body)
 
 
-# ---- serve-state panel -------------------------------------------------------------------
+# ---- Serve-state panel -------------------------------------------------------------------
 # The published-vs-served view + the zero-argument "request rebuild" button. Two data sources:
 #   SERVER-SIDE (passed in): surveys-live HEAD (via the publish git seam), the reconcile-status.json
 #     contents, and whether a rebuild.request is pending — all from mounts the gateway already has.
@@ -2854,7 +2854,7 @@ SERVE_PANEL_JS = """
 """
 
 
-# ---- serve-state screen + operations floor ------------------------------------------
+# ---- Serve-state screen + operations floor ------------------------------------------
 # The serve panel promoted to a first-class screen: the existing published/served
 # blocks (render_serve_panel) + a loud reconcile SYNC strip + a four-card operations FLOOR + the
 # retained-builds and backup-snapshots tables + a build-detail view. Everything here is READ-ONLY —
@@ -3132,7 +3132,7 @@ def _backups_table(ops, ops_stale: bool, generated_at, *, actions: bool = False)
     return head + "".join(rows) + "</table>"
 
 
-# ---- privileged ACTION controls on the serve screen ----------------
+# ---- Privileged ACTION controls on the serve screen ----------------
 # The buttons. All post to session+CSRF-gated routes that write an INTENT the host actions agent
 # executes (the gateway gains no shell). Single-flight: a pending intent of a kind
 # disables its button and shows the pending state. The destructive/id-carrying ones (rollback,
@@ -3354,7 +3354,7 @@ def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: 
     return _shell("AusMT build detail", body, nav=nav)
 
 
-# ---- usage-analytics screen -------------------------------------------------
+# ---- Usage-analytics screen -------------------------------------------------
 # A READ-ONLY Operations page rendering the host aggregator's stats.json (downloads/visits/countries +
 # a daily series). SAME trust class as the ops floor: the facts come from stats.json read SERVER-side
 # (serve_state.read_stats - the ops-status.json seam, no new mount, intact). ZERO JS: the daily
@@ -4451,7 +4451,7 @@ def analytics_country_csv(stats) -> str:
                           "download_bytes", "geo_days"], out)
 
 
-# ---- rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------
+# ---- Rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------
 
 def render_rollback_confirm(*, build_ref: str, build, serving: bool, csrf_token: str,
                             error: str = "", nav: "NavContext") -> str:
@@ -7719,7 +7719,7 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
     return _page("AusMT uploader keys", body)
 
 
-# ---- quarantine view (read-only) ----------------------------------------------------------
+# ---- Quarantine view (read-only) ----------------------------------------------------------
 # A read-only inspection surface for a QUARANTINED submission: the file listing under its extracted
 # package + the refusal reason (the terminal-transition reason). NO action forms — the review flow
 # (the curator approve/return/reject) is deliberately untouched; a quarantined submission is terminal and the
