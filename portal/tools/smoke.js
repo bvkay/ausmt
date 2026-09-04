@@ -19,7 +19,7 @@ let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).
 code += "\nvar AU_PROBE=\"O'Brien, K.; Smith & Co\";";
 code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFromHash," +
   "showEmptyState,portalIsEmpty,nST:()=>ST.length,firstSurvey:()=>surveys[0],firstId:()=>ST[0]&&ST[0].id," +
-  // station0 exposes the buildState fields derived THROUGH the contract maps (r[C.*], sc[SC.*]) so a test
+  // station0 exposes the buildState() fields derived THROUGH the contract maps (r[C.*], sc[SC.*]) so a test
   // can assert their VALUES against the source data — catching a wrong call-site index, not just a crash.
   "station0:()=>ST[0]&&{id:ST[0].id,lat:ST[0].lat,lon:ST[0].lon,type:ST[0].type,ausmt_id:ST[0].ausmt_id,q:ST[0].q,dim:ST[0].dim}," +
   // export0 = the CSV row exports.js builds for ST[0], so the test can value-bind the export call site's
@@ -32,7 +32,7 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   "csvCellFn:v=>csvCell(v)," +
   "citeTxtProbe:()=>citeLine({au:AU_PROBE,yr:\"2019\",ti:\"T\",pb:\"P\"},\"10.1/x\")," +
   "bibProbe:()=>bibtex(\"k\",{au:AU_PROBE,ti:\"A & B\",yr:\"2019\",pb:\"P\"},\"10.1/x\")," +
-  // BuildIdText is a pure function of BUILDID (set by boot from build.json) - exposing it
+  // BuildIdText is a pure function of BUILDID (set by boot() from build.json) - exposing it
   // lets a test assert the footer VALUE binding without a real DOM (getElementById stubs below return
   // a fresh throwaway object per call, so nothing written to el.textContent would be observable).
   // Two-phase boot: boot returns as soon as the FIRST-PAINT products (catalogue/surveys + the small

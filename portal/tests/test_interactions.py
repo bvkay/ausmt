@@ -1,6 +1,6 @@
 """Portal INTERACTION coverage (Invariant 10) — the sidebar tree toggles, #/collection routing, and Find.
 
-These paths shipped with ZERO automated coverage: smoke.js stubs querySelectorAll->[] so buildTree never
+These paths shipped with ZERO automated coverage: smoke.js stubs querySelectorAll()->[] so buildTree() never
 makes a checkbox and only #/station routes. That is exactly how the value-less-checkbox toggle no-op reached
 a release. This boots the REAL portal in jsdom (tools/interaction_test.js) against a KNOWN fixture —
 4 stations / 2 countries / 3 orgs / 3 surveys / 1 collection — and drives the UI.
@@ -11,7 +11,7 @@ The driver FAILS (and so does this test) if:
   skipped binding the toggle handler entirely);
 - the #/collection/<id> hash does not open the full-width collection page over the map, or browser-Back
   (hash -> '') does not restore the map view;
-- a survey-name Find query blanks the map (passes must also match s.survey).
+- a survey-name Find query blanks the map (passes() must also match s.survey).
 
 Skips when Node or the jsdom dev-dependency is absent (CI runs `npm ci` in portal/ first)."""
 import json

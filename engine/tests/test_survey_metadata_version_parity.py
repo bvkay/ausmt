@@ -6,7 +6,7 @@ time); this contract starts with the machinery already in place, so no site ever
 
 SINGLE SOURCE: the SURVEY_METADATA_VERSION constant in contract/generate.py. The schema artifact's
 `title` DISPLAYS the version ("AusMT Survey Metadata <MAJOR.MINOR>[-draft]: ...") and is verified
-against the constant by contract/generate.py:survey_metadata_schema_version, which also emits
+against the constant by contract/generate.py:survey_metadata_schema_version(), which also emits
 SURVEY_METADATA_SCHEMA_VERSION into engine/extract/_contract.py (the generated constant the emitter
 reads), gated by `generate.py --check` in both CI workflows.
 
@@ -15,7 +15,7 @@ function (its own regex over the generate.py source, so the pin cannot agree wit
 
   1. contract/generate.py SURVEY_METADATA_VERSION      (the authority, read raw from the source text)
   2. the schema title                                    (the DISPLAY, verified against the constant)
-  3. contract/generate.py:survey_metadata_schema_version  (the one accessor)
+  3. contract/generate.py:survey_metadata_schema_version()  (the one accessor)
   4. engine/extract/_contract.py                         (the generated engine constant)
   5. the schema $id                                      (the version-specific immutable URI)
   6. a REAL BUILD's served schema routes and every emitted document's `version`

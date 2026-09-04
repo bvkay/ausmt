@@ -33,7 +33,7 @@ def _seed_received(database) -> str:
 def test_illegal_transition_refused_no_row(tmp_path):
     # RECEIVED -> VALIDATED is not in states.ALLOWED (must pass through SCANNED). The DB must refuse
     # AND leave the audit log untouched.
-    # Proven failing: an early transition wrote the row before checking legality -
+    # Proven failing: an early transition() wrote the row before checking legality -
     # transitions count went 1 -> 2 on the illegal move.
     database = _fresh_db(tmp_path)
     sid = _seed_received(database)

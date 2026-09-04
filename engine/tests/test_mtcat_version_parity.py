@@ -11,7 +11,7 @@ read it.
 SINGLE SOURCE: the MTCAT_VERSION constant in contract/generate.py (the MTCAT 2.0 version
 machinery: "the machine-readable version source becomes a constant; the title displays the version;
 it is not parsed as the source"). The schema artifact's `title` is a DISPLAY surface generated
-from the constant and verified against it; contract/generate.py:mtcat_schema_version returns the
+from the constant and verified against it; contract/generate.py:mtcat_schema_version() returns the
 constant after that verification and emits MTCAT_SCHEMA_VERSION into engine/extract/_contract.py
 (the same generated-constant mechanism the positional column contract uses, gated by
 `generate.py --check` in both CI workflows), and every former default site reads that constant or calls
@@ -23,11 +23,11 @@ agree with itself vacuously), and asserts they are all the same string:
 
   1. contract/generate.py MTCAT_VERSION        (the authority, read raw from the source text)
   2. the schema title                          (the DISPLAY, generated from the constant)
-  3. contract/generate.py:mtcat_schema_version   (the one accessor)
+  3. contract/generate.py:mtcat_schema_version()   (the one accessor)
   4. engine/extract/_contract.py               (the generated engine constant)
   5. portal/config.js                          (the generated browser reflection)
   6. portal/data/mtcat.json                    (the committed empty boot document)
-  7. portal/tools/gen_config.py build_config  (a config that OMITS the key: the re-used-portal path)
+  7. portal/tools/gen_config.py build_config()  (a config that OMITS the key: the re-used-portal path)
   8. the docs current-version display           (docs/docs/reference/index.md)
   9. a REAL BUILD's emitted mtcat.json portal block (the version a harvester is actually served)
 
@@ -106,7 +106,7 @@ def _authority() -> str:
     """The version as the SINGLE SOURCE declares it: the MTCAT_VERSION constant in
     contract/generate.py, parsed here with this module's own regex over the raw source text.
 
-    Deliberately not an import of the shared accessor: if the pin asked mtcat_schema_version what
+    Deliberately not an import of the shared accessor: if the pin asked mtcat_schema_version() what
     the version is and then checked that function's own output against itself, an accessor that read
     the wrong thing would still pass. This reads the raw constant."""
     src = (REPO / "contract" / "generate.py").read_text(encoding="utf-8")

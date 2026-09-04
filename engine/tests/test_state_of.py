@@ -9,7 +9,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "extract"))
 import _edi_catalog as cat   # noqa: E402
 
-# (label, lat, lon) -> expected state_of output (captured from the current implementation)
+# (label, lat, lon) -> expected state_of() output (captured from the current implementation)
 CASES = [
     ("Perth",       -31.95, 115.86, "WA"),
     ("Darwin",      -12.46, 130.84, "NT"),

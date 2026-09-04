@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Content-addressed build cache for per-station products.
 
-A full portal build re-parses every EDI through mt_metadata and re-runs normalize's served-XML
+A full portal build re-parses every EDI through mt_metadata and re-runs normalize()'s served-XML
 round-trip for every served station, even when a one-line survey.yaml edit changed nothing about
 those stations. This module is a content-addressed cache of the two expensive per-station products
 so an incremental rebuild skips the parse and the round-trip for unchanged stations.
@@ -133,7 +133,7 @@ class BuildCache:
     One instance per build. Holds the shared salt (engine commit + library versions + contract +
     per-survey survey.yaml digest) and derives a per-station key from it plus the source EDI sha.
     Tracks hit/miss/write counters (deterministic, asserted by tests — never wall-clock). When the
-    salt is degenerate the instance is INERT: enabled is False, get always misses and put is a
+    salt is degenerate the instance is INERT: enabled is False, get() always misses and put() is a
     no-op, and the counters prove no reads or writes happened.
     """
 
@@ -164,7 +164,7 @@ class BuildCache:
             self.degenerate, self.degenerate_reason = True, disabled_reason
         else:
             self.degenerate, self.degenerate_reason = is_salt_degenerate(engine_commit, checkout_dir)
-        # The stable, per-survey salt component is injected via key; the fixed part is precomputed.
+        # The stable, per-survey salt component is injected via key(); the fixed part is precomputed.
         self._fixed_salt = "\x00".join([
             # Cache-format version tag. v2 = self-verifying entries (digest-line + payload);
             # v3 = the served-XML meta blob carries `survey_digest` (the digest

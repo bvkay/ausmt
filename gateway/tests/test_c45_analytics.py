@@ -3,7 +3,7 @@
 The consumer side of the aggregator: the gateway reads stats.json SERVER-side (serve_state.read_stats,
 the ops-status.json seam) and renders the READ-ONLY Analytics screen (Operations rail). These pins
 prove the load-bearing behaviours against INDEPENDENT OBSERVABLES (the rendered HTML, the staleness
-boolean, the response status), mirroring test_c43_stage2b_ops.py. Async bodies run under conftest.run
+boolean, the response status), mirroring test_c43_stage2b_ops.py. Async bodies run under conftest.run()
 (no pytest-asyncio). ZERO JS on the screen (a server-rendered SVG), enforced by a CSP sweep.
 
 Each pin states its failure criterion (Invariant 10). Pure gateway stack — no new skips.

@@ -1,7 +1,7 @@
 """feed.xml -- a minimal Atom feed of surveys sorted by their latest release date (fallback:
 dates end/start year), for a modeller to watch "what's new" without polling the whole portal.
 
-FAILS IF (pre-fix): build_portal has no feed_entries/build_feed_xml at all (AttributeError);
+FAILS IF (pre-fix): build_portal has no feed_entries()/build_feed_xml() at all (AttributeError);
 feed.xml is not well-formed XML; entries are not sorted newest-first; a survey with zero declared
 dates gets a fabricated date instead of being omitted; an empty build (no surveys) still emits a
 feed.xml file (a "feed" with no dated content is not a meaningful product -- see the CONTRACT)."""

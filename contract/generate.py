@@ -20,10 +20,10 @@ against it rather than being parsed as the source. `mtcat_schema_version()`
 returns the constant after verifying the schema artifact's displayed title agrees, and this
 generator propagates it into `_contract.py` the same way it propagates the column order: as a
 generated constant, gated by `--check`, so an engine consumer cannot carry a version literal of
-its own. SURVEY_METADATA_VERSION and survey_metadata_schema_version do the same for the second
+its own. SURVEY_METADATA_VERSION and survey_metadata_schema_version() do the same for the second
 public contract (survey-metadata.json): the constant is the source, the schema title displays it,
 and `_contract.py` gains the generated SURVEY_METADATA_SCHEMA_VERSION mirror. STATION_VERSION and
-station_schema_version do the same for the third (station.json), with STATION_SCHEMA_VERSION as its
+station_schema_version() do the same for the third (station.json), with STATION_SCHEMA_VERSION as its
 generated mirror.
 """
 from __future__ import annotations
@@ -41,10 +41,10 @@ LIC_SRC = HERE / "licenses.json"                    # the licence instrument sin
 PROF_SRC = HERE / "attribution_profiles.json"       # the custodian attribution-profile single source (like licenses.json)
 MTCAT_SRC = ROOT / "engine" / "schema" / "mtcat.schema.json"   # the MTCAT schema version's single source
 # The survey-metadata schema artifact (the second public contract): its title DISPLAYS the version
-# SURVEY_METADATA_VERSION below declares, and survey_metadata_schema_version verifies the two agree.
+# SURVEY_METADATA_VERSION below declares, and survey_metadata_schema_version() verifies the two agree.
 SURVEY_METADATA_SRC = ROOT / "engine" / "schema" / "ausmt-survey-metadata.schema.json"
 # The station schema artifact (the third public contract): same inversion again, the title DISPLAYS
-# the version STATION_VERSION below declares and station_schema_version verifies the two agree.
+# the version STATION_VERSION below declares and station_schema_version() verifies the two agree.
 STATION_SRC = ROOT / "engine" / "schema" / "ausmt-station.schema.json"
 PY_OUT = ROOT / "engine" / "extract" / "_contract.py"
 JS_OUT = ROOT / "portal" / "src" / "contract.js"
@@ -63,7 +63,7 @@ _STATION_TITLE_RE = re.compile(r"^AusMT Station Metadata (\d+\.\d+)(-draft)?:")
 # THE single machine-readable source of the MTCAT schema version: the version source is a machine
 # constant and the title is generated from it. Every surface that states a
 # version derives from THIS constant: the schema artifact's title (verified below - the title
-# DISPLAYS the version and mtcat_schema_version refuses to run if it disagrees), the generated
+# DISPLAYS the version and mtcat_schema_version() refuses to run if it disagrees), the generated
 # engine constant in engine/extract/_contract.py, the emitter's portal.version, gen_config's
 # browser reflection (the portal footer chip), and the docs current-version display (pinned by
 # engine/tests/test_mtcat_version_parity.py). To bump: change this constant, update the schema
@@ -97,7 +97,7 @@ STATION_VERSION = "0.1"
 def station_schema_version() -> str:
     """The station schema version: STATION_VERSION above, THE single source, cross-checked against the
     schema artifact's own displayed title before it is handed out (the same discipline as
-    survey_metadata_schema_version: a title that disagrees with the constant fails loudly here and in
+    survey_metadata_schema_version(): a title that disagrees with the constant fails loudly here and in
     `--check`, so two version claims can never ship side by side)."""
     schema = json.loads(STATION_SRC.read_text(encoding="utf-8"))
     title = schema.get("title", "")
@@ -116,7 +116,7 @@ def station_schema_version() -> str:
 def survey_metadata_schema_version() -> str:
     """The survey-metadata schema version: SURVEY_METADATA_VERSION above, THE single source, cross-
     checked against the schema artifact's own displayed title before it is handed out (the same
-    discipline as mtcat_schema_version: a title that disagrees with the constant fails loudly here
+    discipline as mtcat_schema_version(): a title that disagrees with the constant fails loudly here
     and in `--check`, so two version claims can never ship side by side)."""
     schema = json.loads(SURVEY_METADATA_SRC.read_text(encoding="utf-8"))
     title = schema.get("title", "")
@@ -169,7 +169,7 @@ def _load():
 
 def _load_lic():
     # The licence allow-list/alias/url tables. Emitted verbatim into both generated files so the
-    # engine's redistributable gate and the validator's recognised-id gate read ONE source and cannot
+    # engine's redistributable() gate and the validator's recognised-id gate read ONE source and cannot
     # drift. Keys ordered as authored in licenses.json (Python dicts + json preserve insertion order).
     d = json.loads(LIC_SRC.read_text(encoding="utf-8"))
     return {"redistributable": d["redistributable"], "recognised_only": d["recognised_only"],
@@ -178,7 +178,7 @@ def _load_lic():
 
 def _load_prof():
     # The custodian attribution-profile table. Emitted verbatim into both generated files so the
-    # engine's license_instrument_text and the portal's licenseInstrumentText render one source and
+    # engine's license_instrument_text() and the portal's licenseInstrumentText() render one source and
     # cannot drift. Keys ordered as authored in attribution_profiles.json (insertion order preserved).
     d = json.loads(PROF_SRC.read_text(encoding="utf-8"))
     return d["profiles"]
@@ -248,10 +248,10 @@ def _js(cat, sci, tf, lic, prof):
 
 
 def _parse_args(argv):
-    # exit_on_error=False + a raising error handler: argparse's own --help still calls parser.exit
+    # exit_on_error=False + a raising error handler: argparse's own --help still calls parser.exit()
     # (SystemExit), which is what we want to route to usage+exit(2) below WITHOUT falling through to
     # the write branch — the bug this replaces let *any* unrecognised argv (including --help) reach
-    # the unconditional write at the bottom of the old main.
+    # the unconditional write at the bottom of the old main().
     p = argparse.ArgumentParser(prog="contract/generate.py", add_help=False,
         description="Generate _contract.py / contract.js from contract/columns.json.")
     p.add_argument("--check", action="store_true", help="CI gate: exit 1 if a generated file is out of sync; writes nothing")

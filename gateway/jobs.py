@@ -33,7 +33,7 @@ def _json_default(obj):
     — the job never completed, was re-claimed on restart, and blocked ALL metadata reads. Here any
     date/datetime/time is ISO-formatted (datetime is a datetime.date subclass, so the one isinstance
     covers both) and a Decimal is stringified to preserve exact precision. Anything else is a genuine
-    programming error, so we RAISE TypeError (json's own behaviour) rather than a blind str catch-all
+    programming error, so we RAISE TypeError (json's own behaviour) rather than a blind str() catch-all
     — a truly unexpected object must surface as a bug, not be silently coerced into a persisted file."""
     if isinstance(obj, (datetime.date, datetime.time)):
         return obj.isoformat()

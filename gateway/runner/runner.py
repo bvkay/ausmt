@@ -7,7 +7,7 @@ It invokes the validator/engine as subprocesses (never imports them into the gat
 the two-gates-must-agree property holds at the same image pin the engine uses.
 
 Timeout: a hard wall-clock cap around the whole job. On POSIX this is SIGALRM; the
-cap is expressed through job_deadline so the timeout PATH is unit-testable on any OS (a test
+cap is expressed through job_deadline() so the timeout PATH is unit-testable on any OS (a test
 passes a deadline already in the past and asserts the job quarantines with a timeout reason) without
 depending on signal delivery.
 """
@@ -26,7 +26,7 @@ from .. import jobs
 from ..config import DEFAULT_MAX_UPLOAD_MB  # Single source of the 250 MB upload default
 from .safeextract import ExtractionTimeout, cap_for, safe_extract
 
-# Env pins. AUSMT_VALIDATOR_PATH is the same env the engine's _load_validator reads;
+# Env pins. AUSMT_VALIDATOR_PATH is the same env the engine's _load_validator() reads;
 # in the runner container it points at the in-image validator copy.
 _DEFAULT_TIMEOUT_S = 900
 
@@ -88,7 +88,7 @@ class RunnerConfig:
         max_upload_mb = int(env.get("AUSMT_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB)))
         # Fail closed on a zeroed/negative override, IDENTICALLY to the gateway (config._RANGES floors
         # both of these at 1, and fail_closed_startup SystemExits on a breach). The runner reads the
-        # SAME two knobs, and an int with no floor lets a zeroed AUSMT_JOB_TIMEOUT_S
+        # SAME two knobs, and an int() with no floor lets a zeroed AUSMT_JOB_TIMEOUT_S
         # (every job times out instantly -> everything quarantines) or AUSMT_MAX_UPLOAD_MB (a zero
         # extraction byte-cap) was silently accepted while the gateway rejected it - the runner would
         # crash-loop honestly on a bad numeric knob instead (deploy review section 5, MEDIUM).
@@ -137,7 +137,7 @@ def _run_subprocess(cmd: list[str], *, cwd: Path | None, deadline: float,
 
     `env` is the COMPLETE child environment when given (None inherits this process's, the historical
     behaviour). Only the engine preview spawn passes it, to pin AUSMT_VALIDATOR_PATH; see
-    _preview_env."""
+    _preview_env()."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise JobTimeout("job budget exhausted before subprocess start")

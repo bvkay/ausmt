@@ -924,7 +924,7 @@ def test_r2_publish_gate_mirrors_start_year_check(tmp_path):
 def test_r2_coercion_is_total_and_never_rewrites_literals():
     """The emission coercion (unit): "2003" -> plain int; "2003²" (isdigit-True!) never raises and
     stays a string; "0000"/"007" round-trip-unstable -> stay strings (no silent literal rewrite);
-    a year range stays a string. FAILS IF int can raise out of the emission path or a literal is
+    a year range stays a string. FAILS IF int() can raise out of the emission path or a literal is
     rewritten."""
     from gateway.runner.edit import _coerce_collection_value
     assert _coerce_collection_value("start_year", "2003") == 2003

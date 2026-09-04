@@ -1,6 +1,6 @@
 """Zip central-directory safety. Each hostile shape is rejected with a DISTINCT
 reason and — proven separately in test_upload.py — nothing is written under quarantine/. These are
-pure-unit tests against zipsafety.inspect; test_upload.py drives the same shapes through the HTTP
+pure-unit tests against zipsafety.inspect(); test_upload.py drives the same shapes through the HTTP
 seam.
 
 Proven-failing-first: each guard was confirmed to genuinely fire by first asserting the OPPOSITE
@@ -31,7 +31,7 @@ def test_good_package_passes():
 
 
 def test_zip_slip_parent_segment_rejected():
-    # Proven failing: without the `..`-segment guard, inspect returned the member list
+    # Proven failing: without the `..`-segment guard, inspect() returned the member list
     # instead of raising -> AssertionError on pytest.raises.
     data = make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/../evil.edi": b"x"})
     with pytest.raises(zipsafety.ZipRejection) as exc:
@@ -49,11 +49,11 @@ def test_absolute_path_rejected():
 
 def test_backslash_rejected():
     # zipfile normalises '\\' -> '/' in its writer, reader, AND the ZipInfo constructor, so a
-    # backslash cannot reach inspect via a python-parsed archive - the guard is belt-and-braces
+    # backslash cannot reach inspect() via a python-parsed archive - the guard is belt-and-braces
     # against a foreign zip tool whose bytes some other parser might surface un-normalised. Tested at
     # Check_member's seam by setting .filename directly (bypassing the constructor's normalisation)
     # to prove the branch fires on a literal backslash.
-    # Proven failing: with the backslash branch removed, check_member returned without
+    # Proven failing: with the backslash branch removed, check_member() returned without
     # raising -> pytest.raises failed "DID NOT RAISE".
     info = zipfile.ZipInfo("placeholder")
     info.filename = "mysurvey\\evil.edi"
@@ -178,7 +178,7 @@ def test_disallowed_char_rejected():
 def test_duplicate_member_name_rejected():
     # a zip with two entries of the same name extracts last-wins, so the file the
     # validator/engine reads can differ from the central-directory view a reviewer inspected. Reject.
-    # Proven failing: before the seen_names check, the duplicate passed inspect (both
+    # Proven failing: before the seen_names check, the duplicate passed inspect() (both
     # entries counted) and only the last survived extraction.
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:

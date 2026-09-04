@@ -6,7 +6,7 @@ exactly what the lists, then the server gates the POST in order - session, CSRF,
 last-survey guard, the TOTP second factor (enrolled? rate-limited? valid? not-replayed?), the typed
 slug, the required note — and only then git-rm -r's the package in one commit under PUBLISH_LOCK.
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
 The real-git commit/rollback/revert byte-level guarantees are in test_publish_real_git.py; here
 FakeGit proves the flow shape, the gate order, and 'nothing staged' on every refusal.
 """

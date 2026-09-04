@@ -269,7 +269,7 @@ def test_the_override_reaches_the_manifest_and_the_served_edi_row(tmp_path):
 def test_the_override_reaches_the_served_emtf_xml(tmp_path):
     """The served XML is a DERIVED product, so it carries the published id: in its filename, in
     Site.id (alnum-stripped by the EMTF-XML pattern, as every AusMT id is) and, because that strip
-    is lossy, verbatim in the Site Name source-id marker normalize already writes."""
+    is lossy, verbatim in the Site Name source-id marker normalize() already writes."""
     surveys = _make_survey(tmp_path, yaml_extra=OVERRIDE_YAML)
     out = tmp_path / "out"
     assert _build(surveys, out) == 0
@@ -444,7 +444,7 @@ def test_provenance_reaches_the_station_mth5(tmp_path):
 
 def test_provenance_reaches_the_served_emtf_xml(tmp_path):
     """EMTF XML has exactly one station-level free-text slot that survives its write/read round trip
-    on the pinned mt_metadata: the Site Name, which normalize already uses for the source-id
+    on the pinned mt_metadata: the Site Name, which normalize() already uses for the source-id
     marker. The source FILENAME rides the same convention so the served XML says which custodian file
     it was derived from; the rest of the provenance stays in AusMT's own records."""
     surveys = _make_survey(tmp_path, yaml_extra=PROVENANCE_YAML)

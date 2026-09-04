@@ -147,7 +147,7 @@ _EMPOWER_TOKENS = ("empower", "electrics", "magnetics")
 # does not exist:
 #   * `read_measurement` skips a reference position carrying any of these before the validator runs;
 #   * `edi.py::station_metadata` (1.0.9, line 1092) skips EVERY info_dict entry whose value is in
-#     this list -- `for key, value in self.Info.info_dict.items: ... if value in NULL_VALUES:
+#     this list -- `for key, value in self.Info.info_dict.items(): ... if value in NULL_VALUES:
 #     continue` -- BEFORE any `update_attribute` call, so a field nobody filled in never reaches
 #     pydantic at all and cannot raise, cannot be logged, and cannot be blamed on its units.
 # `""` is the commonest of these by far: the sanitiser turns a JSON `"declination": ""` into

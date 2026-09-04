@@ -12,7 +12,7 @@ halves against independent observables:
                  leave an audit record (created_by/revoked_by); the uploader email never leaks to the
                  public status page.
 
-Failing-first evidence is in each test's docstring. Async bodies run under conftest.run (no
+Failing-first evidence is in each test's docstring. Async bodies run under conftest.run() (no
 pytest-asyncio), the established gateway pattern.
 """
 from __future__ import annotations

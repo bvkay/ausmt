@@ -87,7 +87,7 @@ USER gwuser
 EXPOSE 8000
 
 # The entrypoint wrapper sets umask 0002 (durable group-writable WAL sidecars, incident)
-# then execs `python -m gateway`, which runs create_app (fail-closes on a missing submit key) then
+# then execs `python -m gateway`, which runs create_app() (fail-closes on a missing submit key) then
 # uvicorn on 0.0.0.0:8000 — container-internal; compose publishes it loopback-only and Caddy fronts it
 # same-origin. No CMD args: the config surface is env-only.
 ENTRYPOINT ["/usr/local/bin/gateway-entrypoint.sh"]

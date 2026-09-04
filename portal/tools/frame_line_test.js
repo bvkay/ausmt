@@ -2,12 +2,12 @@
 // Portal frame-line driver (Invariant 10). Boots the REAL portal modules in jsdom and drives
 // the reader-facing frame line the station drawer shows when the engine served impedances AS STORED in
 // a declared acquisition frame (the engine never de-rotates under frame policy v3). It asserts:
-//   * frameLineText (PURE, DOM-free) renders the terse honest line for a non-zero declared angle,
+//   * frameLineText() (PURE, DOM-free) renders the terse honest line for a non-zero declared angle,
 // stays SILENT for a zero/absent angle or a null frame, and appends the "mixes declared
 //     frames" clause only when the survey carries the mixed-frames note;
-//   * frameLineText NEVER emits markup (it interpolates only a validated number + fixed strings), so
+//   * frameLineText() NEVER emits markup (it interpolates only a validated number + fixed strings), so
 //     even a hostile survey_frame_note cannot inject a tag;
-//   * loadStationFrameLine fetches the per-station station.json, injects the line via textContent,
+//   * loadStationFrameLine() fetches the per-station station.json, injects the line via textContent,
 //     and GUARDS against a stale async write (only writes if #frameline still targets this station);
 //   * the resolved line is CACHED per ausmt_id, so a two-phase-boot hydration re-render (which rewrites the
 //     drawer and blanks the #frameline placeholder up to three times, once per settling gate) re-injects it
@@ -31,7 +31,7 @@ const dom = new JSDOM(html, { url: "http://localhost/", runScripts: "outside-onl
 const win = dom.window;
 win.L = stub(); win.JSZip = stub();
 win.AUSMT_CONFIG = { short_name: "AusMT" };
-// Default fetch: the fixture station.json the loadStationFrameLine integration expects. A specific
+// Default fetch: the fixture station.json the loadStationFrameLine() integration expects. A specific
 // test overrides win.__fetchDoc to change the served frame; an unresolvable url yields {ok:false}.
 win.__fetchDoc = { frame: { declared_azimuth_deg: -60, frame_served: "declared-azimuth" } };
 win.__fetches = [];

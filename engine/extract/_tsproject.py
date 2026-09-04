@@ -4,17 +4,17 @@ Four questions, answered here and nowhere else. The last three part ways on purp
 (INTERFACE-CONTRACT:126-132 evidence permanence; :150-153 route detail is its own assertion
 class; the THREDDS rule), and they all rest on the first:
 
-  projects       does this ONE register row publish anything: `review: verified` and a level
+  projects()       does this ONE register row publish anything: `review: verified` and a level
                    this module routes. Asked by the three below AND by station.json's emitter, so
                    the publication rule is stated once rather than restated per surface.
-  station_flag   does a verified time-series resource EXIST for this station? Existence
+  station_flag()   does a verified time-series resource EXIST for this station? Existence
                    semantics: follows the register for EVERY station, withheld included;
                    an embargo never flips it, an outage never flips it, and the only lawful way
                    down is curation - a row retired with its dated reason stops projecting, and
                    when it was the station's last verified row the flag goes with it.
-  survey_counts  the per-survey tally of true flags (spec: stable across access transitions,
+  survey_counts()  the per-survey tally of true flags (spec: stable across access transitions,
                    never derivable by subtraction).
-  route_rows     the PUBLIC route detail: level token to {bytes, url_path}. Only for an OPEN
+  route_rows()     the PUBLIC route detail: level token to {bytes, url_path}. Only for an OPEN
                    station (the caller passes the same served/gated verdict the access gate
                    computed; policy before emission), only `review: verified`, and never
                    level2: a transfer-function copy in the archive is not a time series and

@@ -5,7 +5,7 @@ caller (the request-key endpoint) still returns the neutral 202 whatever happens
 
 Transport is chosen by PORT, the conventional SMTP mapping:
   * 465          -> implicit TLS from the first byte (smtplib.SMTP_SSL);
-  * 587 / 25 / * -> plaintext connect then STARTTLS upgrade (smtplib.SMTP + starttls).
+  * 587 / 25 / * -> plaintext connect then STARTTLS upgrade (smtplib.SMTP + starttls()).
 STARTTLS is REQUIRED on the non-465 path (a mailbox provider like VentraIP offers it): if the server
 does not advertise it, the send fails closed rather than falling back to cleartext auth.
 

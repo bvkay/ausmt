@@ -10,7 +10,7 @@ optional sections render empty widgets with example placeholders (never a null-s
 raw-JSON <details> override; per-field validation errors (bad ORCID / bad DOI) rendered on the form;
 spare blank rows submitted empty are ignored; the editor.js route + CSP (no inline JS).
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
 """
 from __future__ import annotations
 

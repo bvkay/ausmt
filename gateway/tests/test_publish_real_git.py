@@ -13,7 +13,7 @@ test in tmp_path: surveys-live (`git init` + identity + an initial commit on mai
 HERMETIC (no network, no docker, no secrets, no ambient identity leak): every git subprocess runs with
 GIT_CONFIG_NOSYSTEM=1, GIT_CONFIG_GLOBAL -> a tmp file, HOME -> a tmp dir. The dev box's / CI runner's
 ~/.gitconfig can never leak in - that leakage class is exactly the recorded failure
-(test_curator_publish.py:114). real_git_runner builds its subprocess env from scrubbed_env, which
+(test_curator_publish.py:114). real_git_runner builds its subprocess env from scrubbed_env(), which
 copies os.environ; monkeypatching os.environ (what the `hermetic_git_env` fixture does) is therefore
 what those subprocesses actually see.
 
@@ -48,8 +48,8 @@ def _git(args: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Complete
 @pytest.fixture
 def hermetic_git_env(tmp_path, monkeypatch) -> dict[str, str]:
     """Isolate git from any ambient config. Sets HOME / GIT_CONFIG_GLOBAL / GIT_CONFIG_NOSYSTEM on
-    os.environ (so real_git_runner's scrubbed_env copy carries them into every subprocess) AND
-    returns a plain env dict for the fixture's own _git build/inspect calls. A per-test global
+    os.environ (so real_git_runner's scrubbed_env() copy carries them into every subprocess) AND
+    returns a plain env dict for the fixture's own _git() build/inspect calls. A per-test global
     config sets init.defaultBranch=main so `git init` lands on main on any git version, and a throwaway
     default identity proves the publish OVERRIDES it (test a asserts the commit is the gateway identity
     regardless of this ambient one)."""
@@ -587,7 +587,7 @@ def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_e
     # while the second queues, guaranteeing the interleave. Assert: exactly one 200 + one 409, the
     # surviving survey remains, and the corpus NEVER empties.
     # HISTORICAL RED (HEAD, no inside-lock guard): BOTH retires succeed (statuses [200, 200])
-    # and list_published_slugs == 0 (corpus emptied) - captured verbatim in the report.
+    # and list_published_slugs() == 0 (corpus emptied) - captured verbatim in the report.
     import time as _time
 
     env = hermetic_git_env

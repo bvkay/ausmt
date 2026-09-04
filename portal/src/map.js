@@ -1,6 +1,6 @@
 "use strict";
 // Map + layers + markers. Data-dependent work (markers, footprints) is in buildMarkers()/
-// buildFootprints, called by main after ST is built. See docs: portal internals, map.js.
+// buildFootprints(), called by main after ST is built. See docs: portal internals, map.js.
 const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
 // THE ATTRIBUTION CONTROL IS MOUNTED BELOW, not here. See docs: portal internals, map.js.
 const map=L.map("map",{preferCanvas:true,attributionControl:false}).fitBounds(AU_HOME_BOUNDS);
@@ -33,7 +33,7 @@ function isAuslampSurvey(slug,auslampSet){return !!(slug&&auslampSet&&auslampSet
 // catalogue - the engine masks the VALUE (there is no separate policy field; withheld => null, generalised
 // => a 0.1° cell rendered verbatim). See docs: portal internals, map.js.
 function hasPosition(s){return !!(s&&s.lat!=null&&s.lon!=null&&isFinite(s.lat)&&isFinite(s.lon));}
-// Paint the currently-visible stations into the ONE dot container. Called by refresh (a filter changed).
+// Paint the currently-visible stations into the ONE dot container. Called by refresh() (a filter changed).
 // See docs: portal internals, map.js.
 function routeVisibleToLayers(){
   const dots=(typeof visible!=="undefined"?visible:[]).filter(hasPosition);
@@ -110,7 +110,7 @@ function dimStyleFor(surveyOfMarker,focus){
     ? {fillOpacity:MARKER_FILL_OPACITY,opacity:1}
     : {fillOpacity:MARKER_DIM_FILL,opacity:MARKER_DIM_STROKE};}
 // Apply the current focus to every marker. Markers are canvas circleMarkers (preferCanvas), so setStyle
-// carries their opacity; it passes ONLY the opacity keys, so it composes with recolor()/restyleForZoom
+// carries their opacity; it passes ONLY the opacity keys, so it composes with recolor()/restyleForZoom()
 // (colour and radius) instead of fighting them. See docs: portal internals, map.js.
 function applySurveyDim(){
   ST.forEach(s=>{if(s.marker&&s.marker.setStyle)s.marker.setStyle(dimStyleFor(s.survey,_dimFocusSurvey));});}
@@ -129,7 +129,7 @@ const DOT_R_BASE=2.0;          // at z4 (national): every site dot is ~2px, the 
 function radiusForZoom(z){
   return Math.min(DOT_R_CEIL,Math.max(DOT_R_FLOOR,DOT_R_BASE+DOT_R_SLOPE*((typeof z==="number"?z:DOT_R_Z0)-DOT_R_Z0)));}
 function weightForZoom(z){return z<=4?1.0:1.5;}
-// current map zoom as a finite number - the headless smoke/interaction stubs' map.getZoom returns a
+// current map zoom as a finite number - the headless smoke/interaction stubs' map.getZoom() returns a
 // Proxy (not a number), and even Number(proxy) throws ("cannot convert object to primitive"), so read it
 // defensively and default to 4 (national) when it isn't already a finite number.
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
@@ -143,7 +143,7 @@ function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z
 let HOME_BOUNDS=null,_fitWasDegenerate=false;
 // PURE: a Leaflet map size is degenerate when it is missing or zero on either axis, which is what makes
 // fitBounds compute against a 0x0 box and land at zoom 0. Leaflet-free so the jsdom driver pins it on
-// synthetic sizes (the headless map's getSize is a Proxy, so it reads degenerate).
+// synthetic sizes (the headless map's getSize() is a Proxy, so it reads degenerate).
 function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeof size.y==="number"&&size.x>0&&size.y>0);}
 // PURE: the corrector fires ONLY when the user has not taken control (never fight a deliberate view) AND the
 // primary fit was degenerate (so a healthy fit, and any later programmatic fit such as a collection
@@ -247,7 +247,7 @@ L.control.layers(null,{"Survey footprints":footprints,
 // word "stations" (never "sites"), and the shape word - is pinned. See docs: portal internals, map.js.
 function drawSelectionMsg(n,layerType){const shape=layerType==="rectangle"?"rectangle":"polygon";
   return n+" station"+(n===1?"":"s")+" selected within "+shape;}
-// One active selection shape: a new box replaces the previous one rather than stacking. refresh
+// One active selection shape: a new box replaces the previous one rather than stacking. refresh()
 // recomputes `selected` from the new shape, THEN we toast the fresh count and surface the exports by
 // auto-switching the rail to Select & download. See docs: portal internals, map.js.
 function onDrawCreated(e){e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();

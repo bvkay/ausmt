@@ -109,7 +109,7 @@ function headerDownloadBtn(s,m){
 // The PLAIN-TEXT APA sentence: what the citation pack's CITATIONS.txt and the clipboard copy carry.
 // A text file must never receive HTML entities (O'Brien is not O&#39;Brien on disk).
 function apaPlain(m,doi){return `${m.au} (${m.yr||"n.d."}). ${m.ti}${m.ve?" ("+m.ve+")":""} [Data set]. ${m.pb}.`+(doi?` https://doi.org/${doi}`:"");}
-// The HTML rendering of the same sentence. esc is character-wise, so escaping the assembled string
+// The HTML rendering of the same sentence. esc() is character-wise, so escaping the assembled string
 // equals escaping each field; the two renderers cannot drift because one wraps the other.
 function apa(m,doi){return esc(apaPlain(m,doi));}
 // The DISPLAY-ONLY APA citation rendered inside the Cite box. See docs: portal internals, drawer.js.
@@ -191,7 +191,7 @@ function withheldReason(m){
   return reason+", contact the custodian organisation ("+org+")";
 }
 // The boot-loaded coordinate policy for a station ('generalised' | 'withheld' | null), folded onto s by
-// buildState from coord_policy.json. See docs: portal internals, drawer.js.
+// buildState() from coord_policy.json. See docs: portal internals, drawer.js.
 function coordPolicyOf(s){return (s&&s.coordPolicy)||null;}
 // True when a station's SERVED position is masked. A withheld station is detectable from its null coords
 // alone (belt-and-braces if the marker artifact never loaded); a generalised station needs the marker
@@ -753,7 +753,7 @@ function openStation(i,opts){
   // (verbatim, else org(year) synthesis) renders alongside. See docs: portal internals, drawer.js.
   const _attn=attributionText(m);
   // The citation box renders the DOI as a resolution-aware hyperlink (apaCiteDisplay); the copy buttons
-  // below still assemble plain-text apa()/bibtex()/ris strings via the [data-cite] handler.
+  // below still assemble plain-text apa()/bibtex()/ris() strings via the [data-cite] handler.
   const citeBody=m.cite
     ? apaCiteDisplay(m.cite,m.doi,m.doi_resolution)
     : `<div class="prov" style="margin-bottom:6px">Custodian citation not recorded, cite the survey package:</div>${apaCiteDisplay(AUSMT_SELF,m.doi,m.doi_resolution)}`;
@@ -806,7 +806,7 @@ async function fetchEdi(file,avail,survey){
       window.open("https://doi.org/"+m.doi,"_blank","noopener,noreferrer");}
     else toast("This EDI isn't redistributable here: "+withheldReason(m)+".");
     return;}
-  // Route through dataUrl (honours data_base_url) - NOT a hardcoded "data/edi/" path, so the
+  // Route through dataUrl() (honours data_base_url) - NOT a hardcoded "data/edi/" path, so the
   // portal and its data can live in separate repos / on NCI.
   return downloadUrl(dataUrl("edi/"+file),file);}
 // Generic blob download for a resolved manifest URL (EMTF XML, per-survey bundles, EDI fallback).
@@ -1143,7 +1143,7 @@ function clearDiscoveryFilters(){
   // The promoted year inputs are this bar's filters now, so Clear filters owes them a reset. Before
   // the promotion they were the rail's, and a year left in them survived every "Clear filters" click.
   ["yearFrom","yearTo"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
-  // refresh re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
+  // refresh() re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
   if(typeof refresh==="function")refresh();else renderCards();
   if(typeof updateCounts==="function")updateCounts();}
 // "View on map" from the survey drawer header. See docs: portal internals, drawer.js.
@@ -1195,7 +1195,7 @@ function miniScatter(ss){
   const box=`<rect x="${bx0}" y="${by0}" width="${bw}" height="${bh}" fill="none" stroke="var(--line)"/>`;
   return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:#16242f;border:1px solid var(--line);border-radius:6px">`+
     box+latTicks+lonTicks+dots+`</svg>`;}
-// There is no "Related surveys" section and no relatedSurveys scorer. See docs: portal internals,
+// There is no "Related surveys" section and no relatedSurveys() scorer. See docs: portal internals,
 // drawer.js.
 function surveySummary(ss,m){
   // This table carries no "dimensionality mix" row: dimensionality is inferable from the phase

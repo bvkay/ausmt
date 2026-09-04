@@ -5,7 +5,7 @@ producer is gated two ways: `flags:` in `portal/portal.config.yaml`, and a CLI f
 Only one of those two reaches a box.
 
 `deploy/docker/engine.Dockerfile` copies `contract/`, `engine/` and exactly one portal file
-(`portal/src/contract.js`). `portal/portal.config.yaml` is NOT in the image, so `load_flags` inside
+(`portal/src/contract.js`). `portal/portal.config.yaml` is NOT in the image, so `load_flags()` inside
 the build container reads a path that does not exist, returns its OFF defaults, and every flag set in
 that YAML is a production no-op. The enable that works is the CLI flag on `deploy/Makefile`'s
 `rebuild-data` recipe, which is where `--survey-h5` lives and why the Makefile comment above it calls

@@ -84,7 +84,7 @@ def test_preview_authorized_by_id_not_session(tmp_path):
 def test_path_traversal_is_404(tmp_path):
     # Failure criterion: fails if a `..` sub-path escapes preview-data and serves a file (e.g. the
     # submission's own validate.json a level up, or worse).
-    # Proven failing: before the resolve+containment check, /preview/{id}/../validate.json
+    # Proven failing: before the resolve()+containment check, /preview/{id}/../validate.json
     # resolved to reports/validate.json (outside preview-data) and was served 200.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):

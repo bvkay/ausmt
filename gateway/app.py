@@ -124,7 +124,7 @@ class Gateway:
         self._edit_runner = edit_runner or (
             lambda job: metaedit.default_edit_runner(job, self.cfg.jobs_dir,
                                                      timeout_s=self.cfg.edit_timeout_s))
-        # Curator auth. Keys are parsed LAZILY (curator_keys) so a malformed config
+        # Curator auth. Keys are parsed LAZILY (curator_keys()) so a malformed config
         # fail-closes each curator route with a 503 rather than aborting startup — the submit half of
         # the gateway must keep working even if curator config is broken. The rate limiter is a single
         # process-global (no per-source trust on a tailnet).
@@ -146,7 +146,7 @@ class Gateway:
         # await (body read) before the row is inserted, so N concurrent submits could all pass a bare
         # read-check. `_reserved` is an in-memory count of accepted-but-not-yet-inserted submissions,
         # incremented atomically the instant a submit passes the gate and decremented if it fails
-        # before insert. count_inflight + _reserved is the real live count. The event loop is
+        # before insert. count_inflight() + _reserved is the real live count. The event loop is
         # single-threaded, so incrementing _reserved between the check and the first await is
         # indivisible — no lock needed, and it never races a second coroutine mid-increment.
         self._reserved = 0
@@ -166,8 +166,8 @@ class Gateway:
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
 
         # Capacity gate, reserved ATOMICALLY before the body read so N concurrent
-        # submits cannot all slip past a bare read-check (cap TOCTOU). count_inflight is durable
-        # truth; _reserved covers the window between here and insert_submission. The increment
+        # submits cannot all slip past a bare read-check (cap TOCTOU). count_inflight() is durable
+        # truth; _reserved covers the window between here and insert_submission(). The increment
         # below happens with no await between it and this check, so it is indivisible on the single
         # event loop — the reservation is held for the whole handler and released on any early return.
         day = time.strftime("%Y-%m-%d", time.gmtime())
@@ -189,7 +189,7 @@ class Gateway:
     async def _handle_submit_reserved(self, request: Request, auth: "_SubmitAuth"):
         # Parse the multipart body under a hard total-byte cap that fires as bytes arrive (chunked-
         # safe, no Content-Length dependency) and spools only onto the measured incoming volume
-        # (see gateway/upload.py for why request.form alone is unsafe here).
+        # (see gateway/upload.py for why request.form() alone is unsafe here).
         submission_id = db.new_id()
         part_path = self.cfg.incoming_dir / f"{submission_id}.zip.part"
         final_path = self.cfg.incoming_dir / f"{submission_id}.zip"
@@ -352,7 +352,7 @@ class Gateway:
     async def poll_once(self) -> None:
         """One pass of the ingest/retry loop. Split out so tests drive it deterministically instead
         of waiting on the 5 s timer. Fully awaited (not fire-and-forget) so a test that calls
-        poll_once observes all resulting transitions synchronously afterward."""
+        poll_once() observes all resulting transitions synchronously afterward."""
         await self._retry_held()
         await self._ingest_done()
         self._requeue_dead()
@@ -2905,7 +2905,7 @@ def _collection_spec_violation(cid: str, operations: list, note: str) -> str | N
 
 def _form_getlist(form, key: str) -> list[str]:
     """Every value submitted for a repeated form field (checkboxes), from Starlette's FormData
-    multidict - getlist(key) returns ALL checked values (a collapsed dict would keep only the last).
+    multidict - getlist(key) returns ALL checked values (a collapsed dict() would keep only the last).
     A plain-dict fallback (single value) keeps the helper usable on either shape. Blanks dropped."""
     getlist = getattr(form, "getlist", None)
     raw = getlist(key) if callable(getlist) else form.get(key)
@@ -2923,7 +2923,7 @@ def _form_getlist(form, key: str) -> list[str]:
 
 def _selected_removals(form) -> list[str]:
     """The EDI filenames the curator ticked, from repeated `remove` checkboxes. Starlette's FormData
-    is a multidict, so getlist('remove') returns EVERY checked value (a plain dict would collapse
+    is a multidict, so getlist('remove') returns EVERY checked value (a plain dict() would collapse
     them to the last one, silently dropping all but one selection). Deduped, order-preserving, blanks
     dropped. The runner + publish re-validate each name's charset before it becomes a path component,
     so this only needs to gather them."""
@@ -2980,7 +2980,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     async def lifespan(app: FastAPI):
         # The single asyncio poll loop (the ONE background task). Started here so the
         # app has a running loop; cancelled + DB closed on shutdown. Tests construct the app without
-        # entering the lifespan and drive gw.poll_once directly, so this task never competes with
+        # entering the lifespan and drive gw.poll_once() directly, so this task never competes with
         # their deterministic assertions.
         gw._poll_task = asyncio.create_task(_poll_forever(gw))
         try:
@@ -3029,7 +3029,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
         # Cap the body AS BYTES ARRIVE before any parse: this public route read one email address
         # with no ceiling at any layer, and a chunked body declares no length, so only the running
         # byte count can stop a memory-amplifier body (same guard as the sibling /gateway/submit; see
-        # gateway/upload.py). read_body_capped caches the CAPPED bytes, so the json()/form below
+        # gateway/upload.py). read_body_capped caches the CAPPED bytes, so the json()/form() below
         # parse the bounded body. An oversize body degrades to the SAME neutral 202 as a bad body: a
         # 413 here would be an enumeration oracle (too-large vs malformed), and not buffering it has
         # already beaten the DoS.
@@ -3118,7 +3118,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     # ---- curator security: TOTP second factor (schema v4). GET is `def` (blocking sqlite
     # read -> threadpool). The code-verifying POSTs are `async def` so the throttle decision
     # (blocked-check -> verify -> record) runs to completion on the event loop with NO await between
-    # its steps - atomic against a concurrent burst without needing the login route's evaluate form.
+    # its steps - atomic against a concurrent burst without needing the login route's evaluate() form.
     @app.get("/gateway/curator/security")
     def curator_security(request: Request):
         return gw.handle_security(request)

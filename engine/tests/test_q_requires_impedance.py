@@ -176,7 +176,7 @@ def test_the_score_is_the_only_field_a_tipper_only_station_can_lose():
 
 def test_the_impedance_presence_test_is_the_components_columns_own():
     """The rule reuses the decision that fills the catalogue components column rather than making a
-    second one: _mtm.components_from_tf writes the Z series only under tf.has_impedance, the same
+    second one: _mtm.components_from_tf writes the Z series only under tf.has_impedance(), the same
     test that puts "Z" in components. Pinned in both directions over all four fixtures, so a change
     to either side that breaks the equivalence fails here rather than in a corpus diff."""
     for path in (TIPPER_ONLY, PLACEHOLDER, REAL_Z, REAL_ZT):

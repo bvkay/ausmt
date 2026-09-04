@@ -13,7 +13,7 @@ Load-bearing pins here:
   * SHELL PRESENCE: the rail (Stage-1 surfaces only, no Collections) + context bar (drift chip with
     the server-rendered published HEAD + Request-rebuild) render on every curator page.
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
 """
 from __future__ import annotations
 

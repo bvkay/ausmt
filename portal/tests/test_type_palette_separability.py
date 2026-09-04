@@ -12,7 +12,7 @@ portal.config.yaml colour flow - that file carries branding, deployment, analyti
 The hexes live in:
     portal/src/state.js  TYPE_COL          -> map dots, drawer type chips, card mixbar, mini-scatter
     portal/index.html    --lpmt/--bbmt/... -> the map legend and the rail's data-type checkboxes
-Both are consumed through their own path (the legend reads the CSS token via var, never a literal), so
+Both are consumed through their own path (the legend reads the CSS token via var(), never a literal), so
 neither can be deleted in favour of the other without a redesign nobody asked for. What CAN be guaranteed
 is that they never disagree, which is what test_the_two_palette_authorities_agree does. That is the
 "single source" property restated as an enforceable invariant rather than a location.

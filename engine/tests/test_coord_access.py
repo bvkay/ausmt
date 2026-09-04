@@ -985,7 +985,7 @@ def test_unit_parse_reads_default_and_overrides():
 def test_unit_published_id_resolver_is_a_conservative_superset_of_the_matcher():
     """THE READER-SIDE HALF of the shared matcher, for a caller holding a PUBLISHED station id and
     no `variant` field: the front door's route table is generated from the registers by a tool that
-    must not import the ingest stack, so it cannot call station_policy.
+    must not import the ingest stack, so it cannot call station_policy().
 
     The PROPERTY, not an example. Over every (record id, variant) shape the engine emits, whatever
     station_policy byte-gates, station_policy_by_published_id byte-gates too. That direction is the
@@ -1066,7 +1066,7 @@ def test_base_id_surface_emitted_and_engine_true_for_variant_stations(tmp_path):
     """EMISSION + PARITY PIN. A survey with a processing-variant pair emits base_ids.json - a boot map
     ausmt_id -> BASE station id — containing EXACTLY the variant records mapped to their shared base, and
     NOT the non-variant station (whose base is its own catalogue id). The emitted base ids equal
-    base_station_id over the REAL parsed records (engine truth, never a hand-typed map). FAILS IF the
+    base_station_id() over the REAL parsed records (engine truth, never a hand-typed map). FAILS IF the
     surface is missing, a variant record is absent/mis-based, a non-variant station is listed, or the
     emitted base diverges from the mask seam's own base_station_id derivation."""
     out, r = _build(tmp_path, [EXACT, _VAR_A, _VAR_B], coordinates_default="exact", overrides={})

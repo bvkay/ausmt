@@ -27,7 +27,7 @@ function rhoSvg(t){const per=t[T.periods];if(!per.length)return"";const vals=[..
   const H=118,x=xScale(per);let lo=Math.floor(Math.log10(Math.min(...vals))),hi=Math.ceil(Math.log10(Math.max(...vals)));if(hi<=lo)hi=lo+1;
   const y=v=>4+(hi-Math.log10(v))/(hi-lo)*(H-26);const yl=[];for(let d=lo;d<=hi;d++)yl.push([y(10**d),supTen(d)]);
   // Rho error bars in the LOG domain - the low end is clipped at the axis floor (10**lo) so a
-  // large error can never drive the endpoint to <=0 (which log cannot map). Bars only where present.
+  // large error can never drive the endpoint to <=0 (which log() cannot map). Bars only where present.
   const rfloor=10**lo,rlo=(v,e)=>Math.max(v-e,rfloor),rhi=(v,e)=>v+e;
   return svgOpen(W,H)+frame(H,x,per,yl)+
    ebars(per,t[T.rho_xy],t[T.rho_xy_err],x,y,"#EF7256",rlo,rhi)+ebars(per,t[T.rho_yx],t[T.rho_yx_err],x,y,"#2E8FA3",rlo,rhi)+

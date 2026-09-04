@@ -120,7 +120,7 @@ class LoginRateLimiter:
     login attempts are refused (429) until the window rolls off. A SUCCESSFUL login clears the counter.
 
     THREAD-SAFE: the login route is a sync `def` and runs in Starlette's threadpool, so many login
-    POSTs execute concurrently. A bare blocked()->check-key->record_failure sequence would let a
+    POSTs execute concurrently. A bare blocked()->check-key->record_failure() sequence would let a
     burst of ~threadpool-size guesses all read 'not blocked' before any failure records. `evaluate()`
     runs the whole decision — blocked-check, key match, and the failure/success record — under ONE
     lock, so at most `max_attempts` wrong keys can reach the key comparison inside a window (mirrors
@@ -155,7 +155,7 @@ class LoginRateLimiter:
             return "ok", name
 
     # blocked()/record_* kept for the unit tests that exercise the window mechanics directly; the
-    # route uses evaluate so the whole decision is atomic.
+    # route uses evaluate() so the whole decision is atomic.
     def blocked(self, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
         with self._lock:

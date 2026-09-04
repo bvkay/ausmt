@@ -3,7 +3,7 @@
 Both the submission runner (runner._run_validator) and the metadata-edit runner
 (edit._run_validator) invoke `validate_survey.py` as a subprocess. Before each assembled its own
 argv — one positional-first, one --json-first — the exact class of seam whose argv bug quarantined
-every real submission. Both now route through runner.validator_argv.
+every real submission. Both now route through runner.validator_argv().
 
 These tests pin:
   1. the canonical SHAPE (positional-first: <folder> then --json <file>);

@@ -11,7 +11,7 @@ Requires PyYAML (a declared engine dependency, installed in CI); the stdlib fall
 The branding/deployment defaults below are AusMT literals because AusMT is what this repo brands. The
 MTCAT schema version is NOT a branding choice and NOT a deployment knob: it is a property of the schema
 this tree ships, so the default for a config that OMITS portal.schema_version is read from the schema
-itself via contract/generate.py's mtcat_schema_version. A re-used portal (NZMT, CanadaMT, ...) that
+itself via contract/generate.py's mtcat_schema_version(). A re-used portal (NZMT, CanadaMT, ...) that
 drops the key therefore renders the version it actually serves, not a stale literal parked here.
 """
 import json

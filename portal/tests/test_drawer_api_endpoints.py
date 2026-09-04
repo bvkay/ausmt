@@ -12,7 +12,7 @@ which is what this section must now say, templated with the station in front of 
 
 The pins below boot the REAL src modules in a VM (the tools/*_test.js / test_drawer_copy_removals.py
 idiom) against two synthetic fixtures that differ in ONE respect - whether the manifest carries a
-served EDI artifact for the station - and render openStation for each:
+served EDI artifact for the station - and render openStation() for each:
 
   * FICTIONAL-PATH ABSENCE - FAILS if "(planned)" or any /api/ path survives in the rendered drawer.
     RED-proven against the pre-change drawer.js: that build renders all three fictional paths plus the

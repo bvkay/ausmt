@@ -229,11 +229,11 @@ def test_duplicate_key_value_rejected():
 
 
 def test_rate_limiter_evaluate_is_thread_safe():
-    # the login route is sync `def` (threadpool), so evaluate must serialize the
+    # the login route is sync `def` (threadpool), so evaluate() must serialize the
     # blocked-check + key-match + record so a burst cannot slip past the cap. Failure criterion: fails
     # if MORE than max_attempts wrong-key evaluations return 'denied' (i.e. reached the key check)
     # within a window when hammered concurrently.
-    # Proven failing: with the pre-fix separate blocked/record_failure and no lock, a
+    # Proven failing: with the pre-fix separate blocked()/record_failure() and no lock, a
     # threaded burst of wrong keys nearly all read 'not blocked' and reached the key check before any
     # failure recorded — far more than max_attempts got through.
     import threading

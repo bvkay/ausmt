@@ -102,7 +102,7 @@ def test_conditioning_persisted_in_provenance_and_station_json(tmp_path):
     """FAILS IF: a station that had to be conditioned (the spectra fixture's rotation frame is unknown)
     leaves NO trace — i.e. the canonical store's provenance.json records only counts (not a per-station
     conditioning map) and/or the --products station.json carries no `canonical_conditioning`. Pre-fix
-    both consumers discarded normalize's returned notes entirely."""
+    both consumers discarded normalize()'s returned notes entirely."""
     assert SPECTRA.exists(), SPECTRA
     surveys = _spectra_survey(tmp_path)
     out = tmp_path / "out"; canon = tmp_path / "canon"; prod = tmp_path / "prod"

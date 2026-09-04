@@ -330,9 +330,9 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
     # of an EMTF-XML-only package builds no stations.
     #
     # FOLLOW-UP: once the surveys validator gains EMTF-XML input and the vendored copy
-    # + PIN are resynced, the stub can go and this test can run against require_validator_dir.
+    # + PIN are resynced, the stub can go and this test can run against require_validator_dir().
     # The stub honours BOTH contracts the real validate_survey.py serves, because both are exercised
-    # in this flow: build_portal IMPORTS it (validate(folder) -> report with worst/counts) while
+    # in this flow: build_portal IMPORTS it (validate(folder) -> report with worst()/counts()) while
     # the gw-runner SPAWNS it as a subprocess (folder positional + --json output file).
     stub_dir = tmp_path / "validator-stub"
     stub_dir.mkdir()
@@ -459,7 +459,7 @@ def test_run_validator_against_the_real_validator(tmp_path):
     # {counts, items, ...} report and a True (no-FAIL) verdict on a minimal valid package.
     #
     # UNCONDITIONAL - resolves the sibling validator if present, else the
-    # committed vendored copy; require_validator_dir FAILS (never skips) if neither is present. The
+    # committed vendored copy; require_validator_dir() FAILS (never skips) if neither is present. The
     # validator is stdlib+yaml so this runs in the stack-less gateway workflow too.
     #
     # Proven failing on main d645743: the argv was
@@ -827,7 +827,7 @@ def test_atomic_write_json_serialises_dates(tmp_path):
 
 
 def test_atomic_write_json_still_rejects_genuinely_unserialisable(tmp_path):
-    """The encoder is a precise date/Decimal handler, NOT a blind str catch-all: a genuinely
+    """The encoder is a precise date/Decimal handler, NOT a blind str() catch-all: a genuinely
     unexpected object must still surface as a TypeError (a bug), never be silently coerced into a
     persisted job file."""
     class Weird:

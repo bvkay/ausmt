@@ -5,7 +5,7 @@ kinds coexist; operator keys are unchanged.
 
 Every test asserts against an INDEPENDENT observable and RED-proves its enforcement pin (stated in
 the docstring). No network: the mail layer is either an injected fake seam (endpoint tests) or a
-monkeypatched smtplib (mailer-unit tests). Async bodies run under conftest.run (no pytest-asyncio),
+monkeypatched smtplib (mailer-unit tests). Async bodies run under conftest.run() (no pytest-asyncio),
 the established gateway pattern.
 """
 from __future__ import annotations
@@ -512,7 +512,7 @@ def test_mailer_body_has_no_em_dash_and_carries_reply_to(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------------------------------
 def test_smtp_pass_redacted_from_config_dump(tmp_path):
     """The startup config dump carries the SMTP host/port/user/from (operational) but NEVER the SMTP
-    password. Fails if the password value appears in redacted_items."""
+    password. Fails if the password value appears in redacted_items()."""
     cfg = _mail_cfg(tmp_path, smtp_pass="a-very-secret-smtp-pw-9999")
     items = dict(cfg.redacted_items())
     assert "a-very-secret-smtp-pw-9999" not in items.values()

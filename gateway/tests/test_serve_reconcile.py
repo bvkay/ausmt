@@ -5,7 +5,7 @@ shows published HEAD vs served build, the last reconcile outcome, and a pending 
 proves the gateway half against INDEPENDENT OBSERVABLES (the request file on disk + its parsed JSON,
 the response status, the rendered HTML), mirroring test_uploader_keys.py's structure.
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run()
 (no pytest-asyncio), the established gateway pattern.
 """
 from __future__ import annotations

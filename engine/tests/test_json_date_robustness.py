@@ -2,7 +2,7 @@
 
 Root cause: the add-survey form emitted attribution.declared_date as a BARE unquoted ISO date; PyYAML
 safe_load implicit-types a bare ISO date to datetime.date; survey_meta_from_yaml threads the attribution
-block VERBATIM into SMETA; main serialised surveys.json/mtcat via _jdump (json.dumps with NO default
+block VERBATIM into SMETA; main() serialised surveys.json/mtcat via _jdump (json.dumps with NO default
 hook) -> `TypeError: Object of type date is not JSON serializable` -> the whole build crashed and the
 gateway preview quarantined the submission with station_count 0. The served corpus never hit it because
 curator yamls quote their dates; it was UNIVERSAL to form submissions (the licence tick is effectively

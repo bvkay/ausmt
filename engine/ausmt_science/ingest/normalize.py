@@ -4,7 +4,7 @@ Any TF input (EDI / EMTF XML) -> mt_metadata TF object -> a *conditioned*, schem
 EMTF XML + a derived EDI, with a VERIFIED round-trip (impedance preserved). This backs the Phase-1
 canonical EMTF XML store (see docs developer docs / the Phase-1 format-backbone design).
 Requires the core mt_metadata/mth5 stack; every heavy import is function-local so merely importing
-this module is cheap and never pulls the heavy stack until normalize is actually called.
+this module is cheap and never pulls the heavy stack until normalize() is actually called.
 
 WHY a conditioning step is required (measured on real AusLAMP/AusMT EDIs, mt_metadata 1.0.9):
 mt_metadata does NOT round-trip arbitrary real EDIs through EMTF XML out of the box — its writer
@@ -28,7 +28,7 @@ distinct conditioning failures occur that way, and item 7 below is a different c
      so real ids like "C6_BxByReplaced" fail the write; sanitized to alphanumeric for the Site.id +
      filename. The UNSANITISED source id is preserved INSIDE the artifact, in the Site <Name>
      (geographic_name) — the free-text station slot that survives the round-trip — recoverable via
-     source_station_id_from_geographic_name. (Site.id sanitising found by the full-corpus parity run.)
+     source_station_id_from_geographic_name(). (Site.id sanitising found by the full-corpus parity run.)
   6. Site.project pattern is ^[a-zA-Z0-9-_]*$ (no spaces) — survey project names like "Stuart Shelf
      2009" fail the write; sanitized (the readable name stays in survey.yaml). Found by the
      remote-reference data inspection across real dialects (EDL/BIRRP).
@@ -38,7 +38,7 @@ distinct conditioning failures occur that way, and item 7 below is a different c
      each gets a machine-readable NOT-asserted conditioning note, like the rotation zero-fill.
 
 One further post-write byte fix is not a conditioning failure but a reproducibility one:
-  8. mt_metadata assigns Provenance.create_time = now inside to_xml, so the written <CreateTime>
+  8. mt_metadata assigns Provenance.create_time = now() inside to_xml(), so the written <CreateTime>
      carries the build clock and the served XML's digest churns on every rebuild of unchanged inputs.
      It is rewritten to the creation date the source declares (see _pin_create_time), which for a
      station whose EDI this build generates is what that EDI's FILEDATE is pinned to as well.
@@ -335,7 +335,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
     # write->read round-trip (station.comments and transfer_function.id do NOT). This AUGMENTS any real
     # geographic name (e.g. Phoenix's "Near Broken Hill, AU"), it never replaces it, and runs AFTER the
     # Issue #3 sanitisation so the marker's ':' is not stripped. So the artifact is not the only place
-    # the real id is lost; recover it with source_station_id_from_geographic_name. Skipped when the id
+    # the real id is lost; recover it with source_station_id_from_geographic_name(). Skipped when the id
     # needed no sanitising (nothing to recover) — no pollution of the common clean-id case.
     st_true = (st_src or "").strip()
     if st_true and st_true != st_new and _SRC_ID_MARKER not in (tf.station_metadata.geographic_name or ""):
@@ -392,7 +392,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
             pass
         try:
             for run in (getattr(tf.station_metadata, "runs", None) or []):
-                # Run has no .ex/.ey attributes - channels are reached via get_channel (pydantic
+                # Run has no .ex/.ey attributes - channels are reached via get_channel() (pydantic
                 # ListDict model, verified on mt_metadata 1.0.9's Run).
                 try:
                     ex, ey = run.get_channel("ex"), run.get_channel("ey")
@@ -508,8 +508,8 @@ def _pin_create_time(xml_path: Path, tf) -> bool:
     minute this build ran.
 
     The served EMTF XML and the per-survey EMTF-XML zip publish a SHA-256 that a consumer is invited to
-    check against one published earlier. mt_metadata assigns Provenance.create_time = now inside
-    to_xml with no knob to pass a value (verified: setting provenance.creation_time before the write
+    check against one published earlier. mt_metadata assigns Provenance.create_time = now() inside
+    to_xml() with no knob to pass a value (verified: setting provenance.creation_time before the write
     does not reach the file), so an untouched canonical XML publishes a new digest for its station AND
     for its survey's whole XML zip on every rebuild of unchanged inputs. That is the same build-clock
     leak the served EDI's FILEDATE already pins out (extract/build_portal _reproducible_derived_edi),
@@ -621,7 +621,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = station_id or src.stem
 
-    # THE SOURCE READ GOES THROUGH `_mtm.read_with_fallback`, NOT a bare TF.read. normalize is
+    # THE SOURCE READ GOES THROUGH `_mtm.read_with_fallback`, NOT a bare TF().read(). normalize() is
     # the SECOND place the engine hands a custodian EDI to mt_metadata (build_portal's catalogue pass
     # is the first), and it is the one that produces the canonical EMTF XML. A source-read workaround
     # wired into only one of the two seams still BUILDS every station -- catalogue row, served EDI and
@@ -631,7 +631,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     # over. Measured on the GSSA Western Gawler 2023 delivery: 66 of 312 stations emitted canonical XML
     # before this line changed, 312 of 312 after.
     # Behaviour is UNCHANGED for a file mt_metadata reads directly: read_with_fallback's first act is
-    # the same TF.read(str(src)), and the retry it may attempt is parse-only (a normalised copy in a
+    # the same TF().read(str(src)), and the retry it may attempt is parse-only (a normalised copy in a
     # TemporaryDirectory destroyed before the call returns; tf.fn points back at `src`), so the bytes
     # this function writes, hashes or serves are unaffected -- see the note in extract/_mtm.py.
     # NOT recorded here: build_portal's catalogue pass reads every source file first and already

@@ -114,7 +114,7 @@ MTCAT = "/data/mtcat.json"
 # THE ONE EXTERNAL TARGET. The rule links the AuScope relationship from the footer, so the centre's
 # URL text and the lockup both navigate here. It is an exact allow-list of ONE address and it governs
 # NAVIGATION ONLY: _no_external_fetch below holds the other half, that no footer on any surface may
-# FETCH a resource (src, a stylesheet link, @import, url) from a host that is not this site. A CDN
+# FETCH a resource (src, a stylesheet link, @import, url()) from a host that is not this site. A CDN
 # outage or a compromise of a third-party host can tamper with a fetched byte; it cannot tamper with
 # an <a href>, which is why the two are separate rules rather than one host list.
 _EXTERNAL_NAV = ("https://www.auscope.org.au",)
@@ -210,7 +210,7 @@ def _index_footer():
 
 
 def _engine_footer():
-    """The footer _site_footer emits, assembled from the literal fragments in its return
+    """The footer _site_footer() emits, assembled from the literal fragments in its return
     expression. Read from source, not rendered: this module cannot import _pages.py."""
     src = _pages_text()
     body = src.split("def _site_footer(", 1)[1].split('return ("\\n<footer>\\n"', 1)[1]
@@ -446,7 +446,7 @@ def _no_external_fetch(where, footer_html, sheet):
     """THE ONE EXTERNAL TARGET, second half. A footer may NAVIGATE to the allow-listed AuScope
     address; nothing in it, or in the rules that style it, may FETCH from any host but this site.
 
-    FAILS on an external src, an external stylesheet link, an @import or a url naming a host. The
+    FAILS on an external src, an external stylesheet link, an @import or a url() naming a host. The
     rule introduced one anchor and no runtime dependency, and this is what keeps it that way."""
     for src in re.findall(r'<img [^>]*src="([^"]+)"', footer_html):
         assert not src.startswith(("http://", "https://", "//", "data:")), (
@@ -734,7 +734,7 @@ _SET_RE = re.compile(r"(?m)(?:^[ \t]*|(?<=\}))"
                      r"\{([^}]*)\}")
 _RULE_SET = ("footer", "footer a", ".fleft", ".fcenter", ".fright", ".orglogo", ".orglogo img")
 
-# THE TOKEN LAYER, RESOLVED. Five documents write these colours as var and two cannot: 404.html is
+# THE TOKEN LAYER, RESOLVED. Five documents write these colours as var() and two cannot: 404.html is
 # served by Caddy for any unmatched path at any depth and carries no token layer, and the generated
 # tier's shell writes literals throughout. Comparing the rule sets with the tokens resolved is what
 # lets "identical everywhere" be asserted across all seven rather than across the five that happen

@@ -2,7 +2,7 @@
 
 Before this test: generate.py had no argparse, so `if "--check" in argv:` was the ONLY branch test —
 ANY other argv (no args, --write, a typo, or --help) fell through to the unconditional write at the
-bottom of main, silently rewriting engine/extract/_contract.py + portal/src/contract.js. Running
+bottom of main(), silently rewriting engine/extract/_contract.py + portal/src/contract.js. Running
 `python contract/generate.py --help` to "just see usage" rewrote the generated files.
 
 Fails if: `--help` (or no args, or an unknown flag) exits 0 and/or touches either generated file. Proven

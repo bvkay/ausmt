@@ -238,7 +238,7 @@ def test_the_build_refuses_two_manifest_rows_over_one_served_file(tmp_path, monk
 
 
 def test_roundtrip_gate_failure_serves_no_bytes_and_is_loud_in_the_build_report(tmp_path, monkeypatch):
-    """ROUND-TRIP HONESTY. normalize is the gate: EMTF XML in -> TF -> EMTF XML out must satisfy the
+    """ROUND-TRIP HONESTY. normalize() is the gate: EMTF XML in -> TF -> EMTF XML out must satisfy the
     same maxdiff closeness check the EDI pipeline uses, and a file that cannot round-trip must fail
     THAT STATION loudly, never silently.
 
@@ -254,7 +254,7 @@ def test_roundtrip_gate_failure_serves_no_bytes_and_is_loud_in_the_build_report(
 
     real = _ni.normalize
     victim = "EXAMPLE01"
-    # Build the package with the REAL emitter first -- the fixture is written by normalize too, so
+    # Build the package with the REAL emitter first -- the fixture is written by normalize() too, so
     # patching before this point would sabotage the fixture instead of the build under test.
     _package(tmp_path / "surveys", xml_stations=("EXAMPLE01", "EXAMPLE02"))
 
@@ -295,10 +295,10 @@ _Z_CELL = re.compile(r'(<value[^>]*name="Zxy"[^>]*>)([^<]+)(</value>)')
 
 def _corrupt_first_impedance_cell(xml_path):
     """Corrupt a REAL generated EMTF XML the way a damaged submission is corrupt: replace the first
-    Zxy value cell with a non-numeric pair. mt_metadata still READS the file, so normalize gets as
+    Zxy value cell with a non-numeric pair. mt_metadata still READS the file, so normalize() gets as
     far as writing the canonical XML and the derived EDI, and only the round-trip comparison after
     them raises. That ordering is the whole point: a gate failure happens with two files already
-    written into the served tree, which a normalize stubbed to raise immediately cannot reproduce.
+    written into the served tree, which a normalize() stubbed to raise immediately cannot reproduce.
     """
     text = xml_path.read_text(encoding="utf-8")
     doctored, n = _Z_CELL.subn(lambda m: m.group(1) + "NaN NaN" + m.group(3), text, count=1)
@@ -355,7 +355,7 @@ def _corrupt_first_edi_impedance_value(edi_path):
 def test_a_real_round_trip_failure_leaves_no_unverified_bytes_for_an_edi_station(tmp_path):
     """The EDI-sourced leg of the same emitter, kept beside its sibling because it is the same
     failure path in _emit_served_xml. An EDI-sourced station keeps its custodian EDI when the XML
-    emission fails, so the consequence differs -- but the two files normalize wrote before the
+    emission fails, so the consequence differs -- but the two files normalize() wrote before the
     gate rejected them are just as unverified, and out/xml/<slug>/ is just as public.
 
     FAILS IF the rejected canonical XML, or the derived EDI written beside it, survives in the served

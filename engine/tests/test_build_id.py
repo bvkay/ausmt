@@ -92,7 +92,7 @@ def test_build_json_source_commit_matches_git_head_of_surveys_dir(tmp_path):
 
 def test_build_json_and_provenance_carry_served_tool_versions(tmp_path):
     """build.json AND build_provenance.json gain additive mt_metadata_version / mth5_version
-    keys, read from the SINGLE lib_versions source of truth. This build runs the real mt_metadata/mth5
+    keys, read from the SINGLE lib_versions() source of truth. This build runs the real mt_metadata/mth5
     stack (pytest.importorskip at module top), so both keys must be present and match the imported
     library __version__ (an independent observable — not a re-read of the build's own output). FAILS if a
     key is missing or disagrees with the actually-installed library, or if the build_id format drifted."""
@@ -128,7 +128,7 @@ def test_build_json_deterministic_aside_from_generated(tmp_path):
 
 
 # -- engine_commit env fallback + "unknown" (never literal "None") ---------------------------
-# These call build_identity directly (unit-level, not a subprocess build) so git resolution can be
+# These call build_identity() directly (unit-level, not a subprocess build) so git resolution can be
 # monkeypatched to None regardless of whether this checkout happens to be a git repo -- the container
 # scenario the bug came from (engine/ COPYed without .git, so _git_commit_at(HERE) is always None).
 
@@ -137,7 +137,7 @@ import extract.build_portal as bp  # noqa: E402
 
 
 def test_engine_commit_env_fallback_when_git_unavailable(tmp_path, monkeypatch):
-    # FAILS PRE-FIX: build_identity never consulted AUSMT_ENGINE_COMMIT at all, so with git
+    # FAILS PRE-FIX: build_identity() never consulted AUSMT_ENGINE_COMMIT at all, so with git
     # forced to None here engine_commit would stay None instead of picking up the env value --
     # exactly the containerised-build gap (no .git shipped in the image).
     monkeypatch.setattr(bp, "_git_commit_at", lambda cwd: None)
@@ -199,10 +199,10 @@ def test_build_prov_git_commit_prefers_real_git_over_env(monkeypatch):
     assert bp._build_prov("mt_metadata")["git_commit"] == "deadbeef", "real git must win over the env fallback"
 
 
-# --- lib_versions is the ONE source of truth for served tool versions --------------------
+# --- lib_versions() is the ONE source of truth for served tool versions --------------------
 
 def test_lib_versions_is_single_source_reused_by_cache_salt():
-    """The same lib_versions helper feeds BOTH the cache salt and the served version keys, so
+    """The same lib_versions() helper feeds BOTH the cache salt and the served version keys, so
     the two facts can never diverge. Sane shape: a dict whose keys, when present, are strings; and when
     the mt_metadata/mth5 stack IS installed (it is here — module-top importorskip) both keys resolve to
     the imported __version__. FAILS if the helper returns a non-dict, a non-string version, or disagrees

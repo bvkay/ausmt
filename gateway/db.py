@@ -3,7 +3,7 @@ index and the audit log. WAL mode; the GATEWAY PROCESS IS THE ONLY WRITER (house
 never touches the DB; it writes done-files that the gateway's poll loop ingests).
 
 This is the ONLY place submitter PII (name/email/orcid) is stored. The PII grep test
-proves it appears nowhere else in the gw/ tree. transition is the single mutation path for state:
+proves it appears nowhere else in the gw/ tree. transition() is the single mutation path for state:
 it refuses illegal moves (states.ALLOWED) so no illegal transition can ever reach the audit log,
 and it writes the transitions row in the SAME connection/commit as the state update so a state
 change without its audit row is impossible.
@@ -127,7 +127,7 @@ class CuratorTotp:
 
 
 class IllegalTransition(Exception):
-    """Raised when transition is asked for a move not in states.ALLOWED. Surfaced (not swallowed)
+    """Raised when transition() is asked for a move not in states.ALLOWED. Surfaced (not swallowed)
     so a programming error is loud; the row and audit log are left untouched."""
 
 

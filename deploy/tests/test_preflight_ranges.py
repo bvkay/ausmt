@@ -13,7 +13,7 @@ gateway container start (fail_closed_startup). This suite pins the two gaps that
      interpreter (config.py is stdlib-only, so it imports fine).
 
   2. THE RUNNER (gateway/runner/runner.py::RunnerConfig.from_env) reads AUSMT_JOB_TIMEOUT_S and
-     AUSMT_MAX_UPLOAD_MB - the same knobs the gateway floors - but int'ing them with no
+     AUSMT_MAX_UPLOAD_MB - the same knobs the gateway floors - and once int()'d them with no
      floor, so a zero was accepted where the gateway rejects it. from_env now fails closed (SystemExit)
      on a sub-1 value, identically to the gateway.
 
@@ -76,7 +76,7 @@ def test_preflight_reds_on_zeroed_numeric_knob(tmp_path):
 
 @pytest.mark.skipif(_SH is None, reason="no POSIX sh/bash to run preflight.sh")
 def test_preflight_reds_on_non_integer_knob(tmp_path):
-    """RED PIN (parse arm). A non-integer numeric override (int would ValueError inside config) must
+    """RED PIN (parse arm). A non-integer numeric override (int() would ValueError inside config) must
     also be caught by name, not surface as a traceback. FAILS IF a garbage value passes the range leg."""
     r = _run_preflight({"AUSMT_SESSION_TTL_S": "abc"}, tmp_path)
     out = r.stdout + r.stderr

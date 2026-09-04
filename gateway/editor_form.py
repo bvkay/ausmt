@@ -382,7 +382,7 @@ IDENTITY_DESIGNATION_LISTS = ("represents", "own_identifiers")
 # (who-did-what roles) as TWO lists, but the editor presents them as ONE panel of unified rows
 # (one row per person/org). The panel is the `people` section: its rows POST as l_people_<i>_<subkey>
 # (name / name_type / orcid / ror), a cited-author checkbox l_people_<i>_cited, and one checkbox per role
-# l_people_<i>_role_<Token>. assemble_people DECOMPOSES those rows back into the two lists, so
+# l_people_<i>_role_<Token>. assemble_people() DECOMPOSES those rows back into the two lists, so
 # the served creators[]/contributors[] shape is byte-for-byte unchanged (UI/assembly only). The two lists
 # stay registered as LIST_SECTIONS above for the per-list advanced-JSON escape and the vocab pins; they
 # are NOT assembled by the generic build_section_patch loop (they are decomposed here instead).

@@ -1,5 +1,5 @@
-"""Bounded multipart intake. request.form spools file parts to a
-SpooledTemporaryFile that rolls over to tempfile.gettempdir - a filesystem the /gw/incoming
+"""Bounded multipart intake. request.form() spools file parts to a
+SpooledTemporaryFile that rolls over to tempfile.gettempdir() - a filesystem the /gw/incoming
 headroom check does not measure — and starlette 1.3.1 does NOT apply max_part_size to file-part
 bytes, so neither the Content-Length gate (absent under Transfer-Encoding: chunked) nor a
 max_part_size argument bounds a hostile file part before it lands on disk.
@@ -10,7 +10,7 @@ raises before the parser can spool more than the cap + framing overhead. It also
 directory to the measured incoming volume as PER-PARSE state (_PinnedSpoolParser), so nothing the
 parser buffers escapes to an unmeasured /tmp even while several submits overlap.
 
-read_body_capped is the same guarantee for the small-field public routes that read a whole body
+read_body_capped() is the same guarantee for the small-field public routes that read a whole body
 into memory instead of parsing multipart.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ class ParsedForm:
 
 
 async def _capped_stream(request: Request, max_total: int) -> AsyncIterator[bytes]:
-    """Yield body chunks from request.stream, aborting the moment the running total exceeds
+    """Yield body chunks from request.stream(), aborting the moment the running total exceeds
     max_total. This bounds a Transfer-Encoding: chunked body (which carries no Content-Length) and
     caps what the multipart parser can ever spool."""
     total = 0
@@ -65,7 +65,7 @@ async def read_body_capped(request: Request, max_bytes: int = SMALL_BODY_MAX_BYT
     length, so without this the only bound is RAM. Raises UploadTooLarge the moment the running total
     exceeds max_bytes, before the overrun is retained.
 
-    The bytes are also left in the cache Request.body itself fills, so a caller's existing
+    The bytes are also left in the cache Request.body() itself fills, so a caller's existing
     `await request.json()` / `await request.form()` reads the CAPPED body and the guard costs one
     line at the call site. That cache is a starlette internal, so test_request_key_limits.py pins the
     handover: a starlette release that moves it fails loudly here rather than silently re-reading a
@@ -78,7 +78,7 @@ async def read_body_capped(request: Request, max_bytes: int = SMALL_BODY_MAX_BYT
             raise UploadTooLarge()
         chunks.append(chunk)
     body = b"".join(chunks)
-    request._body = body  # noqa: SLF001 -- the same attribute Request.body caches into
+    request._body = body  # noqa: SLF001 -- the same attribute Request.body() caches into
     return body
 
 
@@ -86,7 +86,7 @@ class _PinnedSpoolParser(MultiPartParser):
     """A MultiPartParser whose file parts spool onto a directory carried as PER-PARSE state.
 
     starlette builds each file part's SpooledTemporaryFile from the stdlib symbol in its own module
-    namespace, passing no dir=, so a rollover lands in tempfile.gettempdir: the volume the
+    namespace, passing no dir=, so a rollover lands in tempfile.gettempdir(): the volume the
     /gw/incoming headroom check does not measure. Redirecting that symbol would pin the spool per
     PROCESS across an await: with max_inflight submits overlapping, one parse's restore tears the pin
     out from under another, and the second parse lands exactly where this module exists to prevent.
@@ -99,7 +99,7 @@ class _PinnedSpoolParser(MultiPartParser):
         self._spool_dir = spool_dir
 
     def on_headers_finished(self) -> None:
-        # super first: its max_files/max_fields limits stay starlette's to enforce, so a future
+        # super() first: its max_files/max_fields limits stay starlette's to enforce, so a future
         # release cannot lose a check to a copied-out method body.
         super().on_headers_finished()
         part = self._current_part.file

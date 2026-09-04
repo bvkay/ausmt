@@ -77,7 +77,7 @@ function bundlesForSlug(slug){return slug?mfRows("bundles").filter(r=>r.slug===s
 function tsAccessKnown(){return TSACC!==null;}
 function tsRoutesFor(ausmt_id){return (TSACC&&TSACC[ausmt_id])||null;}
 // The route the reader is handed: the one string carrying survey/station/level into the front-door
-// log, so measurement needs no beacon and no track call. The edge 302s what its table holds and
+// log, so measurement needs no beacon and no track() call. The edge 302s what its table holds and
 // 404s the rest, so a gated station cannot be reached by constructing a path; no slug, no route.
 function tsGoRoute(s,level){
   if(!s||!s.slug||!s.id||!level)return null;

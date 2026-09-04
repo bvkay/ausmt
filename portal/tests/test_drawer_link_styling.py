@@ -16,7 +16,7 @@ WHAT EACH LAYER PROVES (the three are deliberately different failure modes, not 
   * here, test_unrecorded_tile_state_text_stays_muted_not_link_coloured - the negative: an absent level's
     "not yet recorded" is a statement, not a link, and must not be painted the accent.
   * tools/interaction_test.js (section DP) - the CASCADE: every anchor the grid actually renders is
-    SELECTED by an accent rule, asserted with element.matches against the real index.html stylesheet in
+    SELECTED by an accent rule, asserted with element.matches() against the real index.html stylesheet in
     jsdom. That is the layer that catches a container being renamed or a new link site being added out of
     the rules' reach; a string pin here could not.
 

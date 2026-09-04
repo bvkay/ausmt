@@ -111,9 +111,9 @@ def test_commit_carries_no_submitter_email(tmp_path):
 
 def test_git_runner_env_scrubs_secrets(tmp_path, monkeypatch):
     # the env handed to git must NOT carry AUSMT_SUBMIT_KEY / AUSMT_CURATOR_KEYS (a hook
-    # could read them). Failure criterion: fails if either secret var is present in scrubbed_env.
+    # could read them). Failure criterion: fails if either secret var is present in scrubbed_env().
     # Proven failing: real_git_runner passed env=None → git inherited os.environ including
-    # both secrets; scrubbed_env drops them.
+    # both secrets; scrubbed_env() drops them.
     monkeypatch.setenv("AUSMT_SUBMIT_KEY", "submit-secret")
     monkeypatch.setenv("AUSMT_CURATOR_KEYS", "curator1:curator-secret")
     monkeypatch.setenv("PATH", "/usr/bin")  # a benign var that MUST survive

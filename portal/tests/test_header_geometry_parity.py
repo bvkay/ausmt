@@ -355,7 +355,7 @@ def test_no_chrome_surface_carries_the_org_mark_in_its_header():
 
 # The FILE, bounded per page. The pin above is scoped to SPELLINGS of the retired mark: to its
 # anchor literal, its class and its two rules. None of them says how often the IMAGE may be named,
-# so a second loose copy of it, in a body, in a url or as a preload, satisfies the lot. Counting
+# so a second loose copy of it, in a body, in a url() or as a preload, satisfies the lot. Counting
 # the filename is what makes the withdrawal a statement about the image rather than about one
 # spelling of it in one slot.
 ORG_ASSET = ORG_SRC.rsplit("/", 1)[-1]

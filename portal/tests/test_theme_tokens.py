@@ -13,7 +13,7 @@ Each assertion states its failure criterion:
   * cross-file parity — FAILS if the five-token declaration is not byte-identical across the three files.
 
 ENCODING: the reads below state encoding="utf-8" explicitly. Without it
-Path.read_text decodes with the LOCALE codec, which is cp1252 on a default Windows shell, and index.html
+Path.read_text() decodes with the LOCALE codec, which is cp1252 on a default Windows shell, and index.html
 carries UTF-8 superscript tick labels (10 to the -3 and friends) whose bytes are undefined in cp1252 - so
 these tests raised UnicodeDecodeError locally while passing in CI, where the locale is UTF-8. A test that is
 red only on the maintainer's own machine is worse than useless. See test_test_suite_portability.py, which

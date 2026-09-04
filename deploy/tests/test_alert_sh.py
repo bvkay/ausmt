@@ -397,14 +397,14 @@ def test_ops_status_emitted_schema_valid_atomic_ping_unchanged(tmp_path):
 
 def test_ops_status_builds_carry_a4_cache_forensics_producer_truth(tmp_path):
     """PRODUCER-TRUTH PIN. The cache forensics (salt_fp / write_errors / read_errors) are
-    produced by engine.extract.cache.BuildCache.counters and land in build_provenance.json's
+    produced by engine.extract.cache.BuildCache.counters() and land in build_provenance.json's
     TOP-LEVEL `cache` block - NOT in build.json or build_report.json (verified against
     build_portal.py). alert.sh must lift them from that exact file into ops-status.json builds[].cache.
     Driven by the REAL cache producer (constructed here, not a hand-typed block), so a field rename in
     the engine reds this pin. FAILS IF: alert.sh reads the counters from the wrong file, drops one, or
     the producer's field names drift out from under the reader.
 
-    Uses the real producer's counters rather than a full engine sample-survey build (which would
+    Uses the real producer's counters() rather than a full engine sample-survey build (which would
     need mt_metadata + the allow-listed skip): the direct construction exercises the SAME producer
     that writes build_provenance.json and runs on every workflow, so the field contract is pinned without
     a stack dependency."""

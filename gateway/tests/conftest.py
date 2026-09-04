@@ -67,7 +67,7 @@ def require_validator_dir() -> Path:
 # REJECTED_AV" test needs no live signatures.
 EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
-SUBMIT_KEY = "test-submit-key-0123456789"  # >= 16 chars so fail_closed_startup accepts it
+SUBMIT_KEY = "test-submit-key-0123456789"  # >= 16 chars so fail_closed_startup() accepts it
 GOOD_EMAIL = "tester@example.org"          # the PII grep fixture
 
 
@@ -418,7 +418,7 @@ def _git_verb(args) -> str:
 async def app_client(tmp_path: Path, *, scanner=None, run_poll: bool = False,
                      git_runner=None, edit_runner=None, mailer=None, **cfg_overrides):
     """In-process app + httpx client. When run_poll is False the poll-loop task is NOT started (the
-    tests drive gw.poll_once explicitly for determinism); the app object is still returned so a
+    tests drive gw.poll_once() explicitly for determinism); the app object is still returned so a
     test can reach gw = app.state.gw. git_runner injects the publish seam (there is no rebuild seam
     in the v2 commit-and-push model); edit_runner injects the metadata-editor seam (an in-process
     call to the runner edit bodies, so no subprocess/yaml enters the gateway process during tests);
@@ -554,7 +554,7 @@ async def submit_zip(client, zip_bytes: bytes, *, email: str = GOOD_EMAIL, name:
 
 
 def run(coro):
-    """Drive an async test body to completion. Every test function is sync and calls run(_body)."""
+    """Drive an async test body to completion. Every test function is sync and calls run(_body())."""
     return asyncio.run(coro)
 
 

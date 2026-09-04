@@ -10,7 +10,7 @@ published survey. This exercises the full list → preview → confirm pipeline:
   - a stale selection (file vanished since the form rendered) is refused, not half-applied;
   - CSRF + session gate every POST; the CSP pins (no inline JS, data-confirm on the confirm form).
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
 """
 from __future__ import annotations
 

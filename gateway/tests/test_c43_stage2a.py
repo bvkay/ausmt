@@ -1,6 +1,6 @@
 """Stage 2a verification pins (+ the contract's pin list). Each pin states its failure
 criterion (Invariant 10) and is mutation-provable — the report carries a captured failing run for each
-guarded behaviour. Async bodies run under conftest.run.
+guarded behaviour. Async bodies run under conftest.run().
 
 Pins here:
   * PHASE QUADRANT + φyx UNWRAP (phaseqc, the authoritative server-side seam the STATIONS_JS mirrors):
@@ -174,7 +174,7 @@ def test_combined_phase_plot_supersedes_separate_plots_source():
     verdictStrip are GONE; and renderPlots stacks ρa, the combined phase plot (+ its verdict strip),
     then tipper. FAILS IF a separate per-component phase plot returns, the mapper/verdict-parts
     disappear, or the plot order drifts. (There were no pre-existing EXECUTABLE per-plot pins to rework
-    - the plots were covered only via classify parity; the executable mapper pin lives in
+    - the plots were covered only via classify() parity; the executable mapper pin lives in
     test_c43_hub_js_parity.py::test_combined_phase_plan_mapper_from_real_corpus.)"""
     js = curatorpage.STATIONS_JS
     assert "function combinedPhasePlan(" in js, "the pure combined-phase mapper must exist"

@@ -28,7 +28,7 @@ const TOUR_STEPS=[
 const TOUR_DIM=0.78;
 
 let _tourStep=-1,_tourEls=null;
-// What THIS tour run has itself opened, so stopTour undoes only that (not pre-existing visitor state).
+// What THIS tour run has itself opened, so stopTour() undoes only that (not pre-existing visitor state).
 let _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
 
 // Enter action for the map-view steps: make sure the MAP view is showing. Forward this is a no-op; its

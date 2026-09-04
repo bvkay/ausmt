@@ -235,7 +235,7 @@ def test_recognised_metadata_only_license_still_gets_license_md(tmp_path):
 # --------------------------------------------------------------------------------------------------
 def test_existing_files_are_never_overwritten(tmp_path):
     # FAILS IF generation clobbers a package's own LICENSE.md/README.md. proven RED by removing the
-    # `if not path.exists` guard, which would replace the submitter's bytes with the skeleton.
+    # `if not path.exists()` guard, which would replace the submitter's bytes with the skeleton.
     pkg = _make_package(tmp_path)
     orig_lic = b"# The submitter's own hand-written LICENSE\nCustom terms.\n"
     orig_rdm = b"# The submitter's own README\nHand-written notes.\n"
@@ -300,7 +300,7 @@ def test_unparseable_survey_yaml_generates_nothing(tmp_path):
 
 def _alias_bomb_yaml(levels: int = 5, fan: int = 10) -> str:
     """A survey.yaml whose declared metadata are YAML ALIAS chains: each level names the level below
-    it `fan` times, so safe_load builds a small DAG that str expands to fan**levels leaves. Tiny on
+    it `fan` times, so safe_load builds a small DAG that str() expands to fan**levels leaves. Tiny on
     disk (safe_extract's byte cap sees nothing wrong), enormous the moment it is coerced to text."""
     lines = ['schema_version: "0.2"', "slug: alias-bomb-2026", "a0: &a0 x"]
     for n in range(1, levels + 1):
@@ -313,11 +313,11 @@ def _alias_bomb_yaml(levels: int = 5, fan: int = 10) -> str:
 def test_alias_bomb_survey_yaml_generates_a_bounded_readme(tmp_path):
     """Amplification: intake runs BEFORE the validator, so every survey.yaml value it renders is
     still attacker-supplied. A value that is not a scalar must read as no declared metadata (the
-    module's fail-closed posture), never as str of an expanded alias DAG, so the README written into
+    module's fail-closed posture), never as str() of an expanded alias DAG, so the README written into
     the quarantine volume stays bounded no matter what the package declares.
 
     Scope: intake._readme_md_body's four survey.yaml fields plus the licence line. FAILS IF a
-    non-scalar value reaches str. RED against the pre-cap intake in two ways: a non-scalar licence
+    non-scalar value reaches str(). RED against the pre-cap intake in two ways: a non-scalar licence
     raised "AttributeError: 'list' object has no attribute 'strip'" out of canon_license (against the
     module's never-raise contract), and with the licence left scalar a 429-byte survey.yaml produced a
     3,133,630-byte README (7,304x), growing x10 per alias level.

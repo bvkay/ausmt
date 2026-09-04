@@ -89,7 +89,7 @@ def test_good_upload_scans_clean_and_queues(tmp_path):
     (lambda: make_zip({"a/survey.yaml": b"s", "a/S.edi": b"e", "b/x.txt": b"y"}), "top-level"),
 ])
 def test_hostile_zip_rejected_nothing_quarantined(tmp_path, zip_factory, needle):
-    # Proven failing: before wiring zipsafety.inspect into handle_submit, a hostile zip
+    # Proven failing: before wiring zipsafety.inspect() into handle_submit, a hostile zip
     # returned 201 and the .zip landed in incoming/ (quarantine still empty, but the row advanced) —
     # the "distinct reason" assert failed and the state was SCANNED.
     async def _body():
@@ -322,7 +322,7 @@ def test_chunked_oversize_rejected_no_content_length(tmp_path):
     # never fired; the capped stream must reject it as bytes arrive. max_upload_mb=1 (conftest), send
     # a ~3 MiB body via a streaming generator (httpx omits Content-Length -> chunked).
     # Proven failing (before the capped-stream intake): the old code buffered the whole
-    # 3-MiB chunked body into request.form's spool and returned 400 (missing/oversize part) only
+    # 3-MiB chunked body into request.form()'s spool and returned 400 (missing/oversize part) only
     # after buffering, or 201 — never a clean 413 pre-buffer.
     async def _body():
         big_zip = make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/S.edi": b"B" * (3 * 1024 * 1024)})
@@ -352,7 +352,7 @@ def test_concurrent_submits_respect_inflight_cap(tmp_path):
     # Cap TOCTOU: fire 8 concurrent submits at max_inflight=3. The scanner is held open so any row
     # that gets inserted stays RECEIVED (non-terminal, i.e. in-flight) for the whole race; a barrier
     # inside the body-parse holds EVERY handler after its capacity check but before its insert, so
-    # all 8 have passed the gate with durable count_inflight==0 - only the in-memory reservation
+    # all 8 have passed the gate with durable count_inflight()==0 - only the in-memory reservation
     # can hold the cap. proven failing (reservation disabled): 8/8 returned 201.
     from gateway import upload as upload_intake
 

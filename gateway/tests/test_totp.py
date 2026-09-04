@@ -1,7 +1,7 @@
 """Unit pins for gateway.totp - the RFC 6238 destructive-op second factor.
 
 Failure criterion is in each test's docstring (Invariant 10). These are PURE-FUNCTION pins: no app,
-no DB, no git - just the RFC arithmetic + the window/malformed policy verify must enforce.
+no DB, no git - just the RFC arithmetic + the window/malformed policy verify() must enforce.
 
 The RFC 6238 Appendix B test vectors are the load-bearing correctness pin: an independent, published
 oracle (not a same-author round-trip), so a subtly wrong truncation/counter-packing goes RED against
@@ -117,9 +117,9 @@ def test_undecodable_secret_fails_closed():
 
 def test_empty_or_blank_secret_fails_closed():
     """Verify against an empty or whitespace-only secret returns None. An empty base32 string
-    decodes to b'' - a VALID HMAC key - so without the empty-secret guard verify would compute an
-    empty-key code and MATCH it. This pin is MUTATION-PROOF: it feeds verify the exact code an
-    empty-key HMAC produces, so removing the guard in _decode_secret makes verify return the matched
+    decodes to b'' - a VALID HMAC key - so without the empty-secret guard verify() would compute an
+    empty-key code and MATCH it. This pin is MUTATION-PROOF: it feeds verify() the exact code an
+    empty-key HMAC produces, so removing the guard in _decode_secret makes verify() return the matched
     step (not None) and this goes RED. FAILS IF an empty/blank secret can gate anything."""
     import hashlib
     import hmac

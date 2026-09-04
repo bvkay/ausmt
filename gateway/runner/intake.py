@@ -1,6 +1,6 @@
 """Intake generation of LICENSE.md and README.md into a submitted package.
 
-The gw-runner calls generate_intake_files AFTER safe-extraction and BEFORE the validator runs
+The gw-runner calls generate_intake_files() AFTER safe-extraction and BEFORE the validator runs
 (runner._do_work), so a package that arrived without these files carries them by the time the
 validator checks structure — the two 'LICENSE.md/README.md missing' WARNINGs flip to PASS in the
 SAME run, and the curator reviews/approves the COMPLETE package (approve-what-you-publish).
@@ -76,7 +76,7 @@ def _scalar_text(v) -> str:
     """The ONLY route from a survey.yaml value into generated text. Returns '' for a value that is not
     a scalar (see _SCALAR_TYPES) so a collection is never coerced, and caps a scalar at
     _MAX_FIELD_CHARS with a visible marker so a curator is never quietly shown a shortened field.
-    Every reader below goes through here: an uncapped str of a survey.yaml value is the defect."""
+    Every reader below goes through here: an uncapped str() of a survey.yaml value is the defect."""
     if v is None or isinstance(v, bool) or not isinstance(v, _SCALAR_TYPES):
         return ""
     s = str(v).strip()
@@ -128,7 +128,7 @@ def _abstract_of(y: dict) -> str:
 
 def _license_of(y: dict) -> str:
     """The declared licence id as text. Capped like every other field, and '' for a non-scalar: the
-    engine's canon_license calls .strip on what it is given, so a collection here would raise out
+    engine's canon_license() calls .strip on what it is given, so a collection here would raise out
     of a module whose contract is to never raise on bad input (generate_intake_files)."""
     return _scalar_text(y.get("license"))
 

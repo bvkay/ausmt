@@ -86,7 +86,7 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     # The hub URLs resolve to pages/<kind>/index.html; the static portal pages are shipped with
     # the portal image, not built here, so they are checked against the portal tree WHERE ONE IS
     # VISIBLE. The engine image ships /app/portal holding only src/contract.js (designed topology,
-    # engine.Dockerfile), so this leg mirrors the build's own _portal_dir gate: no checkout, no
+    # engine.Dockerfile), so this leg mirrors the build's own _portal_dir() gate: no checkout, no
     # static-page assertions, exactly as the build reconciliation behaves.
     portal_dir = build_portal._portal_dir()
     for u in entity_locs:
@@ -162,7 +162,7 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
     # The house convention for a self-check the build fails: ERROR lines on stderr, then return 2.
     # An operator running `make rebuild-data` gets a message rather than a traceback, and the
-    # reconciliation now reads like every other gate in main (LANE-CONTRACT-PAGE-HIERARCHY.md,
+    # reconciliation now reads like every other gate in main() (LANE-CONTRACT-PAGE-HIERARCHY.md,
     # which flags the RuntimeError this test requires as the odd one out).
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
                             "--bundle-edi", "--no-validate",

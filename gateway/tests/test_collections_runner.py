@@ -100,7 +100,7 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
     _mk(sroot, "lone", name="Lone Survey", collection=None)  # no block -> absent from the rollup
 
     group_collections, _ = _engine_collections()
-    # Build surveys_meta EXACTLY as build_portal does: sorted(iterdir) order, keyed by y['name'].
+    # Build surveys_meta EXACTLY as build_portal does: sorted(iterdir()) order, keyed by y['name'].
     surveys_meta = {}
     for d in sorted((sroot / "surveys").iterdir()):
         y = pyyaml.safe_load((d / "survey.yaml").read_text(encoding="utf-8"))

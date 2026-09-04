@@ -8,7 +8,7 @@ acquisition record: run id `<station>a`, a 0 Hz rate, a 1980 epoch window, an un
 0-ohm contact resistance and a pair of remote-reference channels the corpus never recorded.
 
 ONE definition of "asserted", used twice: the emitter gates every run/channel value through the
-predicates here, and the build REPORTS through run_default_notes what each station's parse
+predicates here, and the build REPORTS through run_default_notes() what each station's parse
 carried, so a default that is dropped is visible to a curator instead of vanishing. The notes join
 the build report's conditioning row family, whose existing rows state the same thing about the
 canonical-XML side ("is a library default ... NOT asserted by source").

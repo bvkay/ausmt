@@ -145,7 +145,7 @@ def _grep_pii(package_dir: Path, preview_dir: Path, submitter_email: str) -> _Pi
     case — a byte-exact needle would let 'User@Example.com' (DB) with 'user@example.com' in an artifact
     slide into the ACKNOWLEDGEABLE class, i.e. a bypass. Both the needle and the scanned bytes are
     ASCII-lowercased before the containment test; a non-ASCII address falls back to byte-exact
-    matching for its non-ASCII characters (bytes.lower is ASCII-only), which is never weaker than
+    matching for its non-ASCII characters (bytes.lower() is ASCII-only), which is never weaker than
     the pre-fix behaviour.
 
     Scope note: only text-ish files are scanned as text; binaries are pattern-matched on raw bytes,

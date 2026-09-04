@@ -1,6 +1,6 @@
 """Licence instrument hardening (Invariant 10).
 
-A prefix gate, `redistributable = s.startswith("CC") or s in {PUBLIC DOMAIN, CC0, ODBL, ODC-BY}`,
+A prefix gate, `redistributable() = s.startswith("CC") or s in {PUBLIC DOMAIN, CC0, ODBL, ODC-BY}`,
 redistributes a TYPO'd 'CC-BY-4.O' (letter O) or any 'CC-nonsense'. The instrument replaces it with
 an EXACT, case-insensitive-after-trim/whitespace/de-alias match against contract/licenses.json.
 

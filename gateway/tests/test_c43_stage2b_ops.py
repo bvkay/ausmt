@@ -4,7 +4,7 @@ The consumer side of the ops floor: the gateway reads ops-status.json SERVER-sid
 reconcile-status.json seam — serve_state.read_ops_status) and renders the first-class serve screen +
 the read-only build-detail view. These pins prove the load-bearing behaviours against INDEPENDENT
 OBSERVABLES (the rendered HTML, the staleness function's boolean, the response status), mirroring
-test_serve_reconcile.py. Async bodies run under conftest.run (no pytest-asyncio).
+test_serve_reconcile.py. Async bodies run under conftest.run() (no pytest-asyncio).
 
 Failure criterion in each docstring (Invariant 10). No new skips — pure gateway stack.
 """

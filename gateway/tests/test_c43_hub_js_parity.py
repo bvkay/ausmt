@@ -530,7 +530,7 @@ def _load_corpus(warn_report):
 
 def test_convention_sentence_vectors_match_phaseqc_medians(tmp_path):
     """CONVENTION-SENTENCE PIN: sentence-format vectors on the Node harness. The
-    sentence is built from the SAME classify medians the parity-tested seam computes - the pin
+    sentence is built from the SAME classify() medians the parity-tested seam computes - the pin
     compares the extracted JS against a Python mirror over phaseqc.classify_series for healthy /
     yx-out (the mockup's exact shape, out-of-quadrant component LEADING) / xy-out / both-out /
     no-data series. FAILS IF the medians drop from the sentence, the lead-swap rule breaks, the

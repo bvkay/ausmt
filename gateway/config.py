@@ -4,7 +4,7 @@ The submit key is a SECRET: it is compared with hmac.compare_digest and is never
 `Config.redacted_items()` is the ONLY sanctioned way to print config at startup - it drops the
 key entirely rather than masking it, so a formatting slip can never leak even a prefix.
 
-fail_closed_startup is called before the app binds a port: an unset or short key aborts the
+fail_closed_startup() is called before the app binds a port: an unset or short key aborts the
 process (the server refuses to start). This is a startup guard, not a request-path
 check, so the failure is loud and early rather than a 500 on first upload.
 """
@@ -36,7 +36,7 @@ class Config:
     clamd_port: int
     # Curator config. curator_keys is the RAW `name:key,name:key` string; it is
     # parsed (and its fail-closed check applied) in curator_auth, not here — config stays a dumb
-    # env carrier. It is a SECRET and is dropped from redacted_items below, never logged.
+    # env carrier. It is a SECRET and is dropped from redacted_items() below, never logged.
     curator_keys: str = ""
     surveys_live_dir: Path | None = None
     session_ttl_s: int = 12 * 3600
@@ -142,7 +142,7 @@ class Config:
 
 def load_config(environ: dict[str, str] | None = None) -> Config:
     """Build Config from the environment. Does NOT enforce the key guard — call
-    fail_closed_startup for that so tests can construct a Config with a deliberately weak key to
+    fail_closed_startup() for that so tests can construct a Config with a deliberately weak key to
     exercise the guard itself."""
     env = os.environ if environ is None else environ
 

@@ -190,7 +190,7 @@ def test_the_spa_map_mounts_the_collapsed_control_and_credits_the_layer_it_draws
 
 
 def test_the_dormant_user_layer_path_still_guards_and_still_escapes():
-    """THE OTHER HALF OF THE PIN THIS MODULE INHERITED. userLayer feeds a fetched GeoJSON's source
+    """THE OTHER HALF OF THE PIN THIS MODULE INHERITED. userLayer() feeds a fetched GeoJSON's source
     field to addAttribution, which Leaflet renders as HTML, so that string is escaped; and the call
     is guarded on a control existing, because a document that failed to load src/mapattrib.js draws
     a map with no control and a layer added there must degrade rather than throw.

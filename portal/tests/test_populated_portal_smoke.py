@@ -3,7 +3,7 @@
 The committed test_empty_portal_smoke only exercises the EMPTY branch; the contract-converted dereferences
 (r[C.*], sc[SC.*], t[T.*]) live exclusively in the POPULATED path and shipped untested. This boots the
 real portal (tools/smoke.js) against a tiny dataset whose values are KNOWN and distinctive, then asserts
-(a) the fields buildState derives THROUGH the contract maps (STATION0: r[C.*] + sc[SC.q/dim]) and
+(a) the fields buildState() derives THROUGH the contract maps (STATION0: r[C.*] + sc[SC.q/dim]) and
 (b) the columns exports.js builds at its OWN sc[SC.*] call site (EXPORT0: q/qb/rr/dim/sw) equal the
 source. So a wrong call-site index (r[C.lon] where lat was meant, or a swapped sc[SC.sw]->sc[SC.alg])
 makes a value wrong and FAILS here — a crash is not required. NOT exhaustive: drawer.js has further
@@ -51,7 +51,7 @@ def test_populated_portal_value_binding(tmp_path):
     (data / "surveys.json").write_text(json.dumps(
         {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}}))
     # build.json - a KNOWN, distinctive build_id/generated so the footer's VALUE binding
-    # (BUILDID -> buildIdText) can be asserted against the source, not just "didn't crash".
+    # (BUILDID -> buildIdText()) can be asserted against the source, not just "didn't crash".
     (data / "build.json").write_text(json.dumps(
         {"build_id": "eng1234-src5678-2026-07-05T01:02:03+00:00",
          "engine_commit": "eng1234", "source_commit": "src5678",
@@ -103,7 +103,7 @@ def test_populated_portal_value_binding(tmp_path):
         assert gone not in ex, ("dropped CSV field %r still present: %r" % (gone, ex))
 
     # (c) the footer's build-id text is a pure function of BUILDID (loaded from build.json) - 
-    # Value-binds main.js's buildIdText against the KNOWN fixture build_id/generated above, so a
+    # Value-binds main.js's buildIdText() against the KNOWN fixture build_id/generated above, so a
     # wrong slice/format (or a dropped build.json fetch) fails here, not just "no crash".
     mb = re.search(r"^BUILDID_TEXT (\".*\")\s*$", out, re.M)
     assert mb, "smoke.js did not emit BUILDID_TEXT:\n" + out

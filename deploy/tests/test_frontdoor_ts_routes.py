@@ -166,7 +166,7 @@ def test_generator_leak_sweep_is_non_vacuous(tmp_path):
 
 def test_generator_membership_is_the_shared_projection_not_a_second_opinion(tmp_path):
     """KEY-SET PARITY, the drift guard the split-host shape needs: the table's (station, level) keys
-    equal what `_tsproject.route_rows` - the same predicate ts_access.json renders from - answers
+    equal what `_tsproject.route_rows()` - the same predicate ts_access.json renders from - answers
     for the same registers. A row cannot resolve that the data does not publish, or vice versa.
     FAILS IF the generator ever grows a membership rule of its own."""
     surveys = _corpus(tmp_path)
@@ -223,7 +223,7 @@ def test_generator_honours_a_per_station_coordinate_override_and_keeps_generatin
 
     The station's raw time series carries the true position in every corner the coordinate mask
     exists to hide, so the route has to go. Refusing to generate is the WRONG way to achieve that:
-    main then writes nothing, so a single override anywhere leaves the whole table un-regenerable
+    main() then writes nothing, so a single override anywhere leaves the whole table un-regenerable
     while the committed one goes on resolving the station the mask has just withheld. Suppression
     that cannot be published is not suppression.
 
@@ -321,7 +321,7 @@ def test_the_refusal_branches_drop_their_survey_and_leave_the_table_standing(tmp
                                                                             forbidden):
     """The two refusals that were uncovered code, and each is now a survey-scope drop rather than a
     corpus-scope stop, so each needs its own pin. A `..` url_path is the string _stationcheck also
-    refuses (one predicate, both readers), and a slug outside safe_component's shape would mint a
+    refuses (one predicate, both readers), and a slug outside safe_component()'s shape would mint a
     route under an identifier no build ever assigned. Either takes that survey's hand-offs offline;
     neither takes the corpus's, and neither string reaches the file the front door imports."""
     surveys = _corpus(tmp_path, held_level="open")

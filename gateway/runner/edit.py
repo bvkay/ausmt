@@ -829,13 +829,13 @@ _COLLECTION_STATUS_VOCAB = frozenset({"active", "completed", "archived"})
 def _json_scalar(v):
     """Coerce a YAML-loaded scalar to a JSON-serialisable value: str/int/float/bool/None pass through;
     anything else becomes its
-    str. The done-file writer (jobs._atomic_write_json) uses a plain json.dump with no default=, so a
+    str(). The done-file writer (jobs._atomic_write_json) uses a plain json.dump with no default=, so a
     date object would raise; this keeps the whole result JSON-safe (matching how the engine's
     collections.json stringifies the same date)."""
     if v is None or isinstance(v, (str, int, float, bool)):
         return v
     # A nested programme field (collection.prose: a map of paragraph lists) is coerced ELEMENTWISE.
-    # A bare str here would surface a Python repr as the field's value and break rollup parity
+    # A bare str() here would surface a Python repr as the field's value and break rollup parity
     # with the engine, which keeps the real structure.
     if isinstance(v, dict):
         return {str(k): _json_scalar(x) for k, x in v.items()}

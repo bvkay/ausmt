@@ -217,7 +217,7 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     Pairing note (the CI tripwire this test once fell into): the mutation target is sorted[0] and the
     served XML is looked up BY THE STATION'S FILENAME derived from that same EDI's DATAID — never by
     index. The original version chose the target via UNSORTED rglob (platform-dependent readdir order)
-    but compared sorted _served_xml[0]: green on NTFS (rglob happened to yield Vulcan_A1.edi first),
+    but compared sorted _served_xml()[0]: green on NTFS (rglob happened to yield Vulcan_A1.edi first),
     red on the Linux runner (yielded Vulcan_A2.edi -> mutated A2, compared -> false 'STALE CACHE'
     with hits=3 misses=2, i.e. the edit HAD missed and re-derived correctly)."""
     import re

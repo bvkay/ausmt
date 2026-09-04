@@ -58,7 +58,7 @@ def test_build_degrades_gracefully(tmp_path):
 
 def test_inf_error_values_do_not_drop_the_station(tmp_path):
     """FAILS IF: an EDI carrying a literal `inf` in an impedance-ERROR array (MTpy writes inf for
-    dead/infinite-variance points) crashes TF assembly and drops the whole station. Pre-fix: sig's log10(inf) -> int(inf) raised OverflowError, build_portal caught it as a
+    dead/infinite-variance points) crashes TF assembly and drops the whole station. Pre-fix: sig()'s log10(inf) -> int(inf) raised OverflowError, build_portal caught it as a
     station-level PARSE FAIL, and FOUR real stations - FR01, NF19, NF21, SA26W_2 - were silently
     absent from the served corpus over single bad error points. Post-fix: the station SERVES and
     the non-finite error points render as null (the None path every consumer already tolerates) —

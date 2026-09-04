@@ -56,8 +56,8 @@ def test_normalize_rejects_empty_tf(tmp_path):
 
 
 # -- The round-trip gate must not vacuously pass a re-read with fewer periods or a dropped
-# tipper (a prefix-`min`-and-allclose gate would happily "verify" either).
-# We simulate a broken re-read by monkeypatching TF.read so ONLY the SECOND call inside normalize
+# tipper (a prefix-`min()`-and-allclose gate would happily "verify" either).
+# We simulate a broken re-read by monkeypatching TF.read so ONLY the SECOND call inside normalize()
 # (the canonical-XML round-trip re-read) is mutated afterward — the first call (reading `src`) is
 # untouched. This is the least invasive way to produce "an XML re-read that lost data" without
 # hand-authoring a doctored XML fixture (mt_metadata's writer output is not hand-editable EMTF-XML).
@@ -141,9 +141,9 @@ def _inject_impedance_fill(edi_text: str, blocks=("ZXYR", "ZXYI")) -> str:
 
 def test_normalize_masks_impedance_fill(tmp_path):
     """FAILS IF: a real-shaped EDI carrying the 1e32 missing-data sentinel inside its impedance blocks
-    cannot produce a canonical XML - i.e. normalize raises 'impedance maxdiff=1.414e+32' (the pre-fix
+    cannot produce a canonical XML - i.e. normalize() raises 'impedance maxdiff=1.414e+32' (the pre-fix
     behaviour that blocked all 57 auslamp-tas stations from getting canonical XML). Post-fix, the fill
-    cells are masked, normalize succeeds, and roundtrip_maxdiff is finite and small."""
+    cells are masked, normalize() succeeds, and roundtrip_maxdiff is finite and small."""
     poisoned = _inject_impedance_fill(STANDARD.read_text(encoding="utf-8"))
     src = tmp_path / "SENTINEL01.edi"
     src.write_text(poisoned, encoding="utf-8")
@@ -173,7 +173,7 @@ def test_normalize_still_rejects_genuine_impedance_drift(tmp_path, monkeypatch):
     perturb one NON-fill impedance cell on the re-read side (Zxx[0], well beyond rtol) and assert the
     round-trip gate STILL raises with the fix in place. A mask that (wrongly) covered every cell would
     make this test fail — proving it guards against over-masking (demonstrated separately in scratchpad
-    prove_overmask.py: masking everything makes normalize silently pass this same drift)."""
+    prove_overmask.py: masking everything makes normalize() silently pass this same drift)."""
     monkeypatch.setattr(TF, "read", _second_read_hook(_perturb_impedance_cell))
     with pytest.raises(RuntimeError, match="impedance maxdiff"):
         normalize(STANDARD, tmp_path, survey_id="vulcan")
@@ -309,7 +309,7 @@ def _inject_fieldnotes_info(edi_text: str) -> str:
 
 def test_legacy_fieldnotes_comments_do_not_block_xml_emission(tmp_path):
     """RED-PROOF (Issue #8). FAILS IF: an EDI carrying legacy `fieldnotes.*` >INFO comments cannot
-    produce a canonical EMTF-XML, i.e. normalize raises the mt_metadata AttributeError
+    produce a canonical EMTF-XML, i.e. normalize() raises the mt_metadata AttributeError
     ('FieldNotes' object has no attribute 'run_list') the way all ~380 AusLAMP-SA legacy stations did.
     Post-fix the un-writable keys are dropped, the write succeeds, and the impedance round-trip is
     clean. Pre-fix (revert normalize.py) this raises inside tf.write(..., file_type='emtfxml')."""
@@ -364,7 +364,7 @@ def test_fieldnotes_drop_is_targeted_not_wholesale(tmp_path):
 
 # --- Library-default metadata the XML asserts must carry conditioning notes. ----------------------
 def test_edi_library_defaults_are_noted_not_silently_asserted(tmp_path):
-    """FAILS IF: normalize writes a canonical XML that asserts a sign convention, a declination
+    """FAILS IF: normalize() writes a canonical XML that asserts a sign convention, a declination
     epoch/model, or channel orientations for an EDI source WITHOUT a conditioning note saying the
     source never stated them. This is the fabrication class the earlier fix did not cover
     (reproduced on this very fixture: Vulcan_A1's XML asserts <SignConvention>+,

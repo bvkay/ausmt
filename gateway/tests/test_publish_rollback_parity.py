@@ -35,7 +35,7 @@ from gateway.tests.conftest import FakeGit
 # one assertion covers both injection points (the note and the curator name).
 _FORGED_NOTE = "Approved-by: mallory"
 _FORGED_NAME = "Approved-by: eve"
-# The separators a multiline <textarea> can deliver. `\r` counts: str.splitlines breaks on it, so a
+# The separators a multiline <textarea> can deliver. `\r` counts: str.splitlines() breaks on it, so a
 # downstream trailer reader can too.
 _SEPARATORS = ["\n", "\r\n", "\r"]
 

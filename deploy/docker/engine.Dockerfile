@@ -5,7 +5,7 @@
 #   NOT available in this build context (per contract) -- the validator it ships
 #   (_validation/validate_survey.py) is supplied at RUNTIME via a read-only bind mount
 #   (compose.yaml mounts the surveys-live checkout at /srv/surveys) and located through
-#   AUSMT_VALIDATOR_PATH, the env pin that engine/extract/build_portal.py's _load_validator
+#   AUSMT_VALIDATOR_PATH, the env pin that engine/extract/build_portal.py's _load_validator()
 #   already reads for exactly this cross-repo case. Baking the surveys repo into this
 #   image would require a second build context / git submodule wiring that the contract for this
 #   image does not include; the bind-mount keeps ausmt-surveys on its own release cadence.
@@ -67,13 +67,13 @@ FROM python:3.12-slim AS runtime
 # first live deployment's footer showed "None - None - <date>" for exactly this reason. GIT_SHA is
 # passed as a build-arg by deploy-images.yml (github.sha -- the FULL 40-char SHA; see that
 # workflow's comment on why the full form was chosen over rev-parse --short's ~7 chars) and baked
-# into the env var build_portal.py's build_identity falls back to when git resolution yields
+# into the env var build_portal.py's build_identity() falls back to when git resolution yields
 # None. Default "unknown" covers a bare `docker build` with no --build-arg (e.g. a local manual
 # build) so the fallback chain still terminates in a real string, never a literal None.
 ARG GIT_SHA=unknown
 ENV AUSMT_ENGINE_COMMIT=${GIT_SHA}
 
-# git is a REAL runtime dependency, not a build tool: build_identity records the SURVEYS
+# git is a REAL runtime dependency, not a build tool: build_identity() records the SURVEYS
 # checkout's HEAD as source_commit in build.json/build_provenance.json -- the build<->data
 # handshake. python:3.12-slim ships no git, so without this every containerised rebuild would
 # silently record source_commit=null (the in-image test suite caught exactly that: fourth

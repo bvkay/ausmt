@@ -434,7 +434,7 @@ def test_an_empty_channel_number_is_not_blamed_on_its_units(tmp_path):
 def test_a_number_written_in_non_ascii_digits_is_predicted_unreadable_and_really_is(tmp_path):
     """Proven failing on abc82d2: predicted `reads`, the reader raised.
 
-    The FALSE-CLEAN direction, and the only one measured anywhere in this module. `float` accepts
+    The FALSE-CLEAN direction, and the only one measured anywhere in this module. `float()` accepts
     any Unicode decimal digit, so `float("١٢٣")` is 123.0, but the reader's scalar
     validator refuses the same string. The control is a non-breaking space around an ASCII 5, which
     both sides accept: without it this test would pass just as happily on a predictor that called

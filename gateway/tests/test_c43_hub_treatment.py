@@ -16,7 +16,7 @@ Load-bearing pins:
   * SEVERITY CSS - .qa.fail/.qa.warn/.qa.info map to the dark palette's bad/warn/info hues
     (red fail / amber warn / blue info - the mockup's severity semantics).
 
-Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
+Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
 """
 from __future__ import annotations
 

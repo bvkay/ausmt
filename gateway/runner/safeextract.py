@@ -1,5 +1,5 @@
 """Safe zip extraction with per-member re-checks (belt-and-braces). The gateway already
-ran zipsafety.inspect before queueing; the runner re-applies the same rules AT EXTRACTION so a
+ran zipsafety.inspect() before queueing; the runner re-applies the same rules AT EXTRACTION so a
 member that somehow slips the central-directory pass cannot land outside the target tree. Every
 resolved destination is confirmed to stay under the target root before a single byte is written.
 

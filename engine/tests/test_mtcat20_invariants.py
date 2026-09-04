@@ -5,7 +5,7 @@ change, forever - a future feature can never silently break identity, migration,
 zero-null/zero-empty posture. Sources:
 
   * the executable fixture suite, whose
-    migrate_12_to_20 IS the 1.2 -> 2.0 emitter-change specification and is carried here
+    migrate_12_to_20() IS the 1.2 -> 2.0 emitter-change specification and is carried here
     VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example and a
     corpus-shaped 1.2 migration input.
   * the schema-level accept/reject checks live in test_mtcat_schema_v20.py; the emitter-behaviour

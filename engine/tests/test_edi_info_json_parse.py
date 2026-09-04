@@ -508,7 +508,7 @@ def test_a_json_info_survey_that_parses_stock_records_no_fallback(tmp_path):
 # --------------------------------------------------------------------------------------------
 
 def test_normalize_reads_a_source_that_needs_the_fallback(tmp_path):
-    """The unit form: normalize itself must not raise on a file that only the fallback can read."""
+    """The unit form: normalize() itself must not raise on a file that only the fallback can read."""
     from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
     res = normalize(DECL, tmp_path / "xml", survey_id="declfix", station_id="1039")
     assert Path(res.canonical_xml).exists(), "no canonical EMTF-XML was written"
@@ -530,7 +530,7 @@ def test_the_canonical_xml_carries_the_declination_the_custodian_wrote(tmp_path)
 
 
 def test_normalize_leaves_the_source_bytes_untouched(tmp_path):
-    """The never-edit rule through the SECOND seam too: normalize reads the custodian's file, never
+    """The never-edit rule through the SECOND seam too: normalize() reads the custodian's file, never
     rewrites it."""
     from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
     before = hashlib.sha256(DECL.read_bytes()).hexdigest()

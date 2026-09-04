@@ -327,11 +327,11 @@ def test_incomplete_current_day_is_not_folded_until_complete():
 
 
 # --------------------------------------------------------------------------------------------------
-# End-to-end: main over a real on-disk layout writes stats.json atomically (0644) and exits 0.
+# End-to-end: main() over a real on-disk layout writes stats.json atomically (0644) and exits 0.
 # --------------------------------------------------------------------------------------------------
 def test_main_writes_stats_json_end_to_end(tmp_path, monkeypatch):
-    """MAIN INTEGRATION PIN. main over a temp data dir (logs + manifest + CSV + state dir) writes a
-    world-readable stats.json with the expected aggregates and returns 0. FAILS IF main raises,
+    """MAIN INTEGRATION PIN. main() over a temp data dir (logs + manifest + CSV + state dir) writes a
+    world-readable stats.json with the expected aggregates and returns 0. FAILS IF main() raises,
     returns non-zero, or omits the atomic write."""
     data = tmp_path / "data"
     logdir = data / "logs" / "caddy"
@@ -362,8 +362,8 @@ def test_main_writes_stats_json_end_to_end(tmp_path, monkeypatch):
 
 
 def test_main_never_raises_on_broken_env(monkeypatch, tmp_path):
-    """TIMER-SAFETY PIN. main must never raise into the timer: a state dir that does not exist (so no
-    write can land) still returns 0 with a loud note, not a traceback. FAILS IF main raises or
+    """TIMER-SAFETY PIN. main() must never raise into the timer: a state dir that does not exist (so no
+    write can land) still returns 0 with a loud note, not a traceback. FAILS IF main() raises or
     returns non-zero on a broken environment."""
     monkeypatch.setenv("AUSMT_DATA_DIR", str(tmp_path / "nonexistent-root"))
     monkeypatch.setenv("AUSMT_STATS_MANIFEST", str(_MANIFEST))
@@ -806,7 +806,7 @@ def test_state_table_rejects_anything_that_is_not_one_of_the_eight_codes():
 
 
 def test_main_wires_the_state_table_through_the_env(tmp_path, monkeypatch):
-    """WIRING PIN. main must find the state table by env (or the documented default beside the
+    """WIRING PIN. main() must find the state table by env (or the documented default beside the
     country CSV) and fold state buckets into the written stats.json. FAILS IF the table is read but
     never reaches the fold, or if the env override is ignored."""
     data = tmp_path / "data"
@@ -1713,7 +1713,7 @@ def test_main_writes_the_archive_beside_stats_json_outside_the_served_tree(tmp_p
     """ARCHIVE LOCATION PIN. The archive must land in the gateway STATE dir beside stats.json and NOT
     anywhere under site-data, because everything under site-data is served to the public web and this
     file is the finest-grained record the pipeline holds. Its journal line must also report how many
-    days it archived. FAILS IF the default path falls inside the served tree, if main does not write
+    days it archived. FAILS IF the default path falls inside the served tree, if main() does not write
     it, or if a second run duplicates a day already in the file."""
     data = tmp_path / "data"
     logdir = data / "logs" / "caddy"
@@ -2207,7 +2207,7 @@ def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
     pre-existing filters each exclude the hop, and both are pinned here with a sensitivity control
     so this pin can fail:
 
-      * PATH CLASS: classify counts only the /data/* download, visit and API paths plus the
+      * PATH CLASS: classify() counts only the /data/* download, visit and API paths plus the
         /go/ts/ archive hand-offs, so a path-shape URI is `ignore` at ANY status (control: the hop
         path at status 200 still counts nothing);
       * STATUS: a visit admits only 200/304 (a download only 200/206), so even a 301 on the visit
@@ -2287,7 +2287,7 @@ def _ts_fold(lines, prev=None, **kw):
 
 
 def test_a_hand_off_route_is_its_own_class_admitted_at_302_alone():
-    """CLASS PIN. classify gains the /go/ts/ prefix, and the route shape is exactly three segments:
+    """CLASS PIN. classify() gains the /go/ts/ prefix, and the route shape is exactly three segments:
     survey, station, level. Anything shorter or longer is not a hand-off route and stays `ignore`, so
     a bare prefix or a probe cannot mint a class. The fold then admits 302 for this class and only
     302: a hand-off IS the redirect, and a 200 or a 404 on one of these paths is not one.
@@ -2405,7 +2405,7 @@ def test_hand_offs_leave_every_download_family_figure_exactly_where_it_was():
     metric to the shared per-place detail rows (the state rows plus unattributed reconcile with the
     AU country row, and that promise is built on those two maps).
 
-    FAILS IF a hand-off is counted as a download or a visit, if `sum(countries.values)` stops
+    FAILS IF a hand-off is counted as a download or a visit, if `sum(countries.values())` stops
     equalling downloads + visits + API requests, or if a detail row grows a fifth metric."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     lines = [
@@ -2474,7 +2474,7 @@ def test_main_reads_the_served_hand_off_index_beside_the_manifest(tmp_path, monk
     config knob, and an ABSENT index degrades to route counts with no bytes -- it never crashes and
     never guesses a size.
 
-    FAILS IF main never reaches the index, or if its absence aborts the run."""
+    FAILS IF main() never reaches the index, or if its absence aborts the run."""
     data = tmp_path / "data"
     served = data / "site-data" / "current"
     logdir = data / "logs" / "caddy"
@@ -2545,10 +2545,10 @@ def test_the_destination_host_is_the_one_the_engine_publishes():
 def test_the_hand_off_class_adds_no_client_side_measurement():
     """PRIVACY-POSTURE PIN (framing invariant). Measuring the hand-off adds NOTHING in the
     browser: the 302 is a request the reader was making anyway and the front door already logs it.
-    So Plausible stays off, and the six existing track call sites stay six -- a seventh would be a
+    So Plausible stays off, and the six existing track() call sites stay six -- a seventh would be a
     new client-side beacon, which is the one thing this measurement was designed not to need.
 
-    FAILS IF analytics is switched on in the shipped config, or if a track call site is added."""
+    FAILS IF analytics is switched on in the shipped config, or if a track() call site is added."""
     cfg = (_REPO / "portal" / "config.js").read_text(encoding="utf-8")
     assert re.search(r'"enabled"\s*:\s*false', cfg), "Plausible must ship disabled"
     assert re.search(r'"plausible_domain"\s*:\s*""', cfg), "and with no domain"

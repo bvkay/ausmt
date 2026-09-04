@@ -30,7 +30,7 @@ from _contract import SCI_COLUMNS  # noqa: E402  (used by the sci-row projection
 
 # --- Dimensionality decision-boundary parameters (SINGLE SOURCE OF TRUTH) ----------------------
 # These thresholds define the phase-tensor dimensionality screening in science_from_components.
-# build_portal._build_prov READS these constants (and _ediparse.PT_MIN_REZ_ROW_SINE) for the
+# build_portal._build_prov() READS these constants (and _ediparse.PT_MIN_REZ_ROW_SINE) for the
 # provenance block, so the parameters recorded in build_provenance.json CANNOT drift from the ones
 # actually applied here. Change a value in exactly one place. The provenance JSON key names mirror
 # these constants (the "_deg" suffix on ELLIP_2D is a back-compat misnomer: ellipticity is

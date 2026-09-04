@@ -116,7 +116,7 @@ def test_the_resource_row_ASKS_the_one_encoder_rather_than_restating_it(monkeypa
     """The same rule for the other half of a published route. Three surfaces render an NCI address
     from one `url_path` and only one of them may be the implementation: `_stationcheck` holds it, the
     front-door generator calls it, and the JS mirror is held to its bytes by a shared vector file.
-    A second `quote` in the emitter is what would let station.json publish a working route beside
+    A second `quote()` in the emitter is what would let station.json publish a working route beside
     a dead one in the redirect table."""
     import _stationcheck as stcheck  # noqa: PLC0415
     import build_portal as bp  # noqa: PLC0415

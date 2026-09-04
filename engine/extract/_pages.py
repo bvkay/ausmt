@@ -1718,7 +1718,7 @@ def _prose_block(paragraphs) -> str:
 
     This is NOT markdown and must not grow into it. There is one sigil, it is recognised only at
     the start of a paragraph, there is no inline syntax, and every character of every paragraph
-    (subheadings included) goes through _e. Author-supplied text can never carry markup onto a
+    (subheadings included) goes through _e(). Author-supplied text can never carry markup onto a
     served page. A non-list value yields nothing rather than one <p> per character.
     """
     if not isinstance(paragraphs, (list, tuple)):
