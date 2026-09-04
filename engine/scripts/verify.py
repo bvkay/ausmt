@@ -97,7 +97,7 @@ def _live_survey_digests(surveys_root: Path) -> dict:
 
 
 def _check_digest_consistency(data_dir: Path, surveys_root: Path):
-    """C18b (Amendment A3) — the cache-INDEPENDENT product-consistency gate.
+    """ The cache-INDEPENDENT product-consistency gate.
 
     Compares out/products/survey_digests.json (the digest-stamp sidecar the build emitted) against the
     LIVE survey.yaml sources under `surveys_root`. FAILS when a served survey's XML was produced under a
@@ -105,11 +105,11 @@ def _check_digest_consistency(data_dir: Path, surveys_root: Path):
     served a pre-edit product while surveys.json showed the post-edit metadata). Two independent checks
     per served survey:
       * xml_digest_stamped[station] == recomputed live survey.yaml digest (the product-vs-source check);
-      * yaml_digest_current == recomputed live digest (sidecar internal self-consistency — the build
-        stamped a digest that no longer matches the source it claims to have read).
+      * yaml_digest_current == recomputed live digest (sidecar internal self-consistency - it fails
+        when the build stamped a digest that does not match the source it claims to have read).
 
     Returns (ok: bool, lines: list[str]). NOT vacuous (Invariant 10): the live digest is recomputed
-    from bytes on disk, an observable independent of anything the build wrote — a build that served a
+    from bytes on disk, an observable independent of anything the build wrote - a build that served a
     stale product cannot make this pass. Never reads the cache dir."""
     ok = True
     lines = []
@@ -466,8 +466,8 @@ def _check_survey_metadata(base_dir: Path, mtc, rep, jsonschema, sm_schema):
                      f"survey.yaml (or withdraw the package deliberately) and rebuild; never swap this build in.")
     # 1b. The same rule for every OTHER survey-granularity drop: unreadable or non-mapping
     #     survey.yaml, invalid coordinate policy or station_ids block, a zero-station parse, an
-    #     unserialisable SMETA. Seven of these eight paths used to be stderr-only, so this gate
-    #     passed a build that silently lost a survey - the exact swap D20 exists to prevent.
+    #     unserialisable SMETA. A stderr-only drop lets this gate pass a build that silently lost
+    #     a survey, which is the exact swap it exists to prevent.
     dropped = (rep or {}).get("surveys_dropped") if isinstance(rep, dict) else None
     if dropped is None:
         ok = False
@@ -591,8 +591,8 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
     EXISTING build dir's own files — the same two checks the self-building path runs post-build (via
     _check_mtcat_and_manifest), minus the build step itself. Returns True (PASS) / False (FAIL).
 
-    C18b (Amendment A3): when `surveys_root` is given (the Makefile's rebuild-data now passes
-    --surveys), ALSO run the cache-INDEPENDENT digest-consistency gate — the served-product digest
+    When `surveys_root` is given (the Makefile's rebuild-data passes
+    --surveys), ALSO run the cache-INDEPENDENT digest-consistency gate: the served-product digest
     stamps vs the live survey.yaml sources. When it is None the gate SKIPS with a LOUD note (all
     pre-C18b call sites keep their exact behaviour). The gate never reads the cache dir."""
     if not data_dir.is_dir():

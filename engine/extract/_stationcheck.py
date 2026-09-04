@@ -62,7 +62,7 @@ _TS_EXCLUDED_LEVEL = "level2"
 # What this module ADDS. Section 2's zero-null rule is scoped to it: the frozen keys carry eight
 # legitimate nulls (remote_site, coordinate_qc, rotspec, the emeas azimuths, the two rotation sources,
 # convention_check.detail), so the survey-metadata document's corpus-wide rule cannot be imported.
-# The fold (D1) is an addition too, and the scan reaches INTO `diagnostics` for exactly its members:
+# The fold is an addition too, and the scan reaches INTO `diagnostics` for exactly its members:
 # an undetermined call is OMITTED here, never copied across as the sidecar's null.
 _NEW_BLOCKS = ("runs", "resources")
 _FOLDED_DIAGNOSTICS = ("classification", "skew_beta_median_deg", "pct_periods_3d", "method", "note")

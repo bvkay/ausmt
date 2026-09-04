@@ -263,7 +263,7 @@ def _rights_row(licence_id: str) -> dict:
 
 def _corpus_licences(manifest) -> list:
     """Distinct data licences actually present in the download manifest, canonicalised through the
-    C6 alias table and sorted. Derived, never asserted: the rightsList states what the corpus IS
+    licence alias table and sorted. Derived, never asserted: the rightsList states what the corpus IS
     licensed under this quarter, not what it was licensed under when this file was written."""
     files, bundles = manifest_rows(manifest)
     aliases = LICENSES.get("aliases") or {}

@@ -9,7 +9,7 @@
               filename: "SA104A.zip"
               bytes: 1042000000
               verified: ""         # the day the crawler read a 200, and the day the
-              match_method: rule:sa-pad      #   published fieldnote names (D18)
+              match_method: rule:sa-pad      #   published fieldnote names
               review: verified               # only `verified` ever projects
 
 Rule 14: this is read OFFLINE. The crawler (_tools/crawl_ts_index.py, ausmt-surveys) is the only

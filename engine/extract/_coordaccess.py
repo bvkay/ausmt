@@ -1,9 +1,9 @@
-"""C42 coordinate-access policy: exact / generalised / withheld (the ENGINE mask seam).
+"""Coordinate-access policy: exact / generalised / withheld (the ENGINE mask seam).
 
 The custodian chooses whether a station's coordinates are served exact, generalised (rounded to
 0.1deg, ~11 km), or withheld (null). This module owns the ONE mask seam and its ONE rounding
-function, per the frozen design record maintainer/C42-CoordinateAccess.md (D2/D3). The seam is
-pipeline-ordered by the caller: parse -> QC on TRUE coordinates -> apply_coordinate_policy() in
+function, per the frozen design record maintainer/C42-CoordinateAccess.md. The seam is
+pipeline-ordered by the caller: parse -> QC on TRUE coordinates -> apply_coordinate_policy in
 place -> ALL emission. No emitter reads a coordinate from anywhere but the post-mask station record.
 
 Fail-closed posture (consistent with the C25 gates' refuse-to-serve stance): an UNKNOWN enum value
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# The three policies, in the order the record lists them (D2). "exact" is the default.
+# The three policies, in the order the record lists them. "exact" is the default.
 COORDINATE_POLICIES = ("exact", "generalised", "withheld")
 
 # Generalisation grid: 0.1deg (~11 km). ONE rounding function, engine-side only — the portal never
@@ -192,9 +192,9 @@ def validate_overrides(overrides, stations):
 
 def coordinates_served(policy) -> bool:
     """The per-station BYTE-GATE predicate: only an 'exact' station's source bytes (EDI + EMTF-XML +
-    derived EDI) may be served. A generalised or withheld station is byte-gated out entirely — its
+    derived EDI) may be served. A generalised or withheld station is byte-gated out entirely - its
     coordinates hide in too many EDI corners (HEAD, INFO free-text, DEFINEMEAS, comments) for
-    redaction to be trustworthy, so we withhold the file rather than rewrite custodian bytes (D3)."""
+    redaction to be trustworthy, so we withhold the file rather than rewrite custodian bytes."""
     return policy == "exact"
 
 

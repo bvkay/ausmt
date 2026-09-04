@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""C25 convention gates — per-station frame guard (Gate 1) and sign-convention check (Gate 2).
+"""Convention gates: per-station frame guard (Gate 1) and sign-convention check (Gate 2).
 
 The engine serves transfer functions under a declared standard: x = geographic north, y = east,
-e^{+iωt} time dependence (docs data-files.md). Nothing used to VERIFY that per file: T1.1/T1.2
-(tracked C25, hard deadline = the T2.1 contract freeze). These gates run at the mt_metadata parse
-seam (build_portal._parse_one_edi) on every EDI, every build.
+e^{+iωt} time dependence (docs data-files.md). Nothing else VERIFIES that per file, so these gates
+run at the mt_metadata parse seam (build_portal._parse_one_edi) on every EDI, every build.
 
-GATE 1 — rotation/frame guard. mt_metadata 1.0.9 RECORDS rotation but never compensates it:
+GATE 1, rotation/frame guard. mt_metadata 1.0.9 RECORDS rotation but never compensates it:
   * io/edi/edi.py:455-461 reads the >ZROT block (falls back to >RHOROT, else zero-fills) into
-    edi_obj.rotation_angle;
+    edi_obj.rotation_angle,
   * core.py:2118/2131 + 2134-2135 copy rotation_angle -> TF._rotation_angle while the impedance is
-    copied VERBATIM — no de-rotation anywhere on the read path (verified empirically: injecting
-    ZROT=30 leaves Z byte-identical while _rotation_angle becomes 30);
+    copied VERBATIM, with no de-rotation anywhere on the read path (verified empirically: injecting
+    ZROT=30 leaves Z byte-identical while _rotation_angle becomes 30),
   * the SPECTRA branch (_read_data -> _read_spectra, edi.py:341-354, 463-690) maps channels purely
     BY POSITION (tools.py index_locator), ignores HMEAS/EMEAS azimuths, never parses ROTSPEC, and
     leaves _rotation_angle None — so a rotated spectra-format file is INVISIBLE to the TF object's
@@ -150,9 +149,9 @@ def parse_frame_evidence(text: str) -> dict:
     spectra = (">=SPECTRASECT" in up) or re.search(r"^>SPECTRA\b", text, re.M | re.I) is not None
     rotspec = [float(x) for x in re.findall(r"ROTSPEC\s*=\s*(-?[\d.]+)", text, re.I)] or None
     tip_attr = re.search(r"^>TX[RI](?:\.EXP)?\b[^\n]*ROT\s*=\s*(\w+)", text, re.M | re.I)
-    # (fix round F3: the v2 freq_descending field is GONE — it existed solely to verify the
-    # angle-to-period alignment before a per-period de-rotation, and v3 refuses ALL per-period
-    # rotation at the gate (V3-C), so frequency ordering no longer bears on any disposition.)
+    # (There is no freq_descending field: it can only verify the angle-to-period alignment ahead of
+    # a per-period de-rotation, and the gate refuses ALL per-period rotation, so frequency ordering
+    # bears on no disposition.)
     return {
         "branch": "spectra" if spectra else "mt",
         "zrot": _block_values(text, "ZROT"),
@@ -434,7 +433,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                          f"orthogonal frame; served as-is under the declared-zero assumption "
                          f"(sign convention still checked)")
 
-    # ---- tipper frame (V3): served as-stored like the impedance. A per-period TROT is the same
+    # --- tipper frame: served as-stored like the impedance. A per-period TROT is the same
     # per-period frame-mixing hazard as per-period ZROT (V3-C) — refuse it too. A uniform/zero TROT
     # rides in facts["evidence"]["trot"] as a recorded fact; nothing is rotated. ----
     if has_tipper and ev["trot"] is not None:
@@ -451,9 +450,8 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                          f"period-by-period (misleading-by-construction); fix: re-export in a single "
                          f"coherent frame.")
         if len(tu) == 1:
-            # F2:
-            # a UNIFORM declared tipper frame that DIFFERS from the impedance's declared azimuth is a
-            # known frame detail — record it first-class (station.json tipper_declared_azimuth_deg)
+            # A UNIFORM declared tipper frame that DIFFERS from the impedance's declared azimuth is a
+            # known frame detail, recorded first-class (station.json tipper_declared_azimuth_deg)
             # + note it (build_report/QA + the portal frame line). Covers both directions: TROT=-60
             # with ZROT=0 (the panel's case d) AND TROT=0 with a nonzero impedance azimuth (the
             # AusLAMP-SA shape: rotated Z, zero tipper). Equal or absent TROT: no field, no noise.
@@ -483,12 +481,12 @@ def _rot_mat(deg: float):
 
 def apply_derotation(tf, disp: FrameDisposition) -> int:
     """DIAGNOSTIC-ONLY (v3): de-rotate the TF object's impedance/tipper (and their errors) IN MEMORY
-    per a hand-built disposition. NOT called on the serve path — frame_disposition never returns
+    per a hand-built disposition. NOT called on the serve path - frame_disposition never returns
     theta_z/theta_t under POLICY v3 (the engine serves data as-stored). Retained + pinned for future
     diagnostic use (see the section header).
-    The source file is never touched (D1). Periods with PARTIAL impedance components (a fill/zero
-    among finite values) cannot be rotated honestly — rotation would mix the fill into every
-    element — so those periods are masked wholesale (NaN) and counted; returns that count (the
+    The source file is never touched. Periods with PARTIAL impedance components (a fill/zero
+    among finite values) cannot be rotated honestly - rotation would mix the fill into every
+    element - so those periods are masked wholesale (NaN) and counted; returns that count (the
     caller notes it). Errors propagate in quadrature: var'_ij = Σ_kl (R_ik R_jl)² var_kl."""
     import numpy as np  # noqa: PLC0415
 

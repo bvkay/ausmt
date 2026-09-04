@@ -748,8 +748,8 @@ def preflight_bytes(raw: bytes, *, label: str = "") -> dict:
     #    a temporary copy and the custodian's own value is kept as the station's site_name. Measured
     #    on the GSSA/BHP Roxby Downs 2018 release: nine of 764 files, all now published.
     #
-    #    Because it is a rescue, it no longer SHORT-CIRCUITS the terminal surfaces below. It used to
-    #    return here, which was right while it was terminal and would now report needs_repair for a
+    #    Because it is a rescue, it must NOT SHORT-CIRCUIT the terminal surfaces below. Returning
+    #    here is right only for a terminal check, and would report needs_repair for a
     #    file that also carries something nothing can read. Its row rides `blocking_fields` whatever
     #    the final verdict is, so a curator still sees it.
     dataid_row = None

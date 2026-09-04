@@ -2,7 +2,7 @@
 
 Any TF input (EDI / EMTF XML) -> mt_metadata TF object -> a *conditioned*, schema-valid canonical
 EMTF XML + a derived EDI, with a VERIFIED round-trip (impedance preserved). This backs the Phase-1
-D6 canonical EMTF XML store (see docs developer docs / the Phase-1 format-backbone design).
+canonical EMTF XML store (see docs developer docs / the Phase-1 format-backbone design).
 Requires the core mt_metadata/mth5 stack; every heavy import is function-local so merely importing
 this module is cheap and never pulls the heavy stack until normalize() is actually called.
 
@@ -55,7 +55,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-# C46-W3a: the canonical licence tables (single-sourced in contract/licenses.json -> _contract via the
+# The canonical licence tables (single-sourced in contract/licenses.json -> _contract via the
 # stdlib-only `extract._license_text` leaf) so the EMTF-XML Copyright truth fix builds its conditions_of_use
 # from the SAME id/URL/recognition maps as the LICENSE.txt instrument — no second licence vocabulary. This
 # resolves in every context normalize runs in: the engine test run and the build both put engine/ on
@@ -145,9 +145,9 @@ def _survey_meta_get(survey_meta: Optional[dict]):
     when present, else the custodian organisation; NEVER the portal brand. Returns (None,None,None) when
     survey_meta is absent so the caller can fall back to an explicit-unknown, not a fabricated value.
 
-    A1 (reader retirement): the middle rung - the back-compat facet built from the two retired flat
-    credit keys - is GONE. A stale or hand-built survey_meta that still carries that key is ignored and
-    the author line falls straight to the custodian org, so no retired value can reach a served XML.
+    NO back-compat facet is built from the two retired flat credit keys. A stale or hand-built
+    survey_meta that still carries one is ignored and the author line falls straight to the custodian
+    org, so no retired value can reach a served XML.
 
     creators are joined with '; ' (a creator name may be 'Last, First', so a comma join would be
     ambiguous). Non-mapping creator rows are skipped, so an odd hand-built list degrades to the org
@@ -169,7 +169,7 @@ def _survey_meta_get(survey_meta: Optional[dict]):
     return authors, title, doi
 
 
-# --- C46-W3a: EMTF-XML Copyright truth fix -----------------------------------------------------------
+# --- EMTF-XML Copyright truth fix ---------------------------------------------------------------
 # mt_metadata 1.0.9 ships a Copyright block whose defaults ASSERT rights the custodian never granted:
 # release_status defaults to "Unrestricted Release" and conditions_of_use to a "may be copied freely …
 # neither the author(s) … nor IRIS …" paragraph — an unowned licence statement inside every served XML.
@@ -464,7 +464,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
     except Exception:  # noqa: BLE001  (citation model varies across versions; non-fatal)
         pass
 
-    # C46-W3a: the Copyright TRUTH FIX. mt_metadata's Copyright defaults ("Unrestricted Release" +
+    # The Copyright TRUTH FIX. mt_metadata's Copyright defaults ("Unrestricted Release" +
     # the "copied freely … IRIS" conditions) are an UNOWNED licence statement that ships inside every
     # served XML. Replace them with the survey's declared licence + access level: release_status from
     # the access level, conditions_of_use built from the licence id + deed URL (custodian-owned), and
@@ -508,7 +508,7 @@ def _pin_create_time(xml_path: Path, tf) -> bool:
     minute this build ran.
 
     The served EMTF XML and the per-survey EMTF-XML zip publish a SHA-256 that a consumer is invited to
-    check against a previously published one. mt_metadata assigns Provenance.create_time = now() inside
+    check against one published earlier. mt_metadata assigns Provenance.create_time = now() inside
     to_xml() with no knob to pass a value (verified: setting provenance.creation_time before the write
     does not reach the file), so an untouched canonical XML publishes a new digest for its station AND
     for its survey's whole XML zip on every rebuild of unchanged inputs. That is the same build-clock
@@ -546,12 +546,12 @@ def _pin_create_time(xml_path: Path, tf) -> bool:
 def _mask_fills(a, b):
     """Boolean mask of cells where EITHER side is the ~1e32 EMTF-XML missing-data fill (|v|>_FILL_MAX).
 
-    Same convention as extract/_mtm.py._is_missing — NOT invented here. Real EDIs from some producers
+    Same convention as extract/_mtm.py._is_missing - NOT invented here. Real EDIs from some producers
     (e.g. Geotools/MT-GFZ) carry the community missing-data sentinel 1e32 INSIDE impedance data blocks
     at periods where a component is undetermined. mt_metadata's EDI reader turns those into 0+0j, but
-    its EMTF-XML writer faithfully re-emits the 1e32 sentinel (D6: the canonical XML must stay
+    its EMTF-XML writer faithfully re-emits the 1e32 sentinel (the canonical XML must stay
     mt_metadata-faithful, sentinels included), which re-reads as (1e32+1e32j). Comparing orig 0+0j vs
-    re-read (1e32+1e32j) at such a cell is a fill-vs-fill artefact, not a corrupted transfer function —
+    re-read (1e32+1e32j) at such a cell is a fill-vs-fill artefact, not a corrupted transfer function -
     so the round-trip comparators exclude these cells and verify only the real (non-fill) values."""
     import numpy as np  # noqa: PLC0415
 
@@ -699,8 +699,8 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
             f"canonical EMTF-XML round-trip FAILED for {src.name}: impedance maxdiff={maxdiff:.3e} "
             f"(rtol={rtol}, atol={atol})")
 
-    # tipper / impedance_error / tipper_error: previously never compared, so a re-read that silently
-    # dropped or corrupted any of these passed the gate. Absent-on-original is fine either way.
+    # tipper / impedance_error / tipper_error are compared as well, so a re-read that silently
+    # drops or corrupts any of them cannot pass the gate. Absent-on-original is fine either way.
     _compare_optional_field("tipper", tf.tipper, tf_rt.tipper, src_name=src.name, rtol=rtol, atol=atol)
     _compare_optional_field("impedance_error", tf.impedance_error, tf_rt.impedance_error,
                              src_name=src.name, rtol=rtol, atol=atol)

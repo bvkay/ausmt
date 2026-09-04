@@ -161,13 +161,13 @@ _REF_STATION = re.compile(r"REFERENCE\b.*?STATION\s+NAME:\s*(\S+)", re.S | re.I)
 # operator emails (e.g. a curator's institutional address) straight into the PUBLIC, non-licence-gated
 # station.json processing.note. Redact here, at the single point the note is derived, so every caller
 # (build_portal, any future consumer) gets the scrubbed form for free. Original EDI bytes are untouched
-# (D1) -- this only rewrites the returned string.
+# - this only rewrites the returned string.
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 
 def parse_dataid(dataid):
     """Phoenix remote-reference DATAID 'P=<station> R=<remote> (H)' -> (station, remote_site).
-    Plain DATAIDs pass through unchanged (remote=None). So a compound id is no longer mangled and the
+    Plain DATAIDs pass through unchanged (remote=None), so a compound id is not mangled and the
     remote site is recovered. Best-effort, never raises."""
     if not dataid:
         return dataid, None

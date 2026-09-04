@@ -15,10 +15,10 @@ class; the THREDDS rule), and they all rest on the first:
   survey_counts()  the per-survey tally of true flags (spec: stable across access transitions,
                    never derivable by subtraction).
   route_rows()     the PUBLIC route detail: level token to {bytes, url_path}. Only for an OPEN
-                   station (the caller passes the same served/gated verdict the C1 gate
+                   station (the caller passes the same served/gated verdict the access gate
                    computed; policy before emission), only `review: verified`, and never
-                   level2 - a transfer-function copy in the archive is not a time series and
-                   must not open a route (D19).
+                   level2: a transfer-function copy in the archive is not a time series and
+                   must not open a route.
 
 ts_access.json, the mtcat keys, and deploy/scripts/gen_ts_routes.py all render from these
 functions; the route table's membership IS route_rows()'s answer, which is what makes the R5
@@ -60,7 +60,7 @@ def survey_counts(flags_by_survey) -> dict:
 def route_rows(rows, station_open) -> dict:
     """{level token: {bytes, url_path}} for the surfaces that publish ROUTE DETAIL. Empty for a
     non-open station however the register reads: suppression lives in resolution, and this
-    return value is the resolution (R5)."""
+    return value is the resolution."""
     if not station_open:
         return {}
     out = {}

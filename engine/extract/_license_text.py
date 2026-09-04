@@ -1,21 +1,21 @@
-"""C34/D2 — the single source for AusMT licence primitives + deterministic rights text.
+"""The single source for AusMT licence primitives + deterministic rights text.
 
 STDLIB-ONLY leaf module (no numpy / mt_metadata / PyYAML): it imports only `_contract`, itself a
 stdlib-generated table. This is what lets BOTH sides share one implementation of the rights text:
 
-  * build_portal — the bundle LICENSE.txt that travels inside every distributed survey zip
+  * build_portal - the bundle LICENSE.txt that travels inside every distributed survey zip
     (`license_instrument_text`), plus the redistribution allow-list gate (`redistributable`); its
     output stays byte-identical to the pre-C34 in-module version (pinned by
     tests/test_license_gate.py + tests/test_manifest.py).
-  * the gw-runner — the LICENSE.md it writes into a submitted package at intake (C34/D1). The runner
-    executes on the ENGINE image, where `extract` is an installed package (C37), so
+  * the gw-runner - the LICENSE.md it writes into a submitted package at intake. The runner
+    executes on the ENGINE image, where `extract` is an installed package, so
     `from extract._license_text import license_instrument_text` resolves without pulling the heavy
     scientific stack that a `build_portal` import would.
 
-The gateway APP process never imports this module (C10/C31 house rule: the app is content-blind).
+The gateway APP process never imports this module (house rule: the app is content-blind).
 
 The canonical id / alias / URL / allow-list tables all derive from contract/licenses.json via
-`_contract.LICENSES` — the ONE place a licence string is canonicalised. Edit contract/licenses.json,
+`_contract.LICENSES` - the ONE place a licence string is canonicalised. Edit contract/licenses.json,
 then `python contract/generate.py`; never hand-edit the derived sets here.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ from __future__ import annotations
 #   * as a bare sibling — build_portal runs `sys.path.insert(0, HERE)` before importing us, and the
 #     engine test run puts extract/ on sys.path; then `import _contract` works directly.
 #   * as an installed package — the gw-runner does `from extract._license_text import ...` on the
-#     engine image (C37). There sys.path holds the package ROOT (engine/), not engine/extract/, so a
+#     engine image. There sys.path holds the package ROOT (engine/), not engine/extract/, so a
 #     bare `import _contract` would miss; `from extract._contract` is the resolvable path.
 # Try the sibling form first (the pre-existing engine convention), fall back to the package-qualified
 # form for the installed-package/runner context. Either way it is stdlib-only content (no heavy deps).
@@ -70,7 +70,7 @@ def recognised(license_str) -> bool:
     return canon_license(license_str) in _LIC_RECOGNISED
 
 
-# C46 (CC-BY 4.0 §3(a) discharge): the default human summary rendered in the changes clause when a
+# (CC-BY 4.0 §3(a) discharge): the default human summary rendered in the changes clause when a
 # survey declares no explicit attribution.changes_summary. Factual — it describes what the engine does
 # to every deposited transfer function it serves (EMTF-XML regeneration, MTH5, coordinate/identifier
 # conditioning). Reviewed wording; to change it, edit here AND
@@ -82,13 +82,13 @@ DEFAULT_CHANGES_SUMMARY = (
 
 def _year4(s) -> str:
     """First run of 4 consecutive digits in a string (a source's `retrieved` date -> its year), else ''."""
-    import re  # stdlib, lazy so the leaf's import stays trivially light (D2)
+    import re  # stdlib, lazy so the leaf's import stays trivially light
     m = re.search(r"\d{4}", str(s or ""))
     return m.group(0) if m else ""
 
 
 def _render_profile(profile_key, licensor, year, source_title, derivative) -> str:
-    """Render a custodian's required attribution from the generated PROFILES table (C46). Falls back to
+    """Render a custodian's required attribution from the generated PROFILES table. Falls back to
     the `generic` profile for an unknown key. The `derivative` form (GA: 'Based on … by GA …') renders
     only when the caller asks for it AND the profile defines one (today only `ga`); otherwise the plain
     `attribution` template renders. Source values are passed as .format ARGUMENTS (never re-parsed), so a
@@ -133,22 +133,22 @@ def instrument_params_from_survey(*, attribution_block, sources_block, derived_p
 
 def license_instrument_text(lic, licensor, year, attribution=None, sources=None, changes=None,
                             filename="LICENSE.txt") -> str:
-    """C6/C46: the LICENSE.txt that travels INSIDE every distributed survey zip so the rights don't get
+    """The LICENSE.txt that travels INSIDE every distributed survey zip so the rights don't get
     stripped from the bytes. Records the canonical licence id, the licensor (survey custodian org), the
     year (from the survey's date range), an attribution line, and the licence deed URL for CC/ODC ids.
     Deterministic pure text (no timestamps) so the caller can keep the zip byte-reproducible.
     `lic` is passed through canon_license so a bare alias/typo prints its canonical id (or the raw
-    normalised value if unrecognised — this file ships only for redistributable surveys, so in practice
+    normalised value if unrecognised - this file ships only for redistributable surveys, so in practice
     it is always a known id, but it never fabricates a URL for an unknown one).
 
     C46 additions, appended AFTER the existing attribution block and BYTE-INERT when both are absent:
-      * `sources` (list of dicts: title/custodian/identifier/licence/retrieved/statement/profile) — one
+      * `sources` (list of dicts: title/custodian/identifier/licence/retrieved/statement/profile) - one
         attribution paragraph per upstream dataset, using the source's verbatim `statement` when present
         else the custodian profile's rendered attribution (the GA derivative form when the release makes
         changes), a supersession line for any source whose licence differs from the release licence, and
         (C46-W3a) the custodian profile's s.5 disclaimer paragraph once per distinct disclaimer when a
         source's profile carries one (today only `ga`).
-      * `changes` ({made, summary}) — the CC-BY 4.0 §3(a) 'indicate if changes were made' clause.
+      * `changes` ({made, summary}) - the CC-BY 4.0 §3(a) 'indicate if changes were made' clause.
     When `sources` is falsy and `changes` is falsy/`made` False, the output is byte-identical to the
     pre-C46 instrument (the frozen LICENSE.txt pins)."""
     cid = canon_license(lic)
@@ -177,9 +177,9 @@ def license_instrument_text(lic, licensor, year, attribution=None, sources=None,
         "terms of that licence" + (f" ({url})." if url else "."),
         "",
     ]
-    # --- C46 additions (byte-inert when sources + changes are both absent): per-source attribution
+    # --- The attribution additions (byte-inert when sources + changes are both absent): per-source
     # paragraphs, licence-supersession line(s), then the CC-BY §3(a) changes clause. Order per the
-    # C46-W2 contract. The existing None-path `lines` above is untouched, so the frozen pins hold.
+    # attribution contract. The existing None-path `lines` above is untouched, so the frozen pins hold.
     srcs = list(sources or [])
     if srcs:
         made = bool(changes and changes.get("made"))

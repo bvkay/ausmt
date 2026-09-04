@@ -269,7 +269,7 @@ def strip_impedance_blocks(raw: bytes) -> bytes:
 
     Operates on BYTES and never re-encodes. A block ends where mt_metadata's own section scan ends
     it -- at the next line whose stripped form starts with `>` -- so the region removed is exactly
-    the region the reader would have read. Section banners (`>!****IMPEDANCES****!`) start with `>`
+    the region the reader reads. Section banners (`>!****IMPEDANCES****!`) start with `>`
     and are kept: they label nothing once the blocks are gone, but leaving them keeps the change set
     to the blocks themselves. Returns the ORIGINAL object when there is nothing to remove, which is
     what lets the caller refuse to retry a file that does not actually carry the shape."""
@@ -489,8 +489,8 @@ def normalise_dataid(dataid: str) -> str:
     """The DATAID rewritten into the reader's station-name charset: every character outside letters,
     digits and underscore becomes `_`. That is mt_metadata's own rewrite (it maps space, `-`, `.`
     and `+` the same way) extended to the characters it refuses instead of mapping, so a name it
-    already accepts comes back unchanged and one it refuses comes back in the form it would have
-    produced. The leading/trailing strip mirrors the validator's own first act."""
+    already accepts comes back unchanged and one it refuses comes back in the reader's own form.
+    The leading/trailing strip mirrors the validator's own first act."""
     return re.sub(r"[^A-Za-z0-9_]", "_", str(dataid).strip())
 
 
@@ -750,7 +750,7 @@ def _reparse_without_frequency_ordering(p: Path, exc: BaseException):
     except Exception:  # noqa: BLE001
         raise exc from None
     shipped = getattr(EDI, "_assert_descending_frequency", None)
-    if shipped is None:      # the reader no longer carries the method: nothing to neutralise
+    if shipped is None:      # the reader carries no such method: nothing to neutralise
         raise exc from None
 
     def _order_only_when_there_is_an_order(self):
@@ -964,7 +964,7 @@ def parse_edi(path: Path) -> dict:
 # triggers on EMTF-XML-sourced TFs; an EDI read straight to components carries no values this large.)
 _FILL_MAX = 1e8
 
-# C20 placeholder-tipper detection. Some EDIs carry an UNPHYSICAL placeholder tipper — observed as
+# Placeholder-tipper detection. Some EDIs carry an UNPHYSICAL placeholder tipper - observed as
 # |T| identically 1.0 at every period, with one component ~1e-17 (a filler, not an estimate). These
 # named constants (siblings of _FILL_MAX; in the spirit of the _edi_science science constants) define
 # the detector: a tipper is a placeholder when it has at least PLACEHOLDER_TIPPER_MIN_PERIODS present
@@ -977,8 +977,8 @@ PLACEHOLDER_TIPPER_UNITY_TOL = 1e-3     # ||T| - 1.0| below this at every period
 
 
 def _is_placeholder_tipper(txr, txi, tyr, tyi) -> bool:
-    """True iff the four masked tipper component series describe an unphysical placeholder tipper
-    (C20): |T| flat AND pinned at 1.0 across at least PLACEHOLDER_TIPPER_MIN_PERIODS present periods.
+    """True iff the four masked tipper component series describe an unphysical placeholder tipper:
+    |T| flat AND pinned at 1.0 across at least PLACEHOLDER_TIPPER_MIN_PERIODS present periods.
     Present = all four components non-None at that period (the same joint-presence the tip magnitude
     needs). Returns False for any real (varying, or off-unity) tipper, and for a tipper with too few
     present periods to judge."""
@@ -997,7 +997,7 @@ def _is_placeholder_tipper(txr, txi, tyr, tyi) -> bool:
 
 def _is_missing(zi) -> bool:
     """True if a complex Z/T element is absent, NaN, a non-physical missing-data fill (~1e32), or
-    EXACT complex zero. The exact-zero arm is C19b: mt_metadata
+    EXACT complex zero. The exact-zero arm is mt_metadata
     converts an EDI's 1e32 fills to exact zeros on read, which passed the magnitude threshold and
     plotted as phase=0deg / rho=0 / tipper-dip data points at every source-masked period. A real
     estimated Z/T element is never exactly 0+0j to double precision; a SINGLE zero component
@@ -1062,7 +1062,7 @@ def components_from_tf(tf, notes=None):
                 comp["PHS" + mode][i] = math.degrees(math.atan2(zi.imag, zi.real))
                 e = earr[k]
                 if e is not None and e[i] is not None and not (isinstance(e[i], float) and math.isnan(e[i])):
-                    # Standard small-error LINEAR propagation from the impedance error |dZ| (C20):
+                    # Standard small-error LINEAR propagation from the impedance error |dZ|:
                     #   rho = 0.2*T*|Z|^2   -> drho  = 0.4*T*|Z|*|dZ|
                     #   phi = atan2(Im,Re)  -> dphi  = degrees(|dZ|/|Z|)
                     # |dZ| is the (real, non-negative) impedance-error magnitude mt_metadata carries
@@ -1089,7 +1089,7 @@ def components_from_tf(tf, notes=None):
                 comp[k + "R"][i] = float(zi.real)
                 comp[k + "I"][i] = float(zi.imag)
 
-        # C20 placeholder-tipper honesty: an unphysical filler tipper (|T| flat at 1.0) is masked
+        # Placeholder-tipper honesty: an unphysical filler tipper (|T| flat at 1.0) is masked
         # WHOLESALE — all four component series to null — so neither the tip magnitude nor the C20
         # tzx/tzy columns paint it as data. Composes with the per-element fill/zero masking above
         # (the detector reads the already-masked series). With a `notes` list the CALLER owns the

@@ -4,15 +4,15 @@
     python3 extract/_au_outline_build.py            # rewrite both generated files
     python3 extract/_au_outline_build.py --check    # drift gate: exit 1 if either is stale
 
-WHY THIS EXISTS. The coastline used to be hand-simplified, and a hand-typed outline cannot be
-checked: a reader had no way to tell a deliberate generalisation from a typo, and the two surfaces
-that claim to draw ONE map had no mechanical guarantee they still agreed. Here the geometry is
+WHY THIS EXISTS. A hand-typed outline cannot be checked: a reader has no way to tell a deliberate
+generalisation from a typo, and two surfaces that claim to draw ONE map have no mechanical
+guarantee they agree. Here the geometry is
 DERIVED, so the numbers in both files are reproducible from a named public-domain source rather
 than trusted, and the Python and the JavaScript are emitted in the same pass from the same rings.
 
 THE SOURCE. Natural Earth 1:50m admin-0 countries, the `Australia` feature. The 1:50m physical
 COASTLINE layer would be the more obvious pick and is deliberately not used: it is a MultiLineString,
-so every ring would have to be stitched closed by hand before it could be filled, which is exactly
+so every ring has to be stitched closed by hand before it can be filled, which is exactly
 the hand step this script exists to remove. The admin-0 country polygon is already closed rings, and
 for Australia specifically it carries no political boundary at all - the country is an island
 continent, so its national outline IS its coastline. Nothing is given up by taking the easier layer.

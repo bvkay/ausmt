@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
-"""C18 — content-addressed build cache for per-station products.
+"""Content-addressed build cache for per-station products.
 
-A full portal build re-parses every EDI through mt_metadata and re-runs normalize()'s served-XML
+A full portal build re-parses every EDI through mt_metadata and re-runs normalize's served-XML
 round-trip for every served station, even when a one-line survey.yaml edit changed nothing about
 those stations. This module is a content-addressed cache of the two expensive per-station products
 so an incremental rebuild skips the parse and the round-trip for unchanged stations.
 
-Design: maintainer/C18-BuildCacheDesign.md (FROZEN, as amended by Amendment A1). The invariants
+Design: maintainer/C18-BuildCacheDesign.md (FROZEN, with its amendments). The invariants
 this module upholds:
 
   * The cache may only ever change build SPEED, never output bytes. `scripts/verify.py` stays full,
     byte-re-hashing and cache-blind; a warm build is byte-identical to the build that populated its
     cache, and so is an INDEPENDENT full build of the same inputs (proven by test; the served XML's
     CreateTime is pinned to the date its source declares, so no served artifact carries a build
-    clock; Amendment A1c is superseded on that point).
+    clock; is superseded on that point).
   * The key is derived from the SOURCE EDI content sha + a coarse engine-commit salt + library
     versions + the positional/schema contract + the whole survey.yaml digest. A byte-changed EDI,
     an engine commit, a library upgrade, a contract change, or ANY survey.yaml edit all miss.
   * A DEGENERATE salt (unknown engine commit, or a dirty checkout where a git checkout exists)
-    silently DISABLES the cache for that build — no reads, no writes. A degenerate/ambiguous salt
+    silently DISABLES the cache for that build - no reads, no writes. A degenerate/ambiguous salt
     must never key a cache. --raw builds are a POLICY exclusion with the same inert behaviour
-    (Amendment A1a: --seed-meta feeds served citations but is not a key component).
-  * Entries are SELF-VERIFYING (Amendment A1b): each file is `<sha256-hex-of-payload>\n<payload>`,
+    (: --seed-meta feeds served citations but is not a key component).
+  * Entries are SELF-VERIFYING: each file is `<sha256-hex-of-payload>\n<payload>`,
     written temp-then-atomic-rename. Every read re-hashes the payload; a mismatch (disk corruption,
     tampering) DELETES the entry, counts in the `corrupt` counter, tallies as a MISS, and the
-    caller recomputes — a poisoned VALUE can never ship. This is the cache's own job: the
+    caller recomputes - a poisoned VALUE can never ship. This is the cache's own job: the
     content-addressed KEY derives from inputs, while verify.py's manifest check (whose shas are
     computed FROM the served bytes) cannot see a poisoned value that flowed through the build; it
     guards post-build tampering of the served tree only.
@@ -44,7 +44,7 @@ import time
 from pathlib import Path
 
 # Prune policy defaults — operator-tunable, single-sourced here. Adjudicated v1 policy
-# (Amendment A1d): mtime-age window + size cap, oldest-first. The design's "20 builds" window is
+#mtime-age window + size cap, oldest-first. The design's "20 builds" window is
 # NOT implemented (the cache keeps no per-build ledger); age is the operator-meaningful bound.
 CACHE_MAX_MB_DEFAULT = 2048          # AUSMT_CACHE_MAX_MB overrides (size cap, oldest-first eviction)
 PRUNE_MAX_AGE_DAYS = 90              # drop entries untouched for this many days
@@ -119,8 +119,8 @@ def contract_schema_digest(engine_root: Path) -> str:
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
 
 
-# NOTE (Amendment A4): the per-survey yaml digest (design §2.5) is no longer derived here. It is
-# computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from —
+# NOTE: the per-survey yaml digest (design §2.5) is not derived here. It is
+# computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from,
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
 # Metadata does not match. The path-taking helper that
 # lived here was deliberately DELETED, not deprecated: any reappearance of a read-the-yaml-again
@@ -150,14 +150,14 @@ class BuildCache:
         self.hits = 0
         self.misses = 0
         self.writes = 0
-        self.corrupt = 0   # A1b: entries whose embedded payload checksum failed on read (deleted+recomputed)
-        # A4 forensics: environment-induced I/O failures, distinct from content-addressed misses.
+        self.corrupt = 0   # Entries whose embedded payload checksum failed on read (deleted+recomputed)
+        # Forensics: environment-induced I/O failures, distinct from content-addressed misses.
         # write_errors = puts dropped after the rename retries were exhausted (AV/indexer lock class);
         # read_errors  = present-but-unreadable entries (counted as misses for the §4.6 arithmetic,
         # but attributable — a lock-induced spurious miss is not a cold miss).
         self.write_errors = 0
         self.read_errors = 0
-        # `disabled_reason` is a POLICY exclusion (e.g. Amendment A1a: --raw builds, whose seed-meta
+        # `disabled_reason` is a POLICY exclusion (e.g.: --raw builds, whose seed-meta
         # citations feed served XML but are not a key component) — behaviourally identical to a
         # degenerate salt: the cache is inert, no reads, no writes.
         if disabled_reason:
@@ -167,9 +167,9 @@ class BuildCache:
         # The stable, per-survey salt component is injected via key(); the fixed part is precomputed.
         self._fixed_salt = "\x00".join([
             # Cache-format version tag. v2 = self-verifying entries (digest-line + payload, A1b);
-            # v3 (C18b, Amendment A3) = the served-XML meta blob carries `survey_digest` (the digest
+            # v3 = the served-XML meta blob carries `survey_digest` (the digest
             # the entry was KEYED under), consumed by the digest-stamp sidecar + the verify.py
-            # consistency gate; v4 (C20) = the parse product changed SHAPE — tf.json rows grew 10 -> 18
+            # consistency gate; v4 = the parse product changed SHAPE - tf.json rows grew 10 -> 18
             # (rho/phase error columns + full complex tipper) and the placeholder-tipper mask now
             # withholds filler tippers, so a pre-C20 cached parse would replay 10-wide/unmasked rows.
             # Bumping the tag re-keys EVERY blob, so pre-C20 entries never resolve — a clean MISS,
@@ -194,7 +194,7 @@ class BuildCache:
             json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions (§2.3)
             self.contract_digest,                                    # columns + schema digest (§2.4)
         ])
-        # A4 forensics: a short fingerprint of the FULL fixed salt (version tag + engine commit +
+        # Forensics: a short fingerprint of the FULL fixed salt (version tag + engine commit +
         # lib versions + contract digest). Two builds that should key identically expose identical
         # fingerprints; a mid-process salt flip (the C18c-flake class: moving HEAD, transient
         # rev-parse failure, contract-file read failure) is attributable from the build report alone.
@@ -222,9 +222,9 @@ class BuildCache:
     def get_bytes(self, key: str, ext: str) -> bytes | None:
         """Read a cached blob's PAYLOAD, or None on miss / disabled / refresh-mode / integrity
         failure. Increments hits on a verified read, misses otherwise. `refresh` mode forces a miss
-        (ignore hits and rewrite) — the forced-full-rebuild escape hatch that still repopulates.
+        (ignore hits and rewrite): the forced-full-rebuild escape hatch that still repopulates.
 
-        A1b integrity: the entry is `<sha256-hex>\\n<payload>`; the payload is RE-HASHED on every
+        Integrity: the entry is `<sha256-hex>\\n<payload>`; the payload is RE-HASHED on every
         read. A malformed entry or a digest mismatch (bit rot, tampering) is deleted, counted in
         `corrupt`, tallied as a MISS, and None returned so the caller recomputes — fail-safe."""
         if not self.enabled or self.mode == "refresh":
@@ -273,15 +273,15 @@ class BuildCache:
 
     def revoke_hit(self) -> None:
         """Correct the tally when a PAIRED read turns out unusable after this cache already counted
-        a hit — the torn-pair case at the served-XML seam: the xml blob hit but its meta sibling
+        a hit - the torn-pair case at the served-XML seam: the xml blob hit but its meta sibling
         missed, so the pair produced nothing and the station recomputes. The sibling's own get
-        already tallied its miss; this only revokes the phantom hit (Amendment A1b/c — mirrors
+        already tallied its miss; this only revokes the phantom hit (c - mirrors
         get_json's internal corrupt-payload discipline)."""
         self.hits -= 1
 
     def put_bytes(self, key: str, ext: str, data: bytes) -> None:
-        """Write a blob to the cache as a SELF-VERIFYING entry (`<sha256-hex-of-payload>\\n<payload>`,
-        A1b), temp-then-atomic-rename (design §2). No-op when disabled or in read-only (`ro`) mode.
+        """Write a blob to the cache as a SELF-VERIFYING entry (`<sha256-hex-of-payload>\\n<payload>`),
+        temp-then-atomic-rename (design §2). No-op when disabled or in read-only (`ro`) mode.
         os.replace is atomic within a filesystem on both POSIX and Windows, so a concurrent or
         interrupted build never observes a half-written entry."""
         if not self.enabled or self.mode == "ro":
@@ -330,7 +330,7 @@ class BuildCache:
 
     def counters(self) -> dict:
         """The deterministic hit/miss/write/corrupt tally for the build log + report (design §4.6).
-        salt_fp (A4) fingerprints the fixed salt so cross-build key-space drift is observable."""
+        salt_fp fingerprints the fixed salt so cross-build key-space drift is observable."""
         return {"enabled": self.enabled, "mode": self.mode, "hits": self.hits,
                 "misses": self.misses, "writes": self.writes, "corrupt": self.corrupt,
                 "write_errors": self.write_errors, "read_errors": self.read_errors,
@@ -342,7 +342,7 @@ class BuildCache:
     def prune(self) -> dict:
         """Drop entries untouched for PRUNE_MAX_AGE_DAYS, then enforce the size cap oldest-first.
         Runs at the end of a successful build. A prune failure must never fail the build; returns a
-        small summary. Adjudicated v1 policy (Amendment A1d): mtime-age + size cap ONLY — the
+        small summary. Adjudicated v1 policy: mtime-age + size cap ONLY - the
         design's original "20 builds" window is not implemented (the cache keeps no per-build
         ledger); age is the operator-meaningful bound, the size cap the hard ceiling."""
         if not self.enabled or self.mode == "ro" or not self.root.exists():
