@@ -320,17 +320,21 @@ def python_comments(text):
         tree = ast.parse(text)
     except SyntaxError:
         return [(where[0], body) for where, body in sorted(out)]
+    # An AST column offset counts UTF-8 BYTES, not characters, so the slice is taken over the
+    # encoded source. Slicing the str by those offsets overshoots by one position per non-ASCII
+    # character earlier on the line, which silently returns a comment that is not the comment.
+    raw = text.encode("utf-8")
     starts, total = [], 0
     for line in text.splitlines(keepends=True):
         starts.append(total)
-        total += len(line)
+        total += len(line.encode("utf-8"))
     for node in ast.walk(tree):
         value = getattr(node, "value", None)
         if (isinstance(node, ast.Expr) and isinstance(value, ast.Constant)
                 and isinstance(value.value, str)):
             out.append(((value.lineno, value.col_offset),
-                        text[starts[value.lineno - 1] + value.col_offset:
-                             starts[value.end_lineno - 1] + value.end_col_offset]))
+                        raw[starts[value.lineno - 1] + value.col_offset:
+                            starts[value.end_lineno - 1] + value.end_col_offset].decode("utf-8")))
     return [(where[0], body) for where, body in sorted(out)]
 
 
@@ -493,6 +497,8 @@ def work_item_tags(text):
 # look like code unambiguously; a run of three or more lines that each END the
 # way code ends is caught even when no single line would be, which is how a
 # commented-out template literal of markup is found.
+# A line that is code whatever else is on it: a declaration, a control keyword, a
+# return statement, a script tag, a mapped call.
 CODE_LINE = tuple(re.compile(p) for p in (
     r"^(?:const|let|var)\s+[\w$\[\]{},\s]+=\s*\S",
     r"^(?:export\s+)?(?:async\s+)?function\s*[\w$]*\s*\(",
@@ -500,16 +506,25 @@ CODE_LINE = tuple(re.compile(p) for p in (
     r"^(?:\}\s*)?(?:if|for|while|switch|catch)\s*\(",
     r"^(?:\}\s*)?else\s*(?:\{|if\s*\()",
     r"^return\b[^.!?]*;\s*$",
-    r"^(?:await\s+|new\s+)?[\w$][\w$.\[\]'\"]*\s*(?:\+|\|\||\?\?)?=[^=~>]\s*\S.*[;,{]\s*$",
-    r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*[;,)]\s*$",
-    r"^\.[\w$]+\(.*\)",
     r"^(?:def\s+\w+\s*\(|import\s+[\w.]+\s*$|from\s+[\w.]+\s+import\s)",
     r"^<script\b[^>]*>\s*(?:</script>)?\s*$",
     r"^(?:L\.map|fetch)\(\s*['\"`\w$]",
 ))
-# The looser tell, only ever counted in a run: a line that ends the way a
-# statement or a block ends, or opens a markup tag. Prose wraps mid-sentence.
-CODE_RUN_LINE = re.compile(r"[;{}]\s*$|^</?[a-zA-Z][\w-]*[\s>]|^\}\)?[;,]?\s*$")
+# A line that is code only because it is TERSE. An assignment or a call statement is also
+# the shape of a sentence naming a field ("write_errors = puts dropped after the rename
+# retries were exhausted;"), so these fire only on a line short enough to be code rather
+# than prose about code.
+CODE_LINE_TERSE = tuple(re.compile(p) for p in (
+    r"^(?:await\s+|new\s+)?[\w$][\w$.\[\]'\"]*\s*(?:\+|\|\||\?\?)?=[^=~>]\s*\S.*[;{]\s*$",
+    r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*[;,)]\s*$",
+    r"^\.[\w$]+\(.*\)",
+))
+TERSE_WORDS = 8
+# The looser tell, only ever counted in a run: a terse line that ends the way a statement
+# or a block ends AND carries a bracket or an operator, or one that opens a markup tag.
+# Prose wraps mid-sentence, and a prose line that ends on a semicolon is still prose.
+CODE_RUN_LINE = re.compile(r"^</?[a-zA-Z][\w-]*[\s>]|^\}\)?[;,]?\s*$"
+                           r"|(?=[^\n]*[=(){}\[\]])[^\n]*[;{}]\s*$")
 CODE_RUN = 3
 
 LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
@@ -541,7 +556,10 @@ def looks_like_code(comment):
             continue
         if any(p.match(line) for p in CODE_LINE):
             return True
-        run = run + 1 if CODE_RUN_LINE.search(line) else 0
+        terse = len(line.split()) <= TERSE_WORDS
+        if terse and any(p.match(line) for p in CODE_LINE_TERSE):
+            return True
+        run = run + 1 if (terse and CODE_RUN_LINE.search(line)) else 0
         if run >= CODE_RUN:
             return True
     return False
@@ -995,3 +1013,25 @@ def test_an_address_is_not_a_person(tmp_path):
     f.write_text('# The DB says Owner@Private.Test and the artifact carries owner@private.test.\na = 1\n',
                  encoding="utf-8")
     assert not offences([f]), "the decision-owner rule flagged an email address in a fixture"
+
+
+def test_a_docstring_with_a_non_ascii_character_is_extracted_exactly(tmp_path):
+    """An AST column offset counts bytes; slicing the source string by it overshoots one position
+    per non-ASCII character on the line, and the comment the sweep reads is then not the comment.
+    A rewrite driven off that slice eats the character after the docstring, which is code."""
+    f = tmp_path / "wide.py"
+    body = 'def f():\n    """A note about 0.1\u00b0 and \u03b2, ending here."""\n    a = 1\n    return a\n'
+    f.write_text(body, encoding="utf-8")
+    found = [c for _, c in comments(f, f.read_text(encoding="utf-8"))]
+    assert found == ['"""A note about 0.1\u00b0 and \u03b2, ending here."""'], found
+
+
+def test_prose_about_code_is_not_commented_out_code(tmp_path):
+    """An assignment and a semicolon are also the shape of a sentence naming a field, so the rule
+    reads terseness as well: a wordy line is prose about code, not code."""
+    f = tmp_path / "prose.py"
+    f.write_text("# write_errors = puts dropped after the rename retries were exhausted (a lock class);\n"
+                 "# read_errors = present-but-unreadable entries, counted as misses for the arithmetic;\n"
+                 "# corrupt = entries whose embedded payload checksum failed on read, then recomputed;\n"
+                 "a = 1\n", encoding="utf-8")
+    assert not offences([f]), "the rule read three sentences about counters as commented-out code"

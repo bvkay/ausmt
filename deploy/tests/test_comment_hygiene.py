@@ -320,17 +320,21 @@ def python_comments(text):
         tree = ast.parse(text)
     except SyntaxError:
         return [(where[0], body) for where, body in sorted(out)]
+    # An AST column offset counts UTF-8 BYTES, not characters, so the slice is taken over the
+    # encoded source. Slicing the str by those offsets overshoots by one position per non-ASCII
+    # character earlier on the line, which silently returns a comment that is not the comment.
+    raw = text.encode("utf-8")
     starts, total = [], 0
     for line in text.splitlines(keepends=True):
         starts.append(total)
-        total += len(line)
+        total += len(line.encode("utf-8"))
     for node in ast.walk(tree):
         value = getattr(node, "value", None)
         if (isinstance(node, ast.Expr) and isinstance(value, ast.Constant)
                 and isinstance(value.value, str)):
             out.append(((value.lineno, value.col_offset),
-                        text[starts[value.lineno - 1] + value.col_offset:
-                             starts[value.end_lineno - 1] + value.end_col_offset]))
+                        raw[starts[value.lineno - 1] + value.col_offset:
+                            starts[value.end_lineno - 1] + value.end_col_offset].decode("utf-8")))
     return [(where[0], body) for where, body in sorted(out)]
 
 
@@ -493,6 +497,8 @@ def work_item_tags(text):
 # look like code unambiguously; a run of three or more lines that each END the
 # way code ends is caught even when no single line would be, which is how a
 # commented-out template literal of markup is found.
+# A line that is code whatever else is on it: a declaration, a control keyword, a
+# return statement, a script tag, a mapped call.
 CODE_LINE = tuple(re.compile(p) for p in (
     r"^(?:const|let|var)\s+[\w$\[\]{},\s]+=\s*\S",
     r"^(?:export\s+)?(?:async\s+)?function\s*[\w$]*\s*\(",
@@ -500,16 +506,25 @@ CODE_LINE = tuple(re.compile(p) for p in (
     r"^(?:\}\s*)?(?:if|for|while|switch|catch)\s*\(",
     r"^(?:\}\s*)?else\s*(?:\{|if\s*\()",
     r"^return\b[^.!?]*;\s*$",
-    r"^(?:await\s+|new\s+)?[\w$][\w$.\[\]'\"]*\s*(?:\+|\|\||\?\?)?=[^=~>]\s*\S.*[;,{]\s*$",
-    r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*[;,)]\s*$",
-    r"^\.[\w$]+\(.*\)",
     r"^(?:def\s+\w+\s*\(|import\s+[\w.]+\s*$|from\s+[\w.]+\s+import\s)",
     r"^<script\b[^>]*>\s*(?:</script>)?\s*$",
     r"^(?:L\.map|fetch)\(\s*['\"`\w$]",
 ))
-# The looser tell, only ever counted in a run: a line that ends the way a
-# statement or a block ends, or opens a markup tag. Prose wraps mid-sentence.
-CODE_RUN_LINE = re.compile(r"[;{}]\s*$|^</?[a-zA-Z][\w-]*[\s>]|^\}\)?[;,]?\s*$")
+# A line that is code only because it is TERSE. An assignment or a call statement is also
+# the shape of a sentence naming a field ("write_errors = puts dropped after the rename
+# retries were exhausted;"), so these fire only on a line short enough to be code rather
+# than prose about code.
+CODE_LINE_TERSE = tuple(re.compile(p) for p in (
+    r"^(?:await\s+|new\s+)?[\w$][\w$.\[\]'\"]*\s*(?:\+|\|\||\?\?)?=[^=~>]\s*\S.*[;{]\s*$",
+    r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*[;,)]\s*$",
+    r"^\.[\w$]+\(.*\)",
+))
+TERSE_WORDS = 8
+# The looser tell, only ever counted in a run: a terse line that ends the way a statement
+# or a block ends AND carries a bracket or an operator, or one that opens a markup tag.
+# Prose wraps mid-sentence, and a prose line that ends on a semicolon is still prose.
+CODE_RUN_LINE = re.compile(r"^</?[a-zA-Z][\w-]*[\s>]|^\}\)?[;,]?\s*$"
+                           r"|(?=[^\n]*[=(){}\[\]])[^\n]*[;{}]\s*$")
 CODE_RUN = 3
 
 LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
@@ -541,7 +556,10 @@ def looks_like_code(comment):
             continue
         if any(p.match(line) for p in CODE_LINE):
             return True
-        run = run + 1 if CODE_RUN_LINE.search(line) else 0
+        terse = len(line.split()) <= TERSE_WORDS
+        if terse and any(p.match(line) for p in CODE_LINE_TERSE):
+            return True
+        run = run + 1 if (terse and CODE_RUN_LINE.search(line)) else 0
         if run >= CODE_RUN:
             return True
     return False
