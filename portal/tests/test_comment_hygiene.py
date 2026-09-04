@@ -902,17 +902,31 @@ def labels_for(comment, cite_contract=False):
 def comment_runs(path, text):
     """(line number, text) for each run of comments a reader reads as one. A block of // or #
     lines is one comment to a reader, and a shape read line by line sees a bracket opened on one
-    line and closed on the next as two scars."""
+    line and closed on the next as two scars. The gutter says which lines are one comment: two
+    consecutive line comments are the same comment when their markers stand in the same COLUMN,
+    so a comment trailing a statement is not read as the next line of the block above it, and a
+    trailing comment's own continuation, aligned under it, is."""
+    lines = text.splitlines()
+
+    def where(lineno, body):
+        """(column of the marker, whether code stands in front of it)."""
+        if not 0 < lineno <= len(lines):
+            return -1, False
+        line = lines[lineno - 1]
+        at = line.find(body.split("\n", 1)[0])
+        return at, at > 0 and bool(line[:at].strip())
+
     out = []
     for lineno, body in comments(path, text):
         lead, span = body[:2], body.count("\n")
+        at, _ = where(lineno, body)
         if (out and lead in ("//", "# ", "#\n", "#") and out[-1][2] == lead
-                and lineno == out[-1][3] + 1):
+                and lineno == out[-1][3] + 1 and at >= 0 and at == out[-1][4]):
             out[-1][1] += "\n" + body
             out[-1][3] = lineno + span
             continue
-        out.append([lineno, body, lead, lineno + span])
-    return [(lineno, body) for lineno, body, _, _ in out]
+        out.append([lineno, body, lead, lineno + span, at])
+    return [entry[0:2] for entry in out]
 
 
 def offences(files, cite_contract=False, root=None):
@@ -961,10 +975,42 @@ LONE_PUNCTUATION = re.compile(r"^[)\].]$")
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
 # fragment of a cut sentence, which the reader is handed as a file name.
+# A hyphen that ends a token is the join of a compound whose second half was cut: "PRE-C1c" leaves
+# "PRE-", "CONTRIBUTOR-CREDIT-SPEC" leaves "CONTRIBUTOR-CREDIT-:". Read on the LINE, because a
+# hyphen at the end of a line is a compound wrapped by the gutter and not a cut. Suspended
+# hyphenation ("pre- and post-processing") is the one shape English writes on purpose, and it is
+# named by the word that follows it. A dot that opens a file name ("no-.git") is the second half
+# of the compound, so only a dot that ends the sentence counts.
+DANGLING_HYPHEN = re.compile(r"[A-Za-z0-9]-(?=[ \t](?!(?:and|or|to)\b)|[:;,)\]]|\.(?![A-Za-z0-9]))")
+# A pointer that replaced the head of a sentence and left the rest of it standing: the run then
+# reads "See docs: ... . like a nameless row (...)", a subject-less fragment in shipped bytes.
+POINTER_ORPHAN = re.compile(r"See docs:[^\n]*?\.\s+(?![A-Z(\[`\"'])(\S+)")
 POINTER_ANY = re.compile(r"See docs:[^\n]*")
 POINTER_GRAMMAR = re.compile(
     r"^See docs: portal internals, ([A-Za-z0-9_-]+\.[A-Za-z0-9]+)"
     r"(?:, ([A-Za-z0-9 ,'-]+))?\.$")
+
+
+# A comment may open a sentence on a code identifier, and an identifier keeps its own case:
+# `ausmt_id`, `tf.json`, `buildState()`, `_tourRestore`. One is told from an ordinary English word
+# by the characters no English word carries (an underscore, a dot or a slash inside the token, a
+# call's brackets) or by standing as a name the same file declares.
+IDENTIFIER_MARK = re.compile(r"[_(\[]|\w[./:]\w")
+SYMBOL = re.compile(r"\b(?:def|class|function|const|let|var)\s+([A-Za-z_$][\w$]*)"
+                    r"|\b([A-Za-z_$][\w$]*)\s*[:=]\s*(?:function\b|\()")
+
+
+def symbols_in(text):
+    """Every name a file declares, so a sentence that opens on one is naming code, not stammering."""
+    found = {a or b for a, b in SYMBOL.findall(text)}
+    found.discard("")
+    return found
+
+
+def reads_as_an_identifier(word, symbols):
+    """True when the word a sentence opens on is a name out of the code rather than English."""
+    bare_word = word.strip("`\"'*,;:").rstrip(".")
+    return not bare_word or bool(IDENTIFIER_MARK.search(bare_word)) or bare_word in symbols
 
 
 def unquoted(text):
@@ -1011,6 +1057,7 @@ def shape_offences(files, root=None):
     for path in files:
         text = path.read_text(encoding="utf-8")
         where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+        symbols = symbols_in(text)
         for lineno, comment in comment_runs(path, text):
             lines = bare(comment).splitlines()
             body = [line for line in lines if line.strip()]
@@ -1046,6 +1093,11 @@ def shape_offences(files, root=None):
                 said.append("a connector left standing where a token was cut")
             if any(LONE_PUNCTUATION.match(line.strip()) for line in body):
                 said.append("a line carrying one bracket")
+            if any(DANGLING_HYPHEN.search(line) for line in clean.splitlines()):
+                said.append("a hyphen with nothing after it")
+            orphan = POINTER_ORPHAN.search(bare_flat)
+            if orphan and not reads_as_an_identifier(orphan.group(1), symbols):
+                said.append("a pointer standing in front of a sentence fragment")
             if any(m is None for _, m in pointer_fragments(flat)):
                 said.append("a pointer that is not of the pointer grammar")
             if said:
@@ -2213,6 +2265,10 @@ def test_each_broken_shape_is_caught(tmp_path):
             '"""The rollup (the runner is the only place YAML is parsed -)."""\n',
         "a space before the bracket that closes a group":
             '"""A 26-char string from the Crockford-base32 id charset (design )."""\n',
+        "a hyphen with nothing after it":
+            '"""Reconstruct the PRE- per-station station.json shape."""\n',
+        "a pointer standing in front of a sentence fragment":
+            '"""See docs: portal internals, add-survey.html. like a nameless row."""\n',
     }
     for label, body in cases.items():
         f = tmp_path / "broken.py"
@@ -2242,6 +2298,14 @@ def test_whole_prose_is_not_a_broken_shape(tmp_path):
         # A quoted run wrapped across two comment lines closes the bracket it opened.
         "wrapped.js": '// Pinned separately (tests/test_entity_pages.py, "the survey blurb\n'
                       '// prose must render"). The card carries no description block.\nvar a = 1;\n',
+        # A compound wrapped by the gutter keeps its hyphen at the end of the LINE, and suspended
+        # hyphenation names the word it is suspended in front of.
+        "wrap.js": "// The drawer is the densest consumer of the PHASE 2 products and of the section-\n"
+                   "// agnostic combined-post machinery.\nvar a = 1;\n",
+        "suspended.py": '"""The pre- and post-processing notes both ride the same conditioning field."""\n',
+        # A pointer followed by a code identifier is naming code, not stammering.
+        "identifier.js": "// See docs: portal internals, state.js. buildState() folds the policy onto\n"
+                         "// each station.\nvar a = 1;\n",
     }
     for name, body in cases.items():
         f = tmp_path / name
@@ -2260,6 +2324,21 @@ def test_a_bracket_left_open_inside_a_run_is_caught(tmp_path):
                  encoding="utf-8")
     hits = shape_offences([f])
     assert hits and "unmatched (" in hits[0], hits
+
+
+def test_the_gutter_says_which_lines_are_one_comment(tmp_path):
+    """A comment trailing a statement is its own comment: joining it to the block above merges two
+    people's sentences and reports a bracket one of them never opened. A trailing comment's own
+    continuation, aligned under it in the same column, IS the same comment."""
+    f = tmp_path / "gutter.js"
+    f.write_text("// The citation rendered inside the Cite box.\n"
+                 "function cite(m){const base=apa(m);   // the sentence WITHOUT the DOI suffix\n"
+                 "  if(!m) return base;                 // an unknown record renders nothing\n"
+                 "}\n", encoding="utf-8")
+    runs = comment_runs(f, f.read_text(encoding="utf-8"))
+    assert len(runs) == 2, runs
+    assert runs[0][0] == 1 and "Cite box" in runs[0][1]
+    assert runs[1][0] == 2 and "DOI suffix" in runs[1][1] and "unknown record" in runs[1][1]
 
 
 def test_a_connector_at_the_end_of_a_run_is_caught(tmp_path):

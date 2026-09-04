@@ -484,7 +484,7 @@ def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
 
 
 def _reconstruct_prefix_station_json(sci_science_present=True):
-    """Reconstruct the PRE- per-station station.json shape (full TF science, emitted for EVERY survey
+    """Reconstruct the pre-fix per-station station.json shape (full TF science, emitted for EVERY survey
     regardless of access state). Used by the red-prove below to show the leak-sweep is non-vacuous: the
     sweep MUST flag this pre-fix document."""
     return {
@@ -501,7 +501,7 @@ def _reconstruct_prefix_station_json(sci_science_present=True):
 
 
 def test_products_leak_sweep_catches_prefix_emitter(tmp_path):
-    """RED-PROVE (non-vacuity): hermetically export the PRE- station.json + dimensionality.json into a
+    """RED-PROVE (non-vacuity): hermetically export the pre-fix station.json + dimensionality.json into a
     products/ tree and run the SAME sweep the PIN above uses — it MUST flag the leak (science fields present,
     exact coordinates present, dimensionality.json emitted). If this passed, the PIN would be vacuous."""
     prod = tmp_path / "products"

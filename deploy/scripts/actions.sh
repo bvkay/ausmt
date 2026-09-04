@@ -250,8 +250,8 @@ recipe_backup() {
 }
 
 # recipe_rollback <build_id>: atomic `current` symlink repoint to a RETAINED build (the
-# "rollback-repoints" pin). NEVER rebuilds — it only moves the pointer. The id is already charset- +
-# inventory-validated by the caller. Writes rollback.pin so the reconcile tick does NOT auto-revert
+# "rollback-repoints" pin). NEVER rebuilds; it only moves the pointer. The id is already charset-
+# and inventory-validated by the caller. Writes rollback.pin so the reconcile tick does NOT auto-revert
 # while the manual pin stands (rollback-repoints).
 recipe_rollback() {
   _bid="$1"; _by="$2"

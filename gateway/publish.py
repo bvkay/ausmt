@@ -225,10 +225,11 @@ def stage_and_commit(git_runner, package_dir: Path, surveys_live: Path, slug: st
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- parity: ANY error below the PublishError layer (an
-        # OSError from copytree, a subprocess failure from the git runner) must still roll the WORKING
-        # TREE back, never leave surveys-live on the submit/ branch with a half-copied package. Re-raised
-        # AS a PublishError so the caller's fail-closed PUBLISH_FAILED path holds.
+    except Exception as exc:  # noqa: BLE001 -- parity with the layer above
+        # ANY error below the PublishError layer (an OSError from copytree, a subprocess failure from
+        # the git runner) must still roll the WORKING TREE back, never leave surveys-live on the
+        # submit/ branch with a half-copied package. Re-raised AS a PublishError so the caller's
+        # fail-closed PUBLISH_FAILED path holds.
         _rollback(git_runner, surveys_live, pre, branch)
         raise PublishError(
             "stage-write", f"unexpected error mid-publish ({type(exc).__name__}): {exc}"[:500]) from exc
@@ -282,10 +283,11 @@ def commit_metadata_edit(git_runner, surveys_live: Path, slug: str, new_yaml: by
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- parity: ANY error below the PublishError layer (an
-        # OSError from write_bytes, a subprocess failure from the git runner) must still roll the WORKING
-        # TREE back. write_bytes truncates before it writes, so an escaping error leaves survey.yaml half
-        # written and the checkout dirty. Re-raised AS a PublishError so the caller's 409 path holds.
+    except Exception as exc:  # noqa: BLE001 -- parity with the layer above
+        # ANY error below the PublishError layer (an OSError from write_bytes, a subprocess failure
+        # from the git runner) must still roll the WORKING TREE back. write_bytes truncates before it
+        # writes, so an escaping error leaves survey.yaml half written and the checkout dirty.
+        # Re-raised AS a PublishError so the caller's 409 path holds.
         _rollback(git_runner, surveys_live, pre, branch)
         raise PublishError(
             "edit-write", f"unexpected error mid-edit ({type(exc).__name__}): {exc}"[:500]) from exc
@@ -372,11 +374,11 @@ def commit_station_removal(git_runner, surveys_live: Path, slug: str, new_yaml: 
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- parity: ANY error below the PublishError layer (an
-        # OSError from write_bytes, a subprocess failure from the git runner) must still roll the WORKING
-        # TREE back. The EDIs are git-rm'd BEFORE the yaml write, so an escaping error leaves surveys-live
-        # on the stationrm/ branch with the station files already gone. Re-raised AS a PublishError so the
-        # caller's 409 path holds.
+    except Exception as exc:  # noqa: BLE001 -- parity with the layer above
+        # ANY error below the PublishError layer (an OSError from write_bytes, a subprocess failure
+        # from the git runner) must still roll the WORKING TREE back. The EDIs are git-rm'd BEFORE the
+        # yaml write, so an escaping error leaves surveys-live on the stationrm/ branch with the
+        # station files already gone. Re-raised AS a PublishError so the caller's 409 path holds.
         _rollback(git_runner, surveys_live, pre, branch)
         raise PublishError(
             "removal-write", f"unexpected error mid-removal ({type(exc).__name__}): {exc}"[:500]) from exc
@@ -525,8 +527,9 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- ANY mid-batch error (an OSError from write_bytes, a
-        # subprocess error from the git runner) must still roll the WORKING TREE back — never leave
+    except Exception as exc:  # noqa: BLE001 -- parity with the layer above
+        # ANY mid-batch error (an OSError from write_bytes, a subprocess error from the git runner)
+        # must still roll the WORKING TREE back, never leave
         # surveys-live on the collbatch/ branch with partial commits. Re-raised AS a PublishError so the
         # caller's fail-closed 409 path holds (main is already protected: the ff-merge is after the loop).
         _rollback(git_runner, surveys_live, pre, branch)

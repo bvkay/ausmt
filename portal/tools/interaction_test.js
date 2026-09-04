@@ -974,9 +974,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "A1: marker colour must be IDENTICAL for AusLAMP vs non-AusLAMP LPMT (no colour split), got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
   ok(A.markerColor(_memberLp) === "#2E8FA3", "A1: all LPMT must render the flagship teal #2E8FA3, got " + A.markerColor(_memberLp));
   // The hover tooltip is station name + survey name ONLY - no diagnostic Q, no
-  // type/AusLAMP label. Pre- it swapped the type label to "AusLAMP" for members; that distinction now
-  // lives only clustering split. Asserting the diagnostic + type/AusLAMP label are GONE is what
-  // fails on code (which carried "· Q 4.2" and the AusLAMP/LPMT label).
+  // type/AusLAMP label. The member/non-member distinction lives only in the clustering split.
+  // Asserting the diagnostic and the type/AusLAMP label are GONE is what fails on a tooltip that
+  // carries "· Q 4.2" or the AusLAMP/LPMT label.
   const _tMemb = A.tooltipText(_memberLp), _tOther = A.tooltipText(_otherLp);
   ok(_tMemb === "S1 · Alpha Survey", "O4: member tooltip must be 'station · survey' only, got: " + JSON.stringify(_tMemb));
   ok(_tOther === "S2 · Beta Survey", "O4: non-member tooltip must be 'station · survey' only, got: " + JSON.stringify(_tOther));
@@ -4054,7 +4054,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // All three served: three per-station manifest files[] rows. The MTH5 entry is the STATION's own h5,
   // never the survey's <slug>-tf.h5 bundle: this node sits in a STATION drawer beside a Files tab that
   // reads the station row, and the discriminating case (bundle present, station row absent) is pinned
-  // under STATION- below.
+  // by the station MTH5 case below.
   A.setManifest({ files: [
     { ausmt_id: "nz.gamma.G1", format: "edi", url: "files/g1.edi", size: 1000 },
     { ausmt_id: "nz.gamma.G1", format: "emtfxml", url: "files/g1.xml", size: 900 },

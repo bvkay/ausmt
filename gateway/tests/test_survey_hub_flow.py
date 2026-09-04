@@ -567,9 +567,8 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             r = await client.get("/gateway/curator/survey/merge-survey-2026?tab=metadata")
             assert r.status_code == 200
             body = r.text
-            # The sidebar/TOC is exactly the merged order, one entry per merged group. CONTRIBUTOR-
-            # CREDIT-: the four investigator/creator/contributor panels collapse to ONE
-            # "People & credit" entry.
+            # The sidebar/TOC is exactly the merged order, one entry per merged group: the four
+            # investigator/creator/contributor panels collapse to ONE "People & credit" entry.
             toc = re.findall(r'data-hub-section="[^"]+">([^<]+)', body)
             assert toc == ["Core fields", "People &amp; credit", "Organisations &amp; roles",
                            "Identifiers &amp; PIDs", "Citation", "Identity &amp; designation",

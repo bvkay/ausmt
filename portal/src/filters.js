@@ -80,7 +80,7 @@ function renderFind(){const box=document.getElementById("findResults");
   findActive=-1;find.removeAttribute("aria-activedescendant");}
 function hasShapes(){let a=false;drawn.eachLayer(()=>a=true);return a;}
 // Coordinate access: a custodian-withheld station has null lat/lon (no position). It must NOT be spatially
-// selectable - without this guard null coerces to 0 and a polygon over (0,0) would phantom- select it. See
+// selectable - without this guard null coerces to 0 and a polygon over (0,0) would phantom-select it. See
 // docs: portal internals, filters.js.
 function inShapes(s){if(!hasPosition(s))return false;
   let inside=false;drawn.eachLayer(layer=>{if(inside)return;

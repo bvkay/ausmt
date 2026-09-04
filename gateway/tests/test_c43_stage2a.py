@@ -4,8 +4,9 @@ guarded behaviour. Async bodies run under conftest.run.
 
 Pins here:
   * PHASE QUADRANT + φyx UNWRAP (phaseqc, the authoritative server-side seam the STATIONS_JS mirrors):
-    the +180 presentation shift on t[4] is inverted before classifying - a TRUE- station (stored t[4]
-    near 0…90) classifies IN-quadrant; reading the stored value as true phase mis-classifies it.
+    the +180 presentation shift on t[4] is inverted before classifying - a station whose TRUE phase
+    sits in the third quadrant (stored t[4] near 0…90) classifies IN-quadrant; reading the stored
+    value as true phase mis-classifies it.
   * [FC-2] LAG LABEL: with served ≠ published the Stations panel carries the publish-pending label.
   * CSP SWEEP extended to every NEW Stage-2a renderer/JS constant + rendered surface.
   * HISTORY READ-ONLY: the history-job argv carries only the read-only `log` verb (allowlist assertion).
@@ -74,7 +75,8 @@ def test_quadrant_slack_matches_engine_gate():
 def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
     """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits (−180…−90) has a STORED t[4] near 0…90
     (because engine _edi_tf stores phs_yx_adj = true + 180, re-wrapped). The workbench MUST subtract
-    the shift and classify the TRUE phase - so a true- station classifies IN-quadrant. FAILS IF the
+    the shift and classify the TRUE phase - so a station whose true phase sits in the third
+    quadrant classifies IN-quadrant. FAILS IF the
     workbench reads the stored value as the true phase (then stored 45° would look like Q1 = 'in Q1',
     and it would read as OUT - the mis-classification this pin catches).
 

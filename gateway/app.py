@@ -2169,7 +2169,7 @@ class Gateway:
 
     def _retire_confirm_response(self, request: Request, name: str, slug: str, *, error: str = "",
                                  status_code: int = 200) -> Response:
-        """Render the retirement confirmation page for `slug`: the record- disclosure + the typed-slug
+        """Render the retirement confirmation page for `slug`: the record disclosure + the typed-slug
         / release-note / TOTP-code form — or, when the action cannot proceed, the honest refusal in
         place of the form (the last-survey guard, or an un-enrolled curator). Reused by the GET
         confirmation route AND by the POST handler's fail-closed re-renders (so a refusal shows the

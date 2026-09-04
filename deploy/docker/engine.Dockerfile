@@ -140,9 +140,9 @@ WORKDIR /app/engine
 # Editable install, no deps (the lock already installed every dependency pinned). This install is
 # what makes `python -m extract.build_portal` resolve: pyproject's [tool.setuptools.packages.find]
 # includes BOTH ausmt_science* AND extract*, so `extract` is a real installed package on
-# sys.path -- NOT a cwd artifact. (Pre- the comment here claimed the install did this while it
-# did not: `extract` was excluded from the package list, and the module only resolved because this
-# WORKDIR put the engine dir on sys.path. That undocumented cwd contract is retired.) The image
+# sys.path -- NOT a cwd artifact. `extract` must stay in that package list: with it excluded the
+# module resolves only because this WORKDIR puts the engine dir on sys.path, which is a cwd
+# contract nothing states. The image
 # ENTRYPOINT below still runs from this WORKDIR, but resolution must not DEPEND on it; and the
 # gw-runner's preview subprocess passes an explicit cwd via AUSMT_ENGINE_DIR (runner.py)
 # so its engine spawn is likewise independent of the inherited working directory.
