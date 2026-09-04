@@ -39,7 +39,7 @@
 #   AUSMT_RECONCILE_MAKE  (optional) override the rebuild command (test shim); default:
 #                                    `make -C $AUSMT_CODE_DIR/deploy rebuild-data`
 #   AUSMT_RECONCILE_LOCK  (optional) lock-file path override; default $AUSMT_DATA_DIR/reconcile.lock
-#   AUSMT_RECONCILE_JOURNALCTL (optional) the journalctl command used to ask the KERNEL journal whether
+#   AUSMT_RECONCILE_JOURNALCTL (optional) the journalctl command that asks the KERNEL journal whether
 #                                    a failed rebuild was OOM-killed (test shim); default `journalctl`
 #
 # FLAGS:
@@ -63,7 +63,7 @@ done
 
 # The data root must PRE-EXIST (mounts + ownership prep): fabricating any of it here would let an
 # unmounted volume or a mistyped AUSMT_DATA_DIR produce a phantom tree that sits in quiet
-# sync_failed forever, writing status into a directory nobody serves (review L4).
+# sync_failed forever, writing status into a directory nobody serves.
 [ -d "$AUSMT_DATA_DIR" ] || { printf 'reconcile: AUSMT_DATA_DIR does not exist: %s (unmounted volume? typo in .env?)\n' "$AUSMT_DATA_DIR" >&2; exit 1; }
 
 SURVEYS_LIVE="$AUSMT_DATA_DIR/surveys-live"
@@ -187,7 +187,7 @@ done
 # instead of one actionable line.) Probe with the same tmp name pattern the status writer uses.
 # mktemp (not a hand-rolled `> file.tmp.$$`): the state dir is DELIBERATELY group-writable to the
 # gateway's uid (README step 0b), and a predictable tmp name would let a compromised container
-# pre-plant a symlink the redirect follows onto an operator-writable target (review L5). mktemp
+# pre-plant a symlink the redirect follows onto an operator-writable target. mktemp
 # creates O_EXCL with an unpredictable suffix — it can neither follow nor be raced.
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$STATE_DIR" 2>/dev/null || true
@@ -308,7 +308,7 @@ oom_kills_since() {
 write_status() {
   _action="$1"; _head="$2"; _built="$3"; _build_id="$4"; _log_file="$5"; _detail="${6:-}"
   mkdir -p "$STATE_DIR"
-  # mktemp, same rationale as the probe above (review L5): O_EXCL + unpredictable name in a dir a
+  # mktemp, same rationale as the probe above: O_EXCL + unpredictable name in a dir a
   # container uid can also write — never a predictable `.tmp.$$` a symlink could be planted at.
   _tmp=$(mktemp "$STATUS_FILE.tmp.XXXXXX" 2>/dev/null) || {
     printf 'reconcile: cannot create status tmp under %s\n' "$STATE_DIR" >&2; return 1; }
@@ -476,7 +476,7 @@ PYEOF
     head=$(git -C "$SURVEYS_LIVE" rev-parse --short HEAD 2>/dev/null || true)
   fi
   # An empty $head must never reach the prefix compare: `"$head"*` with head="" is the pattern `*`,
-  # which matches ANY built value — a false noop with a lying status (review L3). Near-unreachable
+  # which matches ANY built value — a false noop with a lying status. Near-unreachable
   # (rev-parse failing right after a successful pull), but refuse loudly rather than guess.
   if [ -z "$head" ]; then
     printf 'reconcile: cannot resolve surveys-live HEAD in %s — refusing to compare or build\n' "$SURVEYS_LIVE" >&2
@@ -503,7 +503,7 @@ PYEOF
   # rebuild.request (deliberate human intent always gets a fresh attempt). Side effect, accepted +
   # documented: a FAILED first build on a fresh box (no build.json yet) also holds instead of
   # retrying every 15 min — a deterministic build failure needs an operator, not a retry storm.
-  # Known-and-accepted looseness (review L2): a sync_failed tick overwrites the status doc and
+  # Known-and-accepted looseness: a sync_failed tick overwrites the status doc and
   # thereby the latch, so a flaky origin buys ONE extra rebuild attempt per connectivity blip —
   # bounded per-blip, and the status never lies about what happened.
   if [ -z "$built" ] && [ "$request_present" -eq 0 ]; then
@@ -606,7 +606,7 @@ PYEOF
   # A rebuild we cannot log is a rebuild we cannot debug from the panel — fail loud BEFORE building
   # (site-data/ is uid-10001-owned; logs/ needs the one-time operator-owned prep, README step 0).
   # Probe WRITABILITY too, not just existence: an existing-but-unwritable logs/ passes `mkdir -p`
-  # and would only surface at the build redirect, with make never launched (review L1).
+  # and would only surface at the build redirect, with make never launched.
   if ! mkdir -p "$LOG_DIR" 2>/dev/null || ! _lprobe=$(mktemp "$LOG_DIR/.probe.XXXXXX" 2>/dev/null); then
     printf 'reconcile: log dir %s cannot be created or is not writable — one-time ownership prep missing (deploy/README.md "Serve reconcile" step 0)\n' "$LOG_DIR" >&2
     write_status "failed" "$head" "$built" "$(read_build_id)" ""

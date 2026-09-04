@@ -88,8 +88,8 @@ docker run --rm \
 # ----- apply the stack ----------------------------------------------------------------------------
 # Was the edge ALREADY running before this apply? If so, a `compose up -d` that sees no image/compose
 # change will NOT recreate the container, so a container that keeps a bind-mounted Caddyfile would go on
-# serving the OLD config in memory (the 2026-07 stale-wall incident: the new Caddyfile validated, but the
-# running edge never picked it up). We capture that state BEFORE `up -d` so we know whether an explicit
+# serving the OLD config in memory (the stale-wall failure mode: the new Caddyfile validates, but the
+# running edge never picks it up). We capture that state BEFORE `up -d` so we know whether an explicit
 # reload is needed afterwards. `ps -q` prints the container id only when the service has a running
 # container; empty => not running (fresh install), so no reload is needed (up -d starts it clean).
 WAS_RUNNING=""

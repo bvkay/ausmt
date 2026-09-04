@@ -73,7 +73,7 @@ FROM python:3.12-slim AS runtime
 ARG GIT_SHA=unknown
 ENV AUSMT_ENGINE_COMMIT=${GIT_SHA}
 
-# git is a REAL runtime dependency, not a build tool: build_identity() (C12) records the SURVEYS
+# git is a REAL runtime dependency, not a build tool: build_identity() records the SURVEYS
 # checkout's HEAD as source_commit in build.json/build_provenance.json -- the build<->data
 # handshake. python:3.12-slim ships no git, so without this every containerised rebuild would
 # silently record source_commit=null (the in-image test suite caught exactly that: fourth
@@ -87,7 +87,7 @@ RUN apt-get update \
 RUN groupadd --gid 10001 ausmt \
  && useradd --uid 10001 --gid ausmt --home-dir /home/ausmt --create-home --shell /usr/sbin/nologin ausmt
 
-# U2: /srv/surveys is a read-only bind mount of the HOST operator's ausmt-surveys checkout, owned by
+# /srv/surveys is a read-only bind mount of the HOST operator's ausmt-surveys checkout, owned by
 # the host uid -- NOT by the ausmt(10001) user this container runs as. git >=2.35's dubious-ownership
 # check refuses to run ANY command (including rev-parse) in a repo owned by a different uid, so
 # build_identity()'s source_commit resolution silently failed (rev-parse errored -> caught -> None)

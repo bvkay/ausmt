@@ -309,8 +309,8 @@ recipe_restore() {
     return 1
   fi
   # 1. Stop the gateway so nothing writes the live DB during the sequence. From HERE ON the gateway is
-  #    DOWN, so EVERY exit path below MUST restart it (S3: the sole ops surface must never be left down,
-  #    including on a disk/inode-exhaustion mktemp failure — that was the shipped bug).
+  #    DOWN, so EVERY exit path below MUST restart it: the sole ops surface must never be left down,
+  #    including on a disk/inode-exhaustion mktemp failure.
   _gateway_stop
   # 2. DRILL FIRST. A failing drill ABORTS — the live DB is never touched (the "drill-fail aborts
   #    untouched" pin: live DB byte-identical after). Restart on the way out.

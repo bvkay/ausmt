@@ -98,8 +98,8 @@
 	# ---- URL canonicalisation for the published entity shapes ------------------------------------
 	# Nothing on the site emits a trailing-slash entity URL, but readers, mail clients, CMSs and
 	# reference managers add one habitually - and @entityPage below is $-anchored, so every one of
-	# those variants used to miss it, miss /data/*, miss the portal root and land on 404.html. They
-	# 301 to the published slash-free form instead. The front door passes the slash form through
+	# those variants would otherwise miss it, miss /data/*, miss the portal root and land on 404.html.
+	# They 301 to the published slash-free form instead. The front door passes the slash form through
 	# byte-for-byte (its own pin), which is precisely why the canonicalisation lives HERE: one hop,
 	# at the layer that knows the shapes. The index aliases (/surveys/, /surveys/index and its .html
 	# twin) fold onto the bare form for the same reason the root alias does: one URL per document.
@@ -384,8 +384,8 @@
 	# ---- URL canonicalisation for the published entity shapes ------------------------------------
 	# Nothing on the site emits a trailing-slash entity URL, but readers, mail clients, CMSs and
 	# reference managers add one habitually - and @entityPage below is $-anchored, so every one of
-	# those variants used to miss it, miss /data/*, miss the portal root and land on 404.html. They
-	# 301 to the published slash-free form instead. The front door passes the slash form through
+	# those variants would otherwise miss it, miss /data/*, miss the portal root and land on 404.html.
+	# They 301 to the published slash-free form instead. The front door passes the slash form through
 	# byte-for-byte (its own pin), which is precisely why the canonicalisation lives HERE: one hop,
 	# at the layer that knows the shapes. The index aliases (/surveys/, /surveys/index and its .html
 	# twin) fold onto the bare form for the same reason the root alias does: one URL per document.

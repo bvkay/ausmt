@@ -27,7 +27,7 @@
 	# exactly: it opens NO network port (the socket lives in the container's own /run, not on the host,
 	# even under network_mode: host), so there is no new internet- or host-reachable surface. What it
 	# buys is a working `caddy reload`: install-frontdoor.sh reloads the running edge in place after a
-	# Caddyfile change instead of leaving it serving the OLD wall (the 2026-07 stale-config incident).
+	# Caddyfile change instead of leaving it serving the OLD wall (the stale-config failure mode).
 	# `caddy reload --config /etc/caddy/Caddyfile` reads this admin address from the file. If you would
 	# rather forgo in-place reload entirely, set `admin off` here again: the installer detects the reload
 	# failure and falls back to `docker compose restart frontdoor` (a ~1s bounce; certs persist in the
@@ -218,9 +218,9 @@
 	}
 	# A bare /stations has nothing to list and never will: the 2,625 station pages are served for
 	# the URL contract but are deliberately noindex and unadvertised, so the prefix keeps its 301
-	# to the portal root, query preserved. /surveys and /collections used to do the same because
-	# there was nothing behind them; the engine now emits an index page at each, the box serves it
-	# at that exact path, so those two prefixes PASS THROUGH to the reader like any other portal
+	# to the portal root, query preserved. /surveys and /collections must NOT be redirected the same
+	# way: the engine emits an index page at each and the box serves it at that exact path, so those
+	# two prefixes PASS THROUGH to the reader like any other portal
 	# path. Redirecting them here would make two canonical, indexable hub pages unreachable from
 	# the public name, and the doctor's tier-3 leg probes both for exactly that reason.
 	@stations_bare path /stations /stations/

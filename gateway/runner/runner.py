@@ -71,9 +71,9 @@ class RunnerConfig:
     heartbeat_s: float = 30.0
     # Max upload size (bytes) — used only to derive the extraction byte cap (fix #10), which must
     # match the gateway's upload-time 4x-total rule. The MB default is IMPORTED from the gateway
-    # config (M2, code-health review §6) so it cannot drift from the gateway's own default.
+    # config (design §6) so it cannot drift from the gateway's own default.
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_MB * 1024 * 1024
-    # C31 metadata-edit jobs: where THIS container sees the surveys-live checkout (compose mounts it
+    # Metadata-edit jobs: where THIS container sees the surveys-live checkout (compose mounts it
     # READ-ONLY at /srv/surveys — the same mount the validator ships in). Edit jobs carry a SLUG,
     # never a path (the gateway's mount path /srv/surveys-live differs from this container's), and
     # the runner resolves the package from here — mirroring the C10 rule that the runner recomputes
@@ -570,7 +570,7 @@ def _read_json(path: Path):
 
 
 def poll_once(cfg: RunnerConfig) -> bool:
-    """One poll pass (code-health review M4): drain ALL pending edit jobs, then claim and
+    """One poll pass: drain ALL pending edit jobs, then claim and
     process AT MOST ONE submission job. Returns True if a submission job was processed this pass,
     False if none was pending (so run_forever knows whether to sleep). Pure extraction of the old
     run_forever body - byte-equivalent logic, no behaviour change.

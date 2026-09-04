@@ -42,7 +42,7 @@ def new_id(now_ms: int | None = None) -> str:
 
 def is_valid_id(value: str) -> bool:
     """True only for a 26-char string drawn entirely from the Crockford-base32 id charset (design
-    C11 §3). Because that charset contains NO path separators, dots, or spaces, a valid id can never
+    design §3). Because that charset contains NO path separators, dots, or spaces, a valid id can never
     form `..`, an absolute path, or a traversal component — this is the load-bearing guard the
     curator/preview routes apply BEFORE any id reaches a filesystem path or a git branch name."""
     return len(value) == 26 and all(c in _ID_CHARS for c in value)
@@ -72,7 +72,7 @@ class UploaderKey:
     revoked_by: str | None
     last_used_utc: str | None
     note: str | None = None
-    # v5 (feat/selfserve-submit-keys): key PROVENANCE and the email_verified extras. `provenance` is
+    # Schema v5: key PROVENANCE and the email_verified extras. `provenance` is
     # 'operator' for every key the env-bootstrap OR a curator issues (the pre-v5 behaviour, and the
     # backfilled DEFAULT for existing rows) and 'email_verified' for a self-serve key minted by the
     # public request-key endpoint. `expires_utc`/`allowance_remaining` are NULL for operator keys (no
@@ -141,7 +141,7 @@ class SchemaTooNew(Exception):
 
 
 def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
-    """v2 (feat/uploader-key-management): curator-managed uploader keys move the single shared
+    """Schema v2: curator-managed uploader keys move the single shared
     AUSMT_SUBMIT_KEY out of env-only into the DB. Each row is ONE issued key: only its sha256 is
     stored (the plaintext is shown once at creation, never retrievable), plus who/when it was created
     and — when applicable — who/when it was revoked. A revoked row is NEVER deleted (audit trail; the
@@ -213,7 +213,7 @@ def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v5_selfserve_keys(conn: sqlite3.Connection) -> None:
-    """v5 (feat/selfserve-submit-keys): a SECOND, self-serve key-issuance path alongside the existing
+    """Schema v5: a SECOND, self-serve key-issuance path alongside the existing
     operator-issued keys. Two additive changes, both under the migration invariant (no existing column
     touched, no data migrated):
 
@@ -409,8 +409,8 @@ class Database:
         """The submission that already carries these exact zip bytes (duplicate-content 409,
         design §4.4).
 
-        The rule is about CONTENT, not liveness. It used to match only NON-TERMINAL rows, which
-        meant the guard switched itself off the moment the first copy finished: once a submission
+        The rule is about CONTENT, not liveness. Matching only NON-TERMINAL rows would switch the
+        guard off the moment the first copy finished: once a submission
         reached PUBLISHED (or QUARANTINED / REJECTED_AV / REJECTED / RETURNED) the identical bytes
         were accepted again with a fresh 201, a fresh id, a fresh scan + validate + preview cycle
         and a second publishable copy of a package the archive already holds. Every terminal state

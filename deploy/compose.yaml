@@ -199,10 +199,9 @@ services:
       # - the abuse-control knobs the request-key endpoint enforces: per-email / per-ip / global daily
       # issuance caps, plus the self-serve key expiry + submission allowance. Forwarded as ${VAR:-} like
       # the mail vars above: unset means config.py's _i() falls back to the SAME in-code default
-      # (3/20/200/14/5), so behaviour is byte-identical to leaving them out. Real incident (H1, deploy
-      # review section 5): config read these and .env.example advertised them, but they were MISSING from
-      # this block, so an operator clamping issuance during an abuse wave set values the container never
-      # saw - the exact mail-var class, recurring on the rate-limit knobs. NEVER ${VAR:?} here
+      # (3/20/200/14/5), so behaviour is byte-identical to leaving them out. They must stay listed HERE:
+      # config reads them and .env.example advertises them, so an operator clamping issuance during a
+      # burst of abuse would otherwise set values the container never saw. NEVER ${VAR:?} here
       # (a gateway-only guard would abort even a portal-only compose - see AUSMT_SUBMIT_KEY above).
       AUSMT_KEYREQ_PER_EMAIL_DAILY: ${AUSMT_KEYREQ_PER_EMAIL_DAILY:-}        # max keys issued to one email/day (default 3)
       AUSMT_KEYREQ_PER_IP_DAILY: ${AUSMT_KEYREQ_PER_IP_DAILY:-}              # max per connecting IP/day (default 20)
@@ -242,7 +241,7 @@ services:
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/incoming:/gw/incoming:rw
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/jobs:/gw/jobs:rw
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/quarantine:/gw/quarantine:ro
-      # C11: the operator's surveys-live checkout, mounted READ-WRITE — this is the publish target the
+      # The operator's surveys-live checkout, mounted READ-WRITE — this is the publish target the
       # gateway stages into, commits, and pushes (design §5 v2). Demo publish is COMMIT-AND-PUSH ONLY:
       # the gateway writes the git history here and NOTHING ELSE — it does NOT build, so it needs NO
       # Docker socket (keeping the C10 §0 invariant intact). The operator runs `make rebuild-data` by

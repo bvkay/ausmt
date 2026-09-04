@@ -97,7 +97,7 @@ EDITABLE_MAPS = ("organisation", "identifiers", "collection", "processing", "acc
 # widget (editor_form.LIST_SECTIONS), so a changed list MUST be patchable or the curator's edit is rejected
 # as non-editable. Added here so the widget round-trips end-to-end (an UNCHANGED list still assembles to
 # _OMIT and never reaches this allow-list; only a real change is patched, replacing the list wholesale like
-# the other editable lists). (sources[] is the sibling wave-2 widget with the same gap — tracked separately.)
+# the other editable lists). sources[] is the sibling widget with the same gap, tracked separately.
 EDITABLE_LISTS = ("publications", "funding", "instruments",
                   "related_identifiers", "creators", "contributors",
                   "organisations", "acknowledgements")
@@ -448,7 +448,7 @@ def _merge_map_into(node, new_map: dict) -> bool:
         else:
             node[subkey] = quote_ambiguous(new_val)
             changed = True
-    # ACCEPTED RESIDUAL (review F4): `del node[subkey]` removes the key's line and its INLINE trailing
+    # ACCEPTED RESIDUAL: `del node[subkey]` removes the key's line and its INLINE trailing
     # comment cleanly, but a STANDALONE leading comment line above the deleted key is ORPHANED onto the
     # following key — ruamel attaches a leading comment to the node that FOLLOWS it, so deleting the
     # node leaves that comment bound to its successor. Deleting a sub-key via the advanced-JSON path is
@@ -923,7 +923,7 @@ def run_collections_job(surveys_root: Path) -> dict:
     rollup: dict = {}          # id -> first-declarer rollup field dict
     members_by_id: dict = {}   # id -> [member dict] (in slug order)
     order: list = []           # ids in first-seen (sorted-slug) order — matches the engine's order
-    all_surveys: list = []     # A6 candidate list: EVERY published survey + its current membership
+    all_surveys: list = []     # the candidate list: EVERY published survey + its current membership
     for slug in _published_slugs(surveys_root):
         pkg = surveys_root / "surveys" / slug
         # A malformed survey.yaml (ruamel YAMLError) or a non-mapping top-level must drop

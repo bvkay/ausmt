@@ -1,13 +1,13 @@
 """Structured metadata-editor form assembly.
 
-The curator edit form (gateway/curatorpage.py::render_edit_form) used to render every structured
-survey.yaml section as a raw JSON textarea. A geophysicist is not a JSON author, so the sections are
-now per-section widgets. This module is the SERVER-SIDE half that turns the widget inputs back into
+The curator edit form (gateway/curatorpage.py::render_edit_form) must NOT render a structured
+survey.yaml section as a raw JSON textarea: a geophysicist is not a JSON author, so the sections are
+per-section widgets. This module is the SERVER-SIDE half that turns the widget inputs back into
 the same patch the JSON textareas produced — so the preview/confirm/commit pipeline underneath is
 byte-identical (the round-trip test pins that: render the form from a real survey.yaml, submit it
 unchanged, and the preview shows NO diff).
 
-It is pure stdlib (json only — NOT yaml; the gateway never parses survey content, C31 §0.1). It does
+It is pure stdlib (json only — NOT yaml; the gateway never parses survey content). It does
 NO git and NO version logic; it only maps form fields <-> section dicts and validates the formats it
 knows (ORCID via gateway.orcid, DOI "10." prefix, ISO date, access.level enum).
 
@@ -62,8 +62,8 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     "identifiers": [
         ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
         # §2b (identifiers design): the ONE survey/platform-level instrument PID (PIDINST, e.g.
-        # 10.82388/<id>) — the survey-layer counterpart to the deep per-serial instruments[].pid. Wave-1
-        # EXPAND (additive); the surveys validator only WARNS on its format, so it is plain "text" here
+        # 10.82388/<id>) — the survey-layer counterpart to the deep per-serial instruments[].pid.
+        # Additive; the surveys validator only WARNS on its format, so it is plain "text" here
         # (a light hint, never a form block) — the same posture as project_raid above.
         ("instrument_pid", "Instrument PID (survey/platform)", "10.82388/… or an https:// URL", "text"),
     ],
@@ -210,7 +210,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # row, identifies: entire). The `sources` LIST_SECTIONS registration is GONE, so build_section_patch
     # never assembles the key — a legacy sources[] on disk is byte-preserved (never entered into any
     # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine keeps reading
-    # sources[] until the ausmt follow-up (§9.3 note), so nothing served changes this wave.
+    # sources[] (§9.3 note), so nothing served changes.
     #
     # §2a + D-L (SPEC §9): the single typed list of provenance relations to identifiers AusMT does NOT own.
     # The primary per-row control is `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
@@ -265,7 +265,7 @@ _NEVER_NULL_LIST_KEYS: dict[str, frozenset] = {"organisations": frozenset({"ror"
 # access.level enum (validator/normalize; mirrors add-survey.html's <select>).
 ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
 
-# C42 access.coordinates enum — the SURVEY-LEVEL coordinate-access policy. Declared like ACCESS_LEVELS
+# The access.coordinates enum — the SURVEY-LEVEL coordinate-access policy. Declared like ACCESS_LEVELS
 # and IDENTICAL (key + value spellings) to the engine's extract/_coordaccess.COORDINATE_POLICIES, which
 # parse_coordinate_policy reads from access["coordinates"]. "exact" is the default (absent => exact); the
 # editor never WRITES the key at the default, so a survey that never sets a policy stays byte-unchanged.
@@ -352,7 +352,7 @@ NAME_TYPES = ("person", "organisation")
 CONTRIBUTOR_ROLES = ("ProjectLeader", "ProjectMember", "DataCollector", "ContactPerson",
                      "DataCurator", "Sponsor", "RightsHolder", "Distributor")
 
-# MTCAT 2.0 curated homes (A2). BAKED copies of the surveys validator's frozen vocabularies - the
+# MTCAT 2.0 curated homes. BAKED copies of the surveys validator's frozen vocabularies - the
 # gateway APP image is content-blind (it ships only gateway/, never the sibling validator), so a
 # runtime import is impossible; test_editor_form.py::test_mtcat20_vocabs_match_the_vendored_validator
 # pins every one of them (membership AND, where the validator declares an order, the order). The
@@ -402,9 +402,9 @@ WIDGET_SECTIONS = tuple(MAP_SECTIONS) + tuple(LIST_SECTIONS)
 
 # Sections rendered as a raw-JSON panel ONLY (schema too nested/open-ended for widgets), still
 # assembled into the patch: j_<section> JSON with the o_<section> round-trip anchor, blank means
-# unchanged. `care` sat outside every assembly loop until the 2026-08 section-3 review: the
-# panel rendered, prefilled and editable, and the curator's Indigenous data-governance edit was
-# silently discarded. A rendered control is a promise that the edit lands, so this register is
+# unchanged. `care` must NOT sit outside the assembly loop: the panel renders, prefilled and
+# editable, and the curator's Indigenous data-governance edit would be silently discarded.
+# A rendered control is a promise that the edit lands, so this register is
 # what build_section_patch iterates BESIDE the widget sections.
 JSON_SECTIONS = ("care",)
 
@@ -589,7 +589,7 @@ def _assemble_map(form: dict, section: str):
             continue
         out[subkey] = value
 
-    # C43 Stage-4: the per-station coordinate-access overrides live inside the access section, beside
+    # The per-station coordinate-access overrides live inside the access section, beside
     # the #53 survey-level `coordinates` select. Only ONE of the access-editing forms models the map:
     # the stations-panel coord-policy-form POSTs s_access_coordinate_overrides; the Metadata-tab per-
     # section access form does NOT render that field at all. So the field's ABSENCE and an explicit
@@ -670,8 +670,8 @@ def _resolve_coordinate_overrides(form: dict, original) -> dict:
 
 
 def _resolve_preferred_identifier(form: dict, original) -> dict:
-    """citation.preferred_identifier, the NESTED {scheme, identifier} pair (D18, resolved: the emitter
-    D12 designation mapping landed, so the curator editor writes the pair).
+    """citation.preferred_identifier, the NESTED {scheme, identifier} pair: the emitter carries the
+    designation mapping, so the curator editor writes the pair.
 
     ABSENT-vs-EMPTY, the coordinate_overrides precedent: a form that does NOT render the pair inputs
     (neither s_citation_preferred_identifier_scheme nor _identifier is in the POST) PRESERVES the

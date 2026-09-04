@@ -237,7 +237,7 @@ def stage_and_commit(git_runner, package_dir: Path, surveys_live: Path, slug: st
 
 def commit_metadata_edit(git_runner, surveys_live: Path, slug: str, new_yaml: bytes,
                          expected_sha256: str, curator_name: str, note: str, pre: PreState) -> str:
-    """C31 §5: write the confirmed survey.yaml bytes into surveys-live/surveys/<slug>/survey.yaml and
+    """Write the confirmed survey.yaml bytes into surveys-live/surveys/<slug>/survey.yaml and
     run the full git sequence inside ONE rollback guard, mirroring stage_and_commit. Fail-closed at
     every step; a failure anywhere rolls surveys-live back byte-for-byte to `pre` and re-raises.
     Returns the new commit sha.
@@ -247,7 +247,7 @@ def commit_metadata_edit(git_runner, surveys_live: Path, slug: str, new_yaml: by
     or a concurrent edit would change the bytes and invalidate the preview. The bytes themselves are
     the artifact; the gateway does not re-derive them (it never parses yaml), it only re-hashes.
 
-    The commit records `metadata edit by curator:<name>: <note>` (C31 §0.4 — the git history is the
+    The commit records `metadata edit by curator:<name>: <note>` (the git history is the
     audit record); NEVER the submitter email (there is none here — this edits a published survey)."""
     actual = hashlib.sha256(new_yaml).hexdigest()
     if actual != expected_sha256:
@@ -445,7 +445,7 @@ def commit_survey_removal(git_runner, surveys_live: Path, slug: str, curator_nam
 
 def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: list,
                             curator_name: str, note: str, pre: PreState) -> str:
-    """C43 Stage 3b (record D5-A A6, D13 atomicity pin): commit an atomic collection batch as N commits
+    """The atomicity contract: commit an atomic collection batch as N commits
     (one per CHANGED member survey, each version-bumped) sharing ONE release note, all inside ONE
     rollback guard. This GENERALISES commit_metadata_edit from 1 survey to N — the only write path for
     collection edit / add / remove / move / rename / merge / normalise / create.

@@ -954,7 +954,7 @@ class Gateway:
         """GET /gateway/curator/ui.js — the shared curator-page behaviours (delegated data-confirm /
         data-toggle-big handlers) as an external same-origin script. The strictPages CSP blocks
         BOTH inline script blocks and inline on*-attribute handlers on every /gateway/* page —
-        three shipped inline and silently never ran. Deliberately UNGATED (review C2): the LOGIN page
+        three shipped inline and silently never ran. Deliberately UNGATED: the LOGIN page
         loads it via the shared shell before any session exists — a gate here means every login
         view fetches JS, gets a 303 to HTML, and logs a nosniff console error. The content is a
         static public-repo constant; there is nothing to protect."""
@@ -1018,8 +1018,8 @@ class Gateway:
                         headers={"Cache-Control": "no-store"})
 
     def handle_surveys_list_js(self, request: Request) -> Response:
-        """GET /gateway/curator/surveys-list.js — the Surveys list's browser-side enrichment (C43
-        FR2-1): fill the display name / version / licence / served station-count columns from the
+        """GET /gateway/curator/surveys-list.js — the Surveys list's browser-side enrichment:
+        fill the display name / version / licence / served station-count columns from the
         served /data corpus (surveys.json + build_report.json), the serve-panel pattern (script-src
         'self' blocks inline). Session-gated for consistency; the content is a public-repo constant.
         DEGRADES: without it every row still shows its slug + the hub link, the page never breaks."""
@@ -1510,7 +1510,7 @@ class Gateway:
         the staged state (no client staging): scalar fields + keep/add checkboxes over the picker +
         the render-time member set (a hidden field, so a member added elsewhere between render and
         submit is never accidentally removed). Returns (spec, None) or (None, error_message). Server-
-        side guardrails (A2): the id must be lowercase-hyphenated; type/status must be in-vocab."""
+        side guardrails: the id must be lowercase-hyphenated; type/status must be in-vocab."""
         fid = (form.get("f_id") or "").strip()
         # Fullmatch, not match - an anchored `$` matches before a trailing newline.
         # (.strip() above already removes one; every regex gate on this seam is exact-semantics anyway.)
@@ -1755,8 +1755,8 @@ class Gateway:
         The hub's one metadata form posts a hidden HUB_FORM_FIELD marker; when it is present the
         curator goes back to the hub Metadata tab with the errors beside their owning sections and
         every typed value re-prefilled, instead of being bounced to the standalone full form (which
-        used to lose their place — harmless when a save was one section, actively bad now that a save
-        can span ten). Without the marker (the standalone full form) the legacy re-render is
+        loses their place, which is harmless when a save is one section and actively bad when a save
+        spans ten). Without the marker (the standalone full form) the legacy re-render is
         unchanged. The marker carries NO authority: it is not a token, gates nothing, and the CSRF +
         session checks have already run — it only selects a renderer."""
         if form.get(curatorpage.HUB_FORM_FIELD):
@@ -2137,11 +2137,11 @@ class Gateway:
         publish.commit_station_removal(self._git_runner, surveys_live, slug, new_yaml, removed,
                                        expected_sha, curator, note, pre)
 
-    # ---- C41 survey retirement (D2) — the destructive whole-survey removal + its TOTP gate --------
+    # ---- survey retirement — the destructive whole-survey removal + its TOTP gate ----------------
 
     def _station_count_for(self, slug: str) -> int | None:
         """The published station (EDI) count for `slug`, via the runner's list_stations job — for the
-        retirement confirmation disclosure (record D2: 'N station files, N stated'). Degrades to None
+        retirement confirmation disclosure ('N station files, N stated'). Degrades to None
         (runner down / refusal) so the confirmation page still renders honestly without a number,
         never a 500 on the disclosure path."""
         try:
@@ -2156,7 +2156,7 @@ class Gateway:
 
     def _is_last_survey(self) -> bool:
         """True if the corpus holds one (or zero) published surveys, so retiring one would EMPTY it.
-        C41 T6 (evidenced, not guessed): the production serve build (deploy/Makefile rebuild-data)
+        Evidenced, not guessed: the production serve build (deploy/Makefile rebuild-data)
         invokes build_portal WITHOUT --allow-empty, and the real engine exits 2 on an empty corpus, so
         an empty surveys-live breaks the next rebuild and the retired survey keeps serving off the last
         good build indefinitely. The last-survey guard refuses this.
@@ -2221,7 +2221,7 @@ class Gateway:
         pkg = self._edit_package_or_error(slug)
         if isinstance(pkg, Response):
             return pkg
-        # T6 last-survey guard — FAST PRE-REJECT (F1): refusing to retire the final survey (an empty
+        # The last-survey guard — FAST PRE-REJECT: refusing to retire the final survey (an empty
         # corpus breaks the next rebuild). Checked before the TOTP gate so a doomed retirement never
         # burns a code, and it surfaces the guard on the confirmation page. It is OUTSIDE PUBLISH_LOCK
         # and racy by design; the AUTHORITATIVE, lock-serialised guard is in _commit_retire_blocking.
@@ -2303,7 +2303,7 @@ class Gateway:
 
     def _commit_retire_blocking(self, surveys_live: Path, slug: str, curator: str, note: str) -> None:
         pre = publish.preflight(self._git_runner, surveys_live)
-        # F1 (TOCTOU) — the AUTHORITATIVE last-survey guard, re-evaluated INSIDE PUBLISH_LOCK after
+        # TOCTOU — the AUTHORITATIVE last-survey guard, re-evaluated INSIDE PUBLISH_LOCK after
         # preflight from on-disk truth. The check in handle_survey_retire is only a fast, friendly
         # pre-reject (it shows the guard on the confirmation page and avoids burning a TOTP code); it is
         # OUTSIDE the lock and therefore racy — two concurrent retires can both read count>1 there before
@@ -3276,7 +3276,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_edit_list(request: Request):
         return gw.handle_edit_list(request)
 
-    # C43 survey hub (Overview & QA / Metadata). GET `def` (blocking read-job -> threadpool). The tab
+    # The survey hub (Overview & QA / Metadata). GET `def` (blocking read-job -> threadpool). The tab
     # is a query param so both tabs share one route + one crumb; unknown tabs fall back to overview.
     @app.get("/gateway/curator/survey/{slug}")
     def curator_survey_hub(request: Request, slug: str, tab: str = "overview"):

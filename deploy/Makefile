@@ -84,7 +84,7 @@ down:
 # deploy-images.yml passes github.sha, so a current image always resolves its engine commit (null
 # commits once seen in the live box's build.json came from a stale pre-GIT_SHA-bake image -- pull a
 # current image and the cache fires). Losing the cache dir costs one slow rebuild, nothing more.
-# C18b (Amendment A3): the verify step passes --surveys (same root the build used) to ARM the
+# The verify step passes --surveys (the same root the build used) to ARM the
 # cache-staleness digest gate -- served-product digest stamps vs live survey.yaml, cache-independent.
 # --survey-h5: tier-2 survey MTH5 bundles.
 # --station-h5: tier-1 per-station MTH5 (h5/<slug>/<station>.h5).

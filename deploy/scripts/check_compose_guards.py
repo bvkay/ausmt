@@ -116,7 +116,7 @@ def _parse_env_args(args: list[str]) -> dict[str, str]:
 
 
 def _self_test() -> int:
-    """C33 assertions. Fails if the guard-scoping regressed."""
+    """The guard-scoping assertions. Fails if a guard reaches beyond its own service."""
     here = Path(__file__).resolve().parent
     compose = (here.parent / "compose.yaml").read_text(encoding="utf-8")
     failures: list[str] = []

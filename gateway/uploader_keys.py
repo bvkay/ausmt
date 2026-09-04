@@ -1,4 +1,4 @@
-"""Uploader-key helpers (schema v2, feat/uploader-key-management). Curator-managed submit keys move
+"""Uploader-key helpers (schema v2). Curator-managed submit keys move
 the single shared AUSMT_SUBMIT_KEY out of env-only and into the gateway's SQLite, issued and revoked
 by curators through the authenticated UI — so at the NCI/facility home, where the curator has no
 shell, key rotation is a UI action, not a service restart.

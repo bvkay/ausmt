@@ -18,7 +18,7 @@
 [Unit]
 Description=AusMT front-door log shipping (pull masked access-frontdoor logs over the tailnet, daily)
 # The runbook for this unit (resolved by the install sed exactly like ExecStart) — never a literal
-# <operator> path (the 2026-07 backup-unit Documentation bug).
+# <operator> path, which resolves to a path that never exists.
 Documentation=file://__DEPLOY_DIR__/frontdoor/RUNBOOK.md
 # Needs the network up (it pulls over the tailnet) and a synced clock for the log timestamps.
 After=time-sync.target network-online.target

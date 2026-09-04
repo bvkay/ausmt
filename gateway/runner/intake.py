@@ -9,7 +9,7 @@ Design rules (maintainer/C34-IntakeFilesDesign.md D3), all fail-closed:
   * LICENSE.md is generated ONLY for a licence id the engine RECOGNISES (recognised()); an
     unrecognised id (typo / 'TBD' / free text / absent) generates nothing and the validator WARNING
     correctly stands. The rights text is the engine's single source (_license_text), byte-shared
-    with the bundle LICENSE.txt so the two can never drift (D2).
+    with the bundle LICENSE.txt so the two can never drift.
   * README.md is a skeleton from survey.yaml: name, organisation, year/dates, abstract, station
     count (cheap — a count of the package's EDI files), citation guidance, licence line. It carries
     NO submitter contact details of any kind — the runner never sees PII (a job file carries only

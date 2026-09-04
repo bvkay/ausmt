@@ -17,7 +17,7 @@ from pathlib import Path
 # Minimum submit-key length (design §3). Shorter keys are refused at startup, not accepted-then-weak.
 _MIN_KEY_LEN = 16
 
-# Default max upload size, MB (design §7). The SINGLE SOURCE for this default (M2, code-health review
+# Default max upload size, MB (design §7). The SINGLE SOURCE for this default (design
 # §6): the runner imports it for its extraction byte cap rather than carrying its own 250 literal, so
 # the two can never silently drift (they must agree — the runner's cap derives from the gateway's
 # upload-time 4x-total rule). Overridable per-deployment via AUSMT_MAX_UPLOAD_MB.

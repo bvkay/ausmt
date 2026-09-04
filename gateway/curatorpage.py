@@ -767,9 +767,9 @@ CONTEXT_BAR_JS = """
 #      terse diagnosis with the full gate text in a title attr; same-class prefix runs >=3 CLUSTERED
 #      onto one row), the refused-package note ONCE, and the conditioning summary table.
 #   3. METADATA tab — highlight the sticky TOC entry whose section is in view (#hub-toc /
-#      .hub-section). HUB-SINGLE-SAVE: this used to SHOW ONE SECTION AND HIDE THE REST,
-#      which is what forced a separate save per section; the TOC is now plain scroll navigation over
-#      the one metadata form. Without this script the anchors are ordinary in-page links and every
+#      .hub-section). HUB-SINGLE-SAVE: it must NOT show one section and hide the rest, which is what
+#      forces a separate save per section; the TOC is plain scroll navigation over the one metadata
+#      form. Without this script the anchors are ordinary in-page links and every
 #      section is stacked and fully functional (graceful — nothing here gates editing or saving).
 #
 # DATA HONESTY:
@@ -2354,7 +2354,7 @@ _UTC_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):\d{2}Z$")
 
 
 def short_utc(ts: str) -> str:
-    """The display form of a stored UTC timestamp (H2): the canonical db shape renders as
+    """The display form of a stored UTC timestamp: the canonical db shape renders as
     ' 07:49' (date + minutes - operator resolution; the full ISO rides in the cell's
     title attribute at the call site). VERBATIM fallback: any other shape is returned unchanged,
     never mangled or emptied — the S2a-5 build-id shortener posture (audit data is sacred)."""
@@ -3073,7 +3073,7 @@ def _builds_table(ops, ops_stale: bool, generated_at, *, csrf_token: str = "",
         href = "/gateway/curator/serve/build/" + _esc(d)
         is_serving = bool(b.get("serving"))
         serving = f'<span class="pill" style="background:{_PALETTE["ok"]}">serving</span>' if is_serving else ""
-        # S2b-ii: "serve this build…" = rollback (a link to the typed-id confirm page). The
+        # "serve this build…" = rollback (a link to the typed-id confirm page). The
         # currently-serving build offers no rollback-to-itself. rollback is a repoint, never a rebuild.
         act = ""
         if actions and d and not is_serving:
@@ -3117,7 +3117,7 @@ def _backups_table(ops, ops_stale: bool, generated_at, *, actions: bool = False)
             continue
         age = s.get("age_hours")
         name = s.get("name") or ""
-        # C43 S2b-ii: guarded restore (a link to the typed-id + TOTP confirm page). Drill-first,
+        # Guarded restore (a link to the typed-id + TOTP confirm page). Drill-first,
         # destructive — the confirm page carries the disclosure + the second factor.
         act = ""
         if actions and name:
@@ -3664,9 +3664,9 @@ def _detail_caveat(stats: dict) -> str:
     are counted in the headline totals but were never broken down by the dimensions named here. Absent
     detail_since (a box that has only ever run the detailed fold) renders nothing.
 
-    The enumeration is the whole point of the line, so it must be COMPLETE. It used to omit per-month
-    countries and unattributed, which is how a month reading 'Countries: 1' beneath a headline of 11
-    came to look like an arithmetic bug rather than the forward-only seam it is.
+    The enumeration is the whole point of the line, so it must be COMPLETE. Omitting per-month
+    countries and unattributed makes a month reading 'Countries: 1' beneath a headline of 11 look
+    like an arithmetic bug rather than the forward-only seam it is.
 
     THERE ARE TWO SEAMS, and only the first one has a date. `detail_since` is the v1 -> v2 hinge and it
     is stamped in the file. The dimensions in the second paragraph began at the later fold that
@@ -3675,7 +3675,7 @@ def _detail_caveat(stats: dict) -> str:
     exactly where they do and do not reach. Naming them under `detail_since` would overstate their
     coverage by exactly the distance between the two seams.
 
-    WHAT IT POINTS AT MUST ALWAYS BE THERE. This line used to send the reader to "the note under the
+    WHAT IT POINTS AT MUST ALWAYS BE THERE. It must not send the reader to "the note under the
     quarterly table", which is built from the THREE months that table shows while this line fires off
     `detail_since` alone. The monthly rollups are never pruned, so the moment a second-seam month ages
     out of that three-month window the citation names a note the page does not render. The export's
@@ -3835,8 +3835,8 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         + _row("Top survey",
                _measured(lambda c: (_esc(_survey_rows(c.get("surveys") or {})[0]["survey"])
                                     if (c.get("surveys") or {}) else "&mdash;")))
-        # The reach proxy used to exist only on daily rows, which expire after 92 days, so it could
-        # never appear in a quarterly report. The month keeps the peak of its own folded days.
+        # A reach proxy on daily rows alone would expire with them after 92 days and could never
+        # appear in a quarterly report. The month keeps the peak of its own folded days.
         + _row("Peak networks in a day",
                _currently_measured(lambda c: _esc(_as_int(c.get("networks_peak")))))
         # The evidence that scripted scientific use exists at all: discarding those clients as bots
@@ -4760,7 +4760,7 @@ _EDIT_JSON_ONLY = (
 # D-L3 (SPEC §9.3): "Source datasets" (sources) is RETIRED from the editor — its acquisition fields are
 # now optional keys on a related_identifiers row, and the standalone sidebar entry + panel are gone. The
 # sources[] schema key stays byte-preserved on disk (never entered into any patch, because it is not a
-# widget section, so build_section_patch never assembles it); the engine keeps reading it this wave.
+# widget section, so build_section_patch never assembles it) and the engine keeps reading it.
 # The two retired flat credit entries are GONE, and the ratified
 # MTCAT 2.0 curated homes arrive as their own panels - organisations[] (the full role statement),
 # citation{} (preferred wording + the preferred identifier), acknowledgements[] (verbatim required
@@ -5277,7 +5277,7 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
                    submitted: dict | None = None) -> str:
     """One repeatable row: the per-subkey inputs + a remove button (data-attribute delegated; a no-JS
     submit just leaves an empty row, which the server drops). `values` prefills an existing row.
-    `row_suffix_html` (IDCONS D5) is inserted before the remove button - used to attach the per-identifier
+    `row_suffix_html` is inserted before the remove button and attaches the per-identifier
     resolution status chip to related_identifiers rows; it rides the row template so a JS-added row carries
     it too. Default empty, so every other list section renders byte-identically.
     `reorderable` (CONTRIBUTOR-CREDIT-SPEC §6) adds up/down move buttons (creators). `needs_review` adds the
@@ -6190,8 +6190,8 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
 # its snapshot assembles to _OMIT — so the combined form's patch names exactly the sections the
 # curator actually touched, and untouched sections stay byte-for-byte alone.
 
-# C43 Stage 2a: Stations and History are now REAL in-hub tabs (Stage 1 shipped them as a link-out and
-# nothing). The tab ORDER matches record D4: Overview & QA (landing) / Stations / Metadata / History.
+# Stations and History are REAL in-hub tabs, never a link-out. The tab ORDER is fixed: Overview & QA
+# (landing) / Stations / Metadata / History.
 _HUB_TABS = (("overview", "Overview & QA"), ("stations", "Stations"),
              ("metadata", "Metadata"), ("history", "History"))
 _HUB_TAB_KEYS = frozenset(k for k, _ in _HUB_TABS)
@@ -6284,7 +6284,7 @@ def _hub_overview_body(slug: str) -> str:
 
 def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str = "",
                        build_lag: dict | None = None) -> str:
-    """The Stations tab body (C43 S2a-1). Server renders ONLY the scaffold + loading placeholder; the
+    """The Stations tab body. Server renders ONLY the scaffold + loading placeholder; the
     filterable station table, drill-down facts panel, hand-built SVG plots, and quadrant verdicts are
     all populated BROWSER-side by stations.js from the served /data corpus (catalogue/sci/tf/build) —
     the serve-panel pattern, zero new gateway privileges. `build_lag` carries the server-rendered
@@ -6292,7 +6292,7 @@ def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str
     served build's source_commit and, on drift, renders 'facts from build <id> — publish pending' on
     the panel itself. Degrades: without JS the placeholder stays, the page never breaks.
 
-    C43 Stage-4: the panel host also carries the CURRENT survey.yaml access section (the SAME `fields`
+    The panel host also carries the CURRENT survey.yaml access section (the SAME `fields`
     the #53 survey-level select prefills from) so the drill-down's interactive coordinate-policy
     fieldset can prefill each site honestly (explicit override vs inherited default). Saving assembles
     the full {BASE_station_id: policy} map and POSTs it through the hidden #coord-policy-form to the
@@ -6431,10 +6431,9 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     """The Metadata tab body: a sticky section TOC + ONE form carrying EVERY section, with ONE commit
     tray (bump + required note + Preview) at its foot.
 
-    HUB-SINGLE-SAVE: this used to render one <form> PER section, each with
-    its own tray — so a curator cleaning up four sections paid four merge jobs, four version bumps,
-    four release notes, four diff previews and four confirms. The sections are now <section> blocks
-    inside ONE form: a single Save assembles a combined patch across every section
+    HUB-SINGLE-SAVE: one <form> PER section, each with its own tray, would make a curator cleaning up
+    four sections pay four merge jobs, four version bumps, four release notes, four diff previews and
+    four confirms. The sections are <section> blocks inside ONE form: a single Save assembles a combined patch across every section
     (editor_form.build_section_patch already iterates EVERY widget section and assembles whichever
     widgets + o_<section> snapshots the form carries — that is exactly what the merged Core fields /
     Identifiers & PIDs forms already relied on, now taken to its conclusion), and the UNCHANGED
@@ -6477,7 +6476,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     # carrying several sections' fields round-trips them all in ONE submit; the sections a form does NOT
     # carry contribute nothing, so per-section scope and the no-clobber promise are preserved):
     #   CORE FIELDS  = scalars (_scalars) + organisation + instruments, three grouped headings.
-    #   M1 IDENTIFIERS & PIDS folds time_series levels (group d) — done inside _identifiers_and_pids_inner.
+    #   IDENTIFIERS & PIDS folds time_series levels (group d) — done inside _identifiers_and_pids_inner.
     # The merged forms keep their per-section keys so each constituent's o_ snapshot / patch scoping is
     # unchanged; the merged sidebar ENTRY carries a human title while the FORM key stays a real section key.
     def _map_inner(section: str, derrs: dict | None = None) -> str:
@@ -6510,7 +6509,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     for section in _SECTION_ORDER:
         if section in _merged_away:
             continue
-        # IDCONS D1 + M1: the hub renders the SAME consolidated "Identifiers & PIDs" content the full form
+        # The hub renders the SAME consolidated "Identifiers & PIDs" content the full form
         # does — ONE section (keyed "identifiers") that folds the typed related_identifiers list (group b)
         # AND the time_series levels checkboxes (group d). One post round-trips all three because the content
         # carries all three groups' widgets + o_<section> snapshots (see _identifiers_and_pids_inner).
@@ -7609,7 +7608,7 @@ _KEY_ROTATION_RUNBOOK = "docs/docs/operator/uploader-key-rotation.md"
 def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: str = "",
                      submission_counts: dict | None = None,
                      nav: "NavContext | None" = None) -> str:
-    """The uploader-key management page (feat/uploader-key-management + C43 D7 deltas): a create form +
+    """The uploader-key management page: a create form +
     the list of issued keys. The list shows name, email (curator-only PII, never on a public page),
     created (by/when), last used, submission count, a free-text NOTE (D7 — sqlite only, never git), and
     status (active/revoked with when/by). A revoked row STAYS listed for the audit trail — there is no

@@ -136,8 +136,8 @@ _VISIT_PATH = "/data/catalogue.json"
 
 # The RELEASE tier. A cut release freezes the citable copy of each bundle under
 # /data/releases/<tag>/bundles/<file>, and that frozen copy is the one a paper's DOI resolves to. It
-# used to classify as `ignore`, so the archival download produced no analytics at all while its
-# mutable twin under /data/bundles/ was counted: exactly the wrong way round for a custodian report.
+# must NOT classify as `ignore`, or the archival download produces no analytics at all while its
+# mutable twin under /data/bundles/ is counted: exactly the wrong way round for a custodian report.
 # It is a download here, attributed by bundle FILENAME against the live manifest (see
 # _release_bundle_row). The small release metadata documents (releases.json, release.json,
 # datacite.json, mtcat.json under /data/releases/) stay UNCOUNTED for now: they are discovery reads
@@ -839,7 +839,7 @@ def _as_int(v, default: int = 0) -> int:
 
 
 def _next_day(date_str) -> str | None:
-    """The ISO day after `date_str`, or None if it is not an ISO date. Used to stamp `detail_since` when
+    """The ISO day after `date_str`, or None if it is not an ISO date. It stamps `detail_since` when
     a v1 file is upgraded: the richer dimensions begin the day AFTER that file's fold watermark."""
     if not isinstance(date_str, str):
         return None

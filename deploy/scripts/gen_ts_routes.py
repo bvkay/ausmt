@@ -10,10 +10,10 @@ whose `default ""` is what 404s every path the table does not name.
     python deploy/scripts/gen_ts_routes.py --write    # (re)write the table from the registers
     python deploy/scripts/gen_ts_routes.py --check    # gate: exit 1 if the table is out of sync
 
-An NCI urlPath cannot be derived from a route path (D15: the state segment is not in the id), so
-resolution needs a lookup, and a committed one makes R5 membership greppable in review. Membership
-is `_tsproject.route_rows()`, imported, never restated: the flag is projected for withheld
-stations too (R13), so suppression lives here, in resolution, and the table renders from the same
+An NCI urlPath cannot be derived from a route path (the state segment is not in the id), so
+resolution needs a lookup, and a committed one makes membership greppable. Membership is
+`_tsproject.route_rows()`, imported, never restated: the flag is projected for withheld stations
+too, so suppression lives here, in resolution, and the table renders from the same
 predicate as ts_access.json - key sets equal by construction.
 
 The survey serve verdict is the one restated seam (build_portal pulls the mt_metadata stack; see

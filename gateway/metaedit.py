@@ -1,5 +1,5 @@
-"""C31 curator metadata-editor orchestration (gateway side). The gateway NEVER parses survey content
-(C31 §0.1 / the C10 house rule, pinned by the §3.8 source-assertion test AND the subprocess
+"""Curator metadata-editor orchestration (gateway side). The gateway NEVER parses survey content
+(the house rule, pinned by the §3.8 source-assertion test AND the subprocess
 import-hygiene test): every yaml load/merge/emit/diff/validate happens in the gw-runner — the ENGINE
 image, which is where ruamel lives — reached through the C10 file-queue pattern in its own
 jobs/edit/ namespace. This module only writes job JSON, polls for the result JSON, and reads it

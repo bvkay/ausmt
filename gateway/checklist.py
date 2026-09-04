@@ -47,8 +47,8 @@ class Check:
 class Checklist:
     checks: list[Check]
     # §1: file names (relative to the scanned root) where a GENERIC (non-submitter) email
-    # matched. Curator-only, file names ONLY (never an address). Used to render the classified list
-    # and to build the acknowledge audit reason (§2). Empty unless the PII check is acknowledgeable.
+    # matched. Curator-only, file names ONLY (never an address). It renders the classified list
+    # and builds the acknowledge audit reason (§2). Empty unless the PII check is acknowledgeable.
     pii_generic_files: tuple[str, ...] = ()
 
     def _blocking_fails(self) -> list[Check]:
@@ -61,13 +61,13 @@ class Checklist:
 
     @property
     def has_unacknowledgeable_blocking_fail(self) -> bool:
-        """C11b §2: True if any blocking FAIL is NOT acknowledgeable — that is a hard 409 no
+        """True if any blocking FAIL is NOT acknowledgeable — that is a hard 409 no
         acknowledgement can override (includes every submitter-email hit and every non-PII block)."""
         return any(not c.acknowledgeable for c in self._blocking_fails())
 
     @property
     def has_acknowledgeable_blocking_fail(self) -> bool:
-        """C11b §2: True if there is at least one blocking FAIL and they are ALL acknowledgeable —
+        """True if there is at least one blocking FAIL and they are ALL acknowledgeable —
         the only case an affirmative ack_pii may proceed past."""
         fails = self._blocking_fails()
         return bool(fails) and all(c.acknowledgeable for c in fails)

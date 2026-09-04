@@ -24,7 +24,7 @@
 #     $AUSMT_DATA_DIR/backups). Point it at any snapshot dir to drill an older one.
 #
 # ENV:
-#   AUSMT_BACKUP_DIR   backups root (else $AUSMT_DATA_DIR/backups) — used to find `latest`
+#   AUSMT_BACKUP_DIR   backups root (else $AUSMT_DATA_DIR/backups); `latest` is found under it
 #   AUSMT_DATA_DIR     host root (used only to derive the default backups dir)
 #   AUSMT_BACKUP_SQLITE  the sqlite3 command (default `sqlite3`)
 #
