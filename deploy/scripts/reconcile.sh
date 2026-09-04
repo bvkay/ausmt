@@ -352,9 +352,9 @@ doc = {
     "build_id": orval("AUSMT_RS_BUILD_ID"),
     "log_file": log_file,
     "log_tail": log_tail,
-    # C43 S2b-ii: pause + rollback-pin state, exposed on EVERY status write (record D9.7 — the
+    # Pause and rollback-pin state, exposed on EVERY status write: the
     # reconcile status must surface pause state so an authenticated attacker cannot silently keep
-    # serving frozen). paused == a FRESH pause.flag suppressing the drift rebuild; pause_expired ==
+    # serving frozen. paused == a FRESH pause.flag suppressing the drift rebuild; pause_expired ==
     # a stale flag that was IGNORED; pinned == a manual "serve this build" rollback pin standing.
     "paused": os.environ.get("AUSMT_RS_PAUSED") == "1",
     "pause_expired": os.environ.get("AUSMT_RS_PAUSE_EXPIRED") == "1",

@@ -343,9 +343,9 @@ last_run = doc.get("last_run")
 
 if action == "failed":
     if doc.get("oom_kill") is True:
-        # reconcile.sh found a kernel out-of-memory kill inside the failed build window (incident
-        # 2026-08-15: five nights of "rebuild FAILED" whose cause was in the kernel journal). Name it,
-        # so the dead-man ping tells the operator what to do (RAM/swap) instead of "see log tail".
+        # reconcile.sh found a kernel out-of-memory kill inside the failed build window. Name it, so
+        # the dead-man ping tells the operator what to do (RAM/swap) rather than "see log tail": the
+        # cause of a run of "rebuild FAILED" nights otherwise sits unread in the kernel journal.
         # NOTE: no apostrophes or backticks in this heredoc (it sits inside a $(...) substitution and
         # the POSIX sh on macOS cannot parse them there).
         print(f"action=failed - the build was KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY (OOM kill in "
@@ -356,7 +356,7 @@ if action == "failed":
 
 if action == "untracked_blocked":
     # The reconcile agent REFUSED to rebuild: surveys-live has untracked survey dirs the build would
-    # SERVE though git cannot remove them (incident 2026-07-11). This needs an operator and does not
+    # SERVE though git cannot remove them. This needs an operator and does not
     # self-heal, so it is an ALERT (unlike sync_failed, which is a transient panel state). The offending
     # names are carried in log_tail — surface them so the dead-man ping names the dir(s).
     detail = doc.get("log_tail") or "untracked survey dir(s) present"
@@ -759,7 +759,7 @@ def _age_h(path):
     except OSError:
         return None
 newest = snaps[0] if snaps else None
-# The snapshot table (B5): newest-first {name, age_hours}, capped (retention is ~14 on the box).
+# The snapshot table: newest-first {name, age_hours}, capped (retention is ~14 on the box).
 snap_list = [{"name": name, "age_hours": _age_h(d)} for name, d in snaps[:30]]
 drill = _load(os.path.join(backups_dir, "latest-drill.json")) if backups_dir else None
 backups = {"newest": newest[0] if newest else None,
@@ -866,7 +866,7 @@ if site_data:
                 # for a pre-fix report. Lifted so the ops floor can show the trend build over build.
                 "peak_rss_mib": _peak if isinstance(_peak, (int, float)) else None,
                 "serving": (name == serving_dir),
-                # C18-A4 cache forensics live in build_provenance.json's top-level `cache` block —
+                # Cache forensics live in build_provenance.json's top-level `cache` block —
                 # NOT in build.json/build_report.json (verified against build_portal.py). Render what
                 # exists; absent keys (a non-incremental build) stay null.
                 "cache": {"enabled": cache.get("enabled"), "mode": cache.get("mode"),
@@ -902,7 +902,7 @@ pause = {"active": os.environ.get("AUSMT_OPS_PAUSE_ACTIVE", "") == "1",
                               else None),
          "persistent": os.environ.get("AUSMT_OPS_PAUSE_PERSISTENT", "") == "1",
          "max_hours": int(os.environ.get("AUSMT_OPS_PAUSE_MAX_H") or 24)}
-# S5(b): rollback-pin persistent-freeze fact, parallel to pause.
+# The rollback-pin persistent-freeze fact, parallel to pause.
 pin = {"active": os.environ.get("AUSMT_OPS_PIN_ACTIVE", "") == "1",
        "pinned_build": _f("AUSMT_OPS_PIN_BUILD"),
        "first_seen": _f("AUSMT_OPS_PIN_FIRST_SEEN"),

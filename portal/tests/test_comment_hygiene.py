@@ -257,6 +257,52 @@ def html_comments(text):
 
 _HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_]\w*)\1")
 _QUOTE_OPENS_AFTER = set(" \t\n=:([,{$|&;>")
+# A heredoc body is DATA the script writes, EXCEPT where it is the source an interpreter on the
+# same line is about to run: there it is code, and its comments are comments on a surface this
+# sweep covers. These scripts reach their interpreter through a probed variable ("$PY"), so the
+# variable is resolved from the file rather than only the literal command being matched.
+_INTERPRETER = re.compile(r"\b(python3|python|node|perl|bash|sh)\b")
+_SHELL_VAR = re.compile(r"\$\{?([A-Za-z_]\w*)\}?")
+
+
+def _interpreter_vars(text):
+    """The shell variables this file binds to an interpreter, in the two shapes these scripts use:
+    a direct assignment, and the probe loop whose variable ranges over the candidates."""
+    loops = {}
+    for m in re.finditer(r"(?m)^[ \t]*for[ \t]+([A-Za-z_]\w*)[ \t]+in[ \t]+([^\n;]*)", text):
+        found = _INTERPRETER.search(m.group(2))
+        if found:
+            loops[m.group(1)] = found.group(1)
+    names = {}
+    for m in re.finditer(r"(?m)^[ \t]*([A-Za-z_]\w*)=(\"?)([^\n\"]*)\2", text):
+        value = m.group(3)
+        found = _INTERPRETER.search(value)
+        if found:
+            names[m.group(1)] = found.group(1)
+            continue
+        ref = re.fullmatch(r"\$\{?([A-Za-z_]\w*)\}?", value.strip())
+        if ref and ref.group(1) in loops:
+            names[m.group(1)] = loops[ref.group(1)]
+    return names
+
+
+def _fed_to(prefix, interpreter_vars):
+    """The interpreter this heredoc feeds, from the text before the << on its own line."""
+    found = _INTERPRETER.search(prefix)
+    if found:
+        return found.group(1)
+    for var in _SHELL_VAR.finditer(prefix):
+        if var.group(1) in interpreter_vars:
+            return interpreter_vars[var.group(1)]
+    return None
+
+
+def _scanner_for(interpreter):
+    if interpreter in ("python", "python3"):
+        return python_comments
+    if interpreter == "node":
+        return js_comments
+    return hash_comments
 
 
 def hash_comments(text):
@@ -269,6 +315,7 @@ def hash_comments(text):
     apostrophe inside an unquoted YAML scalar cannot swallow the rest of the
     file; and a #! shebang is a directive to the kernel, not commentary."""
     out = []
+    interpreter_vars = _interpreter_vars(text)
     i, n = 0, len(text)
     while i < n:
         c = text[i]
@@ -280,6 +327,14 @@ def hash_comments(text):
             if here:
                 term = re.compile(r"^[ \t]*%s[ \t]*$" % re.escape(here.group(2)), re.M)
                 stop = term.search(text, here.end())
+                fed = _fed_to(text[text.rfind("\n", 0, i) + 1:i], interpreter_vars)
+                if fed:
+                    opens = text.find("\n", here.end())
+                    opens = here.end() if opens < 0 else opens + 1
+                    closes = stop.start() if stop else n
+                    if closes > opens:
+                        out += [(opens + at, body)
+                                for at, body in _scanner_for(fed)(text[opens:closes])]
                 i = stop.end() if stop else n
                 continue
         if c == "#" and (i == 0 or text[i - 1] in " \t\n"):
@@ -309,17 +364,20 @@ def python_comments(text):
     gateway/curatorpage.py serves and the stylesheet engine/extract/_pages.py
     serves stay out of the sweep as content."""
     out = []
+    chars, total = [], 0
+    for line in text.splitlines(keepends=True):
+        chars.append(total)
+        total += len(line)
     try:
         for tok in tokenize.generate_tokens(io.StringIO(text).readline):
             if tok.type == tokenize.COMMENT:
-                out.append((tok.start, tok.string))
+                out.append((chars[tok.start[0] - 1] + tok.start[1], tok.string))
     except (tokenize.TokenError, IndentationError, SyntaxError):
-        out = [((text.count("\n", 0, m.start()) + 1, 0), m.group(0))
-               for m in re.finditer(r"(?m)^[ \t]*#.*$", text)]
+        out = [(m.start(), m.group(0)) for m in re.finditer(r"(?m)^[ \t]*#.*$", text)]
     try:
         tree = ast.parse(text)
     except SyntaxError:
-        return [(where[0], body) for where, body in sorted(out)]
+        return sorted(out)
     # An AST column offset counts UTF-8 BYTES, not characters, so the slice is taken over the
     # encoded source. Slicing the str by those offsets overshoots by one position per non-ASCII
     # character earlier on the line, which silently returns a comment that is not the comment.
@@ -332,10 +390,10 @@ def python_comments(text):
         value = getattr(node, "value", None)
         if (isinstance(node, ast.Expr) and isinstance(value, ast.Constant)
                 and isinstance(value.value, str)):
-            out.append(((value.lineno, value.col_offset),
-                        raw[starts[value.lineno - 1] + value.col_offset:
-                            starts[value.end_lineno - 1] + value.end_col_offset].decode("utf-8")))
-    return [(where[0], body) for where, body in sorted(out)]
+            opens = starts[value.lineno - 1] + value.col_offset
+            closes = starts[value.end_lineno - 1] + value.end_col_offset
+            out.append((len(raw[:opens].decode("utf-8")), raw[opens:closes].decode("utf-8")))
+    return sorted(out)
 
 
 HASH_SUFFIXES = {".sh", ".bash", ".yml", ".yaml", ".service", ".timer", ".conf",
@@ -347,8 +405,8 @@ def comments(path, text):
     """Every comment in one file, as (line number, text), each counted once."""
     suffix = path.suffix.lower()
     if suffix == ".py":
-        return python_comments(text)
-    if suffix in (".html", ".htm", ".plist", ".xml", ".svg"):
+        found = python_comments(text)
+    elif suffix in (".html", ".htm", ".plist", ".xml", ".svg"):
         found = html_comments(text)
     elif suffix in (".js", ".mjs", ".hujson", ".json5"):
         found = js_comments(text)
@@ -851,6 +909,35 @@ def test_a_hash_inside_an_expansion_a_quote_or_a_heredoc_is_not_a_comment(tmp_pa
                  "# the only comment\n", encoding="utf-8")
     found = [c for _, c in comments(f, f.read_text(encoding="utf-8"))]
     assert found == ["# the only comment"], found
+
+
+def test_a_heredoc_that_feeds_an_interpreter_is_scanned_as_that_language(tmp_path):
+    """A heredoc body is DATA the script writes, EXCEPT where it is the source an interpreter on the
+    same line is about to run. Then it is code on a surface this sweep covers, and its comments are
+    comments. These scripts reach their interpreter through a probed variable, so the variable is
+    resolved from the file: both kinds are held here."""
+    f = tmp_path / "both.sh"
+    f.write_text(
+        "cat > /tmp/out <<'EOF'\n"
+        "# written into the file, not a comment\n"
+        "EOF\n"
+        "python3 - <<'PYEOF'\n"
+        "# the incident of 2026-08-15 is why this retries\n"
+        "print(1)\n"
+        "PYEOF\n"
+        'PY=""\n'
+        "for _cand in python3 python; do\n"
+        '  PY="$_cand"\n'
+        "done\n"
+        '"$PY" - <<\'PYEOF\'\n'
+        "# the owner ruled the retry count\n"
+        "print(2)\n"
+        "PYEOF\n", encoding="utf-8")
+    found = [c for _, c in comments(f, f.read_text(encoding="utf-8"))]
+    assert found == ["# the incident of 2026-08-15 is why this retries",
+                     "# the owner ruled the retry count"], found
+    hits = offences([f])
+    assert len(hits) == 2, hits
 
 
 def test_a_shebang_is_not_commentary(tmp_path):
