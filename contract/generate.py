@@ -15,8 +15,8 @@ Requires an explicit --write/--check argv: no-args or an unrecognised flag (e.g.
 and writes NOTHING, so a stray `--help` can never silently fall through to the write branch.
 
 This module also carries MTCAT_VERSION, THE single machine-readable source of the MTCAT schema
-version (ratified inversion, MTCAT 2.0 design: the constant is the source; the schema title merely
-DISPLAYS it and is verified against it, no longer parsed as the source). `mtcat_schema_version()`
+version: the constant is the source, and the schema title merely DISPLAYS it and is verified
+against it rather than being parsed as the source. `mtcat_schema_version()`
 returns the constant after verifying the schema artifact's displayed title agrees, and this
 generator propagates it into `_contract.py` the same way it propagates the column order: as a
 generated constant, gated by `--check`, so an engine consumer cannot carry a version literal of
@@ -38,7 +38,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent                                  # the ausmt monorepo root
 SRC = HERE / "columns.json"
 LIC_SRC = HERE / "licenses.json"                    # the licence instrument single source (like columns.json)
-PROF_SRC = HERE / "attribution_profiles.json"       # C46: the custodian attribution-profile single source (like licenses.json)
+PROF_SRC = HERE / "attribution_profiles.json"       # the custodian attribution-profile single source (like licenses.json)
 MTCAT_SRC = ROOT / "engine" / "schema" / "mtcat.schema.json"   # the MTCAT schema version's single source
 # The survey-metadata schema artifact (the second public contract): its title DISPLAYS the version
 # SURVEY_METADATA_VERSION below declares, and survey_metadata_schema_version() verifies the two agree.
@@ -60,8 +60,8 @@ _SURVEY_METADATA_TITLE_RE = re.compile(r"^AusMT Survey Metadata (\d+\.\d+)(-draf
 # <MAJOR>.<MINOR>[-draft]: <what the document is>".
 _STATION_TITLE_RE = re.compile(r"^AusMT Station Metadata (\d+\.\d+)(-draft)?:")
 
-# THE single machine-readable source of the MTCAT schema version (ratified MTCAT 2.0 decision,
-# 2026-08-22: "version source - machine constant; title generated"). Every surface that states a
+# THE single machine-readable source of the MTCAT schema version: the version source is a machine
+# constant and the title is generated from it. Every surface that states a
 # version derives from THIS constant: the schema artifact's title (verified below - the title
 # DISPLAYS the version and mtcat_schema_version() refuses to run if it disagrees), the generated
 # engine constant in engine/extract/_contract.py, the emitter's portal.version, gen_config's
@@ -136,10 +136,9 @@ def mtcat_schema_version() -> str:
     """The MTCAT schema version: MTCAT_VERSION above, THE single source of truth, cross-checked
     against the schema artifact's own displayed title before it is handed out.
 
-    The source used to be the schema title itself, parsed here; the ratified MTCAT 2.0 design
-    inverted that ("the title displays the version; it is no longer parsed as the source") so the
-    machine-readable source is a constant a generator can propagate, and the title is a DISPLAY
-    surface verified against it. The verification is what keeps the pin property of the old design:
+    The schema title must NOT be parsed as the source: the machine-readable source is a constant a
+    generator can propagate, and the title is a DISPLAY surface verified against it. The
+    verification is what keeps the pin property:
     a schema whose title disagrees with the constant fails loudly here (and in `--check`, which
     calls this) rather than letting two version claims ship side by side. The result is also checked
     against the schema's own MAJOR.MINOR pattern for `portal.version`, so a malformed constant can
@@ -169,7 +168,7 @@ def _load():
 
 
 def _load_lic():
-    # The licence allow-list/alias/url tables (C6). Emitted verbatim into both generated files so the
+    # The licence allow-list/alias/url tables. Emitted verbatim into both generated files so the
     # engine's redistributable() gate and the validator's recognised-id gate read ONE source and cannot
     # drift. Keys ordered as authored in licenses.json (Python dicts + json preserve insertion order).
     d = json.loads(LIC_SRC.read_text(encoding="utf-8"))
@@ -178,7 +177,7 @@ def _load_lic():
 
 
 def _load_prof():
-    # The custodian attribution-profile table (C46). Emitted verbatim into both generated files so the
+    # The custodian attribution-profile table. Emitted verbatim into both generated files so the
     # engine's license_instrument_text() and the portal's licenseInstrumentText() render one source and
     # cannot drift. Keys ordered as authored in attribution_profiles.json (insertion order preserved).
     d = json.loads(PROF_SRC.read_text(encoding="utf-8"))

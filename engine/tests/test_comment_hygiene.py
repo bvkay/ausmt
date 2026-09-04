@@ -32,6 +32,7 @@ from pathlib import Path
 
 ENGINE = Path(__file__).resolve().parent.parent       # engine/
 ROOT = ENGINE.parent                                  # repo root
+CONTRACT = ROOT / "contract"                          # shipped beside engine/ in the image
 
 SELF = "test_comment_hygiene.py"
 
@@ -687,11 +688,22 @@ def guard_tests():
     return listing((ENGINE / "tests", "*.py"))
 
 
+def contract_source():
+    """contract/generate.py writes comment TEMPLATES into shipped bytes: the header of
+    portal/src/contract.js, which every visitor downloads, and of engine/extract/_contract.py.
+    An unswept generator can put the vocabulary back on the shipped tier one regenerate later, so
+    it is a surface of this sweep. The engine image copies contract/ beside engine/ (the image's
+    own contract gate runs generate.py --check there), so reading it does not make this module
+    image-dependent."""
+    return listing((CONTRACT, "*.py"))
+
+
 SURFACES = {
     "the rest of the package": package,
     "the extractors": extractors,
     "the scripts": scripts,
     "the guard tests": guard_tests,
+    "the contract generator": contract_source,
 }
 
 
@@ -761,6 +773,15 @@ def test_script_comments_state_constraints_only():
     )
 
 
+def test_contract_generator_comments_state_constraints_only():
+    hits = offences(contract_source(), root=ROOT)
+    assert not hits, (
+        f"{len(hits)} comment(s) in contract/ carry provenance rather than a constraint (this "
+        "generator writes comment templates into portal/src/contract.js, which every visitor "
+        "downloads):\n" + "\n".join(hits)
+    )
+
+
 def test_guard_test_comments_state_constraints_only():
     hits = offences(guard_tests(), cite_contract=True, root=ROOT)
     assert not hits, (
@@ -773,15 +794,19 @@ def test_guard_test_comments_state_constraints_only():
 # ---------------------------------------------------------------------------
 # Image topology, and non-vacuity.
 # ---------------------------------------------------------------------------
-def test_every_path_this_module_reads_is_inside_the_engine_tree():
+def test_every_path_this_module_reads_is_shipped_in_the_engine_image():
+    """engine/ and contract/ are the two trees the image copies (deploy/docker/engine.Dockerfile
+    COPYs both, and runs contract/generate.py --check from /app/engine), so this module runs
+    identically in the image lanes. Anything else would skip or fail there."""
+    shipped = (ENGINE, CONTRACT)
     outside = []
     for files in SURFACES.values():
         for path in files() + emitter():
-            if not path.resolve().is_relative_to(ENGINE):
+            if not any(path.resolve().is_relative_to(tree) for tree in shipped):
                 outside.append(str(path))
     assert not outside, (
-        "this module reads outside engine/, which the engine image does not ship, so it would "
-        "skip or fail in the image lanes:\n" + "\n".join(outside)
+        "this module reads outside the trees the engine image ships (engine/ and contract/), so "
+        "it would skip or fail in the image lanes:\n" + "\n".join(outside)
     )
 
 
