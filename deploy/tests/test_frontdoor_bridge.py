@@ -1,7 +1,7 @@
 """Public bridge - front-door + box-side two-walls pins + log-shipping pins.
 
 The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader — and,
-since the rule, the PUBLIC submission subset - to the box's dedicated public-subset
+and the PUBLIC submission subset - to the box's dedicated public-subset
 listener over the tailnet. The Add Survey contribution flow is public (an MT user who clicks Add Survey
 must reach the page and lodge a survey); the curator/admin workbench stays refused. The load-bearing
 properties are public (privacy) and security properties, so — per the standing rule — each is proven
@@ -342,7 +342,7 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
         assert cls in classes, f"the deny matcher must be self-complete: {cls!r} missing; got {classes}"
     handle = _brace_match(body, body.index("\thandle @nonpublic {"))
     assert re.search(r"respond\b.*\b404", handle), "the @nonpublic handle must explicitly respond 404"
-    #  serve-path tuning: the box proxies ride the shared (box_upstream) snippet, so the
+    # Serve-path tuning: the box proxies ride the shared (box_upstream) snippet, so the
     # property splits in two: the site body reaches the box THROUGH the snippet, and the snippet
     # (the one place the transport lives) proxies to the env placeholder.
     assert "import box_upstream" in body, \
@@ -354,7 +354,7 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
 def test_frontdoor_tls_and_hsts_configured():
     """Invariant d (config level): the public name drives automatic HTTPS (a hostname site address,
     NO `auto_https off`) so a certificate issues and plain HTTP redirects; and HSTS is set once TLS is
-    in force. The live cert issuance is verified in the brief runbook (needs real DNS + public IP).
+    in force. The live cert issuance is verified in the deploy runbook (needs real DNS + public IP).
     FAILS IF auto_https is disabled or HSTS is absent."""
     text = _fd_text()
     assert "{$AUSMT_PUBLIC_NAME}" in text, "the site address must be the public-name placeholder"

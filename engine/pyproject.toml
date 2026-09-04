@@ -32,8 +32,8 @@ dev = ["pytest>=8", "pytest-xdist>=3", "jsonschema>=4"]
 [tool.setuptools.packages.find]
 # Both sibling trees under engine/ are real installed packages: ausmt_science* (the importable
 # science library) AND extract* (the app-layer build package, `python -m extract.build_portal`).
-# Including extract* is what makes that module-run resolve by INSTALLED PACKAGE rather than by the
-# cwd/WORKDIR-on-sys.path contract rather than by installed package. The generic top-level name
+# Including extract* is what makes that module-run resolve by INSTALLED PACKAGE rather than by a
+# cwd/WORKDIR-on-sys.path contract. The generic top-level name
 # `extract` is accepted because this package ships only inside the dedicated engine image and env,
 # and is never published to PyPI; see engine/extract/__init__.py.
 include = ["ausmt_science*", "extract*"]

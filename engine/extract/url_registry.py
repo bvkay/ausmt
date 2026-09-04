@@ -18,7 +18,7 @@ would be a second derivation, the exact divergence risk build_portal.py refuses 
 
   * survey slug   = mtcat surveys[].survey_id: declared in survey.yaml (`slug:`, defaulting to the
     package folder name), sanitised by safe_component. NOT derived from the display name in
-    --surveys builds.
+    --surveys builds. (--raw bulk-seed mode DOES slugify display labels, which is rebrand-fragile.)
   * station ausmt_id = mtcat stations[].station_id: au.<survey-slug>.<station-id[.variant]>, the
     station id being the transfer function's own declared DATAID (sanitised), with a processing
     variant tag only when one survey holds the same station twice.

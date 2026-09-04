@@ -6,14 +6,13 @@ round-trip for every served station, even when a one-line survey.yaml edit chang
 those stations. This module is a content-addressed cache of the two expensive per-station products
 so an incremental rebuild skips the parse and the round-trip for unchanged stations.
 
-Design: maintainer/C18-BuildCacheDesign.md (FROZEN). The invariants
-this module upholds:
+The invariants this module upholds:
 
   * The cache may only ever change build SPEED, never output bytes. `scripts/verify.py` stays full,
     byte-re-hashing and cache-blind; a warm build is byte-identical to the build that populated its
     cache, and so is an INDEPENDENT full build of the same inputs (proven by test; the served XML's
     CreateTime is pinned to the date its source declares, so no served artifact carries a build
-    clock; is superseded on that point).
+    clock).
   * The key is derived from the SOURCE EDI content sha + a coarse engine-commit salt + library
     versions + the positional/schema contract + the whole survey.yaml digest. A byte-changed EDI,
     an engine commit, a library upgrade, a contract change, or ANY survey.yaml edit all miss.
@@ -43,8 +42,8 @@ import sys
 import time
 from pathlib import Path
 
-# Prune policy defaults — operator-tunable, single-sourced here. Adjudicated v1 policy
-#mtime-age window + size cap, oldest-first. The design's "20 builds" window is
+# Prune policy defaults — operator-tunable, single-sourced here. Adjudicated v1 policy:
+# an mtime-age window + a size cap, oldest-first. The design's "20 builds" window is
 # NOT implemented (the cache keeps no per-build ledger); age is the operator-meaningful bound.
 CACHE_MAX_MB_DEFAULT = 2048          # AUSMT_CACHE_MAX_MB overrides (size cap, oldest-first eviction)
 PRUNE_MAX_AGE_DAYS = 90              # drop entries untouched for this many days
@@ -122,9 +121,8 @@ def contract_schema_digest(engine_root: Path) -> str:
 # NOTE: the per-survey yaml digest is not derived here. It is
 # computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from,
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
-# metadata does not match. The path-taking helper that
-# lived here was deliberately DELETED, not deprecated: any reappearance of a read-the-yaml-again
-# digest call site is the incident's window reopening.
+# metadata does not match. The path-taking helper that stood here was deliberately DELETED, not
+# deprecated: any reappearance of a read-the-yaml-again digest call site reopens that window.
 
 
 class BuildCache:
@@ -171,17 +169,17 @@ class BuildCache:
             # the entry was KEYED under), consumed by the digest-stamp sidecar + the verify.py
             # consistency gate; v4 = the parse product changed SHAPE - tf.json rows grew 10 -> 18
             # (rho/phase error columns + full complex tipper) and the placeholder-tipper mask now
-            # withholds filler tippers, so a cached parse would replay 10-wide/unmasked rows.
-            # Bumping the tag re-keys EVERY blob, so entries never resolve - a clean MISS,
+            # withholds filler tippers, so a pre-v4 cached parse would replay 10-wide/unmasked rows.
+            # Bumping the tag re-keys EVERY blob, so pre-v4 entries never resolve - a clean MISS,
             # counted as a miss, never a replay of a stale-shape parse. One full re-derive on the first
-            # build lands; then warm again. (The contract_digest below ALSO shifts on the
+            # build after this lands; then warm again. (The contract_digest below ALSO shifts on the
             # column append; the tag bump is the explicit, self-documenting belt-and-suspenders — same
             # discipline.) Old-format entries age out via the prune.
             # v5 = the served-XML CONTENT changed corpus-wide: the EMTF-XML Copyright block now
             # carries the survey's real licence-derived release_status + conditions_of_use instead of
             # mt_metadata's default "Unrestricted Release"/"may be copied freely" boilerplate (a truth
             # fix in ausmt_science.ingest.normalize.condition_tf). That formatter change is not captured
-            # by the source-EDI sha, the survey.yaml digest, or the contract digest, so a warm
+            # by the source-EDI sha, the survey.yaml digest, or the contract digest, so a warm pre-v5
             # cache would REPLAY the boilerplate XML for an unchanged EDI on the same engine commit.
             # Bumping the tag forces one clean full re-derive so every served XML is the truthful form.
             # v6 (station promotion) = the parse product changed SHAPE again: the per-EDI parse now
@@ -238,7 +236,7 @@ class BuildCache:
             return None
         except OSError:
             # A PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is not a
-            # normal cold miss. Still tallied as a miss (arithmetic and the recompute path
+            # normal cold miss. Still tallied as a miss (the arithmetic and the recompute path
             # are unchanged) but counted in read_errors so a lock-induced spurious miss is
             # attributable from the build report instead of masquerading as content drift.
             self.read_errors += 1
@@ -275,7 +273,7 @@ class BuildCache:
         """Correct the tally when a PAIRED read turns out unusable after this cache already counted
         a hit - the torn-pair case at the served-XML seam: the xml blob hit but its meta sibling
         missed, so the pair produced nothing and the station recomputes. The sibling's own get
-        already tallied its miss; this only revokes the phantom hit (c - mirrors
+        already tallied its miss; this only revokes the phantom hit (mirrors
         get_json's internal corrupt-payload discipline)."""
         self.hits -= 1
 

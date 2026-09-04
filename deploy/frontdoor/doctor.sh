@@ -376,7 +376,7 @@ check_ts_routes() {
 	#     unguarded - and a stale map is a stale ACCESS DECISION, not just stale config.
 	#   * an OPEN route 302s to the exact NCI Location the table names (probe + expectation both read
 	#     from the repo table, so the pin cannot rot when the corpus moves).
-	# * a route the table does NOT name 404s. That is the property: the map's `default ""` is the
+	# * a route the table does NOT name 404s. That is the closed-world property: the map's `default ""` is the
 	#     suppression, so a path outside it must produce no Location at all.
 	#   * any survey the generator could not resolve is recorded in the table as `# UNRESOLVED`, and
 	#     its hand-offs are OFFLINE. Dropping one survey's routes is the safe direction (they 404),

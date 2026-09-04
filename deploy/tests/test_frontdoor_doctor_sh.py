@@ -558,7 +558,7 @@ def test_ts_routes_leg_fails_when_an_open_route_does_not_hand_off(tmp_path):
 
 
 def test_ts_routes_leg_fails_when_an_unlisted_route_resolves(tmp_path):
-    """THE PIN. A path the table does not name must produce NO Location: the map's `default ""` is
+    """THE SUPPRESSION PIN. A path the table does not name must produce NO Location: the map's `default ""` is
     the suppression, so anything but a 404 there means a route resolved that no register published.
     FAILS IF the leg tolerates a 200, a 302 or a soft redirect on an unlisted path."""
     for code in ("302", "200"):
@@ -600,7 +600,8 @@ def test_ts_routes_leg_skips_cleanly_when_unreachable_and_warns_with_no_table(tm
 
 
 def test_tailnet_path_direct_passes_and_derp_fails(tmp_path):
-    """The relay tripwire. A direct pong PASSES; a pong `via
+    """The relay tripwire: the VPS-box path can silently regress to a DERP relay, with multi-second
+    TTFB outliers and relay throughput caps. A direct pong PASSES; a pong `via
     DERP(...)` must FAIL the run and name both the relay and the remediation. FAILS IF the leg is
     missing, mislabelled, or a relayed path exits zero."""
     ok = _work(tmp_path, "direct")

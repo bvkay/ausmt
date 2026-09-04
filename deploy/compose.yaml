@@ -98,7 +98,7 @@ services:
       AUSMT_CACHE_MAX_MB: ${AUSMT_CACHE_MAX_MB:-2048}   # build-cache size cap (MB), pruned oldest-first
 
   # ---------------------------------------------------------------------------------------------
-  # Gateway (Stage 2, contract) - submission gateway + antivirus + no-network runner. All three
+  # Gateway (Stage 2) - submission gateway + antivirus + no-network runner. All three
   # services live under the "gateway" profile so a bare `docker compose up` (the always-on portal)
   # never starts them; bring them up with `docker compose --profile gateway up -d`. Topology is the
   # design's table exactly. The host tree /srv/ausmt/gateway/{incoming,quarantine,jobs,state} is
@@ -193,7 +193,7 @@ services:
       AUSMT_SMTP_PORT: ${AUSMT_SMTP_PORT:-587}              # 465 implicit TLS; 587/25 STARTTLS
       AUSMT_SMTP_USER: ${AUSMT_SMTP_USER:-}                 # SMTP auth login
       AUSMT_SMTP_PASS: ${AUSMT_SMTP_PASS:-}                 # SECRET — redacted from the config dump
-      AUSMT_MAIL_FROM: ${AUSMT_MAIL_FROM:-}                 # sender and Reply-To on issued-key email
+      AUSMT_MAIL_FROM: ${AUSMT_MAIL_FROM:-}                 # the From: header and Reply-To on issued-key email
       AUSMT_SUBMIT_PAGE_URL: ${AUSMT_SUBMIT_PAGE_URL:-}     # woven into the email; omit for no link line
       # SELF-SERVE KEY ISSUANCE CAPS + KEY SHAPE (deploy/.env.example "Daily issuance rate limits" block)
       # - the abuse-control knobs the request-key endpoint enforces: per-email / per-ip / global daily
@@ -227,8 +227,8 @@ services:
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: /srv/surveys-live
       # ...and tell git HOW to use the mounted credential file (the mount alone was never wired to
-      # a helper, so git has no username for the https remote, which is the second half of the
-      # first curator-approval incident). Harmless when only the placeholder is mounted: auth fails
+      # a helper, so git had no username for the https remote, the second half of the first
+      # curator-approval incident). Harmless when only the placeholder is mounted: auth fails
       # closed.
       GIT_CONFIG_KEY_1: credential.helper
       GIT_CONFIG_VALUE_1: store --file=/srv/git-creds/credentials
@@ -315,9 +315,9 @@ services:
     # Override the engine image's baked ENTRYPOINT (the build pipeline) to run the runner loop
     # instead. gateway/ is NOT in the engine image, so it is bind-mounted read-only below and put on
     # PYTHONPATH; the runner invokes the in-image validator/engine as subprocesses.
-    user: "10002:10002"                 # - same NEW uid as the gateway, not the engine's 10001
-    network_mode: none                  # - untrusted content is parsed with NO network
-    read_only: true                     # - immutable rootfs
+    user: "10002:10002"                 # same NEW uid as the gateway, not the engine's 10001
+    network_mode: none                  # untrusted content is parsed with NO network
+    read_only: true                     # immutable rootfs
     tmpfs:
       - /tmp                            # mt_metadata scratch (the only writable path it needs)
     mem_limit: 4g                       # resource caps (hostile/huge EDI => killed at limits)

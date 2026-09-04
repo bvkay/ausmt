@@ -135,7 +135,7 @@ if [ "$PROFILE" = "gateway" ]; then
     warn "AUSMT_GIT_CREDS_DIR is not set — curator publish push fails (=> PUBLISH_FAILED) until set" "set AUSMT_GIT_CREDS_DIR=/path/to/git-creds in $ENV_FILE (see README 'Curator publish credentials')"
   fi
 
-  # Numeric-knob range check (deploy review section 5). The fail_closed_startup range checks
+  # Numeric-knob range check. The fail_closed_startup range checks
   # (gateway/config.py::_RANGES, 15 numeric knobs) are enforced only AT GATEWAY CONTAINER START, so a
   # zeroed/out-of-range override in .env crash-loops the gateway and no preflight leg names it. Catch it
   # HERE, before `docker compose up`. Single source of truth: shell out to python importing the SAME

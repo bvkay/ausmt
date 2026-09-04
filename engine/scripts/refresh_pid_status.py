@@ -3,7 +3,7 @@
 
 The portal build is OFFLINE and byte-reproducible: it never touches the network. This tool is the ONLY
 thing that HEADs doi.org. Run it EXPLICITLY (the deploy/Makefile `refresh-pid-status` target, part of the
-release ritual - step 4); it sweeps every DOI-typed identifier in the corpus, classifies each
+release ritual); it sweeps every DOI-typed identifier in the corpus, classifies each
 under the alive-rule, and writes pid_status.json into the build state dir. `build_portal --pid-status`
 then CONSUMES that file so a reserved-but-not-yet-active DOI renders as plain text, not a dead link.
 

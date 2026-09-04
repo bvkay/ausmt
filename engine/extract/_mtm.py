@@ -50,7 +50,7 @@ def available() -> bool:
 #   2. io/edi/metadata/information.py::read_info flips into its EMPOWER branch for any INFO line
 #      containing "empower" and "v". The Zonge JSON carries `"empower_version": "v1.54.2.5"`, so
 #      the branch fires on a file that is not in Empower's line-oriented format at all.
-# 3. _parse_empower_info splits on `:` and keeps the remainder verbatim (`value = parts[1].strip()`).
+#   3. _parse_empower_info splits on `:` and keeps the remainder verbatim (`value = parts[1].strip()`).
 #      Its cleanup handles bracketed units and degree symbols; NOTHING removes JSON's structural
 #      member separator. The value is the STRING '5,', _empower_translation_dict maps `declination`
 #      onto the typed field station.location.declination.value, and pydantic's float validator raises.
@@ -997,7 +997,7 @@ def _is_placeholder_tipper(txr, txi, tyr, tyi) -> bool:
 
 def _is_missing(zi) -> bool:
     """True if a complex Z/T element is absent, NaN, a non-physical missing-data fill (~1e32), or
-    EXACT complex zero. The exact-zero arm is mt_metadata
+    EXACT complex zero. The exact-zero arm exists because mt_metadata
     converts an EDI's 1e32 fills to exact zeros on read, which passed the magnitude threshold and
     plotted as phase=0deg / rho=0 / tipper-dip data points at every source-masked period. A real
     estimated Z/T element is never exactly 0+0j to double precision; a SINGLE zero component

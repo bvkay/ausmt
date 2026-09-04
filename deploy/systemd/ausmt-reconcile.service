@@ -32,7 +32,7 @@ WorkingDirectory=__DEPLOY_DIR__
 ExecStart=__DEPLOY_DIR__/scripts/reconcile.sh
 # Bound a wedged build, but leave real headroom over a COLD-CACHE rebuild of the whole corpus.
 # 3600 was set when "a rebuild takes minutes" was true. It is not any more: a measured cold rebuild of
-# 22 surveys / 1730 stations (bundled EDIs + per-survey and per-station MTH5) took ~93 MINUTES, and on
+# 22 surveys / 1730 stations (bundled EDIs + per-survey and per-station MTH5) took ~93 MINUTES, and
 # a 3600 timeout has systemd killing the rebuild at exactly 60 minutes, once an hour, indefinitely,
 # each attempt abandoning a half-written builds/<ts>. The build cache colds on every image rebuild (its salt
 # is the baked engine commit), so the slow path is the NORMAL path after any deploy, not an outlier.

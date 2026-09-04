@@ -11,7 +11,7 @@ whose `default ""` is what 404s every path the table does not name.
     python deploy/scripts/gen_ts_routes.py --check    # gate: exit 1 if the table is out of sync
 
 An NCI urlPath cannot be derived from a route path (the state segment is not in the id), so
-resolution needs a lookup, and a committed one makes membership greppable. Membership is
+resolution needs a lookup, and a committed one makes membership greppable in review. Membership is
 `_tsproject.route_rows()`, imported, never restated: the flag is projected for withheld stations
 too, so suppression lives here, in resolution, and the table renders from the same
 predicate as ts_access.json - key sets equal by construction.

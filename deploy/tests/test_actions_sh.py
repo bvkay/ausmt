@@ -222,7 +222,7 @@ def test_rollback_repoints_no_rebuild(tmp_path):
             _audit_lines(t["state"])
 
 
-# ---- restore id validation + drill-first ------------------------------------------
+# ---- restore id validation + drill-first --------------------------------------------------------
 def _live_db(state: Path, content: bytes = b"LIVE-DB-ORIGINAL") -> Path:
     db = state / "gateway.sqlite"
     db.write_bytes(content)
@@ -289,7 +289,7 @@ def test_restore_success_swaps_db(tmp_path):
         _audit_lines(t["state"])
 
 
-# --- update fixed-recipe ------------------------------------------------------------------
+# ---- update fixed-recipe ------------------------------------------------------------------------
 _HOSTILE_UPDATE = {
     "requested_by": "c1",
     "cmd": "rm -rf /",
@@ -435,7 +435,7 @@ def test_dry_run_takes_no_action(tmp_path):
 
 
 def test_restore_mktemp_fail_restarts_gateway(tmp_path):
-    """If staging the restore tmp FAILS after the gateway is stopped (disk or inode exhaustion, which
+    """RESTART-AFTER-FAILED-STAGE PIN. If staging the restore tmp FAILS after the gateway is stopped (disk or inode exhaustion, which
     is realistic during a disaster restore), the gateway MUST still be restarted: the sole ops surface
     is never left down. Forced by pointing the live DB at a path whose parent does not exist, so the
     restore mktemp fails. FAILS IF no `up -d gateway` mark appears on that post-stop path."""
@@ -456,7 +456,7 @@ def test_restore_mktemp_fail_restarts_gateway(tmp_path):
 
 
 def test_audit_line_is_not_forgeable(tmp_path):
-    """PIN. A compromised gateway cannot forge an audit outcome. A hostile requested_by carrying a
+    """AUDIT-FORGERY PIN. A compromised gateway cannot forge an audit outcome. A hostile requested_by carrying a
     ` outcome=ok` token AND a unicode line separator (U+2028) must yield exactly ONE audit line whose
     HOST-computed `outcome=` is the refusal (not the forged token), with no U+2028 surviving and no
     `=` in the by-field. FAILS IF the forged token appears before the real outcome, an extra line is

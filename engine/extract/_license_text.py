@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - exercised only in the installed-packag
     from extract._contract import LICENSES, PROFILES
 
 # Normalise a raw survey.yaml licence string to a canonical id for allow-list matching. trim ->
-# collapse internal whitespace -> upper, then resolve a legacy bare licence alias (CC0, CC-BY, ODBL) to
+# collapse internal whitespace -> upper, then resolve a legacy bare licence alias (CC0, CC-BY, ODBL, ...) to
 # its canonical id. Allow-list keys and aliases are compared in this same UPPER space, so the match is
 # case-insensitive by construction. This is the ONLY place a licence string is canonicalised — the old
 # `startswith("CC")` prefix test (which redistributed a typo'd 'CC-BY-4.O' or any 'CC-nonsense') is gone.
@@ -70,7 +70,7 @@ def recognised(license_str) -> bool:
     return canon_license(license_str) in _LIC_RECOGNISED
 
 
-# (CC-BY 4.0 §3(a) discharge): the default human summary rendered in the changes clause when a
+# The CC-BY 4.0 §3(a) discharge: the default human summary rendered in the changes clause when a
 # survey declares no explicit attribution.changes_summary. Factual — it describes what the engine does
 # to every deposited transfer function it serves (EMTF-XML regeneration, MTH5, coordinate/identifier
 # conditioning). Reviewed wording; to change it, edit here AND
@@ -119,8 +119,8 @@ def instrument_params_from_survey(*, attribution_block, sources_block, derived_p
                                   synthesized_attribution=None):
     """The (attribution, sources, changes) kwargs for license_instrument_text, derived ONCE from a
     survey's attribution/sources blocks so build_portal (the bundle LICENSE.txt) and the gw-runner (the
-    intake LICENSE.md) state IDENTICAL rights for the same survey - the single-source parity the map
-    found the two call sites lacked. `attribution` = the custodian's verbatim attribution.statement when
+    intake LICENSE.md) state IDENTICAL rights for the same survey - the single-source parity the
+    two call sites lacked. `attribution` = the custodian's verbatim attribution.statement when
     present, else `synthesized_attribution` (None -> license_instrument_text synthesises who(year))."""
     ab = attribution_block or {}
     statement = str(ab.get("statement") or "").strip()

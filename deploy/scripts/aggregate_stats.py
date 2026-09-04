@@ -128,7 +128,7 @@ DEFAULT_DAILY_KEEP_DAYS = 92
 # The engine produces per-station MTH5 files there, so
 # the exclusion had to go with it. It is worth naming why the interlock matters: an excluded family
 # classifies as `ignore`, and an ignored path is absent from `unattributed` as well, so every
-# station-h5 download vanishes from the analytics rather than surfacing as build/serve skew.
+# station-h5 download would vanish from the analytics rather than surfacing as build/serve skew.
 # Silent absence, not undercounting. Pinned in deploy/tests/test_aggregate_stats.py.
 _DOWNLOAD_FAMILIES = ("edi", "xml", "h5", "bundles")
 _DATA_PREFIX = "/data/"
@@ -235,7 +235,7 @@ _SELECT_BULK_FLAG = "sel=bulk"
 _SELECT_SINGLE = "single"
 _SELECT_BULK = "bulk"
 
-# CLIENT CLASSES (record "user-agent for bot filtering only" -- read transiently, NEVER stored).
+# CLIENT CLASSES ("user-agent for bot filtering only" -- read transiently, NEVER stored).
 # The old binary was bot-or-human, which put curl, wget and python-requests on the bot side. Those are
 # the exact clients the public API documentation hands people, so scripted scientific use was invisible
 # and the API-requests figure degenerated toward a footer-click counter. Three classes now:
@@ -284,7 +284,7 @@ def _run_datetime() -> dt.datetime:
 
 
 # --------------------------------------------------------------------------------------------------
-# Geo lookup: a stdlib bisect over a flat `start,end,VALUE` range CSV (record no maxminddb, no
+# Geo lookup: a stdlib bisect over a flat `start,end,VALUE` range CSV (no maxminddb, no
 # geoipupdate, no MaxMind EULA custody). Two tables ride this one shape:
 #   * GeoIP     - the db-ip "IP to Country Lite" CSV (start,end,CC), covering the whole internet;
 #   * AuStates  - the compact AU-only state table deploy/scripts/prep_au_states.py distils from the
@@ -1080,7 +1080,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     Only dates d with last_folded_date < d < run_dt.date() are folded (a strictly-earlier complete
     day), so the CURRENT (partial) day is never counted and re-runs never double-count. `run_dt.date()`
     becomes the new last_folded_date, so a day rotated away before it could be folded is simply skipped
-    (record losing a raw log loses nothing already folded, and nothing not-yet-folded is re-read).
+    (losing a raw log loses nothing already folded, and nothing not-yet-folded is re-read).
 
     Each counted request lands in THREE places at once: the cumulative totals, its day row, and its
     calendar-month rollup. Accumulating the month AS THE DAY FOLDS (rather than summing the daily tail
@@ -1735,8 +1735,8 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
     Tolerant, as the whole file is (retention pin): a missing dir, an unreadable file, or a
     truncated/non-gzip archive contributes no lines from THAT file and never raises.
 
-    TOLERANT IS NOT SILENT, and the difference cost real days. On the box's own access.json
-    was root:root 0600, every open raised, and this function swallowed it: the fold ran for days on the
+    TOLERANT IS NOT SILENT, and the difference cost real days. The box's own access.json was
+    root:root 0600, every open raised, and this function swallowed it: the fold ran for days on the
     shipped front-door file alone and produced a plausible, complete-looking stats.json the whole time.
     A file that the glob MATCHED but that could not be OPENED is an operational fault, so it is named
     on stderr and recorded in `skipped` (an optional list the caller passes to get the count into the

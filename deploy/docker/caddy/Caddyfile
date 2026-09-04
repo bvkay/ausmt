@@ -229,7 +229,7 @@
 	}
 	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
 
-	# the contributor-credit model: the curator metadata editor + survey hub. IDENTICAL to strictPages
+	# The contributor-credit model: the curator metadata editor + survey hub. IDENTICAL to strictPages
 	# EXCEPT connect-src ALSO allows exactly FOUR read-only registries: the SAME two citation registries
 	# the public Add Survey page uses - https://api.crossref.org and https://api.datacite.org - for the
 	# publications "Look up DOI" harvest (the shared window.AusmtDoiHarvest core), PLUS https://pub.orcid.org
@@ -248,7 +248,7 @@
 	# fetch/XHR destinations are not covered by img-src). The page ALSO fetch()es
 	# /gateway/healthz and XHR-POSTs /gateway/submit — both SAME-ORIGIN relative paths already covered
 	# by the connect-src 'self' below, so no directive change is needed for the direct-upload flow.
-	# (publication DOI harvest): connect-src ALSO allows exactly TWO more hosts,
+	# Publication DOI harvest: connect-src ALSO allows exactly TWO more hosts,
 	# https://api.crossref.org and https://api.datacite.org — the citation-metadata registries the
 	# DOI-first publications block harvests from (Crossref for journal papers, DataCite for dataset
 	# DOIs). Deliberate two-host allowlist; no other directive is touched, and the page degrades
@@ -285,7 +285,7 @@
 		file_server
 	}
 
-	# Gateway (Stage 2, contract) - reverse-proxy the submission gateway under the SAME origin.
+	# Gateway (Stage 2) - reverse-proxy the submission gateway under the SAME origin.
 	# Placed ABOVE the static-portal `root`/`file_server` below on purpose: `handle` is an ordered
 	# path router, and putting the more specific /gateway/* matcher first means portal static serving
 	# never shadows it.

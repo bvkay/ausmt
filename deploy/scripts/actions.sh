@@ -5,7 +5,7 @@
 # trust boundary) writes an INTENT FILE into the shared gateway state dir; THIS agent, running as
 # the operator uid that owns the code checkout and can drive `docker compose`, scans the state dir and
 # executes a FIXED RECIPE for each recognised intent. The gateway can only ASK; the host decides and
-# acts. (design "operations floor / actions"; "request-file hardening spec".)
+# acts.
 #
 # THE HARDENING (frozen - implemented in full here; the gateway-side checks are UX only, THIS is the
 # real gate):
@@ -24,7 +24,7 @@
 #     kind, the id (rollback/restore only), the requesting curator NAME, and the outcome.
 #   * Typed confirmation for restore: the snapshot id the curator typed is carried in the intent
 #     and re-checked here against the real snapshot list; a mismatch aborts (audited refused).
-#   update.request and restore.request are flagged for the pre-NCI hostile re-audit (see README).
+#   * update.request and restore.request are flagged for the pre-NCI hostile re-audit (see README).
 #
 # THE UPDATE RECIPE IS THE ONE BOUNDED EXCEPTION to the no-privileged-action rule: `git pull
 # --ff-only` on the code checkout + `docker compose pull` + `up -d`, the standing refresh recipe, with
@@ -34,7 +34,7 @@
 # command argument (the "update fixed-recipe" pin proves this by construction + a hostile-content pin).
 #
 # RECIPES (fixed; nothing parameterised except the two validated ids):
-# update git -C CODE pull --ff-only; COMPOSE pull; COMPOSE up -d (exception)
+#   update    git -C CODE pull --ff-only; COMPOSE pull; COMPOSE up -d            (the bounded exception)
 #   backup    invoke deploy/backup.sh                                            (existing snapshot)
 #   rollback  atomic `current` symlink repoint to the named RETAINED build; write rollback.pin so the
 #             reconcile tick does NOT auto-revert while the manual pin stands. NEVER rebuilds.
@@ -151,7 +151,7 @@ PYEOF
 
 # _scrub <value>: return the value stripped of EVERYTHING that could forge an audit line under a
 # compromised gateway. `LC_ALL=C tr -dc '[:print:]'` keeps ONLY ASCII printable bytes 0x20-
-# 0x7E - dropping all control chars (\n\r\t\v\f) AND every byte of a multibyte UTF-8 sequence,
+# 0x7E - dropping all C0/C1 control chars (\n\r\t\v\f) AND every byte of a multibyte UTF-8 sequence,
 # so unicode line separators U+2028/U+2029 (which the gateway's splitlines-free reader also ignores)
 # cannot survive. Then drop `=` so an attacker-controlled `by`/`id` can never inject a `key=value`
 # token (e.g. a forged `outcome=ok`). Capped at 120 chars.
@@ -228,7 +228,7 @@ record_ran() {
 
 # ---- the recipes --------------------------------------------------------------------------------
 
-# recipe_update: THE ONE BOUNDED EXCEPTION. git pull --ff-only on the code checkout,
+# recipe_update: THE ONE BOUNDED EXCEPTION to the no-privileged-action rule. git pull --ff-only on the code checkout,
 # then compose pull + up -d. NOTHING here is derived from the intent — the command sequence is
 # constant (the "update fixed-recipe" pin asserts this by construction). Returns the recipe rc.
 recipe_update() {

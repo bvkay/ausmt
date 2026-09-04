@@ -1,4 +1,4 @@
-"""Usage-analytics aggregator pins (the workflow).
+"""Usage-analytics aggregator pins.
 
 These prove the load-bearing aggregator behaviours against INDEPENDENT OBSERVABLES (the emitted
 stats.json bytes, the attribution over an ENGINE-TRUTH manifest, the bisect result over a fixture
@@ -1572,7 +1572,7 @@ def test_an_archive_line_is_sparse_and_an_active_day_matches_the_fold():
 def test_no_archive_line_ever_carries_a_country_or_a_state():
     """ARCHIVE GEO PIN. Geography stops at the MONTH, rendered or archived. The day rows here are the
     finest-grained record in the whole pipeline, and a named country on a named day is a smaller cell
-    than the named-state-in-a-named-month the brief already excludes. FAILS IF any geographic key or
+    than the named-state-in-a-named-month the small-cell rule already excludes. FAILS IF any geographic key or
     value reaches an archive line, even though the very same fold is counting countries and states
     into stats.json beside it."""
     states = AGG.AuStates.load(_AU_STATES_CSV)
@@ -1602,7 +1602,7 @@ def test_no_archive_line_ever_carries_a_country_or_a_state():
 
 def test_the_daily_archive_leaks_no_address_and_no_user_agent():
     """LEAK PIN (daily archive). The archive is a SECOND file leaving the fold, kept forever, so the
- promise has to hold over it exactly as it holds over stats.json: no address, masked
+    promise has to hold over it exactly as it holds over stats.json: no address, masked
     or not, and no user-agent string. FAILS IF either survives into an archive line. Non-vacuous by
     the same negative control the stats.json sweep uses."""
     states = AGG.AuStates.load(_AU_STATES_CSV)
@@ -2245,7 +2245,7 @@ def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
 # can never count completed transfers: everything after the Location is between the browser and NCI,
 # and every published string says so.
 #
-# TWO things the log cannot tell us, and they are the whole. The `size` on a 302 line is the
+# TWO things the log cannot tell us, and they are the whole of it. The `size` on a 302 line is the
 # REDIRECT BODY, not the file, and the Location header is never logged at all. So the bytes and the
 # destination host come from the register-derived `ts_access.json` the build serves, joined on the
 # route path exactly as a frozen release bundle joins on its filename (_release_bundle_row).
@@ -2307,7 +2307,7 @@ def test_a_hand_off_route_is_its_own_class_admitted_at_302_alone():
 
 
 def test_hand_off_bytes_and_destination_come_from_the_register_never_the_log():
-    """PIN, the whole reason this class needs a join at all. The log CANNOT say how big the file
+    """JOIN PIN, the whole reason this class needs a join at all. The log CANNOT say how big the file
     is (its `size` is the redirect body) and CANNOT say where it went (the Location header is never
     logged), so both come from the served, register-derived ts_access.json on the route key.
 

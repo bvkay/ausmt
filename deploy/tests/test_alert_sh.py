@@ -275,7 +275,7 @@ def test_reconcile_action_failed_oom_kill_pings_fail_naming_the_kernel(tmp_path)
 def test_reconcile_action_untracked_blocked_pings_fail_naming_dir(tmp_path):
     """reconcile-status.json with action=untracked_blocked => a fail ping quoting the
     refusal AND naming the offending dir from log_tail, nonzero exit. This is the deploy-side loud
-    surface for the guard (#15) — the curator's dead-man monitor emails on it, like action=failed.
+    surface for the guard — the curator's dead-man monitor emails on it, like action=failed.
     FAILS IF: the refusal is treated as a healthy panel state (no fail ping), or the offending dir does
     not reach the alert body."""
     tree = _make_tree(tmp_path, reconcile_action="untracked_blocked")
@@ -593,7 +593,8 @@ def test_persistent_rollback_pin_alarms_and_fails(tmp_path):
 
 
 def test_fresh_pin_active_not_persistent(tmp_path):
-    """Non-vacuous control(b): a freshly-set pin is active but NOT persistent (no fail ping)."""
+    """Non-vacuous control for the rollback-floor pin: a freshly-set pin is active but NOT
+    persistent (no fail ping)."""
     tree = _make_tree(tmp_path)
     (tree["state"] / "rollback.pin").write_text(
         json.dumps({"pinned_build": "20260101T000000Z", "pinned_at": _now_iso()}), encoding="utf-8")

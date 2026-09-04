@@ -19,7 +19,7 @@
 -include .env
 export
 
-# Ops-hardening one-screen box health. Runs scripts/doctor-box.sh, which prints a labelled
+# Ops-hardening: one-screen box health. Runs scripts/doctor-box.sh, which prints a labelled
 # PASS/WARN/FAIL line per check (containers, gateway healthz, the reader wall on loopback, surveys-live
 # git/perms/ACL, the reconcile timer, disk, served-vs-published staleness) and EXITS NON-ZERO if any
 # check FAILs, so `make doctor` can gate a script or an alert. Select the gateway checks with
@@ -71,7 +71,7 @@ down:
 # container (/out) and inside the portal container (/srv/data), so the swap stays live-atomic.
 #
 # This is the ONE place the incremental build cache is switched ON
-# (incremental --cache-dir /out/cache --cache-mode $CACHE_MODE, default rw). a curator
+# (--incremental --cache-dir /out/cache --cache-mode $CACHE_MODE, default rw). A curator
 # "Force full rebuild" writes rebuild.request with a `full` flag; reconcile.sh reads it and sets
 # AUSMT_BUILD_CACHE_MODE=refresh, so the engine recomputes everything (no cache reuse) for that one
 # build. Unset => rw (today's behaviour, byte-identical). The cache lives at /out/cache -- a SIBLING

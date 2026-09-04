@@ -1,4 +1,4 @@
-# AusMT gateway image - runs the FastAPI submission gateway (gateway/, contract). Upload ->
+# AusMT gateway image - runs the FastAPI submission gateway (gateway/). Upload ->
 # zip-safety -> clamd scan -> job queue -> tokenised status. The gateway NEVER parses EDI/YAML and
 # NEVER runs the validator/engine itself: content parsing happens in the gw-runner service, which is
 # the ENGINE image with a user:10002 + network_mode:none override (see compose.yaml's gateway
@@ -15,8 +15,8 @@
 #
 # REPRODUCIBILITY. There is NO `locker` stage here. A stage that resolves
 # gateway/requirements.txt (deliberate FLOORS: fastapi>=..., starlette>=..., the tested majors) into a
-# lock INSIDE the build throws it away with the stage. Nothing is committed, so two builds of the
-# same commit could ship different dependency versions and a PyPI release could break the image with
+# lock INSIDE the build would throw it away with the stage, committing nothing, so two builds of
+# the same commit could ship different dependency versions and a PyPI release could break the image with
 # no repo change at all. That is a sharper risk here than in a typical web app: gateway/upload.py
 # imports starlette.formparsers.MultiPartParser DIRECTLY (a non-public API, see that module's header)
 # to cap a multipart stream by bytes, and a floating starlette can move or rename it without any
@@ -86,7 +86,7 @@ USER gwuser
 
 EXPOSE 8000
 
-# The entrypoint wrapper sets umask 0002 (durable group-writable WAL sidecars, incident)
+# The entrypoint wrapper sets umask 0002 (durable group-writable WAL sidecars; see gateway-entrypoint.sh)
 # then execs `python -m gateway`, which runs create_app() (fail-closes on a missing submit key) then
 # uvicorn on 0.0.0.0:8000 — container-internal; compose publishes it loopback-only and Caddy fronts it
 # same-origin. No CMD args: the config surface is env-only.

@@ -58,7 +58,7 @@ off-diagonal over the mid-band periods (central 60%, after masking absent/degene
   * fewer than CONVENTION_MIN_PERIODS usable mid-band periods -> an explicit "insufficient data"
     note — degenerate/masked data must never manufacture a convention verdict.
 LIMIT (state it, don't discover it): Gate 2 is BLIND to ±90° frame rotations by construction — a
-±90° rotation maps Zxy'=-Zyx / Zyx'=-Zxy, which preserves the structure (verified survey-wide,
+±90° rotation maps Zxy'=-Zyx / Zyx'=-Zxy, which preserves the Q1/Q3 quadrant structure (verified survey-wide,
 n=7835 periods). Gate 2 checks the SIGN CONVENTION only; frames are Gate 1's job.
 
 All thresholds are single-sourced here; tests and build_portal import them — never re-declare.
@@ -80,12 +80,12 @@ AZIMUTH_TOL_DEG = 0.5        # HMEAS azimuth agreement tolerance (HY == HX+90, R
 ROT_FILL_MAX = 1e8           # missing-data sentinel threshold — same convention as _mtm._FILL_MAX
 
 # Frame POLICY v3.
-# Verbatim: "We serve the data as how we are given it; if we know any details about
+# The serving doctrine, verbatim: "We serve the data as how we are given it; if we know any details about
 # the coordinate frame we report it. Frame mixing is something we should pick up on and try to
 # minimalize from the data coming in, but the de-rotated we should not do." So the engine NEVER
 # rotates served data — detection stays, correction goes:
 #   * Arm A - a survey-uniform declared angle (ANY magnitude) serves AS STORED, the angle recorded
-# (absorbs the old record + de-rotate; the 15deg FRAME_KEEP_MAX_DEG threshold dies).
+#            (the 15deg FRAME_KEEP_MAX_DEG threshold dies with the de-rotation).
 #   * Arm B - survey-inconsistent per-station-uniform angles: each station serves AS STORED with its
 #            own angle recorded; the SURVEY gains a "mixed declared frames" note (no de-rotation).
 #   * Arm C - per-period rotation WITHIN a station (PAX class): REFUSE the station (a single served
@@ -150,7 +150,7 @@ def parse_frame_evidence(text: str) -> dict:
     spectra = (">=SPECTRASECT" in up) or re.search(r"^>SPECTRA\b", text, re.M | re.I) is not None
     rotspec = [float(x) for x in re.findall(r"ROTSPEC\s*=\s*(-?[\d.]+)", text, re.I)] or None
     tip_attr = re.search(r"^>TX[RI](?:\.EXP)?\b[^\n]*ROT\s*=\s*(\w+)", text, re.M | re.I)
-    # (There is no freq_descending field: it can only verify the angle-to-period alignment ahead of
+    # (There is no freq_descending field: its only use was to verify the angle-to-period alignment ahead of
     # a per-period de-rotation, and the gate refuses ALL per-period rotation, so frequency ordering
     # bears on no disposition.)
     return {
@@ -212,7 +212,7 @@ def _norm_angle(a: float) -> float:
 def declared_uniform_angle(ev: dict):
     """The (kind, theta) of a station's declared frame, for the SURVEY-scope mixed-frames scan.
     kind: 'none' (zero/undeclared), 'uniform' (one nonzero angle, theta normalised), or
-    'per-period' (class - refused at the gate, never enters the survey-uniformity vote).
+    'per-period' (the Arm C class - refused at the gate, never enters the survey-uniformity vote).
     Mirrors frame_disposition's evidence hierarchy (ZROT wins on the impedance branch; azimuths
     only where nothing else declares; ROTSPEC/azimuths on spectra) WITHOUT a TF parse — this is
     the cheap lexical pre-scan process_edis runs before the per-station loop."""
@@ -239,19 +239,19 @@ def declared_uniform_angle(ev: dict):
 
 def classify_survey_frame(station_angles: list):
     """POLICY v3 survey-scope scan from every station's declared_uniform_angle output. Returns the
-    arm-B mixed-declared-frames NOTE (a string) when the survey's per-station declared angles are
+    Arm B mixed-declared-frames NOTE (a string) when the survey's per-station declared angles are
     inconsistent (spread beyond SURVEY_ANGLE_SPREAD_MAX_DEG), else None.
 
     DECLARED-ZERO stations participate as angle 0.0: a served station always sits in
     SOME declared frame — zero/undeclared serves under the declared-zero reference — so a [0°, 20°]
     survey mixes frames exactly as an [8°, 20°] one does, and the note's range must include the 0°
-    members it is stamped on. Only per-period (arm C) stations stay out of the vote: they are
+    members it is stamped on. Only per-period (Arm C) stations stay out of the vote: they are
     refused, never served, so they cannot mix a SERVED frame.
 
     Unlike v2, this classification does NOT change any per-station disposition — every uniform
     declaration serves AS STORED and every per-period declaration refuses, regardless of survey
     context. It exists ONLY to surface the survey-level "mixed declared frames" note in
-    build_report + station.json + the portal (arm B); the engine never de-rotates and never refuses a
+    build_report + station.json + the portal (Arm B); the engine never de-rotates and never refuses a
     station on survey-consistency grounds."""
     angles = [t for k, t in station_angles if k in ("uniform", "none")]
     if not angles:
@@ -296,7 +296,7 @@ def _angles_summary(u: list) -> str:
 
 def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                       n_periods: int) -> FrameDisposition:
-    """Decide pass/fail from the combined evidence under (module docstring). The engine
+    """Decide pass/fail from the combined evidence under POLICY v3 (module docstring). The engine
     NEVER rotates served data, so this returns only action="pass" (serve as-stored, the declared
     frame recorded in facts) or action="fail" (refuse - per-period frame mixing, or an
     unknowable frame). A survey-uniform declaration of ANY magnitude records and serves;
@@ -376,7 +376,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
         return _done(recorded_deg=theta)
 
     # ---- MT (impedance-block) branch: the >ZROT declaration IS the stored-tensor frame. ----
-    recorded = None   # arm A/B serve-as-stored declaration (survey-uniform angle, any magnitude)
+    recorded = None   # Arm A/B serve-as-stored declaration (survey-uniform angle, any magnitude)
     if ev["zrot"] is not None:
         zr = _mask_sentinels(ev["zrot"])
         # sentinel angles are only acceptable where there is no impedance data to serve
@@ -452,8 +452,8 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                          f"coherent frame.")
         if len(tu) == 1:
             # A UNIFORM declared tipper frame that DIFFERS from the impedance's declared azimuth is a
-            # known frame detail, recorded first-class (station.json tipper_declared_azimuth_deg)
-            # + note it (build_report/QA + the portal frame line). Covers both directions: TROT=-60
+            # known frame detail: record it first-class (station.json tipper_declared_azimuth_deg)
+            # and note it (build_report/QA + the portal frame line). Covers both directions: TROT=-60
             # with ZROT=0 (the panel's case d) AND TROT=0 with a nonzero impedance azimuth (the
             # AusLAMP-SA shape: rotated Z, zero tipper). Equal or absent TROT: no field, no noise.
             t_th = _norm_angle(tu[0])
@@ -613,7 +613,7 @@ def convention_check(comp: Optional[dict]) -> dict:
         return s[m] if len(s) % 2 else 0.5 * (s[m - 1] + s[m])
 
     med_xy = _median([a for a, _ in mid])
-    # wrap-safe axis for yx: map to (-360, 0] so (with slack) is one contiguous window and a
+    # wrap-safe axis for yx: map to (-360, 0] so the Q3 quadrant (with slack) is one contiguous window and a
     # legitimate median near ±180 cannot straddle the atan2 representation seam
     med_yx_mapped = _median([(b if b <= 0 else b - 360.0) for _, b in mid])
     xy_ok = -QUADRANT_SLACK_DEG <= med_xy <= 90.0 + QUADRANT_SLACK_DEG

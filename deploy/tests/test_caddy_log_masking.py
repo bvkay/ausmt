@@ -11,9 +11,9 @@ truncated (red-then-green vs an unfiltered block). This dev/CI harness has no `c
     whose log OUTPUT PATH alone is redirected to a writable dir, because validation provisions the
     file writer and the shipped container path (/var/log/caddy) is unwritable to an unprivileged
     user; a companion meta-pin proves the redirect did not turn the leg into a rubber stamp;
-  * the PROMISE-CONSISTENCY PIN checks the shipped portal/index.html text matches the logging
-    behaviour keywords (truncate/mask at the edge, no cookies) and does not make the now-false
-    absolute "no IPs stored" claim.
+  * the PROMISE-CONSISTENCY PIN checks the privacy paragraph in the shipped portal/about.html
+    matches the logging behaviour keywords (truncate/mask at the edge, no cookies) and does not
+    make the now-false absolute "no IPs stored" claim.
 
 The live masked-log-LINE leg (start caddy, hit it, assert the on-disk line is truncated) is UBUNTU/CI
 territory and is flagged for the wait-for-greens push block; the config assertion is the everywhere-
@@ -134,7 +134,7 @@ def test_status_token_redacted_from_uri_at_both_edges():
 
 
 def test_trusted_proxies_configured_for_real_client_masking():
-    """PIN. Caddy must trust the fronting proxy so `client_ip` is the REAL client (from the
+    """TRUSTED-PROXIES PIN. Caddy must trust the fronting proxy so `client_ip` is the REAL client (from the
     forwarded address) that ip_mask then masks — not the loopback proxy. The tailscale CGNAT range
     (100.64.0.0/10) must be trusted explicitly (it is NOT in private_ranges). FAILS IF trusted_proxies
     is absent or omits the CGNAT range (then the masked client_ip would be the proxy, and the true IP
@@ -301,7 +301,7 @@ def test_real_caddy_masks_forwarded_client_ip_in_the_log():
 
     text = _caddyfile_text()
     log_block = _extract_block(text, "\tlog")          # the shipped log {...}
-    #  serve-path tuning split the servers options per listener (scoped blocks do not
+    # Serve-path tuning split the servers options per listener (scoped blocks do not
     # inherit, so each carries trusted_proxies). The reader listener (:8081) is the one behind the
     # front door, so its block is the shipped source of the trusted_proxies under test here.
     servers_block = _extract_block(text, "servers :8081")    # the shipped trusted_proxies {...}

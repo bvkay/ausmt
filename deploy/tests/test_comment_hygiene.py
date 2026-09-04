@@ -479,7 +479,12 @@ RULES = (
     # exemption may read only the variable's own neighbourhood.
     Rule(re.compile(r"\bowner(?:'s|s)?\b(?!@)", re.I), "decision-owner language",
          ((re.compile(r"^OWNER$"), re.compile(r"AUSMT_|\bvariable\b|\benv\b")),)),
-    Rule(re.compile(r"\brulings?\b|\bruled\b", re.I), "ruling language"),
+    # To RULE OUT is to exclude, and an operator reading "an OOM kill is NOT ruled out" is being
+    # told what the evidence cannot show, not who decided anything. The phrasal verb is the one
+    # sense of the word that survives, and it is read as a phrase so "the owner ruled out" still
+    # fails on the word in front of it.
+    Rule(re.compile(r"\brulings?\b|\bruled\b", re.I), "ruling language",
+         ((re.compile(r"(?i)^ruled$"), re.compile(r"(?i)\bruled\s+out\b")),)),
     # Approval of a DESIGN DECISION is what may not be recorded here. The
     # gateway's own workflow, in which a curator approves a submission and the
     # code writes an `Approved-by:` trailer, is the one sense that survives, and
@@ -662,6 +667,10 @@ TAG_NOT_A_TAG = (
     # corpus-id shape, and an entry that repeated them would excuse them twice.
     ("a DATAID example", re.compile(r"^A\d{1,2}$"),
      re.compile(r"DATAID|data ?id|station id|example|\.edi\b|\bEDI\b", re.I)),
+    # The two CONTROL-CODE BLOCKS of the character set. A sanitiser that names the bytes it drops
+    # names them C0 and C1, and the word that identifies them stands beside them by construction.
+    ("a control-code block", re.compile(r"^C[01]$"),
+     re.compile(r"control (?:char|code|byte)|\bASCII\b|printable|0x[0-9a-f]{2}", re.I)),
     ("a message digest", re.compile(r"^MD5$"),
      re.compile(r"digest|checksum|hash|manifest|sha\d", re.I)),
     ("a percentile", re.compile(r"^P(?:50|95|99)$"),

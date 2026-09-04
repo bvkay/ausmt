@@ -24,7 +24,7 @@ guards in the file, evaluate them against a supplied environment, and report eve
 
 Usage:
     python3 check_compose_guards.py <compose.yaml> KEY=VALUE [KEY=VALUE ...]
-    python3 check_compose_guards.py --self-test        # runs the guard assertions, non-zero on fail
+    python3 check_compose_guards.py --self-test        # runs the guard assertions, exits non-zero on fail
 
 Exit code: 0 if config would resolve (no guard trips), 1 if any guard trips (or a self-test fails).
 """
@@ -117,7 +117,9 @@ def _parse_env_args(args: list[str]) -> dict[str, str]:
 
 
 def _self_test() -> int:
-    """The guard-scoping assertions. Fails if a guard reaches beyond its own service."""
+    """The guard-scoping assertions. Fails if the guard scoping is wrong in either direction: a
+    base-config guard that trips for portal-only operation, or an always-required variable that has
+    lost its guard."""
     here = Path(__file__).resolve().parent
     compose = (here.parent / "compose.yaml").read_text(encoding="utf-8")
     failures: list[str] = []

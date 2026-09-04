@@ -6,7 +6,7 @@ function, per the frozen design record maintainer/C42-CoordinateAccess.md. The s
 pipeline-ordered by the caller: parse -> QC on TRUE coordinates -> apply_coordinate_policy() in
 place -> ALL emission. No emitter reads a coordinate from anywhere but the post-mask station record.
 
-Fail-closed posture (consistent gates' refuse-to-serve stance): an UNKNOWN enum value
+Fail-closed posture (consistent with the convention gates' refuse-to-serve stance): an UNKNOWN enum value
 or an override naming a station that does not exist is a survey-level build FAILURE (raised as
 CoordinatePolicyError), never a silent fallback to exact.
 

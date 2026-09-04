@@ -307,7 +307,7 @@ check_disk() {
 #     * the file is missing (the reconcile timer is not running / never wrote one) — WARN-class only on
 #       a fresh install; here we treat absence as a fail because on a configured box the timer must run,
 #     * last_run is older than AUSMT_ALERT_RECONCILE_MAX_MIN (the timer stalled), OR
-# * action == "failed" (a build/verify failure - the fail-closed state), OR
+#     * action == "failed" (a build/verify failure - the fail-closed state), OR
 #     * action == "untracked_blocked" (the reconcile agent REFUSED to rebuild because surveys-live has
 #       untracked survey dirs the build would serve; needs an operator, no self-heal).
 #   noop/rebuilt/sync_failed are all healthy timer outcomes (they exit 0) and do NOT fail here — a
@@ -443,7 +443,7 @@ check_backup() {
 }
 
 # --------------------------------------------------------------------------------------------------
-# Check e: PERSISTENT-PAUSE alarm (7).
+# Check e: PERSISTENT-PAUSE alarm.
 #   The curator can pause auto-rebuild (pause.flag; reconcile auto-expires it after 6 h). A single
 #   pause is fine. The threat is a SLOW RE-ARM — re-writing the flag once per expiry window keeps
 #   auto-rebuild dead forever while every INDIVIDUAL flag stays "fresh" (a single-flag age check would
@@ -619,7 +619,7 @@ PYEOF
 #     previous ops-status.json forward, so a 4-hour hidden sync_failed reads
 #     as "failing for N ticks since T", not a silent single line.
 #   * retained-build inventory: each site-data/builds/<ts> dir's build.json (id/engine/source) +
-# build_report.json (stations) + build_provenance.json `cache` block (the cache forensics:
+#     build_report.json (stations) + build_provenance.json `cache` block (the cache forensics:
 #     salt_fp / write_errors / read_errors) + a serving marker (== current symlink target).
 #   * log tail: the newest site-data/logs/*.build.log, last 60 lines, copied into the file (the
 #     gateway has no site-data mount — this is how a shell-less curator reads build forensics).

@@ -198,7 +198,7 @@ def test_reconcile_timer_absent_fails(tmp_path):
     assert r.returncode != 0
 
 
-# ---- kernel OOM kills named by name --------------------------------------------
+# ---- kernel OOM kills named by name ------------------------------------------------------------------
 
 def test_kernel_oom_kill_fails_and_names_the_process(tmp_path):
     """The P350 incident: the engine build was OOM-killed by the kernel five nights running and every
@@ -278,7 +278,7 @@ def test_permission_hint_does_not_hide_a_kill_that_is_visible(tmp_path):
 # TS-ROUTE KEY-SET PARITY (THREDDS workflow). The route table lives on the VPS and the data lives here, so
 # a withheld flip is suppressed only once the table is regenerated, committed and installed. Both
 # renderings come from ONE projection, so their (station, level) key sets must be EQUAL: a route that
-# resolves for a station the data does not publish is the leak, and a published route that 404s is
+# resolves for a station the data does not publish is a leak, and a published route that 404s is
 # a broken hand-off. Neither direction may pass quietly.
 # --------------------------------------------------------------------------------------------------
 _TSA = '{"au.demo.A1":{"raw_packed":{"bytes":1,"url_path":"arch/A1.zip"}}}'
@@ -303,7 +303,7 @@ def test_ts_parity_passes_when_the_table_and_the_served_data_agree(tmp_path):
 
 
 def test_ts_parity_fails_when_the_table_names_a_route_the_data_does_not_publish(tmp_path):
-    """THE DIRECTION. A route the served data does not publish is a station whose bytes resolve
+    """THE LEAK DIRECTION. A route the served data does not publish is a station whose bytes resolve
     while its record says nothing - exactly the suppression failure the split-host shape risks.
     FAILS IF a table ahead of the data is reported green."""
     data = _make_tree(tmp_path)

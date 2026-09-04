@@ -157,7 +157,7 @@ def _site_addresses(text: str) -> list[str]:
         if depth == 0 and line.endswith("{") and line[:-1].strip():
             addr = line[:-1].strip()
             # A parenthesised address is a SNIPPET definition (e.g. `(box_upstream)`, the
-            #  shared box transport), not a site block: it binds no listener.
+            # shared box transport), not a site block: it binds no listener.
             if not (addr.startswith("(") and addr.endswith(")")):
                 out.append(addr)
         structural = _PLACEHOLDER_TOKEN.sub("", line)
@@ -166,7 +166,7 @@ def _site_addresses(text: str) -> list[str]:
 
 
 def test_render_with_legacy_unset_strips_to_exactly_one_site_block(tmp_path):
-    """ Legacy var UNSET: the installer must write Caddyfile.rendered with the marker range
+    """Legacy var UNSET: the installer must write Caddyfile.rendered with the marker range
     stripped: exactly the canonical site block, zero legacy references, and the validate call must
     mount the RENDERED file. FAILS IF the legacy block (or any reference to its var) survives, or
     validate still points at the tracked template."""
@@ -188,7 +188,7 @@ def test_render_with_legacy_unset_strips_to_exactly_one_site_block(tmp_path):
 
 
 def test_render_with_legacy_set_keeps_both_blocks_and_the_permanent_redir(tmp_path):
-    """ Legacy var SET: the rendering must keep BOTH site blocks, canonical first, with the
+    """Legacy var SET: the rendering must keep BOTH site blocks, canonical first, with the
     legacy block still carrying its single permanent {uri}-preserving redir. FAILS IF the strip
     fires anyway, the order flips, or the redir softens."""
     work, env = _setup_real_caddyfile(tmp_path, legacy="ausmt.au")

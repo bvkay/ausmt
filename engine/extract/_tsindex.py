@@ -4,11 +4,11 @@
     surveys/<slug>/ts-index.yaml
         ts_index:
           SA104A:
-            - level: raw_packed # one of the five tokens
+            - level: raw_packed              # one of the five tokens
               url_path: "my80/.../SA104A.zip"  # the archive's own string, stored VERBATIM
               filename: "SA104A.zip"
               bytes: 1042000000
-              verified: ""         # the day the crawler read a 200, and the day the
+              verified: "YYYY-MM-DD"        # the day the crawler read a 200, and the day the
               match_method: rule:sa-pad      #   published fieldnote names
               review: verified               # only `verified` ever projects
 

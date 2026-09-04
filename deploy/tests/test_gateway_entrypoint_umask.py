@@ -1,4 +1,4 @@
-"""Gateway entrypoint umask seam (deploy/docker/gateway-entrypoint.sh) - #16, incident.
+"""Gateway entrypoint umask seam (deploy/docker/gateway-entrypoint.sh).
 
 The gateway runs as uid 10002 and opens its sqlite state DB in WAL mode, minting `-wal`/`-shm` sidecars
 fresh on every container recreate. The nightly HOST backup runs as the operator in the shared group

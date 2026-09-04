@@ -51,8 +51,8 @@
 # HISTORY (CI minutes economy): the runtime stage used to `RUN python -m pytest -q tests` as an
 # in-build STACK-LESS sanity check — against whatever mt_metadata/mth5 the `locker` stage resolved
 # for THIS build, NOT the pinned lock the image ships. That in-build run was the least truthful of
-# the engine suite's three runs (it tests a build-time resolution, not the shipped stack) and
-# is the only one costing ~4 min on every image build (see the note further down this file).
+# the engine suite's three runs (it tested a build-time resolution, not the shipped stack) and
+# was the only one costing ~4 min on every image build (see the note further down this file).
 # The FULL, pinned-lock pytest run, the real release gate, runs in
 # CI (.github/workflows/deploy-images.yml's `engine-full-tests` job) INSIDE the shipped image with the
 # lock installed and the skip tripwire; the fast source-tree gate runs in build-products.yml. Two
@@ -154,13 +154,13 @@ RUN python -m pip install --no-cache-dir --no-deps -e .
 RUN python ../contract/generate.py --check
 
 # CI minutes economy: NO in-build stack-less pytest run stands here.
-# It is the least truthful of the engine suite's three runs and the only one paying ~4 min on
-# every image build. The three runs are:
-#   (a) THIS in-build `RUN python -m pytest -q tests` — ran against whatever mt_metadata/mth5 the
+# Such a run would be the least truthful of the engine suite's three runs and the only one paying
+# ~4 min on every image build. The three runs were:
+#   (a) an in-build `RUN python -m pytest -q tests` — ran against whatever mt_metadata/mth5 the
 #       `locker` stage happened to resolve at build time, NOT the pinned lock the image ships (see
 #       the HISTORY note at the top of this file, which admits exactly that). Least faithful → dropped.
 #   (b) deploy-images.yml's `engine-full-tests` job — runs `pytest` INSIDE the SHIPPED image with
-# the pinned lock installed, piped through the skip tripwire. This is the real release gate
+#       the pinned lock installed, piped through the skip tripwire. This is the real release gate
 #       and is UNCHANGED; it is also where the topology skip ("gateway tree not shipped")
 #       legitimately fires (engine image ships engine/ only, no /app/gateway), covered by the
 #       ci_check_skips.py allow-list. That skip is unaffected by removing (a): the image topology at

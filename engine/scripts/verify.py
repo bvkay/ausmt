@@ -97,7 +97,7 @@ def _live_survey_digests(surveys_root: Path) -> dict:
 
 
 def _check_digest_consistency(data_dir: Path, surveys_root: Path):
-    """ The cache-INDEPENDENT product-consistency gate.
+    """The cache-INDEPENDENT product-consistency gate.
 
     Compares out/products/survey_digests.json (the digest-stamp sidecar the build emitted) against the
     LIVE survey.yaml sources under `surveys_root`. FAILS when a served survey's XML was produced under a
@@ -115,7 +115,7 @@ def _check_digest_consistency(data_dir: Path, surveys_root: Path):
     lines = []
     sidecar_path = data_dir / "products" / "survey_digests.json"
     if not sidecar_path.exists():
-        # A build predating (no sidecar) cannot be consistency-checked; fail LOUD rather than
+        # A build with no digest-stamp sidecar cannot be consistency-checked; fail LOUD rather than
         # silently pass — an armed gate (--surveys given) that finds no stamps to check is a real gap.
         lines.append(f"   consistency: FAIL — no digest-stamp sidecar at {sidecar_path} (build predates "
                      f"C18b, or products/ was not emitted); cannot verify product-vs-source freshness")
@@ -307,7 +307,7 @@ def _curator_allow_list(path: Path) -> set:
 def _check_source_parse_failures(rep, allow_path: Path):
     """THE LOST-STATION GATE. build_report.json has recorded `source_parse_failures` since the GDS
     readers arrived -- which source file the reader refused, and what it said -- and until now nothing
-    read it. Measured cost: nine files refused, build exit 0,
+    read it. Measured cost (GSSA/BHP Roxby Downs 2018): nine files refused, build exit 0,
     no SKIP line, package validator 0 FAIL, and nine transfer functions absent from a corpus nobody
     was told had lost them.
 
@@ -466,8 +466,8 @@ def _check_survey_metadata(base_dir: Path, mtc, rep, jsonschema, sm_schema):
                      f"survey.yaml (or withdraw the package deliberately) and rebuild; never swap this build in.")
     # 1b. The same rule for every OTHER survey-granularity drop: unreadable or non-mapping
     #     survey.yaml, invalid coordinate policy or station_ids block, a zero-station parse, an
-    #     unserialisable SMETA. A stderr-only drop lets this gate pass a build that silently lost
-    #     a survey, which is the exact swap it exists to prevent.
+    #     unserialisable SMETA. A stderr-only drop would let this gate pass a build that silently
+    #     lost a survey, which is the exact swap this gate exists to prevent.
     dropped = (rep or {}).get("surveys_dropped") if isinstance(rep, dict) else None
     if dropped is None:
         ok = False
@@ -593,8 +593,8 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
 
     When `surveys_root` is given (the Makefile's rebuild-data passes
     --surveys), ALSO run the cache-INDEPENDENT digest-consistency gate: the served-product digest
-    stamps vs the live survey.yaml sources. When it is None the gate SKIPS with a LOUD note (all
-    call sites keep their exact behaviour). The gate never reads the cache dir."""
+    stamps vs the live survey.yaml sources. When it is None the gate SKIPS with a LOUD note (a call
+    site that passes no surveys root keeps its exact behaviour). The gate never reads the cache dir."""
     if not data_dir.is_dir():
         print(f"ERROR: --data-dir {data_dir} is not an existing directory", file=sys.stderr)
         print("VERIFY:", "FAIL")

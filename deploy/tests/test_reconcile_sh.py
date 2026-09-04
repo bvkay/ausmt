@@ -18,7 +18,7 @@ Each test names its failure criterion in the docstring (Invariant 10). The cases
   lock-held    a concurrent run holds flock -> second run exits 0, status untouched  (needs flock)
 
 WINDOWS: there is no flock(1) here, so the lock-held case skipif's on its absence and is NOTED in the
-report; ALL other cases run on this machine (the brief's requirement) — reconcile.sh runs bare
+report; ALL other cases run on this machine — reconcile.sh runs bare
 (without the lock) when flock is missing, which does not change any non-lock decision.
 """
 from __future__ import annotations
@@ -71,7 +71,7 @@ def _make_tree(tmp_path: Path, *, source_commit: str | None, build_id: str = "bi
 
     # build.json lives at the BUILD ROOT (current/build.json): the engine writes `out/build.json`
     # and Caddy's handle_path strips the /data URL prefix before the filesystem. The first install
-    #  failed because BOTH the script and this fixture assumed current/data/build.json -
+    # failed because BOTH the script and this fixture assumed current/data/build.json -
     # a self-consistent test that validated the script against its own wrong assumption. The layout
     # here is now pinned to the ENGINE's write site by test_build_json_path_matches_engine_layout.
     site = data / "site-data" / "current"
@@ -174,7 +174,8 @@ def _leave_untracked_survey(tree: dict, name: str = "test-2026") -> Path:
 def test_untracked_survey_dir_refuses_rebuild(tmp_path):
     """Surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is NOT
     invoked (no build), the status action is 'untracked_blocked' naming the offending dir, and the
-    script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway, or the refusal state does not name the dir, or it exits 0
+    script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway (the shim marker appears), or the refusal state does not
+    name the dir, or it exits 0
     and hides the misconfiguration."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")  # built != HEAD => would otherwise rebuild
     _commit_tracked_survey(tree)
@@ -193,7 +194,7 @@ def test_untracked_survey_dir_refuses_rebuild(tmp_path):
 def test_clean_survey_tree_still_rebuilds(tmp_path):
     """A surveys/ tree with ONLY tracked survey dirs (no untracked leftovers) + drift => the guard is
     transparent and the rebuild proceeds exactly as before. FAILS IF: the guard false-positives on a
-    clean tree and blocks a legitimate rebuild (a regression reconcile behaviour)."""
+    clean tree and blocks a legitimate rebuild (a regression to the reconcile behaviour)."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     _commit_tracked_survey(tree)  # tracked only — nothing untracked under surveys/
     r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
@@ -477,10 +478,9 @@ def test_missing_data_dir_fails_early(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="directory write-deny not enforceable via chmod on Windows")
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_log_dir_exists_but_unwritable_fails_before_building(tmp_path):
-    """logs/ EXISTS but is not writable (aship regression - `mkdir -p` alone would pass) =>
-    fail before invoking the build, action=failed, rc=1, with the briefship-prep hint. FAILS IF: the
-    writability probe is dropped and the failure only surfaces at the build redirect with no hint
-    with make never launched."""
+    """logs/ EXISTS but is not writable (an ownership regression - `mkdir -p` alone would pass) =>
+    fail before invoking the build, action=failed, rc=1, with the ownership-prep hint. FAILS IF: the
+    writability probe is dropped and the failure only surfaces at the build redirect with no hint."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     logs_dir = tree["data"] / "site-data" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -538,7 +538,7 @@ def test_log_dir_uncreatable_fails_before_building(tmp_path):
 def test_lock_held_second_run_is_silent_noop(tmp_path):
     """A second reconcile run while the lock is held exits 0 WITHOUT touching the status file. FAILS
     IF: two runs both build (lock not honoured), or the second run rewrites/creates the status file.
-    (skipif: no flock on this Windows dev box - noted report; the deploy host has flock.)"""
+    (skipif: no flock on this Windows dev box - noted in the report; the deploy host has flock.)"""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     lock = Path(tree["env"]["AUSMT_RECONCILE_LOCK"])
     # Hold the lock in a separate flock process for the duration of the second run.
@@ -689,7 +689,7 @@ def test_force_full_rebuild_flag_sets_cache_refresh(tmp_path):
 
 
 # ===================================================================================================
-#  incident: systemd's TimeoutStartSec SIGTERMed a 60-minute-plus rebuild once an hour.
+# Incident: systemd's TimeoutStartSec SIGTERMed a 60-minute-plus rebuild once an hour.
 # The script had no signal handler and the Makefile prunes only after a SUCCESSFUL swap, so every
 # killed attempt (a) wrote no status, leaving the curator panel showing the last CLEAN outcome and the
 # loop guard unarmed, and (b) abandoned its half-written builds/<ts> forever.
@@ -933,7 +933,7 @@ def test_failed_build_with_unreadable_journal_says_oom_not_ruled_out(tmp_path):
     this notice"). With -q, or with stderr thrown away, that is indistinguishable from a quiet kernel and
     the incident's OOM kill is recorded as a plain "rebuild FAILED" (exactly how it hid for a week). The
     failure must stay action=failed / oom_kill=false (nothing was SEEN), exit 1, keep the build log tail,
-    but the detail must say the kernel journal could not be read, that an OOM kill CANNOT BE EXCLUDED,
+    but the detail must say the kernel journal could not be read, that an OOM kill CANNOT BE RULED OUT,
     and name the systemd-journal group fix; the console line must say so too; and the query must not
     pass -q. FAILS IF: the status is the plain failure with no such note, oom_kill is claimed true
     (nothing was seen), the log tail is lost, or -q is passed."""
@@ -947,12 +947,12 @@ def test_failed_build_with_unreadable_journal_says_oom_not_ruled_out(tmp_path):
     assert st.get("oom_kill") is False, f"nothing was seen, so oom_kill must not be claimed: {st}"
     tail = st.get("log_tail") or ""
     assert "KERNEL JOURNAL COULD NOT BE READ" in tail, tail[:400]
-    assert "CANNOT BE" in tail and "EXCLUDED" in tail, tail[:400]
+    assert "CANNOT BE" in tail and "RULED OUT" in tail, tail[:400]
     assert "not seeing messages from" in tail, "the detail must quote journalctl's own notice"
     assert "systemd-journal" in tail, "the detail must name the fix"
     assert "simulated build failure" in tail, "the build log tail must still follow the note"
     assert "KILLED BY THE KERNEL" not in tail, "an unread journal is not evidence of a kill"
-    assert "cannot be excluded" in r.stderr and "systemd-journal" in r.stderr, r.stderr
+    assert "NOT ruled out" in r.stderr and "systemd-journal" in r.stderr, r.stderr
     q = qlog.read_text(encoding="utf-8").splitlines()[-1].split()
     assert "-q" not in q, f"-q would suppress the only sign of an unread journal: {q}"
 
@@ -961,7 +961,7 @@ def test_failed_build_with_unreadable_journal_says_oom_not_ruled_out(tmp_path):
 def test_failed_build_with_journalctl_denied_says_oom_not_ruled_out(tmp_path):
     """The older hard-denial shape: journalctl exits non-zero ("No journal files were opened due to
     insufficient permissions."). Same contract as the exit-0 hint: failed, oom_kill=false, note that a
-    kill cannot be excluded, log tail kept."""
+    kill cannot be ruled out, log tail kept."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     shim, _ = _journalctl_shim(tmp_path)
     r = _run(tree, env_extra={"SHIM_FAIL": "1", "SHIM_HINT": "1", "SHIM_RC": "1",
@@ -977,8 +977,8 @@ def test_failed_build_with_journalctl_denied_says_oom_not_ruled_out(tmp_path):
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_permission_hint_does_not_hide_a_visible_kill(tmp_path):
     """A partly readable journal (notice printed AND the kill line present) is a POSITIVE answer: the
-    kill is named by name, oom_kill=true. FAILS IF: the notice downgrades a visible kill to "not
-    excluded"."""
+    kill is named by name, oom_kill=true. FAILS IF: the notice downgrades a visible kill to "not ruled
+    out"."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     shim, _ = _journalctl_shim(tmp_path)
     r = _run(tree, env_extra={"SHIM_FAIL": "1", "SHIM_HINT": "1", "SHIM_OOM": "1",

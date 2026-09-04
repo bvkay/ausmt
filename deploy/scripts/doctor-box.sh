@@ -167,7 +167,7 @@ check_surveys_live() {
 		fail "surveys-live: checkout is DIRTY - local edits/untracked entries would be built + served: $(printf '%s' "$dirty" | tr '\n' ';' | head -c 160)"
 	fi
 	# Group-writable: the shared-group publish model. A .git that has lost g+w locks the operator out of
-	# git pull after a gateway (uid 10002) publish (incident).
+	# git pull after a gateway (uid 10002) publish (a known incident).
 	if [ -w "$sl/.git" ] && [ "$( (ls -ld "$sl/.git" 2>/dev/null | cut -c6) )" = "w" ]; then
 		pass "surveys-live: .git is group-writable (shared-group publish model)"
 	else
@@ -264,7 +264,7 @@ check_ts_route_parity() {
 	# (deploy/frontdoor/ts-routes.map, committed) while the DATA lives here, so a withheld flip is
 	# suppressed only once the table is regenerated, committed and installed. Both renderings come from
 	# ONE projection, so their (station, level) key sets must be EQUAL: a route that resolves for a
-	# station the data does not publish is the leak, and a published route that 404s is a broken
+	# station the data does not publish is a leak, and a published route that 404s is a broken
 	# hand-off. Compared against the SERVED artifact on the reader port rather than a file on disk:
 	# what is served is what the public gets.
 	code_dir="${AUSMT_CODE_DIR:-}"

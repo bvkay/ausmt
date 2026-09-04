@@ -1,4 +1,4 @@
-"""the contributor-credit model (curator DOI harvest) - Caddyfile CSP config-assertion pin.
+"""The contributor-credit model (curator DOI harvest) - Caddyfile CSP config-assertion pin.
 
 The curator publications "Look up DOI" button runs the SAME client-side registry harvest the public Add
 Survey page uses, so the curator metadata editor + survey hub pages need the SAME two citation hosts in

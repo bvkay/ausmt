@@ -13,7 +13,7 @@ Three defects, all box-side, all proven here against a real Caddy over the SHIPP
   * `redir /index.html / 301` dropped the query, so about.html's /index.html?tour=1 - the only
     documented entry point to the guided tour outside the intro panel - never started the tour.
 
-The two listeners carry near-duplicate copies of the reader directives by design (bridge
+The two listeners carry near-duplicate copies of the reader directives by design (the bridge
 pin enforces the no-drift rule), so every source pin below runs against BOTH, and the two
 renditions of the new block are compared to each other directly.
 """

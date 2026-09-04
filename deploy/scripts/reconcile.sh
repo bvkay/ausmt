@@ -85,8 +85,8 @@ JOURNALCTL="${AUSMT_RECONCILE_JOURNALCTL:-journalctl}"
 # rollback pin: both host-written by the actions agent (deploy/scripts/actions.sh) / the gateway, and
 # RESPECTED here (this agent never writes them). A FRESH pause.flag suppresses the drift rebuild; a
 # pause older than PAUSE_EXPIRY_MIN is IGNORED (auto-expired — a stale flag never freezes serving
-# forever, pause-expiry). rollback.pin holds reconcile off an auto-revert of a manual rollback
-# until an explicit rebuild.request moves forward (rollback-repoints).
+# forever; the pause-expiry pin). rollback.pin holds reconcile off an auto-revert of a manual
+# rollback until an explicit rebuild.request moves forward (the rollback-repoints pin).
 PAUSE_FLAG="$STATE_DIR/pause.flag"
 ROLLBACK_PIN="$STATE_DIR/rollback.pin"
 PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"   # 6 h
@@ -253,10 +253,10 @@ PYEOF
 # (a journalctl --since expression), oldest first, at most the last 5; empty when there were none. Never
 # fails the script. ALSO sets OOM_JOURNAL_UNREADABLE: empty when the kernel journal was actually READ (so
 # an empty answer is a real negative), else a one-line reason it was not, so the caller can say "an OOM
-# kill cannot be excluded" instead of silently reporting a plain failure over an unread journal. Both
+# kill cannot be ruled out" instead of silently reporting a plain failure over an unread journal. Both
 # are globals (not echoed) because a $(...) caller would run this in a subshell and lose the second one.
 #
-# WHY (incident, P350): the engine build was OOM-killed by the kernel five nights running
+# WHY: the engine build was OOM-killed by the kernel five nights running
 # ("Out of memory: Killed process 398616 (python) ... anon-rss:13740244kB ... UID:10001") and every one
 # of them reached the operator as "rebuild FAILED (rc=2), see log tail". The log tail ends mid-survey
 # with no error at all, because the process was killed, not failed: the truth was two layers down, in
@@ -383,7 +383,7 @@ run_pass() {
   # 0. PAUSE + ROLLBACK-PIN state. Computed FIRST so EVERY status write below surfaces
   #    it (an authenticated attacker must not be able to keep serving frozen silently). PAUSED == a
   #    pause.flag within its expiry window (honoured); PAUSE_EXPIRED == a stale flag that is IGNORED
-  # (auto-expired); PINNED == a manual "serve this build" rollback pin standing.
+  #    (auto-expired); PINNED == a manual "serve this build" rollback pin standing.
   PAUSED=0; PAUSE_EXPIRED=0; PAUSE_SINCE=""
   if [ -f "$PAUSE_FLAG" ]; then
     if [ -n "$(find "$PAUSE_FLAG" -maxdepth 0 -mmin "+$PAUSE_EXPIRY_MIN" 2>/dev/null)" ]; then
@@ -434,7 +434,7 @@ PYEOF
     return 0
   fi
 
-  # 1b. UNTRACKED-SURVEY-DIR GUARD (incident). The engine build enumerates the FILESYSTEM
+  # 1b. UNTRACKED-SURVEY-DIR GUARD. The engine build enumerates the FILESYSTEM
   # under surveys-live/surveys/ (Makefile rebuild-data passes --surveys …/surveys/surveys), NOT git —
   # so a leftover UNTRACKED survey dir (a `test-2026` left on the box) is SERVED even though `git rm`/
   # pushes can never remove what was never tracked, and the drift compare below reads "current"
@@ -492,10 +492,10 @@ PYEOF
   full_rebuild=0
   if [ -f "$REQUEST_FILE" ]; then
     request_present=1
-    [ "$(read_full_flag)" = "1" ] && full_rebuild=1     # the force-full-rebuild flag
+    [ "$(read_full_flag)" = "1" ] && full_rebuild=1     # Force-full-rebuild flag
   fi
 
-  # LOOP GUARD (the class): an unreadable built-identity reads as drift, and a rebuild
+  # LOOP GUARD: an unreadable built-identity reads as drift, and a rebuild
   # SHOULD make build.json readable — so if the LAST pass already rebuilt (or already tripped this
   # guard) at this SAME head and the identity was STILL unreadable afterwards, something structural
   # (a layout or permission mismatch) is eating every rebuild. Do not burn one build per tick
@@ -561,7 +561,7 @@ PYEOF
     return 0
   fi
 
-  # 2c. ROLLBACK PIN (rollback-repoints). While a manual "serve this build" pin stands,
+  # 2c. ROLLBACK PIN (the rollback-repoints pin). While a manual "serve this build" pin stands,
   #     reconcile must NOT auto-rebuild — that would revert the rollback the curator deliberately made.
   #     An explicit rebuild.request is a deliberate MOVE-FORWARD: it clears the pin and proceeds to
   #     build. Without a request, hold and report the pin honestly (drift is EXPECTED under a pin).
@@ -687,20 +687,20 @@ $_t"
   fi
   # journalctl is on the host but this user could not read the kernel journal (not in systemd-journal /
   # adm): the negative above is NOT evidence. Keep the ordinary failed status (oom_kill=false: nothing
-  # was seen) but lead the detail with the fact that a kill cannot be excluded and how to make it
+  # was seen) but lead the detail with the fact that a kill cannot be ruled out and how to make it
   # visible. A host with no journalctl at all (non-systemd, cron/PBS) keeps the plain path unchanged.
   if [ -n "$OOM_JOURNAL_UNREADABLE" ] && [ "$OOM_JOURNAL_UNREADABLE" != "no journalctl on this host" ]; then
     _t=$(tail -n 30 "$log_file" 2>/dev/null || true)
     write_status "failed" "$head" "$built" "$(read_build_id)" "$log_file" \
 "rebuild FAILED (rc=$rc); the previous build is still being served.
 NOTE: the KERNEL JOURNAL COULD NOT BE READ by this user ($OOM_JOURNAL_UNREADABLE),
-so a kernel out-of-memory kill during this build CANNOT BE EXCLUDED: an unread journal is not
+so a kernel out-of-memory kill during this build CANNOT BE RULED OUT: an unread journal is not
 evidence, and an OOM-killed build reads as a plain failure. Add the user this agent runs as
 ($(id -un 2>/dev/null || echo '?')) to the systemd-journal group (deploy/README.md, 'Serve reconcile'
 install step 0c) so the next failure can be named by cause.
 --- last lines of $log_file ---
 $_t"
-    printf 'reconcile: rebuild FAILED (rc=%s); kernel journal unreadable by this user, an OOM kill cannot be excluded (add %s to systemd-journal). Old build still serving. Log: %s\n' "$rc" "$(id -un 2>/dev/null || echo '?')" "$log_file" >&2
+    printf 'reconcile: rebuild FAILED (rc=%s); kernel journal unreadable by this user, an OOM kill is NOT ruled out (add %s to systemd-journal). Old build still serving. Log: %s\n' "$rc" "$(id -un 2>/dev/null || echo '?')" "$log_file" >&2
     return 1
   fi
   write_status "failed" "$head" "$built" "$(read_build_id)" "$log_file"
