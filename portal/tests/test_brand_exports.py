@@ -1,7 +1,7 @@
 """The committed brand exports are renderings of contract/brand.json, and nothing else.
 
 Ten files: two horizontal logos (dark and light background), two extended lockups that add the tagline
-line, the standalone mark, each as an SVG and a PNG. The rules these pins hold, all of them from the
+line, the standalone mark, each as an SVG and a PNG. The rules these pins hold, all of them from
 the brief:
 
   * ONE MARK. The dot markup is byte-identical in all five SVGs. Dark and light differ in the WORDMARK

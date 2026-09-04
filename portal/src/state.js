@@ -141,5 +141,5 @@ function lerp(a,b,t){const pa=[1,3,5].map(i=>parseInt(a.substr(i,2),16)),pb=[1,3
   return "#"+pa.map((v,k)=>Math.round(v+(pb[k]-v)*t).toString(16).padStart(2,"0")).join("");}
 // CVD amendment: the completeness ramp is a CVD-safe SEQUENTIAL dark→light progression (viridis principle)
 // - dark slate-blue #2A3B66 → olive #6E7F46 → pale warm yellow #F2E27E - because the old red→green
-// endpoints measured dE76≈9.6 under a. See docs: portal internals, state.js.
+// endpoints measured dE76≈9.6 under a deuteranopia simulation. See docs: portal internals, state.js.
 function qColor(q){if(q==null)return "#5A6E7D";const t=clamp((q-2)/3);return t<.5?lerp("#2A3B66","#6E7F46",t*2):lerp("#6E7F46","#F2E27E",(t-.5)*2);}

@@ -17,7 +17,7 @@ The rest are removals and rewordings. Each is pinned in BOTH directions: the ret
 gone, and the sentence that replaced it must be present, so neither a revert nor an over-delete can
 pass. Parsed structurally where structure is the claim (section 1 ending on the card, section 7 down
 to a single link, the acknowledgement being one copyable line), and by exact string where the exact
-words are the.
+words are what the page must carry.
 
 A SECOND COPY BATCH follows it at the foot of this module. That one adds a section rather than
 editing one, so the page's SHAPE is pinned with the words: eight numbered answers in a fixed order,

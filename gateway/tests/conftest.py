@@ -492,7 +492,7 @@ def seed_validated(gw, cfg, *, slug: str = "mysurvey", email: str = GOOD_EMAIL,
     pii_in_preview -> writes the submitter's OWN email into the built preview product.
     foreign_email_in_preview -> writes a DIFFERENT person's email into the preview (proves the
         generic email pattern fires, not just the submitter-email needle).
-    package_files -> extra files written UNDER the package tree (relative path -> text). Used by the
+    package_files -> extra files written UNDER the package tree (relative path -> text). Used by
         the tests to inject a hostile file name and a many-generic-hits case that the PII sweep sees.
     token -> when given, the submission gets this REAL status token (hashed like the app does) so the
         test can fetch /gateway/status/<token>; the default is an unusable placeholder hash.

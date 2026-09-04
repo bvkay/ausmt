@@ -994,7 +994,10 @@ QUOTED_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|(?<![\w'])'[^'\n]{1,60}'(?!\w)"
 # definition table carries its colon in a column of its own.
 ENUMERATOR = re.compile(r"^[ \t]*(?:\d{1,2}|[a-z])\)")
 DEFINITION_ROW = re.compile(r"^\s*\S+[ ]+:[ ]", re.M)
-SPACE_BEFORE_PUNCT = re.compile(r"\w[ ]+[.,;!?](?:\s|$)")
+# The gap is the same gap wherever the words ran out, so what stands in front of it is a word
+# character OR the bracket that closed the group: "relationships[] ;" is the semicolon of a clause
+# whose citation was taken away, and a rule reading only a word character cannot see it.
+SPACE_BEFORE_PUNCT = re.compile(r"[\w)\]}][ ]+[.,;!?](?:\s|$)")
 SPACE_BEFORE_COLON = re.compile(r"\w[ ]+:(?:\s|$)")
 # The same scar read from the other side: a run that OPENS on the punctuation of a sentence whose
 # words were taken away. An ellipsis and a decimal point carry a character after the mark.
@@ -1011,7 +1014,28 @@ OPEN_CONNECTOR = re.compile(r"\([ \t]*[-:;,/][ \t]")
 CLOSE_CONNECTOR = re.compile(r"[ \t][-:;,/|][ \t]*(?=[)\]]|\Z)")
 BRACKET_GROUP = re.compile(r"\([^()]*\)")
 CONNECTOR_PAIR = re.compile(r"\w[,;][-/](?=\w)")
-LONE_PUNCTUATION = re.compile(r"^[)\].]$")
+# A cut that takes the tail of a sentence off the line above leaves the mark that closed it standing
+# at the head of the next line: ")." where the citation stood, "); " and "; " where the clause did,
+# "]," where the list item did. A line that is nothing BUT that mark is the narrowest case of the
+# same scar, so the line's OPENING is what is read rather than a line of exactly one character. The
+# colon is not on the list: a definition row writes one at the head of its continuation on purpose.
+LINE_OPENS_ON_STRAY = re.compile(r"\A(?:[)\]}][.,;]?|[.,;])(?:\s|\Z)")
+# THE WORD A SUBSTITUTION LEFT STANDING. Where a cut token is replaced by a phrase that opens on the
+# word already in front of it, the word is written twice ("NARROWED by the The API docs section",
+# "all of them from the the brief"). Only the closed class of function words is read, because they
+# are what a substitution strands and no sentence in this tree writes one of them twice in a row;
+# the second is read case-insensitively, since the replacement keeps the capital its own line began
+# with. The pair straddles the gutter as often as not, so it is read on the JOINED run. A word
+# joined by a hyphen to what precedes it is part of a compound and not the first of a pair, which
+# is what keeps a header name like "Reply-To to the From address" whole.
+DOUBLED_WORD = re.compile(r"(?<![\w-])(the|a|of|to|is|in|and)\s+\1(?![\w-])", re.I)
+# THE NOUN A CUT TOOK AWAY. The mirror of the doubled word: where the cut takes the noun and leaves
+# the word that introduced it, the sentence ends on a determiner and states nothing ("the exact
+# words are the.", "measured dE76 under a."). Only words that CANNOT end an English sentence are
+# read: a stranded preposition ends one every day in this tree ("the bucket it falls into.", "the
+# meaning of."), so the list is determiners and coordinators alone. Lower case only, because a
+# capital letter followed by a full stop is a list marker.
+ORPHANED_DETERMINER = re.compile(r"(?<![\w-])(?:the|an|a|and|or|nor|than|per|whose)[ \t]*[.;](?:\s|\Z)")
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
 # fragment of a cut sentence, which the reader is handed as a file name.
@@ -1209,8 +1233,16 @@ def shape_offences(files, root=None):
                     or any(CONNECTOR_PAIR.search(group.group(0))
                            for group in BRACKET_GROUP.finditer(bare_flat))):
                 said.append("a connector left standing where a token was cut")
-            if any(LONE_PUNCTUATION.match(line.strip()) for line in body):
-                said.append("a line carrying one bracket")
+            if any(LINE_OPENS_ON_STRAY.match(line.strip())
+                   for line in unquoted(joined).splitlines() if line.strip()):
+                said.append("a line opening on the punctuation a cut left standing")
+            doubled = DOUBLED_WORD.search(unquoted(flat))
+            if doubled:
+                said.append("a word written twice (%s)" % " ".join(doubled.group(0).split()))
+            orphaned = ORPHANED_DETERMINER.search(unquoted(flat))
+            if orphaned:
+                said.append("a sentence ending on the word that introduced its noun (%s)"
+                            % orphaned.group(0).strip())
             if any(DANGLING_HYPHEN.search(line) for line in clean.splitlines()):
                 said.append("a hyphen with nothing after it")
             orphan = POINTER_ORPHAN.search(bare_flat)

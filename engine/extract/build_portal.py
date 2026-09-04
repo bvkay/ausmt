@@ -1343,8 +1343,8 @@ def survey_metadata_document(label, y: dict, smeta: dict, served: bool, coord_st
         append and no engine-authored acknowledgement; funders.
       * dates.coverage via _year_range_of; rights {license raw, access normalised, embargo_until}.
       * extent from the curated WGS 84 geographic_extent only; identifiers[] from the
-        identity_classification mapping and every other related_identifiers row to relationships[]
-        ; activities[] from identifiers.project_raid only; dataset_version omitted.
+        identity_classification mapping and every other related_identifiers row to
+        relationships[]; activities[] from identifiers.project_raid only; dataset_version omitted.
       * provenance {generated, generator}; no nulls, no empty containers, ever."""
     import datetime as _dt  # noqa: PLC0415 (house style: local import where used)
     del label  # the display label is never a source of the title (it falls back to the directory name)
@@ -4070,10 +4070,10 @@ def _mth5_project_lead(smeta: dict):
 
 def _apply_mth5_survey_metadata(sm, smeta, slug, label):
     """Map survey.yaml/SMETA scholarly + identifier fields onto an mth5 TF's survey_metadata at write
-    time. The grouping key id=slug ALWAYS overrides the raw EDI
-    '0' so stations do not collapse into one survey group. The DATASET DOI is INJECTED because it is the
-    one scholarly field genuinely absent from every EDI (raw AND enriched read citation_dataset.doi=None,
-); the journal citation is single-sourced from SMETA too (belt-and-braces, it also survives
+    time. The grouping key id=slug ALWAYS overrides the raw EDI '0' so stations do not collapse into
+    one survey group. The DATASET DOI is INJECTED because it is the one scholarly field genuinely
+    absent from every EDI (raw AND enriched read citation_dataset.doi=None); the journal citation is
+    single-sourced from SMETA too (belt-and-braces, it also survives
     the enriched-EDI round-trip). Every set is best-effort: mt_metadata 1.0.9 rejects some hand-authored
     values (unit strings, unknown attributes - caveat 7), so a field that will not coerce is skipped
     with NO effect on the TF payload (round-trip stays lossless). smeta None => only the slug is

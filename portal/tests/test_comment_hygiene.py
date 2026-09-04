@@ -992,7 +992,10 @@ QUOTED_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|(?<![\w'])'[^'\n]{1,60}'(?!\w)"
 # definition table carries its colon in a column of its own.
 ENUMERATOR = re.compile(r"^[ \t]*(?:\d{1,2}|[a-z])\)")
 DEFINITION_ROW = re.compile(r"^\s*\S+[ ]+:[ ]", re.M)
-SPACE_BEFORE_PUNCT = re.compile(r"\w[ ]+[.,;!?](?:\s|$)")
+# The gap is the same gap wherever the words ran out, so what stands in front of it is a word
+# character OR the bracket that closed the group: "relationships[] ;" is the semicolon of a clause
+# whose citation was taken away, and a rule reading only a word character cannot see it.
+SPACE_BEFORE_PUNCT = re.compile(r"[\w)\]}][ ]+[.,;!?](?:\s|$)")
 SPACE_BEFORE_COLON = re.compile(r"\w[ ]+:(?:\s|$)")
 # The same scar read from the other side: a run that OPENS on the punctuation of a sentence whose
 # words were taken away. An ellipsis and a decimal point carry a character after the mark.
@@ -1009,7 +1012,28 @@ OPEN_CONNECTOR = re.compile(r"\([ \t]*[-:;,/][ \t]")
 CLOSE_CONNECTOR = re.compile(r"[ \t][-:;,/|][ \t]*(?=[)\]]|\Z)")
 BRACKET_GROUP = re.compile(r"\([^()]*\)")
 CONNECTOR_PAIR = re.compile(r"\w[,;][-/](?=\w)")
-LONE_PUNCTUATION = re.compile(r"^[)\].]$")
+# A cut that takes the tail of a sentence off the line above leaves the mark that closed it standing
+# at the head of the next line: ")." where the citation stood, "); " and "; " where the clause did,
+# "]," where the list item did. A line that is nothing BUT that mark is the narrowest case of the
+# same scar, so the line's OPENING is what is read rather than a line of exactly one character. The
+# colon is not on the list: a definition row writes one at the head of its continuation on purpose.
+LINE_OPENS_ON_STRAY = re.compile(r"\A(?:[)\]}][.,;]?|[.,;])(?:\s|\Z)")
+# THE WORD A SUBSTITUTION LEFT STANDING. Where a cut token is replaced by a phrase that opens on the
+# word already in front of it, the word is written twice ("NARROWED by the The API docs section",
+# "all of them from the the brief"). Only the closed class of function words is read, because they
+# are what a substitution strands and no sentence in this tree writes one of them twice in a row;
+# the second is read case-insensitively, since the replacement keeps the capital its own line began
+# with. The pair straddles the gutter as often as not, so it is read on the JOINED run. A word
+# joined by a hyphen to what precedes it is part of a compound and not the first of a pair, which
+# is what keeps a header name like "Reply-To to the From address" whole.
+DOUBLED_WORD = re.compile(r"(?<![\w-])(the|a|of|to|is|in|and)\s+\1(?![\w-])", re.I)
+# THE NOUN A CUT TOOK AWAY. The mirror of the doubled word: where the cut takes the noun and leaves
+# the word that introduced it, the sentence ends on a determiner and states nothing ("the exact
+# words are the.", "measured dE76 under a."). Only words that CANNOT end an English sentence are
+# read: a stranded preposition ends one every day in this tree ("the bucket it falls into.", "the
+# meaning of."), so the list is determiners and coordinators alone. Lower case only, because a
+# capital letter followed by a full stop is a list marker.
+ORPHANED_DETERMINER = re.compile(r"(?<![\w-])(?:the|an|a|and|or|nor|than|per|whose)[ \t]*[.;](?:\s|\Z)")
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
 # fragment of a cut sentence, which the reader is handed as a file name.
@@ -1207,8 +1231,16 @@ def shape_offences(files, root=None):
                     or any(CONNECTOR_PAIR.search(group.group(0))
                            for group in BRACKET_GROUP.finditer(bare_flat))):
                 said.append("a connector left standing where a token was cut")
-            if any(LONE_PUNCTUATION.match(line.strip()) for line in body):
-                said.append("a line carrying one bracket")
+            if any(LINE_OPENS_ON_STRAY.match(line.strip())
+                   for line in unquoted(joined).splitlines() if line.strip()):
+                said.append("a line opening on the punctuation a cut left standing")
+            doubled = DOUBLED_WORD.search(unquoted(flat))
+            if doubled:
+                said.append("a word written twice (%s)" % " ".join(doubled.group(0).split()))
+            orphaned = ORPHANED_DETERMINER.search(unquoted(flat))
+            if orphaned:
+                said.append("a sentence ending on the word that introduced its noun (%s)"
+                            % orphaned.group(0).strip())
             if any(DANGLING_HYPHEN.search(line) for line in clean.splitlines()):
                 said.append("a hyphen with nothing after it")
             orphan = POINTER_ORPHAN.search(bare_flat)
@@ -2603,29 +2635,62 @@ def test_every_pointer_section_names_a_heading_the_docs_page_carries():
 
 
 def test_each_broken_shape_is_caught(tmp_path):
-    """One case per shape, each written the way the sweep actually broke a comment."""
-    cases = {
-        "unmatched )": '"""The identifiers design ): the instrument PID."""\n',
-        "a space before punctuation": '"""The suppression kill : a survey carrying both."""\n',
-        "an empty bracketed group": '"""Blocking-FAIL guard (+): re-check server-side."""\n',
-        "a bracket opening on a connector": '"""The single poll loop (- the one background task)."""\n',
-        "a line carrying one bracket": '"""The identifiers model\n)\n"""\n',
-        "a pointer that is not of the pointer grammar":
-            '"""The rows worth writing. See docs: portal internals, add-survey.html.tml."""\n',
+    """One case per shape, each written the way the sweep actually broke a comment. A shape whose
+    scar comes at several widths carries one case per width, so the list is a sequence of pairs
+    rather than a mapping and the LABEL is the text the report must carry."""
+    cases = (
+        ("unmatched )", '"""The identifiers design ): the instrument PID."""\n'),
+        ("a space before punctuation", '"""The suppression kill : a survey carrying both."""\n'),
+        # The gap in front of the mark, with the bracket that closed the group standing where the
+        # word would be: the shape the cut citation in a mapping table leaves.
+        ("a space before punctuation",
+         '"""Every related_identifiers row goes to relationships[] ; activities[] follows."""\n'),
+        ("an empty bracketed group", '"""Blocking-FAIL guard (+): re-check server-side."""\n'),
+        ("a bracket opening on a connector",
+         '"""The single poll loop (- the one background task)."""\n'),
+        # The line that opens on a stray mark, at its four widths: the bracket alone, which is the
+        # narrowest case and the only one a single-character rule could see; the bracket carrying
+        # the full stop of the sentence whose citation was cut; the bracket carrying the semicolon
+        # of the clause; and the mark standing on its own at the head of the continuation.
+        ("a line opening on the punctuation a cut left standing",
+         '"""The identifiers model\n)\n"""\n'),
+        ("a line opening on the punctuation a cut left standing",
+         '"""The submission that already carries these exact bytes (duplicate-content 409,\n'
+         ').\n\nThe rule is about CONTENT."""\n'),
+        ("a line opening on the punctuation a cut left standing",
+         '"""The DOI is injected because it is absent from every EDI (read doi=None,\n'
+         '); the journal citation is single-sourced too."""\n'),
+        ("a line opening on the punctuation a cut left standing",
+         '"""Every related_identifiers row goes to relationships[]\n'
+         '; activities[] comes from project_raid only."""\n'),
+        # The word a substitution left standing, in the run and across the gutter.
+        ("a word written twice",
+         '"""NARROWED by the The API docs section: the ban does not reach the class."""\n'),
+        ("a word written twice",
+         '# The rules these pins hold, all of them from the\n# the brief.\nRULES = ()\n'),
+        # The noun the cut took away, in the two places it happened: a shipped measurement with
+        # nothing to measure it against, and a pinned string with nothing to be.
+        ("a sentence ending on the word that introduced its noun",
+         "# The old endpoints measured dE76 under a. See docs: portal internals, state.js.\n"
+         "RAMP = ()\n"),
+        ("a sentence ending on the word that introduced its noun",
+         '"""Parsed structurally, and by exact string where the exact words are the."""\n'),
+        ("a pointer that is not of the pointer grammar",
+         '"""The rows worth writing. See docs: portal internals, add-survey.html.tml."""\n'),
         # The closing half of the connector family: before a bracket, before a square bracket,
         # at the end of the run, and hard against the connector in front of it.
-        "a connector left standing where a token was cut":
-            '"""The rollup (the runner is the only place YAML is parsed -)."""\n',
-        "a space before the bracket that closes a group":
-            '"""A 26-char string from the Crockford-base32 id charset (design )."""\n',
-        "a hyphen with nothing after it":
-            '"""Reconstruct the PRE- per-station station.json shape."""\n',
-        "a pointer standing in front of a sentence fragment":
-            '"""See docs: portal internals, add-survey.html. like a nameless row."""\n',
-        "a run opening on the punctuation of a cut sentence":
-            '""": the export appends the hosting institution to every record."""\n',
-    }
-    for label, body in cases.items():
+        ("a connector left standing where a token was cut",
+         '"""The rollup (the runner is the only place YAML is parsed -)."""\n'),
+        ("a space before the bracket that closes a group",
+         '"""A 26-char string from the Crockford-base32 id charset (design )."""\n'),
+        ("a hyphen with nothing after it",
+         '"""Reconstruct the PRE- per-station station.json shape."""\n'),
+        ("a pointer standing in front of a sentence fragment",
+         '"""See docs: portal internals, add-survey.html. like a nameless row."""\n'),
+        ("a run opening on the punctuation of a cut sentence",
+         '""": the export appends the hosting institution to every record."""\n'),
+    )
+    for label, body in cases:
         f = tmp_path / "broken.py"
         f.write_text(body, encoding="utf-8")
         hits = shape_offences([f])
@@ -2689,6 +2754,21 @@ def test_whole_prose_is_not_a_broken_shape(tmp_path):
                    '    Because it is paid once per page, its comment bytes carry a cap."""\n',
         "list.py": '"""The recovery:\n\n    * the publish FAILED closed;\n'
                    "    * the tree is the pre-state.\n    \"\"\"\n",
+        # A word joined by a hyphen to what precedes it is the tail of a compound, so a header
+        # name that ends on a function word is not the first half of a doubled pair.
+        "header.py": '"""The message sets Reply-To to the From address, and carries no dash."""\n',
+        # A definition row writes the colon of its continuation at the head of a line on purpose,
+        # which is why the colon is off the stray-opening list.
+        "rows.py": '"""The fields:\n    access   : the normalised access state\n'
+                   "    embargo  : the date the hold lifts\n    \"\"\"\n",
+        # An enumerator opens on its number, not on the bracket that follows it.
+        "enum.py": '"""The two passes:\n    1) read every record;\n'
+                   "    2) write the index.\n    \"\"\"\n",
+        # A preposition ends an English sentence every day, and a capital letter in front of a full
+        # stop is a list marker; neither is a noun a cut took away.
+        "stranded.py": '"""The bucket the tile falls into. The meaning a missing value has none of."""\n',
+        "marker.py": '"""Two shapes:\n\n    A. the curated survey;\n'
+                     "    B. the raw survey.\n    \"\"\"\n",
     }
     for name, body in cases.items():
         f = tmp_path / name

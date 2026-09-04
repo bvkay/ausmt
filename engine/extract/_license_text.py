@@ -145,7 +145,7 @@ def license_instrument_text(lic, licensor, year, attribution=None, sources=None,
       * `sources` (list of dicts: title/custodian/identifier/licence/retrieved/statement/profile) - one
         attribution paragraph per upstream dataset, using the source's verbatim `statement` when present
         else the custodian profile's rendered attribution (the GA derivative form when the release makes
-        changes), a supersession line for any source whose licence differs from the release licence, and
+        changes), a supersession line for any source whose licence differs from the release licence,
         and the custodian profile's s.5 disclaimer paragraph once per distinct disclaimer when a
         source's profile carries one (today only `ga`).
       * `changes` ({made, summary}) - the CC-BY 4.0 §3(a) 'indicate if changes were made' clause.

@@ -15,7 +15,7 @@ Each assertion states its failure criterion:
   * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
     (nVis/nSel/nTot). Those three report the current map's filter and selection state, and About has
     neither. Non-vacuous: index.html HAS these ids, so a naive copy-the-whole-header would trip this.
-    NARROWED by the The API docs section, deliberately: the ban does not extend to the class "counts",
+    NARROWED by the API docs section, deliberately: the ban does not extend to the class "counts",
     on the reasoning that a static page has no counts to state. That reasoning covered app state only.
     About now carries a CORPUS-totals block (total stations / total surveys, read from the catalogue at
     load time) in index's right zone, reusing index's .counts styling so the two headers render

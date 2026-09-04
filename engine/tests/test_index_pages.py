@@ -806,8 +806,8 @@ def test_one_footer_of_three_regions_on_every_page_kind(built):
     is not lost either: a survey and a station page each carry their own record in the body under
     "Identifiers and provenance", which is asserted separately.
 
-    FAILS IF the one-line footer survives anywhere, if the three regions are not present with the
-    the exact strings, if a region's links move or retarget, if the retired controls come back,
+    FAILS IF the one-line footer survives anywhere, if the three regions are not present with
+    their exact strings, if a region's links move or retarget, if the retired controls come back,
     if the footer differs between page kinds, or if the removed build stamp comes back."""
     seen = {}
     for rel, (_active, label, href, _slot) in _kinds(built).items():
@@ -1022,7 +1022,7 @@ def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
 
 
 # The parent-organisation mark, WITHDRAWN. It must not close a header from the right zone; the
-# the rule takes it off every surface of the site, so what this asserts is that the emitter
+# rule takes it off every surface of the site, so what this asserts is that the emitter
 # puts it on NO page kind, in no zone. The portal surface's half of the same rule is held in
 # portal/tests/test_header_geometry_parity.py, character for character.
 ORG_MARK_IMG = '<a class="orgmark" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope"><img src="/vendor/auscope-icon-white.png" alt="AuScope" width="29" height="30"></a>'

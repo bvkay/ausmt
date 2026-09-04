@@ -407,8 +407,8 @@ class Database:
         return self._row_to_submission(row) if row else None
 
     def find_duplicate_by_sha(self, zip_sha256: str) -> Submission | None:
-        """The submission that already carries these exact zip bytes (duplicate-content 409,
-).
+        """The submission that already carries these exact zip bytes: the duplicate-content 409,
+        pinned by tests/test_upload.py.
 
         The rule is about CONTENT, not liveness. Matching only NON-TERMINAL rows would switch the
         guard off the moment the first copy finished: once a submission

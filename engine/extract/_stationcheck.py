@@ -32,8 +32,8 @@ _BARE_DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 # The electrode-circuit members. They attach to the electric measurement circuit and to nothing else.
 _ELECTRIC_ONLY = ("positive", "negative", "dipole_length_m", "contact_resistance")
 # {archive resource id: the rendition whose presence proves this station's bytes are IN that bundle}.
-# An `archive` row is a CONTAINMENT claim, and containment is decided per station, not per survey: the
-# The coordinate byte gate withholds a non-exact station's EDI and EMTF XML, so it is in neither zip
+# An `archive` row is a CONTAINMENT claim, and containment is decided per station, not per survey:
+# the coordinate byte gate withholds a non-exact station's EDI and EMTF XML, so it is in neither zip
 # its survey still publishes. The emitter reads the same map when it builds resources[], so the rule
 # is stated once and enforced at both ends.
 #
