@@ -876,6 +876,22 @@ DOCUMENT_IN_PROSE = re.compile(
     r"(?<![\w/.~-])([A-Za-z_][\w-]*(?:/[\w.-]+)+\.md)(?![\w-])")
 
 
+# The same rule with no directory in front of it. A document cited by bare name is a pointer a
+# reader follows by opening the file, and a directory is not what makes it followable: existence
+# is. Two names are not citations of a document. A LANE-CONTRACT or LANE-ADDENDUM document is the
+# contract a pin traces itself by, which lives outside the checkout by ruling and is governed by
+# the contract-citation rule instead. A name the same file also writes in its CODE is a file the
+# code produces or reads, not a document it points a reader at.
+BARE_DOCUMENT = re.compile(r"(?<![\w/.~-])([A-Za-z][\w-]*\.md)(?![\w-])")
+CONTRACT_DOCUMENT = re.compile(r"\ALANE-(?:CONTRACT|ADDENDUM)-")
+
+
+def documents_named(text):
+    """Every bare <NAME>.md a comment cites with no directory in front of it."""
+    return [m.group(1) for m in BARE_DOCUMENT.finditer(text)
+            if not CONTRACT_DOCUMENT.match(m.group(1))]
+
+
 def paths_outside_this_repository(text):
     """Every DOCUMENT a comment cites whose first segment is not a tree of this repository. A
     document is the citation the rule is about; a data path outside the checkout (/srv, out/, a

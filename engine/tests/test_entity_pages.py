@@ -689,7 +689,7 @@ def test_an_undeclared_survey_infers_channels_only_from_the_components_it_serves
 
 
 def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
-    """AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md.
+    """The citation is a disclosure and its locator is source-led.
 
     Two defects at once. The Cite-as box held primary visual space near the top of every survey
     page, and it put the AusMT page URL in the LOCATOR slot unconditionally, which cites the AusMT

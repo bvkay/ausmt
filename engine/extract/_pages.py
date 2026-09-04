@@ -926,8 +926,7 @@ def _related_by_identifies(smeta):
 
 
 # The AusMT access acknowledgement. It is a SEPARATE statement from the citation and is never
-# folded into it (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md section 9): providing access does
-# not make AusMT the cited object.
+# folded into it: providing access does not make AusMT the cited object.
 #
 # ONE WORDING, not one per surface. about.html carries the same sentence as the block a reader is
 # asked to copy, and portal/tests/test_about_copy_batch.py holds the two equal by reading this
@@ -941,9 +940,8 @@ _ACKNOWLEDGEMENT = (
 # The related-identifier scopes that name THIS SURVEY RECORD rather than something near it. Only
 # `entire` qualifies. A collection row names the parent, a raw_packed row names the time-series
 # archive, a level3 row names a derived model and a level2 row names the published transfer-function
-# PRODUCT: each is a resource of the survey, not the survey, and the model requires that distinction
-# to survive (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md section 14, with survey-level and
-# resource-level citation separated in section 7). Promoting a product identifier would print it
+# PRODUCT: each is a resource of the survey, not the survey, and survey-level and resource-level
+# citation stay separate. Promoting a product identifier would print it
 # under the survey's own authors and publisher, which asserts a citation neither layer states.
 _SELF_IDENTIFIES = ("entire",)
 
@@ -951,9 +949,9 @@ _SELF_IDENTIFIES = ("entire",)
 def _citation_locator(smeta, access_url):
     """The locator slot of the formatted citation, SOURCE-LED and SCOPE-BOUND.
 
-    A citation should identify the dataset as persistently and specifically as the source allows
-    (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md sections 3 and 4). Where the survey's own
-    record carries a persistent identifier FOR ITSELF, that identifier is the locator. The AusMT
+    A citation identifies the dataset as persistently and specifically as the source allows.
+    Where the survey's own record carries a persistent identifier FOR ITSELF, that identifier is
+    the locator. The AusMT
     page URL is used only where the record carries none, and then as the access route rather than as
     a claim that the AusMT page is the object being cited.
 

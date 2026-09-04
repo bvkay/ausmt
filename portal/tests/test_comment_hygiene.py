@@ -876,6 +876,22 @@ DOCUMENT_IN_PROSE = re.compile(
     r"(?<![\w/.~-])([A-Za-z_][\w-]*(?:/[\w.-]+)+\.md)(?![\w-])")
 
 
+# The same rule with no directory in front of it. A document cited by bare name is a pointer a
+# reader follows by opening the file, and a directory is not what makes it followable: existence
+# is. Two names are not citations of a document. A LANE-CONTRACT or LANE-ADDENDUM document is the
+# contract a pin traces itself by, which lives outside the checkout by ruling and is governed by
+# the contract-citation rule instead. A name the same file also writes in its CODE is a file the
+# code produces or reads, not a document it points a reader at.
+BARE_DOCUMENT = re.compile(r"(?<![\w/.~-])([A-Za-z][\w-]*\.md)(?![\w-])")
+CONTRACT_DOCUMENT = re.compile(r"\ALANE-(?:CONTRACT|ADDENDUM)-")
+
+
+def documents_named(text):
+    """Every bare <NAME>.md a comment cites with no directory in front of it."""
+    return [m.group(1) for m in BARE_DOCUMENT.finditer(text)
+            if not CONTRACT_DOCUMENT.match(m.group(1))]
+
+
 def paths_outside_this_repository(text):
     """Every DOCUMENT a comment cites whose first segment is not a tree of this repository. A
     document is the citation the rule is about; a data path outside the checkout (/srv, out/, a
@@ -1660,6 +1676,46 @@ def test_every_repository_path_a_comment_names_exists():
     assert not dangling, (
         f"{len(dangling)} comment(s) point at a repository path that does not exist:\n"
         + "\n".join(sorted(set(dangling))))
+
+
+def test_every_document_a_comment_names_is_in_this_repository():
+    """The bare form of the same rule. A comment that cites `SOMETHING.md` with no directory in
+    front of it points a reader at a document, and a reader of this repository resolves it by
+    opening the file. When the tree carries no such file the reference is unresolvable wherever it
+    is written, and the constraint the citation stood in for was never stated."""
+    known = {path.name for path in ROOT.rglob("*.md") if not SKIP_DIRS & set(path.parts)}
+    dangling, resolved = [], 0
+    for path in commented_tree():
+        if path.name == SELF or "vendored_validation" in path.parts:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        commentary = "\n".join(body for _, body in comments(path, text))
+        for lineno, comment in comment_runs(path, text):
+            for named in documents_named(flattened(bare(comment))):
+                if named in known:
+                    resolved += 1
+                elif text.count(named) > commentary.count(named):
+                    resolved += 1
+                else:
+                    dangling.append("%s:%d: %s" % (path.relative_to(ROOT), lineno, named))
+    assert resolved, "no document name resolved, so this test would pass over nothing"
+    assert not dangling, (
+        f"{len(dangling)} comment(s) cite a document this repository does not carry:\n"
+        + "\n".join(sorted(set(dangling))))
+
+
+def test_a_bare_document_name_is_read_and_its_three_exemptions_hold(tmp_path):
+    """The token, and what is not one: a contract document a pin traces itself by (it lives outside
+    the checkout by ruling), a name carrying a directory (the path rule reads that one), and a
+    document this repository does carry."""
+    assert documents_named("the model (AUSMT-DATA-CITATION-MODEL.md section 9)") \
+        == ["AUSMT-DATA-CITATION-MODEL.md"]
+    assert documents_named("pinned by LANE-CONTRACT-COMMENT-HYGIENE.md H1") == []
+    assert documents_named("see docs/docs/developer/data-files.md") == []
+    assert documents_named("README.md is in the tree") == ["README.md"]
 
 
 def test_every_docs_pointer_names_a_page_that_exists():
