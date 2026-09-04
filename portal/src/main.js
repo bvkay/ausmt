@@ -81,7 +81,7 @@ function applyYearRangeHints(){
   if(toEl){toEl.placeholder=dated?String(hi):"to";if(dated)toEl.min=lo,toEl.max=hi;}
   if(head)head.textContent="Year range"+(dated?` (${fmtRange(lo,hi)})`:"");   // suffix hidden when no survey is dated
 }
-// ---- "Recently added" (S3) --------------------------------------------------------------------
+// ---- "Recently added" -------------------------------------------------------------------------
 // LOCKSTEP RULE (keep identical to the engine's _survey_latest_date at
 // engine/extract/build_portal.py:467-489): a survey's "latest date" is the max well-formed
 // YYYY-MM-DD among all release_notes[].date PLUS attribution.declared_date when present; else

@@ -70,7 +70,7 @@ map.addLayer(dotLayer);
 // it is collection membership rather than map furniture; retiring the three is a separate decision,
 // and the boot resolution of labels to slugs is pinned on its own.
 function isAuslampSurvey(slug,auslampSet){return !!(slug&&auslampSet&&auslampSet.has(slug));}
-// C42 coordinate access: a station whose custodian WITHHELD its coordinates carries null lat/lon in the
+// Coordinate access: a station whose custodian WITHHELD its coordinates carries null lat/lon in the
 // served catalogue — the engine masks the VALUE (there is no separate policy field; withheld => null,
 // generalised => a 0.1° cell rendered verbatim). hasPosition is the ONE pure predicate every map path
 // uses to skip a position-less station: no marker, no footprint vertex, no fitBounds point, no spatial
@@ -79,7 +79,7 @@ function isAuslampSurvey(slug,auslampSet){return !!(slug&&auslampSet&&auslampSet
 function hasPosition(s){return !!(s&&s.lat!=null&&s.lon!=null&&isFinite(s.lat)&&isFinite(s.lon));}
 // Paint the currently-visible stations into the ONE dot container. Called by refresh() (a filter changed).
 // `visible` (filters.js) is already the filtered set; only POSITIONED stations reach the layer, because a
-// coordinate-withheld station has no marker (C42) and no place on the map. Every one of them is a dot: the
+// coordinate-withheld station has no marker and no place on the map. Every one of them is a dot: the
 // set depends on neither zoom nor the sidebar mode, so nothing else has to trigger a re-route.
 // Returns what this pass painted. The app ignores the value; the jsdom driver calls the pass directly and
 // reads it, because under a stubbed Leaflet the layer contents are unreadable Proxies.
@@ -157,7 +157,7 @@ if(_drawPoly)_drawPoly.onclick=()=>armDraw("polygon");
 // phase-1 fact (the legend is the surviving colour surface). qColor lives on for the drawer's
 // completeness dot.
 function markerColor(s){return TYPE_COL[s.type]||"#999";}
-function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // C42: withheld-coord stations have no marker
+function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // withheld-coord stations have no marker
 // ---- the survey FOCUS DIM --------------------------------------------------------
 // "View on map" with a survey open frames that survey while the rest of the catalogue STAYS ON THE MAP,
 // dimmed. The rejected alternative (what shipped before) filtered every other survey out of the layers, so
@@ -238,7 +238,7 @@ function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeo
 // framing — is left untouched). Split out so the no-fight-with-user decision is unit-testable.
 function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
-  if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
+  if(!hasPosition(s))return;   // a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z),weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
   s.marker._survey=s.survey;   // the per-survey cluster facade buckets markers by this stamp
   // A marker click OPENS that station and must never ALSO read as a
@@ -248,7 +248,7 @@ function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
   // preferCanvas, so every marker and the background share ONE canvas element as e.target. Leaflet's own
   // layer hit-testing is the discriminator, and this flag is how it is expressed.
   s.marker.options.bubblingMouseEvents=false;
-  s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // O4: hover shows station + survey only
+  s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
   // Home frame once data is in: re-fit to the FIXED Australia box
   // (AU_HOME_BOUNDS), NOT the tight positioned-station extent. The tight extent dropped the view south and
@@ -336,7 +336,7 @@ function hull(points){const pts=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);if
   for(const p of pts.reverse()){while(hi.length>=2&&cr(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p);}
   return lo.slice(0,-1).concat(hi.slice(0,-1));}
 const footprints=L.featureGroup();
-function buildFootprints(){const by={};ST.forEach(s=>{if(!hasPosition(s))return;(by[s.survey]=by[s.survey]||[]).push([s.lon,s.lat]);});   // C42: skip withheld-coord stations (no hull vertex)
+function buildFootprints(){const by={};ST.forEach(s=>{if(!hasPosition(s))return;(by[s.survey]=by[s.survey]||[]).push([s.lon,s.lat]);});   // skip withheld-coord stations (no hull vertex)
  Object.entries(by).forEach(([sv,pts],k)=>{const h=hull(pts);if(h.length<3)return;
    L.polygon(h.map(p=>[p[1],p[0]]),{color:Object.values(TYPE_COL)[k%4],weight:1.4,fillOpacity:.04,interactive:false}).bindTooltip(esc(sv)).addTo(footprints);});}
 const userLayers={};

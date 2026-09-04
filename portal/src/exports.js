@@ -272,7 +272,7 @@ function tsHandoffDocument(stations,levels){
 // NOT unique - across the corpus a station's level0 and level1_mth5 can carry the same one, and basenames
 // repeat across surveys - so writing by basename alone lets a second product overwrite (or, with curl -C -,
 // RESUME INTO and corrupt) the first. Keying by slug+level is collision-free over every corpus row, and
-// mirrors the selection zips' own survey-slug namespacing (audit M3).
+// mirrors the selection zips' own survey-slug namespacing.
 function tsOutPath(r,l){return (r.slug||"survey")+"/"+l.level+"/"+String(l.filename||"download");}
 // POSIX single-quote a token so a register-derived path segment is LITERAL in bash/zsh: inside single
 // quotes $( ), backticks, ", ; and space are all inert, and an embedded ' is close-escape-reopen'd. The

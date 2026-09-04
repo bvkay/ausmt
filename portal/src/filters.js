@@ -144,16 +144,15 @@ function updateCounts(){
       (sel?` · <b>${_countN(sel)}</b> station${sel===1?"":"s"} selected`:"");
     return;}
   // MAP: the three station counts, rebuilt into the form index.html ships (ids included, since other
-  // surfaces paint them by id). C5 says this view renders AS TODAY, so the three numbers stay plain
-  // integers, exactly as origin/main wrote them; _countN belongs to the workspace line, which is new
-  // copy. The counts pin drives a 1,200-station window, because at the fixture's five the two formats
-  // are the same string.
+  // surfaces paint them by id). The three numbers are plain integers; _countN belongs to the workspace
+  // line beside them. The counts pin drives a 1,200-station window, because at the fixture's five the
+  // two formats are the same string.
   slot.title="stations passing the current filters · stations selected · total stations in the catalogue";
   slot.innerHTML=`<b id="nVis">${visible.length}</b> shown · <b id="nSel">${selected.size}</b> selected · <span id="nTot">${ST.length}</span> total`;}
 function refresh(){visible=ST.filter(passes);
   // ONE call paints the visible set into the map's single dot container; map.js owns the layer and this
   // stays the caller it always was. Nothing collapses, so a filter change is the only thing that can alter
-  // what is on the map. C42: only POSITIONED stations reach the layer - a withheld-coordinate station has
+  // what is on the map: only POSITIONED stations reach the layer, and a withheld-coordinate station has
   // no marker (buildMarkers skipped it). It remains in `visible` (counted), just not on the map.
   routeVisibleToLayers();
   if(hasShapes())selected=new Set(visible.filter(inShapes).map(s=>s.i));else selected=new Set([...selected].filter(i=>visible.some(s=>s.i===i)));

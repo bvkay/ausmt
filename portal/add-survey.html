@@ -1086,7 +1086,7 @@ function previewSurvey(meta, edis){
     lonRange:lons.length?[Math.min.apply(null,lons),Math.max.apply(null,lons)]:null,
     types, extractor:recommendedExtractor(edis)};
 }
-// C46: the recognised licence-id vocab for the licence <select>s, derived from the GENERATED contract
+// The recognised licence-id vocabulary for the licence <select>s, derived from the GENERATED contract
 // (portal/src/contract.js LICENSES), never a hand-copied list. redistributable first, then
 // recognised-only (metadata-only display). Pure, so the jsdom test can pin it to the contract file.
 function licenseSelectIds(L){ L=L||{}; return [].concat(L.redistributable||[], L.recognised_only||[]); }
@@ -1426,7 +1426,7 @@ function servedSlugMap(surveysJson){
   }
   return out;
 }
-// R1 station-count context: surveys.json carries no per-survey station count, so the "(N stations)" the
+// Station-count context: surveys.json carries no per-survey station count, so the "(N stations)" the
 // collision warning shows is derived from the served catalogue.json (an array of station rows whose index
 // 1 is the survey NAME). Counts rows per survey name; the warning joins slug -> name -> count. Best-effort:
 // an unreachable/absent catalogue simply yields no counts and the warning drops the parenthetical.
@@ -2019,7 +2019,7 @@ if(typeof document!=="undefined"&&document.getElementById){
 
   // ----- confirm station locations (catch wrong coords + resolve HEAD/INFO DMS conflicts) -----
   let cmap=null, cmarkers=[];
-  // The T0 inline map, the "wow moment": stations plotted the instant files land. Guarded on Leaflet, so
+  // The inline map: stations are plotted the instant files land. Guarded on Leaflet, so
   // it degrades to just the count when the map library is unavailable (e.g. the jsdom interaction driver).
   let t0map=null, t0markers=[];
   function renderT0Map(withCoords){
