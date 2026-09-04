@@ -10,7 +10,7 @@
 # deploy/docker/portal.Dockerfile for the grep this depends on staying true):
 #   - index.html      has an inline <script> (the Plausible-disabled no-op shim, lines ~12-18) AND
 #                      loads map tiles from basemaps.cartocdn.com (portal/src/map.js).
-#   - about.html       has NO inline script (only external config.js/version.js/corpus-stats.js) --
+#   - about.html       has NO inline script (only external config.js/corpus-stats.js) --
 # strict CSP. corpus-stats.js fetch()es the same-origin data tree (catalogue.json +
 #                      surveys.json) for the header's corpus totals, which default-src 'self' already
 #                      covers; it is an external file precisely BECAUSE script-src here has no

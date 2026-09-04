@@ -13,8 +13,8 @@ name: build-products
 # ...PLUS the handful of PORTAL files the engine's own tests read as SURFACES OF A SINGLE SOURCE. The
 # MTCAT schema version is declared once, in engine/schema/mtcat.schema.json's title, and
 # engine/tests/test_mtcat_version_parity.py asserts every surface that restates it still agrees:
-# portal.config.yaml, the generated config.js, the committed data/mtcat.json placeholder, gen_config's
-# default for a config omitting the key, and version.js's config-missing sentinel. Scoped to engine/**
+# portal.config.yaml, the generated config.js, the committed data/mtcat.json placeholder and
+# gen_config's default for a config omitting the key. Scoped to engine/**
 # alone that pin would only be a NEXT-PR backstop, which is exactly how four separate hardcoded
 # defaults accumulated in the first place: a PR editing portal.config.yaml touches no engine path, so
 # this lane never ran and the drift shipped. Listing the files the pin reads makes it a SAME-PR gate.
@@ -31,7 +31,6 @@ on:
       - "portal/config.js"
       - "portal/data/mtcat.json"
       - "portal/tools/gen_config.py"
-      - "portal/version.js"
       - ".github/workflows/build-products.yml"
   # Also run on pull requests touching the engine subtree, so a fork/branch PR gets the full
   # engine lane (build + tests + skip accounting) BEFORE merge. Triggering
@@ -45,7 +44,6 @@ on:
       - "portal/config.js"
       - "portal/data/mtcat.json"
       - "portal/tools/gen_config.py"
-      - "portal/version.js"
       - ".github/workflows/build-products.yml"
 
 concurrency:

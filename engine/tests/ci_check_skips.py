@@ -81,7 +81,7 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # other tree the engine image does not ship. The MTCAT schema version has one source (the schema
     # title) and that module reads it back off every surface that restates it; four of those surfaces
     # are portal files (portal.config.yaml, config.js, data/mtcat.json, tools/gen_config.py) plus
-    # version.js's sentinel, and engine.Dockerfile COPYs contract/ + engine/ and exactly one portal
+    # and engine.Dockerfile COPYs contract/ + engine/ and exactly one portal
     # File (the generated portal/src/contract.js), so in the image workflow those five do not exist. The
     # three tests that read them skip with the exact reason below; the ENGINE-side statements (schema
     # title, contract parser, generated _contract constant, the real build's emitted portal block,

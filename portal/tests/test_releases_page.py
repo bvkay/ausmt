@@ -219,11 +219,10 @@ def test_footer_chrome_matches_the_other_pages():
 # --- deployed-CSP and link safety -----------------------------------------------------------------
 
 def test_scripts_are_external_only():
-    """version.js MOVED OUT of this list rather than being weakened out of it. It exists to fill
-    [data-ver-chip]; no document on this site carries one, and nothing reads what it defines, so on
-    this page it was a request that changed nothing a reader could see. The zero-loads-anywhere half
-    is held in tests/test_about_uniform_chrome.py across every document the portal ships, which is
-    where the chip's own pins already live. Contract: LANE-CONTRACT-ABOUT-PAGE.md."""
+    """The scripts this page loads, and no others. The version chip left every surface with the
+    About-this-build popover, so the script that filled it is gone from the tree as well as from
+    this page; tests/test_about_uniform_chrome.py holds every page script the tree ships to being
+    loaded by at least one page. Contract: LANE-CONTRACT-ABOUT-PAGE.md."""
     raw = RELEASES.read_text(encoding="utf-8")
     for src in ("config.js", "releases.js"):
         assert f'<script src="{src}"></script>' in raw, f"releases.html must load {src} as an external script"

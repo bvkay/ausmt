@@ -2,7 +2,7 @@
 # Edit this file and regenerate config.js with tools/gen_config.py for anything it covers. A full
 # re-brand or re-deploy also touches hardcoded constants elsewhere in the portal: page titles,
 # wordmarks and footers in index.html / about.html / add-survey.html, citation strings in
-# src/state.js, src/exports.js and src/drawer.js, and fallback defaults in version.js and
+# src/state.js, src/exports.js and src/drawer.js, and the fallback defaults in
 # tools/gen_config.py. The science build also reads this file for the MTCAT portal block.
 portal:
   id: ausmt                 # MTCAT portal_id, stable, lowercase, unique per portal (federation key)

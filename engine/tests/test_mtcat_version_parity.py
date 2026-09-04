@@ -32,7 +32,7 @@ agree with itself vacuously), and asserts they are all the same string:
   9. a REAL BUILD's emitted mtcat.json portal block (the version a harvester is actually served)
 
 plus TWO class guards: no MAJOR.MINOR literal may sit next to `schema_version` in build_portal.py,
-gen_config.py or version.js ever again, and portal/portal.config.yaml may not re-declare a
+gen_config.py ever again, and portal/portal.config.yaml may not re-declare a
 schema_version key (the config surface is generated, never hand-stated, since the inversion).
 
 Two surfaces are pinned elsewhere and deliberately not repeated here: about.html's prose statement, in
@@ -75,20 +75,19 @@ REPO = ROOT.parent                                  # the ausmt monorepo root
 SCHEMA_FILE = ROOT / "schema" / "mtcat.schema.json"
 BUILDER = ROOT / "extract" / "build_portal.py"
 GEN_CONFIG = REPO / "portal" / "tools" / "gen_config.py"
-VERSION_JS = REPO / "portal" / "version.js"
 PORTAL_CFG = REPO / "portal" / "portal.config.yaml"
 CONFIG_JS = REPO / "portal" / "config.js"
 PLACEHOLDER = REPO / "portal" / "data" / "mtcat.json"
 SURVEYS = HERE / "fixtures"                         # vendored, self-contained (as in test_mtcat.py)
 
 # ---------------------------------------------------------------- which tree is this? (topology)
-# The five portal files this module reads. They all exist on any monorepo checkout and NONE of them
+# The four portal files this module reads. They all exist on any monorepo checkout and NONE of them
 # exists in the engine image, whose Dockerfile COPYs contract/ + engine/ and exactly one portal file
 # (portal/src/contract.js, the generated browser contract that `generate.py --check` verifies). So the
 # presence of the SET is the topology probe, not the presence of portal/ (which the image does have,
 # holding that single unrelated file), and not the presence of any one file (a checkout missing one is
 # BROKEN, and must fail the read, not skip it).
-PORTAL_SURFACES = (PORTAL_CFG, CONFIG_JS, PLACEHOLDER, GEN_CONFIG, VERSION_JS)
+PORTAL_SURFACES = (PORTAL_CFG, CONFIG_JS, PLACEHOLDER, GEN_CONFIG)
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: portal tree not shipped "
                               "(designed topology; portal surfaces are pinned from checkout lanes)")
@@ -259,8 +258,7 @@ def _assert_no_version_literal(files):
     assert not offenders, (
         "an MTCAT schema-version literal was reintroduced next to a schema_version default: "
         f"{offenders}. Read it from the single source instead (MTCAT_SCHEMA_VERSION from _contract, "
-        "or contract/generate.py's mtcat_schema_version()); version.js, which cannot read the schema "
-        "from a browser, must state no version at all rather than a stale one.")
+        "or contract/generate.py's mtcat_schema_version()).")
 
 
 def test_the_builder_carries_no_version_literal():
@@ -271,22 +269,9 @@ def test_the_builder_carries_no_version_literal():
 
 @portal_surface
 def test_no_portal_site_carries_a_version_literal():
-    """The other two sites of the same class (gen_config.py held the fourth literal, version.js is the
-    one that cannot derive the value at all), guarded wherever the portal tree is shipped."""
-    _assert_no_version_literal((GEN_CONFIG, VERSION_JS))
-
-
-@portal_surface
-def test_version_js_sentinel_states_no_version_rather_than_a_stale_one():
-    """version.js is the one surface that CANNOT derive the version (no build step, no way to read the
-    schema at render time), so its config-missing sentinel is honest instead: an explicit null, and a
-    label that stops after the schema name. The jsdom driver asserts the rendered chip; this asserts the
-    source, so the sentinel cannot quietly grow a number back in a workflow that skips when Node is absent."""
-    src = VERSION_JS.read_text(encoding="utf-8")
-    m = re.search(r"window\.AUSMT_CONFIG\s*\|\|\s*\{([^}]*)\}", src)
-    assert m, "version.js must keep a config-missing sentinel object"
-    assert re.search(r"schema_version:\s*null", m.group(1)), (
-        f"the config-missing sentinel must set schema_version null, not a version; got {{{m.group(1)}}}")
+    """The other site of the same class (gen_config.py held the fourth literal), guarded wherever
+    the portal tree is shipped."""
+    _assert_no_version_literal((GEN_CONFIG,))
 
 
 # ---------------------------------------------------------------- the emitted document

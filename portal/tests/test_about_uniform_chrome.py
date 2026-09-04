@@ -24,11 +24,11 @@ Each assertion states its failure criterion:
   * NO version chip, anywhere. FAILS if any element carrying data-ver-chip survives on any of the
     four documents. The chip was the last of the About-this-build popover's copy: the popover left
     every footer with the one-footer rule, the chip followed it into about.html's #build section,
-    and the brief has now deleted that section too. Zero on every surface, held from both ends: the
-    attribute is gone and so is the version.js load that filled it, on EVERY document the portal
-    ships rather than on about.html alone. A script whose whole job is to fill an element no page
-    carries is a request that changes nothing a reader can see, and a page that still loads it reads
-    as a page that still has a chip.
+    and that section is deleted too. Zero on every surface, held from both ends: the attribute is
+    gone, and so is the script that filled it: no page loads it and the tree does not ship it. A
+    script whose whole job is to fill an element no page carries reaches no reader.
+  * every page script the tree ships is loaded by at least one page, and every script a page
+    loads is one the tree ships. FAILS in either direction.
 """
 import re
 from html.parser import HTMLParser
@@ -39,6 +39,9 @@ ABOUT = ROOT / "about.html"
 INDEX = ROOT / "index.html"
 ADD = ROOT / "add-survey.html"
 RELEASES = ROOT / "releases.html"
+# The scripts this repository authors under vendor/: the coastline the build generates. A
+# third-party library there is somebody else's file and is not held to being loaded.
+AUTHORED_VENDOR_SCRIPTS = ("vendor/au-outline.js",)
 
 
 class _Collector(HTMLParser):
@@ -154,8 +157,8 @@ def test_about_has_no_live_counts_elements():
 
 def test_no_portal_document_carries_a_ver_chip():
     """FAILS if a version chip survives on any of the four documents. about.html held the last one;
-    with its #build section deleted there is no chip on the site, which is what makes the version.js
-    load below dead code rather than a spare."""
+    with its #build section deleted there is no chip on the site, which is what made the script
+    that filled one a file no page had a use for."""
     for path in (ABOUT, INDEX, ADD, RELEASES):
         chips = [a for (tag, a, _inh) in _parse(path) if "data-ver-chip" in a]
         assert not chips, (
@@ -565,24 +568,37 @@ def test_the_ladder_resolves_to_the_measured_header_height_at_the_pinned_widths(
             f"in-page anchor lands {header - got}px under it")
 
 
-def test_no_portal_document_loads_the_script_that_filled_the_chip():
-    """The other end of the deletion, on EVERY document rather than on about.html alone. version.js
-    exists to fill [data-ver-chip]; the pin above proves no surface carries one, so on every surface
-    the load is a request that changes nothing a reader can see. Nothing else reads what the file
-    defines: window.AUSMT_VERSION has no consumer in the shipped portal, so the load is inert and
-    not merely invisible.
+def test_every_script_a_page_loads_is_shipped_and_every_page_script_is_loaded():
+    """The two directions of one rule, over every document the portal ships.
 
-    THE FILE IS KEPT, and that is not a contradiction: its label logic and its config-missing
-    sentinel are the contract a future /build page would be held to, and tools/interaction_test.js
-    drives it in its own jsdom for exactly that reason.
+    A page that loads a script the tree does not carry sends every visitor after a 404, and a
+    script the tree carries that no page loads is a file a reader can open and reason about that
+    reaches nobody. The second direction is the one that bites: the version chip was deleted from
+    every surface, its script stopped being loaded, and the file went on being shipped, pinned and
+    read as though a page still used it.
 
-    FAILS if the tag comes back on any document, and FAILS in the other direction if config.js or
-    corpus-stats.js went with it on about.html: corpus-stats.js reads AUSMT_CONFIG.data_base_url
-    from config.js to find the catalogue the header's totals come from."""
+    Read over the page scripts at the top of portal/ and the coastline this repository generates
+    into vendor/. Third-party libraries under vendor/ are somebody else's file and are held only by
+    the first direction. FAILS in the other direction too if config.js or corpus-stats.js left
+    about.html: corpus-stats.js reads AUSMT_CONFIG.data_base_url from config.js to find the
+    catalogue the header's totals come from."""
+    loaded = {}
     for path in sorted(ROOT.glob("*.html")):
-        assert '<script src="version.js">' not in path.read_text(encoding="utf-8"), (
-            f"{path.name}: no surface carries a version chip, so the script that fills one is a "
-            f"dead load")
+        for src in re.findall(r'<script[^>]*\bsrc="([^"]+)"', path.read_text(encoding="utf-8")):
+            if "://" in src:
+                continue
+            loaded.setdefault(src, []).append(path.name)
+    assert loaded, "no page loaded a script, so this pin would pass over nothing"
+    absent = ["%s (loaded by %s)" % (src, ", ".join(pages))
+              for src, pages in sorted(loaded.items()) if not (ROOT / src).exists()]
+    assert not absent, (
+        "a page loads a script this tree does not ship, so every visitor pays a 404:\n"
+        + "\n".join(absent))
+    shipped = [p.name for p in sorted(ROOT.glob("*.js"))] + list(AUTHORED_VENDOR_SCRIPTS)
+    dead = [name for name in shipped if name not in loaded]
+    assert not dead, (
+        "a page script is shipped and loaded by no page, so it reaches no reader and no visitor:\n"
+        + "\n".join(dead))
     text = ABOUT.read_text(encoding="utf-8")
     assert '<script src="config.js">' in text, (
         "config.js stays: corpus-stats.js reads AUSMT_CONFIG.data_base_url from it")

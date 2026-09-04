@@ -278,8 +278,8 @@ win.open = (...args) => { opened.push(args); return null; };
 const clipboard = [];
 Object.defineProperty(win.navigator, "clipboard", {
   value: { writeText: t => { clipboard.push(String(t)); return Promise.resolve(); } }, configurable: true });
-// version/schema pinned so version.js produces a DETERMINISTIC ver-chip label the footer-chip assertion
-// (item 3) can pin exactly, instead of matching a moving default.
+// version and schema pinned so the config the page reads is deterministic rather than a moving
+// default.
 win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", schema_version: "1.0" };
 
 // ---- two-phase boot instrumentation --------------------------------------------------------------
@@ -878,49 +878,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
      _gjOk.features[0].properties.remote_ref === true,
     "a healthy sci.json must write the three screening properties exactly as before");
 
-  // VER CHIP OFF EVERY SURFACE. The one-footer rule took Releases and About this build out of the
-  // footer, and the version chip rode inside the About-this-build popover; it landed in about.html's
-  // #build section, and we have deleted that section too. NO page on this site carries a
-  // chip, and no page loads the script either. version.js is a standalone page script (not in
-  // MODULES), so run it here against the real DOM as a page that loaded it would, then assert:
-  //   (a) this document carries NO [data-ver-chip], in the header, the footer or anywhere else;
-  //   (b) version.js still DERIVES a correct label and POPULATES a chip wherever one is supplied,
-  //       driven in its own jsdom because no shipped page supplies the node the fill would land in.
-  //       The file is kept rather than deleted even though nothing loads it: the label logic and
-  //       its config-missing sentinel are the contract a future build page would be held to, and
-  //       this is the only place they are exercised. portal/tests/test_about_uniform_chrome.py
-  //       holds both zero-everywhere halves, the chips and the loads, across every document.
-  vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), dom.getInternalVMContext());
+  // VER CHIP OFF EVERY SURFACE. The one-footer rule took Releases and About this build out of
+  // the footer, and the version chip rode inside the About-this-build popover; it landed in
+  // about.html's #build section, and that section is deleted too. NO page on this site carries
+  // a chip, and portal/tests/test_about_uniform_chrome.py holds the other half: every page
+  // script the tree ships is loaded by at least one page.
   const spaChips = [...doc.querySelectorAll("[data-ver-chip]")];
   ok(spaChips.length === 0,
     "the SPA carries no version chip: it left with the About-this-build popover, found " + spaChips.length);
-  const chipDom = new JSDOM('<section id="build"><span data-ver-chip></span></section>',
-    { runScripts: "outside-only" });
-  chipDom.window.AUSMT_CONFIG = doc.defaultView.AUSMT_CONFIG;
-  vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), chipDom.getInternalVMContext());
-  ok(chipDom.window.AUSMT_VERSION.label === "AusMT v1.2.3 · MTCAT 1.0",
-    "version.js must still derive the chip label from the loaded config, got: " +
-    JSON.stringify(chipDom.window.AUSMT_VERSION.label));
-
-  // THE CONFIG-MISSING SENTINEL must be HONEST: version.js must NOT fall back to a schema_version, or a
-  // page whose config.js failed to load renders a confident "MTCAT 1.0" chip through the whole of schema
-  // 1.1 and 1.2. A JS file cannot read engine/schema/mtcat.schema.json at render time, so the sentinel
-  // carries NO version and the chip stops after the schema name. Driven in its own bare
-  // jsdom (no AUSMT_CONFIG at all), because that is the only state that reaches the sentinel.
-  const bare = new JSDOM("<footer><span data-ver-chip></span></footer>", { runScripts: "outside-only" });
-  vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), bare.getInternalVMContext());
-  // Assert the LABEL, not the filled node: a just-constructed jsdom document can still be "loading",
-  // in which case version.js correctly defers fill to DOMContentLoaded. The label is the exact string
-  // fill writes into every chip (the populated-chip case is the assertion directly above), so this
-  // pins the rendered text without racing the document's own readiness.
-  const bareLabel = bare.window.AUSMT_VERSION.label;
-  ok(bareLabel === "AusMT v0.0.0 · MTCAT",
-    "with no config loaded the chip must name the schema and state NO version, got: " + JSON.stringify(bareLabel));
-  ok(!/MTCAT\s*\d/.test(bareLabel),
-    "the config-missing chip must not end in a schema version number, got: " + JSON.stringify(bareLabel));
-  ok(bare.window.AUSMT_VERSION.schema_version === null,
-    "the config-missing sentinel must expose schema_version null (an explicit 'no version'), got: " +
-    JSON.stringify(bare.window.AUSMT_VERSION.schema_version));
 
   // AUSLAMP MEMBERSHIP. Collection membership, resolved once at boot.
   //
