@@ -88,8 +88,8 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
         assert phaseqc.true_phi_yx(round(stored, 1)) is not None
         assert abs(phaseqc.true_phi_yx(round(stored, 1)) - true_yx) < 0.05, (true_yx, stored)
         assert phaseqc.in_quadrant_yx(round(stored, 1)) is True, (
-            f"true phi_yx={true_yx} (stored t[4]={round(stored, 1)}) must classify in the third quadrant "
-            "unwrap - reading the stored value directly would mis-classify it")
+            f"true phi_yx={true_yx} (stored t[4]={round(stored, 1)}) must classify in the third "
+            "quadrant after the +180 unwrap - reading the stored value directly would mis-classify it")
 
 
 def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():

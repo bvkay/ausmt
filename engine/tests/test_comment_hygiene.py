@@ -1125,6 +1125,44 @@ MIDSENTENCE_SUBJECT = re.compile(
 # record and states no constraint, so the aside is restated as the constraint it stood for or it
 # goes with its bracket.
 BARE_LABEL = re.compile(r"\((?:design|note|see|ref|cf)\)")
+
+
+# THE EXPRESSION A SWEEP MAY NOT REWRITE. A comment that carries mathematics carries signs, bounds
+# and exponents, and not one of them is prose: R(-θ) is not R(θ), and a quadrant read from -180 to
+# -90 is not one read from 180 to -90. A vocabulary rule that lifts a token out of such a line, or
+# a shape rule that restates it, can strip a sign and leave a sentence that still reads, so the
+# WORDS are the only thing a sweep may touch. What is held is the multiset of SIGNED TOKENS the
+# unit carries: a sign standing where an operand begins (never a hyphen inside a word, and never
+# the spaced minus of arithmetic), the power operator, the join of a range between its bounds, and
+# a degree mark with its number. Two trees state the same expression when their multisets agree.
+GREEK = "\u0370-\u03ff\u1f00-\u1fff"
+SIGNED_TOKEN = re.compile(
+    r"(?<!\w)[-+][0-9(%s]" % GREEK
+    + r"|(?<!\w)[-+][A-Za-z](?![A-Za-z])"
+    + r"|\^"
+    + r"|(?<=[0-9%s])\.\.(?=[-+]?[0-9%s])" % (GREEK, GREEK)
+    + r"|[-+]?\d+(?:\.\d+)?\u00b0")
+
+
+def signed_tokens(text):
+    """The signed tokens one prose unit carries, sorted. The sweep's two-tree guard holds this list
+    equal at both trees for every unit it touched: a rewrite that changes it has changed an
+    expression, whatever it did to the words around it."""
+    return sorted(match.group(0) for match in SIGNED_TOKEN.finditer(text))
+
+
+# THE RANGE A CUT SIGN LEFT STANDING, which is the half of that guard one tree can hold on its own.
+# A quadrant written -180..-90 loses its leading minus to a cut and becomes 180..-90, a range whose
+# lower bound stands above its upper: it states no interval at all, and the sentence around it is
+# untouched, so no vocabulary or shape rule can see it. Both bounds are read as NUMBERS, so a range
+# of identifiers, of commit shas or of column positions is never one.
+RANGE_BOUNDS = re.compile(r"(?<![\w.])(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)(?![\w.])")
+
+
+def inverted_ranges(text):
+    """Every range in one prose unit whose lower bound stands above its upper, as (low, high)."""
+    return [(m.group(1), m.group(2)) for m in RANGE_BOUNDS.finditer(text)
+            if float(m.group(1)) > float(m.group(2))]
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
 # fragment of a cut sentence, which the reader is handed as a file name.
@@ -1357,6 +1395,10 @@ def shape_offences(files, root=None):
                             % " ".join(cut.group(0).split()))
             if BARE_LABEL.search(unquoted(flat)):
                 said.append("a bracketed aside reduced to the label that introduced it")
+            for low, high in inverted_ranges(unquoted(flat)):
+                said.append("a range whose lower bound stands above its upper (%s..%s)"
+                            % (low, high))
+                break
             if any(DANGLING_HYPHEN.search(line) for line in clean.splitlines()):
                 said.append("a hyphen with nothing after it")
             orphan = POINTER_ORPHAN.search(bare_flat)

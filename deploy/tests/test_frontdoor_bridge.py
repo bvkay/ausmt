@@ -101,7 +101,7 @@ def _brace_match(text: str, open_at: int) -> str:
 def _site_body(caddy_text: str, opener_re: str) -> str:
     """The INNER body (without the outer braces) of the site whose opener matches opener_re. The opener
     regex MUST end at the site's own opening brace, because a `{$ENV}` placeholder in the address line
-    also contains braces - we brace-match from the site brace (m.end-1), not the first '{'."""
+    also contains braces - we brace-match from the site brace (m.end()-1), not the first '{'."""
     m = re.search(opener_re, caddy_text)
     assert m, f"could not find a site opener matching {opener_re!r}"
     brace_idx = caddy_text.index("{", m.end() - 1)  # the site's own opening brace

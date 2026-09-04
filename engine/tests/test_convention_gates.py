@@ -8,10 +8,10 @@ so a test cannot pass vacuously against an unrotated fixture; and one adversaria
 the round-trip assertion CAN fail (a wrong-signed de-rotation is caught), permanently — not just
 in a one-off red run (Invariant 10).
 
-the engine NEVER rotates served data. A survey-uniform declared
+THE SERVE POLICY: the engine NEVER rotates served data. A survey-uniform declared
 frame of ANY magnitude serves AS STORED with the angle recorded; survey-inconsistent frames
 serve as-stored per station with a survey "mixed declared frames" note; per-period frame
-mixing (PAX) is REFUSED at the gate. The de-rotation math (Z' = R(θ) Z R(θ)^T) is retained
+mixing (PAX) is REFUSED at the gate. The de-rotation math (Z' = R(-θ) Z R(-θ)^T) is retained
 DIAGNOSTIC-ONLY and pinned here (test_diagnostic_derotation_*) + against the AusLAMP-SA custodian
 twins (test_convention_gates_realdata.py) — see maintainer/C25-ConventionGates.md.
 """

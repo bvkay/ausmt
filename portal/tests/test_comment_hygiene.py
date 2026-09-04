@@ -1127,6 +1127,44 @@ MIDSENTENCE_SUBJECT = re.compile(
 # record and states no constraint, so the aside is restated as the constraint it stood for or it
 # goes with its bracket.
 BARE_LABEL = re.compile(r"\((?:design|note|see|ref|cf)\)")
+
+
+# THE EXPRESSION A SWEEP MAY NOT REWRITE. A comment that carries mathematics carries signs, bounds
+# and exponents, and not one of them is prose: R(-θ) is not R(θ), and a quadrant read from -180 to
+# -90 is not one read from 180 to -90. A vocabulary rule that lifts a token out of such a line, or
+# a shape rule that restates it, can strip a sign and leave a sentence that still reads, so the
+# WORDS are the only thing a sweep may touch. What is held is the multiset of SIGNED TOKENS the
+# unit carries: a sign standing where an operand begins (never a hyphen inside a word, and never
+# the spaced minus of arithmetic), the power operator, the join of a range between its bounds, and
+# a degree mark with its number. Two trees state the same expression when their multisets agree.
+GREEK = "\u0370-\u03ff\u1f00-\u1fff"
+SIGNED_TOKEN = re.compile(
+    r"(?<!\w)[-+][0-9(%s]" % GREEK
+    + r"|(?<!\w)[-+][A-Za-z](?![A-Za-z])"
+    + r"|\^"
+    + r"|(?<=[0-9%s])\.\.(?=[-+]?[0-9%s])" % (GREEK, GREEK)
+    + r"|[-+]?\d+(?:\.\d+)?\u00b0")
+
+
+def signed_tokens(text):
+    """The signed tokens one prose unit carries, sorted. The sweep's two-tree guard holds this list
+    equal at both trees for every unit it touched: a rewrite that changes it has changed an
+    expression, whatever it did to the words around it."""
+    return sorted(match.group(0) for match in SIGNED_TOKEN.finditer(text))
+
+
+# THE RANGE A CUT SIGN LEFT STANDING, which is the half of that guard one tree can hold on its own.
+# A quadrant written -180..-90 loses its leading minus to a cut and becomes 180..-90, a range whose
+# lower bound stands above its upper: it states no interval at all, and the sentence around it is
+# untouched, so no vocabulary or shape rule can see it. Both bounds are read as NUMBERS, so a range
+# of identifiers, of commit shas or of column positions is never one.
+RANGE_BOUNDS = re.compile(r"(?<![\w.])(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)(?![\w.])")
+
+
+def inverted_ranges(text):
+    """Every range in one prose unit whose lower bound stands above its upper, as (low, high)."""
+    return [(m.group(1), m.group(2)) for m in RANGE_BOUNDS.finditer(text)
+            if float(m.group(1)) > float(m.group(2))]
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
 # fragment of a cut sentence, which the reader is handed as a file name.
@@ -1359,6 +1397,10 @@ def shape_offences(files, root=None):
                             % " ".join(cut.group(0).split()))
             if BARE_LABEL.search(unquoted(flat)):
                 said.append("a bracketed aside reduced to the label that introduced it")
+            for low, high in inverted_ranges(unquoted(flat)):
+                said.append("a range whose lower bound stands above its upper (%s..%s)"
+                            % (low, high))
+                break
             if any(DANGLING_HYPHEN.search(line) for line in clean.splitlines()):
                 said.append("a hyphen with nothing after it")
             orphan = POINTER_ORPHAN.search(bare_flat)
@@ -3244,6 +3286,37 @@ def test_a_run_may_open_on_a_decimal_or_an_ellipsis(tmp_path):
         f = tmp_path / "whole.py"
         f.write_text(body, encoding="utf-8")
         assert not shape_offences([f]), body
+
+
+def test_a_sweep_may_not_rewrite_the_expression_a_comment_carries(tmp_path):
+    """The signs, powers, range joins and degree marks a unit carries are not prose. A convention
+    header that states R(-θi) and comes back reading R(θi) documents the wrong frame for every
+    station served under it, and no vocabulary or shape rule can see the difference: the sentence
+    around the sign is untouched. The multiset is what the two-tree guard holds equal; the half a
+    single tree can hold on its own is the range whose lower bound was left standing above its
+    upper."""
+    header = ("The de-rotation MATH (Z0(i) = R(-θi) Z(i) R(-θi)^T, T0(i) = T(i) R(-θi)^T) and "
+              "arg(Zyx) in the third quadrant (-180..-90°).")
+    stripped = header.replace("R(-θi)", "R(θi)").replace("(-180..-90°)", "(180..-90°)")
+    assert signed_tokens(header) != signed_tokens(stripped), \
+        "a stripped rotation sign left the multiset unchanged"
+    assert sorted(set(signed_tokens(header)) - set(signed_tokens(stripped))) == ["-1", "-θ"], \
+        signed_tokens(header)
+
+    # A hyphen inside a word, a spaced minus and a long option are not signs, so ordinary prose
+    # and an ordinary rewrite of it carry the same multiset.
+    assert signed_tokens("a fail-closed gate, and a - b, run with --surveys") == []
+
+    # The single-tree half, on a comment and on the whole-prose side of the same shape.
+    f = tmp_path / "quadrant.py"
+    f.write_text('"""arg(Zyx) lies in the third quadrant (180..-90°)."""\n', encoding="utf-8")
+    hits = shape_offences([f])
+    assert hits and "lower bound stands above its upper" in hits[0], hits
+    whole = tmp_path / "whole.py"
+    whole.write_text('"""arg(Zxy) lies in the first quadrant (0..90°), arg(Zyx) in the third\n'
+                     '    quadrant (-180..-90°); the ids run CC01..CC28 over commits 4f4e999..a31fc8e."""\n',
+                     encoding="utf-8")
+    assert not shape_offences([whole]), shape_offences([whole])
 
 
 def test_a_run_of_line_comments_is_one_shape(tmp_path):
