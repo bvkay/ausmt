@@ -3,7 +3,7 @@
 # exits; a systemd timer (deploy/systemd/ausmt-reconcile.timer) re-invokes it every ~15 min. The
 # NCI end-state has a shell-less curator, so "run make rebuild-data by hand" is not an operation the
 # responsible person can perform — this closes the published-not-served gap with no human in the loop
-# (design).
+# and no manual step between a publish and the bytes a visitor is served.
 #
 # WHAT IT DOES (in order):
 #   1. sync   — git -C surveys-live pull --ff-only. On failure: write status action=sync_failed and

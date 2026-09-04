@@ -485,7 +485,8 @@ def seed_validated(gw, cfg, *, slug: str = "mysurvey", email: str = GOOD_EMAIL,
                    package_files: dict[str, str] | None = None,
                    token: str | None = None) -> str:
     """Insert a submission and drive it directly to VALIDATED via the DB (bypassing the scan/job
-    pipeline - those are), materialising a package tree + reports on disk so the checklist
+    pipeline, which its own tests cover), materialising a package tree + reports on disk so the
+    checklist
     and preview have something to read. Returns the submission id.
 
     fail_item -> writes a FAIL validator item so the blocking-FAIL guard fires.

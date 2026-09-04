@@ -315,7 +315,7 @@ def test_xml_cache_key_binds_disambiguated_station_id(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 2. verify.py catches POST-BUILD tampering of served files (the outer gate - as amended by)
+# 2. verify.py catches POST-BUILD tampering of served files (the outer gate)
 # --------------------------------------------------------------------------------------------------
 
 def test_verify_catches_post_build_tamper_of_served_files(tmp_path, clean_salt):

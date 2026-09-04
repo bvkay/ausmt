@@ -613,7 +613,8 @@ def test_root_artifacts_carry_no_register_route_detail(tmp_path):
 def test_ts_access_membership_is_exactly_the_open_stations(tmp_path):
     """The MEMBERSHIP claim itself, stated as a set rather than as a string sweep: under a register
     covering every access state, the artifact's keys are the served surveys' ausmt_ids and no
-    others. This is the guarantee trades the leak-clean-by-construction shape for."""
+    others. This set is the guarantee that the leak-clean-by-construction shape alone
+    does not give."""
     out, prod, served, nonserved = _build_products_corpus(tmp_path)
     out2, _forbidden, _routes = _build_with_leak_register(tmp_path, prod, (*served, *nonserved))
     ids = {}

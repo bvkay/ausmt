@@ -202,7 +202,7 @@ def read_rollback_pin(state_dir: Path) -> dict | None:
 def read_actions_audit_tail(state_dir: Path, *, n: int = 40) -> list[str]:
     """The last `n` lines of the host actions-audit.log (append-only, host-written 0644 so the gateway
     can read it). Read-only display of who/what/when/outcome for the privileged actions. Never raises;
-    an absent log => .
+    an absent log => [].
 
     Splits on '\\n' ONLY (never str.splitlines()): the host already scrubs control + unicode-separator
     chars from the attacker-controlled fields (actions.sh _scrub), but the gateway must not TRUST

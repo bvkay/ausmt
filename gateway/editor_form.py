@@ -210,7 +210,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # row, identifies: entire). The `sources` LIST_SECTIONS registration is GONE, so build_section_patch
     # never assembles the key — a legacy sources[] on disk is byte-preserved (never entered into any
     # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine keeps reading
-    # sources[] (note), so nothing served changes.
+    # sources[], so nothing served changes.
     #
     # + D-L: the single typed list of provenance relations to identifiers AusMT does NOT own.
     # The primary per-row control is `identifies` (WHAT the identifier points at, in NCI Table 1 data-level

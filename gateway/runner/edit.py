@@ -654,7 +654,7 @@ def _strip_inferred_review_comment(node, key) -> None:
 
 def run_read_job(package_root: Path) -> dict:
     """Handle a `read` edit-job: load the survey.yaml and return the editable subset + version. Also
-    returns `review_flags` (the contributor-credit model, extended in): the row indices the migrations
+    returns `review_flags` (the contributor-credit model): the row indices the migrations
     marked INFERRED-REVIEW on each of _CREDIT_LIST_KEYS (creators, contributors, organisations,
     acknowledgements), so the editor can chip them for curator adjudication."""
     survey_yaml = package_root / "survey.yaml"

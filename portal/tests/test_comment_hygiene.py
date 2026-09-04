@@ -1073,8 +1073,52 @@ SUBJECTLESS_SENTENCE = re.compile(
 ORPHANED_COPULA = re.compile(r"[)\]][ \t]+(?:was|were|is|are|be|been|being)[ \t]*[.;](?:\s|\Z)")
 # Two sentence marks standing together, where the cut took the token that stood between them
 # ("must not both build,;"). A decimal and an ellipsis carry a digit or a further dot after the
-# mark, so neither is this.
-MARKS_TOGETHER = re.compile(r"[\w)\]][,;][.,;](?![.\d])")
+# mark, so neither is this. The second class carries the COLON: where the cut takes the token
+# that introduced a clause, the comma of the phrase in front of it is left hard against that
+# colon ("a production regression,:"), and a class of [.,;] misses it by one character in the
+# same way a rule reading a line of exactly one bracket missed ")." by one. A group that closed
+# before the cut token carries the same scar with its own full stop in between ("anyway).:").
+MARKS_TOGETHER = re.compile(r"[\w)\]][,;][.,;:](?![.\d])|[)\]]\.[:;](?![.\d])")
+# THE WORD LEFT HARD AGAINST THE BRACKET THAT CLOSED ITS GROUP. Where the cut takes the citation a
+# bracketed aside was about, the word that introduced it is left standing against the bracket
+# ("as amended by)", "restated for)", "those are)", "(was ro in)"). A stranded preposition closes
+# an ordinary relative clause in this tree a hundred times over ("the name it arrived with)",
+# "the digest this entry was keyed under)"), so the shapes read are the three that cannot be one:
+# a participle carrying its preposition with no auxiliary in front of it, a demonstrative plural
+# standing on its copula, and a group that opens on a copula and closes with no complement.
+PARTICIPLE_PREPOSITION = re.compile(
+    r"(?<!\bwas )(?<!\bwere )(?<!\bis )(?<!\bare )(?<!\bbeen )(?<!\bbe )(?<![\w-])"
+    r"(?:amended|extended|restated|retired|superseded|narrowed|widened|introduced|replaced|"
+    r"lifted|bumped|renamed|ratified|stated|documented|recorded|granted|reworded|revised|"
+    r"relaxed|tightened|reinstated|rescinded|clarified|corrected|deprecated|reinforced)"
+    r"[ \t]+(?:in|on|by|for|from|with|as|at|under|over|since|to)\)")
+DEMONSTRATIVE_COPULA = re.compile(r"(?<![\w-])(?:those|these)[ \t]+(?:are|is|was|were)\)")
+COPULA_GROUP = re.compile(r"\((?:was|were|is|are)[ \t][\w-]+[ \t]"
+                          r"(?:in|on|by|for|from|with|as|at|under|over|since|to)\)")
+# THE VALUE AN OPERATOR WAS POINTING AT. A docstring that documents a return value writes the
+# arrow and then the value ("an absent log => []"), so a cut that takes the value leaves the
+# arrow pointing at the full stop and the docstring states a behaviour with nothing to state it
+# as. A bare "=" cannot join the class: this tree names a keyword argument or an attribute that
+# way ("passing no dir=, so a rollover lands", "no inline block without src=. Mirrors"), which is
+# the same shape and correct English, so only the arrows and an "=" the writer spaced off are read.
+OPERATOR_ORPHAN = re.compile(r"(?:=>|->|<-)[ \t]*[.,;](?:\s|\Z)|[\w)\]]=[ \t]+[.,;](?:\s|\Z)")
+# THE SUBJECT A CUT TOOK OUT OF THE MIDDLE OF A SENTENCE. SUBJECTLESS_SENTENCE is anchored to a
+# sentence boundary, so it reads only the cut that took the opening word; where the subject stood
+# mid-sentence the copula is left introducing the object of the verb that follows it ("This is the
+# guarantee trades the leak-clean-by-construction shape for"). The verbs are the same floor the
+# sentence-opening rule reads, and a verb the list does not name is a site this rule will not find.
+MIDSENTENCE_SUBJECT = re.compile(
+    r"(?<![\w-])is[ \t]+the[ \t]+[\w-]+[ \t]+"
+    r"(?:trades|adds|carries|keeps|holds|removes|replaces|extends|narrows|widens|closes|fixes|"
+    r"drops|folds|gives|takes|turns|puts|sets|reads|writes|runs|leaves|brings|sends|pins|gates|"
+    r"blocks|allows|names|says|shows|proves|means|needs|uses|treats|counts|marks|stands|splits|"
+    r"inverts|makes|moves|routes|invokes|introduces|retires|supersedes|renames|lifts|raises|"
+    r"lowers)(?![\w-])")
+# A BRACKET THAT POINTS AT NOTHING. Where the cut takes the record a bracketed aside cited, the
+# label that introduced it is left alone between the brackets ("(design)", "(note)"): it names no
+# record and states no constraint, so the aside is restated as the constraint it stood for or it
+# goes with its bracket.
+BARE_LABEL = re.compile(r"\((?:design|note|see|ref|cf)\)")
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
 # fragment of a cut sentence, which the reader is handed as a file name.
@@ -1290,6 +1334,18 @@ def shape_offences(files, root=None):
                             % headless.group(1))
             if MARKS_TOGETHER.search(unquoted(flat)):
                 said.append("two sentence marks with nothing between them")
+            if (PARTICIPLE_PREPOSITION.search(unquoted(flat))
+                    or DEMONSTRATIVE_COPULA.search(unquoted(flat))
+                    or COPULA_GROUP.search(unquoted(flat))):
+                said.append("a word left hard against the bracket that closed its group")
+            if OPERATOR_ORPHAN.search(unquoted(flat)):
+                said.append("an operator standing where the value it points at was cut")
+            cut = MIDSENTENCE_SUBJECT.search(unquoted(flat))
+            if cut:
+                said.append("a verb whose subject was cut from the middle of its sentence (%s)"
+                            % " ".join(cut.group(0).split()))
+            if BARE_LABEL.search(unquoted(flat)):
+                said.append("a bracketed aside reduced to the label that introduced it")
             if any(DANGLING_HYPHEN.search(line) for line in clean.splitlines()):
                 said.append("a hyphen with nothing after it")
             orphan = POINTER_ORPHAN.search(bare_flat)
@@ -2933,6 +2989,39 @@ def test_each_broken_shape_is_caught(tmp_path):
         ("two sentence marks with nothing between them",
          '# Two overlapping ticks must not both build,; the second is a no-op.\n'
          "LOCK = ()\n"),
+        # The same shape at the two widths the colon gives it: the comma of the phrase against
+        # the colon that introduced the clause, and a group that closed before the cut token.
+        ("two sentence marks with nothing between them",
+         '# A production regression,: no station on the deployed portal could be opened.\n'
+         "OPENED = ()\n"),
+        ("two sentence marks with nothing between them",
+         '"""The raw entries are cache-excluded anyway).: the digest is carried, never re-read."""\n'),
+        # The word left against the bracket that closed its group, at its three widths: a
+        # participle carrying its preposition, a demonstrative on its copula, and a group that
+        # opens on a copula and closes with no complement.
+        ("a word left hard against the bracket that closed its group",
+         '"""The row indices the contributor-credit model, extended in) names."""\n'),
+        ("a word left hard against the bracket that closed its group",
+         '"""Drive it to VALIDATED past the scan pipeline - those are), and materialise a tree."""\n'),
+        ("a word left hard against the bracket that closed its group",
+         '# The site-data mount is read-WRITE here now (was ro in). The reconcile step needs it.\n'
+         "MOUNT = ()\n"),
+        # The value an operator was pointing at, taken out of a documented return and out of a
+        # documented expectation.
+        ("an operator standing where the value it points at was cut",
+         '"""Read the log rows. Never raises; an absent log => ."""\n'),
+        ("an operator standing where the value it points at was cut",
+         '"""Two entries in first-appearance order. B: count 1, stations= ."""\n'),
+        # The subject taken out of the MIDDLE of a sentence, where the copula is left introducing
+        # the object of the verb behind it.
+        ("a verb whose subject was cut from the middle of its sentence",
+         '"""This is the guarantee trades the leak-clean-by-construction shape for."""\n'),
+        # The aside reduced to the label that introduced it.
+        ("a bracketed aside reduced to the label that introduced it",
+         '"""The README skeleton (design): one heading per served product."""\n'),
+        ("a bracketed aside reduced to the label that introduced it",
+         '# The engine keeps reading sources[] (note), so nothing served changes.\n'
+         "SOURCES = ()\n"),
         ("a pointer that is not of the pointer grammar",
          '"""The rows worth writing. See docs: portal internals, add-survey.html.tml."""\n'),
         # The closing half of the connector family: before a bracket, before a square bracket,
@@ -3025,6 +3114,22 @@ def test_whole_prose_is_not_a_broken_shape(tmp_path):
         # A preposition ends an English sentence every day, and a capital letter in front of a full
         # stop is a list marker; neither is a noun a cut took away.
         "stranded.py": '"""The bucket the tile falls into. The meaning a missing value has none of."""\n',
+        # The same preposition closes a relative clause hard against the bracket that holds it,
+        # which is why the bracket rule reads a participle with no auxiliary rather than any
+        # preposition: the head noun of each of these stands outside the group.
+        "relative.py": '"""It is copied byte for byte (under the name it arrived with), and an\n'
+                       "    XML-sourced station carries (the digest this entry was keyed under).\n"
+                       '    A panel (that was renamed from) keeps the id (it was folded in)."""\n',
+        # A keyword argument and an attribute are named with a bare "=" in this tree, so only an
+        # arrow, or an "=" the writer spaced off, reads as an operator with its value cut away.
+        "kwarg.py": '"""It uses a plain dump with no default=, so a date object would raise, and\n'
+                    '    it rejects an inline block without src=. Both are named, not called."""\n',
+        # A demonstrative singular takes a complement outside the group, and a copula group that
+        # closes on its own complement is whole.
+        "copula.py": '"""A 302 is not hosting (and this page never claims it is), which is the\n'
+                     '    half the reader needs (it was ro in the first release)."""\n',
+        # A label that carries the record it cites is an aside, not a bracket pointing at nothing.
+        "labelled.py": '"""The skeleton (design record 37) names one heading per served product."""\n',
         "marker.py": '"""Two shapes:\n\n    A. the curated survey;\n'
                      "    B. the raw survey.\n    \"\"\"\n",
         # A sentence opening in lower case is ordinary here: on an identifier, on a path, on a

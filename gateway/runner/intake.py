@@ -196,7 +196,7 @@ def _license_md_body(y: dict, now_utc: datetime) -> str | None:
 
 
 def _readme_md_body(y: dict, package_root: Path, now_utc: datetime) -> str:
-    """The README.md skeleton (design): name, organisation, year/dates, abstract, station count
+    """The README.md skeleton: name, organisation, year/dates, abstract, station count
     (when cheaply known), citation guidance, licence line. NO submitter contact details — only
     survey.yaml-declared fields are used."""
     name = _name_of(y)

@@ -5310,9 +5310,9 @@ def _main_build(argv=None):
         _station_ids = station_ids_by_survey.get(label) or stnids.StationIds("filename", {}, {})
         # Cache key component: this survey's WHOLE survey.yaml digest (provably
         # over-invalidating — any yaml edit re-derives just this survey; "" for --raw entries, which
-        # are cache-excluded anyway).: the digest is CARRIED from discover_work, computed
+        # are cache-excluded anyway). The digest is CARRIED from discover_work, computed
         # there from the SAME bytes the survey meta was parsed from — never re-read here. A loop-time
-        # A re-read here is exactly the incident window: an edit landing between discovery and
+        # re-read is exactly the incident window: an edit landing between discovery and
         # this iteration keys PRE-edit products under the POST-edit digest, poisoning the
         # cache invisibly to the consistency gate (test_straddled_build_cannot_poison_the_cache pins it).
         # Snapshot the cumulative cache counters so this survey's PER-SURVEY delta can be

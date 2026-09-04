@@ -1246,7 +1246,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     JSON.stringify(_legDots && _legDots.textContent));
 
   // A STATION CLICK OPENS THAT STATION, AND NOTHING SITS OVER THE STATION LAYER.
-  //     (production regression,: no station on the deployed portal could be opened. CAUSE: the
+  //     (production regression: no station on the deployed portal could be opened. CAUSE: the
   //     per-survey badge panes sat at z 600 over the station canvas at z 400, and adding an L.Path to a
   //     pane makes Leaflet build a full-map-size canvas inside it, which swallowed every click.)
   //

@@ -1075,8 +1075,52 @@ SUBJECTLESS_SENTENCE = re.compile(
 ORPHANED_COPULA = re.compile(r"[)\]][ \t]+(?:was|were|is|are|be|been|being)[ \t]*[.;](?:\s|\Z)")
 # Two sentence marks standing together, where the cut took the token that stood between them
 # ("must not both build,;"). A decimal and an ellipsis carry a digit or a further dot after the
-# mark, so neither is this.
-MARKS_TOGETHER = re.compile(r"[\w)\]][,;][.,;](?![.\d])")
+# mark, so neither is this. The second class carries the COLON: where the cut takes the token
+# that introduced a clause, the comma of the phrase in front of it is left hard against that
+# colon ("a production regression,:"), and a class of [.,;] misses it by one character in the
+# same way a rule reading a line of exactly one bracket missed ")." by one. A group that closed
+# before the cut token carries the same scar with its own full stop in between ("anyway).:").
+MARKS_TOGETHER = re.compile(r"[\w)\]][,;][.,;:](?![.\d])|[)\]]\.[:;](?![.\d])")
+# THE WORD LEFT HARD AGAINST THE BRACKET THAT CLOSED ITS GROUP. Where the cut takes the citation a
+# bracketed aside was about, the word that introduced it is left standing against the bracket
+# ("as amended by)", "restated for)", "those are)", "(was ro in)"). A stranded preposition closes
+# an ordinary relative clause in this tree a hundred times over ("the name it arrived with)",
+# "the digest this entry was keyed under)"), so the shapes read are the three that cannot be one:
+# a participle carrying its preposition with no auxiliary in front of it, a demonstrative plural
+# standing on its copula, and a group that opens on a copula and closes with no complement.
+PARTICIPLE_PREPOSITION = re.compile(
+    r"(?<!\bwas )(?<!\bwere )(?<!\bis )(?<!\bare )(?<!\bbeen )(?<!\bbe )(?<![\w-])"
+    r"(?:amended|extended|restated|retired|superseded|narrowed|widened|introduced|replaced|"
+    r"lifted|bumped|renamed|ratified|stated|documented|recorded|granted|reworded|revised|"
+    r"relaxed|tightened|reinstated|rescinded|clarified|corrected|deprecated|reinforced)"
+    r"[ \t]+(?:in|on|by|for|from|with|as|at|under|over|since|to)\)")
+DEMONSTRATIVE_COPULA = re.compile(r"(?<![\w-])(?:those|these)[ \t]+(?:are|is|was|were)\)")
+COPULA_GROUP = re.compile(r"\((?:was|were|is|are)[ \t][\w-]+[ \t]"
+                          r"(?:in|on|by|for|from|with|as|at|under|over|since|to)\)")
+# THE VALUE AN OPERATOR WAS POINTING AT. A docstring that documents a return value writes the
+# arrow and then the value ("an absent log => []"), so a cut that takes the value leaves the
+# arrow pointing at the full stop and the docstring states a behaviour with nothing to state it
+# as. A bare "=" cannot join the class: this tree names a keyword argument or an attribute that
+# way ("passing no dir=, so a rollover lands", "no inline block without src=. Mirrors"), which is
+# the same shape and correct English, so only the arrows and an "=" the writer spaced off are read.
+OPERATOR_ORPHAN = re.compile(r"(?:=>|->|<-)[ \t]*[.,;](?:\s|\Z)|[\w)\]]=[ \t]+[.,;](?:\s|\Z)")
+# THE SUBJECT A CUT TOOK OUT OF THE MIDDLE OF A SENTENCE. SUBJECTLESS_SENTENCE is anchored to a
+# sentence boundary, so it reads only the cut that took the opening word; where the subject stood
+# mid-sentence the copula is left introducing the object of the verb that follows it ("This is the
+# guarantee trades the leak-clean-by-construction shape for"). The verbs are the same floor the
+# sentence-opening rule reads, and a verb the list does not name is a site this rule will not find.
+MIDSENTENCE_SUBJECT = re.compile(
+    r"(?<![\w-])is[ \t]+the[ \t]+[\w-]+[ \t]+"
+    r"(?:trades|adds|carries|keeps|holds|removes|replaces|extends|narrows|widens|closes|fixes|"
+    r"drops|folds|gives|takes|turns|puts|sets|reads|writes|runs|leaves|brings|sends|pins|gates|"
+    r"blocks|allows|names|says|shows|proves|means|needs|uses|treats|counts|marks|stands|splits|"
+    r"inverts|makes|moves|routes|invokes|introduces|retires|supersedes|renames|lifts|raises|"
+    r"lowers)(?![\w-])")
+# A BRACKET THAT POINTS AT NOTHING. Where the cut takes the record a bracketed aside cited, the
+# label that introduced it is left alone between the brackets ("(design)", "(note)"): it names no
+# record and states no constraint, so the aside is restated as the constraint it stood for or it
+# goes with its bracket.
+BARE_LABEL = re.compile(r"\((?:design|note|see|ref|cf)\)")
 # A pointer names the docs page, the file it stands for and, where it points at
 # one part of that file, the section. Anything else in the file token is the
 # fragment of a cut sentence, which the reader is handed as a file name.
@@ -1292,6 +1336,18 @@ def shape_offences(files, root=None):
                             % headless.group(1))
             if MARKS_TOGETHER.search(unquoted(flat)):
                 said.append("two sentence marks with nothing between them")
+            if (PARTICIPLE_PREPOSITION.search(unquoted(flat))
+                    or DEMONSTRATIVE_COPULA.search(unquoted(flat))
+                    or COPULA_GROUP.search(unquoted(flat))):
+                said.append("a word left hard against the bracket that closed its group")
+            if OPERATOR_ORPHAN.search(unquoted(flat)):
+                said.append("an operator standing where the value it points at was cut")
+            cut = MIDSENTENCE_SUBJECT.search(unquoted(flat))
+            if cut:
+                said.append("a verb whose subject was cut from the middle of its sentence (%s)"
+                            % " ".join(cut.group(0).split()))
+            if BARE_LABEL.search(unquoted(flat)):
+                said.append("a bracketed aside reduced to the label that introduced it")
             if any(DANGLING_HYPHEN.search(line) for line in clean.splitlines()):
                 said.append("a hyphen with nothing after it")
             orphan = POINTER_ORPHAN.search(bare_flat)

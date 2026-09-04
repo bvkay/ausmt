@@ -7618,7 +7618,7 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
       * submission count per key from the audit trail (`submission_counts` name->count);
       * an explicit UNUSED-KEY NUDGE — an active key that has never been used is badged 'never used'
         so a stale key stands out at a glance;
-      * revoked keys retained as read-only audit rows (unchanged from v2, restated for);
+      * revoked keys retained as read-only audit rows (unchanged from v2);
       * a rotation-runbook link on the page.
     Every interpolated value is html.escaped (a note is curator free text — it MUST NOT inject markup)."""
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'

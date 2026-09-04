@@ -140,7 +140,7 @@ services:
       # reasoning as the portal's 8443 bind: never widen this to 0.0.0.0 or a bare port (README).
       - "127.0.0.1:8444:8000"
     # Publish flow needs read access to the QUARANTINE package tree (to stage it) - so quarantine
-    # is mounted read-WRITE here now (was ro in). Rationale: the publish step copies
+    # is mounted read-WRITE here. Rationale: the publish step copies
     # quarantine/<id>/package into surveys-live; it reads quarantine, and the post-unpack sweep still
     # only reads. It does NOT need to write quarantine, but the runner (10002) and gateway (10002)
     # share the uid, and giving the gateway rw here keeps the topology simple without widening trust
