@@ -1405,7 +1405,7 @@ def comment_blocks(path, text):
              "\n".join(b["bodies"])) for b in out]
 
 
-def over_length(path, text):
+def over_length(path, text, root=None):
     """Every comment on a shipped surface that runs past the clause, as report lines."""
     over = []
     for lineno, block in comment_blocks(path, text):
@@ -1417,8 +1417,9 @@ def over_length(path, text):
         size = len(block.encode("utf-8"))
         said = len(sentences(DOCS_POINTER.sub("", prose)))
         if size > COMMENT_CAP or said > COMMENT_SENTENCES:
-            over.append("portal/%s:%d: %d bytes, %d sentence(s): %s"
-                        % (path.name, lineno, size, said, prose[:100]))
+            where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+            over.append("%s:%d: %d bytes, %d sentence(s): %s"
+                        % (where, lineno, size, said, prose[:100]))
     return over
 
 
@@ -1570,11 +1571,14 @@ def test_each_shipped_document_stays_under_its_comment_cap():
 def test_a_shipped_comment_is_two_sentences_long_at_most():
     """H1's length clause, on the tier every visitor downloads: a long constraint is stated in one or
     two sentences, and anything longer lives in docs/docs/reference/portal-internals.md with the
-    comment carrying the constraint and the bare pointer to it. The exemptions are a licence or
-    attribution obligation, whose wording IS the obligation, and the enumerated list above."""
+    comment carrying the constraint and the bare pointer to it. It reads the page scripts a visitor
+    loads by name as well as the pages and the modules: a script is not shorter for sitting at the top
+    of portal/ rather than under src/, and one of them carries the longest comment the portal ships.
+    The exemptions are a licence or attribution obligation, whose wording IS the obligation, and the
+    enumerated list above."""
     over = []
-    for path in shipped_html() + shipped_js():
-        over += over_length(path, path.read_text(encoding="utf-8"))
+    for path in shipped_html() + shipped_js() + shipped_page_scripts():
+        over += over_length(path, path.read_text(encoding="utf-8"), root=ROOT)
     assert not over, (
         f"{len(over)} comment(s) on the shipped tier run past the length clause "
         f"({COMMENT_SENTENCES} sentences, {COMMENT_CAP} bytes); move the reasoning to "
@@ -1630,7 +1634,7 @@ def test_the_docs_page_the_pointers_name_exists_and_carries_a_section_per_file()
     assert page.exists(), f"{page} is missing and every pointer on the shipped tier is dead"
     text = page.read_text(encoding="utf-8")
     missing = []
-    for path in shipped_html() + shipped_js():
+    for path in shipped_html() + shipped_js() + shipped_page_scripts():
         body = path.read_text(encoding="utf-8")
         if DOCS_POINTER.search(" ".join(bare(body).split()) + " ") or f"portal internals, {path.name}" in body:
             rel = str(path.relative_to(ROOT))

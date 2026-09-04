@@ -5479,3 +5479,112 @@ Select and Download boxes) would spotlight nothing and narrate controls that are
 exactly what a returning visitor who collapsed the rail gets from About's ?tour=1 link. Expand it
 for the run and record that WE did, so _tourRestore puts the visitor's own choice back.
 ```
+
+## portal/config.js
+
+#### The browser-side reflection of portal.config.yaml
+
+```text
+config.js is written by portal/tools/gen_config.py from portal.config.yaml and is the browser-side
+reflection of the portal configuration: branding, version, deployment URLs and the analytics switch.
+To change any of that, edit portal.config.yaml and regenerate; a hand edit to config.js is lost on
+the next generate and the two surfaces then disagree about what the deployment is.
+```
+
+## portal/corpus-stats.js
+
+#### Why the totals come from the catalogue rather than the build document
+
+```text
+The About page header shows the corpus totals ("N stations, N surveys") read from the SAME static
+data products the portal app reads: catalogue.json, one row per station, and surveys.json, one entry
+per survey. About does not load the app bundle, so this is a self-contained script rather than a call
+into src/data.js; it duplicates only the base-url resolution, which it must match exactly.
+
+build.json is deliberately NOT a source here. It carries build IDENTITY (build_id, engine_commit,
+source_commit, generated) and no counts, so it cannot answer this question.
+```
+
+#### Honest by construction
+
+```text
+The block ships hidden and is revealed ONLY once both documents resolve to a non-empty corpus, so a
+file:// page (fetch blocked or cross-origin), a deployment whose data is not published yet, and an
+empty build all show nothing at all rather than a fabricated or "0 stations" total. Nothing is
+hard-coded: the numbers can only ever be what the served catalogue says.
+```
+
+## portal/releases.js
+
+#### What the page reads
+
+```text
+The Releases page is filled from the served release index and from each release's own document. A
+release is a quarterly, frozen copy of one build's catalogue surface (mtcat.json / surveys.json /
+manifest.json) plus that build's survey bundles, cut by engine/extract/cut_release.py into
+<data-root>/releases/<tag>/ and indexed by <data-root>/releases/releases.json. The script reads BOTH
+documents and hard-codes nothing about any release, so the page cannot go stale or advertise a
+release that was never cut.
+
+Every value that reaches the DOM does so through textContent or a DOM property, never innerHTML:
+tags, notes, commits and file paths all originate in a served JSON document.
+```
+
+#### The honesty rules, which are the whole point of the page
+
+```text
+1. Absent-or-empty index and unreadable index are DIFFERENT states. A 404 (or an index whose
+   releases[] is empty) means no release is published here, and the page says so. A network failure,
+   a non-404 status or a malformed document means this request could not find out, and the page says
+   THAT instead. Collapsing the two would let a routing problem be reported to every reader as "no
+   releases have ever been cut".
+2. Nothing is linked that has not been confirmed to exist. Every file link is built from the
+   release's OWN files[] block in its release.json, so a release whose document cannot be read gets
+   an explanation rather than a row of links that would 404.
+3. A DOI is either resolvable or absent. When a release carries a syntactically real DOI it becomes
+   a doi.org link; otherwise the citation shows the plain text "DOI: not yet minted". There is never
+   a dead resolver link, and the pending marker is never an anchor.
+4. The catalogue documents are only ever LINKED here, never parsed, so this page has no opinion
+   about the MTCAT payload shape and nothing to break when the schema version moves.
+```
+
+#### Showing the working on the empty and unreadable states
+
+```text
+The probe line names the exact document that was requested, on both the empty and the unreadable
+state. "No releases cut yet" and "the release tier is not published at this path on this deployment"
+are indistinguishable from a 404 alone, and the difference is an operator's problem to diagnose, not
+a reader's to guess at. It ships hidden, so it can only ever state a URL that was really requested.
+```
+
+#### The release citation
+
+```text
+The citation reads: AusMT contributors (<year>). AusMT Data Portal, Release <tag>. AuScope.
+
+The year comes from the release's own cut timestamp. If that is missing or unparseable the
+parenthetical is omitted rather than guessed: an invented year in a citation is worse than none.
+```
+
+## portal/vendor/au-outline.js
+
+#### Why the outline is a global rather than a fetch
+
+```text
+au-outline.js carries the Australia coastline and the state and territory boundaries for the
+collection footprint mini-map (drawer.js collScatter). It is loaded as a classic script that assigns
+one global, so collScatter can draw it synchronously with NO fetch: the portal's CSP is
+script-src 'self', and a JS global avoids the async fetch dance.
+
+It is GENERATED by engine/extract/_au_outline_build.py, which emits the SAME GEOMETRY into
+engine/extract/_au_outline.py in the same pass; a test compares the two coordinate for coordinate so
+they cannot drift apart. Edit the build script, never either generated file.
+```
+
+#### The format the mini-map expects
+
+```text
+Coordinates are [longitude, latitude] in WGS84. `coast` is an array of closed rings, largest first;
+`borders` is an array of open polylines. collScatter projects both through the SAME fixed-Australia
+transform it uses for the station dots, so the outline stays registered to the dots automatically.
+```
