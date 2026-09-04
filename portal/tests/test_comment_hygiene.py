@@ -977,7 +977,21 @@ def generators():
 
 
 def guard_tests():
-    return listing((PORTAL / "tests", "*.py"), (PORTAL / "tests", "*.js"))
+    """Every module under portal/tests, subdirectories included. A one-level glob leaves a fixture
+    builder outside every class, and a comment is no cleaner for sitting one directory down."""
+    return [p for p in sorted(PORTAL.joinpath("tests").rglob("*"))
+            if p.is_file() and p.suffix.lower() in (".py", ".js")
+            and p.name != SELF and "__pycache__" not in p.parts]
+
+
+CONFIG_SUFFIXES = (".toml", ".txt", ".cfg", ".yaml", ".yml")
+
+
+def config_files():
+    """The portal's own declared configuration, which gen_config.py reads to write the served
+    config.js. It carries prose like any module does and sat outside every class."""
+    return [p for p in sorted(PORTAL.glob("*"))
+            if p.is_file() and p.suffix.lower() in CONFIG_SUFFIXES]
 
 
 SURFACES = {
@@ -986,6 +1000,7 @@ SURFACES = {
     "the page emitter": emitter,
     "the generators": generators,
     "the guard tests": guard_tests,
+    "the portal configuration": config_files,
 }
 
 
@@ -1005,6 +1020,14 @@ def test_shipped_js_comments_state_constraints_only():
     assert not hits, (
         f"{len(hits)} comment(s) in portal/src/*.js carry provenance rather than a constraint:\n"
         + "\n".join(hits)
+    )
+
+
+def test_portal_configuration_comments_state_constraints_only():
+    hits = offences(config_files(), root=ROOT)
+    assert not hits, (
+        f"{len(hits)} comment(s) in the portal's configuration carry provenance rather than a "
+        "constraint:\n" + "\n".join(hits)
     )
 
 

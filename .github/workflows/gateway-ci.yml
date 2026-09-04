@@ -1,7 +1,7 @@
 name: gateway-ci
 
 # The gateway (submission intake + antivirus + curator publish flow) is a first-class subsystem
-# that took real community submissions this week, yet before C35a NO workflow ran its unit suite
+# that takes real community submissions, so a workflow must run its unit suite
 # and ruff excluded it entirely. This job closes that hole: it runs the
 # gateway unit suite and lints gateway/ on every gateway-touching push/PR, so a gateway source
 # change is TESTED before it can ship inside an unrelated deploy-triggered image rebuild.
@@ -14,7 +14,7 @@ name: gateway-ci
 # mt_metadata), so the same collection skips the engine-stack pins accounted for at the tripwire
 # step below: a 0-skip run is a dev-box property, not this lane's.
 #
-# PATH-SCOPED (ADR-001 monorepo): runs when the gateway/ OR deploy/ subtree (or this workflow)
+# PATH-SCOPED: runs when the gateway/ OR deploy/ subtree (or this workflow)
 # changes. deploy/ is here because the deploy unit tests (deploy/tests) were wired into this lane's
 # pytest invocation in PR #19 — but the trigger paths never followed, so a deploy-only change could
 # merge without its own tests ever running in CI: a branch touching only deploy/** would
@@ -34,7 +34,7 @@ on:
       - "gateway/**"
       - "deploy/**"
       # ...AND the carriers of the collection type vocabulary. The console's select IS that
-      # vocabulary's only guardrail (record D5-A A2), so it is a contract with no schema behind it,
+      # vocabulary's only guardrail, so it is a contract with no schema behind it,
       # written out in the select's tuple, four docs pages and the /collections hub lede.
       # gateway/tests/test_c43_collection_type_vocab.py reads all of them and holds them equal as a
       # set. Scoped to gateway/** alone that pin could only ever fail on the NEXT gateway-touching
@@ -52,7 +52,7 @@ on:
       - "gateway/**"
       - "deploy/**"
       # ...AND the carriers of the collection type vocabulary. The console's select IS that
-      # vocabulary's only guardrail (record D5-A A2), so it is a contract with no schema behind it,
+      # vocabulary's only guardrail, so it is a contract with no schema behind it,
       # written out in the select's tuple, four docs pages and the /collections hub lede.
       # gateway/tests/test_c43_collection_type_vocab.py reads all of them and holds them equal as a
       # set. Scoped to gateway/** alone that pin could only ever fail on the NEXT gateway-touching
@@ -82,8 +82,8 @@ jobs:
       - name: Install gateway test deps
         run: pip install -r gateway/requirements-dev.txt
 
-      # Install Caddy so the deploy/ access-log masking pins RUN here instead of skipping (C43 S2b-ii,
-      # privacy). The masked-log runtime pin (test_caddy_log_masking.py) is the executable proof
+      # Install Caddy so the deploy/ access-log masking pins RUN here instead of skipping: they
+      # hold a privacy promise. The masked-log runtime pin (test_caddy_log_masking.py) is the executable proof
       # that the public privacy promise — "a full IP address is never stored" — is TRUE: it drives a
       # real request with X-Forwarded-For through running Caddy and asserts the full IP appears NOWHERE
       # in the log line, only the /24-masked form. A config-syntax assertion is NOT sufficient for a
@@ -133,7 +133,7 @@ jobs:
       # allow-list simply by copying the string: keep it for engine-stack absence and nothing else. tee
       # keeps the full pytest output in the human log AND feeds the tripwire; `set -o pipefail` so a pytest
       # FAILURE (not just a skip regression) still reds the lane through the pipe. Any OTHER skip - e.g. a
-      # validator oracle regressing to skip, the exact F7 hole - fails the lane loudly.
+      # validator oracle regressing to skip - fails the lane loudly.
       # deploy/tests rides this lane too: the reconcile.sh decision-logic tests are plain
       # pytest + sh + git, all present on the runner — including flock(1), so the lock-held case that
       # skips on a Windows dev box RUNS here (no new allow-list entry; a skip would trip the wire).
@@ -146,7 +146,7 @@ jobs:
           python engine/tests/ci_check_skips.py \
             --allow "real engine stack / sample survey / validator not present" < gateway-pytest.out
 
-      # THE ROUTE TABLE'S MEMBERSHIP IS THE R5 SUPPRESSION, so a committed ts-routes.map that names a
+      # THE ROUTE TABLE'S MEMBERSHIP IS THE SUPPRESSION RULE, so a committed ts-routes.map that names a
       # route the registers do not admit is an access decision nobody made. deploy/tests validates
       # the shipped table's SHAPE, but it holds no registers to compare it against, so only
       # `gen_ts_routes.py --check` can catch a register that moved without the table.
@@ -183,7 +183,7 @@ jobs:
         run: |
           DEST="$GITHUB_WORKSPACE/../ausmt-surveys"
           # "Cannot run the gate" resolves to a HARD FAIL everywhere the registers secret is available,
-          # and to a loud SKIP only on a fork PR (which cannot see the secret). This keeps H4/R27's
+          # and to a loud SKIP only on a fork PR (which cannot see the secret). This keeps the
           # rule - "cannot check" never reads as "checked and clean" - without wedging fork PRs.
           fail_or_skip() {   # $1 = human-readable reason
             if [ "$IS_FORK_PR" = "true" ]; then

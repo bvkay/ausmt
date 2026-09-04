@@ -4,9 +4,8 @@
 #
 #   extract/build_portal.py
 #
-# parses EDIs/MTH5 with mt_metadata/mth5 (the USGS community library) — the SOLE engine since the
-# dependency-free regex extractor was retired in 2026-06 (see the extractor note at the top of
-# extract/build_portal.py). The build hard-exits without it.
+# parses EDIs/MTH5 with mt_metadata/mth5 (the USGS community library), the SOLE engine (see the
+# extractor note at the top of extract/build_portal.py). The build hard-exits without it.
 #
 # These are loose floors (the tested majors). For a PINNED, reproducible install — what CI uses —
 # install the full transitive closure on Python 3.12:

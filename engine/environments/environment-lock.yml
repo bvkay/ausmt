@@ -1,4 +1,4 @@
-# EXACT lock of the tested mt_metadata/mth5 environment (win-64), captured 2026-06-16 from the
+# EXACT lock of the tested mt_metadata/mth5 environment (win-64), captured from the
 # known-good `ausmt` env via `conda env export`. This is the reproducibility anchor for the Phase-1
 # canonical-ingest path (ausmt_science.ingest.normalize). Reproduce on win-64 with:
 #   conda env create -f environments/environment-lock.yml

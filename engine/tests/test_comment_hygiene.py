@@ -895,7 +895,21 @@ def package():
 
 
 def guard_tests():
-    return listing((ENGINE / "tests", "*.py"))
+    """Every module under engine/tests, subdirectories included. A one-level glob leaves a fixture
+    builder outside every class, and a comment is no cleaner for sitting one directory down."""
+    return [p for p in sorted((ENGINE / "tests").rglob("*.py"))
+            if p.name != SELF and "__pycache__" not in p.parts]
+
+
+CONFIG_SUFFIXES = (".toml", ".txt", ".cfg", ".yaml", ".yml")
+
+
+def config_files():
+    """The engine's own declared configuration. The packaging metadata carries prose like any
+    module does, and it sat outside every class because the LIST named suffixes, not files."""
+    return [p for p in sorted(ENGINE.rglob("*"))
+            if p.is_file() and p.suffix.lower() in CONFIG_SUFFIXES
+            and "__pycache__" not in p.parts and "fixtures" not in p.parts]
 
 
 def contract_source():
@@ -914,6 +928,7 @@ SURFACES = {
     "the scripts": scripts,
     "the guard tests": guard_tests,
     "the contract generator": contract_source,
+    "the engine configuration": config_files,
 }
 
 
@@ -971,6 +986,14 @@ def test_package_comments_state_constraints_only():
     hits = offences(package(), root=ROOT)
     assert not hits, (
         f"{len(hits)} comment(s) elsewhere in the engine package carry provenance rather than a "
+        "constraint:\n" + "\n".join(hits)
+    )
+
+
+def test_engine_configuration_comments_state_constraints_only():
+    hits = offences(config_files(), root=ROOT)
+    assert not hits, (
+        f"{len(hits)} comment(s) in the engine's configuration carry provenance rather than a "
         "constraint:\n" + "\n".join(hits)
     )
 

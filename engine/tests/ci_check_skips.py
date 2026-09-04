@@ -180,7 +180,7 @@ def _resolve_allow_list(allow_args: list[str] | None) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="CI skip tripwire (M5/C35b-D5).")
+    parser = argparse.ArgumentParser(description="CI skip tripwire.")
     parser.add_argument(
         "--allow", action="append", default=None, metavar="SUBSTRING",
         help="allow-list entry (repeatable); passing it at least once REPLACES the built-in engine "

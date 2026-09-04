@@ -6,7 +6,7 @@ name: portal-ci
 #      (tree toggles, #/collection routing, Find) — the interaction layer's only automated coverage
 # The shipped portal has no runtime deps; the interaction tests' jsdom dev-dep is restored via npm ci.
 #
-# PATH-SCOPED (ADR-001 monorepo): only runs when the portal/ subtree (or this workflow) changes.
+# PATH-SCOPED: only runs when the portal/ subtree (or this workflow) changes.
 #
 # ...PLUS the two engine artifacts the portal's own tests read as SINGLE SOURCES. About's
 # machine-contract field guide documents the served schema's vocabularies in prose, and
@@ -100,7 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: portal   # the static portal lives in portal/ since the ADR-001 merge
+        working-directory: portal   # the static portal lives in portal/ since the monorepo merge
     steps:
       - uses: actions/checkout@v4
 

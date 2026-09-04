@@ -3,17 +3,16 @@ name: deploy-images
 # Builds the three AusMT deployment images (engine, portal, gateway — deploy/docker/*.Dockerfile)
 # and, on a push to main or a version tag, pushes them to GHCR. The engine image's FULL, pinned-lock
 # pytest lane runs here, in the engine-full-tests job below, against the SHIPPED image (lock
-# installed). C39 removed engine.Dockerfile's own in-build stack-less pytest (it tested the
-# locker-stage resolution, not the shipped stack, and cost ~4 min per build — see the HISTORY note at
-# the top of that Dockerfile), so this job is now the ONLY place the engine suite runs against the
-# image itself. Also validates both compose files and smoke-tests the built portal image end-to-end.
+# installed). engine.Dockerfile runs no in-build stack-less pytest of its own: such a run tests the
+# locker-stage resolution rather than the shipped stack, and costs about 4 minutes per build. This
+# job is therefore the ONLY place the engine suite runs against the image itself. Also validates both compose files and smoke-tests the built portal image end-to-end.
 #
-# PATH-SCOPED (ADR-001 monorepo) to every input the three images are BUILT FROM:
+# PATH-SCOPED to every input the three images are BUILT FROM:
 # the images COPY engine/, portal/, gateway/ and contract/ source (see deploy/docker/*.Dockerfile), so
 # a push touching ANY of those must rebuild + republish, or :latest silently serves stale code. This
-# was real, twice: gateway pushes shipped an untested image (the F1 finding), and engine/portal merges
-# published NO image at all - the "box engine label 1333f4f while main was 18 commits
-# ahead" incident was exactly this hole (C32 merged, no deploy/** change, no image rebuilt). The unit
+# was real, twice: gateway pushes shipped an untested image, and engine/portal merges published NO
+# image at all, so the box carried an engine label 18 commits behind main with no deploy/** change
+# and no image rebuilt. The unit
 # suites still run in build-products.yml / portal-ci.yml / gateway-ci.yml; this workflow owns the
 # packaging + image layer, and its path filter must mirror the Dockerfiles' COPY surface.
 #
@@ -100,12 +99,12 @@ on:
   # accepts) while the build matrix expands and reports three green no-op ticks. A job-level skip
   # would collapse the matrix and the three required build names would never report at all (the
   # build job's own comment carries the full story, learned from PR #137).
-  # What C39 bought is GIVEN BACK, on purpose: the `changes` job matches all FIVE image-input paths
+  # What the narrower path scoping bought is GIVEN BACK, on purpose: the `changes` job matches all FIVE image-input paths
   # (deploy, gateway, engine, portal, contract), not the trimmed deploy/gateway pair, so engine-only
-  # and portal-only PRs DO pay for a full build + e2e again. That is a real cost increase over C39
+  # and portal-only PRs DO pay for a full build + e2e again. That is a real cost increase, taken over
   # for the two most common lane types, and it is the price of the check being honest. A required
   # gate that skips itself on exactly the PRs that change the engine is worse than no gate: it is a
-  # green tick over an untested image. C39's reasoning (engine/portal PRs are already covered by
+  # green tick over an untested image. The narrower reasoning (engine/portal PRs are already covered by
   # build-products.yml / portal-ci.yml) still holds for the UNIT suites, but those lanes do not run
   # the pinned-lock pytest INSIDE the shipped image, which is what engine-full-tests exists to prove.
   pull_request:
@@ -199,7 +198,7 @@ jobs:
         run: |
           set -u
 
-          # Non-PR events are unchanged from C39 and MUST stay that way: the push leg is still
+          # Non-PR events are unchanged and MUST stay that way: the push leg is still
           # path-filtered at the trigger, so any push run already matched one of the five inputs, and
           # workflow_dispatch is a deliberate human "build it now". Both mean matched=true, which
           # makes the gates below no-ops for them and preserves the publish behaviour exactly.
@@ -434,7 +433,7 @@ jobs:
   # engine/environments/requirements-mtmetadata-lock.txt, is already installed in the image; this is
   # the real release gate for the engine stack). The image must not carry a build-time
   # `locker` resolve of the floating pins instead, so this gate tested a stack the repo had never
-  # verified; engine.Dockerfile now installs the committed lock and the two agree. C39
+  # verified; engine.Dockerfile now installs the committed lock and the two agree.
   # made this the SOLE in-image engine-suite run: engine.Dockerfile's own in-build stack-less pytest
   # was removed as the least truthful + only ~4-min-per-build of the three engine runs. This lane is
   # where the D3.1 topology skip ("gateway tree not shipped") legitimately fires — the engine image
@@ -472,7 +471,7 @@ jobs:
       - name: Full pytest lane (pinned lock, inside the container) + skip accounting
         run: |
           IMG=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)ausmt-engine:' | head -n1)
-          # Run pytest -rs and the M5 skip tripwire INSIDE the image (the host job does no checkout, so
+          # Run pytest -rs and the skip tripwire INSIDE the image (the host job does no checkout, so
           # the allow-list script only exists in the container, at /app/engine/tests/ci_check_skips.py —
           # it ships in the image via engine.Dockerfile's `COPY engine/`). This lane's env is the SAME
           # as build-products in its INSTALLED stack (mt_metadata/mth5 present, from the image lock)
@@ -526,7 +525,7 @@ jobs:
           cd deploy
           # The gateway profile adds ${AUSMT_SUBMIT_KEY:?...} / ${AUSMT_CODE_DIR:?...} guards on top
           # of the base ones — .env.example carries placeholder values for both, so this validates
-          # the profile's structure (services, mounts, caps) rather than starting anything. C11 adds
+          # the profile's structure (services, mounts, caps) rather than starting anything. This job adds
           # AUSMT_CURATOR_KEYS / AUSMT_SURVEYS_LIVE / the surveys-live rw + git-creds mounts; the
           # curator vars have empty-string defaults so config validates with .env.example as-is, and
           # the git-creds mount falls back to the committed placeholder dir.
@@ -565,19 +564,19 @@ jobs:
           docker stop ausmt-portal-smoke
 
   # ---------------------------------------------------------------------------------------------
-  # Gateway end-to-end (the Stage-2 acceptance scenarios, design §8): with REAL clamd + the REAL
+  # Gateway end-to-end (the Stage-2 acceptance scenarios): with REAL clamd + the REAL
   # runner (engine image), submit the _example fixture package end-to-end -> VALIDATED with populated
   # reports; submit an EICAR zip -> REJECTED_AV. Wired with `docker run` on a shared network that
   # mirrors the compose gateway profile's topology (C35a/F2 — this now includes the runner's
   # PYTHONPATH=/opt, the value compose.yaml:197 uses; the previous /opt/gateway here was the exact
   # production ModuleNotFoundError this reproduces, stated at compose.yaml:198-201):
   #   - clamd + gateway share a user network (gateway reaches clamd:3310 INSTREAM);
-  #   - gw-runner runs with --network none, user 10002, read-only rootfs + tmpfs /tmp (design §1) —
+  #   - gw-runner runs with --network none, user 10002, read-only rootfs + tmpfs /tmp -
   #     it never reaches clamd; the gateway does the raw-zip scan and the post-unpack sweep.
-  # LONG-TERM INTENT (not yet implemented — deferred, C37b seam-cut territory): drive this smoke via
+  # LONG-TERM INTENT (not yet implemented, and deferred): drive this smoke via
   # `docker compose -f deploy/compose.yaml --profile gateway up` with a CI .env, so compose.yaml is
   # the SINGLE source of the topology and a hand-transcribed drift like the PYTHONPATH one cannot recur.
-  # This job cannot run locally (no docker on the C10 dev box); it is authored to the design and
+  # This job cannot run locally (no docker on the dev box); it is authored to the design and
   # validated structurally by compose-validate above.
   # ---------------------------------------------------------------------------------------------
   gateway-e2e:
@@ -616,10 +615,10 @@ jobs:
           SURVEYS_URL: ${{ vars.AUSMT_SURVEYS_URL }}
           SURVEYS_TOKEN: ${{ secrets.AUSMT_SURVEYS_TOKEN }}
         run: |
-          # The gateway tree owned by uid 10002 (design §1); the runner also runs as 10002.
+          # The gateway tree owned by uid 10002; the runner also runs as 10002.
           sudo mkdir -p /srv/ausmt/gateway/{incoming,quarantine,jobs,state,clamav}
           sudo chown -R 10002:10002 /srv/ausmt/gateway
-          # The runner needs the validator from the SEPARATE ausmt-surveys repo. Before C35a this step
+          # The runner needs the validator from the SEPARATE ausmt-surveys repo. This step
           # only echoed the repo var into GITHUB_ENV — no clone existed anywhere, so the checkout the
           # gates below test for was NEVER created and the VALIDATED half was permanently skipped even
           # when the var was set: dead wiring. If the var is set, REALLY
@@ -808,7 +807,7 @@ jobs:
         run: docker rm -f portal gateway gw-runner clamd 2>/dev/null || true
 
   # ---------------------------------------------------------------------------------------------
-  # Curator publish end-to-end (C11 design §8, v2 = commit-and-push ONLY): submit the _example fixture
+  # Curator publish end-to-end (v2 = commit-and-push ONLY): submit the _example fixture
   # -> curator logs in -> approve -> assert PUBLISHED means the package was COMMITTED to surveys-live
   # main and pushed (the survey folder + a fixed-author, PII-free commit land in git history), the
   # submitter PII is curator-only, and the audit rows are complete; the reject path leaves surveys-live
@@ -872,7 +871,7 @@ jobs:
         run: |
           # Each GitHub Actions job runs on its OWN fresh runner, so the clone done in gateway-e2e does
           # NOT carry over here — curator-e2e must clone the validator repo itself, else its gate is
-          # permanently false even with the var set (that was part of the F5 dead wiring). Same
+          # permanently false even with the var set (that was part of the dead wiring since removed). Same
           # contract as gateway-e2e: if the var is set, REALLY clone into the path the steps below read
           # and FAIL LOUDLY on any failure; if unset, skip and record why on the job summary.
           DEST="$GITHUB_WORKSPACE/../ausmt-surveys"
@@ -1183,7 +1182,7 @@ jobs:
   # visibility -> Public, once per package). That is the POINT: this is the regression guard that
   # makes the 403 loud instead of a silent first-contact failure. Runs only AFTER a real publish
   # (push to main / v* tag) — on a PR nothing was pushed, so there is nothing to pull anonymously.
-  # No credentials, no Docker, no image download: three tiny curls. Keeps the C39 CI-economy habit —
+  # No credentials, no Docker, no image download: three tiny curls. Keeps the CI-economy habit -
   # it is push-only, adds nothing to the PR leg.
   # ---------------------------------------------------------------------------------------------
   anon-pull-check:

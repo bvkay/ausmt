@@ -8,7 +8,7 @@ name: build-products
 # the pinned lock on the tested Python (3.12). Tier-3 decomposition (the MTpy-v2 fork) is OPTIONAL
 # and installed separately; the build does NOT depend on it, so CI stays green without the fork.
 #
-# PATH-SCOPED (ADR-001 monorepo): only runs when the engine/ subtree (or this workflow) changes.
+# PATH-SCOPED: only runs when the engine/ subtree (or this workflow) changes.
 #
 # ...PLUS the handful of PORTAL files the engine's own tests read as SURFACES OF A SINGLE SOURCE. The
 # MTCAT schema version is declared once, in engine/schema/mtcat.schema.json's title, and
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: engine   # the engine lives in engine/ since the ADR-001 monorepo merge
+        working-directory: engine   # the engine lives in engine/ since the monorepo merge
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -106,7 +106,7 @@ jobs:
       # in-image run is the trust-invariant one (it tests the artifact that ships), so THAT keeps
       # the full suite on every PR; THIS lane's per-PR run narrows to the subset that gates what
       # this workflow's own steps do and rely on (the product/equivalence/schema set):
-      #   tests/test_build_cache.py           C18 cache seams incl. the section-4.5 warm-vs-refresh
+      #   tests/test_build_cache.py cache seams incl. the section-4.5 warm-vs-refresh
       #                                       byte-equivalence guard and the stale-cache refusal the
       #                                       "Build-cache smoke" step below leans on
       #   tests/test_ingest_normalize.py      canonical-ingest round-trip gate (named above)
@@ -118,13 +118,13 @@ jobs:
       #   tests/test_mtcat.py                 mtcat.json product emission against the schema
       #   tests/test_mtcat_schema_v20.py      the schema that constrains the served catalogue
       #   tests/test_mtcat20_emission.py      the 2.0 emitter semantics (migrate_12_to_20 at source)
-      #   tests/test_mtcat20_invariants.py    the ratified invariant suite (schema, scans, rollups)
+      #   tests/test_mtcat20_invariants.py    the invariant suite (schema, scans, rollups)
       #   tests/test_mtcat_version_parity.py  the same-PR portal-surface pin: the reason this
       #                                       workflow watches the five portal paths at all
       #   tests/test_survey_metadata_version_parity.py  the survey-metadata version single-source pin
       #   tests/test_survey_metadata_schema_v01.py      the 0.1 schema that constrains survey-metadata.json
-      #   tests/test_survey_metadata_emission.py        the survey-metadata emitter semantics, the T25 stop
-      #                                       and the D20 loud skip
+      #   tests/test_survey_metadata_emission.py        the survey-metadata emitter semantics, the hard stop
+      #                                       and the loud skip on a dropped survey
       #   tests/test_survey_metadata_invariants.py      the survey-metadata invariant suite (built output:
       #                                       identity chain, projection chains, scans, schema routes)
       #   tests/test_station_write_path.py    station.json at the served root, with or without --products
@@ -137,11 +137,11 @@ jobs:
       #                                       the closed vocabularies, the unmatched-station stop
       #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
       #   tests/test_station_time_series.py   kind=time_series rows from the register: the route, the
-      #                                       vocabularies, the D19 exclusion, the access gate and
+      #                                       vocabularies, the day-by-state exclusion, the access gate and
       #                                       the ts_access.json boot artifact it renders beside them
       #   tests/test_ts_projection.py         the ONE projection: existence follows the register,
       #                                       route detail follows the gate, level2 opens nothing
-      #   tests/test_access_gate.py           the C1 access gate over BUILT output, INCLUDING the
+      #   tests/test_access_gate.py           the access gate over BUILT output, INCLUDING the
       #                                       root-level leak sweep: no NCI path, filename or size for
       #                                       a withheld, request-only or pending station reaches
       #                                       ts_access.json, mtcat.json or the pointer file
@@ -282,7 +282,7 @@ jobs:
       # Full suite. With mt_metadata present the canonical-ingest / parity / canonical-store /
       # mth5-roundtrip gates RUN (they importorskip only when the stack is absent), so this single
       # job covers extractor parity as well. This suite also carries
-      # the build-cache tests (tests/test_build_cache.py), INCLUDING the §4.5 warm-vs-refresh
+      # the build-cache tests (tests/test_build_cache.py), INCLUDING the warm-vs-refresh
       # byte-equivalence guard and the ★ stale-cache refusal — so a cache change that altered output
       # bytes fails CI here.
       - name: Tests, full suite (push and dispatch; with skip accounting)
@@ -297,7 +297,7 @@ jobs:
       # git status non-empty -> a degenerate salt that self-disables the cache). A full --cache-mode
       # refresh build POPULATES a scratch cache; a warm rw build must then HIT it with zero misses.
       # The build succeeds either way; the byte-EQUIVALENCE between refresh and warm is asserted by
-      # the §4.5 equivalence test inside the Tests step above (BOTH its forms run
+      # the equivalence test inside the Tests step above (BOTH its forms run
       # tests/test_build_cache.py: the PR subset carries it by name, the full suite by inclusion).
       # This scratch cache is throwaway and is
       # NOT the published products (those come from the non-incremental build step below).
@@ -315,13 +315,13 @@ jobs:
           PY
 
       # --no-validate: this checkout has no ausmt-surveys sibling (private repo, no token for a
-      # cross-repo checkout here), so the validator can never resolve -- and since C8 that is now a
+      # cross-repo checkout here), so the validator can never resolve -- and that is now a
       # hard error, not a warning. This is fine: `data/` is the trusted in-repo sample, not real
       # submissions. The real gate runs in ausmt-surveys CI (validate.yml + tests.yml) and again at
       # ingest; this build step only proves the pipeline itself still runs end-to-end.
       #
       # The CI-PUBLISHED products are built NON-incremental (no --incremental flag) - CI products
-      # are never cache-derived (design §5). The build cache only ever accelerates the production
+      # are never cache-derived. The build cache only ever accelerates the production
       # deploy/Makefile rebuild-data; here we prove the full cold pipeline still runs end-to-end.
       - name: Build products (single canonical pipeline; fails on empty output)
         run: |
