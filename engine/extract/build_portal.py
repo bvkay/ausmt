@@ -6337,8 +6337,8 @@ def _main_build(argv=None):
     }
     (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
     if _peak_rss is not None:
-        # One log line an operator can read off the tail: the number the kernel's OOM killer would
-        # have quoted, before it has to.
+        # One log line an operator can read off the tail: the number the kernel's OOM killer
+        # quotes, printed before the kernel has to.
         print(f"build peak RSS: {_peak_rss:.0f} MiB ({_report_stations_built} stations built)", file=sys.stderr)
 
     # The digest-stamp sidecar. out/products/survey_digests.json maps each served survey's

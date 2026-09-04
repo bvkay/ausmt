@@ -1300,10 +1300,10 @@ def test_every_page_kind_holds_its_footer_at_the_viewport_bottom(built):
         assert _FLOW_RULE in css and css.index(_FLOW_RULE) > foot.start(), \
             f"{rel}: below {_FLOW_BELOW}px of viewport the footer returns to flow, in a rule that " \
             f"FOLLOWS the sticky one; the two tie on specificity"
-        # THE SEPARATION ABOVE THE FOOTER IS main'S, not the footer's own margin. This tier used to
-        # give it as footer{margin-top:2.2rem}, which the one rule set cannot carry: the Map's
+        # THE SEPARATION ABOVE THE FOOTER IS main'S, not the footer's own margin. A
+        # footer{margin-top:2.2rem} is what the one rule set cannot carry: the Map's
         # footer is the last child of a column whose body does not scroll, so a margin there takes
-        # height from the map itself. It moves to main's bottom padding, where the portal's content
+        # height from the map itself. It lives in main's bottom padding, where the portal's content
         # pages already keep it. The failure this replaces (a bottom padding lifting the footer off
         # the viewport at the end of the scroll) does not reproduce and is not what guarantees the
         # footer rests on the document's bottom edge; what guarantees it is that the footer is the

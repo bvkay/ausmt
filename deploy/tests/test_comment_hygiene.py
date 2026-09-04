@@ -865,12 +865,30 @@ def labels_for(comment, cite_contract=False):
     return sorted(found)
 
 
+def comment_runs(path, text):
+    """(line number, text) for each run of comments a reader reads as one. A block of // or #
+    lines is one comment to a reader, and a shape read line by line sees a bracket opened on one
+    line and closed on the next as two scars."""
+    out = []
+    for lineno, body in comments(path, text):
+        lead, span = body[:2], body.count("\n")
+        if (out and lead in ("//", "# ", "#\n", "#") and out[-1][2] == lead
+                and lineno == out[-1][3] + 1):
+            out[-1][1] += "\n" + body
+            out[-1][3] = lineno + span
+            continue
+        out.append([lineno, body, lead, lineno + span])
+    return [(lineno, body) for lineno, body, _, _ in out]
+
+
 def offences(files, cite_contract=False, root=None):
-    """Every comment that breaks the rule across a set of files, as report lines."""
+    """Every comment that breaks the rule across a set of files, as report lines. The unit is the
+    RUN a reader reads, not the line: a phrase wrapped across two // lines is one phrase to a
+    reader, and a scan that reads each line alone is defeated by the line break between them."""
     found = []
     for path in files:
         text = path.read_text(encoding="utf-8")
-        for lineno, comment in comments(path, text):
+        for lineno, comment in comment_runs(path, text):
             labels = labels_for(comment, cite_contract=cite_contract)
             if labels:
                 where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
@@ -930,22 +948,6 @@ def unbalanced(prose):
     return stack + stray
 
 
-def comment_runs(path, text):
-    """(line number, text) for each run of comments a reader reads as one. A block of // or #
-    lines is one comment to a reader, and a shape read line by line sees a bracket opened on one
-    line and closed on the next as two scars."""
-    out = []
-    for lineno, body in comments(path, text):
-        lead, span = body[:2], body.count("\n")
-        if (out and lead in ("//", "# ", "#\n", "#") and out[-1][2] == lead
-                and lineno == out[-1][3] + 1):
-            out[-1][1] += "\n" + body
-            out[-1][3] = lineno + span
-            continue
-        out.append([lineno, body, lead, lineno + span])
-    return [(lineno, body) for lineno, body, _, _ in out]
-
-
 def pointer_fragments(flat):
     """Every "See docs:" pointer in one flattened comment, as (fragment, match-or-None)."""
     found = []
@@ -992,6 +994,58 @@ def shape_offences(files, root=None):
                 said.append("a pointer that is not of the pointer grammar")
             if said:
                 found.append("%s:%s: %s: %s" % (where, lineno, ", ".join(said), flat[:110]))
+    return found
+
+
+# WHAT IS, NOT WHAT WAS. A comment a visitor downloads is read by someone who cannot open the file
+# it talks about, so a sentence about a tile that was removed, a control that was retired or a
+# section folded into another leaves that reader holding a fact with nothing behind it. A shipped
+# comment states the invariant that holds now; git carries what was.
+#
+# The same words describe DATA the code handles, and that sense is the code's own behaviour rather
+# than its history: "a station is dropped by the gate" says what the gate does. The two are told
+# apart by what stands in front of the verb. A thing the code HANDLES is introduced by an
+# indefinite article or arrives as a bare plural; a part the page is MADE OF is named, usually in
+# quotes, and takes the definite article. A negated clause ("is never folded into") is a constraint
+# and not a history at all.
+HISTORY_SHAPE = re.compile(
+    r"\blived here\b"
+    r"|\bfolded into\b"
+    r"|\bthe\s+(?:retired|removed|deleted|former)\s+[\w-]+"
+    r"|\b(?:is|are|was|were)\s+(?:[\w-]+\s+){0,2}(?:gone|removed|retired|deleted|dropped)\b",
+    re.I)
+HANDLED_THING = re.compile(
+    r"(?:\ba|\ban|\bany|\bevery|\beach|\bno)\s+(?:[\w-]+\s+){0,3}$"
+    r"|\b(?:rows|stations|values|entries|slashes|characters|keys|bindings|bytes|ids)"
+    r"\s+(?:[\w-]+\s+){0,2}$", re.I)
+NEGATED = re.compile(r"\b(?:never|not|cannot|no)\b\s+(?:[\w-]+\s+){0,2}$", re.I)
+HISTORY_WINDOW = 60
+
+
+def history_shapes(comment):
+    """Every place one comment says what WAS rather than what is, as matched text."""
+    text = flattened(bare(comment))
+    found = []
+    for match in HISTORY_SHAPE.finditer(text):
+        before = text[max(0, match.start() - HISTORY_WINDOW):match.start()]
+        if HANDLED_THING.search(before) or NEGATED.search(before):
+            continue
+        found.append(match.group(0))
+    return found
+
+
+def history_offences(files, root=None):
+    """Every shipped comment that narrates what was removed, as report lines."""
+    found = []
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+        for lineno, comment in comment_runs(path, text):
+            shapes = history_shapes(comment)
+            if shapes:
+                found.append("%s:%s: %s: %s"
+                             % (where, lineno, ", ".join(sorted(set(shapes))),
+                                " ".join(comment.split())[:110]))
     return found
 
 

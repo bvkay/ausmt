@@ -79,10 +79,10 @@ _TYPE_FALLBACK = "#4FC3D9"
 # same colour and its legend could not disambiguate them (AusLAMP: 14 members, 8 colours, 6 reused).
 _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
 
-# The map panel's own ground, one step CLOSER to the card it sits on than the near-black it used to
-# carry. The panel was a box on a box: a dark rectangle inside a lighter card, so the eye read the
-# rectangle before it read the coastline. Stepping the fill to the card's own token and softening the
-# rule leaves the Australia outline as the only object with an edge, which is what the panel is for.
+# The map panel's own ground, one step CLOSER to the card it sits on than a near-black would be. A
+# darker rectangle inside a lighter card reads as a box on a box, and the eye then finds the
+# rectangle before the coastline. Holding the fill at the card's own token and keeping the rule soft
+# leaves the Australia outline as the only object with an edge, which is what the panel is for.
 _MAP_PANEL = "#18213D"
 _MAP_PANEL_LINE = "#222C4E"
 

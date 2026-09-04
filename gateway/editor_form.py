@@ -842,9 +842,10 @@ def _assemble_list(form: dict, section: str) -> list:
     for i in _row_indices(form, section):
         row: dict = {}
         any_value = False
-        # The correspondingly-indexed original row (the render assigns row index i to original[i]) — used
-        # to decide whether an EMPTY optional key was already present (keep it null) or is being newly
-        # introduced (skip it), so an unchanged row round-trips to its snapshot rather than gaining nulls.
+        # The correspondingly-indexed original row (the render assigns row index i to original[i]).
+        # It decides whether an EMPTY optional key was already present (keep it null) or is being
+        # newly introduced (skip it), so an unchanged row round-trips to its snapshot rather than
+        # gaining nulls.
         orig_row = (original[i] if isinstance(original, list) and i < len(original)
                     and isinstance(original[i], dict) else {})
         for subkey, _label, _ph, kind in subfields:

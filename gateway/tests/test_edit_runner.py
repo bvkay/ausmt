@@ -583,8 +583,8 @@ def test_trailing_newline_slug_refused_at_edit_gate(tmp_path):
 def test_non_semver_current_version_refused(tmp_path):
     # The semver-greater gate fires when the CURRENT version is not strict semver: the
     # bump cannot be proven greater, so the merge refuses (fail closed) with a fix-it-via-PR hint.
-    # (The explicit version override was removed per review FIX 6, so lower/equal targets are no
-    # longer constructible through the interface; the comparator itself is pinned below.)
+    # The interface carries no explicit version override, so a lower or equal target is not
+    # constructible through it; the comparator itself is pinned below.
     _write_package(tmp_path / "surveys-live",
                    yaml_text=EXEMPLAR.replace("version: 1.0.0", "version: v2022-final"))
     with pytest.raises(edit.EditError) as exc:

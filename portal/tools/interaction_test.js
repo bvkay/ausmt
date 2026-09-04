@@ -4889,7 +4889,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // Driven on Delta, which every earlier section has finished with, so nothing above is perturbed.
   //
   // (1) `entire` FILLS the Collection slot. `entire` means ONE record covering all levels - the umbrella
-  //     record the Collection slot names - so it belongs in that slot, not in the extra-tile bucket it used
+  //     record the Collection slot names - so it belongs in that slot, not in the extra-tile bucket that
   //     to fall into. The fixture is Gawler Phase 2's real shape: a GSSA/SARIG umbrella landing page
   // (identifies: entire, NO `collection` row) plus its level3 models record. RED on the earlier build:
   //     the Collection tile stayed muted, the head read "1 of 6 recorded", and the umbrella record hung

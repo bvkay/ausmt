@@ -3004,8 +3004,8 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
         return await gw.handle_submit(request, x_ausmt_submit_key)
 
     # Deliberately `def`, NOT `async def`: handle_status does blocking sqlite + file
-    # reads, so Starlette runs a sync route handler in its threadpool — a burst of GET /status can no
-    # longer stall the event-loop poll task. The DB serialises cross-thread access with its own lock.
+    # reads, so Starlette runs a sync route handler in its threadpool and a burst of GET /status
+    # cannot stall the event-loop poll task. The DB serialises cross-thread access with its own lock.
     @app.get("/gateway/status/{token}")
     def status(token: str):
         return gw.handle_status(token)

@@ -1044,8 +1044,8 @@ function identifiersHtml(m){
   if(m.instrument_model)rows.push(`Instrument model: ${esc(m.instrument_model)}`);
   if(m.instrument_pid)rows.push(`Platform/instrument PID: <span class="pidline">${instrumentPidLink(m.instrument_pid)}</span>`);
   const instr=instrumentPidsHtml(m); if(instr)rows.push(instr);
-  // Funders are shown (with grant ids) by the survey card's own Funding section; the identifiers rollup no
-  // longer duplicates them here.
+  // Funders are shown (with grant ids) by the survey card's own Funding section, and by that
+  // section alone: the identifiers rollup does not repeat them here.
   if(!rows.length)return "";
   return `<div class="surveymeta"><b>Persistent identifiers &amp; instruments</b><br>${rows.join("<br>")}</div>`;}
 // One related-publication citation. See docs: portal internals, drawer.js.
