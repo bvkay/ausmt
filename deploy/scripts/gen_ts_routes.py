@@ -192,8 +192,7 @@ def render(rows, unresolved=None) -> str:
     is the decision: a change belongs in a human-readable diff and a `--check` that reds."""
     unresolved = unresolved or {}
     head = (f"# {BANNER}\n"
-            f"# {len(rows)} route(s): open access + review:verified only (R5); level2 never routes "
-            f"(D19).\n")
+            f"# {len(rows)} route(s): open access + review:verified only; level2 never routes.\n")
     for pkg in sorted(unresolved):
         head += f"# UNRESOLVED {pkg}: {_reason_line(unresolved[pkg])}\n"
     return head + "".join(f'"{key}" "{value}"\n' for key, value in rows)
