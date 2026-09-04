@@ -1,9 +1,9 @@
-"""SQLite index for submissions (design §2). Directories are ground truth; this DB is the queryable
+"""SQLite index for submissions. Directories are ground truth; this DB is the queryable
 index and the audit log. WAL mode; the GATEWAY PROCESS IS THE ONLY WRITER (house rule — the runner
 never touches the DB; it writes done-files that the gateway's poll loop ingests).
 
-This is the ONLY place submitter PII (name/email/orcid) is stored. The PII grep test (design §8)
-proves it appears nowhere else in the gw/ tree. transition() is the single mutation path for state:
+This is the ONLY place submitter PII (name/email/orcid) is stored. The PII grep test
+proves it appears nowhere else in the gw/ tree. transition is the single mutation path for state:
 it refuses illegal moves (states.ALLOWED) so no illegal transition can ever reach the audit log,
 and it writes the transitions row in the SAME connection/commit as the state update so a state
 change without its audit row is impossible.
@@ -21,7 +21,7 @@ from pathlib import Path
 from . import states
 
 # ULID would need a dep; a 26-char Crockford-base32 of (48-bit time + 80-bit random) is ULID-shaped
-# and stdlib-only. The id is NOT a secret (the token is — design §2/§3); it is sortable-ish by the
+# and stdlib-only. The id is NOT a secret (the token is -); it is sortable-ish by the
 # time prefix, which is all the design asks of it.
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
@@ -42,7 +42,7 @@ def new_id(now_ms: int | None = None) -> str:
 
 def is_valid_id(value: str) -> bool:
     """True only for a 26-char string drawn entirely from the Crockford-base32 id charset (design
-    design §3). Because that charset contains NO path separators, dots, or spaces, a valid id can never
+). Because that charset contains NO path separators, dots, or spaces, a valid id can never
     form `..`, an absolute path, or a traversal component — this is the load-bearing guard the
     curator/preview routes apply BEFORE any id reaches a filesystem path or a git branch name."""
     return len(value) == 26 and all(c in _ID_CHARS for c in value)
@@ -126,7 +126,7 @@ class CuratorTotp:
 
 
 class IllegalTransition(Exception):
-    """Raised when transition() is asked for a move not in states.ALLOWED. Surfaced (not swallowed)
+    """Raised when transition is asked for a move not in states.ALLOWED. Surfaced (not swallowed)
     so a programming error is loud; the row and audit log are left untouched."""
 
 
@@ -407,7 +407,7 @@ class Database:
 
     def find_duplicate_by_sha(self, zip_sha256: str) -> Submission | None:
         """The submission that already carries these exact zip bytes (duplicate-content 409,
-        design §4.4).
+).
 
         The rule is about CONTENT, not liveness. Matching only NON-TERMINAL rows would switch the
         guard off the moment the first copy finished: once a submission
@@ -466,7 +466,7 @@ class Database:
             ).fetchall())
 
     def queue(self, states_wanted: tuple[str, ...]) -> list[Submission]:
-        """Submissions in any of `states_wanted`, newest first (design §3 curator queue). ORDER BY
+        """Submissions in any of `states_wanted`, newest first (curator queue). ORDER BY
         the id descending: the id is time-prefixed (ULID-shaped), so descending id == newest first
         without a separate sort key."""
         placeholders = ",".join("?" * len(states_wanted))
@@ -477,11 +477,11 @@ class Database:
             ).fetchall()
         return [self._row_to_submission(r) for r in rows]
 
-    # ---- curator sessions (C11 §2). Server-side store; the raw token lives only in the cookie. ----
+    # ---- curator sessions. Server-side store; the raw token lives only in the cookie. ----
 
     def create_session(self, session_hash: str, curator_name: str, ttl_s: int) -> None:
         """Store a new session row keyed by the sha256 of the raw token (mirrors token_hash: the raw
-        secret is NEVER stored). Absolute expiry (design §6 — not sliding): created + ttl_s."""
+        secret is NEVER stored). Absolute expiry (- not sliding): created + ttl_s."""
         now = time.time()
         created = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
         expires = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + ttl_s))

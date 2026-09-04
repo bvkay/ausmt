@@ -1,6 +1,6 @@
 // jsdom-backed INTERACTION test for the portal sidebar + routing.
 //
-// smoke.js stubs the DOM so querySelectorAll() returns [] -> buildTree() never makes a checkbox and the
+// smoke.js stubs the DOM so querySelectorAll returns [] -> buildTree never makes a checkbox and the
 // whole interaction layer (tree toggles, Find, #/collection routing) ships untested. That is exactly how
 // the value-less-checkbox toggle no-op shipped. This test instead loads the REAL index.html into a jsdom
 // DOM, runs the actual src modules in the window's VM context (mirroring the in-order <script> tags), boots
@@ -22,7 +22,7 @@ const PORTAL = path.resolve(TOOLS, "..");
 const SRC = path.join(PORTAL, "src");
 const DATA = path.resolve(process.argv[2] || path.join(PORTAL, "data"));
 
-// fixture data served to the app's fetch() (same file set as smoke.js)
+// fixture data served to the app's fetch (same file set as smoke.js)
 const FILES = ["catalogue", "tf", "sci", "surveys", "build_provenance", "collections", "build"];
 const DATAMAP = {};
 FILES.forEach(k => { try { DATAMAP["data/" + k + ".json"] = JSON.parse(fs.readFileSync(path.join(DATA, k + ".json"))); } catch (e) {} });
@@ -40,7 +40,7 @@ if (!Array.isArray(_cat) || _cat.length === 0) {
 }
 
 // Leaflet/JSZip stub (the map layer is irrelevant here; the DOM itself is real jsdom).
-// mapCalls records every setView()/fitBounds() call the app makes on the `map` object (map.js's
+// mapCalls records every setView()/fitBounds call the app makes on the `map` object (map.js's
 // `L.map(...)` returns this same stub) — general instrumentation for any test that needs to assert
 // on map navigation calls actually made, with real arguments, not just "something happened".
 const mapCalls = [];
@@ -122,7 +122,7 @@ const recGroup = () => {
 // The panes the app creates, by name. It must create NONE: a pane is stacked over the station canvas,
 // Which is the outage. Recorded rather than stubbed away so the absence is assertable.
 const panesMade = Object.create(null);
-// getZoom is deliberately NOT recorded: curZoom() falls back to 4 (national), which is the zoom the map
+// getZoom is deliberately NOT recorded: curZoom falls back to 4 (national), which is the zoom the map
 // pins are written at. project/unproject are not recorded either - they existed only to make the retired
 // badge declutter reachable here, and no shipped map path projects any more.
 const mapOwn = Object.create(null);
@@ -139,7 +139,7 @@ mapOwn.addLayer = (l) => { mapAddLayer(l); return mapOwn.__self; };
 const mapFacade = recProxy(mapOwn);
 // L.control.scale, recorded. The scale bar is CONSTRUCTED with deliberate options and then
 // RE-PARENTED, and both halves are the claim: which options the app asks for, and where the container
-// ends up. The blanket stub answers getContainer() with a Proxy, which is not a node, so under it the
+// ends up. The blanket stub answers getContainer with a Proxy, which is not a node, so under it the
 // re-parenting cannot happen at all and the pin would be vacuous. Every other L.control member (the
 // layer control map.js builds) still degenerates to the old stub.
 const scaleControls = [];
@@ -235,9 +235,9 @@ win.L = new Proxy(function () { }, {
 });
 // JSZip RECORDER. jsdom writes no real archive, but WHICH entries a selection export puts in one is
 // exactly the claim the export pins make ("the zip holds a file per station that has this format, and a
-// LICENSE.txt beside them"), and the old blanket stub swallowed every z.file() call, so no such claim
+// LICENSE.txt beside them"), and the old blanket stub swallowed every z.file call, so no such claim
 // could be asserted at all. This records the entry names (folder prefix included) and degenerates to the
-// generic stub for everything else, so generateAsync() still resolves exactly as it did before.
+// generic stub for everything else, so generateAsync still resolves exactly as it did before.
 const zipEntries = [];
 const zipRec = (prefix) => new Proxy(function () {}, {
   get: (t, p) => {
@@ -255,15 +255,15 @@ win.JSZip = new Proxy(function () {}, { construct: () => zipRec(""), apply: () =
 // (which is where the entry list is complete) instead of stopping short of the code that writes it.
 win.URL.createObjectURL = () => "blob:interaction-test";
 win.URL.revokeObjectURL = () => {};
-// SAVED-FILE RECORDER. save() builds `new Blob([text])`; recording the constructor's parts lets a
+// SAVED-FILE RECORDER. save builds `new Blob([text])`; recording the constructor's parts lets a
 // pin read the DOCUMENT an export actually wrote (the Pointers shape), not just that a click ran.
 const savedBlobs = [];
 const _RealBlob = win.Blob;
 win.Blob = function (parts, opts) { savedBlobs.push({ text: (parts || []).join(""), type: (opts || {}).type });
   return new _RealBlob(parts || [], opts || {}); };
-// ANALYTICS RECORDER. analytics-shim.js defines window.track() over window.plausible, and it only installs
+// ANALYTICS RECORDER. analytics-shim.js defines window.track over window.plausible, and it only installs
 // its own no-op queue when there is no plausible already (`window.plausible || function(){}`). Defining one
-// FIRST therefore records what the real track() emits, through the real shim, rather than replacing track()
+// FIRST therefore records what the real track emits, through the real shim, rather than replacing track
 // with a re-implementation of it. What an export button reports is a published vocabulary: the fold that
 // reads these events cannot see the difference between two buttons that describe themselves differently
 // and two buttons that do different things, so the shape is worth pinning at the call site.
@@ -287,7 +287,7 @@ win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", sch
 // the four small optionals, all in parallel) and renders; phase 2 (tf.json ~3.2MB, sci.json, manifest.json)
 // hydrates behind it. To drive that split this fetch (a) LOGS every url in request order, so the driver can
 // prove the six phase-1 products and the three heavy ones all went out together rather than one behind
-// another, and (b) HOLDS the three heavy responses until releaseHeavy(), so the driver can inspect the app
+// another, and (b) HOLDS the three heavy responses until releaseHeavy, so the driver can inspect the app
 // in exactly the window the split creates. Every other url resolves immediately, as before.
 // ts_access.json joins the held set although it is small: what it gates is a two-phase HONESTY rule
 // (nothing may claim a station has no archive route while the index is still in flight), and that
@@ -330,7 +330,7 @@ win.fetch = url => {
 
 // Concatenate the modules + an api hook; run in the window's global scope so the top-level declarations
 // become window globals (same effect as index.html's ordered <script> tags).
-// analytics-shim is FIRST, exactly as index.html loads it: it defines the no-op window.track() every
+// analytics-shim is FIRST, exactly as index.html loads it: it defines the no-op window.track every
 // export click handler calls on its first line. Omitting it here leaves no pin able to drive a real
 // export BUTTON (only the pure helpers behind one) without dying on an undefined track.
 const MODULES = ["analytics-shim", "contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer", "exports", "main", "tour"];
@@ -366,7 +366,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // toolbar drive; setArmedDraw is what the DRAWSTART/DRAWSTOP listeners call (icon-arm + cancel paths);
   // drawModeHandler proves the reuse reaches the control's handler, not a duplicated invocation.
   "armDraw,setArmedDraw,drawModeHandler,armedDrawMode:()=>armedDrawMode," +
-  // Recently-added hooks: recentlyAdded() for the strip-content assertion; renderRecentlyAdded so the driver
+  // Recently-added hooks: recentlyAdded for the strip-content assertion; renderRecentlyAdded so the driver
   // can force a re-render after directly poking SMETA (not needed in the current fixture path, but
   // keeps parity with runInit's own call sites); surveyLatestDate so the pinned cross-surface date
   // rule (attribution.declared_date folded into the release_notes candidate set) is asserted
@@ -537,7 +537,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
 (async () => {
   // Let jsdom finish its document lifecycle BEFORE we run the modules, so main.js's DOMContentLoaded
-  // auto-boot can't double-fire alongside our explicit boot() (a second boot re-runs buildTree and
+  // auto-boot can't double-fire alongside our explicit boot (a second boot re-runs buildTree and
   // appends a duplicate tree). After 'load', the listener main.js registers is too late to fire.
   await new Promise(res => (win.document.readyState === "complete" ? res() : win.addEventListener("load", res, { once: true })));
   vm.runInContext(code, dom.getInternalVMContext());
@@ -549,9 +549,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // uses rAF, so this override only intercepts the map fix.
   const rafQ = [];
   win.requestAnimationFrame = (cb) => { rafQ.push(cb); return rafQ.length; };
-  // ---- TWO-PHASE BOOT, part 1: boot() must return on the PHASE 1 products alone --------------------
+  // ---- TWO-PHASE BOOT, part 1: boot must return on the PHASE 1 products alone --------------------
   // tf.json / sci.json / manifest.json are HELD by the instrumented fetch above, so this is exactly the
-  // window the split exists for. RED PROOF: before this change boot() awaited a Promise.all that carried
+  // window the split exists for. RED PROOF: before this change boot awaited a Promise.all that carried
   // tf.json, so with that fetch held it could never resolve: this race would report "blocked" and the whole
   // driver below (2000+ existing assertions included) was unreachable.
   let _bootTimer = 0;
@@ -910,8 +910,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const bare = new JSDOM("<footer><span data-ver-chip></span></footer>", { runScripts: "outside-only" });
   vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), bare.getInternalVMContext());
   // Assert the LABEL, not the filled node: a just-constructed jsdom document can still be "loading",
-  // in which case version.js correctly defers fill() to DOMContentLoaded. The label is the exact string
-  // fill() writes into every chip (the populated-chip case is the assertion directly above), so this
+  // in which case version.js correctly defers fill to DOMContentLoaded. The label is the exact string
+  // fill writes into every chip (the populated-chip case is the assertion directly above), so this
   // pins the rendered text without racing the document's own readiness.
   const bareLabel = bare.window.AUSMT_VERSION.label;
   ok(bareLabel === "AusMT v0.0.0 · MTCAT",
@@ -1102,7 +1102,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   win.location.hash = ""; A.routeFromHash();
   ok(A.curView() === "map", "Back from the collection page did not restore the map view");
 
-  // E. FIND: typing a survey name lists it AND keeps its stations on the map (the blank-map fix: passes()
+  // E. FIND: typing a survey name lists it AND keeps its stations on the map (the blank-map fix: passes
   //    must also match s.survey, else a survey-name query — which Find invites — empties the map).
   const find = doc.getElementById("find");
   find.value = "Alpha Survey"; fire(find, "input");
@@ -1134,12 +1134,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   find.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   ok(find.value === "" && doc.getElementById("findResults").style.display === "none",
     "F3: Esc did not clear the query and close the dropdown");
-  // find.value is now "" and refresh() has re-run, so later sections (year/Availability/etc) assume no active Find query
+  // find.value is now "" and refresh has re-run, so later sections (year/Availability/etc) assume no active Find query
 
   // F. SURVEY route: #/survey/<slug> (the route the published /surveys/<slug> path URLs 301 into
   //    at the front door - path-URL contract; the sitemap advertises the path form) must
   //    resolve the slug back to its survey label and open the survey story drawer (openSurvey), same as
-  //    clicking a "Survey story" button does. Before this route existed, routeFromHash() silently fell
+  //    clicking a "Survey story" button does. Before this route existed, routeFromHash silently fell
   //    through for #/survey/... (only #/collection/ and #/station/ were handled) — a sitemap deep-link
   //    landed on a blank/default view instead of the intended survey.
   win.location.hash = "#/survey/alpha"; A.routeFromHash();
@@ -1187,7 +1187,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "#/survey/<slug> must apply the Option-A focus dim, got: " + JSON.stringify(A.dimFocus()));
   A.closeDrawer();
 
-  // SURVEY-DRAWER HASH CLEANUP. closeDrawer() cleared ONLY
+  // SURVEY-DRAWER HASH CLEANUP. closeDrawer cleared ONLY
   //     "#/station..." - a survey opened by the #/survey/<slug> route left that hash in the address bar
   //     after the drawer shut, so the URL claimed a survey was open when nothing was, Back/reload
   //     re-opened a drawer the reader had deliberately closed, and copying the URL shared a state the
@@ -1352,7 +1352,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const _htmlNoComments = html.replace(/<!--[\s\S]*?-->/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
   ok(!/\.introoverlay|\.intropanel|\.introtile|\.introhero|\.introclose|\.introtour/.test(_htmlNoComments),
     "docs wave: index.html must not keep CSS rules for the retired intro panel");
-  // FIRST VISIT: simulate it (clear the key + re-run the first-visit show the way runInit() does).
+  // FIRST VISIT: simulate it (clear the key + re-run the first-visit show the way runInit does).
   win.localStorage.removeItem("ausmt_intro_dismissed");
   A.showWelcome();
   ok(!introWelcome.classList.contains("hidden"), "welcome popup did not show on first visit");
@@ -1450,7 +1450,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // retired; the card is centred for EVERY step and a leader line/arrow connects it to the spotlight. The
   // geometry is PURE (_tourCardBox / _tourLeader) because jsdom has NO layout engine (every
   // getBoundingClientRect is zero) — so the centred-always, overlap-nudge, leader-endpoint and map-step
-  // suppression coverage runs on SYNTHETIC rects, the same pattern as partitionMarkers()/radiusForZoom().
+  // suppression coverage runs on SYNTHETIC rects, the same pattern as partitionMarkers()/radiusForZoom.
   // The DOM checks below then pin the leader element, the copper Next class and the applied dim.
   const M = 8, CLEAR = 16, cardW = 340, cardH = 160, vpW = 1200, vpH = 800;
   const cx0 = Math.round((vpW - cardW) / 2), cy0 = Math.round((vpH - cardH) / 2);
@@ -1812,7 +1812,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // J. YEAR RANGE filter: Alpha [2010,2012], Beta [2018,2019], Gamma
   // undated (no year fields at all). The two inputs get corpus-wide HINTS (placeholder + min/max) from
-  // buildState()'s applyYearRangeHints() — min year_start / max year_end across SMETA, here 2010/2019 —
+  // buildState()'s applyYearRangeHints - min year_start / max year_end across SMETA, here 2010/2019 -
   // but must stay EMPTY on load (a value would immediately exclude Gamma under the filter semantics).
   const yearFrom = doc.getElementById("yearFrom"), yearTo = doc.getElementById("yearTo");
   ok(yearFrom && yearTo, "#yearFrom/#yearTo inputs are missing");
@@ -2203,8 +2203,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   //     and was interpolated into double quotes where bash/zsh still honour $( ), backticks and ". The
   //     built filename must be shell-safe: POSIX single-quoting on macOS/Linux, a safe-charset restriction
   //     on Windows (curl.exe is pasted into PowerShell or cmd, which quote incompatibly).
-  const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";      // mirrors exports.js shq()
-  const winSafe = s => String(s).replace(/[^A-Za-z0-9._\/-]/g, "_");  // mirrors exports.js winSafePath()
+  const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";      // mirrors exports.js shq
+  const winSafe = s => String(s).replace(/[^A-Za-z0-9._\/-]/g, "_");  // mirrors exports.js winSafePath
   const INJ = "$(touch pwned) `id` \";x;\" 'sq' [z].zip";             // every metacharacter the field can carry
   A.setTsAccess({
     // ONE station whose level0 and level1_mth5 carry the SAME basename (the live SA295.h5 case).
@@ -2342,7 +2342,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // attribution.declared_date is a first-class candidate date sharing ONE candidate set with
   // release_notes[].date; the MAX well-formed YYYY-MM-DD wins, and a survey carrying a declared_date
   // but no release_notes dates by that declared_date, NOT the bare-year Dec-31 fallback. These are
-  // pure surveyLatestDate() checks (the fixture path above exercises the 30-day window, but never the
+  // pure surveyLatestDate checks (the fixture path above exercises the 30-day window, but never the
   // declared_date candidate), so the shared date rule is pinned directly without a full re-render.
   ok(A.surveyLatestDate({ year_end: 2019, attribution: { declared_date: "2026-07-25" } }) === "2026-07-25",
     "surveyLatestDate must date by attribution.declared_date, not the year_end Dec-31 fallback");
@@ -2547,8 +2547,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // PT + INDUCTION ARROWS ALWAYS SHOWN. The phase tensor and induction arrows must
   // ALWAYS be shown when the station carries that data — never collapsed by default and with NO
-  // collapse/minimise control the user could hide them with. Pre-change both were plotCollapsible() —
-  // <details class="plotcollapse"> panels, collapsed by default and user-hideable; now they are plotBlock()
+  // collapse/minimise control the user could hide them with. Pre-change both were plotCollapsible -
+  // <details class="plotcollapse"> panels, collapsed by default and user-hideable; now they are plotBlock
   // always-shown <div class="plot"> blocks. The empty-svg absence guard is preserved: an UNCOLLECTED panel
   // stays ABSENT (no empty box). This section RED-proves the swap: on the old <details> markup the
   // `div.plot[data-plot=...]` selectors below find nothing.
@@ -2608,7 +2608,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   //
   // NOTE (Invariant 10): section U asserts the ASSEMBLY HELPERS (apa/bibtex/ris/citeLine) directly —
   // the exact functions the #dlCite click handler feeds into the pack — NOT the zipped file itself:
-  // win.JSZip is a STUB in this harness (it swallows z.file() contents), so any "the shipped zip is
+  // win.JSZip is a STUB in this harness (it swallows z.file contents), so any "the shipped zip is
   // clean" claim routed through a #dlCite click here would be a vacuous test of the stub.
   const PLACEHOLDER = "DOI to be minted";
   // (a) NO-DOI survey — Beta has neither cite nor doi in the fixture; this is the EXACT call shape of
@@ -3061,7 +3061,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.setSidebarMode("browse");
 
   // Z. the sidebar collapse toggle sets the.collapsed class AND calls
-  // map.invalidateSize() (recorded by the map stub) so the map reclaims the width; state persists.
+  // map.invalidateSize (recorded by the map stub) so the map reclaims the width; state persists.
   A.setView("map");
   const collapseBtn = doc.getElementById("sidebarCollapse"), aside = doc.getElementById("filterPane");
   ok(collapseBtn, "D5: #sidebarCollapse toggle missing from the rail");
@@ -3076,7 +3076,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(win.localStorage.getItem("ausmt_sidebar_collapsed") === "0", "D5: expanded state was not persisted");
 
   // AA. the static map legend: a coloured dot per data type and nothing else, the dots
-  // reading the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (a hard-coded hex would fail).
+  // reading the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var (a hard-coded hex would fail).
   const legend = doc.getElementById("mapLegend");
   ok(legend, "D6: #mapLegend was not built");
   // A legend keys what the map DRAWS. Both retired map objects (the proximity bubble and the survey badge
@@ -3160,7 +3160,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // (identifiersHtml + apa are exercised by section P above and the E2 rollup below).
 
   // CC. E3 DISCOVERY CONTROLS. Sort / live count / facets / clear / compact toggle, above the card grid.
-  // Reset the tree first — section Q's selectSurvey() left only one survey checked; the discovery view
+  // Reset the tree first - section Q's selectSurvey left only one survey checked; the discovery view
   // reads the same filter, so restore the full baseline (all 5 stations / 4 surveys) before asserting.
   [...doc.querySelectorAll("#tree input")].forEach(c => { c.checked = true; });
   A.refresh();
@@ -3222,7 +3222,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   searchInput.value = "ORGX"; fire(searchInput, "input");   // Alpha's org, matched case-insensitively
   ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey",
     "E3: the search must match the ORG field case-insensitively (ORGX -> Alpha/OrgX), got: " + JSON.stringify(surveyOrder()));
-  // The header counter stays coherent on the Surveys view; the search handler re-runs updateCounts().
+  // The header counter stays coherent on the Surveys view; the search handler re-runs updateCounts.
   // This pin is off #nVis: on the Surveys view the slot is the WORKSPACE LINE, not the map's three
   // station counts (contract section 1).
   ok(doc.getElementById("countSlot").textContent === "1 of 4 surveys shown",
@@ -3680,7 +3680,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(KEYS.every(k => iNA[k].state === "na"), "X5: a not-computable input must render 'na' (not evaluated), never a fabricated green, got " + JSON.stringify(KEYS.map(k => k + ":" + iNA[k].state)));
   ok(iNA.smoothness.word === "not evaluated", "X5: an 'na' indicator must say 'not evaluated'");
   // No Screening panel renders, so the drawer carries no #dp-screening element and no "Screening
-  // indicators" section. The screeningIndicators() model above is pure and is pinned on its own, which
+  // indicators" section. The screeningIndicators model above is pure and is pinned on its own, which
   // is why the model has cases here and the rendered surface has none.
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   const scP = doc.getElementById("dp-screening");
@@ -3796,7 +3796,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "W3b: a no-cite survey's Cite tab must explicitly say 'custodian citation not recorded, cite the survey package', not a silent AUSMT_SELF masquerade");
   drwN.classList.remove("open");
 
-  // CR. CONTRIBUTOR CREDIT MODEL (CONTRIBUTOR-CREDIT-SPEC §3/§6): the survey drawer renders contributors[]
+  // CR. CONTRIBUTOR CREDIT MODEL (the contributor-credit model): the survey drawer renders contributors[]
   // with human role phrases, and the stale lead/principal-investigator display (the survey-summary
   // 'investigators' row served from the retired keys) is gone. Poke Gamma (base fixture carries no credit
   // lists) with the pinned seam shape: a person ProjectLeader with an ORCID, an org DataCollector with no
@@ -3855,7 +3855,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       { name: "Kate Robertson", name_type: "person", orcid: "0000-0002-1111-2222" },
       { name: "Geological Survey of South Australia", name_type: "organisation", ror: "https://ror.org/028g18b61" },
     ],
-    // Faithful to what the engine SERVES: CONTRIBUTOR-CREDIT-SPEC §2.1 builds cite.au from creators[]
+    // Faithful to what the engine SERVES: the contributor-credit model builds cite.au from creators[]
     // ("; "-joined, in order), so the attribution sentence and the creator names are the same names.
     // dates gives the sentence its "(year)" tail.
     dates: "2019", cite: { au: "Kate Robertson; Geological Survey of South Australia", yr: "2019",
@@ -3871,7 +3871,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ],
   });
   // (1) ONE ATTRIBUTION BOX. The Attribution section renders EXACTLY ONE
-  //     .attn box. When creators[] drive the attribution (§2.1: cite.au IS the "; "-joined creators) that
+  // .attn box. When creators[] drive the attribution (cite.au IS the "; "-joined creators) that
   //     single box carries the SAME sentence with each name ORCID/ROR-linked in place, keeping the "; "
   //     separators and the "(year)" tail; there is never a second names box. RED on origin/main: TWO
   //     visually identical .attn boxes render (the sentence, then a separate ' · '-joined names line).
@@ -3916,7 +3916,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(/Australian Research Council/.test(_fundBlock) && /ADI RD02-260/.test(_fundBlock),
     "PC: a funder's grant_id must be appended in the Funding section, got: " + _fundBlock);
   // (3) pubCite: a URL-form DOI must resolve to a SINGLE doi.org prefix (no double prefix), and a pub missing
-  //     author/year/journal must still render its title + link with no empty "(). ." citation skeleton.
+  //     author/year/journal must still render its title + link with no empty ". ." citation skeleton.
   ok(pcH.indexOf('href="https://doi.org/10.1093/gji/ggad999"') >= 0,
     "PC: a URL-form pub DOI must normalise to a single doi.org prefix, got: " + (pcH.match(/href="[^"]*gji[^"]*"/) || [""])[0]);
   ok(pcH.indexOf("doi.org/https") < 0, "PC: a URL-form pub DOI must not double-prefix the resolver");
@@ -4460,7 +4460,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "LEG keyboard: the keydown handler must preventDefault so a browser's native button activation cannot double-fire");
 
   // (e) ALL FOUR OFF. An empty map must render with NO error and the header must read 0 shown; toggling
-  // back must restore. (A throw anywhere in refresh() would reach the driver's catch and fail the run.)
+  // back must restore. (A throw anywhere in refresh would reach the driver's catch and fail the run.)
   legBtns.forEach(b => { if (b.getAttribute("aria-pressed") === "true") b.click(); });
   ok(legBtns.every(b => b.getAttribute("aria-pressed") === "false" && b.classList.contains("legoff")),
     "LEG all-off: every legend row must read aria-pressed=false and render dimmed");
@@ -4483,7 +4483,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   selectCtl().click();                                                                    // enters the lens
   ok(typeBox("GDS").checked === false && gdRow.getAttribute("aria-pressed") === "false",
     "LEG lens: entering the select lens must not touch a legend/rail TYPE toggle");
-  A.setSidebarMode("browse");                                                             // leaves it -> restoreSelectLens()
+  A.setSidebarMode("browse");                                                             // leaves it -> restoreSelectLens
   ok(typeBox("GDS").checked === false && gdRow.getAttribute("aria-pressed") === "false",
     "LEG lens: leaving the lens must NOT restore over a legend/rail TYPE toggle (the lens snapshots the tree only)");
   gdRow.click(); A.closeDrawer();
@@ -4852,7 +4852,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(dl.every(e => e.props.n === 3),
     "SELFMT event: every export must report the selection size it was given, got " + JSON.stringify(dl.map(e => e.props)));
 
-  // (h) THE MANIFEST INDEX IS PER MANIFEST. artifactsFor() answers from an ausmt_id -> rows index built
+  // (h) THE MANIFEST INDEX IS PER MANIFEST. artifactsFor answers from an ausmt_id -> rows index built
   //     once per manifest (data.js mfFileIndex), which is what takes the size repaint off the keystroke
   //     path. A cache is a wrong answer that never goes away unless something invalidates it, and this one
   //     is invalidated by the manifest's own identity precisely so no caller has to remember to. Swap the

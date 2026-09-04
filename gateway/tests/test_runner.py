@@ -1,4 +1,4 @@
-"""Runner unit tests (design §5/§8), no containers. Safe-extract re-checks a hostile member and
+"""Runner unit tests, no containers. Safe-extract re-checks a hostile member and
 refuses to write outside the target; the timeout path quarantines with a 'could not complete'
 reason; done-file writes are atomic (tmp+rename). The validator/engine subprocesses are stubbed at
 runner._run_subprocess so no real image/validator is needed locally.
@@ -319,7 +319,7 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
         "safe_extract must carry transfer_functions/emtfxml/ through untouched"
 
     # THE VALIDATOR IS NOT THE SUBJECT HERE, and it is not this repo's to change: it lives in the
-    # sibling ausmt-surveys repo (ADR-001) and still classes .xml as an opt-in format, so with the
+    # sibling ausmt-surveys repo and still classes .xml as an opt-in format, so with the
     # real one build_portal's discovery SKIPS this package and the preview cannot succeed. That
     # refusal is REAL and is pinned, unmocked, by test_real_validator_still_rejects_emtfxml_as_a_
     # standard_input below; asserting a green preview against it here would be faking a pass.
@@ -535,7 +535,7 @@ def test_corrupt_deflate_quarantines_not_crashes(tmp_path):
 
 
 def test_safe_extract_byte_cap_on_actual_bytes(tmp_path):
-    # Byte accounting (design §5.1, review #10): the extraction cap is enforced on BYTES READ, not on
+    # Byte accounting (review #10): the extraction cap is enforced on BYTES READ, not on
     # the central-directory file_size, so a member whose real inflated size exceeds the cap is caught
     # even if its header lied small. Build a 3 MiB STORED member; cap at 1 MiB -> UnsafeMember.
     # Proven failing: with the old safe_extract (no byte counter, trusting file_size) the
@@ -607,7 +607,7 @@ def test_heartbeat_keeps_running_file_fresh(tmp_path):
 
 
 def test_safe_extract_refuses_traversal(tmp_path):
-    # A member with a '..' segment must be refused at extraction (design §5.1 re-check), and NOTHING
+    # A member with a '..' segment must be refused at extraction (re-check), and NOTHING
     # Is written outside target. proven failing: with check_member removed from
     # safe_extract, the member wrote to the parent dir (escape) and no UnsafeMember was raised.
     zpath = tmp_path / "evil.zip"
@@ -845,7 +845,7 @@ def test_read_done_rejects_unknown_outcome(tmp_path):
 
 
 def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeypatch):
-    """Collateral guard (design §1): the GATEWAY runner processes UNTRUSTED uploads and must
+    """Collateral guard: the GATEWAY runner processes UNTRUSTED uploads and must
     stay NON-incremental — it must never pass --incremental / --cache-dir / --cache-mode to the
     engine. The build cache is switched on in exactly ONE place (deploy/Makefile's rebuild-data),
     NOT here. FAILS IF the runner ever grows a cache flag on the engine subprocess.

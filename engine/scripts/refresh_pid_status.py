@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""IDCONS D4 (identifier-consolidation, SPEC §5.2) — refresh the DOI resolution cache (pid_status.json).
+"""IDCONS D4 (identifier-consolidation) - refresh the DOI resolution cache (pid_status.json).
 
 The portal build is OFFLINE and byte-reproducible: it never touches the network. This tool is the ONLY
 thing that HEADs doi.org. Run it EXPLICITLY (the deploy/Makefile `refresh-pid-status` target, part of the
-release ritual — SPEC §6 step 4); it sweeps every DOI-typed identifier in the corpus, classifies each
+release ritual - step 4); it sweeps every DOI-typed identifier in the corpus, classifies each
 under the alive-rule, and writes pid_status.json into the build state dir. `build_portal --pid-status`
 then CONSUMES that file so a reserved-but-not-yet-active DOI renders as plain text, not a dead link.
 
   python engine/scripts/refresh_pid_status.py --surveys <surveys-root> --out <cache-dir>/pid_status.json
 
-THE ALIVE-RULE (SPEC §5.1 — identical semantics to gateway/pidcheck.py; the two content-blind copies are
+THE ALIVE-RULE (- identical semantics to gateway/pidcheck.py; the two content-blind copies are
 pinned equal by gateway/tests/test_pidcheck.py::test_alive_rule_parity_with_engine_tool):
 
   Only doi.org's OWN 404 = `unregistered` (reserved). Every other doi.org answer (200 / 30x redirect to
@@ -17,7 +17,7 @@ pinned equal by gateway/tests/test_pidcheck.py::test_alive_rule_parity_with_engi
   the build links it as today). Redirects are NOT followed — a publisher 404 after a 30x is not doi.org's
   404. The gate is an honesty guard, not a liveness monitor.
 
-SWEEP SCOPE (SPEC §8.2 A-C5): during migration the corpus holds DOIs in BOTH the typed related_identifiers
+SWEEP SCOPE (A-C5): during migration the corpus holds DOIs in BOTH the typed related_identifiers
 list AND the still-readable flat keys (identifiers.dataset_doi, time_series.collection_pid). We sweep the
 UNION, keyed by the identifier string (natural dedupe), so neither the typed nor the flat-only DOIs are
 missed. The flat half drops out of the sweep in the same follow-up that removes the engine flat-key reads.
@@ -32,7 +32,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# Status vocabulary written to the cache (SPEC §5.1). build_portal maps resolved->ok, unregistered->
+# Status vocabulary written to the cache. build_portal maps resolved->ok, unregistered->
 # reserved, error/absent->unknown.
 STATUS_RESOLVED = "resolved"
 STATUS_UNREGISTERED = "unregistered"
@@ -91,7 +91,7 @@ def head_status(doi: str) -> tuple[int | None, bool]:
 
 
 def doi_identifiers_of(y: dict) -> set[str]:
-    """Every DOI-shaped identifier ONE survey.yaml contributes to the sweep (SPEC §8.2 A-C5): the typed
+    """Every DOI-shaped identifier ONE survey.yaml contributes to the sweep (A-C5): the typed
     related_identifiers rows whose identifier_type is DOI, PLUS the still-readable flat dataset_doi and
     time_series.collection_pid when they look like DOIs. Deduped by string."""
     out: set[str] = set()

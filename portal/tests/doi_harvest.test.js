@@ -1,5 +1,5 @@
 // Node test for the SHARED DOI citation-harvest core (src/doi_harvest.js) - the single source the public
-// Add Survey form AND the curator metadata editor both consume (CONTRIBUTOR-CREDIT-SPEC §6). Exercises the
+// Add Survey form AND the curator metadata editor both consume (the contributor-credit model). Exercises the
 // module directly: the export surface, the window-global attachment the curator page relies on, the
 // registry parsers, and harvestDoi's Crossref-then-DataCite fallback with a STUBBED fetch (never the
 // network). Run via tests/test_doi_harvest.py or:  node tests/doi_harvest.test.js

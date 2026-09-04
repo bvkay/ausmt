@@ -431,7 +431,7 @@ ok(!("submitter_orcid" in ff1) && ff1.submitter_name === "Ada L" && ff1.submitte
 ok(M.submitFormFields({uploader_name: "A", uploader_email: "a@x.co", uploader_orcid: "0000-0002-1825-0097"}).submitter_orcid
    === "0000-0002-1825-0097", "submitFormFields: non-empty ORCID rides as a field");
 
-// ============================ connection targets (§5) + key-request stub ============================
+// ============================ connection targets + key-request stub ============================
 const conns = [...html.matchAll(/(?:fetch|\.open)\(\s*(?:"[^"]*",\s*)?"([^"]+)"/g)].map(m => m[1])
   .filter(u => !/^\$\{/.test(u));
 // same-origin, the ROR API, or the R3 citation-harvest registries (Crossref + DataCite). These three

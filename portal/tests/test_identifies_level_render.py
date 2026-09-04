@@ -1,4 +1,4 @@
-"""D-L (identifiers by data level, SPEC §9): the portal labels related-identifier rows by their NCI Table 1
+"""D-L (identifiers by data level): the portal labels related-identifier rows by their NCI Table 1
 DATA LEVEL when `identifies` is present, links each files-tab level row to its level's DOI, and omits the
 station-drawer "Identifiers & instruments" expander entirely when there is nothing to show.
 

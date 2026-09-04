@@ -88,7 +88,7 @@ def _memo_len() -> int:
 
 
 def test_mth5_unit_releases_metadata_classes(tmp_path):
-    """The leak. Runs the tier-1 unit (_write_tf_mth5 over ONE station: write + SPEC 6 round-trip gate)
+    """The leak. Runs the tier-1 unit (_write_tf_mth5 over ONE station: write + clause 6 round-trip gate)
     over the two sample EDIs three times each, exactly as emit_station_mth5 does per served station,
     then a tier-2 bundle of both, and asserts after every unit that (a) the class-keyed field-tree
     memo is empty and (b) the number of live pydantic model classes has not moved from what it was

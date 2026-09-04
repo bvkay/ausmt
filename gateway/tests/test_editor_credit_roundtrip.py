@@ -1,4 +1,4 @@
-"""CONTRIBUTOR-CREDIT-SPEC (§6, the ausmt-side editor typed rows): creators[] and contributors[] are
+"""the contributor-credit model (the ausmt-side editor typed rows): creators[] and contributors[] are
 modelled LIST_SECTION widgets that must round-trip AND save end-to-end.
 
 Three failure modes this pins:
@@ -290,7 +290,7 @@ def test_editing_creators_strips_the_comment_above_marker_but_leaves_contributor
 
 
 def test_people_panel_chips_carry_the_migration_flags_labelled_by_source(tmp_path):
-    """§6.2 CHIPS CARRY. The runner's review_flags (indices into the ORIGINAL creators[]/contributors[])
+    """ CHIPS CARRY. The runner's review_flags (indices into the ORIGINAL creators[]/contributors[])
     map onto the MERGED unified rows and each seeded row carries a 'needs review' chip labelled which
     underlying list seeded it (Creators / Contributors). Drives the People panel with the read-job's own
     flags for the comment-above fixture and asserts a chip on the two creator rows and the contributor

@@ -1,4 +1,4 @@
-"""Server-rendered curator pages (design §3/§4). MIRRORS statuspage.py: stdlib string.Template, no
+"""Server-rendered curator pages. MIRRORS statuspage.py: stdlib string.Template, no
 framework, portal palette, minimal JS — and ZERO inline JS: the strictPages CSP (script-src 'self')
 blocks inline script blocks and on*-attribute handlers, so all behaviour rides two external
 same-origin scripts (CURATOR_UI_JS delegation for confirms/toggles; SERVE_PANEL_JS for the C40
@@ -6,11 +6,11 @@ panel). Every interpolated value is html.escaped — reports derive from submitt
 inject markup into the curator's browser.
 
 Two views: the queue (list of actionable submissions) and the detail view (report bundle, live
-checklist, submitter block — curator-only PII, design §2 — the sandboxed preview iframe, and the
+checklist, submitter block - curator-only PII, - the sandboxed preview iframe, and the
 action forms, EACH carrying a CSRF hidden field). Plus a login form.
 
 Unlike the public status page, the detail view DOES render the submitter block (name/email/orcid) —
-that is the whole point of capturing it (design §2) — but ONLY inside authenticated curator HTML,
+that is the whole point of capturing it - but ONLY inside authenticated curator HTML,
 never on /gateway/status/*.
 """
 from __future__ import annotations
@@ -487,7 +487,7 @@ EDITOR_UI_JS = """
 """
 
 
-# CONTRIBUTOR-CREDIT-SPEC (§6): the unified People & credit panel enhancements, appended to editor.js (the
+# the contributor-credit model: the unified People & credit panel enhancements, appended to editor.js (the
 # script both the full editor form and the hub Metadata tab already load). RAW string (JS-native
 # backslashes). ALL progressive - the panel is fully usable without JS (both id fields + every control
 # show, manual entry + the +Add person spare rows work, and the server already renders cited rows in
@@ -684,7 +684,7 @@ _PEOPLE_CREDIT_JS = r"""
 EDITOR_UI_JS = EDITOR_UI_JS + _PEOPLE_CREDIT_JS
 
 
-# CONTRIBUTOR-CREDIT-SPEC (§6 curator DOI harvest): the DOI citation-harvest core, served to the curator
+# the contributor-credit model (curator DOI harvest): the DOI citation-harvest core, served to the curator
 # editor as an external same-origin script (the strictPages script-src 'self' CSP blocks inline). It is the
 # SAME code the public Add Survey form uses, delivered as the BYTE-IDENTICAL bundled copy under
 # gateway/static/ (the gateway app image is content-blind: it ships only gateway/ and cannot read portal/ at
@@ -693,7 +693,7 @@ EDITOR_UI_JS = EDITOR_UI_JS + _PEOPLE_CREDIT_JS
 DOI_HARVEST_JS = (Path(__file__).resolve().parent / "static" / "doi_harvest.js").read_text(encoding="utf-8")
 
 
-# The publications-row "Look up DOI" button + status line (CONTRIBUTOR-CREDIT-SPEC §6). Rides the row like
+# The publications-row "Look up DOI" button + status line (the contributor-credit model). Rides the row like
 # the related_identifiers PID chip (as row_suffix_html), so a JS-added row carries it too. Without JS it is
 # an inert button - the manual author/year/title/journal fields still work (degrades safely).
 _DOI_HARVEST_BUTTON_HTML = (
@@ -2566,7 +2566,7 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
 #   SERVER-SIDE (passed in): surveys-live HEAD (via the publish git seam), the reconcile-status.json
 #     contents, and whether a rebuild.request is pending — all from mounts the gateway already has.
 #   BROWSER-SIDE (fetched by the inline JS below): /data/build.json + /data/build_report.json,
-#     same-origin from Caddy (the gateway server has NO site-data mount — design §3). The JS renders
+#     same-origin from Caddy (the gateway server has NO site-data mount -). The JS renders
 #     the served build id + source_commit (highlighted when it differs from the published HEAD the
 #     server passed in) and the per-survey build_report table with an expandable detail row.
 # Dependency-free vanilla JS, matching the rest of the curator UI (no framework, no CDN).
@@ -2588,7 +2588,7 @@ _ACTION_SHOW_TAIL = ("failed", "sync_failed", "untracked_blocked", "paused", "pi
 def _reconcile_status_block(status: dict | None) -> str:
     """Render the last reconcile outcome from reconcile-status.json. None => the agent is not
     installed yet (a hint, not an error). A `failed`/`sync_failed` shows the log tail so a shell-less
-    curator sees WHY without console access (design §2 — the NCI no-console requirement)."""
+    curator sees WHY without console access (- the NCI no-console requirement)."""
     if status is None:
         return ('<p class="sub">No reconcile status yet — the host reconcile agent is not installed, '
                 'its status file is unreadable by the gateway (permissions on gateway/state — see the '
@@ -4582,7 +4582,7 @@ def _checklist_panel(cl: "checklist_mod.Checklist") -> str:
         warning = (f'<p style="color:{_PALETTE["bad"]};font-weight:600">'
                    'A blocking check FAILED — approve is refused until it is resolved.</p>')
     elif cl.has_acknowledgeable_blocking_fail:
-        # §3: an acknowledgeable-only block. The curator approve is available via the acknowledgement
+        # an acknowledgeable-only block. The curator approve is available via the acknowledgement
         # checkbox (a deliberate curator decision), NOT hard-refused. The submitter's own email would
         # be unacknowledgeable and hit the branch above instead.
         warning = (f'<p style="color:{_PALETTE["warn"]};font-weight:600">'
@@ -4594,7 +4594,7 @@ def _checklist_panel(cl: "checklist_mod.Checklist") -> str:
 
 
 def _submitter_panel(*, name: str, email: str, orcid: str | None) -> str:
-    # Curator-only PII (design §2). This block appears ONLY here, never on the public status page.
+    # Curator-only PII. This block appears ONLY here, never on the public status page.
     orcid_row = f'<tr><td class="k">ORCID</td><td>{_esc(orcid)}</td></tr>' if orcid else ""
     return (
         '<div class="panel"><h2>Submitter (curator-only)</h2>'
@@ -4611,7 +4611,7 @@ def _preview_value(value) -> str:
     `str(the_list)`: `warnings` is the only key that ever holds one, and since the >INFO pre-flight
     it holds up to a dozen sentences the curator reads to decide whether to hold a package. Python's
     repr delivered them as a single unbroken run. Mirrors `statuspage._preview_value`, minus the
-    absolute-path strip, which this page deliberately does not apply (design §6 gates the PUBLIC
+    absolute-path strip, which this page deliberately does not apply (gates the PUBLIC
     page; a curator is entitled to see the server path in a build message)."""
     if isinstance(value, list):
         return ("<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in value) + "</ul>") if value else ""
@@ -4644,7 +4644,7 @@ def _reports_panel(*, validate_report: dict | None, preview_summary: dict | None
     return "".join(parts)
 
 
-# §3: the acknowledgement checkbox label. Rendered ONLY when the PII block is acknowledgeable
+# the acknowledgement checkbox label. Rendered ONLY when the PII block is acknowledgeable
 # (non-submitter addresses) and there are NO submitter hits. When a submitter hit exists the checkbox
 # is NOT rendered and the button is hard-disabled — the server-side 409 is the guarantee either way.
 _ACK_PII_LABEL = (
@@ -4666,7 +4666,7 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
     note = ('<p><textarea name="note" placeholder="Decision note (required)" '
             'required></textarea></p>')
     # A hard block (submitter PII or any non-PII FAIL) disables approve. An acknowledgeable-only PII
-    # block does NOT disable it — instead the ack checkbox appears (§3). The 409 remains the guarantee.
+    # block does NOT disable it - instead the ack checkbox appears. The 409 remains the guarantee.
     hard_blocked = cl.has_unacknowledgeable_blocking_fail
     ack_box = _ack_pii_checkbox() if cl.has_acknowledgeable_blocking_fail else ""
     forms = []
@@ -4688,7 +4688,7 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
             f'{csrf}{note}<p><button class="b-warn" type="submit">Return to submitter</button></p>'
             '</form></div>'
         )
-        # Reject now REQUIRES a real note too (design §3 — no exemption). Its own note field.
+        # Reject now REQUIRES a real note too (- no exemption). Its own note field.
         forms.append(
             f'<div class="panel"><h2>Reject</h2>'
             f'<form method="post" action="/gateway/curator/submission/{sid}/reject" '
@@ -4706,7 +4706,7 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
             'works if the reconcile timer is not installed.</p></div>'
         )
     elif state == states.PUBLISH_FAILED:
-        # Retry re-evaluates the checklist and acknowledgement is PER-ACTION (C11b §2), so a
+        # Retry re-evaluates the checklist and acknowledgement is PER-ACTION, so a
         # still-acknowledgeable block needs the checkbox again here; a hard block disables retry.
         retry_attr = "disabled" if hard_blocked else ""
         retry_title = ' title="Blocked by a failing check"' if hard_blocked else ""
@@ -4727,14 +4727,14 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
 
 # ---- C31 metadata editor ---------------------------------------------------------------------
 
-# The editable fields, grouped like the add-survey page (C31 §2). Top-level scalars render as an
+# The editable fields, grouped like the add-survey page. Top-level scalars render as an
 # input/textarea; the STRUCTURED sections (maps + lists) now render as per-section WIDGETS
 # (labelled inputs, selects, checkboxes, repeatable rows) instead of the raw-JSON textareas a 2026-
 # 07-08 production use judged hostile for a geophysicist. Every section still keeps an "advanced"
 # collapsed raw-JSON <details> fallback that OVERRIDES its widgets when non-empty (deliberate escape
 # hatch, documented in the copy). The section shapes/labels live in gateway.editor_form (the server-
 # side assembly half) so rendering and assembly cannot drift. ORCID/ROR hints are text + a plain
-# link only (C31 §2 / the strictPages CSP has no api.ror.org connect-src — a fetch would be blocked).
+# link only (the strictPages CSP has no api.ror.org connect-src - a fetch would be blocked).
 _EDIT_SCALARS = (
     ("project_name", "Project name"),
     ("name", "Name (backward-compatible alias)"),
@@ -4757,7 +4757,7 @@ _EDIT_JSON_ONLY = (
 # The structured-section titles + document order (matches survey-yaml.md), shared by the single-form
 # edit page and the C43 survey-hub Metadata tab (which splits each into its own per-section form) so
 # rendering order never drifts between them.
-# D-L3 (SPEC §9.3): "Source datasets" (sources) is RETIRED from the editor — its acquisition fields are
+# "Source datasets" (sources) is RETIRED from the editor - its acquisition fields are
 # now optional keys on a related_identifiers row, and the standalone sidebar entry + panel are gone. The
 # sources[] schema key stays byte-preserved on disk (never entered into any patch, because it is not a
 # widget section, so build_section_patch never assembles it) and the engine keeps reading it.
@@ -4798,7 +4798,7 @@ def _canon_json(value) -> str:
 
 
 def _suggest_bump(current: str, kind: str) -> str:
-    """Display-only bump suggestion for the form (patch is the C31 §0.3 default). The AUTHORITATIVE
+    """Display-only bump suggestion for the form (patch is the C31 default). The AUTHORITATIVE
     semver comparison + enforcement lives in the runner (gateway.runner.edit.semver_greater); this is
     a pure-stdlib suggestion so the page needs no yaml/runner import. A non-semver current version
     falls back to 1.0.x so the form always shows a valid suggestion."""
@@ -5037,7 +5037,7 @@ def _profile_select_widget(name: str, label: str, value) -> str:
             f'<select name="{_esc(name)}">{"".join(opts)}</select></p>')
 
 
-# IDCONS D1 (SPEC §2.2) — plain-language display text for the relation <select>. The option VALUE stays
+# IDCONS D1 - plain-language display text for the relation <select>. The option VALUE stays
 # the exact DataCite vocab (RELATION_TYPES, POSTed byte-identically so the fail-closed validator sees the
 # same token); only the human-facing option TEXT is expanded so a geophysicist who never read the spec can
 # tell which relation to pick. Any vocab not mapped here falls back to its raw token.
@@ -5051,7 +5051,7 @@ _RELATION_DISPLAY = {
     "IsDocumentedBy": "Documented by (an activity or project record describes this dataset)",
 }
 
-# D-L1 (SPEC §9.1) — plain-language display text for the `identifies` <select>, in NCI Table 1 ORDER.
+# D-L1 - plain-language display text for the `identifies` <select>, in NCI Table 1 ORDER.
 # The option VALUE stays the exact vocab token (POSTed byte-identically so the fail-closed validator sees
 # the same token); only the human-facing option TEXT is expanded so a geophysicist can pick the level.
 _IDENTIFIES_DISPLAY = {
@@ -5064,7 +5064,7 @@ _IDENTIFIES_DISPLAY = {
     "entire": "Entire dataset (single record, all levels)",
 }
 
-# CONTRIBUTOR-CREDIT-SPEC (§6) - plain-language option TEXT for the credit-row selects. As with the other
+# the contributor-credit model - plain-language option TEXT for the credit-row selects. As with the other
 # typed selects the option VALUE stays the exact vocab token (POSTed byte-identically so the fail-closed
 # validator sees the same token); only the human-facing TEXT is expanded so a geophysicist can pick without
 # reading the spec. Any vocab not mapped here falls back to its raw token.
@@ -5086,7 +5086,7 @@ _ROLE_DISPLAY = {
 
 def _typed_vocab_select_widget(name: str, label: str, value, options: tuple,
                                display_labels: dict | None = None) -> str:
-    """§2a: a FAIL-CLOSED <select> for a typed related-identifiers preset — relation (RELATION_TYPES)
+    """: a FAIL-CLOSED <select> for a typed related-identifiers preset - relation (RELATION_TYPES)
     or identifier_type (IDENTIFIER_TYPES). Same C46 vocab-select discipline as _profile_select_widget:
     a leading blank leaves it unset, and an out-of-vocab STORED value is shown as its own selected
     option so the curator sees and can correct it (never silently coerced, never crashes). Server-
@@ -5146,7 +5146,7 @@ def _levels_widget(section: str, subkey: str, fields: dict, submitted: dict | No
 
 
 def _reorder_controls_html() -> str:
-    """CONTRIBUTOR-CREDIT-SPEC (§6, creators are an ORDERED list): the per-row move up/down buttons. The
+    """the contributor-credit model (creators are an ORDERED list): the per-row move up/down buttons. The
     delegated handler in EDITOR_UI_JS moves the row's DOM node AND renumbers the section's row indices so
     the assembled order (editor_form._assemble_list reads rows in numeric index order) matches the visual
     order - the reorder therefore persists through save. Degrades to inert buttons without JS (the server
@@ -5160,7 +5160,7 @@ def _reorder_controls_html() -> str:
             '&darr; down</button></p>')
 
 
-# CONTRIBUTOR-CREDIT-SPEC (§6): the "needs review" chip on a migration-seeded credit row awaiting curator
+# the contributor-credit model: the "needs review" chip on a migration-seeded credit row awaiting curator
 # adjudication (the INFERRED-REVIEW marker the runner detected). Advisory only - it never blocks saving;
 # saving the list rewrites it WITHOUT the marker, which IS the adjudication (apply_patch replaces the list
 # wholesale AND explicitly strips row 0's comment-above marker off the parent key, which a replace alone
@@ -5279,7 +5279,7 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
     `row_suffix_html` is inserted before the remove button and attaches the per-identifier
     resolution status chip to related_identifiers rows; it rides the row template so a JS-added row carries
     it too. Default empty, so every other list section renders byte-identically.
-    `reorderable` (CONTRIBUTOR-CREDIT-SPEC §6) adds up/down move buttons (creators). `needs_review` adds the
+    `reorderable` (the contributor-credit model) adds up/down move buttons (creators). `needs_review` adds the
     INFERRED-REVIEW chip to a migration-seeded row. `spare` stamps the no-JS add-fallback marker
     (_SPARE_ROW_ATTR) that editor.js hides on init, see the constant's note. `submitted` is the
     raw POST, needed only by the two non-scalar organisations controls (the roles checkbox group and
@@ -5297,18 +5297,18 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
         if kind == "profile":                       # Sources[].profile - ga|generic <select>
             cells.append(_profile_select_widget(name, label, val))
             continue
-        if kind == "relation":                      # §2a related_identifiers[].relation — vocab <select>
+        if kind == "relation":                      # related_identifiers[].relation - vocab <select>
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.RELATION_TYPES,
                                                     display_labels=_RELATION_DISPLAY))
             continue
-        if kind == "identifier_type":               # §2a related_identifiers[].identifier_type — vocab <select>
+        if kind == "identifier_type":               # related_identifiers[].identifier_type - vocab <select>
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.IDENTIFIER_TYPES))
             continue
-        if kind == "name_type":                     # §6 creators/contributors - person|organisation <select>
+        if kind == "name_type":                     # creators/contributors - person|organisation <select>
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.NAME_TYPES,
                                                     display_labels=_NAME_TYPE_DISPLAY))
             continue
-        if kind == "role":                          # §6 contributors[].role - 8-token vocab <select>
+        if kind == "role":                          # contributors[].role - 8-token vocab <select>
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.CONTRIBUTOR_ROLES,
                                                     display_labels=_ROLE_DISPLAY))
             continue
@@ -5380,7 +5380,7 @@ def _blank_row(values) -> bool:
 # so no real index or field text can collide with it, and the surrounding underscores survive.
 ROW_INDEX_TOKEN = "ROWIDX"
 
-# CONTRIBUTOR-CREDIT-SPEC (§6): sections whose ORDER is meaningful get per-row up/down reorder controls.
+# the contributor-credit model: sections whose ORDER is meaningful get per-row up/down reorder controls.
 # creators[] is the citation author order; contributors[] is not ordered, so it does not.
 _REORDERABLE_SECTIONS = frozenset({"creators"})
 
@@ -5390,13 +5390,13 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
                         review_indices: list | None = None, intro_html: str = "") -> str:
     """`display_error` (C43-HUB H4): a DISPLAY-LAYER section-level error line (list rows have no
     single offending input to redden, so the message renders under the heading). Rendering only —
-    the server validator and POST path are untouched. `review_indices` (CONTRIBUTOR-CREDIT-SPEC §6):
+    the server validator and POST path are untouched. `review_indices` (the contributor-credit model):
     the ORIGINAL row indices the migration marked INFERRED-REVIEW, chipped only on the first render (not
     after a submit, when the rows may have been reordered/edited)."""
     from . import editor_form
     subfields = editor_form.LIST_SECTIONS[section]
     reorderable = section in _REORDERABLE_SECTIONS
-    # CONTRIBUTOR-CREDIT-SPEC (§6): publications rows carry the "Look up DOI" harvest button (like the
+    # the contributor-credit model: publications rows carry the "Look up DOI" harvest button (like the
     # related_identifiers PID chip); it rides every row + the template so a JS-added row gets it too.
     row_suffix = _DOI_HARVEST_BUTTON_HTML if section == "publications" else ""
     # Prefill existing rows: resubmitted rows win (preserve typed values on a validation error),
@@ -5611,7 +5611,7 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
 
 
 # ==================================================================================================
-# CONTRIBUTOR-CREDIT-SPEC (§6): the unified "People & credit" panel, replacing
+# the contributor-credit model: the unified "People & credit" panel, replacing
 # the four-panel Investigators hub group with "one huge list which makes no sense"). ONE row per person
 # or organisation: name, name_type, ORCID (people) / ROR (orgs), a Cited-author checkbox, and the eight
 # role checkboxes. The panel DECOMPOSES to the two served lists on save
@@ -5619,13 +5619,13 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
 # ==================================================================================================
 _PEOPLE_SECTION = "people"
 
-# Placeholder hygiene (§6.6): every example value is prefixed "e.g." so a bare sample ORCID/ROR on an
+# Placeholder hygiene: every example value is prefixed "e.g." so a bare sample ORCID/ROR on an
 # empty row never reads as recorded data.
 _PEOPLE_NAME_PH = "e.g. Family, Given  or  Organisation name"
 _PEOPLE_ORCID_PH = "e.g. 0000-0002-1825-0097"
 _PEOPLE_ROR_PH = "e.g. https://ror.org/03yghzc09"
 
-# §6.7 explainer - ONE short paragraph replacing the retired lead-suppresses-PIs precedence sentence and
+# explainer - ONE short paragraph replacing the retired lead-suppresses-PIs precedence sentence and
 # the old credit-model paragraph.
 _PEOPLE_EXPLAINER = (
     '<p class="sub">Cited authors form the citation, in order (use the up/down controls on a cited row); '
@@ -5634,7 +5634,7 @@ _PEOPLE_EXPLAINER = (
 
 def _people_name_type_select(name: str, value) -> str:
     """The person|organisation <select> for a credit row. FAIL-CLOSED vocab, but DEFAULTS to person on a
-    fresh row (no "(none)" state, §6.6). An out-of-vocab STORED value stays visible + selected so the
+    fresh row (no "(none)" state). An out-of-vocab STORED value stays visible + selected so the
     curator can fix it. data-people-nametype drives the ORCID/ROR show-hide enhancement (degrades to both
     shown without JS)."""
     from . import editor_form
@@ -5665,7 +5665,7 @@ def _people_role_checkboxes(index, roles: set) -> str:
             '<span class="k">Roles (what they did)</span><br>' + "".join(boxes) + '</div>')
 
 
-# §6.2: the "needs review" chip on a unified row seeded by the migration (the INFERRED-REVIEW marker the
+# the "needs review" chip on a unified row seeded by the migration (the INFERRED-REVIEW marker the
 # runner detected on the underlying creators/contributors row). Labelled which list seeded it. Advisory
 # only; saving the row rewrites the underlying list WITHOUT the marker (the adjudication, cleared via the
 # runner's existing _strip_inferred_review_comment path).
@@ -5767,7 +5767,7 @@ def _people_rows_for_render(fields: dict, submitted: dict | None,
 
 
 def _people_typeahead_html() -> str:
-    """§6.4 REUSE DIRECTORY. An "Add person" typeahead whose directory is built CLIENT-SIDE from the
+    """ REUSE DIRECTORY. An "Add person" typeahead whose directory is built CLIENT-SIDE from the
     same-origin /data/surveys.json (aggregate every creators+contributors entry corpus-wide, dedupe by
     ORCID else name, sort by frequency then name). Selecting an entry adds a prefilled row. Hidden by
     default; the enhancement reveals it only once the directory loads, so a failed/absent fetch leaves it
@@ -5839,7 +5839,7 @@ def _people_credit_inner(slug: str, fields: dict, submitted: dict | None, err_ma
             + '</div>')
 
 
-# IDCONS D5 (SPEC §5.5): the per-identifier resolution status chip + check button attached to each
+# The per-identifier resolution status chip + check button attached to each
 # related_identifiers row. Advisory only — it NEVER blocks saving; a curator can save a survey whose DOI
 # is reserved-and-404ing (the correct state for a freshly-reserved NCI PID). The button rides the row
 # TEMPLATE (so a JS-added row carries it too); the click handler in EDITOR_UI_JS reads the row's identifier
@@ -5854,7 +5854,7 @@ _PID_CHIP_HTML = (
 
 
 def _identifies_select_widget(name: str, value) -> str:
-    """D-L1 (SPEC §9.1): the "What does this identifier point at?" <select> — the seven NCI Table 1 data
+    """The "What does this identifier point at?" <select> - the seven NCI Table 1 data
     levels in order, with human-facing labels. Fail-closed (an out-of-vocab STORED value is shown as its
     own option so the curator can fix it, never silently coerced). Reuses _typed_vocab_select_widget so the
     option VALUE stays the exact vocab token and the POST is byte-identical to what the validator expects."""
@@ -5863,7 +5863,7 @@ def _identifies_select_widget(name: str, value) -> str:
                                       editor_form.IDENTIFIES_LEVELS, display_labels=_IDENTIFIES_DISPLAY)
 
 
-# D-L (SPEC §9.6): the acquisition sub-keys folded onto a related_identifiers row from the retired
+# D-L: the acquisition sub-keys folded onto a related_identifiers row from the retired
 # sources[] list — rendered behind a COLLAPSED "acquisition details" disclosure, shown only when the
 # curator opens it (an upstream dataset AusMT obtained). (subkey, label, kind) — the field NAMES match
 # editor_form.LIST_SECTIONS["related_identifiers"] so the assembler reads them back.
@@ -5877,7 +5877,7 @@ _ACQUISITION_ROW_FIELDS = (
 
 
 def _related_identifier_row_html(index, values: dict | None, *, spare: bool = False) -> str:
-    """D-L (SPEC §9.6): one related_identifiers row. The `identifies` level <select> is FIRST; the DataCite
+    """D-L: one related_identifiers row. The `identifies` level <select> is FIRST; the DataCite
     relation is HIDDEN-OR-DERIVED - the relation control renders ONLY for a legacy row (an explicit relation
     but no identifies, backward compatible), because on an identifies row the relation derives server-side
     (editor_form._assemble_list) and is not curator-facing. The acquisition fields sit behind a COLLAPSED
@@ -5931,7 +5931,7 @@ def _related_identifier_row_html(index, values: dict | None, *, spare: bool = Fa
 
 
 def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """IDCONS D1 group (b) + D-L (SPEC §9) — THIS DATASET ELSEWHERE: the single typed related_identifiers
+    """IDCONS D1 group (b) + D-L - THIS DATASET ELSEWHERE: the single typed related_identifiers
     list, the ONLY place a dataset-level DOI/PID is edited. Each row leads with the `identifies` level
     <select>; the relation derives from it and is hidden (a legacy relation-only row still edits its
     relation). Acquisition fields sit behind a collapsed per-row disclosure. Field names are identical to
@@ -5971,7 +5971,7 @@ def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: di
         '<p class="sub">Every DOI or PID this survey already has at another archive goes here — one row '
         'each. Start by picking WHAT the identifier points at; the DataCite relation is set for you. This '
         'is the ONLY place a dataset-level DOI/PID is recorded; there is no separate "dataset DOI" box.</p>'
-        # D-L (SPEC §9.6) — the WHERE-DOES-IT-GO cheat line, now in data-LEVEL language (the curator thinks
+        # D-L - the WHERE-DOES-IT-GO cheat line, now in data-LEVEL language (the curator thinks
         # in NCI Table 1 levels, not DataCite relations).
         '<p class="sub" style="border-left:3px solid #2E4254;padding-left:.6rem">'
         '<b>Where does it go?</b><br>'
@@ -6008,7 +6008,7 @@ def _time_series_levels_group(fields: dict, submitted: dict | None, err_map: dic
 
 
 def _identifiers_and_pids_inner(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """IDCONS D1 (SPEC §2) — the ONE consolidated "Identifiers & PIDs" editor content, three groups:
+    """IDCONS D1 - the ONE consolidated "Identifiers & PIDs" editor content, three groups:
     (a) THIS SURVEY (read-only ausmt id + project RAiD), (b) THIS DATASET ELSEWHERE (the typed
     related_identifiers list — the sole dataset-PID editor), (c) INSTRUMENT (the survey/platform PID).
     SIDEBARMERGE M1 folds a fourth group (d) TIME SERIES LEVELS AVAILABLE here from the retired
@@ -6071,11 +6071,11 @@ def _identifiers_and_pids_panel(slug: str, fields: dict, submitted: dict | None,
 def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token: str,
                      error: str = "", field_errors=None, submitted: dict | None = None,
                      nav: "NavContext | None" = None, review_flags: dict | None = None) -> str:
-    """The seed form (C31 §1.2): server-rendered, escaped, prefilled from the runner's editable
+    """The seed form: server-rendered, escaped, prefilled from the runner's editable
     subset. Top-level scalars are inputs/textarea; the structured sections are per-section WIDGETS
     (labelled inputs, an access-level <select>, levels checkboxes, repeatable rows) with a collapsed
     advanced-JSON <details> override each; `care` is advanced-JSON only (nested shape). A version-bump
-    radio group (patch default) + a required release-note box carry the C31 §0.3 discipline.
+    radio group (patch default) + a required release-note box carry the C31 discipline.
     `field_errors` annotates the section(s) that failed validation; `submitted` re-prefills the
     widgets with the curator's typed values after such a failure so nothing is discarded."""
     from . import editor_form
@@ -6113,7 +6113,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     # time_series is folded into the Identifiers & PIDs panel (group d) and related_identifiers into
     # group b, so both are skipped as standalone panels. Field names are unchanged -> assembly is byte-
     # identical; the mirror is presentation-only.
-    # CONTRIBUTOR-CREDIT-SPEC: the retired Lead/Principal investigator and
+    # the contributor-credit model: the retired Lead/Principal investigator and
     # the separate Creators/Contributors panels are REPLACED by ONE unified "People & credit" panel
     # (keyword "people") that decomposes to the two served lists on save.
     # The three curated homes plus the designation mapping join the order, next to the
@@ -6334,7 +6334,7 @@ def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str
         # submits. It round-trips the REST of the access section verbatim (o_access snapshot + the four
         # modelled scalars) so the ONLY diff is coordinate_overrides; the JS fills s_access_coordinate_
         # overrides (the assembled full map) + the release note, then submits to the NORMAL preview route
-        # (YAML diff + validator gate + confirm). bump defaults to patch (the C31 §0.3 content-edit default).
+        # (YAML diff + validator gate + confirm). bump defaults to patch (content-edit default).
         + _coord_policy_form(slug, access, csrf_token)
         # EXTERNAL same-origin script (strictPages CSP blocks inline JS). Degrades gracefully.
         + '<script src="/gateway/curator/stations.js" defer></script>'
@@ -6491,7 +6491,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
                                    intro_html=_LIST_SECTION_INTROS.get(section, ""))
 
     core_inner = (scalar_panel_inner + _map_inner("organisation") + _list_inner("instruments"))
-    # CONTRIBUTOR-CREDIT-SPEC: ONE "People & credit" panel REPLACES the
+    # the contributor-credit model: ONE "People & credit" panel REPLACES the
     # retired Lead/Principal investigator + separate Creators/Contributors panels. It merges the two
     # served lists into unified rows and decomposes them back on save (build_section_patch owns the
     # creators[]/contributors[] keys via assemble_people).
@@ -6529,7 +6529,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
 
     # HUB-SINGLE-SAVE: ONE commit tray for the WHOLE form (bump + required note + Save), pinned to the
     # bottom of the field column so it is reachable from any scroll position. One logical edit — however
-    # many sections it spans — is one bump, one release note, one diff, one confirm (the C31 §0.3
+    # many sections it spans - is one bump, one release note, one diff, one confirm (the C31
     # discipline is unchanged; it does not fire once per section).
     patch_v, minor_v, major_v = (_suggest_bump(cur, k) for k in ("patch", "minor", "major"))
     tray = (
@@ -6679,8 +6679,8 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
 def render_edit_preview(*, slug: str, version: str, diff: str, validate_report: dict | None,
                         has_fail: bool, new_sha256: str, note: str, patch_json: str,
                         bump: str, csrf_token: str, nav: "NavContext | None" = None) -> str:
-    """The preview (C31 §1.4): the unified diff (escaped, no truncation), the validator verdict, and
-    — only when the validator did NOT FAIL — a confirm form carrying the §0.6 content hash + the
+    """The preview: the unified diff (escaped, no truncation), the validator verdict, and
+    - only when the validator did NOT FAIL - a confirm form carrying the content hash + the
     patch/bump/note needed to reproduce the exact bytes at commit. A FAIL shows the report and NO
     confirm button (and the server 409s regardless — the button absence is UX)."""
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
@@ -7441,7 +7441,7 @@ def render_removal_preview(*, slug: str, version: str, removed: list, station_co
     """The removal preview (deliverable 2): exactly which files will be deleted, station count before
     → after, the survey.yaml diff (version + release_notes), and the validator's verdict on the package
     WITHOUT the removed files. Only when the validator did NOT FAIL is a confirm form shown — carrying
-    the §0.6 content hash + the filenames/bump/note to reproduce the exact bytes at commit. The confirm
+    the content hash + the filenames/bump/note to reproduce the exact bytes at commit. The confirm
     form has a data-confirm guard (rides CURATOR_UI_JS; no inline JS)."""
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
     files_items = "".join(f"<li>{_esc(name)}</li>" for name in removed)
@@ -7942,7 +7942,7 @@ def render_detail(*, submission_id: str, state: str, updated_utc: str,
     (the source-literal render-pin path); the two-column split still applies and collapses on narrow."""
     preview = ""
     if has_preview:
-        # NULL-ORIGIN SANDBOX (design §7): sandbox="allow-scripts" WITHOUT allow-same-origin — the
+        # NULL-ORIGIN SANDBOX: sandbox="allow-scripts" WITHOUT allow-same-origin - the
         # portal JS renders the map/drawer, but the framed document has an OPAQUE origin and cannot
         # read the curator cookie/session, the parent DOM, or make credentialed same-origin requests.
         # A portal-XSS in this UN-curated submitter data therefore cannot steal the curator session or

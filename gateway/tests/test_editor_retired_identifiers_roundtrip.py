@@ -1,9 +1,9 @@
-"""IDCONS D2 (identifier-consolidation, SPEC §3) — the retired flat identifier keys must SURVIVE an edit
+"""IDCONS D2 (identifier-consolidation) - the retired flat identifier keys must SURVIVE an edit
 to an UNRELATED section, byte-preserved on disk.
 
 dataset_doi, time_series.collection_pid, and instruments[].pid are RETIRED from the editor UI (their
 input widgets are gone from editor_form.MAP_SECTIONS / LIST_SECTIONS) but the schema keys stay READABLE —
-the engine keeps its flat-key fallback reads until the corpus migration lands (SPEC §3/§6). So a survey
+the engine keeps its flat-key fallback reads until the corpus migration lands. So a survey
 that still carries an un-migrated dataset_doi (or collection_pid, or per-row instrument pid) must not have
 it silently dropped the next time a curator saves an unrelated change. The fix is the unmodelled-key
 carry-forward in editor_form._assemble_map / _assemble_list: a key the widget does not model is re-

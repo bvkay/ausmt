@@ -1,11 +1,11 @@
-"""Gateway config — env only, no config files (design §7).
+"""Gateway config - env only, no config files.
 
 The submit key is a SECRET: it is compared with hmac.compare_digest and is never logged.
 `Config.redacted_items()` is the ONLY sanctioned way to print config at startup — it drops the
 key entirely rather than masking it, so a formatting slip can never leak even a prefix.
 
-fail_closed_startup() is called before the app binds a port: an unset or short key aborts the
-process (design §3 — the server refuses to start). This is a startup guard, not a request-path
+fail_closed_startup is called before the app binds a port: an unset or short key aborts the
+process (- the server refuses to start). This is a startup guard, not a request-path
 check, so the failure is loud and early rather than a 500 on first upload.
 """
 from __future__ import annotations
@@ -14,11 +14,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-# Minimum submit-key length (design §3). Shorter keys are refused at startup, not accepted-then-weak.
+# Minimum submit-key length. Shorter keys are refused at startup, not accepted-then-weak.
 _MIN_KEY_LEN = 16
 
-# Default max upload size, MB (design §7). The SINGLE SOURCE for this default (design
-# §6): the runner imports it for its extraction byte cap rather than carrying its own 250 literal, so
+# Default max upload size, MB. The SINGLE SOURCE for this default (design
+#): the runner imports it for its extraction byte cap rather than carrying its own 250 literal, so
 # the two can never silently drift (they must agree — the runner's cap derives from the gateway's
 # upload-time 4x-total rule). Overridable per-deployment via AUSMT_MAX_UPLOAD_MB.
 DEFAULT_MAX_UPLOAD_MB = 250
@@ -34,9 +34,9 @@ class Config:
     job_timeout_s: int
     clamd_host: str
     clamd_port: int
-    # Curator config (design §2/§6). curator_keys is the RAW `name:key,name:key` string; it is
+    # Curator config. curator_keys is the RAW `name:key,name:key` string; it is
     # parsed (and its fail-closed check applied) in curator_auth, not here — config stays a dumb
-    # env carrier. It is a SECRET and is dropped from redacted_items() below, never logged.
+    # env carrier. It is a SECRET and is dropped from redacted_items below, never logged.
     curator_keys: str = ""
     surveys_live_dir: Path | None = None
     session_ttl_s: int = 12 * 3600
@@ -87,7 +87,7 @@ class Config:
         relay or a localhost submission port is legitimate)."""
         return bool(self.smtp_host.strip() and self.mail_from.strip())
 
-    # Directory layout under data_dir (design §1 host tree). These are the gateway's view; the
+    # Directory layout under data_dir (host tree). These are the gateway's view; the
     # runner sees incoming ro / quarantine rw / jobs rw under its own mount at the same relative
     # names, so the runner recomputes them from its own AUSMT_GW_DATA and never trusts a path
     # handed to it in a job file beyond confirming containment.
@@ -113,7 +113,7 @@ class Config:
 
     def redacted_items(self) -> list[tuple[str, str]]:
         """Config for the startup log — submit_key AND curator_keys intentionally DROPPED (design
-        §6: never masked, dropped, so a formatting slip cannot leak even a prefix). The curator-count
+: never masked, dropped, so a formatting slip cannot leak even a prefix). The curator-count
         is logged instead of the keys so the operator can confirm curators are configured without the
         secrets appearing anywhere in the log stream."""
         curators_configured = len([p for p in self.curator_keys.split(",") if p.strip()])
@@ -142,7 +142,7 @@ class Config:
 
 def load_config(environ: dict[str, str] | None = None) -> Config:
     """Build Config from the environment. Does NOT enforce the key guard — call
-    fail_closed_startup() for that so tests can construct a Config with a deliberately weak key to
+    fail_closed_startup for that so tests can construct a Config with a deliberately weak key to
     exercise the guard itself."""
     env = os.environ if environ is None else environ
 
@@ -197,7 +197,7 @@ def operator_env_vars() -> tuple[str, ...]:
     seen: dict[str, None] = {}
 
     class _Recorder(dict):
-        # Every env read in load_config goes through .get(); record the AUSMT_* names, return the
+        # Every env read in load_config goes through .get; record the AUSMT_* names, return the
         # caller's default so load_config builds a valid Config off an empty environment.
         def get(self, key, default=None):
             if isinstance(key, str) and key.startswith("AUSMT_"):
@@ -236,7 +236,7 @@ _RANGES: tuple[tuple[str, str, int, int], ...] = (
 
 
 def fail_closed_startup(cfg: Config) -> None:
-    """Refuse to start on a missing/short submit key (design §3) or an out-of-range numeric knob
+    """Refuse to start on a missing/short submit key or an out-of-range numeric knob
     (_RANGES). Raises SystemExit, so the port is never bound and there is no window where the gateway
     accepts uploads with a weak key or serves a wall of 413/429 while its health surfaces read green.
     The key is checked FIRST so a deploy that is both key-less and mis-tuned names the secret."""

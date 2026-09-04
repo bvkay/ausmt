@@ -1,29 +1,29 @@
-"""Zip central-directory safety checks (design §4.3). This is the DEEPEST the gateway ever looks
+"""Zip central-directory safety checks. This is the DEEPEST the gateway ever looks
 into submitted bytes: names, sizes, and external attributes from the central directory only — never
 member contents (house rule: the gateway never parses EDI/YAML). The same rules are re-applied by
-the runner during extraction (design §5, belt-and-braces), so this module is imported by both the
+the runner during extraction (belt-and-braces), so this module is imported by both the
 gateway and the runner and must stay content-blind and dependency-free (stdlib zipfile only).
 
 Every guard returns a distinct reason string so a rejected upload tells the submitter exactly which
-rule fired and the test contract can assert on the specific reason (design §8).
+rule fired and the test contract can assert on the specific reason.
 """
 from __future__ import annotations
 
 import zipfile
 from dataclasses import dataclass
 
-# Design §4.3 numeric limits. Kept as named constants because the test contract asserts the exact
+# Design numeric limits. Kept as named constants because the test contract asserts the exact
 # boundary behaviour (a 2001-member zip rejects, a ratio-101 member rejects).
 MAX_MEMBERS = 2000
 MAX_TOTAL_UNCOMPRESSED_FACTOR = 4      # declared uncompressed total <= 4 x max-upload
 RATIO_LIMIT = 100                      # per-member compression ratio cap (zip-bomb)
 RATIO_CHECK_MIN_COMPRESSED = 1024 * 1024  # only ratio-check members > 1 MiB compressed
 
-# Nested-archive extensions rejected outright (design §4.3): a submission is ONE survey package,
+# Nested-archive extensions rejected outright: a submission is ONE survey package,
 # never an archive-of-archives. Checked on the lowercased basename suffix.
 _NESTED_ARCHIVE_SUFFIXES = (".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar")
 
-# Allowed member-name character class (design §4.3). Space is allowed (survey packages have
+# Allowed member-name character class. Space is allowed (survey packages have
 # human-named files); backslash is NOT (a Windows-style separator smuggling a traversal). The check
 # is on the raw zip name, which always uses forward slashes per the zip spec.
 _ALLOWED_NAME_CHARS = set(
@@ -32,7 +32,7 @@ _ALLOWED_NAME_CHARS = set(
 
 # Extensions that make a member count as a transfer function for the "package is not empty" shape
 # Rule. EDI and EMTF XML are both first-class submission inputs. Checked on
-# the lowercased basename suffix; see inspect() for why this is a shape heuristic, not an allowlist.
+# the lowercased basename suffix; see inspect for why this is a shape heuristic, not an allowlist.
 _TF_SUFFIXES = (".edi", ".xml")
 
 # External-attr high bits carry the unix mode in the top 16 bits; S_IFLNK (0o120000) marks a
@@ -59,7 +59,7 @@ def _external_unix_mode(info: zipfile.ZipInfo) -> int:
 
 
 def check_member(info: zipfile.ZipInfo) -> None:
-    """Raise ZipRejection if a single member violates any §4.3 name/type/ratio rule. Directory
+    """Raise ZipRejection if a single member violates any name/type/ratio rule. Directory
     entries (trailing slash) are allowed structurally but still name-checked."""
     name = info.filename
 
@@ -94,7 +94,7 @@ def inspect(zip_path, max_upload_bytes: int) -> list[str]:
     (used by the caller for the second clamd sweep bound). Raises ZipRejection on the first rule
     that fires. Never extracts — reads the central directory only.
 
-    Package-shape rules (design §4.3): exactly one top-level directory, at most one survey.yaml at
+    Package-shape rules: exactly one top-level directory, at most one survey.yaml at
     depth <= 2, at least one transfer-function member.
 
     "Transfer-function member" is a NAME-SHAPE heuristic, not an allowlist: this module is

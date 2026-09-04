@@ -18,14 +18,14 @@ function hydrFailed(k){return HYDR[k]==="failed";}
 function hydrUsable(k){return HYDR[k]==="ready";}
 // The two positional rows consumers deref by station index. Both tolerate a NOT-YET-ASSIGNED global
 // (phase 1 renders before tf/sci land), so a pre-hydration read yields the same empty row an absent product
-// yields; the DISPLAY difference is carried by hydrating()/hydrFailed(), never by the data itself.
+// yields; the DISPLAY difference is carried by hydrating()/hydrFailed, never by the data itself.
 function sciRow(i){return (SCI&&SCI[i])||[];}
 function tfRow(i){return (TFD&&TFD[i])||null;}
 let ST=[],surveys=[],visible=[],selected=new Set(),curView="map",qMin=0;
 // The period-window predicate is HEADLESS (the slider control is retired; passesCore reads
 // these bounds, harnesses set them). Full-range defaults = the filter is off.
 let periodLo=0.001,periodHi=100000;
-let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState(); backs the #/survey/<slug> route
+let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState; backs the #/survey/<slug> route
 // The set of survey SLUGS that belong to the `auslamp` collection, built once at boot (buildAuslampSet,
 // main.js) from COLL[auslamp].surveys (which holds survey LABELS) resolved through SMETA[label].slug. See
 // docs: portal internals, state.js.
@@ -68,7 +68,7 @@ const NCI_CITE={au:"AuScope; NCI Australia",yr:"",ti:"NCI-AuScope Magnetotelluri
 // three are JS TWINS of the engine's reference implementations (engine/extract/_pages.py: _fmt_period,
 // _range, _cc_human/_fmt_licence). See docs: portal internals, state.js.
 
-// Round `v` to `d` decimals the way Python's format() does. See docs: portal internals, state.js.
+// Round `v` to `d` decimals the way Python's format does. See docs: portal internals, state.js.
 function _fixedHalfEven(v,d){
   const wide=Math.abs(v).toFixed(Math.min(100,d+20));
   if(new RegExp("\\.\\d{"+d+"}50*$").test(wide)){

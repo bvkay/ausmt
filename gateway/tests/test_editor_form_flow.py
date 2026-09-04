@@ -260,7 +260,7 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             assert 'name="s_access_coordinates"' in body  # Coordinate-access <select>
             assert 'name="s_access_embargo_until"' in body and 'type="date"' in body
             assert 'name="c_time_series_levels_available_raw_packed"' in body  # checkbox
-            # CONTRIBUTOR-CREDIT-SPEC (§6): the unified People & credit panel replaces the four
+            # the contributor-credit model: the unified People & credit panel replaces the four
             # investigator/creator/contributor panels. Its widgets (a spare row, the name_type select,
             # the Cited-author checkbox, a role checkbox) are present.
             assert 'data-editor-rows="people"' in body
@@ -328,7 +328,7 @@ def test_empty_optional_sections_render_empty_widgets_with_placeholders(tmp_path
 
 
 def test_identifiers_and_pids_consolidated_page(tmp_path):
-    """IDCONS D1 (SPEC §2): the identifier surface renders as ONE consolidated 'Identifiers & PIDs' panel
+    """The identifier surface renders as ONE consolidated 'Identifiers & PIDs' panel
     with three groups (This survey / This dataset elsewhere / Instrument), the typed related_identifiers
     list folded in (group b, the sole dataset-PID editor), a read-only ausmt id, and the per-identifier
     resolution chip. No standalone 'Related identifiers' panel renders (it is folded in). FAILS IF the
@@ -358,7 +358,7 @@ def test_identifiers_and_pids_consolidated_page(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# D-L (identifiers by data level, SPEC §9): the editor identifies-first surface + Source datasets retired
+# D-L (identifiers by data level): the editor identifies-first surface + Source datasets retired
 # --------------------------------------------------------------------------------------------------
 # A survey carrying BOTH an identifies-tagged related_identifiers row and a LEGACY relation-only row (no
 # identifies), plus a sources[] list the engine still reads (must be byte-preserved on disk).
@@ -391,7 +391,7 @@ def _dl_client(tmp_path):
 
 
 def test_identifies_first_relation_hidden_and_sources_retired(tmp_path):
-    """D-L (SPEC §9): the related_identifiers row leads with the 'What does this identifier point at?'
+    """D-L: the related_identifiers row leads with the 'What does this identifier point at?'
     level <select> (identifies FIRST); on an identifies row the DataCite relation control is HIDDEN (it
     derives), while a LEGACY relation-only row still renders its relation <select>. The acquisition fields
     sit behind a collapsed disclosure. The 'Source datasets' section/sidebar entry is GONE. FAILS IF the

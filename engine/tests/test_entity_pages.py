@@ -446,7 +446,7 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
 
 
 def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
-    """The page hierarchy (design brief 11 to 14 and 41), asserted as ORDER rather than as prose.
+    """The page hierarchy, asserted as ORDER rather than as prose.
 
     The page must not read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
     stations: a citation box and an unlabelled abstract held the top of the document and the map was

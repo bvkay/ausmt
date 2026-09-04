@@ -1,4 +1,4 @@
-"""Test seams (design §8): a fake clamd speaking INSTREAM over a real asyncio TCP server, an
+"""Test seams: a fake clamd speaking INSTREAM over a real asyncio TCP server, an
 in-process app via httpx ASGITransport, and zip-building helpers.
 
 No docker, no real clamd, and NO pytest-asyncio (not among the four permitted deps). Async work runs
@@ -67,8 +67,8 @@ def require_validator_dir() -> Path:
 # REJECTED_AV" test needs no live signatures.
 EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
-SUBMIT_KEY = "test-submit-key-0123456789"  # >= 16 chars so fail_closed_startup() accepts it
-GOOD_EMAIL = "tester@example.org"          # the PII grep fixture (design §8)
+SUBMIT_KEY = "test-submit-key-0123456789"  # >= 16 chars so fail_closed_startup accepts it
+GOOD_EMAIL = "tester@example.org"          # the PII grep fixture
 
 
 class FakeClamd:
@@ -247,13 +247,13 @@ def corrupt_deflate_zip() -> bytes:
 # App harness
 # --------------------------------------------------------------------------------------------------
 # Curator fixtures. A configured curator key (>= 16 chars per the fail-closed floor) and a fake
-# git seam so publish tests need no real git (design §8 — same injected-callable pattern as the clamd
+# git seam so publish tests need no real git (- same injected-callable pattern as the clamd
 # scanner seam). No rebuild seam: v2 publish is commit-and-push ONLY (the operator rebuilds by hand).
 CURATOR_NAME = "curator1"
 CURATOR_KEY = "curator-secret-key-0123456789"     # >= 16 chars
 CURATOR_KEYS = f"{CURATOR_NAME}:{CURATOR_KEY}"
 
-# The fixed commit-author identity a publish must use (design §5.3). Tests assert one of these
+# The fixed commit-author identity a publish must use. Tests assert one of these
 # markers appears in the git commit invocation (the -c user.name/user.email config flags).
 COMMIT_AUTHOR_MARKERS = ("AusMT Gateway", "gateway@ausmt.local")
 
@@ -279,10 +279,10 @@ def make_config(tmp_path: Path, **overrides) -> Config:
 
 
 class FakeGit:
-    """A small in-memory model of the surveys-live git repo (design §5 v2, commit-and-push ONLY -
+    """A small in-memory model of the surveys-live git repo (v2, commit-and-push ONLY -
     NO rebuild). Records every invocation AND tracks enough state (current branch, HEAD ref, whether
     a rollback happened) to prove the fail-closed rollback restores the pre-state. No real repo, no
-    real git - the whole point of the injected seam (design §8).
+    real git - the whole point of the injected seam.
 
     STRICT: every git verb this fake serves is enumerated in __call__; an unmodeled verb
     RAISES AssertionError naming the argv instead of returning a silent rc=0. Extending the fake to a
@@ -428,7 +428,7 @@ async def app_client(tmp_path: Path, *, scanner=None, run_poll: bool = False,
     app = create_app(cfg=cfg, scanner=scanner, git_runner=git_runner, edit_runner=edit_runner,
                      mailer=mailer)
     gw = app.state.gw
-    # https base_url so the client's cookie jar retains the Secure session cookie (design §2 sets
+    # https base_url so the client's cookie jar retains the Secure session cookie (sets
     # Secure; over a plain-http base httpx drops it). The ASGI app is scheme-agnostic; in production
     # it is always behind Caddy/TLS, so Secure is correct and stays.
     transport = httpx.ASGITransport(app=app)
@@ -561,7 +561,7 @@ def run(coro):
 # Metadata-editor seams + fixtures
 # --------------------------------------------------------------------------------------------------
 # A well-formed block-style survey.yaml with comments, a null field, a block-scalar abstract, and an
-# UNKNOWN custom key the editor form does not model. The round-trip-fidelity contract (C31 §0.2/§3.1)
+# UNKNOWN custom key the editor form does not model. The round-trip-fidelity contract
 # is proved against this: an edit must touch nothing but the edited field + version + release_notes.
 EDIT_EXEMPLAR = """\
 schema_version: "0.2"

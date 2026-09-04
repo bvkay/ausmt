@@ -1,4 +1,4 @@
-"""Capability-token status page (design §3/§6/§8). The status URL from an upload works; the same
+"""Capability-token status page. The status URL from an upload works; the same
 token after the row is wiped -> 404; a wrong token -> 404 with a BYTE-IDENTICAL body; the rendered
 HTML never contains submitter PII.
 
@@ -24,7 +24,7 @@ def test_status_url_from_upload_works(tmp_path):
 
 
 def test_wrong_token_404_byte_identical(tmp_path):
-    # An unknown token and a known-but-wrong token return the SAME 404 body (design §3): no oracle
+    # An unknown token and a known-but-wrong token return the SAME 404 body: no oracle
     # that distinguishes "no such token" from "token exists but is wrong".
     # Proven failing: an early handler returned a JSON {"detail": ...} for unknown tokens
     # and an HTML 404 elsewhere -> bodies differed.
@@ -39,7 +39,7 @@ def test_wrong_token_404_byte_identical(tmp_path):
 
 
 def test_wiped_row_token_404(tmp_path):
-    # A valid token whose row is deleted -> 404 (the token is meaningless without its row; design §3).
+    # A valid token whose row is deleted -> 404 (the token is meaningless without its row).
     # Proven failing: a cached-by-token lookup returned the stale page after the delete.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, gw, _cfg):
@@ -56,7 +56,7 @@ def test_wiped_row_token_404(tmp_path):
 
 
 def test_status_never_leaks_pii(tmp_path):
-    # The rendered status HTML must never contain the submitter email/name (design §6): a leaked
+    # The rendered status HTML must never contain the submitter email/name: a leaked
     # status URL must not leak PII.
     # Proven failing: an early template echoed submitter_name in a header -> the email/
     # name appeared in page.text.

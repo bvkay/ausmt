@@ -3,7 +3,7 @@
 One `<station>.h5` per served station under `out/h5/<slug>/`, beside the `edi/` and `xml/` families
 the manifest already keys, written by the SAME writer the tier-2 survey bundle uses. That sharing is
 the point of the design rather than an implementation detail: the embargo posture, the coordinate
-posture and the SPEC section 6 round-trip gate are INHERITED, so there is no second place for any of
+posture and the section 6 round-trip gate are INHERITED, so there is no second place for any of
 the three to be got wrong. These pins are therefore mostly about what the shared writer is handed and
 what the caller does with what it returns.
 

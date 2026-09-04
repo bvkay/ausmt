@@ -1,4 +1,4 @@
-"""Preview sandbox (design §7/§8): the biggest new attack surface.
+"""Preview sandbox: the biggest new attack surface.
 
 Guards under test, each with a stated failure criterion + proven-failing evidence:
 - iframe isolation: the detail page frames the preview with sandbox="allow-scripts" and NOT
@@ -6,7 +6,7 @@ Guards under test, each with a stated failure criterion + proven-failing evidenc
   unsandboxed top-level navigation to the preview.
 - path containment: `..`/absolute under /preview/{id}/ => 404 (fails if a traversal served a file
   outside preview-data).
-- id-authorized (revised §7): a VALID submission id serves the embargo-safe preview WITHOUT a
+- id-authorized (revised): a VALID submission id serves the embargo-safe preview WITHOUT a
   session (the null-origin iframe can't send the cookie); a nonexistent id => 404.
 - strict CSP + nosniff on every served asset (fails if the CSP/nosniff header was absent).
 - only allow-listed content types are served.
@@ -19,7 +19,7 @@ from gateway.tests.conftest import app_client, curator_login, run, seed_validate
 
 
 def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
-    # review #8 / design §7: the iframe must be sandbox="allow-scripts" WITHOUT allow-same-origin
+    # review #8 /: the iframe must be sandbox="allow-scripts" WITHOUT allow-same-origin
     # (opaque origin — the framed submitter JS cannot read the curator cookie/DOM or make credentialed
     # same-origin requests). Failure criterion: fails if allow-same-origin is present, or allow-scripts
     # Is absent. proven failing: the first pass had the tokens INVERTED
@@ -39,7 +39,7 @@ def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
 
 
 def test_no_unsandboxed_navigation_to_preview(tmp_path):
-    # review #8 / design §7: there must be NO anchor/link that top-level-navigates to the preview
+    # review #8 /: there must be NO anchor/link that top-level-navigates to the preview
     # (that would run submitter JS in the curator origin, escaping the frame). Failure criterion:
     # Fails if the detail page contains an <a href> pointing at /preview/. proven failing:
     # the first pass had an "open preview in a new tab" link (a target=_blank same-origin nav).
@@ -56,7 +56,7 @@ def test_no_unsandboxed_navigation_to_preview(tmp_path):
 
 
 def test_preview_authorized_by_id_not_session(tmp_path):
-    # Revised design §7: the preview SUBTREE is authorized by the unguessable submission id in the
+    # Revised: the preview SUBTREE is authorized by the unguessable submission id in the
     # path, NOT the curator session — because the null-origin sandboxed iframe that embeds it cannot
     # send the cookie (a session gate would 401 the preview's own subresource fetches, so it would
     # never render). Failure criterion: fails if a VALID id does NOT serve the preview without a
@@ -103,7 +103,7 @@ def test_path_traversal_is_404(tmp_path):
 
 
 def test_invalid_id_is_404(tmp_path):
-    # An id outside the Crockford charset never reaches a path (design §3/§7). Failure criterion:
+    # An id outside the Crockford charset never reaches a path. Failure criterion:
     # fails if a non-charset id (with separators) reaches a filesystem path.
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):
@@ -117,7 +117,7 @@ def test_invalid_id_is_404(tmp_path):
 
 def test_unlisted_content_type_refused(tmp_path):
     # A file with an extension outside the allow-list is 404 rather than served with a guessed type
-    # (design §7). Failure criterion: fails if a .exe/.bin under preview-data is served.
+    #. Failure criterion: fails if a .exe/.bin under preview-data is served.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):
             sid = seed_validated(gw, cfg)

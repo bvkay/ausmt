@@ -517,6 +517,16 @@ RULES = (
          "decision-owner language"),
     # To ratify is to bless a decision, which is what "approved" and "ruling" already name.
     Rule(re.compile(r"\bratif(?:y|ies|ied|ication)\b", re.I), "ruling language"),
+    # A comment may point only at something a reader of this repository can open: a file in the
+    # tree, or a docs/ page and its section. A clause number, a SPEC, a design brief and an ADR all
+    # name a document that is not here, so the reader is left with an unresolvable reference where
+    # the constraint should have been.
+    Rule(re.compile(r"\u00a7|\bSPEC\b|\bdesign brief\s*\d|\bADR-\d"),
+         "design-document citation",
+         # A licence's own clause number is the obligation, not a design document, and the legal
+         # code it names is public. The window must carry the licence for the exemption to hold.
+         ((re.compile(r"^\u00a7$"),
+           re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)),)),
     Rule(re.compile(r"YOUR-"), "placeholder"),
     Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
     Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),

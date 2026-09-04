@@ -1,4 +1,4 @@
-"""Schema-version stamp + migration runner + forward-compat guard (audit Angle 1 minor / Angle 4 §3).
+"""Schema-version stamp + migration runner + forward-compat guard (audit Angle 1 minor / Angle 4).
 
 A schema created with no version stamp leaves the first future schema change with no migration path.
 db.Database stamps PRAGMA user_version and refuses a DB written by a newer build.

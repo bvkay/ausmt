@@ -9,7 +9,7 @@ tests an INDEPENDENT observable, never cache-metadata self-consistency. The load
     payload, verified on read - a bit-flipped entry is counted (`corrupt`), deleted and recomputed,
     so the poison can never ship. verify.py guards POST-BUILD tampering of served files only: the
     manifest sha is computed FROM the served bytes, so a poison that flowed through the build would
-    verify self-consistently - the outer gate cannot see it (the review proved this; §4.2 as amended).
+    verify self-consistently - the outer gate cannot see it (the review proved this; as amended).
   * raw-mode exclusion: --raw builds never touch the cache (seed-meta feeds served
     citations but is not a key component).
   * salt invalidations (engine commit / library version / survey.yaml edit) each force misses.
@@ -203,7 +203,7 @@ def test_raw_mode_build_never_touches_the_cache(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# ★ 1. Stale-cache refusal — THE contract test (design §4.1)
+# ★ 1. Stale-cache refusal - THE contract test
 # --------------------------------------------------------------------------------------------------
 
 def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
@@ -251,7 +251,7 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     assert _build(surveys, out2, cache) == 0
     counters = _cache_counters(out2)
 
-    # Exact counter arithmetic (deterministic, §4.6): the edited station misses parse + xml (2) and
+    # Exact counter arithmetic (deterministic): the edited station misses parse + xml (2) and
     # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each). On failure, dump
     # Both builds' full counters + the cache listing (A4 - the C18c failures left nothing
     # to diagnose from; salt_fp/degenerate/write_errors in the dump now name the class directly).
@@ -315,7 +315,7 @@ def test_xml_cache_key_binds_disambiguated_station_id(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 2. verify.py catches POST-BUILD tampering of served files (the outer gate — §4.2 as amended by A1b)
+# 2. verify.py catches POST-BUILD tampering of served files (the outer gate - as amended by A1b)
 # --------------------------------------------------------------------------------------------------
 
 def test_verify_catches_post_build_tamper_of_served_files(tmp_path, clean_salt):
@@ -781,7 +781,7 @@ def test_unreadable_entry_counts_read_error_absent_stays_plain_miss(tmp_path):
     """FAILS IF: a PRESENT-but-unreadable entry (lock/permissions — simulated with a directory at
     the entry path: an OSError that is NOT FileNotFoundError, on Windows and POSIX alike) is not
     distinguished from a cold miss via read_errors — or an ABSENT entry starts counting read_errors,
-    which would smear the deterministic §4.6 miss arithmetic on every clean run."""
+    which would smear the deterministic miss arithmetic on every clean run."""
     bc = _bc(root=tmp_path / "cache")
     k = bc.key(edi_sha="s1", survey_digest="y", kind="xml")
     assert bc.get_bytes(k, "xml") is None          # absent -> plain miss
@@ -845,7 +845,7 @@ def test_per_survey_instrumentation_sums_to_corpus_total(tmp_path, clean_salt, c
 
 
 # --------------------------------------------------------------------------------------------------
-# 3. Salt invalidations (design §4.3)
+# 3. Salt invalidations
 # --------------------------------------------------------------------------------------------------
 
 def test_salt_engine_commit_change_zero_hits(tmp_path, clean_salt, monkeypatch):
@@ -868,7 +868,7 @@ def test_salt_engine_commit_change_zero_hits(tmp_path, clean_salt, monkeypatch):
 
 def test_salt_library_version_change_zero_hits(tmp_path, clean_salt, monkeypatch):
     """FAILS IF: a simulated mt_metadata version bump still hits. A library upgrade invalidates every
-    cached XML + round-trip verdict (design §2.3)."""
+    cached XML + round-trip verdict."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     assert _build(surveys, tmp_path / "out1", cache) == 0
@@ -884,7 +884,7 @@ def test_salt_library_version_change_zero_hits(tmp_path, clean_salt, monkeypatch
 def test_salt_survey_yaml_edit_rederives_only_that_survey(tmp_path, clean_salt):
     """FAILS IF: editing one survey's survey.yaml either (a) fails to re-derive that survey, or (b)
     busts OTHER surveys. The v1 salt is the WHOLE survey.yaml, so any edit re-derives just that survey
-    (design §2.5); a sibling survey with an untouched yaml + unchanged EDIs must still hit."""
+; a sibling survey with an untouched yaml + unchanged EDIs must still hit."""
     root = tmp_path / "surveys"
     _make_survey(tmp_path, SAMPLE_EDIS, name="Alpha", slug="alpha", subdir="surveys")
     _make_survey(tmp_path, SAMPLE_EDIS, name="Beta", slug="beta", subdir="surveys")
@@ -906,7 +906,7 @@ def test_salt_survey_yaml_edit_rederives_only_that_survey(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 4. Degenerate-salt refusal (design §4.4) — the real gate, no monkeypatch of the gate
+# 4. Degenerate-salt refusal - the real gate, no monkeypatch of the gate
 # --------------------------------------------------------------------------------------------------
 
 def test_degenerate_salt_unknown_commit_no_reads_or_writes(tmp_path, monkeypatch):
@@ -1013,7 +1013,7 @@ def test_git_commit_memoised_per_process_success_only(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------------
-# 5. Equivalence (CI guard, design §4.5): warm build == the build that populated its cache
+# 5. Equivalence (CI guard): warm build == the build that populated its cache
 # --------------------------------------------------------------------------------------------------
 
 def test_warm_build_byte_identical_to_populating_build(tmp_path, clean_salt):
@@ -1066,12 +1066,12 @@ def test_warm_build_byte_identical_to_populating_build(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 6. Deterministic hit/miss/write counters (design §4.6) — no wall-clock
+# 6. Deterministic hit/miss/write counters - no wall-clock
 # --------------------------------------------------------------------------------------------------
 
 def test_no_change_rebuild_counters_are_deterministic(tmp_path, clean_salt):
     """FAILS IF: a no-change incremental rebuild does not hit EXACTLY the served-blob count with zero
-    misses and zero writes. Asserts the counters, never a timing (design §4.6 forbids wall-clock)."""
+    misses and zero writes. Asserts the counters, never a timing (forbids wall-clock)."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     # cold rw build: all miss, all write.
@@ -1116,13 +1116,13 @@ def test_refresh_mode_ignores_hits_but_repopulates(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 7. Lifecycle survival: prune + atomic swap (design §4.7)
+# 7. Lifecycle survival: prune + atomic swap
 # --------------------------------------------------------------------------------------------------
 
 def test_cache_survives_prune_and_swap_and_still_hits(tmp_path, clean_salt):
     """FAILS IF: the cache does not survive a simulated builds/ prune + `current` atomic swap and still
     hit on the next build. The cache is a sibling of builds/, so a prune of builds/<ts> + a swap of
-    `current` must leave it intact (design §3).
+    `current` must leave it intact.
 
     The swap is modelled with os.replace on a `current` POINTER FILE (the atomic primitive behind the
     Makefile's `mv -T`), not an actual symlink: symlink creation needs elevated privilege on Windows
@@ -1183,7 +1183,7 @@ def test_prune_size_cap_evicts_oldest_first(tmp_path, clean_salt, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------------
-# Unit-level: the key derivation binds every salt field (design §2)
+# Unit-level: the key derivation binds every salt field
 # --------------------------------------------------------------------------------------------------
 
 def _bc(**over):
@@ -1209,7 +1209,7 @@ def test_key_binds_edi_sha_survey_digest_and_kind(tmp_path):
 
 def test_key_binds_engine_commit_libs_and_contract(tmp_path):
     """FAILS IF: changing the engine commit, a library version, or the contract digest does not change
-    the derived key (the coarse salt fields, design §2.2-§2.4)."""
+    the derived key (the coarse salt fields,-)."""
     args = dict(edi_sha="s", survey_digest="y", kind="xml")
     base = _bc(root=tmp_path).key(**args)
     assert base != _bc(root=tmp_path, engine_commit="commitB").key(**args), "key ignores engine commit"

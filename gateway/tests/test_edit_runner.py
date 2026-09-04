@@ -1,10 +1,10 @@
-"""Runner-side edit tests (design §3.1/§3.2 + adversarial-review fixes). These exercise
+"""Runner-side edit tests (+ adversarial-review fixes). These exercise
 gateway.runner.edit DIRECTLY — the same in-suite-reaches-the-runner pattern as test_runner.py.
 ruamel.yaml is a runner (engine-image) dependency; these tests run wherever ruamel is installed
 (the ausmt env locally; the engine lock in CI's full workflow).
 
 Load-bearing tests here:
-  - the §3.1 round-trip fidelity proof (comments + unknown key byte-identical across an edit);
+  - the round-trip fidelity proof (comments + unknown key byte-identical across an edit);
   - review FIX 3, the parser differential (patched "on"/"no"/"12:34:56" must re-read as STRINGS
     under PyYAML safe_load — the reader the validator and build_portal use);
   - review FIX 2, scratch containment (nothing the merge does may touch the surveys tree);
@@ -92,7 +92,7 @@ def _merge(cfg: RunnerConfig, slug: str = "demo-survey-2026", **overrides) -> di
 
 
 # --------------------------------------------------------------------------------------------------
-# §0.2 / §3.1 round-trip fidelity
+# round-trip fidelity
 # --------------------------------------------------------------------------------------------------
 def test_noop_round_trip_is_byte_identical():
     # The floor the whole design rests on: loading and re-emitting an UNEDITED well-formed
@@ -103,7 +103,7 @@ def test_noop_round_trip_is_byte_identical():
 
 
 def test_round_trip_fidelity_edit_touches_only_field_version_notes(tmp_path):
-    # §3.1: edit ONE field (region); the emitted diff touches ONLY region + version + the appended
+    # edit ONE field (region); the emitted diff touches ONLY region + version + the appended
     # release_notes entry. The comment lines and the unknown custom key are byte-identical.
     # Proven-failing (design phase): with ruamel defaults the no-op diff already showed
     # Spurious null->empty and re-wrap changes - the tuned _yaml config is what makes this hold.
@@ -442,7 +442,7 @@ def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
     # Proven failing (pre-fix HEAD 4f4e999..a31fc8e): patched region "on" emitted as bare
     # `region: on` -> PyYAML safe_load read True (bool); name "no" -> False; abstract "12:34:56" ->
     # 45296 (YAML-1.1 sexagesimal int). ruamel's own re-read kept them strings, so the diff, the
-    # §0.6 sha pin, and the confirm re-run all agree and NO guard fires, so the portal
+    # sha pin, and the confirm re-run all agree and NO guard fires, so the portal
     # served a bool/int the curator never wrote. FAILS IF quote_ambiguous stops quoting the
     # YAML-1.1-retypeable tokens.
     import base64
@@ -578,10 +578,10 @@ def test_trailing_newline_slug_refused_at_edit_gate(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.2 semver + no-op gates
+# semver + no-op gates
 # --------------------------------------------------------------------------------------------------
 def test_non_semver_current_version_refused(tmp_path):
-    # The semver-greater gate (C31 §0.3) fires when the CURRENT version is not strict semver: the
+    # The semver-greater gate fires when the CURRENT version is not strict semver: the
     # bump cannot be proven greater, so the merge refuses (fail closed) with a fix-it-via-PR hint.
     # (The explicit version override was removed per review FIX 6, so lower/equal targets are no
     # longer constructible through the interface; the comparator itself is pinned below.)
@@ -600,7 +600,7 @@ def test_missing_bump_refused(tmp_path):
 
 
 def test_noop_edit_refused(tmp_path):
-    # §3.2: submitting the SAME values (no content change) is refused outright.
+    # submitting the SAME values (no content change) is refused outright.
     _write_package(tmp_path / "surveys-live")
     with pytest.raises(edit.EditError) as exc:
         _merge(_cfg(tmp_path), patch={"region": "South Australia"})
@@ -618,7 +618,7 @@ def test_valid_patch_bump_appends_release_note(tmp_path):
 
 
 def test_semver_helpers():
-    # §3.2 comparator semantics: lower/equal/non-semver are all NOT greater (the merge-side gate).
+    # comparator semantics: lower/equal/non-semver are all NOT greater (the merge-side gate).
     assert edit.parse_semver("1.2.3") == (1, 2, 3)
     assert edit.parse_semver("1.2") is None
     assert edit.parse_semver("1.2.x") is None
@@ -790,7 +790,7 @@ def test_merge_runs_the_real_validator(tmp_path):
 
 def test_merge_real_validator_flags_fail(tmp_path):
     # The real validator FAILs an out-of-enum access.level (a required, enumerated field), and the
-    # merge reports has_fail=True — the signal the gateway turns into a confirm 409 (§0.4).
+    # merge reports has_fail=True - the signal the gateway turns into a confirm 409.
     # UNCONDITIONAL - sibling-or-vendored, FAILS if neither present.
     pkg = _write_package(tmp_path / "surveys-live", slug="intg-survey-2026",
                          yaml_text=_VALID_PACKAGE_YAML)

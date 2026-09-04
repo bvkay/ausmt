@@ -40,9 +40,9 @@ function readFix(name) { return JSON.parse(fs.readFileSync(path.join(FIX, name),
 
 // ---- recording Leaflet stub -----------------------------------------------------------------------
 // A blanket chainable stub for everything, with two recorders: circleMarker([lat,lon]) and the map's
-// fitBounds(points). fgroup() returns an INDEPENDENT layer container per call (so cluster.clearLayers()
+// fitBounds(points). fgroup returns an INDEPENDENT layer container per call (so cluster.clearLayers
 // never wipes the drawn selection layer). The map object is chainable-by-default but has real
-// fitBounds/getZoom so buildMarkers records its point set and curZoom() reads a finite number.
+// fitBounds/getZoom so buildMarkers records its point set and curZoom reads a finite number.
 function chain() {
   return new Proxy(function () {}, {
     get: (t, p) => { if (p === "then") return undefined; if (p === Symbol.iterator) return function* () {}; return chain(); },
@@ -103,7 +103,7 @@ code += "\nwindow.__api={" +
   "setup:(c,t,s,sv,coll,cp)=>{CAT=c;TFD=t;SCI=s;SMETA=sv;COLL=coll;MANIFEST=null;COORD_POLICY=cp||{};buildState();buildTree();}," +
   "idxOf:(id)=>ST.findIndex(s=>s.id===id)," +
   "buildMarkersRun:()=>{buildMarkers();return {marker:ST.map(s=>({id:s.id,has:s.marker!==undefined}))};}," +
-  // driveRefresh runs the REAL refresh() (which paints routeVisibleToLayers() into the map layer) and
+  // driveRefresh runs the REAL refresh (which paints routeVisibleToLayers into the map layer) and
   // reports what actually reached it - routed markers, any undefined (an addLayer(undefined) crash), and
   // the `visible` ids (counts must still include the withheld station). ONE count, because there is ONE
   // dot container and nothing collapses: a routed station is a dot.
@@ -142,7 +142,7 @@ ok(badCM.length === 0, "PIN1: no circleMarker built at a null/NaN position (phan
 const badFit = calls.fitBounds.some((pts) => Array.isArray(pts) && pts.some((p) => Array.isArray(p) && (p[0] == null || p[1] == null || !isFinite(p[0]) || !isFinite(p[1]))));
 ok(!badFit, "PIN1: fitBounds must not receive a null/NaN point (NaN bounds)");
 
-// --- Pin 1b: the REAL refresh() routes only positioned stations; withheld stays counted, off the map --
+// --- Pin 1b: the REAL refresh routes only positioned stations; withheld stays counted, off the map --
 const dr = A.driveRefresh();
 ok(dr.undef === 0, "PIN1b: refresh must not route an undefined marker into addLayers (crash), got " + dr.undef);
 ok(dr.routedCount === 2, "PIN1b: refresh routes ONLY the 2 positioned stations to the map (withheld excluded), got " + dr.routedCount + " (visible: " + JSON.stringify(dr.vis) + ")");

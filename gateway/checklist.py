@@ -1,16 +1,16 @@
-"""Live curator checklist (design §4): the machine-checkable subset of the curator checklist,
+"""Live curator checklist: the machine-checkable subset of the curator checklist,
 computed ENTIRELY from data already on disk (validate.json, preview-summary.json) plus the
 submission row. The gateway does NOT re-parse the package here — it reads the runner's reports.
 
 Each check yields PASS / WARN / FAIL / NA. A FAIL on a BLOCKING check refuses the curator approve
 SERVER-SIDE (the app returns 409 on the approve POST even if the button is hidden: absence is
-UX, the 409 is the guarantee, design §4). Non-blocking checks (DOI/PID) only ever WARN.
+UX, the 409 is the guarantee). Non-blocking checks (DOI/PID) only ever WARN.
 
 The single most important check is the PII grep: it looks for the submitter's own email (the needle
 comes from the DB, curator-only) plus a generic email pattern across the built preview product +
 package tree. A hit is a FAIL — publishing PII is the one thing the whole confinement design exists
 to prevent. C11b splits that FAIL: a submitter-email hit is an ABSOLUTE block no acknowledgement can
-override (§0); a hit on only OTHER addresses (e.g. a historical EDI `>INFO` contact line in a source
+override; a hit on only OTHER addresses (e.g. a historical EDI `>INFO` contact line in a source
 record) is a blocking FAIL a named curator MAY acknowledge (`acknowledgeable=True`). Either way the
 detail names files ONLY — the matched address is never echoed anywhere.
 """
@@ -29,7 +29,7 @@ NA = "NA"
 _EMAIL_RE = re.compile(rb"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 
 # Coordinate anomaly flag the preview summary raises when a station's coords looked off and need a
-# human ack (design §4). Its presence WARNs; it never blocks (the curator acknowledges via the note).
+# human ack. Its presence WARNs; it never blocks (the curator acknowledges via the note).
 _COORD_ANOMALY = "info_anomalous_review"
 
 
@@ -39,16 +39,16 @@ class Check:
     label: str
     status: str            # PASS / WARN / FAIL / NA
     detail: str
-    blocking: bool         # a FAIL here refuses the curator approve (design §4)
-    acknowledgeable: bool = False  # §1: a curator may acknowledge PAST this blocking FAIL
+    blocking: bool         # a FAIL here refuses the curator approve
+    acknowledgeable: bool = False  # a curator may acknowledge PAST this blocking FAIL
 
 
 @dataclass(frozen=True)
 class Checklist:
     checks: list[Check]
-    # §1: file names (relative to the scanned root) where a GENERIC (non-submitter) email
+    # file names (relative to the scanned root) where a GENERIC (non-submitter) email
     # matched. Curator-only, file names ONLY (never an address). It renders the classified list
-    # and builds the acknowledge audit reason (§2). Empty unless the PII check is acknowledgeable.
+    # and builds the acknowledge audit reason. Empty unless the PII check is acknowledgeable.
     pii_generic_files: tuple[str, ...] = ()
 
     def _blocking_fails(self) -> list[Check]:
@@ -56,7 +56,7 @@ class Checklist:
 
     @property
     def has_blocking_fail(self) -> bool:
-        """True if any BLOCKING check is FAIL, so the curator approve must be refused (design §4)."""
+        """True if any BLOCKING check is FAIL, so the curator approve must be refused."""
         return bool(self._blocking_fails())
 
     @property
@@ -88,14 +88,14 @@ def _level(item: dict) -> str:
     return str(item.get("level") or item.get("status") or "").upper()
 
 
-# The reporting cap (C11b §1): bound the FILE-NAME lists we render, not the scan. The scan always
+# The reporting cap: bound the FILE-NAME lists we render, not the scan. The scan always
 # visits the whole tree; only the surfaced names are capped so a package with thousands of hits does
 # not produce an unbounded detail string.
 _MAX_REPORTED = 20
 
 
 class _PiiScan:
-    """Structured result of the full-tree PII sweep (C11b §1). Scans the entire built product + package
+    """Structured result of the full-tree PII sweep. Scans the entire built product + package
     tree — never returns early on the first hit — and classifies each matching file as a submitter hit
     (the DB needle matched) or a generic hit (a generic email matched and the needle did NOT).
 
@@ -120,9 +120,9 @@ def _rel_name(root: Path, p: Path) -> str:
 
 
 def bounded_names(names) -> str:
-    """Render a capped file-name list: up to _MAX_REPORTED names + a '+N more' suffix (§1). File names
+    """Render a capped file-name list: up to _MAX_REPORTED names + a '+N more' suffix. File names
     only — this string never contains a matched address. Public so the app can build the same bounded
-    string for the acknowledge audit reason (§2) without re-deriving the cap."""
+    string for the acknowledge audit reason without re-deriving the cap."""
     names = list(names)
     if len(names) <= _MAX_REPORTED:
         return ", ".join(names)
@@ -133,19 +133,19 @@ def bounded_names(names) -> str:
 def _grep_pii(package_dir: Path, preview_dir: Path, submitter_email: str) -> _PiiScan:
     """Sweep the built preview product + package tree for the submitter's exact email (needle from the
     DB) AND any generic email address (the generic pattern, not just the submitter's own), classifying
-    each matching FILE — never echoing an address (C11b §1 / unchanged no-echo rule).
+    each matching FILE - never echoing an address (unchanged no-echo rule).
 
     A file whose bytes contain the needle is a SUBMITTER hit (unpublishable, no ack). A file that has a
     generic email match but NOT the needle is a GENERIC hit (a historical `>INFO` contact line in a
-    source EDI — a curator may acknowledge it, §3). The scan visits the WHOLE tree so the curator sees
+    source EDI - a curator may acknowledge it). The scan visits the WHOLE tree so the curator sees
     every affected file, not just the first.
 
-    Submitter-needle matching is CASE-INSENSITIVE by contract (design §1 as amended / review finding
+    Submitter-needle matching is CASE-INSENSITIVE by contract (as amended / review finding
     1): email addresses are case-insensitive in practice, and the generic regex already matches any
     case — a byte-exact needle would let 'User@Example.com' (DB) with 'user@example.com' in an artifact
-    slide into the ACKNOWLEDGEABLE class, i.e. a §0 bypass. Both the needle and the scanned bytes are
+    slide into the ACKNOWLEDGEABLE class, i.e. a bypass. Both the needle and the scanned bytes are
     ASCII-lowercased before the containment test; a non-ASCII address falls back to byte-exact
-    matching for its non-ASCII characters (bytes.lower() is ASCII-only), which is never weaker than
+    matching for its non-ASCII characters (bytes.lower is ASCII-only), which is never weaker than
     the pre-fix behaviour.
 
     Scope note: only text-ish files are scanned as text; binaries are pattern-matched on raw bytes,
@@ -167,7 +167,7 @@ def _grep_pii(package_dir: Path, preview_dir: Path, submitter_email: str) -> _Pi
                 continue
             name = _rel_name(root, p)
             if needle and needle in data.lower():
-                # The submitter's OWN email in ANY case — the §0 needle. Unpublishable, no ack.
+                # The submitter's OWN email in ANY case - the needle. Unpublishable, no ack.
                 submitter_hits.append(name)
             elif _EMAIL_RE.search(data) is not None:
                 # A DIFFERENT address (a co-author / an EDI `>INFO` contact left in the record). Report
@@ -185,7 +185,7 @@ def build(*, validate_report: dict | None, preview_summary: dict | None,
     items = _validator_items(validate_report)
     have_validate = validate_report is not None
 
-    # CI/validator green: a FAIL item blocks the curator approve (design §4).
+    # CI/validator green: a FAIL item blocks the curator approve.
     fails = [i for i in items if _level(i) in ("FAIL", "ERROR")]
     if not have_validate:
         checks.append(Check("validator", "Validator green", NA,
@@ -240,9 +240,9 @@ def build(*, validate_report: dict | None, preview_summary: dict | None,
         checks.append(Check("coords", "Coordinate flags acknowledged", PASS,
                             "no unresolved coordinate anomalies", blocking=False))
 
-    # No submitter PII in the built product — the load-bearing privacy check (design §4 / C11b §1).
-    # A submitter-email hit is a hard, NON-acknowledgeable block (§0). Only-generic hits are a blocking
-    # FAIL a named curator may acknowledge (§3), because a historical `>INFO` contact line in a source
+    # No submitter PII in the built product: the load-bearing privacy check.
+    # A submitter-email hit is a hard, NON-acknowledgeable block. Only-generic hits are a blocking
+    # FAIL a named curator may acknowledge, because a historical `>INFO` contact line in a source
     # EDI is part of the record being archived, not a leak the gateway created.
     scan = _grep_pii(package_dir, preview_dir, submitter_email)
     generic_files: tuple[str, ...] = ()
@@ -250,13 +250,13 @@ def build(*, validate_report: dict | None, preview_summary: dict | None,
         checks.append(Check("pii", "No submitter PII in package", NA,
                             "no built product on disk to sweep yet", blocking=False))
     elif scan.submitter_hits:
-        # §0: the submitter's own email is present. Acknowledgement is NOT available for this.
+        # the submitter's own email is present. Acknowledgement is NOT available for this.
         detail = (f"submitter email present in built artifact ({bounded_names(scan.submitter_hits)}) — "
                   "acknowledgement is not available for submitter PII; this block is absolute")
         checks.append(Check("pii", "No submitter PII in package", FAIL, detail, blocking=True,
                             acknowledgeable=False))
     elif scan.generic_hits:
-        # §3: only non-submitter addresses. A curator may acknowledge that every one is part of the
+        # only non-submitter addresses. A curator may acknowledge that every one is part of the
         # original submitted records (e.g. an EDI `>INFO` contact line) and none is the submitter's.
         detail = (f"an email address is present in built artifact ({bounded_names(scan.generic_hits)}) — "
                   "acknowledgeable: confirm each is part of the original submitted records (e.g. an "
@@ -268,7 +268,7 @@ def build(*, validate_report: dict | None, preview_summary: dict | None,
         checks.append(Check("pii", "No submitter PII in package", PASS,
                             "no email address present in the built product or package", blocking=False))
 
-    # DOI/PID present or absence acknowledged — WARN if absent, NEVER blocks (design §4).
+    # DOI/PID present or absence acknowledged - WARN if absent, NEVER blocks.
     doi_items = [i for i in items if "doi" in str(i.get("name") or i.get("id") or "").lower()
                  or "pid" in str(i.get("name") or i.get("id") or "").lower()]
     if doi_items and any(_level(i) not in ("FAIL", "ERROR") for i in doi_items):

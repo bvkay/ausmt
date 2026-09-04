@@ -1,10 +1,10 @@
-"""IDCONS D4/D5 (identifier-consolidation, SPEC §5) — the curator-side DOI resolution check.
+"""IDCONS D4/D5 (identifier-consolidation) - the curator-side DOI resolution check.
 
-The editor's "Identifiers & PIDs" page shows a per-identifier status chip (SPEC §5.5). Unlike the build
+The editor's "Identifiers & PIDs" page shows a per-identifier status chip. Unlike the build
 (which is OFFLINE and reads a pre-refreshed pid_status.json cache), the gateway HAS egress, so the chip
 does a LIVE doi.org HEAD server-side when the curator clicks the check button. This module is that check.
 
-THE ALIVE-RULE (SPEC §5.1 — the load-bearing semantics, identical to the engine refresh tool
+THE ALIVE-RULE (- the load-bearing semantics, identical to the engine refresh tool
 engine/scripts/refresh_pid_status.py; kept as a separate copy because the gateway image is content-blind
 and ships only gateway/, so it cannot import the engine — the two copies are pinned equal by
 gateway/tests/test_pidcheck.py::test_alive_rule_parity_with_engine_tool):
@@ -25,7 +25,7 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 
-# Status vocabulary this module returns (the curator-chip half of the SPEC §5.1 vocab). `resolved` /
+# Status vocabulary this module returns (the curator-chip half of the vocab). `resolved` /
 # `unregistered` / `error` mirror the engine cache; `skipped` is the non-DOI case the chip surfaces.
 STATUS_RESOLVED = "resolved"
 STATUS_UNREGISTERED = "unregistered"

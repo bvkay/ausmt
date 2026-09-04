@@ -9,12 +9,12 @@ zero-argument "request rebuild" button's write.
 Pure-ish functions (filesystem + an injected git runner, no DB, no framework) so the read/write logic
 is unit-testable without the whole app — the same split uploader_keys.py / publish.py use.
 
-TRUST BOUNDARY (design §3): the gateway gains NO new privileges. It reads its OWN state dir
+TRUST BOUNDARY: the gateway gains NO new privileges. It reads its OWN state dir
 (/gw/state, already mounted rw) and runs `git rev-parse` over the surveys-live checkout it ALREADY
 mounts for the publish flow (via the same scrubbed_env the publish git calls use). It does NOT read
 site-data (it has no such mount) — the served build.json/build_report.json are fetched by the BROWSER
 same-origin from Caddy, never by this server. The request file's CONTENT is audit-only: the host
-reconcile agent keys only on the file's EXISTENCE and never parses it (C40 §4 — zero-argument by
+reconcile agent keys only on the file's EXISTENCE and never parses it (- zero-argument by
 design), so a compromised gateway can at worst trigger one rebuild per timer tick of the same corpus.
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # The two state files the reconcile agent and the button share, under the gateway state dir
-# (cfg.state_dir == /gw/state; host: $AUSMT_DATA_DIR/gateway/state). Names fixed by design §3.
+# (cfg.state_dir == /gw/state; host: $AUSMT_DATA_DIR/gateway/state). Names fixed by.
 REQUEST_FILENAME = "rebuild.request"
 STATUS_FILENAME = "reconcile-status.json"
 # The ops floor's host-written state file. Written by the alert timer
@@ -100,7 +100,7 @@ def _atomic_write(state_dir: Path, filename: str, payload: dict) -> Path:
 
 def write_rebuild_request(state_dir: Path, *, requested_by: str, full: bool = False) -> Path:
     """Write {requested_at, requested_by[, full]} to <state_dir>/rebuild.request ATOMICALLY. Idempotent:
-    a second press overwrites the same path (design §3 — "pressing twice = still one file"). The content
+    a second press overwrites the same path (- "pressing twice = still one file"). The content
     is AUDIT ONLY for reconcile's existence-keyed consume, EXCEPT the optional `full` boolean (the
     force-full-rebuild flag): reconcile reads ONLY that one flag and, when true, runs the build in
     cache-REFRESH mode (recompute everything, no cache reuse). A bounded parse: the worst a compromised
@@ -206,7 +206,7 @@ def read_actions_audit_tail(state_dir: Path, *, n: int = 40) -> list[str]:
 
     Splits on '\\n' ONLY (never str.splitlines()): the host already scrubs control + unicode-separator
     chars from the attacker-controlled fields (actions.sh _scrub, S4), but the gateway must not TRUST
-    that a host file is clean — splitlines() would treat a stray U+2028/U+2029/VT/FF as a line break
+    that a host file is clean - splitlines would treat a stray U+2028/U+2029/VT/FF as a line break
     and could fabricate whole tail entries from one crafted line. Splitting on the host's real
     separator (\\n) keeps a crafted line as ONE rendered entry (later _esc'd, so inert)."""
     p = state_dir / ACTIONS_AUDIT_FILENAME
@@ -323,7 +323,7 @@ def read_published_head(git_runner, surveys_live: Path | None) -> PublishedHead:
     the safe.directory GIT_CONFIG_* the compose file already declares applies and no secret leaks to
     git. Returns available=False (never raises) on any failure: an unset surveys_live, a non-checkout,
     or a non-zero git exit. The curator page shows "unavailable" instead of erroring — a missing HEAD
-    is a state to display, not a page fault (design §4: "on failure show 'unavailable', never 500")."""
+    is a state to display, not a page fault ("on failure show 'unavailable', never 500")."""
     if surveys_live is None:
         return PublishedHead(short=None, available=False)
     try:

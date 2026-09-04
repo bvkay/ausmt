@@ -3,7 +3,7 @@
 
 A host-side, STDLIB-ONLY daily job (deploy/systemd/ausmt-stats.timer fires it) that folds the Caddy
 access log into a cumulative `stats.json` the workbench Analytics screen reads. It is the same
-trust class as alert.sh's ops-status writer: it NEVER raises into the timer (main() catches
+trust class as alert.sh's ops-status writer: it NEVER raises into the timer (main catches
 everything and exits 0), writes atomically (tmp -> chmod 0644 -> os.replace), and stamps the shared
 UTC timestamp so the gateway's staleness clock parses it identically.
 
@@ -1798,7 +1798,7 @@ def _load_json(path) -> dict | None:
 def write_stats_atomic(stats_file, stats: dict) -> None:
     """Atomic write: tmp under the dest dir -> chmod 0644 (the gateway uid 10002 reads it via the shared
     state dir, the alert.sh posture) -> os.replace. The dest dir must exist (the operator prep creates
-    the state dir); a missing dir raises, caught by main()."""
+    the state dir); a missing dir raises, caught by main."""
     dest = Path(stats_file)
     tmp = dest.with_name(f"{dest.name}.tmp.{os.getpid()}")
     tmp.write_text(json.dumps(stats, indent=1), encoding="utf-8")

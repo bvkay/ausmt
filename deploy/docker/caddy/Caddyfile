@@ -17,7 +17,7 @@
 #                      'unsafe-inline'.
 #   - add-survey.html  has an inline <script> (same Plausible shim) AND loads OpenStreetMap tiles
 #                      (tile.openstreetmap.org -- a DIFFERENT tile host than index.html's CartoDB,
-#                      confirmed by grep, not assumed) AND does a live fetch() to api.ror.org (the
+#                      confirmed by grep, not assumed) AND does a live fetch to api.ror.org (the
 #                      ROR organisation-search autocomplete), which needs connect-src, not img-src.
 # All three pages get style-src 'unsafe-inline' (every page uses inline <style> blocks / style
 # attributes; none of the three ships an external stylesheet besides vendor/leaflet*.css).
@@ -25,9 +25,9 @@
 # object-src 'none' + base-uri 'self' + frame-ancestors 'none' on every page (defence-in-depth;
 # nothing here embeds objects/frames or needs a non-self <base>).
 #
-# FORWARD-LOOKING CAVEAT: index.html's data fetches (portal/src/data.js etc) go through dataUrl(),
+# FORWARD-LOOKING CAVEAT: index.html's data fetches (portal/src/data.js etc) go through dataUrl,
 # which honours window.AUSMT_CONFIG.data_base_url (portal/config.js) — currently "" (same-origin)
-# in the shipped config, so 'self' alone covers every fetch() call today (verified: every fetch()
+# in the shipped config, so 'self' alone covers every fetch call today (verified: every fetch
 # site in portal/src/*.js is either same-origin via dataUrl()/a relative path, or the one
 # api.ror.org call on add-survey.html, already allow-listed below). If an operator later points
 # data_base_url at a remote host (e.g. an NCI/THREDDS tier, per the comment in data.js), index.html's
@@ -229,7 +229,7 @@
 	}
 	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
 
-	# CONTRIBUTOR-CREDIT-SPEC (§6): the curator metadata editor + survey hub. IDENTICAL to strictPages
+	# the contributor-credit model: the curator metadata editor + survey hub. IDENTICAL to strictPages
 	# EXCEPT connect-src ALSO allows exactly FOUR read-only registries: the SAME two citation registries
 	# the public Add Survey page uses - https://api.crossref.org and https://api.datacite.org - for the
 	# publications "Look up DOI" harvest (the shared window.AusmtDoiHarvest core), PLUS https://pub.orcid.org
@@ -244,7 +244,7 @@
 
 	# add-survey.html only: its APPLICATION code is one intentional inline <script> (the shim was
 	# extracted like index's) + OpenStreetMap tiles (NOT CartoDB — its own two Leaflet maps call
-	# tile.openstreetmap.org directly) + a live fetch() to the ROR API (connect-src, since
+	# tile.openstreetmap.org directly) + a live fetch to the ROR API (connect-src, since
 	# fetch/XHR destinations are not covered by img-src). Since C13 the page ALSO fetch()es
 	# /gateway/healthz and XHR-POSTs /gateway/submit — both SAME-ORIGIN relative paths already covered
 	# by the connect-src 'self' below, so no directive change is needed for the direct-upload flow.
@@ -301,7 +301,7 @@
 	# gateway is reached from the portal's own origin, so its fetch()/form POSTs are covered by the
 	# existing `default-src 'self'` / `connect-src 'self'` already in force on every page — there is
 	# no new host to allow-list. And because it is same-origin, no CORS is involved at all: the
-	# gateway sets no CORS headers and needs none (design §1). The status page it serves is a
+	# gateway sets no CORS headers and needs none. The status page it serves is a
 	# standalone server-rendered HTML document (its own inline style, no external assets), so it does
 	# not depend on either per-page CSP above. DO NOT add a CSP override for /gateway/* here — the
 	# strictPages default already applies to it and is correct.

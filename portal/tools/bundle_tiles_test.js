@@ -1,6 +1,6 @@
 "use strict";
 // Portal bundle-tile driver. Boots the REAL portal modules in jsdom against a synthetic MANIFEST
-// and asserts surveyBundleTiles() renders/gates the three per-survey bundle tiles correctly:
+// and asserts surveyBundleTiles renders/gates the three per-survey bundle tiles correctly:
 //   * a served survey shows EDI-zip, EMTF-XML-zip and (flag-on) the TF MTH5 tile, the MTH5 labelled
 //     "transfer functions only" (never implying time series) — the C32 labelling requirement;
 //   * a survey with no bundle rows (embargoed / withheld) renders the empty withheld state ("");
@@ -27,7 +27,7 @@ win.L = stub(); win.JSZip = stub();
 win.AUSMT_CONFIG = { short_name: "AusMT" };
 win.fetch = () => Promise.resolve({ ok: false });
 
-// Only the modules surveyBundleTiles() transitively needs (security -> esc/escAttr, state -> MANIFEST,
+// Only the modules surveyBundleTiles transitively needs (security -> esc/escAttr, state -> MANIFEST,
 // data -> bundlesForSlug/fmtBytes, drawer -> surveyBundleTiles). Loading the full chain would also boot
 // map/main which want more DOM; this focused subset is enough and faster.
 const MODULES = ["contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer"];

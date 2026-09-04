@@ -234,7 +234,7 @@ record_ran() {
 recipe_update() {
   [ -n "$CODE_DIR" ] || { printf 'actions: update needs AUSMT_CODE_DIR (the code checkout)\n' >&2; return 1; }
   [ -e "$CODE_DIR/.git" ] || { printf 'actions: update: %s is not a git checkout\n' "$CODE_DIR" >&2; return 1; }
-  # git DOES take -C (it is a git checkout); compose does NOT — it goes through compose() (`-f`, S2).
+  # git DOES take -C (it is a git checkout); compose does NOT - it goes through compose (`-f`, S2).
   # shellcheck disable=SC2086 -- GIT_CMD may be multi-word (default `git`/a test shim).
   $GIT_CMD -C "$CODE_DIR" pull --ff-only || return 1
   compose pull || return 1

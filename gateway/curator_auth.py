@@ -1,4 +1,4 @@
-"""Curator authentication (design §2/§6). SEPARATE credential from the submit key: a comma-separated
+"""Curator authentication. SEPARATE credential from the submit key: a comma-separated
 `name:key` list in AUSMT_CURATOR_KEYS, so every curator action is attributable to a named actor in
 the audit log. Fail closed — an unset or malformed AUSMT_CURATOR_KEYS means NO curator can be
 authenticated and every curator route 503s (you cannot approve anything without a configured curator
@@ -25,7 +25,7 @@ import time
 
 # Minimum curator-key length. Each configured key must clear this or the whole config is malformed
 # and curator routes fail closed — a short curator key is refused, not accepted-then-weak (design
-# §2/§6, mirroring the submit-key floor).
+#, mirroring the submit-key floor).
 _MIN_CURATOR_KEY_LEN = 16
 
 # Cookie + form field names. The session cookie is the ONLY place the raw session token lives.
@@ -39,7 +39,7 @@ _CSRF_LABEL = b"ausmt-curator-csrf-v1"
 
 class CuratorConfigError(Exception):
     """AUSMT_CURATOR_KEYS is unset or malformed. The caller (app) turns this into a 503 on every
-    curator route — fail closed (design §2). Raised at PARSE time so a bad config surfaces as a
+    curator route - fail closed. Raised at PARSE time so a bad config surfaces as a
     uniform 503, never as a partially-usable auth surface."""
 
 
@@ -85,7 +85,7 @@ def parse_curator_keys(raw: str) -> dict[str, str]:
 def match_curator(keys: dict[str, str], presented_key: str) -> str | None:
     """Return the curator NAME whose configured key equals presented_key, comparing EVERY key with
     hmac.compare_digest (constant time — no early exit on the first char, so no timing oracle on
-    which key matched, design §6). Returns None if none match. Presented_key is compared even when
+    which key matched). Returns None if none match. Presented_key is compared even when
     empty so the timing profile does not reveal 'a key was presented at all'."""
     matched: str | None = None
     for name, key in keys.items():
@@ -103,7 +103,7 @@ def hash_session_token(token: str) -> str:
 def csrf_token_for(session_token: str) -> str:
     """Derive the per-session CSRF token as HMAC-SHA256(session_token, label). Deterministic from the
     session token, so the server re-derives it to check a form without storing a second value; an
-    attacker without the (HttpOnly) session cookie cannot compute it (design §2 synchroniser token)."""
+    attacker without the (HttpOnly) session cookie cannot compute it (synchroniser token)."""
     return hmac.new(session_token.encode("utf-8"), _CSRF_LABEL, hashlib.sha256).hexdigest()
 
 
@@ -115,12 +115,12 @@ def csrf_ok(session_token: str, presented: str | None) -> bool:
 
 
 class LoginRateLimiter:
-    """Global (per-process) sliding-window login rate limit (design §6). No per-source trust on a
+    """Global (per-process) sliding-window login rate limit. No per-source trust on a
     tailnet, so the window is global: after `max_attempts` FAILED logins inside `window_s`, further
     login attempts are refused (429) until the window rolls off. A SUCCESSFUL login clears the counter.
 
     THREAD-SAFE: the login route is a sync `def` and runs in Starlette's threadpool, so many login
-    POSTs execute concurrently. A bare blocked()->check-key->record_failure() sequence would let a
+    POSTs execute concurrently. A bare blocked()->check-key->record_failure sequence would let a
     burst of ~threadpool-size guesses all read 'not blocked' before any failure records. `evaluate()`
     runs the whole decision — blocked-check, key match, and the failure/success record — under ONE
     lock, so at most `max_attempts` wrong keys can reach the key comparison inside a window (mirrors
@@ -155,7 +155,7 @@ class LoginRateLimiter:
             return "ok", name
 
     # blocked()/record_* kept for the unit tests that exercise the window mechanics directly; the
-    # route uses evaluate() so the whole decision is atomic.
+    # route uses evaluate so the whole decision is atomic.
     def blocked(self, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
         with self._lock:
@@ -175,6 +175,6 @@ class LoginRateLimiter:
 
 def is_session_expired(expires_utc: str, now_utc: str) -> bool:
     """String compare works because both are `YYYY-MM-DDTHH:MM:SSZ` (fixed-width, lexicographically
-    ordered == chronologically ordered). Absolute expiry (design §6): a session past expires_utc is
+    ordered == chronologically ordered). Absolute expiry: a session past expires_utc is
     dead regardless of activity."""
     return now_utc >= expires_utc

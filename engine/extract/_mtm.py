@@ -97,7 +97,7 @@ def _is_info_delimiter_defect(exc: BaseException) -> bool:
     if callable(errors):
         try:
             rows = list(errors())
-        except Exception:  # noqa: BLE001  (a non-pydantic .errors(); fall through to the message)
+        except Exception:  # noqa: BLE001  (a non-pydantic .errors; fall through to the message)
             rows = None
         if rows is not None:
             for row in rows:

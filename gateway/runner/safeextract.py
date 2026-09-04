@@ -1,9 +1,9 @@
-"""Safe zip extraction with per-member re-checks (design §5.1, belt-and-braces). The gateway already
-ran zipsafety.inspect() before queueing; the runner re-applies the same rules AT EXTRACTION so a
+"""Safe zip extraction with per-member re-checks (belt-and-braces). The gateway already
+ran zipsafety.inspect before queueing; the runner re-applies the same rules AT EXTRACTION so a
 member that somehow slips the central-directory pass cannot land outside the target tree. Every
 resolved destination is confirmed to stay under the target root before a single byte is written.
 
-Byte accounting (design §5.1, review #10): the total extracted size and each member's extracted
+Byte accounting (review #10): the total extracted size and each member's extracted
 size are counted from the bytes ACTUALLY READ, never trusted from the central-directory file_size —
 a lying header can't make extraction write more than the caps. A per-member or total overrun aborts
 the whole extraction. A deadline (review #7) is checked as bytes flow so a slow/huge extraction is

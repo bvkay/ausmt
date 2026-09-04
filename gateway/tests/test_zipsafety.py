@@ -1,4 +1,4 @@
-"""Zip central-directory safety (design §4.3 / §8). Each hostile shape is rejected with a DISTINCT
+"""Zip central-directory safety. Each hostile shape is rejected with a DISTINCT
 reason and — proven separately in test_upload.py — nothing is written under quarantine/. These are
 pure-unit tests against zipsafety.inspect; test_upload.py drives the same shapes through the HTTP
 seam.

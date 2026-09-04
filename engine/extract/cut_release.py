@@ -90,7 +90,7 @@ def utc_now() -> str:
 
 
 def sha256_of(path: Path) -> str:
-    """Streamed sha256 of a file. Streamed, not read_bytes(): a survey MTH5 bundle can be large."""
+    """Streamed sha256 of a file. Streamed, not read_bytes: a survey MTH5 bundle can be large."""
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):

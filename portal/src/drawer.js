@@ -103,13 +103,13 @@ function headerDownloadBtn(s,m){
   const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
-// (The Overview "primary download" tile - overviewDownload(), the gated descriptor rendered as a single
+// (The Overview "primary download" tile - overviewDownload, the gated descriptor rendered as a single
 // product tile inside the Station summary - is REMOVED. See docs: portal internals, drawer.js.
 
 // The PLAIN-TEXT APA sentence: what the citation pack's CITATIONS.txt and the clipboard copy carry.
 // A text file must never receive HTML entities (O'Brien is not O&#39;Brien on disk).
 function apaPlain(m,doi){return `${m.au} (${m.yr||"n.d."}). ${m.ti}${m.ve?" ("+m.ve+")":""} [Data set]. ${m.pb}.`+(doi?` https://doi.org/${doi}`:"");}
-// The HTML rendering of the same sentence. esc() is character-wise, so escaping the assembled string
+// The HTML rendering of the same sentence. esc is character-wise, so escaping the assembled string
 // equals escaping each field; the two renderers cannot drift because one wraps the other.
 function apa(m,doi){return esc(apaPlain(m,doi));}
 // The DISPLAY-ONLY APA citation rendered inside the Cite box. See docs: portal internals, drawer.js.
@@ -191,7 +191,7 @@ function withheldReason(m){
   return reason+", contact the custodian organisation ("+org+")";
 }
 // The boot-loaded coordinate policy for a station ('generalised' | 'withheld' | null), folded onto s by
-// buildState() from coord_policy.json. See docs: portal internals, drawer.js.
+// buildState from coord_policy.json. See docs: portal internals, drawer.js.
 function coordPolicyOf(s){return (s&&s.coordPolicy)||null;}
 // True when a station's SERVED position is masked. A withheld station is detectable from its null coords
 // alone (belt-and-braces if the marker artifact never loaded); a generalised station needs the marker
@@ -283,7 +283,7 @@ function maturityBlock(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
 // The raw-TS pointer. See docs: portal internals, drawer.js.
 function tsPidRaw(m){return (m&&m.ts_pid)||TS_COLLECTION.doi;}
 function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
-// mth5BundleFor() lived here: the survey's <slug>-tf.h5 bundles[] row, looked up by slug. It is gone
+// mth5BundleFor lived here: the survey's <slug>-tf.h5 bundles[] row, looked up by slug. It is gone
 // because every surface that called it was STATION-scoped and therefore reading the wrong scope. See docs:
 // portal internals, drawer.js.
 function apiArtifactPath(u){const v=String(u==null?"":u);
@@ -304,7 +304,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   // honesty); an absent level shows the honest muted not-available state (levels 0-2 are never omitted).
   const levels=(m.ts_levels||[]);
   const hasLevel=v=>levels.indexOf(v)>=0;
-  // D-L4 (SPEC §9.6): the related_identifiers row whose `identifies` matches this level (its own DOI), so
+  // The related_identifiers row whose `identifies` matches this level (its own DOI), so
   // a user on the files tab jumps straight to the DOI for the data level they are looking at.
   const idRowFor=lvl=>(m.related_identifiers||[]).find(r=>r&&r.identifies===lvl);
   const tsLevelRow=(label,gloss,vocab)=>{
@@ -755,7 +755,7 @@ function openStation(i,opts){
   // (verbatim, else org(year) synthesis) renders alongside. See docs: portal internals, drawer.js.
   const _attn=attributionText(m);
   // The citation box renders the DOI as a resolution-aware hyperlink (apaCiteDisplay); the copy buttons
-  // below still assemble plain-text apa()/bibtex()/ris() strings via the [data-cite] handler.
+  // below still assemble plain-text apa()/bibtex()/ris strings via the [data-cite] handler.
   const citeBody=m.cite
     ? apaCiteDisplay(m.cite,m.doi,m.doi_resolution)
     : `<div class="prov" style="margin-bottom:6px">Custodian citation not recorded, cite the survey package:</div>${apaCiteDisplay(AUSMT_SELF,m.doi,m.doi_resolution)}`;
@@ -808,7 +808,7 @@ async function fetchEdi(file,avail,survey){
       window.open("https://doi.org/"+m.doi,"_blank","noopener,noreferrer");}
     else toast("This EDI isn't redistributable here: "+withheldReason(m)+".");
     return;}
-  // Route through dataUrl() (honours data_base_url) — NOT a hardcoded "data/edi/" path, so the
+  // Route through dataUrl (honours data_base_url) - NOT a hardcoded "data/edi/" path, so the
   // portal and its data can live in separate repos / on NCI.
   return downloadUrl(dataUrl("edi/"+file),file);}
 // Generic blob download for a resolved manifest URL (EMTF XML, per-survey bundles, EDI fallback).
@@ -879,12 +879,12 @@ function pidLink(p){if(!p)return "<span class='prov'>not recorded</span>";if(p.s
 // so callers append it directly after the escaped name.
 function orcidLink(o){if(!o)return "";const href="https://orcid.org/"+o;
   return ` <a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer" title="ORCID: ${escAttr(o)}" class="orcid-ico"><img src="vendor/ORCID_iD.png" alt="ORCID" class="idlogo orcid-logo"></a>`;}
-// Credit model (SPEC §3.1): the DataCite contributorType subset -> a human role phrase. Fail-closed vocab;
+// Credit model: the DataCite contributorType subset -> a human role phrase. Fail-closed vocab;
 // an absent or out-of-vocab role adds no phrase (the validator blocks a bad token upstream, so this never
 // echoes a raw token).
 const CONTRIBUTOR_ROLE_LABELS={ProjectLeader:"led",ProjectMember:"project member",DataCollector:"collected the data",
   ContactPerson:"contact",DataCurator:"curated",Sponsor:"sponsored",RightsHolder:"rights holder",Distributor:"distributed"};
-// The display order for a person's role phrases when they hold several (SPEC §3.1). See docs:
+// The display order for a person's role phrases when they hold several. See docs:
 // portal internals, drawer.js.
 const CONTRIBUTOR_ROLE_ORDER=["ProjectLeader","ProjectMember","DataCollector","ContactPerson","DataCurator","Sponsor","RightsHolder","Distributor"];
 // An ORCID grouping key: lower-cased, resolver-prefix stripped, trailing slashes dropped, so the bare id
@@ -897,7 +897,7 @@ function contributorName(c){
   const name=((c&&c.name)||"").toString().trim();
   if(!name)return "";
   return c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
-// Credit model (SPEC §3/§6): the survey's contributors[] as a COLLAPSED <details> (styled like the
+// Credit model: the survey's contributors[] as a COLLAPSED <details> (styled like the
 // Persistent-identifiers rollup), GROUPED by person. See docs: portal internals, drawer.js.
 function contributorsHtml(m){
   const list=((m&&m.contributors)||[]).filter(c=>c&&typeof c==="object");
@@ -915,14 +915,14 @@ function contributorsHtml(m){
     return phrases.length?`${contributorName(g.c)} <span class="prov">${phrases.map(esc).join(", ")}</span>`:contributorName(g.c);});
   return `<details class="prov-d survey-contributors"><summary>Contributors (${groups.length})</summary>`+
     `<div class="prov-dbody"><div class="surveymeta">${rows.join("<br>")}</div></div></details>`;}
-// Credit model (SPEC §2.1): the survey's ORDERED creators[], the attribution-author list. Order IS the
+// Credit model: the survey's ORDERED creators[], the attribution-author list. Order IS the
 // attribution order; a person carries the ORCID icon-link, an organisation's name links to its ROR. See
 // docs: portal internals, drawer.js.
 function creatorRow(c){
   const name=((c&&c.name)||"").toString().trim();
   if(!name)return "";
   return c&&c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
-// ONE attribution box, never two. The engine builds cite.au from creators[] (CONTRIBUTOR-CREDIT-SPEC §2.1,
+// ONE attribution box, never two. The engine builds cite.au from creators[] (the same ordered list,
 // names joined "; "), so a second .attn box for the creator names would carry the SAME names twice. See
 // docs: portal internals, drawer.js.
 function attributionBoxHtml(m){m=m||{};
@@ -971,17 +971,17 @@ function instrumentPidsHtml(m){
     const link=instrumentPidLink(i.pid);
     return link?`${label}: ${link}`:label;}).join("<br>");
   return `Instrument PIDs:<br><span class="pidline">${rows}</span>`;}
-// §2a (identifiers design — the related-identifiers model): DataCite relation -> a human label. An
+// The related-identifiers model: a DataCite relation maps to a human label. An
 // out-of-vocab relation (should never publish — the validator FAILs it) falls back to the escaped raw
 // value; a blank relation to a neutral "Related".
 const RELATION_LABELS={IsDerivedFrom:"Derived from",IsVariantFormOf:"Variant form of",
   IsSupplementTo:"Supplement to",Cites:"Cites",IsPartOf:"Part of",IsSourceOf:"Source of"};
-// D-L1/D-L4 (SPEC §9): `identifies` states WHAT the identifier points at, in NCI Table 1 data-level terms.
+// `identifies` states WHAT the identifier points at, in NCI Table 1 data-level terms.
 // See docs: portal internals, drawer.js.
 const IDENTIFIES_LABELS={collection:"Collection",raw_packed:"Raw time series",level0:"Level 0, edited time series",
   level1:"Level 1, transformed time series",level2:"Level 2, processed data",level3:"Level 3, models",
   entire:"Entire dataset"};
-// §2a: a typed provenance identifier -> a link whose resolver host is chosen by identifier_type, ALWAYS
+// A typed provenance identifier resolves to a link whose host is chosen by identifier_type, ALWAYS
 // through the escUrl guard (a hostile identifier value can never become an executable/relative anchor —
 // same posture as pidLink/instrumentPidLink). See docs: portal internals, drawer.js.
 function relatedIdHref(id,type){
@@ -1015,7 +1015,7 @@ function sourceArchiveCell(m){m=m||{};
   }
   if(m.doi)return resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`);
   return m.ts==="ok"?tsCollectionCell(m):"<span class='prov'>not recorded</span>";}
-// §2a: the related-identifiers block — one line per typed relation (SMETA.related_identifiers, served by
+// The related-identifiers block: one line per typed relation (SMETA.related_identifiers, served by
 // the engine mapper as always-a-list). See docs: portal internals, drawer.js.
 function relatedIdentifiersHtml(m){
   const list=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object");
@@ -1029,7 +1029,7 @@ function relatedIdentifiersHtml(m){
     const idCell=r.resolution==="reserved"?reservedText(r.identifier):relatedIdLink(r.identifier,r.identifier_type);
     return `${label}: ${idCell}${cust}`;}).join("<br>");
   return `Related identifiers:<br><span class="pidline">${rows}</span>`;}
-// §2a: "a persistent dataset identifier exists in this survey's provenance chain" - the reading of
+// "A persistent dataset identifier exists in this survey's provenance chain" is the reading of
 // the DOI maturity badge. See docs: portal internals, drawer.js.
 function hasDatasetDoi(m){return !!(m&&(m.doi||(m.related_identifiers||[]).some(r=>r&&r.identifier_type==="DOI")));}
 // The rollup renders ONLY the rows that carry a value. No "not recorded", no "(no PID)", no "not recorded
@@ -1145,7 +1145,7 @@ function clearDiscoveryFilters(){
   // The promoted year inputs are this bar's filters now, so Clear filters owes them a reset. Before
   // the promotion they were the rail's, and a year left in them survived every "Clear filters" click.
   ["yearFrom","yearTo"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
-  // refresh() re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
+  // refresh re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
   if(typeof refresh==="function")refresh();else renderCards();
   if(typeof updateCounts==="function")updateCounts();}
 // "View on map" from the survey drawer header. See docs: portal internals, drawer.js.
@@ -1197,7 +1197,7 @@ function miniScatter(ss){
   const box=`<rect x="${bx0}" y="${by0}" width="${bw}" height="${bh}" fill="none" stroke="var(--line)"/>`;
   return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:#16242f;border:1px solid var(--line);border-radius:6px">`+
     box+latTicks+lonTicks+dots+`</svg>`;}
-// The "Related surveys" section and its relatedSurveys() scorer are REMOVED . See docs: portal internals,
+// The "Related surveys" section and its relatedSurveys scorer are REMOVED . See docs: portal internals,
 // drawer.js.
 function surveySummary(ss,m){
   // The "dimensionality mix (screening only)" row was removed from this table (dimensionality is inferable

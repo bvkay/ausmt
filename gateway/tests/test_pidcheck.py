@@ -1,6 +1,6 @@
-"""IDCONS D4/D5 (identifier-consolidation, SPEC §5) — the curator DOI-resolution check (gateway side).
+"""IDCONS D4/D5 (identifier-consolidation) - the curator DOI-resolution check (gateway side).
 
-The alive-rule (SPEC §5.1) is the load-bearing semantics: only doi.org's OWN 404 is `unregistered`;
+The alive-rule is the load-bearing semantics: only doi.org's OWN 404 is `unregistered`;
 every other doi.org answer (200 / 30x redirect / 403 / 5xx) is `resolved`; a network failure is `error`.
 These tests pin the pure classifier, the DOI/URL normalisation, the check flow over a MOCKED opener
 (NEVER the network — the build/CI stays offline), the not-a-DOI skip, and the session-gated endpoint.
@@ -22,7 +22,7 @@ from gateway.tests.conftest import app_client, curator_login, run
 # ---- the pure alive-rule -------------------------------------------------------------------------
 
 def test_classify_only_doi_org_404_is_unregistered():
-    """SPEC §5.1: ONLY a 404 from doi.org is `unregistered`. FAILS IF a 404 is not caught."""
+    """: ONLY a 404 from doi.org is `unregistered`. FAILS IF a 404 is not caught."""
     assert pidcheck.classify(404, False) == pidcheck.STATUS_UNREGISTERED
 
 

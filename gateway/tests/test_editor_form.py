@@ -713,7 +713,7 @@ def _write_survey(folder: Path, meta: dict) -> None:
     (folder / "LICENSE.md").write_text("# Licence\n\n**CC-BY-4.0**\n", encoding="utf-8")
 
 
-# SPEC §9.3: the acquisition fields (title/licence/retrieved/statement/profile) that would otherwise live
+# the acquisition fields (title/licence/retrieved/statement/profile) that would otherwise live
 # on a sources[] row now ride a related_identifiers row (identifies: entire). Same SOURCE_KEYS allow-list
 # at the validator, so the key-parity pin now feeds the merged row.
 _C46_FORM = {
@@ -818,7 +818,7 @@ def test_related_identifiers_acquisition_licence_and_profile_vocab_enforced():
                              **_snap("related_identifiers", [])}, "related_identifiers")
 
 
-# ---- §2a/§2b: related_identifiers (typed list) + identifiers.instrument_pid ----------------------
+# ----: related_identifiers (typed list) + identifiers.instrument_pid ----------------------
 
 def test_related_identifiers_vocab_matches_vendored_validator():
     """PARITY PIN: the editor's baked RELATION_TYPES / IDENTIFIER_TYPES / identifies vocab equal the surveys
@@ -857,7 +857,7 @@ def _load_credit_validator():
 
 
 def test_credit_vocab_matches_surveys_validator():
-    """PARITY PIN (CONTRIBUTOR-CREDIT-SPEC §6): the editor's baked NAME_TYPES / CONTRIBUTOR_ROLES equal the
+    """PARITY PIN (the contributor-credit model): the editor's baked NAME_TYPES / CONTRIBUTOR_ROLES equal the
     surveys validator's FROZEN credit vocabularies, read from the arm conftest resolves. Skipped only when
     that validator predates the credit vocab - a stale sibling checkout, since the vendored copy carries
     it; that skip is deliberately NOT on gateway-ci's allow-list, so a CI run that lost the vocab reds the
@@ -870,7 +870,7 @@ def test_credit_vocab_matches_surveys_validator():
     assert set(ef.CONTRIBUTOR_ROLES) == set(vv.CONTRIBUTOR_ROLES), \
         "editor CONTRIBUTOR_ROLES drifted from the validator"
     # the ordered tuple must match the validator's order too (creators/contributors selects
-    # present the roles in the spec's §3.1 order).
+    # present the roles in the spec's order).
     assert tuple(ef.CONTRIBUTOR_ROLES) == tuple(vv.CONTRIBUTOR_ROLES_ORDERED), \
         "editor CONTRIBUTOR_ROLES order drifted from the validator's ratified order"
 
@@ -1025,7 +1025,7 @@ def test_identifies_row_derives_even_when_no_explicit_relation_field_present():
 
 
 def test_instrument_pid_persists_and_round_trips():
-    """identifiers.instrument_pid (§2b, additive) assembles from its input and round-trips to
+    """identifiers.instrument_pid (additive) assembles from its input and round-trips to
     _OMIT when unchanged. FAILS IF the new field is not read, or an unchanged submit emits a diff. It
     is additive/WARNING-only at the validator, so the editor never blocks on its format (plain text)."""
     form = {"s_identifiers_dataset_doi": "10.5281/zenodo.1",

@@ -1,12 +1,12 @@
 "use strict";
-// Shared station filter (drives both Map and Surveys) + the hierarchy tree. buildTree() is data-dependent
+// Shared station filter (drives both Map and Surveys) + the hierarchy tree. buildTree is data-dependent
 // and called by main after ST is built. See docs: portal internals, filters.js.
 const tree=document.getElementById("tree");
 // The empty-state selection hint is OWNED by the markup (#selHint's default text in index.html);
 // read once at load so the copy lives in one place. updateSel restores it when a selection clears.
 const SEL_HINT_EMPTY=(document.getElementById("selHint")||{textContent:""}).textContent;
 let findActive=-1;   // index of the keyboard-highlighted Find option (-1 = none). Declared
-                     // up here so renderFind() (which resets it) is never in its temporal dead zone. See
+                     // up here so renderFind (which resets it) is never in its temporal dead zone. See
                      // docs: portal internals, filters.js.
 function passesYearWindow(yearLo,yearHi){
   const fromEl=document.getElementById("yearFrom"),toEl=document.getElementById("yearTo");
@@ -314,8 +314,8 @@ document.getElementById("modeSeg").addEventListener("click",e=>{const b=e.target
 document.getElementById("selAll").onclick=()=>{drawn.clearLayers();selected=new Set(visible.map(s=>s.i));updateSel();setSidebarMode("select");};
 document.getElementById("clearSel").onclick=()=>{selected.clear();drawn.clearLayers();updateSel();};
 
-// Year range filter - two plain number inputs; either change re-filters (refresh() re-reads
-// passesYearRange() each call, so no extra plumbing needed beyond a re-render trigger).
+// Year range filter - two plain number inputs; either change re-filters (refresh re-reads
+// passesYearRange each call, so no extra plumbing needed beyond a re-render trigger).
 const yearFrom=document.getElementById("yearFrom"),yearTo=document.getElementById("yearTo");
 if(yearFrom)yearFrom.addEventListener("input",refresh);
 if(yearTo)yearTo.addEventListener("input",refresh);
@@ -323,5 +323,5 @@ if(yearTo)yearTo.addEventListener("input",refresh);
 // Availability > Transfer functions: the #tfAvail CHECKBOX is gone, folded into the Browse "Data available"
 // single-select (#availSel, its "tf" option). See docs: portal internals, filters.js.
 
-// No "Go to place" control exists: no goToPlace(), no #goPlace input and no AU_PLACES list, here or
+// No "Go to place" control exists: no goToPlace, no #goPlace input and no AU_PLACES list, here or
 // in index.html or state.js.

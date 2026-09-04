@@ -541,7 +541,7 @@
   <div class="panel" id="pPackage"><h3>Submission package</h3><div class="kv" id="pkBody"></div></div>
   </div>
 
-  <!-- 8. SUBMIT TO AUSMT (direct upload; shown only when a same-origin gateway is detected, design §2) -->
+  <!-- 8. SUBMIT TO AUSMT (direct upload; shown only when a same-origin gateway is detected) -->
   <fieldset id="gatewayBlock">
     <legend>Submit to AusMT</legend>
     <div class="pidnote">A submission gateway is available on this site. You can upload the validated
@@ -723,7 +723,7 @@ function relatedIdentifiersEmit(list){
       identifier_type:IDENTIFIER_TYPES.indexOf(String(r.identifier_type||"").trim())>=0?String(r.identifier_type).trim():"",
       custodian:String(r.custodian==null?"":r.custodian).trim()}));
 }
-// ---------- contributor credit model (CONTRIBUTOR-CREDIT-SPEC). creators[] is the ORDERED "who should be
+// ---------- contributor credit model. creators[] is the ORDERED "who should be
 // credited?" citation list; contributors[] is the typed who-did-what list. See docs: portal internals,
 // add-survey.html.
 const NAME_TYPES=["person","organisation"];
@@ -828,8 +828,8 @@ function citationIdentifierRow(m){
 const REQUIRED=["name","slug","organisation","country","license","access"];
 function isEmail(s){ return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s||"")); }
 function isOrcid(s){ return !s || /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/.test(String(s).trim()); }
-// ISO 7064 MOD 11-2 checksum over the 16 chars, mirrors gateway/orcid.py::is_valid_orcid EXACTLY (design
-// §4). See docs: portal internals, add-survey.html.
+// ISO 7064 MOD 11-2 checksum over the 16 chars, mirrors gateway/orcid.py::is_valid_orcid EXACTLY.
+// See docs: portal internals, add-survey.html.
 function isOrcidChecksum(s){
   const m=/^(\d{4})-?(\d{4})-?(\d{4})-?(\d{3})([\dX])$/.exec(String(s==null?"":s).trim());
   if(!m) return false;
@@ -840,7 +840,7 @@ function isOrcidChecksum(s){
   const check=result===10?"X":String(result);
   return check===digits[digits.length-1];
 }
-// §1 gateway detection: PRESENT only if HTTP 200 AND the body parses as JSON AND json.ok === true. Anything
+// Gateway detection: PRESENT only if HTTP 200 AND the body parses as JSON AND json.ok === true. Anything
 // else (network error/timeout -> status 0 by convention here, non-200, HTML body that a 200-ing
 // SPA-fallback/404 page could return) is ABSENT. See docs: portal internals, add-survey.html.
 function gatewayPresent(status, bodyText){
@@ -848,11 +848,11 @@ function gatewayPresent(status, bodyText){
   let j; try{ j=JSON.parse(bodyText); }catch(e){ return false; }
   return !!(j && j.ok===true);
 }
-// §2 anchor guard: a 201 status_url is used verbatim as an href ONLY if it is a same-origin relative
+// Anchor guard: a 201 status_url is used verbatim as an href ONLY if it is a same-origin relative
 // /gateway/status/<urlsafe-token> path. See docs: portal internals, add-survey.html.
 function statusUrlSafe(url){ return /^\/gateway\/status\/[A-Za-z0-9_-]+$/.test(String(url==null?"":url)); }
-// §2 message mapping: HTTP status (+ parsed JSON body or null) -> plain human text (NO HTML; the page
-// escapes it through esc() at render time). See docs: portal internals, add-survey.html.
+// Message mapping: HTTP status (+ parsed JSON body or null) -> plain human text (NO HTML; the page
+// escapes it through esc at render time). See docs: portal internals, add-survey.html.
 function submitResultMessage(status, body){
   const detail=(body && typeof body.detail==="string") ? body.detail : "";
   const sid=(body && (body.submission_id!=null)) ? String(body.submission_id) : "";
@@ -868,8 +868,8 @@ function submitResultMessage(status, body){
     default:  return "Unexpected gateway response"+(status?" (HTTP "+status+")":"")+(detail?": "+detail:".");
   }
 }
-// §3 wire contract form fields: submitter_name + submitter_email always; submitter_orcid ONLY when
-// non-empty (the field is OMITTED entirely when blank, per the gateway's ≤8-field parser + §4 PII note).
+// Wire contract form fields: submitter_name + submitter_email always; submitter_orcid ONLY when
+// non-empty, because the gateway's parser takes at most 8 fields and a blank ORCID is PII with no use.
 // See docs: portal internals, add-survey.html.
 function submitFormFields(meta){
   const f={submitter_name:(meta&&meta.uploader_name)||"", submitter_email:(meta&&meta.uploader_email)||""};
@@ -1338,7 +1338,7 @@ if(typeof module!=="undefined"&&module.exports){
 // ---------- UI wiring (browser only) ----------
 if(typeof document!=="undefined"&&document.getElementById){
   const files=[]; const $=id=>document.getElementById(id);
-  // Gateway state: set true ONLY by a passing same-origin healthz probe (design §1). Read by the shared
+  // Gateway state: set true ONLY by a passing same-origin healthz probe. Read by the shared
   // package builder so SUBMISSION.md lists the direct-upload path first when a gateway is live. See docs:
   // portal internals, add-survey.html.
   let gatewayReady=false;
@@ -1992,7 +1992,7 @@ if(typeof document!=="undefined"&&document.getElementById){
       (p.n?`<div>recommended EDI extractor: <b>${p.extractor}</b>${p.spectra?`  (incl. ${p.spectra} spectra-section EDI(s), read directly)`:""}</div>`:"");
     $("pPreview").classList.add("show");
   };
-  // ----- shared package builder (design §0.5: ONE builder feeds BOTH the download and the direct- upload
+  // ----- shared package builder: ONE builder feeds BOTH the download and the direct- upload
   // paths, so the bytes are identical either way). See docs: portal internals, add-survey.html.
   async function buildPackage(meta, pf, ediF, mh, gatewayAvailable, xf){
     xf = xf || [];
@@ -2042,7 +2042,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     const fname="ausmt-survey-"+slug+"-"+tsUTC()+".zip";
     return {blocked:false, blob, fname, tf, manifest, inputFormat, counts:v.counts, slug};
   }
-  // SUBMISSION.md travels INSIDE the zip on BOTH transport paths (design §2), so it must stay accurate for
+  // SUBMISSION.md travels INSIDE the zip on BOTH transport paths, so it must stay accurate for
   // both: the direct-upload path is listed as option 1 where a gateway is available, emailing the packaged
   // zip to the operator as the fallback. See docs: portal internals, add-survey.html.
   function accessMeaning(level){
@@ -2131,7 +2131,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   })();
 
   // ----- Direct upload to the same-origin submission gateway ------------------------------------
-  // Detection (design §1): one healthz probe per page load, 5 s AbortController timeout, no polling. See
+  // Detection: one healthz probe per page load, 5 s AbortController timeout, no polling. See
   // docs: portal internals, add-survey.html.
   function showGatewayUI(){
     gatewayReady=true;
@@ -2177,7 +2177,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     };
   })();
 
-  // Submit flow (design §2). The submit key is RADIOACTIVE (§0.3): it lives only in the password input and,
+  // Submit flow. The submit key is RADIOACTIVE: it lives only in the password input and,
   // transiently, in the X-AusMT-Submit-Key request header. See docs: portal internals, add-survey.html.
   let submitInFlight=null;   // the live XMLHttpRequest, so Cancel can abort it
   let submitBusy=false;      // engaged SYNCHRONOUSLY on click (before the async build) so a fast
@@ -2186,7 +2186,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   function submitBlocked(msg){ submitPanel('<b class="submitbad">'+esc(msg)+"</b>"); }
   function setSubmitting(on){
     submitBusy=on;
-    $("btnSubmitGateway").disabled=on;                 // double-submit guard (§2.5)
+    $("btnSubmitGateway").disabled=on;                 // double-submit guard
     $("btnCancelSubmit").style.display=on?"":"none";    // Cancel only meaningful while the XHR is live
     $("submitProg").classList.toggle("show",on);
     if(!on){ $("submitBar").style.width="0"; }
@@ -2219,7 +2219,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     Object.keys(fields).forEach(k=>fd.append(k, fields[k]));
     track("GatewaySubmitAttempted");   // count only, no ids, no key, no email
     const xhr=new XMLHttpRequest(); submitInFlight=xhr;
-    xhr.open("POST", "/gateway/submit");                 // literal same-origin relative path (§0.2)
+    xhr.open("POST", "/gateway/submit");                 // literal same-origin relative path
     xhr.setRequestHeader("X-AusMT-Submit-Key", key);     // the ONLY place the key goes on the wire
     if(xhr.upload){ xhr.upload.onprogress=e=>{ if(e.lengthComputable){ const pct=Math.round(100*e.loaded/e.total);
       $("submitBar").style.width=pct+"%"; $("submitProgText").textContent="Uploading… "+pct+"%"; } }; }
@@ -2234,8 +2234,8 @@ if(typeof document!=="undefined"&&document.getElementById){
       submitPanel('<b>Upload cancelled.</b> Nothing was submitted. You can edit and try again.'); };
     xhr.send(fd);
   };
-  // §2 response rendering, EVERY server-derived string goes through esc(). The status link is an anchor
-  // ONLY when statusUrlSafe() accepts the server's status_url (else the id is shown, no link). See docs:
+  // Response rendering: EVERY server-derived string goes through esc. The status link is an anchor
+  // ONLY when statusUrlSafe accepts the server's status_url (else the id is shown, no link). See docs:
   // portal internals, add-survey.html.
   function renderSubmitResult(status, body){
     const msg=submitResultMessage(status, body);        // plain text (no HTML) from the pure mapper

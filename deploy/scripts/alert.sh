@@ -158,7 +158,7 @@ done
 #   compose emits either a JSON ARRAY or newline-delimited objects depending on the compose version;
 #   the python reader below tolerates both. Field names (Service, State, Health, RestartCount) are the
 #   compose ps schema. A "restarting" State is the exact crash-loop signal for the healthcheck-less
-#   gw-runner (README §4 "submissions stuck at SCANNED").
+#   gw-runner ("submissions stuck at SCANNED").
 # --------------------------------------------------------------------------------------------------
 check_services() {
   code_dir="${AUSMT_CODE_DIR:-}"
@@ -311,7 +311,7 @@ check_disk() {
 #     * action == "untracked_blocked" (the reconcile agent REFUSED to rebuild because surveys-live has
 #       untracked survey dirs the build would serve; needs an operator, no self-heal).
 #   noop/rebuilt/sync_failed are all healthy timer outcomes (they exit 0) and do NOT fail here — a
-#   sync_failed is an operator-visible panel state, not a monitoring alert (README §4).
+#   sync_failed is an operator-visible panel state, not a monitoring alert.
 # --------------------------------------------------------------------------------------------------
 check_reconcile() {
   data_dir="${AUSMT_DATA_DIR:-}"

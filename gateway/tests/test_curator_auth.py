@@ -1,4 +1,4 @@
-"""Curator auth + session + CSRF + rate limit (design §2/§6/§8).
+"""Curator auth + session + CSRF + rate limit.
 
 Guards under test, each with a stated failure criterion and proven-failing evidence:
 - no session => every curator route 401/redirect (fails if a route served content unauthenticated).
@@ -94,7 +94,7 @@ def test_no_session_routes_redirect_or_401(tmp_path):
             assert queue.status_code == 303  # -> login
             detail = await client.get(f"/gateway/curator/submission/{sid}", follow_redirects=False)
             assert detail.status_code == 303
-            # NOTE (revised design §7): the preview SUBTREE is authorized by the unguessable submission
+            # NOTE (revised): the preview SUBTREE is authorized by the unguessable submission
             # id in the path, NOT the session (the null-origin iframe cannot send the cookie). So an
             # unauthenticated request with a VALID id serves the (embargo-safe, PII-scrubbed) preview —
             # see test_curator_preview.py::test_preview_authorized_by_id_not_session. The session gate
@@ -121,7 +121,7 @@ def test_wrong_key_401_then_rate_limited(tmp_path):
 def test_valid_login_sets_httponly_samesite_cookie(tmp_path):
     # Failure criterion: fails if the session cookie is missing HttpOnly or SameSite=Strict.
     # Proven failing: an early set_cookie omitted httponly, so the token was readable from
-    # page JS (defeating the HttpOnly rationale in design §2).
+    # page JS (defeating the HttpOnly rationale).
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):
             r = await curator_login(client)
@@ -169,7 +169,7 @@ def test_logout_requires_csrf(tmp_path):
 
 
 def test_approve_without_csrf_403_no_transition_no_git(tmp_path):
-    # THE core CSRF guarantee (design §8): a state-changing POST without the token => 403, NO
+    # THE core CSRF guarantee: a state-changing POST without the token => 403, NO
     # transition, NO git call.
     # Failure criterion: fails if the submission left VALIDATED, or if the fake git recorded ANY call.
     # Proven failing: disabling the csrf_ok gate in handle_curator_action (if False:)
@@ -190,7 +190,7 @@ def test_approve_without_csrf_403_no_transition_no_git(tmp_path):
 
 def test_fail_closed_when_curator_keys_unset(tmp_path):
     # Failure criterion: fails if a curator route serves anything but 503 when AUSMT_CURATOR_KEYS is
-    # unset — you must not be able to reach the queue without a configured curator identity (§2).
+    # unset - you must not be able to reach the queue without a configured curator identity.
     async def _body():
         async with app_client(tmp_path, curator_keys="") as (client, _app, _gw, _cfg):
             root = await client.get("/gateway/curator/", follow_redirects=False)
@@ -201,7 +201,7 @@ def test_fail_closed_when_curator_keys_unset(tmp_path):
 
 
 def test_login_actor_is_named_in_audit(tmp_path):
-    # A successful approve records actor curator:<name> (design §1/§8 audit completeness).
+    # A successful approve records actor curator:<name> (audit completeness).
     from gateway.tests.conftest import settle_publish
 
     async def _body():
@@ -260,7 +260,7 @@ def test_rate_limiter_evaluate_is_thread_safe():
 
 
 def test_correct_key_blocked_during_window():
-    # A blocked window refuses even a CORRECT key (design §6): brute force can't outrun the limiter by
+    # A blocked window refuses even a CORRECT key: brute force can't outrun the limiter by
     # occasionally guessing right during the lockout.
     keys = {"curator1": "k" * 20}
     lim = curator_auth.LoginRateLimiter(max_attempts=2, window_s=1000)

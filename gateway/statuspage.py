@@ -1,9 +1,9 @@
-"""Server-rendered status page (design §6). stdlib string.Template, no framework, no JS, inline
+"""Server-rendered status page. stdlib string.Template, no framework, no JS, inline
 style in the portal palette. Reports are shown verbatim MINUS absolute paths.
 
 Two hard rules enforced here:
   1. Submitter fields (name/email/orcid) are NEVER rendered — a leaked status URL must not leak PII
-     (design §6). The render function is not even given the submitter fields.
+. The render function is not even given the submitter fields.
   2. Everything interpolated from a report is HTML-escaped (html.escape) — reports derive from
      submitted bytes and must not be able to inject markup into the operator/submitter's browser.
 """
@@ -42,7 +42,7 @@ _STATE_BLURB = {
     states.QUARANTINED: "Quarantined. Validation or the preview build did not complete cleanly.",
     states.REJECTED_AV: "Rejected. The uploaded archive matched a virus signature and was deleted.",
     # PUBLISHED means committed to the survey repository, NOT yet on the live map - do not
-    # overstate it (design §5). Since C40 the serve-reconcile timer runs that rebuild automatically.
+    # overstate it. Since C40 the serve-reconcile timer runs that rebuild automatically.
     states.PUBLISHING: "Publishing. The curator approved this submission; it is being committed.",
     states.PUBLISHED: ("Published. Committed to the AusMT survey repository. It will appear on the "
                        "live map after the next automatic data rebuild (typically within about "
@@ -52,7 +52,7 @@ _STATE_BLURB = {
     states.REJECTED: "Rejected. The curator declined this submission — see the note below.",
 }
 
-# Strip anything that looks like an absolute path from report text before display (design §6): a
+# Strip anything that looks like an absolute path from report text before display: a
 # posix /a/b or a windows C:\a\b. Belt-and-braces — the runner already writes relative refs, but
 # reports embed tool output we do not control.
 _ABS_POSIX = re.compile(r"(?<![\w])/(?:[\w.\-]+/)*[\w.\-]+")
@@ -118,7 +118,7 @@ def _validator_section(report: dict) -> str:
     # The real validator (ausmt-surveys/_validation/validate_survey.py --json) writes {"items":[...]}
     # (review #8); accept that FIRST, then the historical checks/rows shapes so a shape change on
     # either side degrades gracefully rather than silently dropping the whole table. Every rendered
-    # cell is html.escaped AND absolute-path-stripped (design §6 — a leaked status URL must not leak
+    # cell is html.escaped AND absolute-path-stripped (- a leaked status URL must not leak
     # a server path; keeping the strip on these rows is why fixing the key does not re-open a leak).
     rows = report.get("items") or report.get("checks") or report.get("rows") or []
     if not isinstance(rows, list) or not rows:
@@ -160,7 +160,7 @@ def _preview_section(summary: dict) -> str:
     for key in ("station_count", "types", "coord_flags", "warnings"):
         if key in summary:
             # Strip absolute paths from preview values too (review #11) — warnings can echo a build
-            # path; the strip keeps design §6's "no absolute paths in the status page" invariant
+            # path; the strip keeps's "no absolute paths in the status page" invariant
             # uniform across validator rows, the AV note, AND preview values.
             value = _preview_value(summary[key])
             items.append(f"<tr><td class=\"k\">{_esc(key)}</td><td>{value}</td></tr>")
@@ -178,7 +178,7 @@ def _av_section(reason: str) -> str:
 def render(*, submission_id: str, state: str, updated_utc: str,
            validator_report: dict | None = None, preview_summary: dict | None = None,
            note: str = "") -> str:
-    """Render the status HTML. Deliberately takes NO submitter fields (design §6)."""
+    """Render the status HTML. Deliberately takes NO submitter fields."""
     sections = ""
     if state in (states.VALIDATED, states.QUARANTINED):
         sections += _validator_section(validator_report or {})

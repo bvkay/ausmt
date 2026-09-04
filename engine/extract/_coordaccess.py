@@ -114,7 +114,7 @@ def station_policy(default, overrides, station_id, variant=None):
     """The APPLICATION half of the one shared matcher: the effective policy for one station — its
     per-station override if declared, else the survey default. Override keys are BASE station ids: the record's id is base-stripped via base_station_id before matching, so
     privacy of a physical site covers ALL its processing variants. EXACT base match only — no
-    prefixes, no stems. validate_overrides() is the validation half, checking keys against the very
+    prefixes, no stems. validate_overrides is the validation half, checking keys against the very
     same base_station_id derivation, so a validated key can never be a silent no-op."""
     return (overrides or {}).get(base_station_id(station_id, variant), default)
 
@@ -122,7 +122,7 @@ def station_policy(default, overrides, station_id, variant=None):
 def station_policy_by_published_id(default, overrides, station_id):
     """The READER-SIDE half of the shared matcher, for a caller that holds a PUBLISHED station id and
     not the record's `variant` field: the front door's route table is generated from the registers by
-    a tool that must not import the ingest stack, so it cannot call station_policy().
+    a tool that must not import the ingest stack, so it cannot call station_policy.
 
     DELIBERATELY A CONSERVATIVE SUPERSET, and that is the whole safety argument. station_policy
     masks a record whose base_station_id equals an override key; base_station_id strips a
@@ -253,7 +253,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
     template) so that, for every non-exact station:
 
       * withheld  -> lat / lon / elev_m null (the station keeps its row; alignment invariant).
-      * generalised -> lat / lon rounded to 0.1deg via round_generalised(); elev_m null (defensive
+      * generalised -> lat / lon rounded to 0.1deg via round_generalised; elev_m null (defensive
         invariant per D2 — no served JSON carries elevation today, but any future emitter inherits the
         mask).
 

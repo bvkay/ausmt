@@ -517,6 +517,16 @@ RULES = (
          "decision-owner language"),
     # To ratify is to bless a decision, which is what "approved" and "ruling" already name.
     Rule(re.compile(r"\bratif(?:y|ies|ied|ication)\b", re.I), "ruling language"),
+    # A comment may point only at something a reader of this repository can open: a file in the
+    # tree, or a docs/ page and its section. A clause number, a SPEC, a design brief and an ADR all
+    # name a document that is not here, so the reader is left with an unresolvable reference where
+    # the constraint should have been.
+    Rule(re.compile(r"\u00a7|\bSPEC\b|\bdesign brief\s*\d|\bADR-\d"),
+         "design-document citation",
+         # A licence's own clause number is the obligation, not a design document, and the legal
+         # code it names is public. The window must carry the licence for the exemption to hold.
+         ((re.compile(r"^\u00a7$"),
+           re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)),)),
     Rule(re.compile(r"YOUR-"), "placeholder"),
     Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
     Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),
@@ -997,6 +1007,56 @@ def test_the_docs_page_the_pointers_name_exists_and_carries_a_section_per_file()
                 missing.append(rel)
     assert not missing, (
         "the shipped tier points at sections this page does not carry:\n" + "\n".join(missing))
+
+
+# A pointer may name a docs/ page and a section on it. The page is resolved by slug under
+# docs/docs, so a pointer at a page that does not exist fails here rather than in a reader's hands.
+DOCS_PAGE_POINTER = re.compile(r"\bdocs:\s*([a-z][a-z0-9]*(?:[ -][a-z0-9]+)*)\s*,", re.I)
+POINTER_SUFFIXES = (".py", ".js", ".html", ".css", ".sh", ".yaml", ".yml", ".toml", ".txt",
+                    ".cfg", ".service", ".timer", ".md")
+SKIP_DIRS = {".git", "node_modules", "site", "__pycache__", ".venv"}
+
+
+def commented_tree():
+    """Every file in the repository the extractor reads a comment in. The pointer rule is repo-wide
+    because a dead pointer is dead wherever it is written, and the three sweeps between them do not
+    cover the whole tree."""
+    out = []
+    for path in sorted(ROOT.rglob("*")):
+        if not path.is_file() or SKIP_DIRS & set(path.parts):
+            continue
+        if path.suffix.lower() in POINTER_SUFFIXES or path.name in HASH_NAMES:
+            out.append(path)
+    return out
+
+
+def test_every_docs_pointer_names_a_page_that_exists():
+    """A comment may point only at something a reader of this repository can open. A pointer that
+    names a docs/ page resolves to a file under docs/docs; a dangling one is exactly the
+    unresolvable reference the citation rule exists to stop."""
+    pages = {p.stem: p for p in (ROOT / "docs" / "docs").rglob("*.md")}
+    assert pages, "docs/docs carries no pages, so this resolution would pass over nothing"
+    dangling, resolved = [], 0
+    for path in commented_tree():
+        if path.name == SELF or path.is_relative_to(ROOT / "docs"):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if "docs:" not in text:
+            continue
+        for lineno, comment in comments(path, text):
+            for match in DOCS_PAGE_POINTER.finditer(bare(comment)):
+                slug = re.sub(r"[ ]+", "-", match.group(1).strip().lower())
+                if slug in pages:
+                    resolved += 1
+                else:
+                    dangling.append("%s:%d: docs: %s" % (path.relative_to(ROOT), lineno, match.group(1)))
+    assert resolved, "no docs pointer resolved, so this test would pass over nothing"
+    assert not dangling, (
+        f"{len(dangling)} comment pointer(s) name a docs/ page that does not exist under "
+        "docs/docs:\n" + "\n".join(dangling))
 
 
 def test_shipped_scripts_stay_under_their_comment_cap():

@@ -1,4 +1,4 @@
-"""Status-page rendering (design §6, review #8/#11). The validator table renders from the REAL
+"""Status-page rendering (review #8/#11). The validator table renders from the REAL
 validator JSON shape ({"items":[...]}), and every rendered surface — validator rows, preview values,
 AV note — is absolute-path-stripped and html.escaped.
 """
@@ -10,7 +10,7 @@ from gateway import states, statuspage
 def test_validator_table_renders_from_items():
     # The real validator writes {"items":[{level,name,message}, ...]}. proven failing:
     # _validator_section read only "checks"/"rows", so a real {"items":...} report rendered an EMPTY
-    # table (the whole §6 validator feature silently absent).
+    # table (the whole validator feature silently absent).
     report = {"items": [
         {"level": "PASS", "name": "slug-matches-folder", "message": "ok"},
         {"level": "WARN", "name": "coord-precision", "message": "low precision"},
@@ -25,7 +25,7 @@ def test_validator_table_renders_from_items():
 
 
 def test_validator_rows_strip_absolute_paths():
-    # A validator message that echoes a server path must NOT leak it (design §6). Keeping the strip on
+    # A validator message that echoes a server path must NOT leak it. Keeping the strip on
     # the items rows is why fixing the key (#8) does not re-open the path leak (#11 sibling concern).
     report = {"items": [
         {"level": "FAIL", "name": "x", "message": "failed reading /srv/ausmt/gateway/quarantine/01ABC/package/survey.yaml"},
@@ -60,7 +60,7 @@ def test_status_page_never_has_script_or_raw_html_injection():
 
 def test_note_renders_only_for_submitter_intended_states():
     # The decision/AV note must not render for ANY state with a truthy note,
-    # so the PII-ACK audit reason — curator-only by C11b §2 — leaked onto the public page during the
+    # so the PII-ACK audit reason - curator-only by C11b - leaked onto the public page during the
     # PUBLISHING window (and raw curator notes / internal git failure text leaked in
     # PUBLISHING/PUBLISH_FAILED). The note renders ONLY for states where it is intended for the
     # submitter: QUARANTINED, REJECTED_AV, RETURNED, REJECTED. Failure criterion: fails if a note
@@ -106,7 +106,7 @@ def test_preview_warnings_render_as_a_list_not_a_python_repr():
 
 
 def test_preview_warning_items_are_still_escaped_and_path_stripped():
-    # The list rendering must not become a hole in either §6 control. Failure criterion: fails if a
+    # The list rendering must not become a hole in either control. Failure criterion: fails if a
     # hostile warning renders live markup, or if a build path survives inside a list item.
     page = statuspage.render(
         submission_id="01ABC", state=states.VALIDATED, updated_utc="t",

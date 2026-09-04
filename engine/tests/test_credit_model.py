@@ -1,4 +1,4 @@
-"""CONTRIBUTOR-CREDIT-SPEC (engine credit citation path): the suppression kill, the §2.1 citation-author
+"""the contributor-credit model (engine credit citation path): the suppression kill, the citation-author
 assembly, the verbatim creators[]/contributors[] seam, the DataCite HostingInstitution export, the
 funders grant_id pass-through, and the mth5 project_lead derivation + ORCID url.
 
@@ -22,7 +22,7 @@ from ausmt_science.ingest.normalize import _survey_meta_get  # noqa: E402
 # --------------------------------------------------------------- the suppression kill (headline RED-prove)
 
 def test_citation_names_all_creators_even_with_lead_and_pis():
-    """RED-prove the suppression kill (SPEC C3 / §2.1): a survey carrying BOTH a lead_investigator AND
+    """RED-prove the suppression kill (C3 /): a survey carrying BOTH a lead_investigator AND
     principal_investigators AND creators[] must cite ALL creators, in order. Pre-change cite.au was always
     org_name (the retired lead suppressed the PIs and creators were never read), so it named none of the
     creators - this fails on origin/main and passes after the change."""
@@ -52,10 +52,10 @@ def test_no_retired_credit_key_is_read_into_smeta():
     assert sm["cite"]["au"] == "University of X", sm["cite"]["au"]
 
 
-# --------------------------------------------------------------- §2.1 citation-author precedence
+# --------------------------------------------------------------- citation-author precedence
 
 def test_citation_prefers_verbatim_cite_au_over_org_when_no_creators():
-    """§2.1 middle rung: a hand-authored verbatim cite.au wins over the org-year synthesis when no
+    """ middle rung: a hand-authored verbatim cite.au wins over the org-year synthesis when no
     creators are present. The retired lead/PI keys never enter this chain."""
     y = {"organisation": {"name": "Custodian Org"}, "cite": {"au": "Verbatim, Author"},
          "lead_investigator": {"name": "Ignored Lead"}}
@@ -63,7 +63,7 @@ def test_citation_prefers_verbatim_cite_au_over_org_when_no_creators():
 
 
 def test_citation_falls_back_to_org_year_when_no_creators_or_cite():
-    """§2.1 fallback (unchanged default): no creators and no hand-authored cite -> the org name. A survey
+    """ fallback (unchanged default): no creators and no hand-authored cite -> the org name. A survey
     that carries only a lead_investigator still renders the org citation (the retired field is not the
     citation author)."""
     y = {"organisation": {"name": "Custodian Org"}, "lead_investigator": {"name": "A Lead"}}
@@ -73,7 +73,7 @@ def test_citation_falls_back_to_org_year_when_no_creators_or_cite():
 # --------------------------------------------------------------- the verbatim creators/contributors seam
 
 def test_creators_and_contributors_served_verbatim_order_preserved():
-    """SPEC C1/C2 pinned seam: creators[]/contributors[] ride into SMETA verbatim, ORDER PRESERVED, only
+    """Pinned seam: creators[]/contributors[] ride into SMETA verbatim, ORDER PRESERVED, only
     the validated keys, keys OMITTED when the source row omits them (an orcid-less row carries no orcid
     key, not a null). Pre-change SMETA had no creators/contributors keys at all."""
     y = {"organisation": {"name": "Org"},
@@ -110,7 +110,7 @@ def _mtcat_survey_entry(meta):
 
 
 def test_datacite_export_adds_ausmt_hosting_institution():
-    """SPEC §4: the mtcat (DataCite/federation) export appends AusMT as the HostingInstitution to every
+    """: the mtcat (DataCite/federation) export appends AusMT as the HostingInstitution to every
     record's contributors, after the survey's own contributors, verbatim. Pre-change mtcat carried no
     contributors field at all."""
     entry = _mtcat_survey_entry({"org": "Org", "access": "open",
@@ -122,7 +122,7 @@ def test_datacite_export_adds_ausmt_hosting_institution():
 
 
 def test_datacite_hosting_institution_added_even_with_no_survey_contributors():
-    """§4: AusMT hosts every survey, so the HostingInstitution row is emitted even when the survey declares
+    """: AusMT hosts every survey, so the HostingInstitution row is emitted even when the survey declares
     no contributors of its own."""
     entry = _mtcat_survey_entry({"org": "Org", "access": "open"})
     assert entry["contributors"] == [
@@ -130,7 +130,7 @@ def test_datacite_hosting_institution_added_even_with_no_survey_contributors():
 
 
 def test_hosting_institution_is_export_only_never_in_surveys_json_seam():
-    """§4: AusMT is EXPORT-only - it must never leak into the surveys.json (SMETA) contributors seam,
+    """: AusMT is EXPORT-only - it must never leak into the surveys.json (SMETA) contributors seam,
     which stays the verbatim curator surface."""
     y = {"organisation": {"name": "Org"},
          "contributors": [{"name": "Lead, L", "name_type": "person", "role": "ProjectLeader"}]}
@@ -142,7 +142,7 @@ def test_hosting_institution_is_export_only_never_in_surveys_json_seam():
 # --------------------------------------------------------------- funders grant_id pass-through
 
 def test_funders_carry_grant_id_when_present_only():
-    """SPEC (mth5 follow-up): _funders_of threads grant_id from the survey funding row when it declares a
+    """ (mth5 follow-up): _funders_of threads grant_id from the survey funding row when it declares a
     real one, and OMITS it otherwise (the corpus carries grant_id: null, so no placeholder grant id ever
     reaches the mth5 producer). Pre-change _funders_of emitted only {name, pid}."""
     y = {"funding": [{"organisation": "ARC", "organisation_ror": None, "grant_id": "DP000000"},
@@ -183,7 +183,7 @@ def test_project_lead_prefers_projectleader_contributor_then_creator_and_never_a
 # --------------------------------------------------------------- EDI/XML export attribution (normalize)
 
 def test_edi_export_attribution_reads_creators_over_a_stale_retired_facet():
-    """SPEC §3 (scope: the EDI/EMTF-XML export attribution): _survey_meta_get assembles the citation-author
+    """ (scope: the EDI/EMTF-XML export attribution): _survey_meta_get assembles the citation-author
     line from creators[] when present. A stale investigators key in a hand-built SMETA never competes."""
     authors, _title, _doi = _survey_meta_get({
         "org": "Custodian Org",

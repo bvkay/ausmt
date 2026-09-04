@@ -1,4 +1,4 @@
-"""The submission state machine (design §2). This module is data only:
+"""The submission state machine. This module is data only:
 no I/O — so the legal-transition set is one auditable table that both the DB layer and the property
 test read.
 
@@ -25,7 +25,7 @@ VALIDATED = "VALIDATED"
 QUARANTINED = "QUARANTINED"
 REJECTED_AV = "REJECTED_AV"
 
-# Curator states (design §1).
+# Curator states.
 RETURNED = "RETURNED"
 REJECTED = "REJECTED"
 PUBLISHING = "PUBLISHING"
@@ -39,13 +39,13 @@ ALL_STATES: frozenset[str] = frozenset({
 
 # Terminal = the submission is done advancing. VALIDATED is NOT terminal (the curator
 # actions reopen it). PUBLISHING/PUBLISH_FAILED are transient/recoverable working states, not
-# terminal. RETURNED is terminal FOR THIS SUBMISSION (design §1: a revision is a fresh upload, which
+# terminal. RETURNED is terminal FOR THIS SUBMISSION (a revision is a fresh upload, which
 # keeps the audit trail append-only) — the submitter cannot silently mutate a returned package.
 TERMINAL: frozenset[str] = frozenset({QUARANTINED, REJECTED_AV, RETURNED, REJECTED, PUBLISHED})
 
 # The ONLY legal moves. Note RECEIVED->RECEIVED is absent: a clamd-down hold is NOT a transition
 # (no state change, no audit row) — the row simply stays put until the poll loop retries. IN_REVIEW
-# (design §1, optional single-curator claim) is deliberately NOT implemented — the demo is
+# (optional single-curator claim) is deliberately NOT implemented - the demo is
 # single-curator, so the publish lock (publish.py) is the only concurrency guard needed and the
 # extra state would be dead weight in the audit trail.
 ALLOWED: frozenset[tuple[str, str]] = frozenset({
@@ -53,7 +53,7 @@ ALLOWED: frozenset[tuple[str, str]] = frozenset({
     (RECEIVED, REJECTED_AV),
     (SCANNED, VALIDATED),
     (SCANNED, QUARANTINED),
-    # Curator transitions (design §1).
+    # Curator transitions.
     (VALIDATED, PUBLISHING),
     (VALIDATED, RETURNED),
     (VALIDATED, REJECTED),
@@ -62,7 +62,7 @@ ALLOWED: frozenset[tuple[str, str]] = frozenset({
     (PUBLISH_FAILED, PUBLISHING),
 })
 
-# The states the curator queue lists (design §3): actionable work, newest first.
+# The states the curator queue lists: actionable work, newest first.
 QUEUE_STATES: tuple[str, ...] = (VALIDATED, RETURNED, PUBLISH_FAILED)
 
 

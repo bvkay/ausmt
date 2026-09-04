@@ -188,9 +188,9 @@ cut-release:
 	env -u TAG docker compose -f compose.yaml --profile jobs run --rm --entrypoint python \
 	  build-runner -m extract.cut_release "$$@"
 
-# IDCONS D4 (SPEC §5.2): refresh the DOI resolution cache. This is the ONLY thing that HEADs doi.org —
+# Refresh the DOI resolution cache. This is the ONLY thing that HEADs doi.org -
 # the build itself stays OFFLINE and byte-reproducible, consuming /out/cache/pid_status.json if present.
-# Run it EXPLICITLY as part of the release ritual (SPEC §6 step 4), BEFORE `rebuild-data`, so a reserved-
+# Run it EXPLICITLY as part of the release ritual (step 4), BEFORE `rebuild-data`, so a reserved-
 # but-404 DOI (e.g. a freshly-minted NCI PID whose handle mapping is not yet live) renders as plain text
 # rather than a dead link. Network-touching, so it runs OUTSIDE the deterministic build — a stale cache is
 # an accepted cost of an offline build (the curator status chip is the always-live check). Writes into

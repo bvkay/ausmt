@@ -199,7 +199,7 @@ def test_build_prov_git_commit_prefers_real_git_over_env(monkeypatch):
     assert bp._build_prov("mt_metadata")["git_commit"] == "deadbeef", "real git must win over the env fallback"
 
 
-# --- C32 §2: lib_versions is the ONE source of truth for served tool versions --------------------
+# --- lib_versions is the ONE source of truth for served tool versions --------------------
 
 def test_lib_versions_is_single_source_reused_by_cache_salt():
     """The same lib_versions helper feeds BOTH the C18 cache salt and the C32 served version keys, so

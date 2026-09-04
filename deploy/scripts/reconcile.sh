@@ -3,11 +3,11 @@
 # exits; a systemd timer (deploy/systemd/ausmt-reconcile.timer) re-invokes it every ~15 min. The
 # NCI end-state has a shell-less curator, so "run make rebuild-data by hand" is not an operation the
 # responsible person can perform — this closes the published-not-served gap with no human in the loop
-# (design C40 §1/§2).
+# (design).
 #
-# WHAT IT DOES (design §3, in order):
+# WHAT IT DOES (in order):
 #   1. sync   — git -C surveys-live pull --ff-only. On failure: write status action=sync_failed and
-#               exit 0 WITHOUT rebuilding (never build from a state we cannot fast-forward to, §4).
+#               exit 0 WITHOUT rebuilding (never build from a state we cannot fast-forward to).
 #   1b. untracked-guard — if surveys-live has UNTRACKED entries under surveys/ (a leftover survey dir
 #               the build would enumerate and SERVE, but git can never remove):
 #               write status action=untracked_blocked naming the dirs, exit 1, DO NOT rebuild.
@@ -15,10 +15,10 @@
 #               surveys-live (matched to the STORED short-hash length by prefix). Missing/unreadable
 #               build.json => treat as drift (rebuild), because we cannot prove what is served.
 #   3. decide — if head != built OR a rebuild.request file exists: consume rebuild.request FIRST
-#               (rm -f, at-most-once per run, §4), then run the rebuild capturing all output to a
+#               (rm -f, at-most-once per run), then run the rebuild capturing all output to a
 #               timestamped log under site-data/logs/ (pruned to newest 20). Else: noop.
 #   4. status — write reconcile-status.json ATOMICALLY (tmp+mv) to the gateway state dir so the
-#               curator panel can show the last outcome (design §3).
+#               curator panel can show the last outcome.
 #
 # EXIT CODE: 0 on noop / rebuilt / sync_failed (the timer must NOT flap on an operator-visible
 # sync divergence or a normal no-op); 1 on action=failed (a build/verify failure) AND on
@@ -27,10 +27,10 @@
 # state.
 #
 # LOCK: flock -n on a lock file (default $AUSMT_DATA_DIR/reconcile.lock). If another run holds it,
-# exit 0 SILENTLY without touching the status file (two overlapping ticks must not both build, §4;
+# exit 0 SILENTLY without touching the status file (two overlapping ticks must not both build,;
 # the second is a no-op, not an error). On a host without flock(1) the script still runs the pass
 # WITHOUT the lock (a WARN to stderr) — the timer's 15-min cadence + the atomic rebuild swap bound
-# the worst case to a redundant build, never a corrupt one. NCI note (§6): the timer becomes a
+# the worst case to a redundant build, never a corrupt one. NCI note: the timer becomes a
 # cron/PBS job of THIS SAME script — the script itself never assumes systemd.
 #
 # ENV (all documented in deploy/.env.example; the systemd unit's EnvironmentFile provides them):
@@ -421,7 +421,7 @@ PYEOF
 )
   fi
 
-  # 1. SYNC: fast-forward-only pull. A diverged/blocked checkout must NOT be built from (§4).
+  # 1. SYNC: fast-forward-only pull. A diverged/blocked checkout must NOT be built from.
   if ! sync_out=$(git -C "$SURVEYS_LIVE" pull --ff-only 2>&1); then
     printf 'reconcile: git pull --ff-only failed (surveys-live diverged?):\n%s\n' "$sync_out" >&2
     head_short=$(git -C "$SURVEYS_LIVE" rev-parse --short HEAD 2>/dev/null || true)
@@ -599,7 +599,7 @@ PYEOF
     return 0
   fi
 
-  # Consume the request file BEFORE building (at-most-once per run, §4): a request written mid-build
+  # Consume the request file BEFORE building (at-most-once per run): a request written mid-build
   # is picked up on the NEXT tick, never queued into a storm. Content is audit-only and never parsed.
   [ "$request_present" -eq 1 ] && rm -f "$REQUEST_FILE"
 
@@ -625,7 +625,7 @@ PYEOF
   fi
 
   # Run the rebuild, capturing stdout+stderr to the log. The make target is already atomic
-  # (build -> verify -> swap current): a failure leaves the OLD build serving (§4). The script runs
+  # (build -> verify -> swap current): a failure leaves the OLD build serving. The script runs
   # under `set -u` (not `-e`), so a non-zero make exit does NOT abort — we capture rc and still write
   # a status document either way.
   # Hand the signal trap everything it needs to write an honest status if systemd kills us mid-build:
@@ -639,7 +639,7 @@ PYEOF
   rc=$?
 
   # Prune the log dir to the newest 20 *.build.log (operator forensics; never served — LOG_DIR is a
-  # sibling of builds/, outside current/, §3). ls -1t newest-first; delete everything past 20.
+  # sibling of builds/, outside current/). ls -1t newest-first; delete everything past 20.
   ( cd "$LOG_DIR" 2>/dev/null && ls -1t ./*.build.log 2>/dev/null | tail -n +21 | while IFS= read -r old; do
       rm -f -- "$old"
     done ) || true
@@ -660,7 +660,7 @@ PYEOF
 
   # Build/verify failed: the atomic swap left the OLD build serving. Report failed + the log tail so
   # the panel shows why WITHOUT the operator needing shell access; the request file is already
-  # consumed, so there is no crash-loop (§4). Exit 1 so `systemctl status`/monitoring flags it.
+  # consumed, so there is no crash-loop. Exit 1 so `systemctl status`/monitoring flags it.
   # FIRST ask the kernel journal whether the build was OOM-KILLED in its own window (six "rebuild
   # FAILED, see log tail" reports have had a kernel kill two layers down as their cause).
   # If it was, say so BY NAME, kernel lines first, then the log tail; and flag oom_kill in the status.
@@ -710,7 +710,7 @@ $_t"
 
 # flock the whole pass on fd 9. -n => non-blocking: if the lock is held by a concurrent run, flock
 # returns non-zero and we exit 0 immediately and SILENTLY (the status file is left untouched — the
-# holding run owns this tick, §4). run_pass runs in THIS shell while fd 9 is held, so the entire
+# holding run owns this tick). run_pass runs in THIS shell while fd 9 is held, so the entire
 # sync..status critical section is inside the lock; the fd closes on process exit, releasing it.
 if command -v flock >/dev/null 2>&1; then
   exec 9>"$LOCK_FILE" || { printf 'reconcile: cannot open lock file %s\n' "$LOCK_FILE" >&2; exit 1; }

@@ -1,4 +1,4 @@
-"""IDCONS D4 (identifier-consolidation, SPEC §5.4): the portal renders a RESERVED identifier HONESTLY —
+"""IDCONS D4 (identifier-consolidation): the portal renders a RESERVED identifier HONESTLY -
 plain text + a muted "(reserved, not yet active)" note, NEVER an anchor — at every metadata-DOI link
 surface, while `ok` / `unknown` render as links exactly as today.
 
@@ -53,7 +53,7 @@ def test_ok_dataset_doi_still_links(tmp_path):
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_unknown_dataset_doi_links_as_today(tmp_path):
     """No resolution facet (no cache / no entry) -> links as today, byte-for-byte. FAILS IF the absence of
-    a cache changes the served rendering (the backward-compatibility contract, SPEC §5.3)."""
+    a cache changes the served rendering (the backward-compatibility contract)."""
     extra = {"doi": "10.25914/unknown-doi"}   # no doi_resolution key at all
     station, _story, _card = _render(tmp_path, extra)
     assert 'href="https://doi.org/10.25914/unknown-doi"' in station, \
@@ -105,7 +105,7 @@ def test_reserved_ts_pid_collection_renders_as_text(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_sweep_no_reserved_identifier_is_ever_an_anchor(tmp_path):
-    """IDCONS D4 SWEEP (SPEC §5.4): the load-bearing honesty guard. A single survey carries a RESERVED
+    """IDCONS D4 SWEEP: the load-bearing honesty guard. A single survey carries a RESERVED
     identifier in EVERY metadata-DOI slot at once — the flat dataset DOI (engine fallback), the survey
     collection PID (ts_pid), and a typed related_identifiers DOI row — plus a citation. Across ALL three
     rendered surfaces (station drawer, survey story, survey card), NO anchor's href may point at any

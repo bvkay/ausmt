@@ -1,4 +1,4 @@
-"""§2a/§2b (identifiers design — the related-identifiers model): drawer render pins.
+""" (identifiers design - the related-identifiers model): drawer render pins.
 
 Boots the REAL src modules in a VM (the org_name_ror_link / smoke.js idiom) against a synthetic
 one-survey fixture and renders BOTH the station drawer (openStation) and the survey story (openSurvey),

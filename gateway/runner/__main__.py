@@ -1,4 +1,4 @@
-"""`python -m gateway.runner` — the runner's entrypoint inside the engine image (design §5). No
+"""`python -m gateway.runner` - the runner's entrypoint inside the engine image. No
 network, non-root, resource-capped by compose. Loops forever claiming jobs.
 """
 from __future__ import annotations

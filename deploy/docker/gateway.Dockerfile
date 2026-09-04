@@ -9,7 +9,7 @@
 #
 # ONE stage, mirroring engine.Dockerfile (which retired pip-tools deliberately -- read its header):
 # python:3.12-slim, non-root (gwuser:10002 -- a NEW uid distinct from the engine's 10001 so a
-# compromised gateway stack cannot touch published site-data even via a uid collision; design §1),
+# compromised gateway stack cannot touch published site-data even via a uid collision),
 # installs the COMMITTED lock + the gateway package, and sets the entrypoint to `python -m gateway`
 # (uvicorn on :8000, container-internal).
 #
@@ -36,10 +36,10 @@ FROM python:3.12-slim AS runtime
 ARG GIT_SHA=unknown
 ENV AUSMT_GATEWAY_COMMIT=${GIT_SHA}
 
-# Publish flow (design §5 v2) shells out to `git` ONLY - stage/commit/push into surveys-live. It
+# Publish flow (v2) shells out to `git` ONLY - stage/commit/push into surveys-live. It
 # does NOT invoke the build: demo publish is COMMIT-AND-PUSH ONLY, and the operator runs
 # `make rebuild-data` by hand afterward. So NO `make` here, and crucially NO Docker socket — which is
-# exactly what keeps the C10 §0 no-socket invariant intact. `git` is not in python:3.12-slim, so
+# exactly what keeps the C10 no-socket invariant intact. `git` is not in python:3.12-slim, so
 # install it (+ openssh-client so a `git push` over an ssh deploy key at /srv/git-creds authenticates;
 # ca-certs for an https remote). The gateway still NEVER parses EDI/YAML; it only invokes git.
 RUN apt-get update \
@@ -48,7 +48,7 @@ RUN apt-get update \
 
 # Non-root user, uid/gid 10002 (fixed + named so the /srv/ausmt/gateway bind-mount ownership on the
 # host is predictable — see deploy/README.md). 10002 is DELIBERATELY distinct from the engine's
-# 10001 (design §1): the gateway stack owns only its own gw/ tree, never the published site-data.
+# 10001: the gateway stack owns only its own gw/ tree, never the published site-data.
 RUN groupadd --gid 10002 gwuser \
  && useradd --uid 10002 --gid gwuser --home-dir /home/gwuser --create-home --shell /usr/sbin/nologin gwuser
 
@@ -76,7 +76,7 @@ RUN chmod 0755 /usr/local/bin/gateway-entrypoint.sh
 # AUSMT_GW_DATA is the mount point compose.yaml uses for the gateway's gw/ tree (state/incoming/
 # quarantine/jobs). Baked here so a compose deployment following that convention works with no extra
 # config; overridable at `docker run -e AUSMT_GW_DATA=...`. AUSMT_SUBMIT_KEY is intentionally NOT set
-# here — the app fail-closes at startup if it is unset/short (design §3), so the operator MUST supply
+# here - the app fail-closes at startup if it is unset/short, so the operator MUST supply
 # it via compose env/secret; baking a default would be a security hole.
 ENV AUSMT_GW_DATA=/gw
 
@@ -87,7 +87,7 @@ USER gwuser
 EXPOSE 8000
 
 # The entrypoint wrapper sets umask 0002 (durable group-writable WAL sidecars, incident)
-# then execs `python -m gateway`, which runs create_app() (fail-closes on a missing submit key) then
+# then execs `python -m gateway`, which runs create_app (fail-closes on a missing submit key) then
 # uvicorn on 0.0.0.0:8000 — container-internal; compose publishes it loopback-only and Caddy fronts it
-# same-origin (design §1). No CMD args: the config surface is env-only (design §7).
+# same-origin. No CMD args: the config surface is env-only.
 ENTRYPOINT ["/usr/local/bin/gateway-entrypoint.sh"]

@@ -268,7 +268,7 @@ def classify_survey_frame(station_angles: list):
 # ---------------------------------------------------------------------------------------------
 @dataclass
 class FrameDisposition:
-    """What Gate 1 decided for one station. Under POLICY v3 frame_disposition() returns only
+    """What Gate 1 decided for one station. Under POLICY v3 frame_disposition returns only
     action="pass" (serve as-stored, the declared frame recorded in `facts`) or action="fail" (the
     station is refused — per-period frame mixing, or an unknowable frame). It NEVER de-rotates.
 

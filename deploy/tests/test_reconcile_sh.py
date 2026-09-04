@@ -8,7 +8,7 @@ NEXT read sees the corpus advance. Every assertion is an INDEPENDENT OBSERVABLE 
 invocation-marker file, the request file's existence, the status JSON's action, the process exit
 code, the log file), never the script's own self-report.
 
-Each test names its failure criterion in the docstring (Invariant 10). The cases (design C40 §3/§4,
+Each test names its failure criterion in the docstring (Invariant 10). The cases (design C40,
 brief note 6c):
   noop         head == built, no request  -> shim NOT invoked, action=noop, exit 0
   drift        head != built              -> shim invoked, action=rebuilt, log written + pruned, exit 0
@@ -315,7 +315,7 @@ def test_sync_failed_when_diverged(tmp_path):
     """A surveys-live that cannot fast-forward (diverged local commit vs origin) => the shim is NOT
     invoked, status action=sync_failed, exit 0. FAILS IF: the script BUILDS from a state it could not
     sync (shim marker appears), or the action is not sync_failed, or it exits non-zero and flaps the
-    timer. This is the §4 'never build from a state we cannot fast-forward to' guarantee."""
+    timer. This is the 'never build from a state we cannot fast-forward to' guarantee."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     surveys = tree["surveys"]
     # Diverge: origin gets a commit, local gets a DIFFERENT commit on top of the shared base -> a

@@ -1,4 +1,4 @@
-"""Runner loop (design §5). Claims pending jobs (atomic rename = lock), safe-extracts, runs the
+"""Runner loop. Claims pending jobs (atomic rename = lock), safe-extracts, runs the
 validator and the engine preview build as SUBPROCESSES, writes a done-file, removes the running
 file. Runs inside the engine image with no network, non-root, resource-capped.
 
@@ -6,8 +6,8 @@ The runner NEVER touches the gateway DB and never reads PII: a job file carries 
 It invokes the validator/engine as subprocesses (never imports them into the gateway package) so
 the two-gates-must-agree property holds at the same image pin the engine uses.
 
-Timeout: a hard wall-clock cap around the whole job (design §5.1). On POSIX this is SIGALRM; the
-cap is expressed through job_deadline() so the timeout PATH is unit-testable on any OS (a test
+Timeout: a hard wall-clock cap around the whole job. On POSIX this is SIGALRM; the
+cap is expressed through job_deadline so the timeout PATH is unit-testable on any OS (a test
 passes a deadline already in the past and asserts the job quarantines with a timeout reason) without
 depending on signal delivery.
 """
@@ -26,7 +26,7 @@ from .. import jobs
 from ..config import DEFAULT_MAX_UPLOAD_MB  # Single source of the 250 MB upload default
 from .safeextract import ExtractionTimeout, cap_for, safe_extract
 
-# Env pins (design §5). AUSMT_VALIDATOR_PATH is the same env the engine's _load_validator() reads;
+# Env pins. AUSMT_VALIDATOR_PATH is the same env the engine's _load_validator reads;
 # in the runner container it points at the in-image validator copy.
 _DEFAULT_TIMEOUT_S = 900
 
@@ -71,7 +71,7 @@ class RunnerConfig:
     heartbeat_s: float = 30.0
     # Max upload size (bytes) — used only to derive the extraction byte cap (fix #10), which must
     # match the gateway's upload-time 4x-total rule. The MB default is IMPORTED from the gateway
-    # config (design §6) so it cannot drift from the gateway's own default.
+    # config so it cannot drift from the gateway's own default.
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_MB * 1024 * 1024
     # Metadata-edit jobs: where THIS container sees the surveys-live checkout (compose mounts it
     # READ-ONLY at /srv/surveys — the same mount the validator ships in). Edit jobs carry a SLUG,
@@ -88,7 +88,7 @@ class RunnerConfig:
         max_upload_mb = int(env.get("AUSMT_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB)))
         # Fail closed on a zeroed/negative override, IDENTICALLY to the gateway (config._RANGES floors
         # both of these at 1, and fail_closed_startup SystemExits on a breach). The runner reads the
-        # SAME two knobs, and an int() with no floor lets a zeroed AUSMT_JOB_TIMEOUT_S
+        # SAME two knobs, and an int with no floor lets a zeroed AUSMT_JOB_TIMEOUT_S
         # (every job times out instantly -> everything quarantines) or AUSMT_MAX_UPLOAD_MB (a zero
         # extraction byte-cap) was silently accepted while the gateway rejected it - the runner would
         # crash-loop honestly on a bad numeric knob instead (deploy review section 5, MEDIUM).
@@ -137,7 +137,7 @@ def _run_subprocess(cmd: list[str], *, cwd: Path | None, deadline: float,
 
     `env` is the COMPLETE child environment when given (None inherits this process's, the historical
     behaviour). Only the engine preview spawn passes it, to pin AUSMT_VALIDATOR_PATH; see
-    _preview_env()."""
+    _preview_env."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise JobTimeout("job budget exhausted before subprocess start")
@@ -544,7 +544,7 @@ def _validator_file(validator_path: str) -> Path:
 
 def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) -> list[str]:
     """The ONE canonical argv for invoking the surveys validator as a subprocess (code-health
-    review §6). Both the C10 submission runner (_run_validator above) and the C31 metadata-edit
+    review). Both the C10 submission runner (_run_validator above) and the C31 metadata-edit
     runner (edit._run_validator) go through this, so the invocation contract lives in exactly one
     place - no second, independently-assembled argv can drift and re-open the ship-blocker
     (the folder had been passed as the --json VALUE with no positional, argparse exited 2, every real

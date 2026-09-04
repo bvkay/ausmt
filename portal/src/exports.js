@@ -1,10 +1,10 @@
 "use strict";
-// Scope-following downloads + toast/snackbar. Every download acts on scopeSel() (the selection, else the
-// filtered corpus); paintDownloadRows() owns the Download block's scope line, priced rows and disabled
+// Scope-following downloads + toast/snackbar. Every download acts on scopeSel (the selection, else the
+// filtered corpus); paintDownloadRows owns the Download block's scope line, priced rows and disabled
 // states. See docs: portal internals, exports.js.
 const sel=()=>ST.filter(s=>selected.has(s.i));
 // Every download acts on the SCOPE - the selection when one exists, else the filtered
-// corpus (filters.js scopeStations; the scope line in the Download block states which). sel() stays
+// corpus (filters.js scopeStations; the scope line in the Download block states which). sel stays
 // for callers that mean the literal selection.
 function scopeSel(){return (typeof scopeStations==="function")?scopeStations():sel();}
 // Bind one control's click handler, tolerating an absent element: an unguarded miss threw at parse

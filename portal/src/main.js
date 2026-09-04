@@ -13,7 +13,7 @@ function buildState(){
     // the portal never re-parses date strings). null when the survey.yaml declares no dates.
     yearStart:(SMETA[r[C.survey]]||{}).year_start??null,yearEnd:(SMETA[r[C.survey]]||{}).year_end??null,
     // Two-phase boot: sci.json is a PHASE 2 product, so at first paint these are undefined and are folded
-    // on again by applySciToStations() when SCI_READY settles. sciRow() is the shared not-yet-loaded-safe
+    // on again by applySciToStations when SCI_READY settles. sciRow is the shared not-yet-loaded-safe
     // deref, so this is the same expression at both call sites (one derivation, two moments).
     q:sciRow(i)[SC.q], dim:sciRow(i)[SC.dim],
     // Use the authoritative ausmt_id the engine wrote into catalogue column r[C.ausmt_id]
@@ -37,7 +37,7 @@ function buildState(){
   buildAuslampSet();
   applyYearRangeHints();
 }
-// Two-phase boot: the ONLY two station fields that come from sci.json. buildState() runs at first paint,
+// Two-phase boot: the ONLY two station fields that come from sci.json. buildState runs at first paint,
 // before sci.json has landed, so it derives them from an empty row; this re-folds them from the real data
 // the moment SCI_READY settles. See docs: portal internals, main.js.
 function applySciToStations(){
@@ -351,7 +351,7 @@ function buildScaleBar(body){
   if(!ctl||typeof ctl.addTo!=="function")return null;
   ctl.addTo(map);
   const el=(typeof ctl.getContainer==="function")?ctl.getContainer():null;
-  // Only a REAL element is moved. The headless harnesses stub Leaflet, so getContainer() there answers
+  // Only a REAL element is moved. The headless harnesses stub Leaflet, so getContainer there answers
   // with something that is not a node, and appendChild would throw on the boot path.
   if(!el||el.nodeType!==1||!el.classList)return null;
   el.classList.add("maplegend-scale");
@@ -427,7 +427,7 @@ function wireHydration(){
     if(ST.length&&typeof refresh==="function")refresh();
     rehydrateOpenDrawer();
   });
-  // The selection card's zip-size estimates are read off the manifest too, and updateSel() last ran
+  // The selection card's zip-size estimates are read off the manifest too, and updateSel last ran
   // before it landed, so they would sit blank until the reader next changed the selection. Repaint them
   // on the same gate that re-renders the drawer.
   const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();

@@ -1,4 +1,4 @@
-"""curator Approve -> commit-to-surveys-live flow + fail-closed rollback (design §5 v2/§8), with git faked
+"""curator Approve -> commit-to-surveys-live flow + fail-closed rollback (v2/), with git faked
 at its injected seam (no real git). v2 is COMMIT-AND-PUSH ONLY — NO rebuild: PUBLISHED means
 committed+pushed, not served.
 
@@ -6,11 +6,11 @@ Guards under test, each with a stated failure criterion + proven-failing evidenc
 - happy path: VALIDATED -> PUBLISHING -> PUBLISHED (committed); package staged into a temp surveys-
   live; commit author is the FIXED gateway identity; submitter email ABSENT from the commit.
 - blocking-FAIL: an approve on a submission with a blocking FAIL => 409, no PUBLISHING, no git.
-- pre-flight abort: a dirty surveys-live checkout => PUBLISH_FAILED, nothing staged (design §5 step 1).
+- pre-flight abort: a dirty surveys-live checkout => PUBLISH_FAILED, nothing staged (step 1).
 - rollback on ANY git step (commit hook rejection, push rejection) => surveys-live restored, PUBLISH_
   FAILED. Rollback restores the CAPTURED branch/ref even when HEAD started on a stale submit branch.
 - retry from PUBLISH_FAILED works for the git-only flow.
-- confirm_overwrite parsed as an EXACT token (design §5.2 / review #7): "0" does NOT overwrite.
+- confirm_overwrite parsed as an EXACT token (review #7): "0" does NOT overwrite.
 - reconciliation: a PUBLISHING row with no live task => poll loop moves it to PUBLISH_FAILED.
 """
 from __future__ import annotations
@@ -59,7 +59,7 @@ def test_happy_path_commits_and_stages(tmp_path):
 
 
 def test_published_status_pages_say_not_yet_served(tmp_path):
-    # design §5 v2: both the curator detail page AND the public status page must say PUBLISHED means
+    # v2: both the curator detail page AND the public status page must say PUBLISHED means
     # committed, not live. Failure criterion: fails if the "rebuild-data" guidance is absent.
     async def _body():
         import hashlib
@@ -93,7 +93,7 @@ def test_published_status_pages_say_not_yet_served(tmp_path):
 
 
 def test_commit_carries_no_submitter_email(tmp_path):
-    # THE PII guarantee for publish (house rule / design §8): the submitter email appears in NO git
+    # THE PII guarantee for publish (house rule /): the submitter email appears in NO git
     # Argument. proven failing: injecting the submitter email into the commit body made
     # this assertion break (verified by patching a leak in).
     async def _body():
@@ -139,7 +139,7 @@ def test_blocking_fail_refuses_approve_409(tmp_path):
 
 
 def test_pii_in_preview_blocks_approve(tmp_path):
-    # The submitter's OWN email in the built preview is a blocking FAIL (design §4).
+    # The submitter's OWN email in the built preview is a blocking FAIL.
     async def _body():
         git = FakeGit()
         async with app_client(tmp_path, git_runner=git) as (client, _app, gw, cfg):
@@ -171,7 +171,7 @@ def test_foreign_email_in_preview_blocks_approve(tmp_path):
 
 
 def test_dirty_checkout_aborts_before_staging(tmp_path):
-    # review #2 / design §5 step 1: a dirty surveys-live checkout => pre-flight ABORT, PUBLISH_FAILED,
+    # review #2 / step 1: a dirty surveys-live checkout => pre-flight ABORT, PUBLISH_FAILED,
     # NOTHING staged. Failure criterion: fails if a survey was staged, or if the state is not
     # PUBLISH_FAILED. proven failing: with no pre-flight, staging proceeded on a dirty tree
     # and the survey dir appeared under surveys-live before the (unrelated) later steps.
@@ -246,7 +246,7 @@ def test_rollback_restores_original_branch(tmp_path):
 
 
 def test_retry_from_publish_failed(tmp_path):
-    # PUBLISH_FAILED -> retry -> PUBLISHING -> PUBLISHED (design §5.4 recoverability), git-only flow.
+    # PUBLISH_FAILED -> retry -> PUBLISHING -> PUBLISHED (recoverability), git-only flow.
     async def _body():
         # First attempt fails at push (rolled back); retry with a clean git succeeds.
         git = FakeGit(fail_on={"push": (1, "transient")})
@@ -337,7 +337,7 @@ def test_slug_charset_validation():
 # Every behaviour change below is proven-failing-first against pre-C11b code (evidence in the report).
 # --------------------------------------------------------------------------------------------------
 def test_generic_email_without_ack_refuses_approve_409(tmp_path):
-    # §4.1: a generic (non-submitter) email in the package, NO ack => approve 409 listing the PII
+    # a generic (non-submitter) email in the package, NO ack => approve 409 listing the PII
     # reason (the CURRENT hard-block behaviour, now pinned as an explicit regression). Failure
     # criterion: fails if the curator approve is not 409, or the reason does not mention the PII check, or the
     # submission left VALIDATED, or any git ran.
@@ -357,7 +357,7 @@ def test_generic_email_without_ack_refuses_approve_409(tmp_path):
 
 
 def test_generic_email_with_ack_publishes_and_audits(tmp_path):
-    # §4.2: generic email + ack_pii=yes + note => publish proceeds; the PUBLISHING audit reason
+    # generic email + ack_pii=yes + note => publish proceeds; the PUBLISHING audit reason
     # carries the PII-ACK prefix with the file name and the curator note. Failure criterion: fails if
     # the submission does not reach PUBLISHED, or the audit reason lacks PII-ACK / the file name / the
     # note. proven failing against pre-C11b code: there was no ack_pii path, so this curator approve 409'd and
@@ -383,7 +383,7 @@ def test_generic_email_with_ack_publishes_and_audits(tmp_path):
 
 
 def test_submitter_email_with_ack_still_409(tmp_path):
-    # §0 / §4.3 - THE CONTRACT TEST. The submitter's OWN email present + ack_pii=yes => 409. No
+    # - THE CONTRACT TEST. The submitter's OWN email present + ack_pii=yes => 409. No
     # acknowledgement can override a submitter-email hit. Also the MIXED case (submitter + generic) is
     # a 409 with ack, and a CASE-VARIANT of the submitter email is still a submitter hit (review
     # finding 1 — submitter-needle matching is case-insensitive by contract). Failure criterion: fails
@@ -455,7 +455,7 @@ def test_submitter_email_case_variants_classified_submitter(tmp_path):
 
 
 def test_ack_pii_exact_token_parsing(tmp_path):
-    # §4.4: ack_pii is an EXACT affirmative token, default DENY (mirrors confirm_overwrite). The
+    # ack_pii is an EXACT affirmative token, default DENY (mirrors confirm_overwrite). The
     # four affirmatives allow; "", "0", "false", "anything" deny. Failure criterion: fails if a
     # non-affirmative value lets the acknowledged curator approve proceed, or an affirmative is refused.
     # proven failing against pre-C11b code: there was no ack path at all, so every affirmative 409'd.
@@ -485,7 +485,7 @@ def test_ack_pii_exact_token_parsing(tmp_path):
 
 
 def test_ack_address_never_echoed_and_report_capped(tmp_path):
-    # §4.5: needle-vs-generic separation; the report caps at 20 names with '+N more'; the matched
+    # needle-vs-generic separation; the report caps at 20 names with '+N more'; the matched
     # ADDRESS string appears in NO output (checklist detail, HTML, audit reason). Failure criterion:
     # fails if any matched address leaks, or the cap/+N-more is absent, or a submitter hit is
     # misclassified as generic.
@@ -515,7 +515,7 @@ def test_ack_address_never_echoed_and_report_capped(tmp_path):
 
 
 def test_retry_after_acknowledged_failure_needs_ack_again(tmp_path):
-    # §4.6: acknowledgement is PER-ACTION. A retry from PUBLISH_FAILED re-evaluates and needs
+    # acknowledgement is PER-ACTION. A retry from PUBLISH_FAILED re-evaluates and needs
     # ack_pii again — a retry WITHOUT ack on a still-acknowledgeable submission is a 409. Failure
     # criterion: fails if the retry proceeds without a fresh ack. proven failing against pre-C11b
     # code: retry did not consider PII acknowledgement at all (the block was absolute), so this path

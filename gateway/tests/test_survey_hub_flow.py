@@ -353,7 +353,7 @@ def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
 
 
 def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
-    """IDCONS D1 (SPEC §2) — the HUB Metadata tab (the sidebar editor the curator actually uses) renders
+    """IDCONS D1 - the HUB Metadata tab (the sidebar editor the curator actually uses) renders
     the identifier surface as ONE consolidated 'Identifiers & PIDs' section, exactly like the full form.
     The sidebar/TOC shows a SINGLE entry (no standalone 'Related identifiers' section), the consolidated
     form carries BOTH the identifiers map widgets (project_raid) AND the typed related_identifiers list
@@ -450,7 +450,7 @@ def test_hub_metadata_tab_single_form_all_sections(tmp_path):
             sections = re.findall(r'data-hub-section-form="([^"]+)"', r.text)
             # Scalars + each (possibly merged) sidebar section is its own BLOCK. SIDEBARMERGE:
             # organisation and instruments are folded into the "Core fields" (_scalars) block and are
-            # NOT standalone; CONTRIBUTOR-CREDIT-SPEC §6: the unified People & credit block is "people".
+            # NOT standalone; the contributor-credit model: the unified People & credit block is "people".
             assert "_scalars" in sections and "people" in sections
             assert "organisation" not in sections, \
                 "organisation must be folded into the merged Core fields block, not a standalone one"
@@ -568,7 +568,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             assert r.status_code == 200
             body = r.text
             # The sidebar/TOC is exactly the merged order, one entry per merged group. CONTRIBUTOR-
-            # CREDIT-SPEC §6: the four investigator/creator/contributor panels collapse to ONE
+            # CREDIT-: the four investigator/creator/contributor panels collapse to ONE
             # "People & credit" entry.
             toc = re.findall(r'data-hub-section="[^"]+">([^<]+)', body)
             assert toc == ["Core fields", "People &amp; credit", "Organisations &amp; roles",
@@ -595,7 +595,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
                            'name="l_instruments_0_manufacturer"', 'name="o_instruments"'):
                 assert needle in core, f"Core fields form missing {needle}"
 
-            # §6 People & credit: ONE panel of unified rows + the widgets and the short
+            # People & credit: ONE panel of unified rows + the widgets and the short
             # credit explainer (NOT the retired precedence sentence). (The o_creators/o_contributors
             # round-trip anchors render only when the survey CARRIES those lists; this survey has
             # neither, so their absence is correct - it keeps an empty panel absent -> _OMIT.)

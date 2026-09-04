@@ -1,4 +1,4 @@
-"""Upload-path guards through the HTTP seam (design §4/§8). Every hostile shape is rejected at upload
+"""Upload-path guards through the HTTP seam. Every hostile shape is rejected at upload
 with a distinct reason AND leaves nothing under quarantine/; capacity/auth/oversize/duplicate guards;
 the clamd verdicts (clean/EICAR/down) drive the right state.
 
@@ -169,7 +169,7 @@ def test_good_orcid_accepted(tmp_path):
 
 
 def test_duplicate_sha_conflicts(tmp_path):
-    # Same bytes, still non-terminal -> 409 pointing at the first (design §4.4).
+    # Same bytes, still non-terminal -> 409 pointing at the first.
     # Proven failing: without the sha lookup, the second upload got its own 201.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_down()) as (client, _app, _gw, _cfg):
@@ -284,7 +284,7 @@ def test_eicar_upload_rejected_av_and_zip_deleted(tmp_path):
             assert r.status_code == 201
             sub = gw.db.get(r.json()["submission_id"])
             assert sub.state == states.REJECTED_AV
-            assert not any(cfg.incoming_dir.glob("*.zip"))  # raw zip deleted immediately (design §2)
+            assert not any(cfg.incoming_dir.glob("*.zip"))  # raw zip deleted immediately
     run(_body())
 
 

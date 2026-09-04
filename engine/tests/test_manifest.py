@@ -24,7 +24,7 @@ ROOT = HERE.parent
 SURVEYS = ROOT / "data"          # data/sample-survey: CC-BY-4.0 => redistributable => exercises serving
 SCHEMA = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
 sys.path.insert(0, str(ROOT / "extract"))
-import build_portal as bp        # noqa: E402  (the redistributable() license gate)
+import build_portal as bp        # noqa: E402  (the redistributable license gate)
 
 
 def _sha(p):

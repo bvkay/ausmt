@@ -3,8 +3,8 @@
 // The pure logic (isOrcidChecksum/gatewayPresent/statusUrlSafe/submitResultMessage/submitFormFields)
 // is unit-tested in tests/add_survey_logic.test.js. This driver covers what only a live DOM can: the
 // healthz probe gating the submit UI, the in-flight double-submit guard, the escaped 201 status link,
-// and — the design §5 CENTREPIECE — that the radioactive submit key travels ONLY in the
-// X-AusMT-Submit-Key request header and appears NOWHERE else (not the zip bytes, not any track()
+// and - the CENTREPIECE - that the radioactive submit key travels ONLY in the
+// X-AusMT-Submit-Key request header and appears NOWHERE else (not the zip bytes, not any track
 // payload, not the DOM outside the input's own live value, not any URL the mock XHR saw).
 //
 //   node tools/add_survey_submit_test.js
@@ -25,10 +25,10 @@ function die(msg) { console.error("SUBMIT-TEST FAILED: " + msg); process.exit(1)
 function ok(cond, msg) { if (!cond) die(msg); }
 
 // The distinctive secret we track through the whole flow. If this string surfaces anywhere except the
-// X-AusMT-Submit-Key header, the radioactive-key invariant (design §0.3) is broken.
+// X-AusMT-Submit-Key header, the radioactive-key invariant is broken.
 const SECRET_KEY = "SECRET-KEY-do-not-leak-7f3a9c";
 // A synthetic minimal-but-valid submission: one clean-decimal EDI + all required metadata, locations
-// confirmed, declarations ticked — so validateSurvey() returns zero FAILs and the flow reaches upload.
+// confirmed, declarations ticked - so validateSurvey returns zero FAILs and the flow reaches upload.
 const EDI_TEXT = '>HEAD\nDATAID="S01"\nLAT=-30.10\nLONG=136.20\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n';
 
 // ---- A programmable fake XMLHttpRequest that records every observable the key could leak into. ----
@@ -56,7 +56,7 @@ function makeFakeXHR(record) {
   };
 }
 
-// Boot the real add-survey DOM with the given fetch() probe behaviour and (optionally) a scripted XHR.
+// Boot the real add-survey DOM with the given fetch probe behaviour and (optionally) a scripted XHR.
 async function boot({ probe, xhrScript }) {
   const dom = new JSDOM(html, { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
   const win = dom.window;
@@ -91,7 +91,7 @@ async function boot({ probe, xhrScript }) {
     *entries() { for (const [n, v] of this._e) yield [n, v]; }
     [Symbol.iterator]() { return this.entries(); }
   };
-  // fetch() → the scripted healthz probe.
+  // fetch → the scripted healthz probe.
   win.fetch = (url) => probe(url);
   // XHR record + fake class (only installed when a script is provided).
   const record = { opens: [], headers: [], sends: [], trackCalls: [], blobs: [] };
@@ -103,7 +103,7 @@ async function boot({ probe, xhrScript }) {
   // Wait for the document to finish loading BEFORE we run the page scripts, so nothing double-fires.
   await new Promise((res) => (win.document.readyState === "complete" ? res() : win.addEventListener("load", res, { once: true })));
   // Run the page's scripts in source order: security.js, analytics-shim.js, then the ONE inline block.
-  // We wrap track() to record every event+props so the key-hygiene assertion can scan payloads.
+  // We wrap track to record every event+props so the key-hygiene assertion can scan payloads.
   const security = fs.readFileSync(path.join(SRC, "security.js"), "utf8");
   const shim = fs.readFileSync(path.join(SRC, "analytics-shim.js"), "utf8");
   // The inline block aliases the DOI-harvest core from window.AusmtDoiHarvest - the shared src/doi_harvest.js
@@ -113,7 +113,7 @@ async function boot({ probe, xhrScript }) {
   const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((b) => b.includes("function buildSurveyYaml"));
   ok(!!inline, "could not extract the inline pure-logic+UI script block");
   let code = security + "\n" + shim + "\n" + doiHarvest + "\n" +
-    // record every track() call (name + props) so we can prove the key never rides in analytics.
+    // record every track call (name + props) so we can prove the key never rides in analytics.
     "(function(){var _t=window.track;window.track=function(n,p){window.__trackCalls.push({name:n,props:p});return _t&&_t(n,p);};})();\n" +
     inline;
   win.__trackCalls = record.trackCalls;
@@ -134,7 +134,7 @@ function fillValidForm(win, { key = SECRET_KEY, orcid = "" } = {}) {
   $("m_auth").checked = true; $("m_licdecl").checked = true; $("m_locconf").checked = true;
   if (key != null) $("m_submit_key").value = key;
   // Inject the EDI into the page's internal file list by driving the real drop handler path: the page
-  // exposes addFiles() only inside the UI closure, so instead push through the file input's change by
+  // exposes addFiles only inside the UI closure, so instead push through the file input's change by
   // faking a File-like object the FileReader path reads. Simpler + faithful: dispatch a drop with a
   // DataTransfer-like payload the page's drop handler accepts.
   return new Promise((res) => {
@@ -198,7 +198,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     "a passing probe fires GatewayDetected");
 
   // --------------------------------------------------------------------------------------------------
-  // 2. THE KEY-HYGIENE CENTREPIECE (design §5). Boot with the gateway present + a scripted 201, fill a
+  // 2. THE KEY-HYGIENE CENTREPIECE. Boot with the gateway present + a scripted 201, fill a
   //    valid form with the SECRET key, submit, and prove the key appears ONLY in the header.
   const script201 = { status: 201, responseText: JSON.stringify({ submission_id: "SUB123", status_url: "/gateway/status/tok-EN_abc123" }) };
   const env = await boot({ probe: probePresent, xhrScript: script201 });
@@ -237,12 +237,12 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   ok(zipBuf.indexOf(Buffer.from(SECRET_KEY)) < 0, "the key is absent from the built zip bytes");
   // Also prove email/ORCID never entered the zip bytes even though they ride as form fields.
   ok(zipBuf.indexOf(Buffer.from("ada@example.org")) < 0, "the submitter email is absent from the zip bytes (C3)");
-  // (f) the key is NOT in any track() payload (name or props).
+  // (f) the key is NOT in any track payload (name or props).
   ok(!record.trackCalls.some((t) => JSON.stringify(t).indexOf(SECRET_KEY) >= 0), "the key is absent from every track() payload");
   ok(record.trackCalls.some((t) => t.name === "GatewaySubmitAttempted"), "GatewaySubmitAttempted fired");
   ok(record.trackCalls.some((t) => t.name === "GatewaySubmitResult" && t.props && t.props.code === 201),
     "GatewaySubmitResult{code:201} fired");
-  // track() must never carry the submission id either (capability-adjacent, design §0.4).
+  // track must never carry the submission id either (capability-adjacent).
   ok(!record.trackCalls.some((t) => JSON.stringify(t.props || {}).indexOf("SUB123") >= 0),
     "the submission id never enters a track() payload (design §0.4)");
   // (g) the key is NOT anywhere in the rendered DOM (outside the input's own live .value, which is not
@@ -259,9 +259,9 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   ok(/Save this link/i.test(body.textContent), "success panel carries the save-this-link warning");
 
   // --------------------------------------------------------------------------------------------------
-  // 3. XSS REGRESSION (design §5): a hostile 400 `detail` and a hostile status_url must render as inert
+  // 3. XSS REGRESSION: a hostile 400 `detail` and a hostile status_url must render as inert
   //    TEXT — no element injection. This assertion FAILS if someone removes the esc()/escAttr()/
-  //    statusUrlSafe() guards (non-vacuous).
+  //    statusUrlSafe guards (non-vacuous).
   // (3a) hostile 400 detail.
   {
     const evil = '<img src=x onerror="window.__pwned=1">';
@@ -470,7 +470,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
 
   // --------------------------------------------------------------------------------------------------
   // 6. PER-ROW FILE REMOVE: the ✕ button removes a file from `files`, the
-  //    list re-renders, updateConf() re-runs, and — the LOAD-BEARING invariant — a removed file must
+  //    list re-renders, updateConf re-runs, and - the LOAD-BEARING invariant - a removed file must
   //    NEVER ship in the packaged zip. Two EDIs are added; the FIRST (a dms_sign_ambiguous-flagged
   //    station, so it also drives the conflict count) is removed; then we assert the list, the DMS
   //    conflict count, and the REAL packaged zip bytes.
@@ -843,7 +843,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 8f. CONTRIBUTOR CREDIT MODEL (CONTRIBUTOR-CREDIT-SPEC C1/C2). The "who should be credited?" question
+  // 8f. CONTRIBUTOR CREDIT MODEL (the contributor-credit model C1/C2). The "who should be credited?" question
   //     -> creators[] (basic tier: name + Organisation checkbox, ORDER preserved) and the advanced typed
   //     contributors[] rows (name_type + the 8-token fail-closed role <select>). Drives every new field
   //     for real, then reads the REAL packaged survey.yaml and asserts the emitted shape the validator

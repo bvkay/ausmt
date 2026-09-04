@@ -38,7 +38,7 @@ _SECRET_BYTES = 20  # 160-bit secret == the RFC 6238 SHA-1 test-vector key lengt
 def generate_secret(*, nbytes: int = _SECRET_BYTES) -> str:
     """A fresh per-curator secret as an UNPADDED uppercase base32 string (the authenticator-app
     manual-entry format). `secrets.token_bytes` is the CSPRNG; base32 (RFC 4648) is what otpauth://
-    and every authenticator expect. Padding `=` is stripped for a clean copy/paste — verify() re-pads
+    and every authenticator expect. Padding `=` is stripped for a clean copy/paste - verify re-pads
     on decode, so a stripped or user-typed (spaces, lowercase) secret still resolves."""
     raw = secrets.token_bytes(nbytes)
     return base64.b32encode(raw).decode("ascii").rstrip("=")
@@ -51,8 +51,8 @@ def _decode_secret(secret: str) -> bytes:
     cleaned = secret.strip().replace(" ", "").upper()
     if not cleaned:
         # An empty / whitespace-only secret cleans to "" and base64.b32decode("") returns b"" - a
-        # VALID HMAC key — so verify() would compute and could MATCH an empty-key code instead of
-        # refusing, contradicting the fail-closed claim. Reject it: verify() catches ValueError and
+        # VALID HMAC key - so verify would compute and could MATCH an empty-key code instead of
+        # refusing, contradicting the fail-closed claim. Reject it: verify catches ValueError and
         # returns None, so an empty secret fails closed as documented. Unreachable via the DB today
         # (curator_totp.secret is NOT NULL and generate_secret is never empty) — defence in depth that
         # makes the docstring true.
@@ -70,7 +70,7 @@ def current_step(now: float | None = None, *, step_s: int = _STEP_S) -> int:
 
 
 def code_at(secret: str, counter: int, *, digits: int = _DIGITS) -> str:
-    """HOTP(K, counter) (RFC 4226 §5.3): HMAC-SHA1 of the 8-byte big-endian counter under the secret,
+    """HOTP(K, counter) (RFC 4226): HMAC-SHA1 of the 8-byte big-endian counter under the secret,
     dynamic-truncated to `digits` decimal digits, zero-padded. TOTP is this with counter == the
     time-step. A negative counter is clamped to 0 (a ±window at step 0 must not pack a negative int)."""
     key = _decode_secret(secret)

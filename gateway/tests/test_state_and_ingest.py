@@ -1,4 +1,4 @@
-"""State machine + done-file ingest (design §2/§5/§8). The property: only legal transitions are
+"""State machine + done-file ingest. The property: only legal transitions are
 possible, and every transition writes exactly one audit row. Ingest of a forged/unknown done-file
 is logged and ignored (no transition).
 
@@ -69,8 +69,8 @@ def test_terminal_state_cannot_transition(tmp_path):
 
 
 def test_allowed_set_matches_state_diagram():
-    # Guard against silent widening of the state machine: the exact legal set is frozen (C10 §2 +
-    # §1). If a future change adds a transition, it must be reflected HERE deliberately.
+    # Guard against silent widening of the state machine: the exact legal set is frozen (+
+    #). If a future change adds a transition, it must be reflected HERE deliberately.
     assert states.ALLOWED == frozenset({
         (states.RECEIVED, states.SCANNED),
         (states.RECEIVED, states.REJECTED_AV),
@@ -86,7 +86,7 @@ def test_allowed_set_matches_state_diagram():
 
 
 def test_validated_is_no_longer_terminal():
-    # §1: VALIDATED stops being terminal (curator actions reopen it). PUBLISHING/PUBLISH_FAILED
+    # VALIDATED stops being terminal (curator actions reopen it). PUBLISHING/PUBLISH_FAILED
     # Are transient/recoverable, not terminal. proven failing: with the C10 TERMINAL set
     # (VALIDATED terminal) a VALIDATED->PUBLISHING curator approve was refused as an illegal transition.
     assert not states.is_terminal(states.VALIDATED)
@@ -134,7 +134,7 @@ def test_ingest_quarantined_done(tmp_path):
 
 def test_forged_done_file_ignored(tmp_path):
     # A done-file with an unknown outcome / unknown submission must NOT drive any transition
-    # (design §8). proven failing: read_done returned a DoneFile for outcome='curator approve'
+    #. proven failing: read_done returned a DoneFile for outcome='curator approve'
     # and _apply_done attempted a transition.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, gw, cfg):
@@ -182,7 +182,7 @@ def test_post_unpack_sweep_hit_quarantines(tmp_path):
 
 def test_dead_job_requeued_once_then_quarantined(tmp_path):
     # A running-file older than 2x timeout: first dead pass re-queues it (a pending file reappears);
-    # a second dead pass quarantines with 'job died twice' (design §5 crash recovery).
+    # a second dead pass quarantines with 'job died twice' (crash recovery).
     # Proven failing: without _requeue_dead the stale running-file was never noticed and
     # the submission sat at SCANNED forever.
     import os

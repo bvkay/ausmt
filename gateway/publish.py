@@ -1,6 +1,6 @@
-"""The curator approve commits to surveys-live (design §5, v2). Publish is COMMIT-AND-PUSH ONLY: the
+"""The curator approve commits to surveys-live. Publish is COMMIT-AND-PUSH ONLY: the
 gateway writes the approved submission into the surveys-live git history (the ledger) and pushes it.
-It does NOT build — which is what makes the C10 §0 no-Docker-socket invariant hold cleanly (the
+It does NOT build - which is what makes the C10 no-Docker-socket invariant hold cleanly (the
 gateway never invokes the build, never needs the socket). `PUBLISHED` therefore means "committed to
 surveys-live main and pushed", NOT yet served. Since C40 the HOST-side serve-reconcile agent closes
 that gap automatically on its next tick (~15 min; deploy/scripts/reconcile.sh — still not the
@@ -10,7 +10,7 @@ Runs in-process in the gateway as a background task (the approve request returns
 PUBLISHING; the curator watches the state). Single-flight: ONE module-level asyncio.Lock, because
 every publish mutates the shared surveys-live checkout — two at once would corrupt it.
 
-Fail closed at EVERY git step (design §5): the ENTIRE git sequence is wrapped so a failure at ANY
+Fail closed at EVERY git step: the ENTIRE git sequence is wrapped so a failure at ANY
 point (dirty tree, a commit-hook rejection, a non-ff merge, a push rejection) rolls surveys-live back
 to the captured pre-state (ref AND branch, plus removal of staged untracked files) and lands
 PUBLISH_FAILED. No partial publish; a PUBLISH_FAILED submission leaves surveys-live byte-for-byte the
@@ -43,18 +43,18 @@ from pathlib import Path
 
 logger = logging.getLogger("ausmt.gateway.publish")
 
-# ONE publish at a time across the whole process (design §5). Module-level so every Gateway instance
+# ONE publish at a time across the whole process. Module-level so every Gateway instance
 # in a process shares it. NOTE: this single-flight + the crash reconciliation both assume ONE gateway
 # process — the deployment MUST run single-worker (uvicorn --workers 1); see deploy/README.md. A
 # multi-worker deployment would need cross-process coordination this demo deliberately does not build.
 PUBLISH_LOCK = asyncio.Lock()
 
-# Fixed commit identity (design §5.3). The commit records the gateway as author — never the
+# Fixed commit identity. The commit records the gateway as author - never the
 # submitter, whose contact details are PII confined to the DB.
 COMMIT_AUTHOR_NAME = "AusMT Gateway"
 COMMIT_AUTHOR_EMAIL = "gateway@ausmt.local"
 
-# The env vars that must NEVER reach a git subprocess or a git hook (design §6). Scrubbed from the
+# The env vars that must NEVER reach a git subprocess or a git hook. Scrubbed from the
 # environment handed to the git runner so a hostile/careless hook cannot exfiltrate them.
 _SECRET_ENV_VARS = ("AUSMT_SUBMIT_KEY", "AUSMT_CURATOR_KEYS")
 
@@ -93,7 +93,7 @@ class GitResult:
 
 
 def scrubbed_env() -> dict[str, str]:
-    """The process environment with the gateway secrets removed (design §6). git + any hook it runs
+    """The process environment with the gateway secrets removed. git + any hook it runs
     inherit PATH/HOME/GIT_*/the credential-helper env, but NOT AUSMT_SUBMIT_KEY/AUSMT_CURATOR_KEYS."""
     env = dict(os.environ)
     for name in _SECRET_ENV_VARS:
@@ -115,7 +115,7 @@ def real_git_runner(args: list[str], *, cwd: Path, env: dict[str, str] | None = 
 
 def validate_slug(slug: str | None) -> str:
     """Return the slug if it matches the safe charset; raise PublishError otherwise. The gate that
-    stops a spoofed slug from reaching a path or a branch name (design §5.2/§6). FULLMATCH, not
+    stops a spoofed slug from reaching a path or a branch name. FULLMATCH, not
     match — an anchored `$` matches before a trailing newline, so `.match` accepted "slug\n" (the
     trailing-newline class); this is the last gate before a git/fs op, so the check must be exact."""
     if not slug or not _SLUG_RE.fullmatch(slug):
@@ -132,7 +132,7 @@ def _flat(value: str | None) -> str:
 
 @dataclass(frozen=True)
 class PreState:
-    """The surveys-live state captured BEFORE any mutation (design §5 step 1). _rollback restores
+    """The surveys-live state captured BEFORE any mutation (step 1). _rollback restores
     exactly this — the ref AND the branch — never "whatever is currently checked out" (a prior failed
     publish could have left HEAD on a submit branch)."""
 
@@ -141,7 +141,7 @@ class PreState:
 
 
 def preflight(git_runner, surveys_live: Path) -> PreState:
-    """Design §5 step 1 pre-flight: the checkout must be CLEAN and on main before we touch it. A
+    """Design step 1 pre-flight: the checkout must be CLEAN and on main before we touch it. A
     dirty tree or a HEAD not on main => ABORT (raise), so nothing is staged into an unknown state.
     Returns the captured pre-state (ref + branch) for a byte-exact rollback."""
     status = git_runner(["status", "--porcelain"], cwd=surveys_live)
@@ -170,7 +170,7 @@ def _capture_head(git_runner, cwd: Path) -> str | None:
 
 def stage_package(package_dir: Path, surveys_live: Path, slug: str, *, allow_overwrite: bool) -> Path:
     """Copy quarantine/<id>/package/<slug>/ -> surveys-live/surveys/<slug>/. A pre-existing <slug>/
-    is a version bump/collision: do NOT overwrite silently (design §5.2) unless the curator confirmed
+    is a version bump/collision: do NOT overwrite silently unless the curator confirmed
     it (allow_overwrite, from an EXACT confirm token — not bool(any-string)). Returns the dest path."""
     src = package_dir / slug
     if not src.is_dir():
@@ -196,7 +196,7 @@ def stage_package(package_dir: Path, surveys_live: Path, slug: str, *, allow_ove
 def stage_and_commit(git_runner, package_dir: Path, surveys_live: Path, slug: str,
                      submission_id: str, curator_name: str, note: str, pre: PreState,
                      *, allow_overwrite: bool) -> str:
-    """Stage the package AND run the full git sequence, ALL inside one rollback guard (design §5 steps
+    """Stage the package AND run the full git sequence, ALL inside one rollback guard (steps
     2-3): a failure at ANY point — a mid-copy stage error, a commit-hook rejection, a non-ff merge, a
     push rejection — rolls surveys-live back to `pre` (ref + branch + staged-untracked cleanup) so it
     is byte-for-byte the pre-state, then raises. Returns the new commit sha on success.
@@ -242,7 +242,7 @@ def commit_metadata_edit(git_runner, surveys_live: Path, slug: str, new_yaml: by
     every step; a failure anywhere rolls surveys-live back byte-for-byte to `pre` and re-raises.
     Returns the new commit sha.
 
-    The §0.6 TOCTOU pin: `expected_sha256` is the sha256 the curator saw in the diff/preview. We
+    The TOCTOU pin: `expected_sha256` is the sha256 the curator saw in the diff/preview. We
     re-hash the bytes about to be written and REFUSE (409 upstream) on any mismatch — a re-run merge
     or a concurrent edit would change the bytes and invalidate the preview. The bytes themselves are
     the artifact; the gateway does not re-derive them (it never parses yaml), it only re-hashes.
@@ -301,7 +301,7 @@ def commit_station_removal(git_runner, surveys_live: Path, slug: str, new_yaml: 
     every step; a failure anywhere rolls surveys-live back byte-for-byte to `pre` and re-raises.
     Returns the new commit sha.
 
-    The §0.6 TOCTOU pin holds on the survey.yaml bytes (`expected_sha256` is what the curator saw in
+    The TOCTOU pin holds on the survey.yaml bytes (`expected_sha256` is what the curator saw in
     the preview) — a re-run or concurrent edit changes the bytes and 409s here. The removed EDIs are
     re-checked for existence and re-validated for charset before they become path components (the
     house guard: never trust a name from the request). A removal that would leave ZERO EDIs is refused
@@ -461,7 +461,7 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
 
     Each survey's own survey.yaml bytes are written and committed INDIVIDUALLY (`git add` scoped to that
     one path), so each commit's diff touches ONLY that survey's file (diff-minimality, D13 pin 4). The
-    §0.6 TOCTOU hash pin holds PER survey: `expected_sha256` is what the curator saw in the preview; we
+ TOCTOU hash pin holds PER survey: `expected_sha256` is what the curator saw in the preview; we
     re-hash the bytes about to be written and refuse the WHOLE batch on any mismatch (a stale preview or
     a concurrent edit). Fail-closed at EVERY step: a failure anywhere (stale-hash refusal, a write
     error, a commit-hook rejection, a non-ff merge, a push rejection) rolls surveys-live back byte-for-
@@ -478,7 +478,7 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
         raise PublishError("validator",
                            "batch blocked: validator FAILED on " + ", ".join(failed)
                            + " — nothing was committed")
-    # Re-hash pin (§0.6 TOCTOU) + path/existence guards for EVERY survey BEFORE mutating anything, so a
+    # Re-hash pin (TOCTOU) + path/existence guards for EVERY survey BEFORE mutating anything, so a
     # bad member is caught while surveys-live is still pristine (nothing to roll back yet).
     dest_root = surveys_live / "surveys"
     root_resolved = dest_root.resolve()
@@ -543,7 +543,7 @@ def _git(git_runner, args: list[str], cwd: Path, phase: str) -> GitResult:
 
 
 def _rollback(git_runner, surveys_live: Path, pre: PreState, submit_branch: str) -> None:
-    """Restore surveys-live to the captured pre-state (design §5 step 3): checkout the pre branch AND
+    """Restore surveys-live to the captured pre-state (step 3): checkout the pre branch AND
     reset --hard to the pre ref AND drop staged untracked files under surveys/, then delete the submit
     branch we created so a retry starts clean. Restores the CAPTURED branch/ref, never "whatever is
     currently checked out" — a prior failed publish could have left HEAD on a submit branch. Best-

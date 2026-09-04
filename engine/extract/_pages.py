@@ -376,7 +376,7 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
             x, y = p(pt[0], pt[1])
             head = f'<circle cx="{x}" cy="{y}" r="{r}"'
             # A dot whose colour encodes WHICH member survey it belongs to must also say so in
-            # text: colour alone is not an identifier (design brief 45), and the SPA's own scatter
+            # text: colour alone is not an identifier, and the SPA's own scatter
             # has carried these titles all along. Type-coloured dots need none; the type is a
             # category the legend and the tiles already name.
             if labelled:
@@ -411,7 +411,7 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
         clat = sum(pt[1] for pt in points) / len(points)
         mx, my = p(clon, clat)
         # Muted, not coral: the ring is a locator hint on a map, and coral is reserved for primary
-        # actions and active states (design brief 3). Same ink as the footprint panel's scale bar,
+        # actions and active states. Same ink as the footprint panel's scale bar,
         # so the two map annotations read as one layer over the geography.
         marker = (f'<circle cx="{mx}" cy="{my}" r="9" fill="none" stroke="#8FA3B0" '
                   f'stroke-width="1.4" opacity=".75"/>')
@@ -1397,7 +1397,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                  if pub_rows else "")
 
     # ---- the station table ----
-    # The five default columns of design brief 17. Deployment and instrument metadata do NOT belong
+    # The five default columns. Deployment and instrument metadata do NOT belong
     # here in eight more columns: the survey table is a chooser, and the per-station detail belongs
     # behind the station link this table's first column already carries, in the station pages' Runs
     # section.
@@ -1674,7 +1674,7 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
     line as the corpus grows: it fails loudly rather than quietly dropping stations.
 
     The per-dot `<title>` rides with the legend. It exists so that colour is not the only
-    identifier of a member survey (design brief 45), and the legend is what gives those colours
+    identifier of a member survey, and the legend is what gives those colours
     names. The card has no legend, and its whole surface is one stretched link, so no pointer can
     reach a dot there to read a title in the first place."""
     if not member_points:
@@ -1720,7 +1720,7 @@ def _prose_block(paragraphs) -> str:
 
     This is NOT markdown and must not grow into it. There is one sigil, it is recognised only at
     the start of a paragraph, there is no inline syntax, and every character of every paragraph
-    (subheadings included) goes through _e(). Author-supplied text can never carry markup onto a
+    (subheadings included) goes through _e. Author-supplied text can never carry markup onto a
     served page. A non-list value yields nothing rather than one <p> per character.
     """
     if not isinstance(paragraphs, (list, tuple)):
@@ -1749,7 +1749,7 @@ def _prose_of(coll, key) -> str:
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
                     member_facts=None, level_counts=None, formats=None, build=None,
                     og_image=None) -> str:
-    """The collection page as an EXPLORATORY layer (design brief 23 to 31), not a catalogue record.
+    """The collection page as an EXPLORATORY layer, not a catalogue record.
 
     `member_facts` ({slug: row}), `level_counts` ({level: n stations}) and `formats` are rollups the
     emitter computes from the SAME served documents the member survey pages render from. All three

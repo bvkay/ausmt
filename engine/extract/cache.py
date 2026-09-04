@@ -71,7 +71,7 @@ def _dirty_checkout(cwd: Path) -> bool | None:
 
 
 def is_salt_degenerate(engine_commit, checkout_dir: Path | None) -> tuple[bool, str]:
-    """Integrity gate (design §2.2): is the cache salt degenerate, so incremental must be DISABLED
+    """Integrity gate: is the cache salt degenerate, so incremental must be DISABLED
     for this build (treated as full — no reads, no writes)?
 
     Degenerate iff EITHER:
@@ -96,7 +96,7 @@ def is_salt_degenerate(engine_commit, checkout_dir: Path | None) -> tuple[bool, 
 
 
 def contract_schema_digest(engine_root: Path) -> str:
-    """sha256 over the positional-column contract + the product schema versions (design §2.4). A
+    """sha256 over the positional-column contract + the product schema versions. A
     column append (contract/columns.json) or an mtcat/manifest schema-version bump changes cached
     row shapes / cached XML validity, so it must invalidate the cache. Missing files degrade to an
     empty-string component rather than crashing — a build without a resolvable contract simply has a
@@ -119,7 +119,7 @@ def contract_schema_digest(engine_root: Path) -> str:
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
 
 
-# NOTE: the per-survey yaml digest (design §2.5) is not derived here. It is
+# NOTE: the per-survey yaml digest is not derived here. It is
 # computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from,
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
 # Metadata does not match. The path-taking helper that
@@ -133,7 +133,7 @@ class BuildCache:
     One instance per build. Holds the shared salt (engine commit + library versions + contract +
     per-survey survey.yaml digest) and derives a per-station key from it plus the source EDI sha.
     Tracks hit/miss/write counters (deterministic, asserted by tests — never wall-clock). When the
-    salt is degenerate the instance is INERT: enabled is False, get() always misses and put() is a
+    salt is degenerate the instance is INERT: enabled is False, get always misses and put is a
     no-op, and the counters prove no reads or writes happened.
     """
 
@@ -146,14 +146,14 @@ class BuildCache:
         self.lib_versions = dict(lib_versions or {})
         self.contract_digest = contract_digest or ""
         self.max_mb = int(max_mb) if max_mb is not None else _env_max_mb()
-        # Counters (design §4.6): deterministic build-report evidence, NOT wall-clock timing.
+        # Counters: deterministic build-report evidence, NOT wall-clock timing.
         self.hits = 0
         self.misses = 0
         self.writes = 0
         self.corrupt = 0   # Entries whose embedded payload checksum failed on read (deleted+recomputed)
         # Forensics: environment-induced I/O failures, distinct from content-addressed misses.
         # write_errors = puts dropped after the rename retries were exhausted (AV/indexer lock class);
-        # read_errors  = present-but-unreadable entries (counted as misses for the §4.6 arithmetic,
+        # read_errors  = present-but-unreadable entries (counted as misses for the arithmetic,
         # but attributable — a lock-induced spurious miss is not a cold miss).
         self.write_errors = 0
         self.read_errors = 0
@@ -164,7 +164,7 @@ class BuildCache:
             self.degenerate, self.degenerate_reason = True, disabled_reason
         else:
             self.degenerate, self.degenerate_reason = is_salt_degenerate(engine_commit, checkout_dir)
-        # The stable, per-survey salt component is injected via key(); the fixed part is precomputed.
+        # The stable, per-survey salt component is injected via key; the fixed part is precomputed.
         self._fixed_salt = "\x00".join([
             # Cache-format version tag. v2 = self-verifying entries (digest-line + payload, A1b);
             # v3 = the served-XML meta blob carries `survey_digest` (the digest
@@ -190,9 +190,9 @@ class BuildCache:
             # with no runs at all. Same clean-MISS discipline as v4/v5: one full re-derive on the
             # first build after this lands, then warm again.
             "ausmt-c47-cache-v6",
-            str(engine_commit),                                      # coarse engine-commit salt (§2.2)
-            json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions (§2.3)
-            self.contract_digest,                                    # columns + schema digest (§2.4)
+            str(engine_commit),                                      # coarse engine-commit salt
+            json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions
+            self.contract_digest,                                    # columns + schema digest
         ])
         # Forensics: a short fingerprint of the FULL fixed salt (version tag + engine commit +
         # lib versions + contract digest). Two builds that should key identically expose identical
@@ -211,7 +211,7 @@ class BuildCache:
     def key(self, *, edi_sha: str, survey_digest: str, kind: str) -> str:
         """Derive the content-addressed key for one station product. `kind` namespaces the two
         distinct products (parse rows vs served XML) so they never collide on one key. The key binds
-        EVERY salt field (§2): source EDI sha + engine commit + lib versions + contract + this
+        EVERY salt field: source EDI sha + engine commit + lib versions + contract + this
         survey's whole-yaml digest."""
         material = "\x00".join([self._fixed_salt, str(edi_sha), str(survey_digest or ""), str(kind)])
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
@@ -238,7 +238,7 @@ class BuildCache:
             return None
         except OSError:
             # A PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is not a
-            # normal cold miss. Still tallied as a miss (the §4.6 arithmetic and the recompute path
+            # normal cold miss. Still tallied as a miss (arithmetic and the recompute path
             # are unchanged) but counted in read_errors so a lock-induced spurious miss is
             # attributable from the build report instead of masquerading as content drift.
             self.read_errors += 1
@@ -281,7 +281,7 @@ class BuildCache:
 
     def put_bytes(self, key: str, ext: str, data: bytes) -> None:
         """Write a blob to the cache as a SELF-VERIFYING entry (`<sha256-hex-of-payload>\\n<payload>`),
-        temp-then-atomic-rename (design §2). No-op when disabled or in read-only (`ro`) mode.
+        temp-then-atomic-rename. No-op when disabled or in read-only (`ro`) mode.
         os.replace is atomic within a filesystem on both POSIX and Windows, so a concurrent or
         interrupted build never observes a half-written entry."""
         if not self.enabled or self.mode == "ro":
@@ -329,7 +329,7 @@ class BuildCache:
             pass
 
     def counters(self) -> dict:
-        """The deterministic hit/miss/write/corrupt tally for the build log + report (design §4.6).
+        """The deterministic hit/miss/write/corrupt tally for the build log + report.
         salt_fp fingerprints the fixed salt so cross-build key-space drift is observable."""
         return {"enabled": self.enabled, "mode": self.mode, "hits": self.hits,
                 "misses": self.misses, "writes": self.writes, "corrupt": self.corrupt,
@@ -337,7 +337,7 @@ class BuildCache:
                 "degenerate": self.degenerate, "reason": self.degenerate_reason,
                 "salt_fp": self.salt_fp}
 
-    # ---- lifecycle: prune at the end of a successful build (design §3) --------------------------
+    # ---- lifecycle: prune at the end of a successful build --------------------------
 
     def prune(self) -> dict:
         """Drop entries untouched for PRUNE_MAX_AGE_DAYS, then enforce the size cap oldest-first.

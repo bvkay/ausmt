@@ -51,7 +51,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("name", "Name", "University of Example", "text"),
         ("ror", "ROR id", "https://ror.org/03yghzc09", "ror"),
     ],
-    # IDCONS D2 (SPEC §3): the flat dataset-identifier inputs are RETIRED from the editor UI. The typed
+    # The flat dataset-identifier inputs are RETIRED from the editor UI. The typed
     # related_identifiers list (below, group (b) of the "Identifiers & PIDs" page) is now the ONLY place a
     # dataset-level DOI/PID is edited; the legacy "Related publication (+DOI)" pair is superseded by
     # publications[]; identifiers.project was a dead orphan. The schema KEYS stay readable (the engine keeps
@@ -61,7 +61,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # Only the two survey/project-level PIDs a curator legitimately sets stay modelled here.
     "identifiers": [
         ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
-        # §2b (identifiers design): the ONE survey/platform-level instrument PID (PIDINST, e.g.
+        # (identifiers design): the ONE survey/platform-level instrument PID (PIDINST, e.g.
         # 10.82388/<id>) - the survey-layer counterpart to the deep per-serial instruments[].pid.
         # Additive; the surveys validator only WARNS on its format, so it is plain "text" here
         # (a light hint, never a form block) — the same posture as project_raid above.
@@ -96,7 +96,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("contact", "Access contact", "email or role address", "email"),
     ],
     "time_series": [
-        # IDCONS D2 (SPEC §3): time_series.collection_pid is RETIRED from the editor UI — a dataset-level
+        # time_series.collection_pid is RETIRED from the editor UI - a dataset-level
         # collection DOI/handle is now recorded as a typed related_identifiers row (relation IsDerivedFrom).
         # The key stays readable (engine fallback + carry-forward round-trip); only levels_available is edited here.
         # levels_available is a checkbox set — rendered specially; listed here for order only.
@@ -138,7 +138,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
 
 # List (repeatable-row) sections: per-row scalar sub-fields.
 LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
-    # CONTRIBUTOR-CREDIT-SPEC C1 (§6 editor typed rows): creators[] - who the citation names, an ORDERED
+    # the contributor-credit model C1 (editor typed rows): creators[] - who the citation names, an ORDERED
     # editorial list (order IS the citation author order, so the row renders with up/down reorder controls
     # in curatorpage). name_type is FAIL-CLOSED (person|organisation); orcid is people-only and ror
     # organisations-only, both OPTIONAL curator hints (WARNING-only at the validator). orcid/ror sit in
@@ -150,8 +150,8 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("orcid", "ORCID (people)", "0000-0002-1825-0097", "orcid"),
         ("ror", "ROR id (organisations)", "https://ror.org/03yghzc09", "ror"),
     ],
-    # CONTRIBUTOR-CREDIT-SPEC C2 (§6): contributors[] - who did what, repeatable. name_type AND role are
-    # both FAIL-CLOSED (role over the 8-token DataCite contributorType subset, §3.1); orcid/ror optional as
+    # contributors[]: who did what, repeatable. name_type AND role are
+    # both FAIL-CLOSED (role over the 8-token DataCite contributorType subset); orcid/ror optional as
     # for creators. NOT ordered (no reorder controls), unlike creators.
     "contributors": [
         ("name", "Name", "Family, Given  or  Organisation name", "text"),
@@ -196,7 +196,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("grant_title", "Grant title", "grant title", "text"),
         ("funding_doi", "Funding DOI", "10.xxxx/xxxxx", "doi"),
     ],
-    # IDCONS D2 (SPEC §3): the per-row instruments[].pid input is RETIRED from the editor UI. The
+    # The per-row instruments[].pid input is RETIRED from the editor UI. The
     # survey/platform-level PID is recorded once as identifiers.instrument_pid (group (c) of the new page)
     # or as a typed related_identifiers row; the per-serial key stays readable (engine fallback +
     # per-row carry-forward round-trip) so an un-migrated instruments[].pid survives an unrelated edit.
@@ -204,15 +204,15 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("manufacturer", "Manufacturer", "Phoenix", "text"),
         ("model", "Model", "MTU-5C", "text"),
     ],
-    # D-L3 (SPEC §9.3): the "Source datasets" section is RETIRED from the editor UI. Its acquisition
+    # The "Source datasets" section is RETIRED from the editor UI. Its acquisition
     # fields (title, licence-as-obtained, retrieved, attribution statement, attribution profile) are now
     # OPTIONAL keys on a related_identifiers row (an upstream dataset AusMT obtained is just another typed
     # row, identifies: entire). The `sources` LIST_SECTIONS registration is GONE, so build_section_patch
     # never assembles the key — a legacy sources[] on disk is byte-preserved (never entered into any
     # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine keeps reading
-    # sources[] (§9.3 note), so nothing served changes.
+    # sources[] (note), so nothing served changes.
     #
-    # §2a + D-L (SPEC §9): the single typed list of provenance relations to identifiers AusMT does NOT own.
+    # + D-L: the single typed list of provenance relations to identifiers AusMT does NOT own.
     # The primary per-row control is `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
     # terms) — FIRST on the row and FAIL-CLOSED like relation/identifier_type. The DataCite `relation`
     # DERIVES from `identifies` server-side, so it is not a curator control on an identifies
@@ -233,7 +233,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     ],
 }
 
-# D-L (SPEC §9): the related_identifiers row sub-keys that are OPTIONAL — `identifies` (absent on a legacy
+# D-L: the related_identifiers row sub-keys that are OPTIONAL - `identifies` (absent on a legacy
 # row) plus the acquisition fields merged from the retired sources[] list. Unlike the always-emitted typed
 # core (identifier / identifier_type / relation / custodian), an empty optional key is written back ONLY
 # when the ORIGINAL row already carried it, so a corpus row that has no acquisition fields (and a legacy
@@ -243,7 +243,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
 _OPTIONAL_LIST_KEYS: dict[str, frozenset] = {
     "related_identifiers": frozenset({"identifies", "title", "licence", "retrieved", "statement",
                                       "profile"}),
-    # CONTRIBUTOR-CREDIT-SPEC (§6): orcid is people-only and ror organisations-only, so on any given credit
+    # the contributor-credit model: orcid is people-only and ror organisations-only, so on any given credit
     # row one of them is legitimately absent. Marked OPTIONAL so an empty orcid/ror is written back ONLY
     # when the original row already carried it - an org creator {name, name_type: organisation, ror} and a
     # person creator {name, name_type: person, orcid} each round-trip to their snapshot (-> _OMIT) instead
@@ -296,7 +296,7 @@ LICENSE_REDISTRIBUTABLE = LICENSE_IDS[:13]
 # "ga" prescribes the Geoscience Australia form (and makes attribution.statement required at validate).
 SOURCE_PROFILES = ("ga", "generic")
 
-# §2a (identifiers design — the related-identifiers model): the two FROZEN, FAIL-CLOSED vocabularies the
+# (identifiers design - the related-identifiers model): the two FROZEN, FAIL-CLOSED vocabularies the
 # typed relation adds. RELATION_TYPES is the curated DataCite subset as the editor presets;
 # IDENTIFIER_TYPES is the small set AusMT records against. Both are BAKED copies — the gateway APP image
 # is content-blind (ships only gateway/, never the surveys validator — see gateway.Dockerfile), so a
@@ -377,12 +377,12 @@ IDENTIFIER_PAIR_KEYS = ("scheme", "identifier")
 # The two designation lists identity_classification may carry, and the case each belongs to.
 IDENTITY_DESIGNATION_LISTS = ("represents", "own_identifiers")
 
-# CONTRIBUTOR-CREDIT-SPEC (§6, the unified People & credit panel: "one huge
+# the contributor-credit model (the unified People & credit panel: "one huge
 # list which makes no sense"): the served schema keeps creators[] (citation authors) and contributors[]
 # (who-did-what roles) as TWO lists, but the editor presents them as ONE panel of unified rows
 # (one row per person/org). The panel is the `people` section: its rows POST as l_people_<i>_<subkey>
 # (name / name_type / orcid / ror), a cited-author checkbox l_people_<i>_cited, and one checkbox per role
-# l_people_<i>_role_<Token>. assemble_people() DECOMPOSES those rows back into the two lists, so
+# l_people_<i>_role_<Token>. assemble_people DECOMPOSES those rows back into the two lists, so
 # the served creators[]/contributors[] shape is byte-for-byte unchanged (UI/assembly only). The two lists
 # stay registered as LIST_SECTIONS above for the per-list advanced-JSON escape and the vocab pins; they
 # are NOT assembled by the generic build_section_patch loop (they are decomposed here instead).
@@ -468,7 +468,7 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "profile" and value not in SOURCE_PROFILES:
         raise SectionError(section, f"attribution profile '{value}' is not one of "
                                     f"{', '.join(SOURCE_PROFILES)}")
-    # §2a: the typed related-identifiers presets. Fail-closed like access.coordinates / profile — the
+    # the typed related-identifiers presets. Fail-closed like access.coordinates / profile - the
     # <select> only offers vocab values, so a normal submit is always valid; this rejects a hand-crafted
     # out-of-vocab POST (a mis-typed relation would publish a wrong provenance claim).
     if kind == "relation" and value not in RELATION_TYPES:
@@ -483,7 +483,7 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "identifies" and value not in IDENTIFIES_LEVELS:
         raise SectionError(section, f"data level '{value}' is not one of "
                                     f"{', '.join(IDENTIFIES_LEVELS)}")
-    # CONTRIBUTOR-CREDIT-SPEC (§6) - the typed credit-row presets. Fail-closed like the vocabs above: the
+    # the contributor-credit model - the typed credit-row presets. Fail-closed like the vocabs above: the
     # <select> only offers vocab values, so a normal submit is always valid; this rejects a hand-crafted
     # out-of-vocab POST. A mis-typed name_type mis-classifies the actor (wrong citation rendering) and a
     # mis-typed role publishes a wrong provenance claim about who did what, so each must block, not ship.
@@ -527,7 +527,7 @@ def _original_snapshot(form: dict, section: str):
 
 _ABSENT = object()  # the section had no original value (distinct from a real null)
 
-# IDCONS D2 (SPEC §3): keys a section's assembler MANAGES itself — so their absence from the assembled
+# Keys a section's assembler MANAGES itself - so their absence from the assembled
 # value is INTENTIONAL and the unmodelled-key carry-forward must NOT resurrect them. access.coordinate_-
 # overrides is the one such key: _resolve_coordinate_overrides may deliberately DROP it (the C42 set-all-
 # to-inherit-removes-the-key path), so carrying it back from the snapshot would un-delete a curator's
@@ -623,7 +623,7 @@ def _assemble_map(form: dict, section: str):
             if rows:
                 out[key] = rows
 
-    # IDCONS D2 (SPEC §3) — carry forward UNMODELLED original keys verbatim. Any key the source section
+    # IDCONS D2 - carry forward UNMODELLED original keys verbatim. Any key the source section
     # carried that the widget does not model (the retired flat identifier keys dataset_doi / project /
     # related_publication(_doi), OR any unknown/legacy key the editor never modelled) is re-emitted exactly
     # as stored, so the assembled value still equals the o_<section> snapshot on an untouched section
@@ -874,13 +874,13 @@ def _assemble_list(form: dict, section: str) -> list:
             # removes the key rather than writing `ror: null`.
             if subkey in never_null and not value:
                 continue
-            # D-L (SPEC §9): an OPTIONAL sub-key (identifies + the acquisition fields) is written back only
+            # D-L: an OPTIONAL sub-key (identifies + the acquisition fields) is written back only
             # when it has a value OR the original row already carried it — never introduce an empty one the
             # source row lacked (mirrors the map scalar rule; keeps a corpus row's round-trip byte-clean).
             if subkey in optional and not value and subkey not in orig_row:
                 continue
             row[subkey] = value if value else None
-        # D-L2 (SPEC §9.2): when the row states a data LEVEL, the DataCite relation DERIVES from it — the
+        # When the row states a data LEVEL, the DataCite relation DERIVES from it - the
         # relation control is not shown on an identifies row, so the form carries no explicit relation and
         # the server writes the derived value. A legacy row (no identifies) keeps whatever relation it
         # posted, untouched (backward compatible). An out-of-vocab identifies already FAILed above.
@@ -888,7 +888,7 @@ def _assemble_list(form: dict, section: str) -> list:
         if idf and str(idf).strip() in IDENTIFIES_LEVELS:
             row["relation"] = derived_relation(idf)
             any_value = True
-        # IDCONS D2 (SPEC §3) — carry forward UNMODELLED per-row keys from the correspondingly-indexed
+        # IDCONS D2 - carry forward UNMODELLED per-row keys from the correspondingly-indexed
         # original row (the render assigns row index i to original[i]). The retired instruments[].pid — and
         # any unknown/legacy per-row key — is re-emitted verbatim, so an untouched list reassembles equal to
         # its o_<section> snapshot (-> _OMIT, byte-preserved) instead of the wholesale-replace dropping it.
@@ -931,7 +931,7 @@ def _row_indices(form: dict, section: str) -> list[int]:
     return sorted(idx)
 
 
-# ---- unified People & credit assembly (CONTRIBUTOR-CREDIT-SPEC §6) ------------------------------
+# ---- unified People & credit assembly (the contributor-credit model) ------------------------------
 
 def normalize_orcid(value) -> str:
     """The merge-key form of an ORCID: lower-cased, with any URL wrapper (https://orcid.org/...) and

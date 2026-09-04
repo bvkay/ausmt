@@ -1,4 +1,4 @@
-"""Curator queue/detail rendering + return/reject + the PII surface split (design §3/§4/§8).
+"""Curator queue/detail rendering + return/reject + the PII surface split.
 
 Guards under test:
 - queue lists VALIDATED/RETURNED/PUBLISH_FAILED newest-first with the submitter + WARN count.
@@ -63,7 +63,7 @@ def test_detail_shows_submitter_and_csrf_form(tmp_path):
             await curator_login(client)
             page = await client.get(f"/gateway/curator/submission/{sid}")
             assert page.status_code == 200
-            # Curator-only PII is present here BY DESIGN (design §2).
+            # Curator-only PII is present here BY DESIGN.
             assert PII_EMAIL in page.text
             assert PII_NAME in page.text
             # Every action form carries the CSRF hidden field.
@@ -77,7 +77,7 @@ def test_detail_shows_submitter_and_csrf_form(tmp_path):
 
 
 def test_return_note_on_public_status_but_not_submitter(tmp_path):
-    # THE PII split (design §8): a RETURNED submission's note surfaces on the PUBLIC status page, but
+    # THE PII split: a RETURNED submission's note surfaces on the PUBLIC status page, but
     # its submitter block does NOT. Failure criterion: fails if the public page leaks the submitter
     # email/name, or if the return note never reached the public page.
     async def _body():
@@ -125,7 +125,7 @@ def test_reject_records_actor_and_note(tmp_path):
 
 
 def test_empty_note_refused_every_action(tmp_path):
-    # EVERY action requires a non-empty note (design §3 — no reject exemption, review #11). An empty
+    # EVERY action requires a non-empty note (- no reject exemption, review #11). An empty
     # note on return OR reject => 400, no transition. Failure criterion: fails if either action
     # Transitions on an empty note. proven failing: the `action != "reject"` exemption let
     # a reject with an empty note through, so a submission could be REJECTED with no recorded reason.
@@ -146,7 +146,7 @@ def test_empty_note_refused_every_action(tmp_path):
 
 
 def test_ack_checkbox_shown_for_generic_only_hit(tmp_path):
-    # §3: when the PII block is acknowledgeable (non-submitter address) and there are NO submitter
+    # when the PII block is acknowledgeable (non-submitter address) and there are NO submitter
     # hits, the curator approve form shows the ack_pii checkbox with the confirmation label; the curator Approve button
     # is NOT hard-disabled. Failure criterion: fails if the checkbox/label is absent or the button is
     # disabled. proven failing against pre-C11b code: no ack_pii control existed and any blocking FAIL
@@ -171,7 +171,7 @@ def test_ack_checkbox_shown_for_generic_only_hit(tmp_path):
 
 
 def test_no_ack_checkbox_and_disabled_for_submitter_hit(tmp_path):
-    # §0/§3: when the submitter's OWN email is present, NO ack checkbox is rendered, the detail
+    # when the submitter's OWN email is present, NO ack checkbox is rendered, the detail
     # states the block is absolute, and the curator Approve button is hard-disabled. Failure criterion: fails
     # if an ack_pii control appears, or the absolute-block wording is missing, or curator Approve is enabled.
     async def _body():
@@ -192,7 +192,7 @@ def test_no_ack_checkbox_and_disabled_for_submitter_hit(tmp_path):
 
 
 def test_hostile_pii_filename_renders_inert(tmp_path):
-    # §4.7: a hostile file name in the package (an XSS payload) is submitter-derived input and
+    # a hostile file name in the package (an XSS payload) is submitter-derived input and
     # must render INERT (escaped) in the detail page. Rendered at the page layer directly with a
     # crafted checklist because such a name (`<`, `>`) is not a legal file on Windows, yet IS a legal
     # zip member on the Linux gateway host — the escaping, not the filesystem, is the control under
@@ -256,7 +256,7 @@ def test_detail_full_width_two_column_layout():
 
 
 def test_public_status_identical_for_ack_vs_nonack(tmp_path):
-    # §4.8: the PUBLIC status page output is byte-identical for an acknowledged vs a
+    # the PUBLIC status page output is byte-identical for an acknowledged vs a
     # non-acknowledged submission in the same state — acknowledgement is a CURATOR-only detail and must
     # not change the public page. Failure criterion: fails if the two public pages differ (beyond the
     # submission id / token, which we normalise out).
@@ -325,8 +325,8 @@ def test_publishing_window_hides_ack_details_from_public(tmp_path):
     # Review finding 2 (HIGH): the PII-ACK-prefixed reason lands on the VALIDATED->PUBLISHING
     # transition, and the public status page rendered the LAST transition reason for ANY state with a
     # truthy note — so during the real PUBLISHING window (git runs for seconds) the submitter-visible
-    # page showed 'PII-ACK', the flagged file names, and the curator's private note. C11b §2:
-    # acknowledgement details are curator-only; the public page must not change. Failure criterion:
+    # page showed 'PII-ACK', the flagged file names, and the curator's private note.
+    # Acknowledgement details are curator-only; the public page must not change. Failure criterion:
     # fails if, while the submission is verifiably in PUBLISHING after an acknowledged curator approve, the
     # public page contains 'PII-ACK', a flagged file name, or the curator note.
     async def _body():
@@ -411,7 +411,7 @@ def test_public_page_identical_ack_vs_nonack_while_publishing(tmp_path):
 
 def test_pii_absent_from_served_preview(tmp_path):
     # The submitter email must appear in the CURATOR detail HTML but NEVER in the served preview
-    # output (design §8 PII bullet). Failure criterion: fails if the email fixture appears in ANY
+    # output (PII bullet). Failure criterion: fails if the email fixture appears in ANY
     # served preview asset. (Here the fixture package's preview is PII-clean; the checklist test
     # covers the FAIL case where PII IS present.)
     async def _body():

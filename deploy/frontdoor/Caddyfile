@@ -144,7 +144,7 @@
 	#   * POST /gateway/submit          — the direct-upload endpoint the Submit button POSTs to.
 	#   * POST /gateway/request-key - self-serve email key issuance.
 	#   * GET  /gateway/healthz         — the liveness probe the page uses to reveal the Submit button.
-	#   * GET  /gateway/status/*        — the capability-token submission-status page (design §3).
+	#   * GET  /gateway/status/*        - the capability-token submission-status page.
 	# Everything else under /gateway — the ENTIRE curator/admin workbench (login, queue, publish, serve
 	# control, passkey enrolment, analytics, uploader-key management) — is an EXPLICIT 404. The bare
 	# `/gateway` is enumerated alongside `/gateway/*` because `/gateway/*` does not match a path with no
