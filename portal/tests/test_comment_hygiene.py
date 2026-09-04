@@ -518,6 +518,10 @@ CODE_LINE_TERSE = tuple(re.compile(p) for p in (
     r"^(?:await\s+|new\s+)?[\w$][\w$.\[\]'\"]*\s*(?:\+|\|\||\?\?)?=[^=~>]\s*\S.*[;{]\s*$",
     r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*[;,)]\s*$",
     r"^\.[\w$]+\(.*\)",
+    # One ELEMENT of an array or object literal, which is the shape a switched-off row takes and
+    # the only shape a LIVE literal can carry between two of its own entries.
+    r"^\[.*\]\s*,\s*$",
+    r"^\{.*\}\s*,\s*$",
 ))
 TERSE_WORDS = 8
 # The looser tell, only ever counted in a run: a terse line that ends the way a statement
@@ -527,7 +531,12 @@ CODE_RUN_LINE = re.compile(r"^</?[a-zA-Z][\w-]*[\s>]|^\}\)?[;,]?\s*$"
                            r"|(?=[^\n]*[=(){}\[\]])[^\n]*[;{}]\s*$")
 CODE_RUN = 3
 
-LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
+# A triple quote opens a comment as surely as a # does, so the first line of a docstring is the
+# head of a comment and a rule that reads head position must see it there.
+LEADERS = ("<!--", "-->", "/*", "*/", "//", '"""', "'''", "*", "#")
+# A one-line block comment carries its CLOSER on the same line, and a shape anchored to the end of
+# a line can never match while the closer is still sitting there.
+TRAILERS = ("-->", "*/", '"""', "'''")
 
 
 def bare_line(line):
@@ -538,6 +547,10 @@ def bare_line(line):
         for lead in LEADERS:
             if stripped.startswith(lead):
                 stripped = stripped[len(lead):].strip()
+                changed = True
+        for trail in TRAILERS:
+            if stripped.endswith(trail):
+                stripped = stripped[:-len(trail)].strip()
                 changed = True
     return stripped
 
@@ -944,6 +957,35 @@ def test_commented_out_code_is_caught_in_its_shapes(tmp_path):
         f.write_text(body, encoding="utf-8")
         hits = offences([f])
         assert hits and "commented-out code" in hits[0], f"{name}: commented-out code went unseen"
+
+
+def test_a_one_line_block_comment_is_read_without_its_closer():
+    """A comment shape anchored to the end of a line cannot match while the comment's own closer is
+    still sitting on it, so a one-line /* */ or <!-- --> hides every terse code shape there is."""
+    for source in ('/* rows.push(["x", y]); */',
+                   '/* level3 = row(m); */',
+                   '<!-- panel.innerHTML = html; -->'):
+        assert looks_like_code(source), f"a one-line block comment hid the code inside it: {source}"
+
+
+def test_a_switched_off_array_or_object_element_is_commented_out_code():
+    """A row lifted out of an array or an object literal is code switched off rather than deleted,
+    and it is the shape a live literal can carry INLINE, between two of its own entries."""
+    for source in ('/* ["screening parameters", params], */',
+                   '/*["screening","Screening"],*/',
+                   '// { label: "Screening", key: "screening" },'):
+        assert looks_like_code(source), f"a switched-off literal element went unseen: {source}"
+
+
+def test_a_tag_at_the_head_of_a_docstring_is_in_head_position(tmp_path):
+    """The triple quote is a comment leader like any other. Without it the first line of a docstring
+    never sits in head position, and a work-item tag written there is unreachable."""
+    f = tmp_path / "tagged.py"
+    f.write_text('"""C32 the ONE source."""\n', encoding="utf-8")
+    hits = offences([f])
+    assert hits and "work-item identifier" in hits[0], (
+        "a work-item tag at the head of a docstring went unseen"
+    )
 
 
 def test_prose_that_names_a_function_is_not_commented_out_code(tmp_path):

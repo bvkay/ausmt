@@ -518,6 +518,10 @@ CODE_LINE_TERSE = tuple(re.compile(p) for p in (
     r"^(?:await\s+|new\s+)?[\w$][\w$.\[\]'\"]*\s*(?:\+|\|\||\?\?)?=[^=~>]\s*\S.*[;{]\s*$",
     r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*[;,)]\s*$",
     r"^\.[\w$]+\(.*\)",
+    # One ELEMENT of an array or object literal, which is the shape a switched-off row takes and
+    # the only shape a LIVE literal can carry between two of its own entries.
+    r"^\[.*\]\s*,\s*$",
+    r"^\{.*\}\s*,\s*$",
 ))
 TERSE_WORDS = 8
 # The looser tell, only ever counted in a run: a terse line that ends the way a statement
@@ -527,7 +531,12 @@ CODE_RUN_LINE = re.compile(r"^</?[a-zA-Z][\w-]*[\s>]|^\}\)?[;,]?\s*$"
                            r"|(?=[^\n]*[=(){}\[\]])[^\n]*[;{}]\s*$")
 CODE_RUN = 3
 
-LEADERS = ("<!--", "-->", "/*", "*/", "//", "*", "#")
+# A triple quote opens a comment as surely as a # does, so the first line of a docstring is the
+# head of a comment and a rule that reads head position must see it there.
+LEADERS = ("<!--", "-->", "/*", "*/", "//", '"""', "'''", "*", "#")
+# A one-line block comment carries its CLOSER on the same line, and a shape anchored to the end of
+# a line can never match while the closer is still sitting there.
+TRAILERS = ("-->", "*/", '"""', "'''")
 
 
 def bare_line(line):
@@ -538,6 +547,10 @@ def bare_line(line):
         for lead in LEADERS:
             if stripped.startswith(lead):
                 stripped = stripped[len(lead):].strip()
+                changed = True
+        for trail in TRAILERS:
+            if stripped.endswith(trail):
+                stripped = stripped[:-len(trail)].strip()
                 changed = True
     return stripped
 
