@@ -323,7 +323,7 @@ def test_people_panel_chips_absent_on_a_clean_survey(tmp_path):
 def _canonical_form(fields):
     """Build the People & credit form POST that an UNCHANGED load of `fields` (its creators[] +
     contributors[]) would submit: merge to unified rows, then emit l_people_* + the cited/role ticks +
-    the o_ anchors. Used to prove the no-op round-trip is byte-stable."""
+    the o_ anchors. It proves the no-op round-trip is byte-stable."""
     rows = ef.merge_people(fields.get("creators") or [], fields.get("contributors") or [])
     tick_rows = []
     for r in rows:
@@ -454,7 +454,7 @@ def test_the_legacy_convert_surface_is_gone(tmp_path):
 def test_an_unmodelled_retired_key_is_byte_preserved_through_an_unrelated_save(tmp_path):
     """A pre-migration survey that STILL carries a retired flat credit key is simply an unmodelled
     key now: the editor never reads or patches it, so an unrelated edit leaves it byte-for-byte
-    alone. This is what lets the ausmt wave run clean against BOTH corpora."""
+    alone. This is what lets the ausmt suite run clean against BOTH corpora."""
     patch = {"region": "Renamed Region"}
     pkg = _merge_pkg(tmp_path, b'name: Demo\nversion: 1.0.0\nregion: Old\n'
                                b'lead_investigator:\n  name: "Heinson, Graham"\n'

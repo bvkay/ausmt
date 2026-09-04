@@ -18,7 +18,7 @@ sys.path.insert(0, str(REPO / "extract"))
 sys.path.insert(0, str(REPO))
 import build_portal  # noqa: E402
 
-# (review F7) +.1: the
+# The resolution rule: the
 # validator resolves via the FOUR-arm environment enumeration recorded in
 # maintainer/C35b-GitTruthDesign.md §D3.1. The validator is stdlib-only import plumbing here
 # (_load_validator imports the module, no mt_metadata), so the vendored copy resolves in the
@@ -113,7 +113,7 @@ def test_no_validate_still_builds(tmp_path):
 
 def test_env_var_path_resolves_real_validator(tmp_path, monkeypatch):
     """AUSMT_VALIDATOR_PATH pointing at a real validator dir resolves and is used (both the directory
-    form and the direct-file form are accepted). C35b/D3 + D3.1 (review F7): resolution is the four-arm
+    form and the direct-file form are accepted). Resolution is the four-arm
     enumeration in _resolve_validator_dir — sibling, else vendored, else SKIP only in the engine
     image's gateway-less topology (arm iii, unreachable on any monorepo checkout), else FAIL (a true
     broken checkout, arm iv)."""

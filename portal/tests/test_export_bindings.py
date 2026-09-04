@@ -1,6 +1,6 @@
 """The export panel's handler bindings degrade instead of dying.
 
-exports.js used to bind nine handlers with unguarded document.getElementById(id).onclick= at parse
+exports.js must not bind nine handlers with unguarded document.getElementById(id).onclick= at parse
 time: one missing id threw, aborted the file mid-load, and silently dropped every later binding and
 top-level assignment. The bindings must go through the guarded helper, and the disabled-state loop
 in filters.js must tolerate a missing element the same way.

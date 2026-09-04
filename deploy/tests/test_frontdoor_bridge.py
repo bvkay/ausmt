@@ -1,4 +1,4 @@
-"""C47 public bridge — front-door + box-side two-walls pins + log-shipping pins.
+"""Public bridge — front-door + box-side two-walls pins + log-shipping pins.
 
 The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader — and,
 since the the rule, the PUBLIC submission subset - to the box's dedicated public-subset
@@ -352,7 +352,7 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
 
 
 def test_frontdoor_tls_and_hsts_configured():
-    """C47 invariant d (config level): the public name drives automatic HTTPS (a hostname site address,
+    """Invariant d (config level): the public name drives automatic HTTPS (a hostname site address,
     NO `auto_https off`) so a certificate issues and plain HTTP redirects; and HSTS is set once TLS is
     in force. The live cert issuance is verified in the brief runbook (needs real DNS + public IP).
     FAILS IF auto_https is disabled or HSTS is absent."""
@@ -648,7 +648,7 @@ def test_frontdoor_masking_redproof():
 
 
 # ==================================================================================================
-# CORS on public data — runtime pins (feat/api-cors-geojson-honesty)
+# CORS on public data — runtime pins
 # ==================================================================================================
 def _acao(headers: dict) -> str | None:
     """The Access-Control-Allow-Origin response header value, case-insensitively (urllib's header dict

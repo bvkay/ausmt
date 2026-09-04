@@ -1,4 +1,4 @@
-"""A3 (LANE-CONTRACT-FORM-CREDIT) GREP PIN: no retired flat credit key is written, read or named
+"""GREP PIN (LANE-CONTRACT-FORM-CREDIT): no retired flat credit key is written, read or named
 anywhere in the shipped portal.
 
 lead_investigator and principal_investigators were retired by the ratified contributor-credit model:

@@ -1,4 +1,4 @@
-"""releases.html: the citable-snapshot listing page (feat/release-machinery, portal half).
+"""releases.html: the citable-snapshot listing page, portal half.
 
 The page lists the quarterly releases cut by engine/extract/cut_release.py. Everything it says about a
 release is READ at load time from the served release index and the per-release release.json, so the two
@@ -156,7 +156,7 @@ def _centre_order(path):
 
 
 def test_header_parity_releases_matches_about():
-    """Docs wave, stage 2: every shipped header is FIVE items, namely Map, Surveys,
+    """Every shipped header is FIVE items, namely Map, Surveys,
     Collections, About, Contribute. Releases arrived on main carrying the retired sixth entry, a
     "How to use AusMT" link to about.html#howto, so this pin held it to a six-item order that About no
     longer has. Non-vacuous in both halves: run against that six-item header, the RELEASES assertion

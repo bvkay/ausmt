@@ -4,7 +4,7 @@ PERMANENT TEST STAGE (the MTCAT 2.0 rule, inherited by the second public contrac
 on every later emitter change, so a future feature can never silently break the identity chain, the
 projection equivalences, the zero-null / zero-empty posture, the schema routes or the document
 budget. Sources: AusMT_2026/AUSMT-METADATA-INTERFACE-CONTRACT.md (identity, citation and projection
-equivalence contracts), run-fixture-suite.py (T24, T25, T31a/T31b), LANE-CONTRACT-SURVEY-METADATA
+equivalence contracts), run-fixture-suite.py, LANE-CONTRACT-SURVEY-METADATA
 section 2 (the framing invariants).
 
 Three layers:
@@ -16,7 +16,7 @@ Three layers:
      and no empty container, is dict-equal across the two builds minus provenance.generated, and is
      under the 16 KB budget; the schema served at both routes byte-identical to the in-tree artifact
      and across builds; survey_id == directory component == mtcat surveys[].survey_id (set equality,
-     T24); the doi / raid / organisation projection chains hold (T31 port); no manifest row names the
+     ; the doi / raid / organisation projection chains hold; no manifest row names the
      document; the shared-definition guarantee (subject_row and the relationship core vs the mtcat
      schema, structurally).
   2. built layer, the 3-survey D8 corpus (open + embargoed + metadata_only, each curating every
@@ -339,7 +339,7 @@ def test_built_documents_are_dict_equal_across_builds_minus_generated(built):
 
 def test_catalogue_and_surveys_are_byte_identical_across_builds_and_mtcat_dict_equal(built):
     """The framing proof's shape between two builds of THIS tree: the document rides a side channel
-    and touches neither catalogue.json nor surveys.json (D18), and mtcat is unchanged but for its
+    and touches neither catalogue.json nor surveys.json, and mtcat is unchanged but for its
     wall-clock generated_at."""
     for name in ("catalogue.json", "surveys.json"):
         assert (built[0] / name).read_bytes() == (built[1] / name).read_bytes(), name

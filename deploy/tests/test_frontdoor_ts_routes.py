@@ -10,7 +10,7 @@ safe alone:
     JSON, which is why its sweep lives here rather than in the engine's root-level sweep.
   * the Caddyfile map + two handles that turn it into a redirect, and refuse everything else.
 
-THE TABLE IS THE SUPPRESSION (R5). `has_time_series` is projected for withheld stations too
+THE TABLE IS THE SUPPRESSION. `has_time_series` is projected for withheld stations too
 (existence semantics), so mtcat.json hands an enumerator every segment of one of these paths:
 suppression cannot live in discovery and must live in RESOLUTION. The map admits ONLY open-access,
 `review: verified`, non-level2 rows, so an unlisted path cannot produce a Location at all - the

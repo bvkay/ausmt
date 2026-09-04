@@ -1,4 +1,4 @@
-"""C43 S2b-i: serve-state screen + operations floor (gateway half — record D8/D15).
+"""Serve-state screen + operations floor, gateway half.
 
 The consumer side of the ops floor: the gateway reads ops-status.json SERVER-side (the
 reconcile-status.json seam — serve_state.read_ops_status) and renders the first-class serve screen +

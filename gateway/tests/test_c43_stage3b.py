@@ -1,4 +1,4 @@
-"""C43 Stage 3b — the collections batch editor WRITE path (record D5-A A6, D13 pins; Invariant 10).
+"""Stage 3b — the collections batch editor WRITE path (record D5-A A6, D13 pins; Invariant 10).
 
 Every write-path pin states its failure criterion and is mutation-proof (shown able to fail). The
 gate-scrutinised four — atomicity (#1), rollback (#2), single-flight/re-validate-under-lock (#3),
@@ -754,7 +754,7 @@ def test_f4_publish_rejects_crafted_spec(tmp_path):
     run(_body())
 
 
-# F5 (minor) — RENAME RECORDS THE NEW ID in the commit subject/branch/body (not the stale URL cid).
+# RENAME RECORDS THE NEW ID in the commit subject/branch/body (not the stale URL cid).
 # FAILS IF a rename's commits carry the old id.
 def test_f5_rename_commits_record_the_new_id(tmp_path):
     surveys_live = tmp_path / "surveys-live"

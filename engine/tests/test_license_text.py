@@ -1,4 +1,4 @@
-"""C34/D2 — the stdlib-only _license_text leaf is the SINGLE SOURCE of the licence rights text and
+"""The stdlib-only _license_text leaf is the SINGLE SOURCE of the licence rights text and
 the recognised-id gate, shared by build_portal (bundle LICENSE.txt) and the gw-runner (intake
 LICENSE.md). These tests pin that the extraction did not change behaviour and that the new gate is
 correct.
@@ -11,7 +11,7 @@ NON-VACUOUS failure criteria:
     is the whole point of the leaf (the runner must import it without the engine build stack). FAILS
     if an import of the leaf drags in a heavy module.
   * recognised accepts redistributable AND metadata-only ids, rejects typos/placeholders/None -
-    the fail-closed D3 gate for LICENSE.md generation (FAILS against a startswith or a too-broad gate).
+    the fail-closed gate for LICENSE.md generation (FAILS against a startswith or a too-broad gate).
 Stdlib only.
 """
 import sys

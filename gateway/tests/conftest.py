@@ -22,8 +22,8 @@ from gateway.app import create_app
 from gateway.config import Config
 
 # --------------------------------------------------------------------------------------------------
-# C35b/D3 (code-health review F7): validator-oracle resolution.
-# The cross-repo validator oracles (test_runner.py, test_edit_runner.py) used to skipif on a sibling
+# Validator-oracle resolution.
+# The cross-repo validator oracles (test_runner.py, test_edit_runner.py) must not skipif on a sibling
 # ausmt-surveys checkout that no CI has, silently reverting the suite to same-author mocks. Now they
 # resolve UNCONDITIONALLY: the SIBLING checkout when present (dev box — tests the LIVE cross-repo pair),
 # else the VENDORED pinned copy (CI / fresh clones — tests the PINNED contract). "Neither present" is a
@@ -218,7 +218,7 @@ def _patch_uncompressed_size(raw: bytearray, name: bytes, fake: int, *, local: b
 def corrupt_deflate_zip() -> bytes:
     """A zip whose central directory is intact (passes zipsafety.inspect) but whose compressed data
     for one DEFLATED member is corrupted, so decompression at extraction raises zlib.error/BadZipFile
-    — NOT an OSError. This is the crafted zip the reviewer used to crash the runner (fix #3)."""
+    — NOT an OSError. This is the crafted zip that can crash the runner."""
     import struct
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:

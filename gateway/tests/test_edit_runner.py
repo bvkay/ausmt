@@ -1,4 +1,4 @@
-"""C31 runner-side edit tests (design §3.1/§3.2 + adversarial-review fixes). These exercise
+"""Runner-side edit tests (design §3.1/§3.2 + adversarial-review fixes). These exercise
 gateway.runner.edit DIRECTLY — the same in-suite-reaches-the-runner pattern as test_runner.py.
 ruamel.yaml is a runner (engine-image) dependency; these tests run wherever ruamel is installed
 (the ausmt env locally; the engine lock in CI's full workflow).
@@ -404,7 +404,7 @@ def test_scalar_edit_in_section_with_list_member_leaves_list_block_stable(tmp_pa
 # end-to-end (build_section_patch -> apply_patch on a ruamel doc — the reviewer's exact leak path).
 # --------------------------------------------------------------------------------------------------
 def test_access_edit_preserves_coordinate_overrides_end_to_end():
-    """C42 LEAK PIN, end-to-end (RED on pre-fix HEAD dfa5bab): assemble the patch a Metadata-tab access
+    """LEAK PIN, end-to-end (RED on pre-fix HEAD dfa5bab): assemble the patch a Metadata-tab access
     edit posts (change ONLY embargo_until; NO s_access_coordinate_overrides field — that form never
     renders it) via editor_form.build_section_patch, then apply it to a REAL ruamel round-trip doc via
     apply_patch. The withheld/generalised stations must survive in the emitted YAML. Before the fix the
@@ -759,7 +759,7 @@ access:
 custom_note: "unknown key survives"
 """
 
-# (review F7): resolve the validator UNCONDITIONALLY - sibling if present, else the committed
+# Resolve the validator UNCONDITIONALLY - sibling if present, else the committed
 # Vendored pinned copy; require_validator_dir FAILS (never skips) if neither is present.
 from gateway.tests.conftest import require_validator_dir  # noqa: E402
 
@@ -791,7 +791,7 @@ def test_merge_runs_the_real_validator(tmp_path):
 def test_merge_real_validator_flags_fail(tmp_path):
     # The real validator FAILs an out-of-enum access.level (a required, enumerated field), and the
     # merge reports has_fail=True — the signal the gateway turns into a confirm 409 (§0.4).
-    # (review F7): UNCONDITIONAL - sibling-or-vendored, FAILS if neither present.
+    # UNCONDITIONAL - sibling-or-vendored, FAILS if neither present.
     pkg = _write_package(tmp_path / "surveys-live", slug="intg-survey-2026",
                          yaml_text=_VALID_PACKAGE_YAML)
     (pkg / "transfer_functions" / "edi" / "S01.edi").write_text(

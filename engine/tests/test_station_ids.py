@@ -332,7 +332,7 @@ def test_the_block_parses_identically_without_pyyaml():
 
 
 # Default stability for a survey with no `station_ids` block is pinned by
-# test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field, in the review-round section
+# test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field, in the section
 # below. It replaced a test named ..._is_byte_identical_... that compared no bytes at all: it
 # asserted two catalogue ids and the site_name column, so nothing in this suite catches
 # the feature's additive fields leaking into a survey that never declared the block.
@@ -507,7 +507,7 @@ def test_the_integrity_gate_withholds_a_station_whose_served_bytes_differ(tmp_pa
 
 
 # --------------------------------------------------------------------------------------------
-# COMMIT 3: adversarial-review round. Every test below was RED against commit 0884792.
+# Every test below is RED against an engine that mints an id where the source states none.
 # --------------------------------------------------------------------------------------------
 
 def test_a_null_map_value_fails_closed():

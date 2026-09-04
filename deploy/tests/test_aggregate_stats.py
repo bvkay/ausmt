@@ -1,4 +1,4 @@
-"""C45 usage-analytics aggregator pins (record D6 - the C45-impl workflow).
+"""Usage-analytics aggregator pins (record D6 - the C45-impl workflow).
 
 These prove the load-bearing aggregator behaviours against INDEPENDENT OBSERVABLES (the emitted
 stats.json bytes, the attribution over an ENGINE-TRUTH manifest, the bisect result over a fixture
@@ -2307,7 +2307,7 @@ def test_a_hand_off_route_is_its_own_class_admitted_at_302_alone():
 
 
 def test_hand_off_bytes_and_destination_come_from_the_register_never_the_log():
-    """D4 PIN, the whole reason this class needs a join at all. The log CANNOT say how big the file
+    """PIN, the whole reason this class needs a join at all. The log CANNOT say how big the file
     is (its `size` is the redirect body) and CANNOT say where it went (the Location header is never
     logged), so both come from the served, register-derived ts_access.json on the route key.
 

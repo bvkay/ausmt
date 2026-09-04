@@ -1,6 +1,6 @@
 """The verified-resource register the build reads offline, and the flag that makes it read one.
 
-R1 puts the register in the survey packages: one row per (survey, product level, station), carrying
+The register lives in the survey packages: one row per (survey, product level, station), carrying
 the NCI `urlPath` verbatim, because that string cannot be rebuilt from a station id. Rule 14 keeps
 the READING offline: the crawler is an out-of-band tool, `--ts-index` names a ROOT of registers the
 build consumes as files, and the build itself never reaches the network, so cache.py's
@@ -211,7 +211,7 @@ def test_a_station_the_survey_does_not_publish_stops_the_BUILD(tmp_path):
 
 
 def test_the_vocabularies_are_the_ratified_tokens():
-    """D8's five level tokens, S1's three review states, R10's two match methods plus rule:<name>.
+    """The five level tokens, the three review states, and the two match methods plus rule:<name>.
     Restated in the engine, so pin the CONTENT: a silent widening here would let the build project a
     token the surveys validator refuses, and the register is the only record either reads. The two
     copies are reconciled when the vendored validator is resynced (deploy plan, section 7); until

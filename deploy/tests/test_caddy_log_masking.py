@@ -134,7 +134,7 @@ def test_status_token_redacted_from_uri_at_both_edges():
 
 
 def test_trusted_proxies_configured_for_real_client_masking():
-    """S1 PIN. Caddy must trust the fronting proxy so `client_ip` is the REAL client (from the
+    """PIN. Caddy must trust the fronting proxy so `client_ip` is the REAL client (from the
     forwarded address) that ip_mask then masks — not the loopback proxy. The tailscale CGNAT range
     (100.64.0.0/10) must be trusted explicitly (it is NOT in private_ranges). FAILS IF trusted_proxies
     is absent or omits the CGNAT range (then the masked client_ip would be the proxy, and the true IP
@@ -283,7 +283,7 @@ def _extract_block(text: str, opener: str) -> str:
 @pytest.mark.skipif(shutil.which("caddy") is None,
                     reason="no caddy binary — the masked-log-line pin is the ubuntu/CI leg (wait-for-greens)")
 def test_real_caddy_masks_forwarded_client_ip_in_the_log():
-    """S1 HEADLINE — REAL-CADDY RUNTIME PIN (ubuntu/CI, wait-for-greens). A request carrying
+    """HEADLINE — REAL-CADDY RUNTIME PIN (ubuntu/CI, wait-for-greens). A request carrying
     `X-Forwarded-For: 203.0.113.7` through a running Caddy using the SHIPPED log filter + trusted_proxies
     writes a log line in which the full client IP appears NOWHERE — only the /24-masked form 203.0.113.0.
     FAILS IF 203.0.113.7 appears anywhere in the emitted JSON (fields OR headers). This is the property
@@ -363,7 +363,7 @@ def test_real_caddy_masks_forwarded_client_ip_in_the_log():
 @pytest.mark.skipif(shutil.which("caddy") is None,
                     reason="no caddy binary - the status-token redaction is config-asserted; live leg runs in CI")
 def test_real_caddy_redacts_status_token_in_the_log(tmp_path):
-    """R28 HEADLINE - REAL-CADDY RUNTIME PIN. A GET /gateway/status/<token> through a running Caddy using
+    """HEADLINE - REAL-CADDY RUNTIME PIN. A GET /gateway/status/<token> through a running Caddy using
     the SHIPPED log filter writes a log line in which the capability token appears NOWHERE - only the
     /gateway/status/REDACTED placeholder. A control request to /data/mtcat.json is logged UNCHANGED, so
     the redaction is scoped to the status path and does not maul other URIs. Proves the config assertion

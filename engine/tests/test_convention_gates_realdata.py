@@ -1,4 +1,4 @@
-"""C25 convention gates — real-corpus pins (dev-box only; the corpus is not in the repo).
+"""Convention gates — real-corpus pins (dev-box only; the corpus is not in the repo).
 
 Gated on AUSMT_REALDATA pointing at the .audit/realdata harness (and, for the twin pin, a sibling
 ausmt-surveys checkout). In CI these skip with an allow-listed reason (tests/ci_check_skips.py):
@@ -117,7 +117,7 @@ def test_ccmt_uniform_zrot_served_as_stored_v3a():
 
 
 def test_auslamp_pax_serve_path_refuses_v3c():
-    """V3-C on real bytes. FAILS IF: a PAX-rotated (per-period ZROT) AusLAMP-SA specimen is SERVED.
+    """Arm C on real bytes. FAILS IF: a PAX-rotated (per-period ZROT) AusLAMP-SA specimen is SERVED.
     Under frame POLICY v3 the serve path REFUSES per-period frame mixing - a single served curve
     from period-varying frames is misleading-by-construction.
     Historical red: v2 de-rotated per period and served it (disp.action == "derotate")."""

@@ -1,4 +1,4 @@
-"""Uploader keys (schema v2, feat/uploader-key-management): DB-backed, curator-managed submit keys.
+"""Uploader keys (schema v2): DB-backed, curator-managed submit keys.
 
 The workflow moves the single shared AUSMT_SUBMIT_KEY out of env-only into the gateway's SQLite so a
 curator with no shell can issue and revoke keys through the authenticated UI. This file proves both
@@ -281,7 +281,7 @@ def _nav():
 
 
 def test_short_utc_canonical_and_verbatim_fallback():
-    """H2 PIN (display shortener contract, the S2a-5 build-id posture). db._utc_now's canonical
+    """PIN (display shortener contract, the S2a-5 build-id posture). db._utc_now's canonical
     '%Y-%m-%dT%H:%M:%SZ' shape renders as 'YYYY-MM-DD HH:MM' (date + minutes); ANY other shape is
     returned VERBATIM, never mangled. FAILS IF the canonical form stops shortening (the three-line
     wrap comes back) or a non-canonical value is truncated/emptied (audit data silently lost)."""
@@ -295,7 +295,7 @@ def test_short_utc_canonical_and_verbatim_fallback():
 
 
 def test_keys_page_wide_layout_short_datetimes_and_note_width():
-    """H2 RENDER PIN. The rendered keys page carries (a) the wide-layout marker on its content wrap
+    """RENDER PIN. The rendered keys page carries (a) the wide-layout marker on its content wrap
     (the per-page variant — the shell's 960px measure is untouched elsewhere), (b) every stored
     datetime in the short 'YYYY-MM-DD HH:MM' form with the FULL ISO in a title attribute (hover
     keeps the audit precision; the cell stops wrapping over three lines), (c) a usable note editor
@@ -338,7 +338,7 @@ def test_keys_page_wide_layout_short_datetimes_and_note_width():
 
 
 def test_wide_by_default_narrow_by_exception():
-    """C43 FR2-1 SCOPE PIN. The scope invariant FLIPPED from H2's per-page
+    """SCOPE PIN. The scope invariant is WIDE-BY-DEFAULT rather than per-page
     opt-in to WIDE-BY-DEFAULT: every shelled working page (via _shell) fills the viewport; the ONLY
     narrow survivors are the chrome-less _page users — the login page and the terminal confirm pages
     (a centred form stays a centred form). The old H2 'queue must NOT be wide' assertion dies with this
@@ -359,7 +359,7 @@ def test_wide_by_default_narrow_by_exception():
 
 
 def test_keys_page_served_wide_end_to_end(tmp_path):
-    """H2 ROUTE PIN. The SERVED /gateway/curator/uploaders page (through the app + nav shell)
+    """ROUTE PIN. The SERVED /gateway/curator/uploaders page (through the app + nav shell)
     carries the wide marker — the renderer pin above can't catch an app-side regression that stops
     passing nav (falling back to the chrome-less _page). FAILS IF the served bytes lose the wide
     wrap."""

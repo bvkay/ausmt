@@ -39,7 +39,7 @@ def _check(node, schema, path="$"):
 
     MTCAT 1.2 pins the ratified vocabularies (name_type, contributor role, identifier_type, relation,
     identifies, the station band) with `enum`, so this stdlib checker learns `enum` too: without it every
-    _check call in this file would silently wave an out-of-vocabulary token through, and the vocab pins
+    _check call in this file would silently pass an out-of-vocabulary token through, and the vocab pins
     would only ever be enforced where jsonschema happens to be installed. `integer` is honoured as a
     distinct type for the same reason (a stringified count must not pass as a number)."""
     import re
@@ -270,7 +270,7 @@ def test_mtcat_builder_unit():
 
 
 def test_mtcat_builder_emits_org_ror_and_raid_when_declared():
-    """C7 task 6: mtcat.schema.json gained additive optional survey fields organisation_ror, raid;
+    """Task 6: mtcat.schema.json gained additive optional survey fields organisation_ror, raid;
     mtcat_document emits them when the survey's SMETA carries org_ror/raid."""
     sys.path.insert(0, str(ROOT / "extract"))
     import build_portal as bp

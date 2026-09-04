@@ -163,7 +163,7 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     # The house convention for a self-check the build fails: ERROR lines on stderr, then return 2.
     # An operator running `make rebuild-data` gets a message rather than a traceback, and the
     # Reconciliation now reads like every other gate in main (LANE-CONTRACT-PAGE-HIERARCHY.md B8,
-    # which flags the RuntimeError this test used to require as the odd one out).
+    # which flags the RuntimeError this test requires as the odd one out).
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
                             "--bundle-edi", "--no-validate",
                             "--products", str(tmp_path / "out" / "products"),
@@ -787,7 +787,7 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
 
 def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide():
     """Design brief 16, and a real collision. _TS_LEVELS gave BOTH level0 and raw_packed the badge
-    L0, so a survey carrying both rendered two panels badged L0 and a station cell reading
+    level 0, so a survey carrying both renders two panels badged L0 and a station cell reading
     "L0 3.2 GB &#183; L0 41 KB" with nothing to tell the reader which was which. level1_netcdf, which
     ts_access.json emits and the SPA's own TS_LEVELS names, had no panel at all.
 
@@ -954,7 +954,7 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
 
 
 def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations(tmp_path):
-    """Design brief 17, and it can only run AFTER the station pages carry the detail (B4).
+    """Design brief 17, and it can only run AFTER the station pages carry the detail.
 
     The default table was 13 columns wide inside an 840px column, forced to scroll horizontally by
     an unconditional min-width of 1180px that a 5-column table also paid. The deployment and
@@ -1219,7 +1219,7 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                              base="https://x.example")
     assert "Packed raw" in page and "1 of 1 stations" in page
     assert "Raw 3.2 GB" in page, "the table cell states the level and the real size"
-    # The download panel used to send a reader standing on THIS survey's page to the bare map with
+    # The download panel must not send a reader standing on THIS survey's page to the bare map with
     # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
     assert '<a href="/#/survey/s">Build a download script</a>' in page, \
         "the download-script action must keep the survey context, not point at the bare map"
@@ -1405,7 +1405,7 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
 
     Two swatch assertions moved with LANE-CONTRACT-PAGE-HIERARCHY.md B7 and are restated, not
     dropped. BBMT is #3730B8, the value portal/src/state.js measured for LP/BB separability and
-    deutan-safety, in place of the lightened #5B54D6 this test used to lock in. The locator ring is
+    deutan-safety, in place of the lightened #5B54D6. The locator ring is
     muted rather than coral, because coral is reserved for primary actions and active states; the
     ring assertion still bites, on the new ink."""
     surveys = _make_rich_survey(tmp_path)

@@ -12,7 +12,7 @@ Three layers:
      minus portal.generated_at; every station.json dict-equal minus provenance.generated, which is the
      only per-build field a same-commit rebuild may move; the schema served at both routes byte-identical
      to the in-tree artifact and across builds; no manifest row names the record.
-  2. THE IDENTITY CHAIN (T33): mtcat.json's stations[].station_id set equals the set of published
+  2. THE IDENTITY CHAIN: mtcat.json's stations[].station_id set equals the set of published
      ausmt_id values, every ausmt_id is unique, and each record's survey_id joins BOTH the mtcat survey
      row and the survey-metadata.json document beside it. Proven non-vacuous against planted violations.
   3. THE CONSUMER PINS: drawer.js reads exactly two members out of station.json and fetches it at the
@@ -61,7 +61,7 @@ corpus_arm = pytest.mark.skipif(
 # ---------------------------------------------------------------- reference chain implementations
 
 def identity_chain_violations(out: Path) -> list:
-    """T33 over a built tree: the station join in both directions, id uniqueness, and the survey_id
+    """Over a built tree: the station join in both directions, id uniqueness, and the survey_id
     chain into mtcat's survey rows and the survey-metadata document beside each record."""
     docs = _docs(out)
     mtcat = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
@@ -351,7 +351,7 @@ def _workflow_step(name_fragment: str) -> str:
                     reason="engine image build: workflow tree not shipped "
                            "(designed topology; the CI guards are pinned from checkout lanes)")
 def test_the_ci_pii_guard_greps_every_tree_the_build_writes():
-    """D11's second half. The build step writes TWO trees, `--out` and `--products`, and the guard
+    """The mask rule's second half. The build step writes TWO trees, `--out` and `--products`, and the guard
     grepped only the first, so every station.json and dimensionality.json in the curator tree went
     unscanned for the free-text vector the guard exists to catch. The trees are read out of the build
     step's own arguments so this pin cannot drift from what CI actually produces."""

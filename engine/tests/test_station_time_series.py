@@ -10,7 +10,7 @@ Four gates decide whether a row exists at all, and each is pinned separately bec
 differently:
 
   * `review: verified`. A pending row is an ADJUDICATION QUEUE entry, and best-guess attachment
-    of a file to a station is silent scientific error; a retired row (D17) is evidence of a resource
+    of a file to a station is silent scientific error; a retired row is evidence of a resource
     that ceased to exist. Neither projects.
   * `level != level2`. NCI's level_2 tree holds transfer functions, not time
     series: seeding them here would assert a verified TIME SERIES for stations that have none. The
@@ -231,7 +231,7 @@ def test_a_verified_level2_row_projects_nothing(built):
 
 
 def test_a_pending_and_a_retired_row_project_nothing(built):
-    """D9 and D17. EXAMPLE02 carries one of each and nothing else, so its record must carry the
+    """The channel rule and the retired row. EXAMPLE02 carries one of each and nothing else, so its record must carry the
     served renditions alone."""
     doc = _station(built, "example-survey", "EXAMPLE02")
     assert _rows(doc) == [], doc.get("resources")

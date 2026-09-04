@@ -1,4 +1,4 @@
-"""C35b/D3 (code-health review F7): the vendored validator is a PINNED contract copy.
+"""The vendored validator is a PINNED contract copy.
 
 The F7 oracles resolve to the vendored copy (gateway/tests/fixtures/vendored_validation/
 validate_survey.py) on CI and fresh clones. This file guards that copy: its sha256 must equal the PIN,

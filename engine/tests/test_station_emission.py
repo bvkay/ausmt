@@ -12,8 +12,8 @@ What this module pins, all of it read off documents a REAL build wrote:
     three markers and nothing else. These are the pins that make byte-stability enforceable: before the
     promotion nothing forbade a fifteenth key on either branch.
   * the markers themselves: `schema` names the contract, `version` is the generated constant, and
-    `survey_id` is the SLUG (D4), which is what mtcat and survey-metadata.json key on.
-  * D1, the dimensionality fold: `diagnostics` and the sidecar state ONE call, from one computation,
+    `survey_id` is the SLUG, which is what mtcat and survey-metadata.json key on.
+  * the dimensionality fold: `diagnostics` and the sidecar state ONE call, from one computation,
     and the withheld branch gains no `diagnostics` at all, which is what keeps the interpretation
     product out of a record whose science is withheld.
   * the NEW blocks carry no null and no empty container. This is scoped to runs[] and resources[] on
@@ -21,7 +21,7 @@ What this module pins, all of it read off documents a REAL build wrote:
     sources), so the survey-metadata document's corpus-wide rule cannot be imported here.
   * the ratified leak rejections T13, T14 and T28a-d, applied to BUILT withheld stubs rather than to a
     hand-written fixture, so what is proven closed is the document the corpus actually publishes.
-  * D11: no non-exact station's true position reaches any published free text. The per-station mask
+  * No non-exact station's true position reaches any published free text. The per-station mask
     withholds a masked station's OWN note; nothing stops ANOTHER station's note naming it, and the
     corpus already publishes remote-station coordinates in notes (WG-1-1, where both stations are
     open, so it is not a leak). This is fail-closed protection ahead of the first survey where it
@@ -241,7 +241,7 @@ def test_a_withheld_record_publishes_neither_block(built_access):
 # ---------------------------------------------------------------- the ratified leak rejections
 
 def _leaks():
-    """T14 and T28a-d, as mutations of a BUILT stub. Each differs from the emitted document by
+    """The emission vectors, as mutations of a BUILT stub. Each differs from the emitted document by
     exactly the field under test."""
     return [
         ("T13 injected runs[]", lambda d: d.update({"runs": [{"id": "001"}]})),

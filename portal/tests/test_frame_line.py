@@ -1,4 +1,4 @@
-"""C25-V3 portal frame line (Invariant 10).
+"""The portal frame line (Invariant 10).
 
 The station drawer shows a terse, honest frame line when the engine served a station's impedances AS
 STORED in a declared acquisition frame (frame policy v3: the engine never de-rotates). This boots the

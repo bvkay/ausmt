@@ -1,4 +1,4 @@
-"""C20 — transfer-function completeness: error columns, full complex tipper, placeholder honesty.
+"""Transfer-function completeness: error columns, full complex tipper, placeholder honesty.
 
 The tf.json contract grew 10 -> 18 (contract/columns.json TF_COLUMNS):
   t[10] rho_xy_err  t[11] rho_yx_err  t[12] phs_xy_err  t[13] phs_yx_err

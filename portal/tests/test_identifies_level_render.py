@@ -61,7 +61,7 @@ def test_related_block_labels_by_level_when_identifies_present(tmp_path):
 
 # ---- drawer-polish workflow: `entire` FILLS the Collection slot ----------------------
 # `entire` is the umbrella record - one deposit covering all levels - which is exactly what the Collection
-# slot names. It used to fall through to the extra-tile bucket, so Gawler Phase 2 (its GSSA/SARIG landing
+# slot names. It must not fall through to the extra-tile bucket, or Gawler Phase 2 (its GSSA/SARIG landing
 # page + a level3 models record) read "1 of 6 recorded" with an orphan tile hanging under the grid. These
 # two pins are the stated acceptance shape.
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")

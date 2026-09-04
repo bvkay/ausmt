@@ -1,6 +1,6 @@
 """The static data API, documented in depth, and the death of the fictional REST design.
 
-DOCS WAVE, STAGE 3. Until this module, docs/docs/interoperability/api-overview.md and api-reference.md
+Until this module, docs/docs/interoperability/api-overview.md and api-reference.md
 specified a REST service that has never existed at any AusMT deployment: `/v1/collections`,
 `/v1/surveys`, `/v1/stations`, an authentication section, a "Future Directions" section. Both pages
 carried an "Implementation status" callout admitting the whole design was unbuilt, and then spent
@@ -418,7 +418,7 @@ def test_no_absolute_portal_host_on_the_pages_this_lane_wrote():
 
 
 def test_no_em_dashes_on_the_pages_this_lane_wrote():
-    """The documentation wave's voice charter forbids the em dash outright. These three pages were
+    """The documentation voice charter forbids the em dash outright. These three pages were
     written under it, so the rule is mechanical here rather than a review note. The character is built
     from its code point so that this module, which the same rule covers, does not contain one."""
     em_dash = chr(0x2014)

@@ -340,7 +340,7 @@ def test_update_fixed_recipe_ignores_intent_content(tmp_path):
 
 
 def test_compose_uses_project_file_flag_never_dash_C(tmp_path):
-    """S2 ARG-SHAPE PIN. `docker compose` has NO `-C` flag (that is git) — every compose invocation
+    """ARG-SHAPE PIN. `docker compose` has NO `-C` flag (that is git) — every compose invocation
     must carry `-f`/`--project-directory` pointing at the deployment, never `-C`. FAILS IF a compose
     call is shaped with `-C` (the real-box breakage the shim masked). Exercises BOTH compose-using
     recipes: update (pull + up -d) and restore (stop + up)."""
@@ -456,7 +456,7 @@ def test_restore_mktemp_fail_restarts_gateway(tmp_path):
 
 
 def test_audit_line_is_not_forgeable(tmp_path):
-    """S4 PIN. A compromised gateway cannot forge an audit outcome. A hostile requested_by carrying a
+    """PIN. A compromised gateway cannot forge an audit outcome. A hostile requested_by carrying a
     ` outcome=ok` token AND a unicode line separator (U+2028) must yield exactly ONE audit line whose
     HOST-computed `outcome=` is the refusal (not the forged token), with no U+2028 surviving and no
     `=` in the by-field. FAILS IF the forged token appears before the real outcome, an extra line is

@@ -1,4 +1,4 @@
-"""C43-S2a fix round F3: EXECUTABLE JS↔Python parity pins for the Stations-tab classification and
+"""EXECUTABLE JS↔Python parity pins for the Stations-tab classification and
 URL construction (modelled on portal/tests/test_interactions.py's node-driver pattern).
 
 WHY EXECUTABLE: the fix round's F1 (JS truncated `%` vs Python floored `%` on negatives — 362 trueYx
@@ -304,7 +304,7 @@ def engine_corpus(tmp_path_factory):
 
 
 def test_stations_filter_selects_engine_built_rows_by_slug(engine_corpus, tmp_path):
-    """H1 EXECUTABLE ENGINE-TRUTH PIN. The extracted STATIONS_JS row filter (surveyRows), driven in
+    """EXECUTABLE ENGINE-TRUTH PIN. The extracted STATIONS_JS row filter (surveyRows), driven in
     Node with the catalogue the REAL ENGINE emitted, must return EXACTLY the stations the engine
     built for each slug — judged against the engine's own slug-keyed products/<slug>/ tree, an
     INDEPENDENT observable (the products tree is keyed by slug on disk; the catalogue rows carry
@@ -353,7 +353,7 @@ process.stdout.write(JSON.stringify(out));
 
 
 def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
-    """H1 VERIFY-GATE PIN, engine-truth form. The 'au.' + slug + '.'
+    """VERIFY-GATE PIN, engine-truth form. The 'au.' + slug + '.'
     prefix join is exact ONLY because every slug that can reach the hub is a safe_component FIXED
     POINT: the engine passes every declared slug through safe_component before it enters ausmt_id
     (build_portal.py discover_work), safe_component is idempotent, and the hub route 404s unless an
@@ -396,7 +396,7 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
 # ==================================================================================================
 # Frame-declaration readability — SUPERSEDED presentation, same invariant.
 #
-# S2a-SPLIT presented station.json's `frame` block as typed fact rows (frameRows). C43-HUB H3
+# The split view presents station.json's `frame` block as typed fact rows (frameRows). The hub
 #  replaced that table with the mockup's single worded line -
 # frameWords(frame): 'declared-zero · no rotation declared' — with EVERY extra frame field kept in
 # the collapsed raw-JSON <details>. The invariant is unchanged: the words derive from VERBATIM
@@ -502,7 +502,7 @@ process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(
 
 
 def test_frame_panel_renders_words_and_collapsed_raw_json():
-    """FRAME-PANEL SOURCE PIN (C43-HUB H3 shape; gate F1/F2 round widened the collapsed dump to
+    """FRAME-PANEL SOURCE PIN (the hub shape, which widens the collapsed dump to
     the WHOLE station.json). factsPanel must render the frame fact via frameWords(station.frame)
     AND keep the FULL raw document (frame + conditioning + coordinate QC + every extra field) in
     a collapsed <details> whose <pre> is JSON.stringify(station, ...) set by textContent. FAILS

@@ -50,7 +50,7 @@ def test_canonical_store_is_additive(tmp_path):
 def test_canonical_store_same_dataid_no_overwrite(tmp_path):
     """Two EDIs in one survey sharing a DATAID (the same-site-two-codes case `_disambiguate` exists for)
     must produce TWO distinct canonical XML files, and `canonical_written` must equal the files on disk.
-    Regression guard for H1: emit_canonical_store keyed on the PRE-disambiguation DATAID, so both wrote
+    Regression guard: emit_canonical_store must not key on the PRE-disambiguation DATAID, or both write
     the same <DATAID>.xml (one overwritten) while the count incremented twice."""
     import re as _re
     src_edis = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
@@ -78,7 +78,7 @@ def test_canonical_store_same_dataid_no_overwrite(tmp_path):
         f"canonical_written ({prov['canonical_written']}) != XML files on disk ({len(xmls)})"
 
 
-# --- C2: conditioning is persisted (provenance.json map + station.json) and the citation is HONEST ---
+# --- conditioning is persisted (provenance.json map + station.json) and the citation is HONEST ---
 SPECTRA = HERE / "real_dialects" / "phoenix_empower_A01.edi"
 
 

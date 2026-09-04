@@ -984,6 +984,7 @@ def test_the_id_exemption_tests_the_token_and_not_its_neighbourhood(tmp_path):
             f"a work-item tag was excused by a word standing near it: {line}"
         )
 
+
 def test_history_and_alternatives_narrative_is_caught(tmp_path):
     """The vocabulary filter clears the words on the list and leaves the SHAPES off it, so each
     shape history takes is named here as well as each word."""
@@ -1013,6 +1014,12 @@ def test_history_and_alternatives_narrative_is_caught(tmp_path):
         "Three consecutive review rounds each found another default.",
         "The bucket was flagged missing in the review.",
     ]
+    for i, case in enumerate(cases):
+        f = tmp_path / f"hist{i}.js"
+        f.write_text(f"// {case}\nvar a = 1;\n", encoding="utf-8")
+        assert offences([f]), f"the history rule missed: {case}"
+
+
 def test_commented_out_code_is_caught_in_its_shapes(tmp_path):
     plants = {
         "assign.js": "// const screening = buildScreening(row, level);\nvar a = 1;\n",

@@ -77,7 +77,7 @@ def _run_preflight(data_dir: Path) -> subprocess.CompletedProcess:
 
 
 def test_preflight_reds_on_non_group_writable_git(tmp_path):
-    """RED PIN (B7). A surveys-live/.git with a non-group-writable object dir must make gateway-profile
+    """RED PIN. A surveys-live/.git with a non-group-writable object dir must make gateway-profile
     preflight FAIL with the incident-naming line — a gateway publish would lock the operator out of
     `git pull`. FAILS IF: the check passes an un-hardened .git (the shipped-blind state), or the FAIL
     line does not name the missing group-write."""
@@ -91,7 +91,7 @@ def test_preflight_reds_on_non_group_writable_git(tmp_path):
 
 
 def test_preflight_passes_on_group_writable_shared_repo_git(tmp_path):
-    """GREEN PIN (B7). A surveys-live/.git that is fully group-writable with core.sharedRepository=group
+    """GREEN PIN. A surveys-live/.git that is fully group-writable with core.sharedRepository=group
     must PASS the shared-group check (the FAIL line absent). Proves the red pin above is non-vacuous —
     the same code path returns PASS once the model is in place. FAILS IF: a correctly-hardened .git
     still trips the g+w FAIL."""

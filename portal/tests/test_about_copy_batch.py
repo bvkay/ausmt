@@ -100,7 +100,7 @@ def test_the_raw_timeseries_archive_is_named_by_link_not_in_passing():
     'usually the NCI-AuScope MT collection' overstated a single archive as the default; 'such as'
     makes it an example, and the link makes it findable.
 
-    THE SENTENCE IT QUALIFIES MERGED, and this pin follows it there: the section used to make the
+    THE SENTENCE IT QUALIFIES MERGED, and this pin follows it there. The section must not make the
     hand-off claim twice, and the surviving telling is the one holding the THREDDS A7 wording
     verbatim. What is asserted is unchanged, the archive named as an example rather than as the
     usual case, and named by an anchor on its collection DOI."""
@@ -432,7 +432,7 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
 # reader sees and part of what the contents box promises, so it is pinned WITH the title rather than
 # beside it.
 #
-# The page is eight sections and nothing else. "This build" used to close it WITHOUT a number, as a
+# The page is eight sections and nothing else. "This build" must not close it WITHOUT a number, as a
 # colophon rather than a ninth answer to "what is this site"; it has been deleted it. Its two
 # paragraphs that were not build identity moved into the numbered sections that own their subjects,
 # and the route to the citable releases moved into section 8, so nothing the colophon carried is

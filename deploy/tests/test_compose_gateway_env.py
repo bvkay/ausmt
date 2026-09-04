@@ -9,7 +9,7 @@ This pin fails when ANY operator-facing variable config reads is dropped from th
 service's environment block. It reads the YAML textually (no yaml dependency in this suite) but
 anchors on the gateway service's environment mapping keys, so a rename or removal trips it.
 
-DERIVATION BOUNDARY (H1, deploy review section 5). REQUIRED_FORWARDED is DERIVED from
+DERIVATION BOUNDARY. REQUIRED_FORWARDED is DERIVED from
 gateway.config.operator_env_vars, NOT hand-listed - that is the whole point of this revision.
 The old pin restated a copy of config's env surface (only the six mail vars), so it stayed green
 while five self-serve abuse-control knobs (AUSMT_KEYREQ_* / AUSMT_SELFSERVE_KEY_*) that config

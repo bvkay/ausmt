@@ -1,4 +1,4 @@
-"""Self-serve submission keys (feat/selfserve-submit-keys, K1-K4). A SECOND key-issuance path
+"""Self-serve submission keys. A SECOND key-issuance path
 alongside the operator-issued keys: POST /gateway/request-key mints an `email_verified` uploader key,
 BOUND to the requesting email, with a 14-day expiry and a 5-submission allowance, and mails it. Both
 kinds coexist; operator keys are unchanged.

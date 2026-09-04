@@ -331,7 +331,7 @@ def test_identifiers_and_pids_consolidated_page(tmp_path):
     """IDCONS D1 (SPEC §2): the identifier surface renders as ONE consolidated 'Identifiers & PIDs' panel
     with three groups (This survey / This dataset elsewhere / Instrument), the typed related_identifiers
     list folded in (group b, the sole dataset-PID editor), a read-only ausmt id, and the per-identifier
-    resolution chip (D5). The old standalone 'Related identifiers' panel is GONE (folded in). FAILS IF the
+    resolution chip. No standalone 'Related identifiers' panel renders (it is folded in). FAILS IF the
     five-section scatter returns or the typed list is duplicated."""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
@@ -348,7 +348,7 @@ def test_identifiers_and_pids_consolidated_page(tmp_path):
             # The typed list is the sole dataset-PID editor, folded in (no standalone panel):
             assert 'name="l_related_identifiers_0_identifier"' in body
             assert ">Related identifiers</h2>" not in body
-            # The per-identifier resolution status chip + check button (D5):
+            # The per-identifier resolution status chip + check button:
             assert "data-pid-check" in body and "data-pid-chip" in body
             # The read-only ausmt id shows the slug for orientation:
             assert 'value="rich-survey-2026" readonly' in body

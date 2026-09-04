@@ -9,7 +9,7 @@ caveat that qualifies them. (the station promotion): the call is FOLDED BACK IN,
 string come with it, so the qualification travels with the numbers rather than sitting one file
 away. The sidecar keeps being written byte-unchanged through 1.x because deleting a served
 file is a deprecation, not a refactor. So the two surfaces now state the same thing, and the pin
-that used to forbid the restatement forbids DISAGREEMENT instead: both carry the honest median key,
+that forbade the restatement forbids DISAGREEMENT instead: both carry the honest median key,
 neither carries the misleading mean key, and every member the fold covers is equal on both. A
 withheld station has no dimensionality.json and no diagnostics block at all, which is what keeps
 the interpretation product out of a withheld record (pinned in test_access_gate.py).

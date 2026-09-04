@@ -1,4 +1,4 @@
-"""C34/D1+D3 - the gw-runner generates LICENSE.md + README.md into a submitted package at intake
+"""The gw-runner generates LICENSE.md + README.md into a submitted package at intake
 (after safe-extract, before validation), fail-closed and non-destructive.
 
 Each test states its failure criterion and tests an independent observable (real bytes on disk, the
@@ -153,7 +153,7 @@ def test_intake_and_build_state_identical_attribution(tmp_path):
 
 
 def test_readme_carries_declared_metadata(tmp_path):
-    # README skeleton (D3): name, organisation, dates, station count, licence, abstract, citation —
+    # README skeleton: name, organisation, dates, station count, licence, abstract, citation —
     # all from survey.yaml. FAILS IF a required field is dropped from the skeleton.
     pkg = _make_package(tmp_path, n_edi=2)
     intake.generate_intake_files(pkg, now_utc=_NOW)
@@ -311,7 +311,7 @@ def _alias_bomb_yaml(levels: int = 5, fan: int = 10) -> str:
 
 
 def test_alias_bomb_survey_yaml_generates_a_bounded_readme(tmp_path):
-    """G3 amplification: intake runs BEFORE the validator, so every survey.yaml value it renders is
+    """Amplification: intake runs BEFORE the validator, so every survey.yaml value it renders is
     still attacker-supplied. A value that is not a scalar must read as no declared metadata (the
     module's fail-closed posture), never as str of an expanded alias DAG, so the README written into
     the quarantine volume stays bounded no matter what the package declares.

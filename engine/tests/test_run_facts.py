@@ -118,7 +118,7 @@ def test_mtpy_fieldnotes_reads_the_manufacturers_and_the_geometry_only():
 
 
 def test_lemimt_site_reads_the_instrument_and_leaves_the_rate_where_none_is_stated():
-    """A23's SITE line carries no rate token at all, so only the Instrument line qualifies it. A
+    """The station's SITE line carries no rate token at all, so only the Instrument line qualifies it. A
     dialect that matched would otherwise invent a rate for 296 stations."""
     d = facts("lemimt-site")
     assert d["dialects"] == ["lemimt-site"]
@@ -157,7 +157,7 @@ def test_empower_json_takes_the_highest_rate_as_the_run_nominal_rate():
 
 
 def test_phoenix_compact_json_reads_the_local_blocks_and_never_the_remote_one():
-    """D10 again, in the other Phoenix shape: `RH` is the REMOTE station. Its coordinates differ
+    """The remote-station rule again, in the other Phoenix shape: `RH` is the REMOTE station. Its coordinates differ
     from the local receiver's, and nothing it states may become this station's channel or run."""
     d = facts("phoenix-compact")
     assert d["run"]["data_logger"] == {"model": "MTU5A", "serial_number": "4759"}

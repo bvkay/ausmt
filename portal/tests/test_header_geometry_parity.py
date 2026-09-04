@@ -297,7 +297,7 @@ def test_no_header_stands_the_auscope_symbol_in_for_an_identity():
 
 # ------------------------------------------------------- the parent-organisation mark, WITHDRAWN
 #
-# The AuScope mark used to close every header from the right zone. The rule moves the
+# No AuScope mark closes a header from the right zone. The rule moves the
 # relationship to the two places that state it in words: the footer, on every surface, and About's
 # "Who enables AusMT" section. A symbol repeated in the top-right corner of every page said nothing
 # those two do not, so it leaves EVERY header, and the right zone keeps the contextual status slot
@@ -321,7 +321,7 @@ def test_no_chrome_page_is_exempt_from_the_identity_mark():
     """The guard over the per-surface identity pin above: it may not be hollowed out by skipping a
     page. FAILS IF any discovered chrome page is missing the AusMT mark that opens its header.
 
-    It used to hold BOTH marks on every page. One of the two is gone from every header, so what is
+    It must not hold BOTH marks on a page. One of the two is absent from every header, so what is
     left to hold is the one that remains, and the withdrawal of the other is pinned below rather
     than folded in here: a page that lost its identity and a page that grew a parent mark back are
     different defects and read better as different failures."""

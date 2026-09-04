@@ -477,7 +477,7 @@ ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false 
 
 // ============================ ROUND 2 =================================================
 
-// ---- R1: slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
+// ---- slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
 //      stationCountsByName counts catalogue.json rows (index 1 = survey name) per survey. The chip warns
 //      (never blocks) when a charset-valid slug matches a served slug.
 const SURVEYS_FIXTURE = { "Vulcan 2022": { slug: "vulcan-2022", org: "GA" },
@@ -541,7 +541,7 @@ ok(flat.indexOf("Who should the citation name, in order?") < flat.indexOf("Who l
 ok(flat.indexOf("Who did what?") < flat.indexOf("5. I know my metadata"),
    "contributors (Who did what?) moved UP out of the advanced tier");
 
-// ---- "Who led this survey?" -> ONE ProjectLeader contributors row (D3) ----
+// ---- "Who led this survey?" -> ONE ProjectLeader contributors row ----
 const yLead = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming",
                                   lead_orcid: "0000-0002-1825-0097" });
 ok(/contributors:\s*\n\s*- name: "Duan, Jingming"\s*\n\s*name_type: person\s*\n\s*role: ProjectLeader\s*\n\s*orcid: "0000-0002-1825-0097"/.test(yLead),

@@ -31,7 +31,7 @@ def _runner_cfg(tmp_path) -> RunnerConfig:
     )
 
 
-# The REAL validator the gw-runner invokes in production. C35b/D3 (review F7): resolve it
+# The REAL validator the gw-runner invokes in production. Resolve it
 # UNCONDITIONALLY — the sibling ausmt-surveys checkout when present (dev box / compose e2e), else the
 # committed VENDORED pinned copy (CI / fresh clones). The validator-only oracle below does not skip;
 # the engine-preview oracle (which additionally needs the mt_metadata stack) still does, legitimately.
@@ -174,7 +174,7 @@ def test_preview_spawns_engine_with_explicit_engine_dir_cwd(tmp_path, monkeypatc
 def test_preview_spawns_engine_with_the_configured_validator_path(tmp_path, monkeypatch):
     # The preview build runs the SAME validator gate again in-process (build_portal._load_validator),
     # which reads AUSMT_VALIDATOR_PATH and otherwise walks upward for a sibling ausmt-surveys
-    # checkout, exiting rc=2 when neither resolves. The runner used to spawn it with the ambient
+    # checkout, exiting rc=2 when neither resolves. The runner must not spawn it with the ambient
     # environment only, so the validator the runner was CONFIGURED with (cfg.validator_path, the same
     # value _run_validator hands the validator subprocess) was never communicated: the two gates
     # agreed only where the box happened to export the same env var. Captures the env handed to
@@ -329,7 +329,7 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
     # engine commit carries it" needs proving rather than asserting. FAILS IF the gw-runner's preview
     # of an EMTF-XML-only package builds no stations.
     #
-    # FOLLOW-UP: after the surveys branch feat/validator-emtfxml-input is merged and the vendored copy
+    # FOLLOW-UP: once the surveys validator gains EMTF-XML input and the vendored copy
     # + PIN are resynced, the stub can go and this test can run against require_validator_dir.
     # The stub honours BOTH contracts the real validate_survey.py serves, because both are exercised
     # In this flow: build_portal IMPORTS it (validate(folder) -> report with worst/counts) while
@@ -374,7 +374,7 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
 
 def test_real_validator_accepts_emtfxml_as_a_standard_input(tmp_path):
     """END-STATE PIN, inverted from its honest-state predecessor when the surveys-repo
-    branch feat/validator-emtfxml-input merged (surveys main 7ab0a0d) and the vendored copy + PIN
+    surveys validator gained EMTF-XML input (surveys main 7ab0a0d) and the vendored copy + PIN
     were resynced. An EMTF-XML-only package now validates as a standard input with no curator
     enablement: the accepted-extension table and the structural where-do-transfer-functions-live
     check both moved together, which is exactly what the predecessor pin demanded. FAILS IF a future
@@ -420,7 +420,7 @@ def _emulate_real_validator(cmd, report: dict) -> None:
     the argv shape first — [python, .../validate_survey.py, <existing folder positional>, --json,
     <report file>] - so no mocked test can ever again mask an argv regression.
 
-    M7 (code-health review §6): the EXPECTED shape is single-sourced from runner.validator_argv rather
+    The EXPECTED shape is single-sourced from runner.validator_argv rather
     than re-encoded by hand here — the observed cmd must be exactly what the shared helper would build
     for the same (validator_file, folder, report_file). So a change to the canonical argv moves the
     helper AND this expectation together, and a call site that DRIFTED from the helper reds this
@@ -432,7 +432,7 @@ def _emulate_real_validator(cmd, report: dict) -> None:
     report_file = Path(cmd[4])
     assert report_file.suffix == ".json", f"--json value is not a report file: {cmd}"
     # Re-derive from the shared helper: the observed cmd must equal validator_argv(...) for the same
-    # inputs. Pins the mocked call site to the ONE argv builder (M7).
+    # inputs. Pins the mocked call site to the ONE argv builder.
     assert cmd == runner.validator_argv(Path(cmd[1]), folder, report_file), (
         f"validator argv drifted from runner.validator_argv: {cmd}")
     report_file.write_text(json.dumps(report), encoding="utf-8")
@@ -458,7 +458,7 @@ def test_run_validator_against_the_real_validator(tmp_path):
     # INTEGRATION, no mocks: _run_validator must drive the REAL validate_survey.py to a parsed
     # {counts, items, ...} report and a True (no-FAIL) verdict on a minimal valid package.
     #
-    # (review F7): UNCONDITIONAL now - resolves the sibling validator if present, else the
+    # UNCONDITIONAL - resolves the sibling validator if present, else the
     # Committed vendored copy; require_validator_dir FAILS (never skips) if neither is present. The
     # Validator is stdlib+yaml so this runs in the stack-less gateway workflow too.
     #
@@ -801,7 +801,7 @@ def test_done_file_atomic_no_partial(tmp_path):
 def test_atomic_write_json_serialises_dates(tmp_path):
     """Regression pin (RED pre-fix: `TypeError: Object of type date is not JSON serializable`). A
     survey.yaml with an unquoted ISO date loads that field as a
-    datetime.date, which flows into an edit-job RESULT dict; the plain json.dump used to crash the
+    datetime.date, which flows into an edit-job RESULT dict; a plain json.dump crashes the
     done-file write, crash-looping the runner and blocking every metadata read. The encoder ISO-formats
     date/datetime (nested too — the real embargo lives under result['fields']['access']) and the result
     round-trips as ISO strings."""
@@ -845,7 +845,7 @@ def test_read_done_rejects_unknown_outcome(tmp_path):
 
 
 def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeypatch):
-    """C18 collateral guard (design §1): the GATEWAY runner processes UNTRUSTED uploads and must
+    """Collateral guard (design §1): the GATEWAY runner processes UNTRUSTED uploads and must
     stay NON-incremental — it must never pass --incremental / --cache-dir / --cache-mode to the
     engine. The build cache is switched on in exactly ONE place (deploy/Makefile's rebuild-data),
     NOT here. FAILS IF the runner ever grows a cache flag on the engine subprocess.
@@ -890,7 +890,7 @@ def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeyp
 
 
 # --------------------------------------------------------------------------------------------------
-# C35b/D4 (code-health review M4): run_forever's loop contracts, pinned at the poll_once seam.
+# run_forever's loop contracts, pinned at the poll_once seam.
 # run_forever's body is now poll_once(cfg); these tests enforce the ordering + crash-recovery
 # contracts the M4 finding said were enforced NOWHERE (the old run_forever docstring falsely claimed
 # Compose-e2e coverage in a workflow where the runner never boots).

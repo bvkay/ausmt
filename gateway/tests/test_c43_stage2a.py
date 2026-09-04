@@ -1,4 +1,4 @@
-"""C43 Stage 2a verification pins (record D13 + the contract's pin list). Each pin states its failure
+"""Stage 2a verification pins (record D13 + the contract's pin list). Each pin states its failure
 criterion (Invariant 10) and is mutation-provable — the report carries a captured failing run for each
 guarded behaviour. Async bodies run under conftest.run.
 
@@ -13,7 +13,7 @@ Pins here:
     attachment + nosniff discipline.
   * KEYS: a note is stored + rendered + ABSENT from any git-bound artifact; submission counts are
     correct; revoked rows render read-only (no note editor, no revoke button).
-  * S2a-5 BUILD-ID SHORTENER: canonical triple-barrel -> short display; malformed -> verbatim fallback.
+  * BUILD-ID SHORTENER: canonical triple-barrel -> short display; malformed -> verbatim fallback.
 """
 from __future__ import annotations
 
@@ -165,7 +165,7 @@ def test_stations_js_mirrors_phaseqc_constants():
 
 
 def test_combined_phase_plot_supersedes_separate_plots_source():
-    """C43 FR2-3 SOURCE PIN. The two separate
+    """SOURCE PIN. The two separate
     phase plots are SUPERSEDED by a single combined plot: STATIONS_JS carries the pure combinedPhasePlan
     mapper + one phasePlot + phaseVerdictParts (BOTH
     components) + combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component
@@ -248,7 +248,7 @@ def test_fc2_lag_label_rendered_when_served_differs_from_published(tmp_path):
 # The Stations tab split layout (list LEFT / data panel RIGHT; narrow = panel-first)
 # ==================================================================================================
 def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
-    """C43 FR2-2 RENDER PIN. The Stations tab body carries the split grid with THREE slots: the
+    """RENDER PIN. The Stations tab body carries the split grid with THREE slots: the
     station FACTS (#station-facts, .st-facts) and the PLOTS column (#station-plots-col, .st-plots)
     precede the site TABLE (#stations-list, .st-list) in DOM order — facts, then plots, then table.
     Facts-first DOM order is the load-bearing narrow-stacking mechanism (see the CSS pin below): on a
@@ -264,7 +264,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert r.status_code == 200
             body = r.text
             assert 'class="stations-split"' in body, "the split grid container must render"
-            # C43 FR2-1: every hub tab is wide by default now (the Stations tab included).
+            # Every hub tab is wide by default (the Stations tab included).
             assert 'class="wrap wide"' in body, "the stations tab must use the wide page measure"
             i_facts = body.find('id="station-facts"')
             i_plots = body.find('id="station-plots-col"')
@@ -290,7 +290,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
 
 
 def test_stations_split_css_layout_mechanism_present():
-    """C43 FR2-2 CSS-MECHANISM PIN. Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
+    """CSS-MECHANISM PIN. Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
     regression that silently breaks the layout goes red even though the DOM is unchanged:
       (a) WIDE: .stations-split is a 3-column grid; the site table is placed in grid-column 1 (LEFT),
           the facts in column 2 (MIDDLE), and the plots in column 3 (RIGHT) — all on grid-ROW 1.
@@ -337,7 +337,7 @@ def test_stations_split_css_layout_mechanism_present():
 
 
 def test_stations_split_no_page_scroll_on_row_select():
-    """S2a-SPLIT NO-SCROLL PIN. Clicking a station must populate the RIGHT panel WITHOUT scrolling the
+    """SPLIT NO-SCROLL PIN. Clicking a station must populate the RIGHT panel WITHOUT scrolling the
     page away. The row handler must NOT navigate to a fragment or call scrollIntoView — it selects the
     row (adds the .on highlight) and repopulates #station-detail in place. FAILS IF the JS reintroduces
     a location-hash link (href='#') or a scroll call in the row-selection path (the merged behaviour put
@@ -665,7 +665,7 @@ def test_revoked_key_renders_read_only(tmp_path):
 
 
 def test_revoked_key_note_post_refused(tmp_path):
-    """F6 PIN: revoked keys are IMMUTABLE audit rows. A note POST to a REVOKED key
+    """PIN: revoked keys are IMMUTABLE audit rows. A note POST to a REVOKED key
     id is refused 4xx and the stored note is UNCHANGED — the UI hiding the editor is not the
     enforcement; the route + the DB `AND revoked_utc IS NULL` guard are. FAILS IF the route accepts a
     note update on a revoked id (the shipped pre-fix behaviour, 'by-design' docstring overruled), or
@@ -693,7 +693,7 @@ def test_revoked_key_note_post_refused(tmp_path):
 
 
 def test_note_and_create_length_caps(tmp_path):
-    """F5 PIN. Over-length inputs are REFUSED (400) and nothing persists beyond the cap: a 2001-char
+    """PIN. Over-length inputs are REFUSED (400) and nothing persists beyond the cap: a 2001-char
     note POST leaves the stored note unchanged; an over-length name/email on create creates no key.
     (Cap posture: REJECT, not truncate — silently dropping the tail of a curator's text loses
     information without telling them.) FAILS IF an over-length value persists or is truncated in."""
@@ -734,10 +734,10 @@ def test_note_and_create_length_caps(tmp_path):
 
 
 # ==================================================================================================
-# S2a-5 build-id display shortener
+# The build-id display shortener
 # ==================================================================================================
 def test_build_id_shortener_canonical_and_verbatim_fallback():
-    """S2a-5 PIN. A canonical triple-barrel build id shortens to '<source short> · HH:MM UTC'; a
+    """SHORTENER PIN. A canonical triple-barrel build id shortens to '<source short> · HH:MM UTC'; a
     malformed id falls back VERBATIM (never hide information). FAILS IF the canonical form is not
     shortened, or a malformed id is mangled/hidden instead of shown verbatim."""
     canon = "252a96fed49c74477ed24e159e6689c8100fcb4c-b898f26-2026-07-10T06:00:39.252632+00:00"

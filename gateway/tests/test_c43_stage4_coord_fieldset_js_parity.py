@@ -1,4 +1,4 @@
-"""C43 Stage-4 — executable JS pins for the INTERACTIVE per-station coordinate-policy fieldset.
+"""Stage-4 — executable JS pins for the INTERACTIVE per-station coordinate-policy fieldset.
 
 The C43-S2a standing rule requires the stations-panel behaviour to be pinned with EXECUTABLE JS (the
 functions actually run under node), never a string match alone. This pins the DOM-free CORE of the
@@ -82,7 +82,7 @@ def test_js_key_construction_from_base_id_surface(tmp_path):
     its OWN catalogue id ('CP1L04.2'), NEVER the file stem ('ALPHA') and NEVER a dot-stripped guess
     ('CP1L04'); a plain station keys by its own id. Explicit-vs-inherit prefill comes from the current
     survey.yaml map. FAILS IF a fieldset key is a stem, a variant-suffixed id, or a dot-guess (the exact
-    D2 / probe-e keys the engine's validate_overrides forbids)."""
+    / probe-e keys the engine's validate_overrides forbids)."""
     tail = ("const c = buildOverrideControls(P.stations, P.baseMap, P.overrides);\n"
             "const out = {};\n"
             "for (const k in c) out[k] = { control: c[k].control, explicit: c[k].explicit, "
@@ -104,7 +104,7 @@ def test_js_key_construction_from_base_id_surface(tmp_path):
 
 
 def test_js_sibling_variants_share_one_control(tmp_path):
-    """EXECUTABLE SIBLING-INVARIANT PIN (D2). The two processing variants of one physical site
+    """EXECUTABLE SIBLING-INVARIANT PIN. The two processing variants of one physical site
     (MBV20.a / MBV20.b) resolve to the SAME base key and therefore ONE control, whose members list
     names both siblings. Setting that control writes a SINGLE base-keyed override that covers all
     variants. FAILS IF a sibling gets its own control (two competing keys) or a variant serves the
@@ -242,7 +242,7 @@ def test_fieldset_payload_passes_real_engine_parse_and_validate(tmp_path):
 
 
 def test_js_orphan_override_survives_the_save(tmp_path):
-    """EXECUTABLE ORPHAN-PRESERVATION PIN (G2, section-3 review). A survey.yaml override whose base
+    """EXECUTABLE ORPHAN-PRESERVATION PIN. A survey.yaml override whose base
     id has NO row in the currently served catalogue (the served build lags the package, or the
     station was removed) must survive assembly VERBATIM, as an explicit orphan control - and an
     untouched Save must remain a no-op. The invariant is editor_form.py's own, mirrored client-side:

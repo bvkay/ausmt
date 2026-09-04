@@ -1,4 +1,4 @@
-"""About.html carries the SAME header/footer chrome as index.html (fix/about-uniform-chrome).
+"""About.html carries the SAME header/footer chrome as index.html.
 
 The ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and
 the site's one footer, so chrome is uniform across pages. These are STRUCTURAL assertions parsed
@@ -15,7 +15,7 @@ Each assertion states its failure criterion:
   * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
     (nVis/nSel/nTot). Those three report the current map's filter and selection state, and About has
     neither. Non-vacuous: index.html HAS these ids, so a naive copy-the-whole-header would trip this.
-    NARROWED by the The API docs section, deliberately: the ban used to extend to the class "counts" as well,
+    NARROWED by the The API docs section, deliberately: the ban does not extend to the class "counts",
     on the reasoning that a static page has no counts to state. That reasoning covered app state only.
     About now carries a CORPUS-totals block (total stations / total surveys, read from the catalogue at
     load time) in index's right zone, reusing index's .counts styling so the two headers render
@@ -164,7 +164,7 @@ def test_no_portal_document_carries_a_ver_chip():
 
 
 def test_about_references_no_nonexistent_federation_doc():
-    """C22 citation honesty. FAILS if about.html references FEDERATION.md - no such file
+    """Citation honesty. FAILS if about.html references FEDERATION.md - no such file
     exists anywhere in the repository (verified repo-wide before this test was written), so the pre-C22
     line 236 ("see the MTCAT v1.0 specification and FEDERATION.md in the project repositories") pointed
     readers at a fabricated document. Chief-architect rule: REMOVE the claim, do not repoint (federation
@@ -231,7 +231,7 @@ def test_mtcat_link_in_footer_not_header_across_pages():
                        if tag == "a" and "apilink" in _classes(a)]
         assert len(footer_hits) == 1, (
             f"{path.name}: <footer> must carry exactly one MTCAT apilink (bottom-left); found {len(footer_hits)}")
-        # The honest Wave-A link target + title + visible text must survive the move verbatim.
+        # The honest link target + title + visible text must survive the move verbatim.
         assert footer_hits[0].get("href") == "data/mtcat.json", (
             f"{path.name}: the footer MTCAT link must point at data/mtcat.json, got {footer_hits[0].get('href')}")
         title = footer_hits[0].get("title") or ""
@@ -281,7 +281,7 @@ def _header_shape(path):
 
 
 def test_header_parity_about_matches_index():
-    """Api-docs workflow. About's header used to differ from the SPA's in two visible ways: its primary nav
+    """Api-docs workflow. About's header must NOT differ from the SPA's in the two visible ways it could: its primary nav
     items carried none of index's ids, and its right zone was empty while index's carried a mono stats
     block. Both are now aligned, and this pins the alignment structurally (parsed DOM, so comments and
     raw-text coincidences cannot pass it).
@@ -293,7 +293,7 @@ def test_header_parity_about_matches_index():
         The TAG is deliberately not compared: index's are <button>s that switch app views in place, About
         is static so its must be links. Ids + order + placement are the parity that matters.
       * CENTRE-ZONE ORDER: FAILS if the five primary items are not in the same order on both pages:
-        Map, Surveys, Collections, About, Contribute. It was six until the docs wave, when the brief cut
+        Map, Surveys, Collections, About, Contribute. It is five, not six: the brief cut
         "How to use AusMT" from every header (the welcome tour and About cover it). The sixth slot is
         pinned SHUT below, so a header that grows a sixth centre item fails here rather than drifting
         back.
@@ -347,11 +347,11 @@ def test_header_parity_about_matches_index():
 
 
 def test_no_page_header_keeps_the_retired_how_to_use_entry():
-    """Docs wave, stage 2: the "How to use AusMT" header entry is gone from every page.
+    """The "How to use AusMT" header entry is absent from every page.
     On index it was a <button id="howToUse"> that opened the #introOverlay help panel; on About it was an
     <a href="#howto">, and releases.html arrived on main with an <a href="about.html#howto"> copy of the
     same item. All are pinned absent, by id and by visible text, on all four shipped pages. Non-vacuous:
-    run against the pre-wave HTML, index.html, about.html and releases.html all fail.
+    run against HTML that still carries the entry, index.html, about.html and releases.html all fail.
 
     The #howto ANCHOR survives on About (answer 3 keeps that id, so an inbound deep link still lands) and
     is deliberately not what this asserts against; the assertion is about the HEADER entry.
@@ -601,7 +601,7 @@ def test_no_portal_document_loads_the_script_that_filled_the_chip():
 
 
 def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is():
-    """API-access honesty (feat/api-cors-geojson-honesty, inverted by feat/geojson-station-h5-and-about).
+    """API-access honesty.
 
     This pin was written when NO GeoJSON was generated or served: the only one was the portal's
     in-browser export button (portal/src/exports.js, #dlGeo), so the card was forbidden from claiming

@@ -1,4 +1,4 @@
-"""C40 serve-reconcile host agent (deploy/scripts/reconcile.sh) — decision-logic tests.
+"""Serve-reconcile host agent (deploy/scripts/reconcile.sh) — decision-logic tests.
 
 The reconcile agent is POSIX sh, so it is tested as a BLACK BOX through `sh` over a fake data tree
 built under tmp_path: a real git origin + a tracking surveys-live checkout, a fabricated served
@@ -466,7 +466,7 @@ def test_loop_guard_rearmed_by_request_and_by_head_change(tmp_path):
 def test_missing_data_dir_fails_early(tmp_path):
     """An AUSMT_DATA_DIR that does not exist (unmounted volume / .env typo) => rc=1 with one loud
     message, BEFORE any tree is fabricated. FAILS IF: the script mkdir-ps a phantom tree and settles
-    into quiet sync_failed forever (review L4)."""
+    into quiet sync_failed forever."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     r = _run(tree, env_extra={"AUSMT_DATA_DIR": str(tmp_path / "not-mounted")})
     assert r.returncode == 1
@@ -481,7 +481,7 @@ def test_log_dir_exists_but_unwritable_fails_before_building(tmp_path):
     """logs/ EXISTS but is not writable (aship regression - `mkdir -p` alone would pass) =>
     fail before invoking the build, action=failed, rc=1, with the briefship-prep hint. FAILS IF: the
     writability probe is dropped and the failure only surfaces at the build redirect with no hint
-    (review L1)."""
+    with make never launched."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     logs_dir = tree["data"] / "site-data" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)

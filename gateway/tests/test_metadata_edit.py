@@ -1,4 +1,4 @@
-"""C31 metadata-editor gateway-flow tests (design §3.2-§3.8). Driven through the real HTTP surface
+"""Metadata-editor gateway-flow tests (design §3.2-§3.8). Driven through the real HTTP surface
 (httpx in-process) with the C31 edit seam injected in-process (conftest.inproc_edit_runner) and the
 publish git seam faked (conftest.FakeGit) — the same injected-seam discipline as the C10 clamd and
 Git tests. Proven-failing-first where a behaviour change is the deliverable.
@@ -197,7 +197,7 @@ def test_validator_fail_shows_fail_and_confirm_409(tmp_path):
             assert r.status_code == 409
             # No MUTATING git — the FAIL guard is upstream of any commit. (The preview render now
             # reads surveys-live HEAD via `rev-parse --short HEAD` for the C43 drift chip, a benign
-            # read the queue page already does.) ALLOWLIST, not denylist (review F1): the FAIL path
+            # read the queue page already does.) ALLOWLIST, not denylist: the FAIL path
             # may make ONLY the two benign READS `status` and `rev-parse`; assert every recorded verb
             # is one of those two. A denylist would silently pass a NEW mutating verb (worktree add,
             # stash, tag, mv, apply) the moment FakeGit models it and nobody extends the list — the
@@ -314,7 +314,7 @@ def test_commit_edit_oserror_returns_clean_500(tmp_path):
 
 
 def test_commit_edit_oserror_inside_publish_rolls_surveys_live_back(tmp_path, monkeypatch):
-    """G5 at the app seam. The test above replaces _commit_edit_blocking wholesale, so it never
+    """The source-assertion rule at the app seam. The test above replaces _commit_edit_blocking wholesale, so it never
     enters publish.commit_metadata_edit and never asks whether the working tree was restored. This drives
     the REAL blocking commit with a failing survey.yaml write. FAILS IF the OSError escapes publish.py:
     write_bytes truncates before it writes, so surveys-live is left with a half-written survey.yaml and

@@ -82,8 +82,8 @@ def _table_columns(path, table: str) -> set[str]:
 
 def test_fresh_db_lands_at_v2_with_uploader_keys(tmp_path):
     """A fresh DB is stamped at the current SCHEMA_VERSION (>= 2) and carries the uploader_keys table
-    (the feat/uploader-key-management migration), INCLUDING the v3 `note` column (C43 D7) and the v5
-    provenance/expires_utc/allowance_remaining columns (feat/selfserve-submit-keys). Fails if a
+    (the uploader-key migration), INCLUDING the v3 `note` column and the v5
+    provenance/expires_utc/allowance_remaining columns. Fails if a
     migration never ran on a fresh DB, or a schema change dropped/renamed a column."""
     path = tmp_path / "gateway.sqlite"
     db.Database(path).close()

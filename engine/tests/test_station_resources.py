@@ -1,6 +1,6 @@
 """Resources[] on the promoted station.json: what represents this station, and what merely contains it.
 
-D3: an open station's resources are the SERVED, ADDRESSABLE things - its transfer function as EDI,
+An open station's resources are the SERVED, ADDRESSABLE things - its transfer function as EDI,
 as canonical EMTF XML and as MTH5, plus the per-survey archives those files are bundled into. Each
 carries the path the download manifest records for the same bytes, and none carries `identifiers[]`,
 because a DOI identifying THIS EXACT file does not exist for anything AusMT serves today.
@@ -74,7 +74,7 @@ def test_an_open_station_publishes_its_served_renditions(built):
 
 
 def test_the_role_axes_are_emitted_only_where_they_are_certain(built):
-    """D19 at its ratified default."""
+    """The level-2 rule at its ratified default."""
     rows = {r["id"]: r for r in _station(built, "example-survey", "EXAMPLE01")["resources"]}
     assert (rows["edi"]["provenance_role"], rows["edi"]["representation_role"]) == ("source", "original")
     assert (rows["emtfxml"]["provenance_role"],
@@ -86,7 +86,7 @@ def test_the_role_axes_are_emitted_only_where_they_are_certain(built):
 def test_the_survey_archives_ride_every_station_whose_bytes_are_in_them(built):
     """An archive row is a CONTAINMENT claim, so a bundle rides the stations that actually put bytes
     into it, not every station of its survey. In this all-exact fixture that is every station; the
-    C42 arm in test_station_emission.py is where the two differ."""
+    Arm in test_station_emission.py is where the two differ."""
     doc = _station(built, "example-survey", "EXAMPLE01")
     archives = [r for r in doc["resources"] if r["kind"] == "archive"]
     assert {r["format"] for r in archives} == {"zip"}

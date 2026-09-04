@@ -47,7 +47,7 @@ def test_feed_entries_uses_latest_release_note_not_first():
 
 
 def test_feed_entries_uses_attribution_declared_date_when_no_release_notes():
-    """PINNED CROSS-SURFACE DATE RULE: attribution.declared_date (C46) is a first-class candidate date.
+    """PINNED CROSS-SURFACE DATE RULE: attribution.declared_date is a first-class candidate date.
     A survey with NO release_notes but a declared_date must date its feed entry BY that declared_date,
     NOT the bare-year Dec-31 fallback. FAILS PRE-FIX: _survey_latest_date ignored attribution entirely,
     so this survey dated to (year_end)."""

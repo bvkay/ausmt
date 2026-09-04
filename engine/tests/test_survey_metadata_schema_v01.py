@@ -7,7 +7,7 @@ schema gate, the sibling of test_mtcat_schema_v20.py:
 
   1. the artifact's own shape: legal draft-07, the required set {schema, version, survey_id, title},
      every array property minItems 1 (the zero-empty posture is enforced by the schema, not only by
-     the emitter), the versioned $id (D3), the open top level;
+     the emitter), the versioned $id, the open top level;
   2. four committed fixtures that must VALIDATE with format checking on: the ratified suite's T20
      document verbatim, a synthetic Case B release, a synthetic multi-activity survey and a synthetic
      no-identifier survey cited by source-provided text (the matrix rows the real corpus cannot
@@ -82,7 +82,7 @@ def scan_nulls_and_empties(doc):
 
 
 def preferred_identifier_designated(doc):
-    """T25 reference check: when citation.preferred_identifier is present, an EQUAL {scheme, identifier}
+    """Reference check: when citation.preferred_identifier is present, an EQUAL {scheme, identifier}
     row exists in identifiers[] (the designated identifiers OF this dataset/release)."""
     pref = (doc.get("citation") or {}).get("preferred_identifier")
     if pref is None:

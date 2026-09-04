@@ -1,4 +1,4 @@
-"""Download manifest (slice #4 — the distribution backbone).
+"""Download manifest, the distribution backbone.
 
 The build emits manifest.json: the key-based index of every DOWNLOADABLE artifact (per-station
 EDI/EMTF-XML, per-survey EDI-zip/MTH5 bundles) with size + sha256 + a tier-resolved URL.
@@ -77,7 +77,7 @@ def test_manifest_integrity_and_license_gate(tmp_path):
         assert row["n_stations"] >= 1
         bfmts.add(row["format"])
         urls_by_fmt[row["format"]] = row["url"]
-    # C32 §1: three bundle kinds for a served survey with the flag on — EDI zip, EMTF-XML zip, TF MTH5.
+    # Three bundle kinds for a served survey with the flag on — EDI zip, EMTF-XML zip, TF MTH5.
     assert bfmts == {"edi-zip", "xml-zip", "mth5"}, f"expected all three C32 bundle kinds, got {bfmts}"
     # Filename contract: the MTH5 says transfer-functions-only via the -tf suffix, all under bundles/.
     assert urls_by_fmt["edi-zip"].endswith("-edi.zip") and urls_by_fmt["edi-zip"].startswith("bundles/")
@@ -91,7 +91,7 @@ def test_manifest_integrity_and_license_gate(tmp_path):
 
 
 def test_manifest_survey_h5_off_by_default(tmp_path):
-    """survey MTH5 is gated OFF by default (D4): no --survey-h5 => no -tf.h5 artifact and no mth5 bundle
+    """Survey MTH5 is gated OFF by default: no --survey-h5 => no -tf.h5 artifact and no mth5 bundle
     row. The per-survey EDI zip AND the C32 EMTF-XML zip are BOTH unconditional when served (only the
     MTH5 is flag-gated)."""
     out, man = _build(tmp_path)               # no --survey-h5
@@ -102,7 +102,7 @@ def test_manifest_survey_h5_off_by_default(tmp_path):
 
 
 def test_xml_zip_contains_exactly_the_served_xml_set(tmp_path):
-    """C32 §1.1 / §4: the per-survey EMTF-XML zip contains EXACTLY the survey's emitted canonical XMLs
+    """The per-survey EMTF-XML zip contains EXACTLY the survey's emitted canonical XMLs
     (plus the C6 LICENSE.txt) — no more, no less. INDEPENDENT OBSERVABLE: the on-disk out/xml/<slug>/
     set, compared against the zip's namelist. FAILS if the zip bundles a stale/foreign XML or misses a
     served one."""
@@ -123,7 +123,7 @@ def test_xml_zip_contains_exactly_the_served_xml_set(tmp_path):
 
 
 def test_tf_h5_bundle_round_opens_with_served_tfs(tmp_path):
-    """C32 §1.2 / §4: the survey MTH5 bundle round-opens under mth5 and holds the served stations'
+    """The survey MTH5 bundle round-opens under mth5 and holds the served stations'
     TRANSFER FUNCTIONS. Reuses the same _mth5 reader the compare/round-trip tests use. FAILS if the file
     is unreadable, is misnamed (not <slug>-tf.h5), or is missing a served station's TF."""
     import _mth5 as m5  # noqa: PLC0415

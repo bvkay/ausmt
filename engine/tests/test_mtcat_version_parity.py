@@ -1,6 +1,6 @@
 """THE MTCAT SCHEMA VERSION HAS ONE SOURCE, AND THIS IS THE PIN THAT KEEPS IT THAT WAY.
 
-The version must not be a literal, because a literal reproduces. Three consecutive review rounds each found
+The version must not be a literal, because a literal reproduces. Three separate passes each found
 another hardcoded default: two in build_portal (the no-config/unreadable-config default in
 load_portal_config and the emitter's own p.get fallback), a third in load_portal_config's parsed-config
 branch, and a fourth in portal/tools/gen_config.py still defaulting to "1.0" two schema releases after
@@ -212,7 +212,7 @@ def test_every_portal_surface_that_states_the_mtcat_version_agrees():
 def test_portal_config_yaml_does_not_redeclare_the_version():
     """Since the ratified inversion the portal config carries NO schema_version key: the value is
     GENERATED into config.js from the constant, and a re-declared key here would be the duplicated
-    literal returning under its old name (the class that bit three review rounds running)."""
+    literal returning under its old name (the class that bit three passes running)."""
     assert not re.search(r"^\s*schema_version\s*:", PORTAL_CFG.read_text(encoding="utf-8"), flags=re.M), (
         "portal/portal.config.yaml re-declares portal.schema_version; delete the key - the version is "
         "generated from contract/generate.py's MTCAT_VERSION constant, never hand-stated in config")
@@ -250,7 +250,7 @@ def _assert_no_version_literal(files):
     """The CLASS guard, applied to whichever of the three sites this topology ships. Every one of the
     four defects was the same shape: a MAJOR.MINOR literal parked beside the word schema_version.
     Forbidding the shape is what stops the fifth one, because the four were not found by reading
-    carefully, they were found one per review round."""
+    carefully, they were found one at a time."""
     offenders = {}
     for f in files:
         hits = re.findall(r"schema_version[^\n]{0,60}?[\"']\d+\.\d+[\"']", f.read_text(encoding="utf-8"))

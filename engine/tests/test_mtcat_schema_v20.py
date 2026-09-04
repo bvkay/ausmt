@@ -192,7 +192,7 @@ def test_schema_self_identifies_as_the_versioned_immutable_uri():
     VERSION-SPECIFIC immutable URI under /data/schemas/mtcat/<version>/; the unversioned
     /data/mtcat.schema.json remains the latest-convenience route (portal.schema_url still names
     it, and the build serves BOTH). This supersedes the 1.2-era unversioned-$id rule; the pin
-    that used to forbid a versioned $id now requires it."""
+    that forbade a versioned $id requires it."""
     want = f"https://ausmt.auscope.org.au/data/schemas/mtcat/{SCHEMA_VERSION}/mtcat.schema.json"
     assert SCHEMA["$id"] == want, f"$id must be the versioned immutable URI {want}; got {SCHEMA['$id']}"
     assert SCHEMA["title"].startswith(f"MTCAT v{SCHEMA_VERSION}:")

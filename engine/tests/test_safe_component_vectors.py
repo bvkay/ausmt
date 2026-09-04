@@ -1,4 +1,4 @@
-"""C38 item 4 (code-health review §6 M2 family): pin build_portal.safe_component against shared vectors.
+"""Pin build_portal.safe_component against shared vectors.
 
 safe_component is the untrusted-DATAID/slug sanitiser guarding on-disk product paths, ausmt_ids and
 portal markup against traversal / stored XSS. Its behaviour is pinned here by a COMMITTED vector file

@@ -1,4 +1,4 @@
-"""url_for — the manifest storage-tier resolver (slice #4 distribution backbone). A pure, dependency-free
+"""url_for — the manifest storage-tier resolver of the distribution backbone. A pure, dependency-free
 function, so this runs in the core suite. Locks the branches the build/integration tests could not reach
 (they only ever emit tier=repo, relative urls — the `assert tier in (repo,nci)` there is tautological,
 audit M6): absolute --base-url joining, the tier=nci null contract (url_for returns None for a bare

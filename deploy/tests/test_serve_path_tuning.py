@@ -3,7 +3,7 @@
 The measured defects these pins guard against coming back:
 
   * the front door spoke HTTP/1.1 to the box reader with default pooling, so the browser's 15
-    parallel h2 streams funnelled into a staircase of upstream TTFBs (1.1s / 1.6s / 2.2s waves on
+    parallel h2 streams funnelled into a staircase of upstream TTFBs (1.1s / 1.6s / 2.2s steps on
     a cold load). tailscale serve forwards :8445 as a RAW TCP tunnel (RUNBOOK: `--tcp=8445`), so
     h2c passes end to end once both ends agree: the reader listener accepts h2c and every
     front-door proxy to the box dials it through one shared snippet.

@@ -1,4 +1,4 @@
-"""C25 convention gates (T1.1 rotation/frame guard + T1.2 sign-convention quadrant check).
+"""Convention gates (T1.1 rotation/frame guard + T1.2 sign-convention quadrant check).
 
 Every fixture here is generated AT RUNTIME by text-transforming the in-repo clean stations
 (data/sample-survey Vulcan_A1 for the impedance branch; tests/real_dialects phoenix_empower_A01
@@ -178,7 +178,7 @@ def test_uniform_zrot_served_as_stored_v3a(tmp_path):
 
 
 def test_olympic_dam_class_neg60_served_as_stored_v3a(tmp_path):
-    """V3-A pin (olympic-dam class: uniform ZROT −60, beyond any declination - the old R4 class).
+    """Arm A pin (olympic-dam class: uniform ZROT −60, beyond any declination).
     FAILS IF: the −60° station is served de-rotated. Compares the served pt_az against the SAME
     fixture built at angle 0 (the de-rotated target): they must DIFFER in the rotated way (~60°),
     proving the served values are the SOURCE (as-stored) values, not the de-rotated ones. Both go
@@ -573,7 +573,7 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
     NOT gain the 'mixed declared frames' note. The rule: each station is served in its OWN
     declared frame (nothing de-rotated); the survey merely reports that it mixes frames — the note
     reaches build_report's frame array AND every member's station.json frame block (for the portal).
-    Historical red: v2 de-rotated the whole survey to zero (R2)."""
+    A policy that de-rotated the whole survey to zero would fail this."""
     t8, t20 = _vulcan_rotated(8.0), _vulcan_rotated(20.0)
     # PRECONDITION: standalone the 8-deg file already records its own frame (as-stored)
     solo = _parse(tmp_path, "solo8.edi", t8)
@@ -613,7 +613,7 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
 
 
 # ---------------------------------------------------------------------------------------------
-# Fix round F1: declared-zero stations participate in the V3-B vote as angle 0.0
+# Declared-zero stations participate in the arm-B vote as angle 0.0
 # ---------------------------------------------------------------------------------------------
 def test_classify_survey_frame_declared_zero_participates_f1():
     """FAILS IF: declared-zero (kind 'none') stations are excluded from the V3-B
@@ -641,7 +641,7 @@ def test_classify_survey_frame_declared_zero_participates_f1():
 
 
 def test_survey_zero_member_gets_mixed_frames_note_f1(tmp_path):
-    """F1 integration. FAILS IF: a survey mixing a declared-zero station with a 20° one gets NO
+    """Integration. FAILS IF: a survey mixing a declared-zero station with a 20° one gets NO
     mixed-frames note (the pre-F1 defect: zero members were invisible to the vote), or the note's
     range omits the 0° member it is stamped on. Both stations still serve AS STORED.
     Historical red: pre-F1 code emitted no note for [0°, 20°]."""
@@ -728,7 +728,7 @@ def test_divergent_tipper_frame_reported_f2(tmp_path):
 
 
 def test_equal_tipper_frame_not_reported_f2(tmp_path):
-    """F2 negative space. FAILS IF: an EQUAL tipper/impedance declaration (ZROT=TROT=-60) or a
+    """Negative space. FAILS IF: an EQUAL tipper/impedance declaration (ZROT=TROT=-60) or a
     zero/zero one produces the divergence field or note — equal-or-absent TROT means no change, no
     noise (mutation-proof for the F2 pin: the field appears ONLY on divergence)."""
     for name, zr, tr in (("eq60.edi", -60.0, -60.0), ("eq0.edi", 0.0, 0.0)):

@@ -201,7 +201,7 @@ def _outside_queries(text):
 def _index_footer():
     """index.html's <footer> with HTML comments stripped, so prose inside it cannot satisfy a pin.
 
-    NOTHING ELSE IS STRIPPED. This footer used to have the SPA's basemap credit removed before any
+    NOTHING ELSE IS STRIPPED. Removing the SPA's basemap credit from this footer before any
     comparison, which is what let one surface carry a line the other six did not while every
     "identical everywhere" pin still passed. The credit is gone from every footer, so the readers
     compare what is there."""

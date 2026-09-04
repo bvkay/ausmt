@@ -179,7 +179,7 @@ def test_report_all_pass_is_labelled_and_exits_zero(tmp_path):
 
 
 def test_config_hash_match_passes(tmp_path):
-    """O1 trap, green side: when the container's mounted Caddyfile hashes EQUAL to the repo file, the
+    """Trap, green side: when the container's mounted Caddyfile hashes EQUAL to the repo file, the
     config check PASSES. Proves the FAIL pin below is non-vacuous."""
     cf = _caddyfile(tmp_path)
     env = _env(tmp_path, cf, FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest())
@@ -189,7 +189,7 @@ def test_config_hash_match_passes(tmp_path):
 
 
 def test_config_hash_mismatch_fails_and_exits_nonzero(tmp_path):
-    """O1 trap, red side: when the RUNNING container's Caddyfile hash DIFFERS from the repo file, the
+    """Trap, red side: when the RUNNING container's Caddyfile hash DIFFERS from the repo file, the
     config check must FAIL and the whole run must exit non-zero (so it can gate an alert). FAILS IF a
     drifted running config is reported green."""
     cf = _caddyfile(tmp_path)

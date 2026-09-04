@@ -1,6 +1,6 @@
 """Station-drawer API section states the REAL served endpoints (Invariant 10).
 
-The Provenance tab's collapsed "API" expander used to advertise a "Read API (planned)" over three
+The Provenance tab's collapsed "API" expander must never advertise a "Read API (planned)" over three
 paths that have never existed on any AusMT deployment:
 
     GET /api/station/<ausmt_id>.json
@@ -141,7 +141,7 @@ def test_drawer_api_section_lists_the_real_endpoints(tmp_path):
             f"the drawer API section must not advertise {gone}: surveys.json is portal-internal with no "
             f"contract, and the products/ twin of the manifest is retired (public-surface audit, "
             f"2026-08-22); rendered:\n{html[-2500:]}")
-    # Docs wave, stage 2: the depth pointer is the docs site's API reference, and it must
+    # The depth pointer is the docs site's API reference, and it must
     # be the SAME url About links, so a reader is never sent to two different "for depth" pages. Read off
     # about.html rather than typed twice, which is what makes the two surfaces provably agree.
     about = (ROOT / "about.html").read_text(encoding="utf-8")
@@ -156,7 +156,7 @@ def test_drawer_api_section_lists_the_real_endpoints(tmp_path):
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_drawer_edi_line_tracks_the_manifest_row_not_the_station_id(tmp_path):
     """The station's own EDI endpoint is the manifest row's url, joined under /data/. The fixture's
-    served filename (Vulcan_A1.edi) deliberately differs from the station id (A1), so a path templated
+    served filename (Vulcan_A1.edi) deliberately differs from the station id A1, so a path templated
     from the id would fail here."""
     html = _render(tmp_path, _fixture(served=True, access="open"), "served")
     assert "/data/edi/vulcan-2022/Vulcan_A1.edi" in html, (

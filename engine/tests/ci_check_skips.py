@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI skip tripwire (code-health review M5).
+"""CI skip tripwire.
 
 The engine suite gates the release, but ~20 of its files `pytest.importorskip("mt_metadata")`/
 `("mth5")` at module top. If the pinned lock ever silently stopped installing that stack, those files

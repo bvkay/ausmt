@@ -411,7 +411,7 @@ def test_coordinate_overrides_malformed_payload_rejected():
 # survey default (usually exact) — its TRUE coordinates served on the next build (a C42 leak).
 
 def test_ordinary_access_edit_preserves_existing_coordinate_overrides():
-    """C42 LEAK PIN (RED on pre-fix HEAD dfa5bab): a Metadata-tab access edit that changes ONLY
+    """LEAK PIN (RED on pre-fix HEAD dfa5bab): a Metadata-tab access edit that changes ONLY
     embargo_until — submitting NO s_access_coordinate_overrides field, exactly what that form posts —
     must PRESERVE the survey's existing coordinate_overrides map. FAILS IF an unrelated access edit
     drops a withheld/generalised station back to the survey default (the silent un-masking)."""
@@ -468,7 +468,7 @@ def test_stations_panel_clear_all_removes_overrides_despite_original_map():
 
 
 def test_survey_level_coordinates_default_survives_sibling_scalar_edit():
-    """C42 sibling-scalar class (the survey-level policy, one level up from the per-station map): editing
+    """Sibling-scalar class (the survey-level policy, one level up from the per-station map): editing
     a SIBLING access scalar (embargo) must not drop the survey-level `coordinates` policy. The Metadata
     form round-trips the coordinates <select>, so it is re-posted verbatim and the assembler keeps it.
     FAILS IF a sibling-only edit drops access.coordinates (the same silent un-mask, survey-granularity)."""
@@ -713,7 +713,7 @@ def _write_survey(folder: Path, meta: dict) -> None:
     (folder / "LICENSE.md").write_text("# Licence\n\n**CC-BY-4.0**\n", encoding="utf-8")
 
 
-# D-L3 (SPEC §9.3): the acquisition fields (title/licence/retrieved/statement/profile) that used to live
+# SPEC §9.3: the acquisition fields (title/licence/retrieved/statement/profile) that would otherwise live
 # on a sources[] row now ride a related_identifiers row (identifies: entire). Same SOURCE_KEYS allow-list
 # at the validator, so the key-parity pin now feeds the merged row.
 _C46_FORM = {
@@ -799,7 +799,7 @@ def test_attribution_bad_declared_date_errors():
 
 
 def test_related_identifiers_acquisition_licence_and_profile_vocab_enforced():
-    """D-L3: the acquisition fields merged onto a related_identifiers row keep the fail-closed vocab
+    """The acquisition fields merged onto a related_identifiers row keep the fail-closed vocab
     discipline the retired sources[] row had — licence against the contract vocab, profile against
     ga|generic. A valid pair assembles; an out-of-vocab value fail-closes at the form. FAILS IF the merged
     row would accept a value the validator/engine would reject."""
@@ -967,7 +967,7 @@ def test_related_identifiers_validator_fails_bad_relation_non_vacuous(tmp_path):
 
 
 def test_identifies_out_of_vocab_is_fail_closed():
-    """D-L1: `identifies` is a fail-closed vocab (like relation/identifier_type) — an out-of-vocab level
+    """`identifies` is a fail-closed vocab (like relation/identifier_type) — an out-of-vocab level
     is a SectionError, because a mis-typed level auto-derives a WRONG relation and must block, not ship."""
     with pytest.raises(ef.SectionError):
         ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
@@ -983,7 +983,7 @@ def test_identifies_out_of_vocab_is_fail_closed():
 
 
 def test_relation_auto_derives_from_identifies_server_side():
-    """D-L2: when a row states `identifies`, the DataCite relation DERIVES from it server-side — the form
+    """When a row states `identifies`, the DataCite relation DERIVES from it server-side — the form
     carries NO explicit relation (the control is hidden on an identifies row), and the assembler writes the
     derived value. Every level maps to its ratified relation. FAILS IF a level does not derive its relation."""
     expected = {"collection": "IsPartOf", "raw_packed": "IsDerivedFrom", "level0": "IsDerivedFrom",
@@ -1026,7 +1026,7 @@ def test_identifies_row_derives_even_when_no_explicit_relation_field_present():
 
 
 def test_instrument_pid_persists_and_round_trips():
-    """identifiers.instrument_pid (§2b, wave-1 EXPAND) assembles from its input and round-trips to
+    """identifiers.instrument_pid (§2b, additive) assembles from its input and round-trips to
     _OMIT when unchanged. FAILS IF the new field is not read, or an unchanged submit emits a diff. It
     is additive/WARNING-only at the validator, so the editor never blocks on its format (plain text)."""
     form = {"s_identifiers_dataset_doi": "10.5281/zenodo.1",

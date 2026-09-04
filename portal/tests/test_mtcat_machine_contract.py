@@ -15,7 +15,7 @@ TRUE of the artifact it describes:
     documented; an extra token would document one the build hard-fails on. Both are silent until someone
     writes an importer against the page, which is the whole point of publishing it.
 
-DOCS WAVE, STAGE 2. The four-bullet field guide used to live on about.html. About is now the two-minute
+The four-bullet field guide does not live on about.html. About is the two-minute
 front door, so the guide moved to docs/docs/reference/mtcat-schema.md under "Reading a served survey
 record", and the vocabulary pins moved with it. What About keeps is the machine-contract PARAGRAPH
 (<p id="machine-contract">), which names the schema, the version and the metadata licence and links the
@@ -26,7 +26,7 @@ RED-proven, per assertion, by mutating the pages: dropping `Sponsor` from the ro
 plausible-looking `level4` to the NCI levels, adding a phantom `legacy` access level, and pointing the
 About link at a versioned schema filename all fail here.
 
-RESOLVED (fix round): the schema's own description of `surveys[].access` used to claim AusMT emits
+RESOLVED: the schema's own description of `surveys[].access` must not claim AusMT emits
 "open, metadata_only, embargoed or legacy", and the same phantom fourth value survived in two older
 engine/portal comments. No such level has ever existed: ACCESS_LEVELS in the emitter (and in
 gateway/editor_form.py, and in the surveys validator) is the three-value tuple this module reads. All
@@ -201,8 +201,8 @@ def test_about_keeps_the_machine_contract_paragraph_with_its_schema_link():
 
 
 def test_about_points_at_the_field_guide_it_no_longer_carries():
-    """The field guide moved to the docs site in the documentation wave. About must SEND readers there,
-    or the four vocabularies it used to explain become undiscoverable from the portal. FAILS if the
+    """The field guide lives on the docs site. About must SEND readers there,
+    or the four vocabularies become undiscoverable from the portal. FAILS if the
     pointer is missing."""
     para = _about_contract()
     assert "https://ausmt.readthedocs.io/en/latest/reference/mtcat-schema/" in para, (

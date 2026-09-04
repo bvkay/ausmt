@@ -23,7 +23,7 @@ The two config pins run everywhere. The shim run needs a POSIX shell to execute 
 so it carries the same `_SH is None` skip its four sibling shell pins carry (test_alert_sh,
 test_actions_sh, test_backup_sh, test_frontdoor_doctor_sh), and DELIBERATELY without an entry in the
 CI skip allow-list: `sh` is present on the runner, so the skip cannot fire there, and if it ever did
-the tripwire should red the workflow rather than wave it through. That is the same convention the workflow
+the tripwire should red the workflow rather than pass it through. That is the same convention the workflow
 already applies to its flock(1) case.
 """
 from __future__ import annotations

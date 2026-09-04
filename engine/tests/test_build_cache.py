@@ -533,7 +533,7 @@ def test_c18b_unstamped_cache_meta_reads_as_suspect_not_current(tmp_path, clean_
 
 
 def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypatch):
-    """★ THE INCIDENT ROOT CAUSE (M1, Amendment A4). FAILS IF: a survey.yaml edit landing AFTER
+    """★ THE ROOT CAUSE (single-read coherence). FAILS IF: a survey.yaml edit landing AFTER
     discovery but BEFORE that survey's per-survey processing lets the straddled build write cache
     entries whose XML embeds the PRE-edit metadata KEYED under the POST-edit digest — so a
     subsequent clean warm build serves the pre-edit citation from cache. Independent observable:

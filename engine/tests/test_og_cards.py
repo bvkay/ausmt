@@ -509,7 +509,7 @@ def test_the_column_scan_catches_a_title_that_crosses_the_edge(tmp_path):
 
 def test_the_known_offender_fits_the_column_by_stepping_down_and_wrapping(tmp_path):
     """The card the column rule was written for. Its title at 64 px and its three-state region line
-    both used to run across the footprint panel; the title now steps down the ladder to fit on one
+    neither may run across the footprint panel; the title steps down the ladder to fit on one
     line, and the region wraps to a second rather than crossing the edge."""
     pages = _pages_module()
     from PIL import Image, ImageDraw
@@ -524,7 +524,7 @@ def test_the_known_offender_fits_the_column_by_stepping_down_and_wrapping(tmp_pa
 
 
 def test_a_page_only_ever_advertises_a_card_that_was_written(built):
-    """FAILS IF a page names a card URL with no file behind it. The page used to derive the URL from
+    """FAILS IF a page names a card URL with no file behind it. The page must not derive the URL from
     "is Pillow importable", which is a claim about the environment and not about the file, so a
     failed write shipped an og:image that every link-preview fetcher resolved to a 404."""
     for rel, want in (("surveys/card-a.html", "/data/pages/og/card-a.png"),

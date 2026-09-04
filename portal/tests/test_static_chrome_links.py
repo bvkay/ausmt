@@ -87,7 +87,7 @@ def test_every_static_page_declares_its_canonical(name, url):
 
 def test_the_404_page_recovers_to_the_surveys_index():
     """FAILS IF the 404 page's recovery link still points at the dead #/surveys hash route. It is
-    the one link a reader who arrived on a stale URL is offered, and it used to leave them on the
+    the one link a reader who arrived on a stale URL is offered, and it must not leave them on the
     map with no explanation."""
     text = _text("404.html")
     assert 'href="/surveys"' in text, "the 404 recovery link must reach the surveys index"

@@ -166,7 +166,7 @@ def test_the_served_bytes_stay_the_custodian_s_file(tmp_path):
 
 
 def test_the_station_record_carries_the_section_of_record(tmp_path):
-    """R1's provenance travelling into the published product: the fixture carries the averaged
+    """Provenance travelling into the published product: the fixture carries the averaged
     solution and one realisation, and station.json says which one the numbers came from."""
     surveys = _survey(tmp_path, "53(RR).edi", "RD18-053a")
     out = tmp_path / "out"

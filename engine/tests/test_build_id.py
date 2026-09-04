@@ -91,7 +91,7 @@ def test_build_json_source_commit_matches_git_head_of_surveys_dir(tmp_path):
 
 
 def test_build_json_and_provenance_carry_served_tool_versions(tmp_path):
-    """C32 §2: build.json AND build_provenance.json gain additive mt_metadata_version / mth5_version
+    """build.json AND build_provenance.json gain additive mt_metadata_version / mth5_version
     keys, read from the SINGLE lib_versions source of truth. This build runs the real mt_metadata/mth5
     stack (pytest.importorskip at module top), so both keys must be present and match the imported
     library __version__ (an independent observable — not a re-read of the build's own output). FAILS if a

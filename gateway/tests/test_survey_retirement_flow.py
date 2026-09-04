@@ -300,11 +300,11 @@ def test_retire_rate_limit_trips(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# T6 last-survey guard (evidenced: an empty corpus breaks the production build)
+# Last-survey guard (evidenced: an empty corpus breaks the production build)
 # --------------------------------------------------------------------------------------------------
 def test_retire_last_survey_guard_refuses_nothing_staged(tmp_path):
     """With only ONE published survey, retiring it is refused (409) with nothing staged — an empty
-    corpus breaks the next rebuild (T6, evidenced). FAILS IF the last survey can be retired."""
+    corpus breaks the next rebuild, evidenced. FAILS IF the last survey can be retired."""
     async def _body():
         surveys_live = _live_with_surveys(tmp_path, slugs=("only-survey-2026",))
         git = FakeGit()

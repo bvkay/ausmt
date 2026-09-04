@@ -169,7 +169,7 @@ def test_open_baseline_serves(tmp_path):
 ])
 def test_withheld_surveys_serve_no_bytes_but_stay_discoverable(tmp_path, access_block):
     """CC-BY + (embargoed future | metadata_only | embargoed past) => ZERO served bytes/rows, yet the
-    survey is fully discoverable in catalogue/surveys/mtcat. FAILS against the pre-C1 gate (everything
+    survey is fully discoverable in catalogue/surveys/mtcat. FAILS against a gate that serves everything
     with a redistributable licence served)."""
     pytest.importorskip("mt_metadata")
     pytest.importorskip("mth5")
@@ -191,7 +191,7 @@ def test_withheld_surveys_serve_no_bytes_but_stay_discoverable(tmp_path, access_
     "access: { level: metadata_only }",
 ])
 def test_embargoed_survey_emits_none_of_the_three_bundles(tmp_path, access_block):
-    """C32 §1.3 / §4: the two new bundles (EMTF-XML zip, TF MTH5) flow through the IDENTICAL can_serve
+    """The two new bundles (EMTF-XML zip, TF MTH5) flow through the IDENTICAL can_serve
     gate as the EDI zip — so a withheld survey emits NONE of the three, even with --survey-h5 ON. FAILS
     if any bundle row is emitted OR any bundle file lands on disk for a withheld survey. (The pre-C32
     generic 'bundles == []' assertion never exercised the flag-gated MTH5 path; this does.)"""
@@ -250,7 +250,7 @@ _SCI_METADATA = ("rr", "sw", "alg")
 
 
 def test_embargoed_survey_withholds_display_curves(tmp_path):
-    """C1b (THIS FAILS pre-fix — the curves are present in tf.json / sci.json for an embargoed survey):
+    """THIS FAILS where the curves are present in tf.json / sci.json for an embargoed survey:
     an embargoed CC-BY survey must have EVERY tf.json series column an EMPTY ARRAY (row width + station
     alignment preserved) and its sci.json science-derived fields WITHHELD, while the processing-metadata
     sci fields (rr/sw/alg) and the whole catalogue row stay public."""
@@ -417,7 +417,7 @@ def _sweep_products_science(prod, slug):
 
 
 def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
-    """C1c PIN (FAILS pre-fix — the per-station products carried full TF science for every station): after a
+    """PIN (FAILS pre-fix — the per-station products carried full TF science for every station): after a
     3-survey build with --products, NO non-served survey's station.json/dimensionality.json may carry any
     TF-derived science or exact coordinates, and NO dimensionality.json is emitted for a non-served survey;
     the OPEN survey's products are unaffected (science present, dimensionality.json present)."""
@@ -527,7 +527,7 @@ def _root_leak_hits(out, forbidden, names=("mtcat.json", "ts_access.json")):
 
     `names` is a parameter because the two root artifacts answer DIFFERENT questions. mtcat.json
     states existence and a count and must carry NO route detail from any station; ts_access.json IS
-    route detail by design (D3), so what it may carry is decided by MEMBERSHIP - open stations only -
+    route detail by design, so what it may carry is decided by MEMBERSHIP - open stations only -
     and it is swept against the withheld half of the register alone."""
     hits = []
     for name in names:

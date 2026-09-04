@@ -1,7 +1,7 @@
 """Portal handles masked coordinates (Invariant 10).
 
 The engine masks a custodian-withheld station to null lat/lon and a generalised station to a 0.1deg
-cell, AND (C42 Amendment A1) emits an explicit coordinate-policy marker for the non-exact stations on a
+cell, AND emits an explicit coordinate-policy marker for the non-exact stations on a
 boot-loaded artifact (coord_policy.json). This boots the REAL portal modules in jsdom
 (tools/coord_access_test.js) over ENGINE-BUILT fixtures (tests/fixtures/c42/, produced by
 tools/gen_c42_fixtures.py) and drives the null-coord + generalised-badge paths.

@@ -156,7 +156,7 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # third asset, or the same asset in the wrong slot, fails here.
 #
 # ONE mark in the header now: the AusMT identity opening the left zone. The AuScope parent mark
-# that used to close the right zone is withdrawn from every header on the site (the relationship is
+# that could close the right zone is absent from every header on the site (the relationship is
 # stated in words, in the footer and in About's Who enables AusMT section), so the header's fetched
 # set is a single file.
 # The chrome's own fetched assets, in the order a page writes them: the header identity, then the
@@ -455,7 +455,7 @@ def _detail_page(pages, rows, i=0):
 def test_the_hub_card_draws_a_dot_for_every_member_station():
     """A card's map is a COVERAGE claim, so it draws every member station or it misreports one.
 
-    The card used to grid-decimate above a per-card cap, and the cap was split between members and
+    The card must not grid-decimate above a per-card cap split between members and
     then snapped to a grid, so it bit about a third harder than its own number implied: the AusLAMP
     card drew 180 of its 1,354 stations and the legacy GDS card 193 of its 579. The two largest
     programmes in the corpus were the two the card understated most, and a reader comparing cards
@@ -623,7 +623,7 @@ def test_the_collections_card_keeps_its_explore_link_above_the_stretched_overlay
 
 
 def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
-    """The hub's own words, verbatim from the review, between the summary line and the
+    """The hub's own words, verbatim, between the summary line and the
     list; and the map action carries the in-site forward arrow (R14 keeps U+2192 for actions that
     stay on the site and U+2197 for links that leave the page)."""
     pages = _pages_module()
@@ -641,7 +641,7 @@ def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
 
 
 def test_the_hub_locator_grows_and_its_container_steps_back():
-    """R6 and R7. The locator map is the card's only picture and was too small to read at a glance;
+    """The locator map is the card's only picture and must not be too small to read at a glance;
     it grows about ten percent. The PANEL around it steps toward the card's own fill so the
     Australia outline reads as the object rather than as a box on a box. The shared-symbol geometry
     is untouched, which is what keeps the budget pin honest."""
@@ -702,7 +702,7 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # ==================================================================================================
 # The page kinds this tier emits, with the tab that must be active, the machine-readable link the
 # footer must resolve to, and whether the header's right status slot carries anything. The footer
-# column USED to differ per row, which is exactly what the one-footer rule ended; it is
+# column must NOT differ per row, which is exactly what the one-footer rule settles; it is
 # kept as a column, one value repeated, so a re-divergence shows up here as rows that disagree.
 # LANE-ADDENDUM-HUB-FEEDBACK.md R11 to R13. The tokens asserted below are the SPA header's own
 # (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
@@ -1006,7 +1006,7 @@ def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
 
 
 def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
-    """The identity swap itself (E3). Every surface of the site now opens with the same mark: the SPA
+    """The identity swap itself. Every surface of the site opens with the same mark: the SPA
     header and every generated page. FAILS IF a page kind renders the wordmark without the mark, or
     puts the mark anywhere but the header's left identity zone, or sizes it off the shared rule."""
     for rel in _kinds(built):
@@ -1022,7 +1022,7 @@ def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
             f"{rel}: the mark must carry the shared sizing rule the SPA header uses"
 
 
-# The parent-organisation mark, WITHDRAWN. It used to close every header from the right zone; the
+# The parent-organisation mark, WITHDRAWN. It must not close a header from the right zone; the
 # the rule takes it off every surface of the site, so what this asserts is that the emitter
 # puts it on NO page kind, in no zone. The portal surface's half of the same rule is held in
 # portal/tests/test_header_geometry_parity.py, character for character.

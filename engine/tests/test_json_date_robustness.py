@@ -1,4 +1,4 @@
-"""JSON date-serialisation robustness across the three build layers (fix/engine-json-date-serialization).
+"""JSON date-serialisation robustness across the three build layers.
 
 Root cause: the add-survey form emitted attribution.declared_date as a BARE unquoted ISO date; PyYAML
 safe_load implicit-types a bare ISO date to datetime.date; survey_meta_from_yaml threads the attribution

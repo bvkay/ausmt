@@ -1,7 +1,7 @@
 """A half-coordinate station (latitude without longitude) must never abort the corpus build.
 
 _mtm sets lat and lon independently, so a record with one and not the other is a legal parse
-product. _group_collections used to guard only lat before appending BOTH accumulators, and
+product. _group_collections must not guard only lat before appending BOTH accumulators, or
 round(min(lon), 6) then raised TypeError at corpus level - after LAYER 2's per-survey withhold,
 so one malformed station denied publication to the whole corpus. The three ingest guards are
 pinned to require both coordinates, so the half-coordinate shape is dropped where it is born

@@ -94,7 +94,7 @@ def test_a_multi_period_failure_is_never_taken_for_the_single_period_defect(tmp_
 
 
 def test_a_single_period_station_builds_end_to_end(tmp_path):
-    """Over the real producer: the station the corpus used to lose now lands in the catalogue as a
+    """Over the real producer: the station a length gate would lose lands in the catalogue as a
     GDS station with its one period, and the fallback is recorded per station in build_report.json.
     A survey whose files ALL fail this way built zero stations and was dropped from the portal
     entirely, taking its whole survey page with it."""

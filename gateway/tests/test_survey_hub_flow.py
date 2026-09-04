@@ -1,4 +1,4 @@
-"""C43 Stage 1 survey-hub + nav-shell flow tests (record D13 verification pins), driven through the
+"""Stage 1 survey-hub + nav-shell flow tests (record D13 verification pins), driven through the
 real gateway HTTP surface with the in-process edit seam.
 
 Load-bearing pins here:
@@ -110,7 +110,7 @@ def _diff_changed(text: str) -> list[str]:
 
 def _section_html(body: str, key: str) -> str:
     """The rendered HTML of ONE hub Metadata section block. HUB-SINGLE-SAVE: the sections
-    are <section> blocks inside ONE form, so a block ends at </section> (it used to end at </form>).
+    are <section> blocks inside ONE form, so a block ends at </section>, never at </form>.
     Splitting on the wrong terminator would swallow every following section and quietly hollow out the
     per-section assertions built on this helper."""
     assert f'data-hub-section-form="{key}"' in body, f"no section block for {key!r}"
@@ -279,7 +279,7 @@ def test_survey_list_links_to_hub_not_edit_form(tmp_path):
 
 
 def test_surveys_list_is_a_table_filled_browser_side(tmp_path):
-    """C43 FR2-1 SURVEYS-TABLE PIN. The Surveys list is a proper TABLE (not a bare link list): a row
+    """SURVEYS-TABLE PIN. The Surveys list is a proper TABLE (not a bare link list): a row
     per slug with Survey / Slug / Version / Licence / Stations columns, the slug rendered as a mono
     chip, the Survey cell linking to the hub, and data-cell placeholders the external surveys-list.js
     fills from the served corpus (surveys.json + build_report.json). The server renders only slugs (a
@@ -613,7 +613,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             # ONE advanced-JSON escape per underlying list.
             assert 'name="j_creators"' in people and 'name="j_contributors"' in people
 
-            # M1 Identifiers & PIDs: the folded Time series levels group (d) + its widgets/snapshot/hint.
+            # Identifiers & PIDs: the folded Time series levels group (d) + its widgets/snapshot/hint.
             ids = _form("identifiers")
             for needle in ("Time series levels available",
                            'name="c_time_series_levels_available_raw_packed"', 'name="o_time_series"',
@@ -658,7 +658,7 @@ def test_hub_core_fields_merge_round_trips_scalars_org_instruments(tmp_path):
 
 
 def test_hub_curated_homes_merge_round_trips_in_one_post(tmp_path):
-    """A2 COMBINED-POST PIN, replacing the retired M2 Investigators pin. ONE post of the metadata form
+    """COMBINED-POST PIN, replacing the retired M2 Investigators pin. ONE post of the metadata form
     round-trips the citation map (preferred text + the nested preferred-identifier pair), the
     identity_classification designation mapping, an organisations row with its role checkbox group and
     its primary-custodian radio, AND an acknowledgements row. FAILS IF any of the four new panels drops

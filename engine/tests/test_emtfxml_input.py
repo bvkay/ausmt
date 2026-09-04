@@ -440,7 +440,7 @@ def test_withheld_coordinate_emtfxml_station_serves_no_coordinates_and_no_bytes(
 
 
 def test_declared_frame_is_read_from_the_file_not_from_a_library_default(tmp_path):
-    """C25 honesty on the XML path. The frame an EMTF XML declares lives in
+    """Honesty on the XML path. The frame an EMTF XML declares lives in
     <Site><Orientation angle_to_geographic_north=...>. mt_metadata 1.0.9's EMTF-XML reader leaves the
     TF's own _rotation_angle at a bare 0 regardless of what the file says, so reading THAT would
     report every station as 'declared-zero' -- a library default asserted as a station fact.
@@ -467,7 +467,7 @@ def test_declared_frame_is_read_from_the_file_not_from_a_library_default(tmp_pat
 
 
 def test_per_period_rotation_declaration_refuses_the_station():
-    """C25 POLICY v3 applies to the XML path too: AusMT serves data AS STORED and never serves a
+    """POLICY v3 applies to the XML path too: AusMT serves data AS STORED and never serves a
     per-period-mixed frame, so the XML frame reader must REFUSE a per-period declaration rather than
     pick one of the angles.
 

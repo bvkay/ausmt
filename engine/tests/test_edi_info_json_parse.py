@@ -530,7 +530,8 @@ def test_the_canonical_xml_carries_the_declination_the_custodian_wrote(tmp_path)
 
 
 def test_normalize_leaves_the_source_bytes_untouched(tmp_path):
-    """D1 through the SECOND seam too: normalize reads the custodian's file, never rewrites it."""
+    """The never-edit rule through the SECOND seam too: normalize reads the custodian's file, never
+    rewrites it."""
     from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
     before = hashlib.sha256(DECL.read_bytes()).hexdigest()
     normalize(DECL, tmp_path / "xml", survey_id="declfix", station_id="1039")

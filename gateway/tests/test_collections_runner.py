@@ -1,4 +1,4 @@
-"""C43 Stage-3a collections read-job pins (record D5-A / D13, Invariant 10).
+"""Stage-3a collections read-job pins (record D5-A / D13, Invariant 10).
 
 These exercise gateway.runner.edit.run_collections_job DIRECTLY (the same in-suite-reaches-the-runner
 pattern as test_edit_runner.py). Each pin states its failure criterion in one line; the parity,
@@ -93,7 +93,7 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
         collection="collection:\n  id: wamt\n  title: WA MT\n  status: complete\n", n_edi=1)
     _mk(sroot, "wamt-b", name="WA MT B",
         collection="collection:\n  id: wamt\n  status: active\n", n_edi=1)
-    # F2 edge (D5-B): a falsy id (unquoted 0) is dropped by BOTH the engine (truthiness) and the runner
+    # Edge (D5-B): a falsy id (unquoted 0) is dropped by BOTH the engine (truthiness) and the runner
     # — so it forms no collection on either side (same-input parity holds).
     _mk(sroot, "zero-id", name="Zero Id",
         collection="collection:\n  id: 0\n  title: Zero\n", n_edi=1)

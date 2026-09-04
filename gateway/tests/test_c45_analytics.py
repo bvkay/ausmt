@@ -1,4 +1,4 @@
-"""C45 usage-analytics screen (gateway half — record D4/D5).
+"""Usage-analytics screen (gateway half — record D4/D5).
 
 The consumer side of the aggregator: the gateway reads stats.json SERVER-side (serve_state.read_stats,
 the ops-status.json seam) and renders the READ-ONLY Analytics screen (Operations rail). These pins
@@ -1220,7 +1220,7 @@ def _aged_out_seam_stats(**over) -> dict:
 
 
 def test_no_disclosure_points_at_a_note_that_is_not_on_the_page(tmp_path):
-    """DANGLING-CITATION PIN. Two disclosures used to tell the reader that "the note under the
+    """DANGLING-CITATION PIN. Neither disclosure may tell the reader that "the note under the
     quarterly table names the months", but that note is built from the THREE months the quarterly
     table shows while the disclosures citing it fire off a scan of every retained month, which the
     aggregator never prunes. Once a second-seam month ages out of the three-month window the citation

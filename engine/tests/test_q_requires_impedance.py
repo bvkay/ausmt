@@ -5,7 +5,7 @@ tipper-only station there is neither, and the shape-based branch of the formula 
 coverage plus a constant: a number that reads as an assessed diagnostic without being one. The rule
 is that such a station publishes no score, uniformly, for whichever reason it lacks an impedance.
 
-Two reasons reach the same physical situation and used to publish differently:
+Two reasons reach the same physical situation and must not publish differently:
 
   * a survey that declares its recorded channels WITHOUT Ex/Ey has any impedance in its released
     files masked as a conversion artifact, and the mask nulled q with the rest of the impedance-
@@ -189,7 +189,7 @@ def test_the_impedance_presence_test_is_the_components_columns_own():
 # ---------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("path,expected", [
-    # Vulcan A1: a clean broadband impedance with error blocks, at the top of the scale.
+    # station A1 of vulcan: a clean broadband impedance with error blocks, at the top of the scale.
     (REAL_Z, {"q": 5.0, "qb": "e", "rr": 0, "sw": None, "alg": None, "dim": "2-D", "p3d": 0,
               "gd": 0, "ellip": 0.127, "skew": 0.7, "mre": 0.019, "decades": 6.1}),
     # CP1L01: a noisier Pilbara station, mid-scale, so the pin is not a saturated 5.0 that a

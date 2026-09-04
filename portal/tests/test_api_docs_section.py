@@ -243,7 +243,7 @@ def _code_blocks(fragment):
 def test_docs_document_the_bundle_forms_with_a_worked_command():
     """The three bundle forms plus a worked command that actually pulls bytes.
 
-    REFERENCE-GRADE: the command used to hard-code https://ausmt.au. The docs are now
+    REFERENCE-GRADE: the command must not hard-code https://ausmt.au. The docs are
     host-relative throughout, and the runnable examples take that root
     from a BASE variable. The pin moved with the convention; what it guards is unchanged, namely that
     the subsection carries a command a reader can run rather than only a path listing."""

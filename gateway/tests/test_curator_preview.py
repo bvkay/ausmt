@@ -104,7 +104,7 @@ def test_path_traversal_is_404(tmp_path):
 
 def test_invalid_id_is_404(tmp_path):
     # An id outside the Crockford charset never reaches a path (design §3/§7). Failure criterion:
-    # fails if a non-charset id (with separators) was used to build a filesystem path.
+    # fails if a non-charset id (with separators) reaches a filesystem path.
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):
             await curator_login(client)

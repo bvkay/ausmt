@@ -102,7 +102,7 @@ def test_the_tool_sets_the_row_at_the_sizes_this_file_declares():
     The tool's source is compiled and run here rather than imported. An import would write a
     __pycache__ entry beside a hand-run tool and, worse, could READ a stale one: the validity stamp
     is the source's mtime to the second, so an edit and a test in the same second can be answered
-    with the previous compile. A pin that can report the constant a file used to hold is not a pin."""
+    with the previous compile. A pin that can report a stale constant from a file is not a pin."""
     ns = {"__file__": str(TOOL), "__name__": "gen_social_card_pin"}
     exec(compile(TOOL.read_text(encoding="utf-8"), str(TOOL), "exec"), ns)
     assert ns["LINE_H"] == LINE_H, \

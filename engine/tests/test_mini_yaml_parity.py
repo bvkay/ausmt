@@ -44,7 +44,7 @@ def test_mini_yaml_matches_pyyaml_on_pid_chain_fields():
     """The mini-yaml fallback must agree with PyYAML on organisation.ror,
     identifiers.project_raid and time_series.collection_pid too: the new SMETA
     fields this contract adds, all of which are declared (non-null) in the pid-survey fixture.
-    A1: the retired lead_investigator key is still ON DISK in the fixture and is read by NEITHER
+    The retired lead_investigator key is still ON DISK in the fixture and is read by NEITHER
     parser path, so the two SMETAs agree by both ignoring it."""
     yaml = pytest.importorskip("yaml")
     text = (HERE / "fixtures" / "pid-survey" / "survey.yaml").read_text(encoding="utf-8")
@@ -85,7 +85,7 @@ def test_parity_comment_after_quoted_scalar():
 
 def test_parity_quoted_mapping_keys():
     """ (station-id override): a QUOTED mapping key must parse like PyYAML parses it.
-    Filenames with spaces/parentheses are only expressible quoted, and the fallback used to drop
+    Filenames with spaces/parentheses are only expressible quoted, and the fallback must not drop
     such keys entirely. The same alternation must NOT turn a quoted list-item SCALAR that contains a
     colon into a one-key map, so both shapes are pinned here against PyYAML."""
     import yaml

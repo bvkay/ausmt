@@ -1,13 +1,13 @@
-"""runs[] on the promoted station.json: the D2 gate, the D9 channel rule, and the run ids.
+"""runs[] on the promoted station.json: the run gate, the channel rule, and the run ids.
 
-A run is an ACQUISITION, so a run may be published only where a source states one. D2: a station
+A run is an ACQUISITION, so a run may be published only where a source states one. A station
 gets runs[] when its own >INFO asserts a source run id or a real acquisition fact, and never from
 the placeholder run mt_metadata instantiates for every file it reads. The identifier comes from the
 persistent per-survey run-id store in the surveys package (`run-ids.yaml`), assigned once and never
 regenerated: where the store has no row the station publishes no runs at all, because the emitter is
 not allowed to invent an id at build time.
 
-D9 decides which channels ride the run: a channel enters channels[] only when corroborated beyond
+The channel rule decides which channels ride the run: a channel enters channels[] only when corroborated beyond
 DEFINEMEAS alone, which here means the >INFO names it or the transfer function measured it. A source
 assertion CONTRADICTING the channel list wins over both, and the corpus fixture for that is
 newer-volcanic-province-2019's A1.edi, which states that its HZ/RX/RY channel declarations are
@@ -121,7 +121,7 @@ def test_the_channel_list_is_corroborated_never_taken_from_definemeas():
 
 
 def test_a_source_note_contradicting_the_channel_list_wins():
-    """D9's exclusion rule and its corpus fixture: A1.edi's own caveat removes HZ/RX/RY even when
+    """The channel exclusion rule and its corpus fixture: station A1.edi's own caveat removes HZ/RX/RY even when
     the transfer function carries a tipper, which would otherwise corroborate hz."""
     runs, _notes = bp.station_runs(_facts("enriched-dotted"), {"A1": ["A1_001"]}, "A1", "ZT")
     assert "hz" not in [c["component"] for c in runs[0]["channels"]]

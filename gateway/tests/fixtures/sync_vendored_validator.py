@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""C35b/D3 (code-health review F7) — refresh the vendored validator from the sibling ausmt-surveys.
+"""Refresh the vendored validator from the sibling ausmt-surveys.
 
-The F7 oracles exercise the cross-repo validator contract. On CI and fresh clones the sibling
+The validator oracles exercise the cross-repo validator contract. On CI and fresh clones the sibling
 ausmt-surveys checkout is absent, so those oracles resolve to the VENDORED copy
 (gateway/tests/fixtures/vendored_validation/validate_survey.py) instead of skipping. This script keeps
 that vendored copy honest — the same generate-and-assert pattern contract/generate.py already owns:

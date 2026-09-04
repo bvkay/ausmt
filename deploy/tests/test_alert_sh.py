@@ -552,7 +552,7 @@ def test_pending_intents_and_audit_tail_surfaced(tmp_path):
 
 
 def test_expired_pause_flag_does_not_alarm(tmp_path):
-    """S5(a) PIN. An EXPIRED pause.flag (mtime older than the expiry reconcile honours) is IGNORED by
+    """PAUSE-EXPIRY PIN. An EXPIRED pause.flag (mtime older than the expiry reconcile honours) is IGNORED by
     reconcile — so it is NOT freezing serving and must NOT alarm, even if a stale ops-status shows a
     long prior span. FAILS IF an expired flag still trips the persistent-pause alarm (alarming on a
     non-freeze). Non-vacuous vs test_persistent_pause_alarms_and_fails (a FRESH re-armed flag DOES)."""
@@ -574,7 +574,7 @@ def test_expired_pause_flag_does_not_alarm(tmp_path):
 
 
 def test_persistent_rollback_pin_alarms_and_fails(tmp_path):
-    """S5(b) PIN. A rollback.pin held continuously past the threshold (carried first_seen) raises an
+    """ROLLBACK-FLOOR PIN. A rollback.pin held continuously past the threshold (carried first_seen) raises an
     ops-floor fact AND fires the fail ping — a pin freezes auto-rebuild with no expiry, so it needs the
     same visibility as a persistent pause. FAILS IF a long-standing pin stays silent."""
     tree = _make_tree(tmp_path)

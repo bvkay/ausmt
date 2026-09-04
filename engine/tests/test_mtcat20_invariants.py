@@ -453,7 +453,7 @@ def test_corpus_build_validates_and_scans_clean():
     # THE PROJECTION AT CORPUS SCALE. Its shape is a reference invariant above, so what is left for
     # a built TREE to witness is the one thing a document alone cannot: a station the build ROUTED
     # carries the flag. The containment is deliberately ONE-directional - a withheld, embargoed or
-    # pending station keeps its flag while serving no route (R13, CONTRACT:126-132), so the reverse
+    # pending station keeps its flag while serving no route (CONTRACT:126-132), so the reverse
     # would be false by design. ts_access.json is emitted only when non-empty, and a corpus whose
     # register is all withheld or all pending flags stations while publishing none, so its absence
     # is a legitimate state rather than a missing artifact.

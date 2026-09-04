@@ -1,14 +1,14 @@
-"""C43-HUB server-side render pins - the survey hub's mockup styling, driven through the real gateway HTTP surface with the in-process edit
+"""Server-side render pins - the survey hub's mockup styling, driven through the real gateway HTTP surface with the in-process edit
 seam. The EXECUTABLE JS pins (clusterWarnings & co, producer-truth build_report) live in
 test_c43_hub_js_parity.py; this file pins what the SERVER renders and the JS source invariants.
 
 Load-bearing pins:
-  * H1 HEADER - every hub tab renders the mockup's header: survey title + mono slug chip +
+  * HEADER - every hub tab renders the mockup's header: survey title + mono slug chip +
     orientation line (v<version> · <licence> · <access> · collection <id>) from the metadata
     read-job fields, with a hidden browser-filled counts span; the tab strip carries the hidden
     Stations chip slot + the slug data attribute. The header DEGRADES to the slug when the
     read-job fails on a non-metadata tab (never a bounce, never a 500).
-  * H2 SCAFFOLD: the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at
+  * SCAFFOLD: the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at
     JS-source level here (executable form in the parity file). the Q3 citation-author
     email heuristic and its three surfaces (the data-citation-email scaffold attribute, the TOC
     issue chip and the Metadata inline field error) are DELETED with the retired flat credit keys
@@ -87,10 +87,10 @@ def _live(tmp_path, yaml_text=HUB_YAML):
 
 
 # --------------------------------------------------------------------------------------------------
-# H1 — hub header + tab strip
+# Hub header + tab strip
 # --------------------------------------------------------------------------------------------------
 def test_hub_header_orientation_line_on_every_tab(tmp_path):
-    """H1 HEADER PIN. Every hub tab renders the mockup's header — the survey display TITLE (not the
+    """HEADER PIN. Every hub tab renders the mockup's header — the survey display TITLE (not the
     slug) + a mono slug chip + the orientation line 'v1.0.1 · CC-BY-4.0 · open · collection
     capricorn' (each fact from the metadata read-job fields, in the mockup's order) + the hidden
     counts span survey-hub.js fills from build_report. The tab strip carries data-survey-slug and
@@ -126,7 +126,7 @@ def test_hub_header_orientation_line_on_every_tab(tmp_path):
 
 
 def test_hub_header_never_invents_missing_facts(tmp_path):
-    """H1 NO-INVENTED-FACTS PIN. A survey carrying NO licence/access/collection renders an
+    """NO-INVENTED-FACTS PIN. A survey carrying NO licence/access/collection renders an
     orientation line with only the version — no empty separators, no defaulted 'open', no
     fabricated collection. FAILS IF a missing survey.yaml fact still produces a segment (the
     display layer must never assert what the record does not carry)."""
@@ -154,7 +154,7 @@ def test_hub_header_never_invents_missing_facts(tmp_path):
 
 
 def test_hub_header_degrades_when_read_job_fails(tmp_path):
-    """H1 DEGRADATION PIN. When the metadata read-job fails on a NON-metadata tab, the hub still
+    """DEGRADATION PIN. When the metadata read-job fails on a NON-metadata tab, the hub still
     renders (200): the title falls back to the slug, the orientation line carries no fact
     segments, and the tab's own content is unaffected. FAILS IF the failure bounces the curator
     off the hub (the pre-C43-HUB metadata-only behaviour) or 500s."""
@@ -176,7 +176,7 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# H2 - overview scaffold + citation-email stamp
+# Overview scaffold + citation-email stamp
 # --------------------------------------------------------------------------------------------------
 def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
     """ SCAFFOLD PIN, inverted. The Q3 citation-author email heuristic read ONLY the two
@@ -198,7 +198,7 @@ def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# H2 — JS-source invariants (executable twins live in test_c43_hub_js_parity.py)
+# JS-source invariants (executable twins live in test_c43_hub_js_parity.py)
 # --------------------------------------------------------------------------------------------------
 def test_survey_hub_js_four_cards_and_no_build_id_card():
     """FOUR-CARDS SOURCE PIN incl. the build-id-card-ABSENT assertion. SURVEY_HUB_JS builds
@@ -255,12 +255,12 @@ def test_station_panel_no_raw_json_outside_collapsed_details():
 
 
 # --------------------------------------------------------------------------------------------------
-# H4 — metadata TOC state hints + the inline citation-email field error (display-layer only)
+# Metadata TOC state hints + the inline citation-email field error (display-layer only)
 # --------------------------------------------------------------------------------------------------
 def test_metadata_toc_state_hints(tmp_path):
-    """H4 TOC-HINT PIN. The Metadata TOC entries carry render-time state hints: entry COUNTS on
+    """TOC-HINT PIN. The Metadata TOC entries carry render-time state hints: entry COUNTS on
     non-empty list sections (publications: 2, organisations: 1, acknowledgements: 1) and the access
-    level / collection id values. A2 (D19): there is no '1 issue' chip any more, because the only
+    level / collection id values. There is no '1 issue' chip, because the only
     thing that ever produced one was the deleted citation-email heuristic. FAILS IF a hint is
     invented for an empty section, a count drifts from the survey's own entries, or the retired
     issue chip returns."""
@@ -290,7 +290,7 @@ def test_metadata_toc_state_hints(tmp_path):
 
 
 def test_metadata_tab_renders_the_curated_home_panels(tmp_path):
-    """A2 PANEL PIN. The Metadata tab renders the three ratified curated homes plus the designation
+    """PANEL PIN. The Metadata tab renders the three ratified curated homes plus the designation
     mapping, prefilled from the survey's own values: the organisations role checkbox group with the
     stored custodian ticked and its primary-custodian radio selected, the citation preferred-text and
     nested preferred-identifier inputs, the acknowledgement wording, and the identity_classification
@@ -326,10 +326,10 @@ def test_metadata_tab_renders_the_curated_home_panels(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# H5 — history density polish (the mockup's merged 'When · by' column)
+# History density polish (the mockup's merged 'When · by' column)
 # --------------------------------------------------------------------------------------------------
 def test_history_when_by_merged_column(tmp_path):
-    """H5 DENSITY PIN. The History table merges When and Author into the mockup's single
+    """DENSITY PIN. The History table merges When and Author into the mockup's single
     'When · by' column ('<date> · <author>', values verbatim from the history read-job); the
     separate Author column is gone; behaviour (read-only real git log) is unchanged. FAILS IF
     the columns split again or the author drops out of the merged cell."""

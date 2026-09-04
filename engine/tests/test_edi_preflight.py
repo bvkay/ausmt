@@ -483,7 +483,7 @@ def test_the_bounded_advisory_names_a_file_that_will_not_read_even_when_it_sorts
 # =============================================================================================
 
 def test_the_check_never_writes_to_the_files_it_reads(tmp_path):
-    """D1 in miniature. Anything that edits an EDI is out of scope for this module permanently, so
+    """The never-edit rule in miniature. Anything that edits an EDI is out of scope for this module, so
     the whole tree is hashed before and after both entry points, the CLI included."""
     package = tmp_path / "package"
     package.mkdir()

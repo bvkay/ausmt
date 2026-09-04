@@ -45,8 +45,8 @@ def test_aggregate_note_on_one_of_two():
 
 
 def test_aggregate_ccmt_outlier_records_except_complement():
-    """The ccmt-2017 shape: 28 stations, 27 share a note, ONE (CC07) lacks it. The small side is the
-    single absentee, so the entry records except=['CC07'] (NOT stations=[27 ids]) and count=27."""
+    """The ccmt-2017 shape: 28 stations, 27 share a note, and station CC07 lacks it. The small side is the
+    single absentee, so the entry records the exception list, NOT stations=[27 ids], and count=27."""
     ids = [f"CC{n:02d}" for n in range(1, 29)]  # the station ids CC01..CC28
     notes = {sid: (["shared"] if sid != "CC07" else ["outlier"]) for sid in ids}
     entries = bp.aggregate_conditioning(notes)

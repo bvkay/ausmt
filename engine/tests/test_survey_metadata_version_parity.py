@@ -1,7 +1,7 @@
 """THE SURVEY-METADATA SCHEMA VERSION HAS ONE SOURCE, AND THIS IS THE PIN THAT KEEPS IT THAT WAY.
 
 The sibling of test_mtcat_version_parity.py for the second public contract, survey-metadata.json.
-The MTCAT workflow learned the lesson the hard way (four version literals found one review round at a
+The MTCAT workflow learned the lesson the hard way (four version literals found one pass at a
 time); this contract starts with the machinery already in place, so no site ever holds a literal.
 
 SINGLE SOURCE: the SURVEY_METADATA_VERSION constant in contract/generate.py. The schema artifact's

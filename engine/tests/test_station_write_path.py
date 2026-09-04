@@ -62,7 +62,7 @@ def test_station_json_is_published_in_both_trees_when_products_sits_outside_out(
         doc = json.loads(path.read_text(encoding="utf-8"))
         assert doc["schema"] == "ausmt-station"
 
-    # D7 promotes station.json alone; the dimensionality sidecar keeps its single --products home.
+    # Promotes station.json alone; the dimensionality sidecar keeps its single --products home.
     assert list(products.rglob("dimensionality.json")), "the curator tree keeps the sidecar"
     assert not list((out / "products").rglob("dimensionality.json")), (
         "dimensionality.json is not a contract and is not promoted with station.json")

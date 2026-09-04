@@ -221,7 +221,7 @@ def _opendap_service_url(doc):
 
 
 def _time_series_at_level2(doc):
-    """D19 fail-closed. The archive's level_2 tree holds TRANSFER FUNCTIONS, so a level2 row under
+    """Fail-closed. The archive's level_2 tree holds TRANSFER FUNCTIONS, so a level2 row under
     this kind asserts a recorded time series for a station that has none. The emitter routes no such
     row; this makes the exclusion a rule rather than an emitter habit."""
     _ts_row(doc)["processing_level"] = "level2"

@@ -1,4 +1,4 @@
-"""C40 serve-reconcile gateway half: the curator "request rebuild" button + the serve-state panel.
+"""Serve-reconcile gateway half: the curator "request rebuild" button + the serve-state panel.
 
 The button writes the zero-argument rebuild.request the host reconcile agent consumes; the panel
 shows published HEAD vs served build, the last reconcile outcome, and a pending indicator. This file
@@ -283,7 +283,7 @@ def test_published_head_via_git_seam_on_shell_and_serve(tmp_path):
 # ---- CSP delivery + the queue-is-pure-queue invariant (strictPages blocks inline) ---------------
 
 def test_queue_page_is_pure_queue_and_csp_clean(tmp_path):
-    """C43 FR2-1 + CSP PIN. The queue page is PURELY the queue now: the inline serve-state panel is GONE - it does NOT reference serve-state.js and
+    """CSP PIN. The queue page is PURELY the queue: no inline serve-state panel renders, it does NOT reference serve-state.js and
     carries no serve-state panel id (that job moved to /gateway/curator/serve + the drift chip). It
     still carries the shared UI script and stays CSP-clean: Caddy serves every /gateway/* page under
     script-src 'self', so inline <script> blocks and inline on*= handlers are silently BLOCKED and any
@@ -312,8 +312,8 @@ def test_queue_page_is_pure_queue_and_csp_clean(tmp_path):
 
 def test_no_page_renderer_emits_inline_handlers_or_scripts():
     """SOURCE-LEVEL CSP SWEEP: no gateway HTML-emitting module may contain an inline event-handler
-    attribute (ANY on*= — onerror/ontoggle/onkeydown included, review S3) or an inline <script>
-    block without src= (review S2) — all are dead under the strictPages CSP. Three handlers shipped
+    attribute (ANY on*= — onerror/ontoggle/onkeydown included) or an inline <script>
+    block without src= — all are dead under the strictPages CSP. Three handlers shipped
     that way and silently never ran until; behaviours belong in CURATOR_UI_JS's
     data-attribute delegation and scripts belong behind the external routes. FAILS IF: a new inline
     handler or inline script block lands in any listed module — or a listed module is renamed away
@@ -334,7 +334,7 @@ def test_no_page_renderer_emits_inline_handlers_or_scripts():
 
 
 def test_c43_external_js_constants_are_raw_and_referenced_externally():
-    """C43 Stage-1 CSP coverage (record D13): the new nav-shell + survey-hub behaviours ship as
+    """Stage-1 CSP coverage (record D13): the new nav-shell + survey-hub behaviours ship as
     EXTERNAL route constants (script-src 'self' kills inline), and the pages that use them reference
     them by external <script src=…>, never inline. FAILS IF a C43 JS constant is removed/renamed
     (coverage silently narrows) or a page inlines its script instead of referencing the route. This
@@ -357,7 +357,7 @@ def test_c43_external_js_constants_are_raw_and_referenced_externally():
 
 
 def test_rendered_forms_carry_the_delegated_data_attributes():
-    """S1 PIN: the delegated behaviours only work if the RENDERED markup carries the data
+    """PIN: the delegated behaviours only work if the RENDERED markup carries the data
     attributes — reverting them regresses silently otherwise (ui.js keeps serving handlers nothing
     triggers). Rendered where cheap (the serve panel), source-literal where the renderer needs a
     full fixture graph (Reject / Revoke / toggle). FAILS IF: any of the four migrated sites loses
@@ -398,7 +398,7 @@ def test_ui_js_route_serves_shared_behaviours(tmp_path):
     """GET /gateway/curator/ui.js (loaded by EVERY curator page via the shell, INCLUDING the
     pre-session login page) returns the shared delegation JS: the data-confirm submit guard
     (Rebuild/Reject/Revoke confirms ride it) and the data-toggle-big click handler (the preview
-    size toggle). Deliberately UNGATED (review C2): a session gate here 303s the login page's own
+    size toggle). Deliberately UNGATED: a session gate here 303s the login page's own
     script fetch into a nosniff console error on every login view; the content is a static
     public-repo constant. FAILS IF: the route 404s, lacks either delegated behaviour, or regains a gate that breaks the
     login page."""

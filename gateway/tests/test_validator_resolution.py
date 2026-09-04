@@ -8,7 +8,7 @@ fire on any machine for weeks. Nothing went red, because no test took the resolv
 every reference to it in this suite is a consumer. These pins take it as the subject, so the same
 defect cannot ship silently twice: the sibling constant points outside the repo, a present sibling
 wins, AUSMT_FORCE_VENDORED_VALIDATOR=1 flips the branch, an absent sibling falls back to the pinned
-vendored copy, and neither present FAILS rather than skips (review F7, no same-author-mock fallback).
+vendored copy, and neither present FAILS rather than skips (no same-author-mock fallback).
 
 Style follows the engine's D3.1 falsifiability tests (engine/tests/test_validator_gate.py): drive the
 REAL resolver over a monkeypatched SCRATCH topology, never over the real checkout, so each pin
@@ -95,7 +95,7 @@ def test_absent_sibling_falls_back_to_the_vendored_copy(tmp_path, monkeypatch):
 def test_neither_arm_present_fails_rather_than_skips(tmp_path, monkeypatch):
     """Both arms absent is a BROKEN CHECKOUT, never a legitimate skip: the vendored copy is
     committed. resolve_validator_dir returns None and require_validator_dir asserts, so the oracles
-    go red instead of reverting to same-author mocks (review F7). FAILS IF either one starts
+    go red instead of reverting to same-author mocks. FAILS IF either one starts
     skipping or returns a path that is not there."""
     _scratch_topology(tmp_path, monkeypatch, sibling=False, vendored=False)
     assert gwconftest.resolve_validator_dir() is None

@@ -112,7 +112,7 @@ def test_a_sheet_only_station_qualifies_for_runs(tmp_path):
 
 
 def test_the_sheet_never_supplies_an_id(tmp_path):
-    """D2 unchanged: curated facts without a stored id publish nothing, and the gap is reported."""
+    """The run gate: curated facts without a stored id publish nothing, and the gap is reported."""
     doc = rs.merge(None, _row_dict(tmp_path), "EXAMPLE01", [])
     runs, notes = bp.station_runs(doc, {}, "EXAMPLE01", "Z")
     assert runs == []

@@ -1,6 +1,6 @@
-"""C35b/D1 (code-health review F6): the REAL-git publish workflow.
+"""The REAL-git publish workflow.
 
-F6: `real_git_runner` (publish.py:86) is the ONLY place the gateway executes the git binary, yet ALL
+`real_git_runner` (publish.py:86) is the ONLY place the gateway executes the git binary, yet ALL
 pytest coverage went through FakeGit — which (pre-C35b/D2) returned rc=0 for any unmodeled verb. The
 sole real-git workflow (curator-e2e) was F5-unrunnable. So the fail-closed rollback (publish.py _rollback)
 — the core publication-ledger guarantee — had NEVER run against a real repository, and the first live
@@ -212,7 +212,7 @@ def test_real_git_no_submitter_pii_in_tree_or_message(tmp_path, hermetic_git_env
 
 
 def test_real_git_preflight_refuses_dirty_tree(tmp_path, hermetic_git_env):
-    # D1.d(i) — a genuinely dirty surveys-live checkout => preflight ABORT, PUBLISH_FAILED, nothing
+    # a genuinely dirty surveys-live checkout => preflight ABORT, PUBLISH_FAILED, nothing
     # staged. FAILS IF the publish proceeds on a dirty tree.
     env = hermetic_git_env
 
@@ -387,7 +387,7 @@ def test_real_git_metadata_edit_rollback_on_push_reject(tmp_path, hermetic_git_e
 
 
 # --------------------------------------------------------------------------------------------------
-# D1.g — the station-removal commit path (commit_station_removal) on a REAL repo pair
+# The station-removal commit path (commit_station_removal) on a REAL repo pair
 # --------------------------------------------------------------------------------------------------
 def _seed_published_survey_with_edis(surveys_live: Path, env: dict[str, str], slug: str,
                                      yaml_text: str, stations) -> None:
@@ -442,7 +442,7 @@ def test_real_git_station_removal_deletes_edis_and_pushes(tmp_path, hermetic_git
 
 
 def test_real_git_station_removal_rollback_on_push_reject(tmp_path, hermetic_git_env):
-    # D1.g(ii) — a pre-receive reject rolls surveys-live back byte-for-byte: the git-rm'd EDI is
+    # a pre-receive reject rolls surveys-live back byte-for-byte: the git-rm'd EDI is
     # RESTORED, the yaml reverts, the ref/branch are the pre-state, the tree is clean. FAILS IF the
     # removal survives a rejected push (a half-removal in the publication ledger).
     env = hermetic_git_env
@@ -476,10 +476,10 @@ def test_real_git_station_removal_rollback_on_push_reject(tmp_path, hermetic_git
 
 
 # --------------------------------------------------------------------------------------------------
-# D1.h — the survey-retirement commit path (commit_survey_removal) on a REAL repo pair (C41 T4)
+# The survey-retirement commit path (commit_survey_removal) on a REAL repo pair
 # --------------------------------------------------------------------------------------------------
 def test_real_git_survey_retirement_removes_package_and_pushes(tmp_path, hermetic_git_env):
-    # D1.h(i) — commit_survey_removal git-rm -r's the WHOLE survey package in one commit with the
+    # commit_survey_removal git-rm -r's the WHOLE survey package in one commit with the
     # gateway identity and pushes; the package is gone from the committed tree, a SIBLING survey
     # remains, and the commit touches EXACTLY the slug's paths (survey-scope diff-minimality). FAILS IF
     # the wrong tree is removed, a sibling is touched, the diff is not minimal, or the push does not
@@ -521,7 +521,7 @@ def test_real_git_survey_retirement_removes_package_and_pushes(tmp_path, hermeti
 
 
 def test_real_git_survey_retirement_rollback_on_push_reject(tmp_path, hermetic_git_env):
-    # D1.h(ii) — a pre-receive reject rolls surveys-live back byte-for-byte: the WHOLE retired package
+    # a pre-receive reject rolls surveys-live back byte-for-byte: the WHOLE retired package
     # is restored, the ref/branch are the pre-state, the tree is clean. FAILS IF a rejected retirement
     # leaves the package removed (a half-retired publication ledger).
     env = hermetic_git_env
@@ -578,7 +578,7 @@ def test_real_git_survey_retirement_revert_restores_package_byte_identical(tmp_p
 
 
 def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_env):
-    # F1 (TOCTOU) — two CONCURRENT retires against a 2-survey corpus must NOT both succeed and EMPTY it.
+    # TOCTOU — two CONCURRENT retires against a 2-survey corpus must NOT both succeed and EMPTY it.
     # The outside-lock guard (handle_survey_retire) is racy: both requests read count=2 before either
     # commits. This drives _commit_retire (the PUBLISH_LOCK holder) directly for BOTH surveys under
     # asyncio.gather, isolating the AUTHORITATIVE inside-lock guard from the TOTP replay counter (whose

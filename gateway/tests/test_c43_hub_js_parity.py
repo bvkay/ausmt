@@ -1,4 +1,4 @@
-"""C43-HUB executable JS pins: the survey-hub overview logic (clusterWarnings, attentionPlan,
+"""Executable JS pins for the survey-hub overview logic (clusterWarnings, attentionPlan,
 cardsPlan, hubCounts/qaFlagCount, terse diagnoses, the Stations chip) run IN NODE against a
 build_report.json the REAL ENGINE produced over a doctored fixture survey — never hand-typed rows
 (standing rule: data-seam pins consume PRODUCER-TRUTH fixtures).
@@ -374,7 +374,7 @@ process.stdout.write(JSON.stringify(p.cases.map(function (c) {
 
 
 def test_chip_and_qa_card_share_one_flag_definition(warn_report, tmp_path):
-    """Q2 SHARED-DEFINITION PIN. The H1 Stations-chip flagged number and the H2 QA-flags card
+    """SHARED-DEFINITION PIN. The H1 Stations-chip flagged number and the H2 QA-flags card
     render the SAME number from the SAME input (qaFlagCount over the convention-warn frame
     entries): chip '2 dropped · 5 flagged', card value '5', counts {serving 6, published 8}.
     FAILS IF the two surfaces disagree, published stops being built + dropped, or a healthy
@@ -418,7 +418,7 @@ def test_no_metadata_info_row_is_ever_planned(warn_report, tmp_path):
 
 
 def test_frame_card_derotation_headline_from_note_vocabulary(warn_report, tmp_path):
-    """Q1 FRAME-CARD PIN (both branches). Headline derives from DE-ROTATION notes ONLY: the real
+    """FRAME-CARD PIN (both branches). Headline derives from DE-ROTATION notes ONLY: the real
     as-stored fixture yields 'as-stored'; grafting the ENGINE'S OWN derotation/R3 note shapes
     (verbatim vocabulary from _conventions.py) onto the real report yields 'N de-rotated' with
     the enumerated-carrier union, and the R3 sub-line 'declared acquisition frame recorded'.
@@ -500,7 +500,7 @@ process.stdout.write(JSON.stringify({
 
 
 # ==================================================================================================
-# H3 — the stations panel redesign (Commit B): the STATIONS_JS pure formatters, driven with the
+# The stations panel redesign (Commit B): the STATIONS_JS pure formatters, driven with the
 # REAL corpus rows the same fixture build emitted (catalogue/sci/tf + station.json products).
 # ==================================================================================================
 _ST_FNS = ("floormod", "wrap180", "trueYx", "mapYx", "inQ1", "inQ3", "medianOf", "classify",
@@ -529,7 +529,7 @@ def _load_corpus(warn_report):
 
 
 def test_convention_sentence_vectors_match_phaseqc_medians(tmp_path):
-    """CONVENTION-SENTENCE PIN (contract H3: sentence-format vectors on the Node harness). The
+    """CONVENTION-SENTENCE PIN: sentence-format vectors on the Node harness. The
     sentence is built from the SAME classify medians the parity-tested seam computes - the pin
     compares the extracted JS against a Python mirror over phaseqc.classify_series for healthy /
     yx-out (the mockup's exact shape, out-of-quadrant component LEADING) / xy-out / both-out /
@@ -608,7 +608,7 @@ process.stdout.write(JSON.stringify(v.map(function (x) { return shortSha(x); }))
 
 
 def test_station_chips_and_facts_from_real_corpus(warn_report, tmp_path):
-    """H3 CHIP/FACTS ENGINE-TRUTH PIN. Driven with the catalogue/sci/tf rows the REAL engine
+    """CHIP/FACTS ENGINE-TRUTH PIN. Driven with the catalogue/sci/tf rows the REAL engine
     emitted for the doctored survey: the flipped-Zyx stations chip 'Zyx quadrant' (amber) and
     status 'served with note'; the flipped-Zxy station chips 'Zxy quadrant'; the clean control is
     'served' with its dimensionality as the neutral chip; the convention sentence leads with the
@@ -670,7 +670,7 @@ process.stdout.write(JSON.stringify(out));
 
 
 def test_stations_list_merged_latlon_and_portal_link_source():
-    """H3 SOURCE PIN. The stations LIST header carries the MERGED 'Lat / Lon' column (mockup list
+    """SOURCE PIN. The stations LIST header carries the MERGED 'Lat / Lon' column (mockup list
     shape — never the two separate columns), rows use latLonText, and the panel header carries
     the portal deep-link ('open in portal ↗', new tab, noopener) plus the status badge. FAILS IF
     the columns split again, the deep-link disappears (the portal DOES support
@@ -695,7 +695,7 @@ def test_stations_list_merged_latlon_and_portal_link_source():
 # ==================================================================================================
 def _station_docs(warn_report) -> list:
     """Every station.json document the REAL engine wrote for the fixture survey, read from the SERVED
-    root rather than from --products. station.json is now published under --out unconditionally (D7),
+    root rather than from --products. station.json is published under --out unconditionally,
     and that tree is the one deployment serves and the portal fetches, so a pin judged on the curator
     copy would be judging a document nothing renders. The two are the same bytes, and this asserts it
     rather than assuming it. The is_dir guard is needed at the served root: survey-metadata.json is a
@@ -827,7 +827,7 @@ def _phase_driver(body: str) -> str:
 
 
 def test_combined_phase_plan_mapper_from_real_corpus(warn_report, tmp_path):
-    """C43 FR2-3 COMBINED-PHASE-PLAN PIN (engine truth). The pure combinedPhasePlan, driven in Node
+    """COMBINED-PHASE-PLAN PIN (engine truth). The pure combinedPhasePlan, driven in Node
     with the tf rows the REAL engine emitted, produces: (1) the φxy series verbatim (stored = true) and
     the φyx series UNWRAPPED to true phase (stored − 180, re-wrapped — trueYx); (2) per-point flags +
     median verdicts MATCHING phaseqc.classify_series (the parity-tested seam the plot dots use); (3)

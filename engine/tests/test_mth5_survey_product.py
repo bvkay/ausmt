@@ -1,4 +1,4 @@
-"""C32 tier 2 survey MTH5 product (SPEC MTH5-PRODUCT): the survey.yaml -> survey_metadata mapping and
+"""Tier 2 survey MTH5 product (SPEC MTH5-PRODUCT): the survey.yaml -> survey_metadata mapping and
 the INJECTED dataset DOI (SPEC §3.3 / A5), the SPEC §6 blocking round-trip gate (a faithful build
 passes; a corrupted h5 is RED-proven to fail and be withheld), the A2 version-pin recorded on the
 manifest, and the tier-3 (designed-but-disabled, SPEC §2.3 / A4) collection producer + its RAM guard.
@@ -54,7 +54,7 @@ def _open(hp):
 # --------------------------------------------------------------------- metadata mapping + DOI injection
 
 def test_survey_metadata_and_dataset_doi_injected(tmp_path):
-    """SPEC §3.3 / A5: the survey.yaml scholarly fields map onto survey_metadata and the DATASET DOI is
+    """SPEC §3.3: the survey.yaml scholarly fields map onto survey_metadata and the DATASET DOI is
     injected (it is the one field genuinely absent from every EDI). The bare '10.…' DOI is normalised to a
     resolvable URL, and all of it survives the write -> reopen round-trip."""
     rel, hp, n = bp.emit_survey_mth5(_stations(), "example-survey", "Example", tmp_path, smeta=_SMETA)

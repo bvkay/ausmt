@@ -110,7 +110,7 @@ def test_smeta_year_range_tolerates_null_end():
 
 
 def test_mtcat_document_emits_organisation_ror_and_raid():
-    """C7 task 6: additive optional survey fields organisation_ror, raid in mtcat_document."""
+    """Task 6: additive optional survey fields organisation_ror, raid in mtcat_document."""
     meta = {"PID Chain Survey 2026": bp.survey_meta_from_yaml(_load())}
     stations = [(Path("a.edi"), {"survey": "PID Chain Survey 2026",
                                  "ausmt_id": "au.pid-survey.A1", "id": "A1",
