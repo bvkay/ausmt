@@ -2666,10 +2666,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwV.classList.contains("open"), "WaveC: the A1 drawer did not open");
 
-  // (a) FOUR tabs, each role=tab, in the mandated order. (HIDDEN: the Screening tab is
-  //     reversibly commented out in drawer.js pending design review, so the count is 4, "screening" is absent
-  //     from the order AND the DOM. Restore the 5-tab order + the Screening click test below when re-enabled.)
-  //     FAILS if a tab is missing, mis-roled, reordered, or if the retired Overview tab reappears.
+  // (a) FOUR tabs, each role=tab, in the mandated order. No Screening tab renders, so the count is
+  //     4 and "screening" is absent from the order AND the DOM.
+  //     FAILS if a tab is missing, mis-roled, reordered, or if the folded-away Overview tab reappears.
   const tabsV = [...drwV.querySelectorAll('[role="tab"]')];
   ok(tabsV.length === 4, "C1/X4: expected 4 role=tab buttons (Overview folded away, Screening owner-hidden), got " + tabsV.length);
   const wantTabs = ["response", "files", "provenance", "cite"];
@@ -3681,10 +3680,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const iNA = byKey(A.screeningIndicators({ q: null, azR: null, azN: 0, beta: null, phaseSplit: null, decades: null }));
   ok(KEYS.every(k => iNA[k].state === "na"), "X5: a not-computable input must render 'na' (not evaluated), never a fabricated green, got " + JSON.stringify(KEYS.map(k => k + ":" + iNA[k].state)));
   ok(iNA.smoothness.word === "not evaluated", "X5: an 'na' indicator must say 'not evaluated'");
-  // HIDDEN: the Screening tab/panel is reversibly commented out in drawer.js pending design
-  // review, so the RENDERED panel is ABSENT. The pure screeningIndicators() model above is UNCHANGED (helpers
-  // left intact), so re-enabling the tab is uncommenting only. Restore the rendered-panel pins (five .indrow
-  // rows + 'Show details' expander + strike prose) when the Screening surface returns.
+  // No Screening panel renders, so the drawer carries no #dp-screening element and no "Screening
+  // indicators" section. The screeningIndicators() model above is pure and is pinned on its own, which
+  // is why the model has cases here and the rendered surface has none.
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   const scP = doc.getElementById("dp-screening");
   ok(scP == null, "OWNER HIDE: the Screening panel (#dp-screening) must be ABSENT (owner-hidden pending design review)");
@@ -4175,11 +4173,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(_monotone, "CVD: relative luminance must rise monotonically along the ramp (lightness IS the signal) — the old red→amber→green ramp fails this");
   ok(_relLum(A.qColor(5)) - _relLum(A.qColor(2)) > 0.5,
     "CVD: the ramp must span a LARGE lightness range (Y gap > 0.5), got " + (_relLum(A.qColor(5)) - _relLum(A.qColor(2))).toFixed(3));
-  // (d) drawer render: (HIDDEN: the Station summary "completeness" row - the only.qvdot ramp
-  //     swatch in the drawer — is reversibly hidden pending design review, so the swatch is ABSENT. The pure
-  //     qColor ramp model above is UNCHANGED (helper intact); restore the .qvdot-present pin when the
-  //     completeness row is re-enabled.) The surviving invariant: no element uses a qColor hex as a TEXT
-  //     colour (the pre-amendment style="color:<ramp>" anti-pattern).
+  // (d) drawer render: no Station summary "completeness" row renders, so the .qvdot ramp swatch is
+  //     absent from the drawer and the qColor ramp has no rendered surface. The invariant that holds
+  //     here: no element uses a qColor hex as a TEXT colour.
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   const rsPanelQ = doc.getElementById("dp-response");
   ok(rsPanelQ.querySelector(".qvdot") == null,

@@ -627,6 +627,16 @@ CODE_LINE_TERSE = tuple(re.compile(p) for p in (
     # the only shape a LIVE literal can carry between two of its own entries.
     r"^\[.*\]\s*,\s*$",
     r"^\{.*\}\s*,\s*$",
+    # A term switched off INSIDE a live expression ends on the binary operator that joined it to
+    # the next term, so a shape anchored to ; , or ) cannot reach it. Prose ending on the same
+    # operator is excluded by the terse-line limit above and by requiring the call's own brackets.
+    r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*(?:\+|-|\*|/|&&|\|\||\?\?)\s*$",
+    r"^(?:\[.*\]|\{.*\})\s*(?:\+|&&|\|\||\?\?)\s*$",
+    # A member chain left dangling on its own dot. It must carry a call with ARGUMENTS or a
+    # subscript, because the other shapes are prose: a file name closing a sentence
+    # ("drawer.js."), an abbreviation, and a sentence that ends by naming a function
+    # ("see _preview_env().").
+    r"^(?=.{8,}$)[\w$][\w$.]*(?:\((?:[^()]|\([^()]*\))+\)|\[[^\]]*\])[\w$.\[\]]*\.\s*$",
 ))
 TERSE_WORDS = 8
 # The looser tell, only ever counted in a run: a terse line that ends the way a statement
@@ -1287,6 +1297,26 @@ def test_a_switched_off_array_or_object_element_is_commented_out_code():
                    '/*["screening","Screening"],*/',
                    '// { label: "Screening", key: "screening" },'):
         assert looks_like_code(source), f"a switched-off literal element went unseen: {source}"
+
+
+def test_a_switched_off_fragment_ending_on_an_operator_is_commented_out_code():
+    """A call switched off INSIDE a live expression ends on the operator that joined it to the next
+    term, not on a terminator, so a shape anchored to ; , or ) never sees it. That is the shape that
+    survives longest, because the live code around it still reads as one statement."""
+    for source in ('/* drawerPanel("screening",screeningHtml,false)+ */',
+                   '// drawerPanel("screening",screeningHtml,false) +',
+                   '/* buildRow(m) && */',
+                   '// widths.push(w) ??',
+                   '/* map.getPane("markers"). */'):
+        assert looks_like_code(source), f"a switched-off fragment ended on an operator: {source}"
+    for prose in ("The panel is built by drawerPanel(name, html, open) and",
+                  "each row is one station.",
+                  "See docs: portal internals, drawer.js.",
+                  "drawer.js.",
+                  "statusUrlSafe() guards (non-vacuous).",
+                  "_preview_env().",
+                  "e.g."):
+        assert not looks_like_code(prose), f"prose was read as code: {prose}"
 
 
 def test_a_tag_at_the_head_of_a_docstring_is_in_head_position(tmp_path):

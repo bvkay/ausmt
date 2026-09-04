@@ -766,8 +766,7 @@ function openStation(i,opts){
     `<button data-cite="ris" data-survey="${escAttr(s.survey)}">RIS</button></div></div>`;
   drawer.innerHTML=header+
     drawerPanel("response",responseHtml,true)+
-    // HIDDEN pending design review: screening surface not public-ready - restore by uncommenting.
-    /* drawerPanel("screening",screeningHtml,false)+ */
+    // No Screening panel is concatenated here: the automated indicators are not a public surface.
     drawerPanel("files",filesHtml,false)+
     drawerPanel("provenance",provenanceHtml,false)+
     drawerPanel("cite",citeHtml,false);

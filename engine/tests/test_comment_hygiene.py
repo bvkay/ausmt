@@ -625,6 +625,16 @@ CODE_LINE_TERSE = tuple(re.compile(p) for p in (
     # the only shape a LIVE literal can carry between two of its own entries.
     r"^\[.*\]\s*,\s*$",
     r"^\{.*\}\s*,\s*$",
+    # A term switched off INSIDE a live expression ends on the binary operator that joined it to
+    # the next term, so a shape anchored to ; , or ) cannot reach it. Prose ending on the same
+    # operator is excluded by the terse-line limit above and by requiring the call's own brackets.
+    r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*(?:\+|-|\*|/|&&|\|\||\?\?)\s*$",
+    r"^(?:\[.*\]|\{.*\})\s*(?:\+|&&|\|\||\?\?)\s*$",
+    # A member chain left dangling on its own dot. It must carry a call with ARGUMENTS or a
+    # subscript, because the other shapes are prose: a file name closing a sentence
+    # ("drawer.js."), an abbreviation, and a sentence that ends by naming a function
+    # ("see _preview_env().").
+    r"^(?=.{8,}$)[\w$][\w$.]*(?:\((?:[^()]|\([^()]*\))+\)|\[[^\]]*\])[\w$.\[\]]*\.\s*$",
 ))
 TERSE_WORDS = 8
 # The looser tell, only ever counted in a run: a terse line that ends the way a statement
