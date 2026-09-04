@@ -1713,7 +1713,7 @@ def test_a_bare_document_name_is_read_and_its_three_exemptions_hold(tmp_path):
     document this repository does carry."""
     assert documents_named("the model (AUSMT-DATA-CITATION-MODEL.md section 9)") \
         == ["AUSMT-DATA-CITATION-MODEL.md"]
-    assert documents_named("pinned by LANE-CONTRACT-COMMENT-HYGIENE.md H1") == []
+    assert documents_named("pinned by LANE-CONTRACT-PAGE-HIERARCHY.md section 2") == []
     assert documents_named("see docs/docs/developer/data-files.md") == []
     assert documents_named("README.md is in the tree") == ["README.md"]
 
