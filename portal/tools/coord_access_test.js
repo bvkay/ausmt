@@ -23,7 +23,7 @@
 //  4 (selection): inShapes(withheld) is false (excluded from spatial selection — it has no position)
 //    yet the withheld station is findable by id/text and stays in ST.
 //  5 (counts): the survey station count includes the withheld station.
-//  A1 (generalised badge): a generalised station's drawer shows the "position generalised to ~0.1°
+//  Generalised badge: a generalised station's drawer shows the "position generalised to ~0.1°
 //    (custodian policy)" badge beside the masked 0.1deg value, and NEVER its true 6-dp coords; an exact
 //    station shows no such badge.
 // Mirrors tools/frame_line_test.js: load modules in order, stub Leaflet, run in the window scope.

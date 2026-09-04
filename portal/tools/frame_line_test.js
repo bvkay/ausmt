@@ -113,9 +113,9 @@ for (const f of [{ declared_azimuth_deg: 0, survey_frame_note: hostile },
 }
 
 // --- fileWrittenByText: the lineage's file-WRITER cell (PURE) --------------------------------------
-// The station drawer used to publish the EDI HEAD's program stamp under the heading "Processing software",
-// which told the reader Geotools/WinGLink/MTpy processed the data when those tools only WROTE the file.
-// The writer now has its own row, and a known exporter is annotated so the distinction is legible.
+// The EDI HEAD's program stamp must NOT be published as "Processing software": Geotools, WinGLink and
+// MTpy only WROTE the file, and a reader told otherwise reads them as having processed the data. The
+// writer has its own row, and a known exporter is annotated so the distinction is legible.
 ok(A.fwb({ name: "Geotools", version: "4.0.5.12583" }) === "Geotools 4.0.5.12583 (database/file export)",
   "a known writer must render with its version and the export annotation: " + A.fwb({ name: "Geotools", version: "4.0.5.12583" }));
 ok(A.fwb({ name: "WINGLINK EDI", version: "1.0.22" }).indexOf("(database/file export)") > 0,

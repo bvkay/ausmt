@@ -38,7 +38,7 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   // Two-phase boot: boot() returns as soon as the FIRST-PAINT products (catalogue/surveys + the small
   // optionals) are in; tf.json / sci.json / manifest.json hydrate behind it. hydrationDone settles once all
   // three have landed AND their late-render work has run, so this smoke test can keep asserting against the
-  // fully-hydrated state a single-phase boot used to hand it.
+  // fully-hydrated state a single-phase boot would hand it in one go.
   "hydrationDone:()=>HYDRATION_DONE," +
   "buildIdText:()=>buildIdText()};";
 

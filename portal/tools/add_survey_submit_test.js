@@ -469,7 +469,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 6. PER-ROW FILE REMOVE (fix/add-survey-file-remove): the ✕ button removes a file from `files`, the
+  // 6. PER-ROW FILE REMOVE: the ✕ button removes a file from `files`, the
   //    list re-renders, updateConf() re-runs, and — the LOAD-BEARING invariant — a removed file must
   //    NEVER ship in the packaged zip. Two EDIs are added; the FIRST (a dms_sign_ambiguous-flagged
   //    station, so it also drives the conflict count) is removed; then we assert the list, the DMS

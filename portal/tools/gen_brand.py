@@ -60,9 +60,8 @@ from _au_outline import COAST, EXTENT  # noqa: E402  (sibling engine module, std
 # more. At 21 x 18 the silhouette keeps Cape York, the Gulf of Carpentaria notch, the Top End and the
 # Bight coast at 16 px, and Tasmania survives as three dots.
 #
-# The pitch was tuned against the HAND-SIMPLIFIED outline this file used to rasterise. On the derived
-# Natural Earth coastline it still holds - the mark gained a dot in the Kimberley, a deeper Gulf
-# notch and a third Tasmanian dot - but the lattice is now the coarser of the two inputs: the
+# The pitch holds on the derived Natural Earth coastline: the mark carries a dot in the Kimberley, a
+# deeper Gulf notch and a third Tasmanian dot. The lattice is the coarser of the two inputs: the
 # coastline resolves the Bight concavity and the taper of Cape York, and a 2 degree cell throws both
 # away. Changing the pitch is a BRAND decision, not a consequence of this generator.
 GRID_COLS = 21
