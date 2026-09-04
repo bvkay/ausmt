@@ -37,7 +37,7 @@ import json
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent                                  # the ausmt monorepo root
 SRC = HERE / "columns.json"
-LIC_SRC = HERE / "licenses.json"                    # C6: the licence instrument single source (like columns.json)
+LIC_SRC = HERE / "licenses.json"                    # the licence instrument single source (like columns.json)
 PROF_SRC = HERE / "attribution_profiles.json"       # C46: the custodian attribution-profile single source (like licenses.json)
 MTCAT_SRC = ROOT / "engine" / "schema" / "mtcat.schema.json"   # the MTCAT schema version's single source
 # The survey-metadata schema artifact (the second public contract): its title DISPLAYS the version
@@ -196,11 +196,11 @@ def _py(cat, sci, tf, lic, prof, mtver, smver, stver):
         + arr("CATALOGUE_COLUMNS", cat) + "\n"
         + arr("SCI_COLUMNS", sci) + "\n"
         + arr("TF_COLUMNS", tf) + "\n\n"
-        "# C6 licence instrument (single-sourced in contract/licenses.json): the redistribution allow-list\n"
+        "# Licence instrument (single-sourced in contract/licenses.json): the redistribution allow-list\n"
         "# read by build_portal.redistributable(), plus recognised metadata-only ids, legacy aliases and\n"
         "# per-id deed URLs. Edit contract/licenses.json, then regenerate — never hand-edit here.\n"
         + f"LICENSES = {json.dumps(lic, indent=4)}\n\n"
-        "# C46 custodian attribution profiles (single-sourced in contract/attribution_profiles.json): the\n"
+        "# Custodian attribution profiles (single-sourced in contract/attribution_profiles.json): the\n"
         "# per-custodian required-attribution templates rendered by _license_text.license_instrument_text().\n"
         "# Edit contract/attribution_profiles.json, then regenerate — never hand-edit here.\n"
         + f"PROFILES = {json.dumps(prof, indent=4, ensure_ascii=False)}\n\n"
@@ -240,10 +240,10 @@ def _js(cat, sci, tf, lic, prof):
         f"var C  = {idx(cat)};\n"
         f"var SC = {idx(sci)};\n"
         f"var T  = {idx(tf)};\n"
-        "// C6 licence instrument (single-sourced in contract/licenses.json): allow-list + aliases + deed\n"
+        "// The licence instrument (single-sourced in contract/licenses.json): allow-list + aliases + deed\n"
         "// URLs. exports.js reads LICENSES.urls for the LICENSE.txt that travels in the bulk-download zip.\n"
         f"var LICENSES = {json.dumps(lic, indent=2)};\n"
-        "// C46 custodian attribution profiles (single-sourced in contract/attribution_profiles.json):\n"
+        "// Custodian attribution profiles (single-sourced in contract/attribution_profiles.json):\n"
         "// exports.js licenseInstrumentText() reads PROFILES to render a source's required attribution.\n"
         f"var PROFILES = {json.dumps(prof, indent=2, ensure_ascii=False)};\n"
     )
