@@ -469,7 +469,7 @@ TAG_PATTERN = re.compile(
 # projection, a percentile or a heading level is not lane vocabulary.
 TAG_NOT_A_TAG = re.compile(
     r"^(?:CC0|MD5|SHA1|S3|IPv4|IPv6|AA|AAA|EPSG|WGS84|GDA94|GDA2020|UTM"
-    r"|H1|H2|H3|H4|H5|H6|P50|P95|P99|L1|L2|L3)$")
+    r"|H1|H2|H3|H4|H5|H6|P50|P95|P99|L1|L2|L3|D50|D55|D65|D75)$")
 # A station, site or survey id is data the corpus carries rather than a work
 # item, so the words that name one excuse the token beside them.
 TAG_NEAR_AN_ID = re.compile(
@@ -501,7 +501,7 @@ def work_item_tags(text):
 # return statement, a script tag, a mapped call.
 CODE_LINE = tuple(re.compile(p) for p in (
     r"^(?:const|let|var)\s+[\w$\[\]{},\s]+=\s*\S",
-    r"^(?:export\s+)?(?:async\s+)?function\s*[\w$]*\s*\(",
+    r"^(?:export\s+)?(?:async\s+)?function\s*[\w$]*\s*\([\w$,\s]*\)\s*\{?\s*$",
     r"^class\s+[\w$]+\s*(?:extends\s+[\w$.]+\s*)?\{",
     r"^(?:\}\s*)?(?:if|for|while|switch|catch)\s*\(",
     r"^(?:\}\s*)?else\s*(?:\{|if\s*\()",
