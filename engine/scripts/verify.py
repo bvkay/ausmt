@@ -5,7 +5,7 @@
   2. a full build with mt_metadata (the sole extractor since the regex retirement)
   3. mtcat.json schema validation for the build, the manifest and build_report checks, the
      survey-metadata gate (every products/<slug>/survey-metadata.json validates with format checking,
-     the slug set equals mtcat's surveys[], and the build skipped no survey:) and the station gate
+     the slug set equals mtcat's surveys[], and the build skipped no survey) and the station gate
      (every products/<slug>/<station>/station.json validates, holds the semantic layer beyond JSON
      Schema, and its ausmt_id set equals mtcat's stations[])
 
@@ -20,7 +20,7 @@ conda/pip ABI note):
 
 Exit code 0 only if every step passed.
 
--data-dir mode: validate an EXISTING build output dir (e.g. a deploy/Makefile rebuild-data run's
+--data-dir mode: validate an EXISTING build output dir (e.g. a deploy/Makefile rebuild-data run's
 just-produced builds/<timestamp>) in place, WITHOUT rebuilding or running pytest — the post-build gate
 `make rebuild-data` runs inside the build-runner container before the atomic `current` symlink swap.
 Mutually exclusive with the default self-building invocation (--surveys/--skip-tests are ignored, with
@@ -592,7 +592,7 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
     _check_mtcat_and_manifest), minus the build step itself. Returns True (PASS) / False (FAIL).
 
     When `surveys_root` is given (the Makefile's rebuild-data passes
-    -surveys), ALSO run the cache-INDEPENDENT digest-consistency gate: the served-product digest
+    --surveys), ALSO run the cache-INDEPENDENT digest-consistency gate: the served-product digest
     stamps vs the live survey.yaml sources. When it is None the gate SKIPS with a LOUD note (all
     call sites keep their exact behaviour). The gate never reads the cache dir."""
     if not data_dir.is_dir():

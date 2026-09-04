@@ -19,8 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# The flags contribute.py passes to `python -m extract.build_portal` (contribute.py:148-151, read
-# . VENDORED because CI has no surveys sibling; kept honest by
+# The flags contribute.py passes to `python -m extract.build_portal` (contribute.py:148-151).
+# VENDORED because CI has no surveys sibling; kept honest by
 # test_vendored_flags_match_live_contribute below whenever the sibling is present.
 CONTRIBUTE_BUILD_PORTAL_FLAGS = ("--surveys", "--out", "--extractor", "--no-validate")
 

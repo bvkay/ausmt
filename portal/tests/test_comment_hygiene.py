@@ -129,7 +129,7 @@ def _skip_template(text, i):
 
 
 def _skip_hole(text, i):
-    """Index just past the } closing a ${ hole, nested strings included."""
+    """Index just past the `}` closing a `${` hole, nested strings included."""
     n = len(text)
     depth = 1
     while i < n and depth:
@@ -770,7 +770,7 @@ CODE_LINE_TERSE = tuple(re.compile(p) for p in (
     r"^\[.*\]\s*,\s*$",
     r"^\{.*\}\s*,\s*$",
     # A term switched off INSIDE a live expression ends on the binary operator that joined it to
-    # the next term, so a shape anchored to ; , or ) cannot reach it. Prose ending on the same
+    # the next term, so a shape anchored to a statement end cannot reach it. Prose ending on the same
     # operator is excluded by the terse-line limit above and by requiring the call's own brackets.
     r"^(?:await\s+|new\s+)?[\w$][\w$.]*\(.*\)\s*(?:\+|-|\*|/|&&|\|\||\?\?)\s*$",
     r"^(?:\[.*\]|\{.*\})\s*(?:\+|&&|\|\||\?\?)\s*$",
@@ -861,6 +861,123 @@ def offences(files, cite_contract=False, root=None):
                              % (where, lineno, ", ".join(labels),
                                 " ".join(comment.split())[:110]))
     return found
+# COMMENT SHAPE. A comment is prose, and a token cut out of the middle of a
+# sentence leaves a scar no vocabulary can see: a bracket with no partner, a
+# connector left hanging inside one, a space between a word and the punctuation
+# that belongs to it, a line carrying nothing but a bracket, a pointer whose file
+# token swallowed the fragment of the sentence that was cut. The shapes are read
+# on the comment a READER reads, so a run of single-line comments is joined
+# first, and a bracket or a punctuation mark the prose is NAMING sits inside a
+# quoted run and is blanked before the shape is read.
+QUOTED_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|(?<![\w'])'[^'\n]{1,60}'(?!\w)")
+# "2)" opening a line is a list marker; "(-180, 180]" is an interval; a row of a
+# definition table carries its colon in a column of its own.
+ENUMERATOR = re.compile(r"^[ \t]*(?:\d{1,2}|[a-z])\)")
+DEFINITION_ROW = re.compile(r"^\s*\S+[ ]+:[ ]", re.M)
+SPACE_BEFORE_PUNCT = re.compile(r"\w[ ]+[.,;!?](?:\s|$)")
+SPACE_BEFORE_COLON = re.compile(r"\w[ ]+:(?:\s|$)")
+EMPTY_GROUP = re.compile(r"\([ \t]*[-+:;,|][ \t]*\)")
+OPEN_CONNECTOR = re.compile(r"\([ \t]*[-:;,][ \t]")
+LONE_PUNCTUATION = re.compile(r"^[)\].]$")
+# A pointer names the docs page, the file it stands for and, where it points at
+# one part of that file, the section. Anything else in the file token is the
+# fragment of a cut sentence, which the reader is handed as a file name.
+POINTER_ANY = re.compile(r"See docs:[^\n]*")
+POINTER_GRAMMAR = re.compile(
+    r"^See docs: portal internals, ([A-Za-z0-9_-]+\.[A-Za-z0-9]+)"
+    r"(?:, ([A-Za-z0-9 ,'-]+))?\.$")
+
+
+def unquoted(text):
+    """The prose with every quoted run blanked to a filler letter of the same length, so a
+    bracket or a punctuation mark the comment is quoting is not read as the comment's own."""
+    return QUOTED_RUN.sub(lambda m: "q" * len(m.group(0)), text)
+
+
+def unbalanced(prose):
+    """Every unmatched bracket in one comment, as (character, index). An opener pairs with ANY
+    closer so interval notation balances, and a closer that opens a line as an enumerator is a
+    list marker rather than a bracket."""
+    prose = unquoted(prose)
+    stack, stray, line_start = [], [], 0
+    for i, ch in enumerate(prose):
+        if ch == "\n":
+            line_start = i + 1
+        elif ch in "([{":
+            stack.append((ch, i))
+        elif ch in ")]}":
+            if stack:
+                stack.pop()
+            elif not (ch == ")" and ENUMERATOR.match(prose[line_start:i + 1])):
+                stray.append((ch, i))
+    return stack + stray
+
+
+def comment_runs(path, text):
+    """(line number, text) for each run of comments a reader reads as one. A block of // or #
+    lines is one comment to a reader, and a shape read line by line sees a bracket opened on one
+    line and closed on the next as two scars."""
+    out = []
+    for lineno, body in comments(path, text):
+        lead, span = body[:2], body.count("\n")
+        if (out and lead in ("//", "# ", "#\n", "#") and out[-1][2] == lead
+                and lineno == out[-1][3] + 1):
+            out[-1][1] += "\n" + body
+            out[-1][3] = lineno + span
+            continue
+        out.append([lineno, body, lead, lineno + span])
+    return [(lineno, body) for lineno, body, _, _ in out]
+
+
+def pointer_fragments(flat):
+    """Every "See docs:" pointer in one flattened comment, as (fragment, match-or-None)."""
+    found = []
+    for match in POINTER_ANY.finditer(flat):
+        fragment = match.group(0)
+        stop = fragment.find(". ")
+        fragment = fragment[:stop + 1] if stop >= 0 else fragment
+        found.append((fragment, POINTER_GRAMMAR.match(fragment)))
+    return found
+
+
+def shape_offences(files, root=None):
+    """Every comment whose SHAPE is broken across a set of files, as report lines."""
+    found = []
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        where = path.relative_to(root) if root and path.is_relative_to(root) else path.name
+        for lineno, comment in comment_runs(path, text):
+            lines = bare(comment).splitlines()
+            body = [line for line in lines if line.strip()]
+            if not body:
+                continue
+            joined = "\n".join(lines)
+            flat = " ".join(joined.split())
+            clean = unquoted(joined)
+            table = len(DEFINITION_ROW.findall(clean)) >= 2
+            said = []
+            for ch, at in unbalanced(joined):
+                line = joined.count("\n", 0, at)
+                if line == 0 or line == len(lines) - 1:
+                    said.append("unmatched %s" % ch)
+                    break
+            for line in clean.splitlines():
+                if SPACE_BEFORE_PUNCT.search(line) or (not table and SPACE_BEFORE_COLON.search(line)):
+                    said.append("a space before punctuation")
+                    break
+            if EMPTY_GROUP.search(unquoted(flat)):
+                said.append("an empty bracketed group")
+            if OPEN_CONNECTOR.search(unquoted(flat)):
+                said.append("a bracket opening on a connector")
+            if any(LONE_PUNCTUATION.match(line.strip()) for line in body):
+                said.append("a line carrying one bracket")
+            if any(m is None for _, m in pointer_fragments(flat)):
+                said.append("a pointer that is not of the pointer grammar")
+            if said:
+                found.append("%s:%s: %s: %s" % (where, lineno, ", ".join(said), flat[:110]))
+    return found
+
+
 # --- shared extractor and vocabulary: end -----------------------------------
 
 
@@ -1685,7 +1802,8 @@ def test_a_switched_off_array_or_object_element_is_commented_out_code():
 
 def test_a_switched_off_fragment_ending_on_an_operator_is_commented_out_code():
     """A call switched off INSIDE a live expression ends on the operator that joined it to the next
-    term, not on a terminator, so a shape anchored to ; , or ) never sees it. That is the shape that
+    term, not on a terminator, so a shape anchored to a statement end never sees it. That is the
+    shape that
     survives longest, because the live code around it still reads as one statement."""
     for source in ('/* drawerPanel("screening",screeningHtml,false)+ */',
                    '// drawerPanel("screening",screeningHtml,false) +',
@@ -1821,3 +1939,96 @@ def test_prose_opening_on_a_keyword_is_not_a_declaration(tmp_path):
                  '    function (its own regex over the source, so it cannot agree with itself):\n'
                  '    """\n', encoding="utf-8")
     assert not offences([f]), "the rule read an English sentence as a function declaration"
+
+
+# ---------------------------------------------------------------------------
+# Comment shape: the scar a removed token leaves is invisible to a vocabulary.
+# ---------------------------------------------------------------------------
+def test_comment_shapes_are_whole():
+    files = []
+    for producer in SURFACES.values():
+        files += producer()
+    hits = shape_offences(files, root=ROOT)
+    assert not hits, (
+        f"{len(hits)} comment(s) carry the shape a cut token leaves behind rather than whole "
+        "prose:\n" + "\n".join(hits))
+
+
+def test_every_pointer_section_names_a_heading_the_docs_page_carries():
+    """A pointer that carries a section clause must find that section on the page. The
+    stylesheet pin below reads the shipped pages; this reads every pointer in the tree, at any
+    heading level, so a pointer into a subsection is resolved too."""
+    page = ROOT / "docs" / "docs" / "reference" / "portal-internals.md"
+    headings = {h.strip() for h in re.findall(r"^#{2,6}\s+(.+)$",
+                                              page.read_text(encoding="utf-8"), re.M)}
+    assert headings, "the docs page carries no headings, so this resolution would pass over nothing"
+    missing, found = [], 0
+    for path in commented_tree():
+        if path.name == SELF or path.is_relative_to(ROOT / "docs"):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if "See docs:" not in text:
+            continue
+        for lineno, comment in comment_runs(path, text):
+            for fragment, match in pointer_fragments(" ".join(bare(comment).split())):
+                if match is None or not match.group(2):
+                    continue
+                found += 1
+                if match.group(2) not in headings:
+                    missing.append("%s:%d: %s" % (path.relative_to(ROOT), lineno, fragment))
+    assert found, "no pointer carried a section, so this resolution would pass over nothing"
+    assert not missing, (
+        "pointers name a section the docs page does not carry:\n" + "\n".join(missing))
+
+
+def test_each_broken_shape_is_caught(tmp_path):
+    """One case per shape, each written the way the sweep actually broke a comment."""
+    cases = {
+        "unmatched )": '"""The identifiers design ): the instrument PID."""\n',
+        "a space before punctuation": '"""The suppression kill : a survey carrying both."""\n',
+        "an empty bracketed group": '"""Blocking-FAIL guard (+): re-check server-side."""\n',
+        "a bracket opening on a connector": '"""The single poll loop (- the one background task)."""\n',
+        "a line carrying one bracket": '"""The identifiers model\n)\n"""\n',
+        "a pointer that is not of the pointer grammar":
+            '"""The rows worth writing. See docs: portal internals, add-survey.html.tml."""\n',
+    }
+    for label, body in cases.items():
+        f = tmp_path / "broken.py"
+        f.write_text(body, encoding="utf-8")
+        hits = shape_offences([f])
+        assert hits and label in hits[0], f"{label} went unseen in {body!r}: {hits}"
+
+
+def test_whole_prose_is_not_a_broken_shape(tmp_path):
+    """The negatives, one per exemption the shape rules carry: an interval, an enumerated list, a
+    definition table, a bracket the prose quotes, a well-formed pointer, and a bracket a run of
+    line comments opens on one line and closes on the next."""
+    cases = {
+        "interval.py": '"""Normalise an angle to (-180, 180] for reporting."""\n',
+        "enumerated.py": '"""The recovery:\n\n    1) the publish FAILED closed.\n'
+                         '    2) the tree is the pre-state.\n    """\n',
+        "table.py": '"""The handshake.\n\n    engine_commit : short HEAD of this repo.\n'
+                    '    source_commit : short HEAD of the surveys checkout.\n    """\n',
+        "quoted.py": '"""Index just past the `}` closing a `${` hole."""\n',
+        "pointer.py": '"""The first-paint set. See docs: portal internals, data.js."""\n',
+        "run.py": "# The manifest is the index of every downloadable artifact (per-station\n"
+                  "# EDI and per-survey bundles), each carrying size and sha256.\na = 1\n",
+    }
+    for name, body in cases.items():
+        f = tmp_path / name
+        f.write_text(body, encoding="utf-8")
+        assert not shape_offences([f]), f"{name}: whole prose was read as a broken shape"
+
+
+def test_a_run_of_line_comments_is_one_shape(tmp_path):
+    """Read line by line, a bracket opened on one line and closed on the next is two scars. The
+    run is the comment a reader reads, so it is the unit the shape rules read."""
+    f = tmp_path / "run.js"
+    f.write_text("// The cap fires as bytes arrive (chunked-safe, no\n"
+                 "// Content-Length dependency).\nvar a = 1;\n", encoding="utf-8")
+    assert len(comment_runs(f, f.read_text(encoding="utf-8"))) == 1
+    assert not shape_offences([f])
+

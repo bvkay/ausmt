@@ -595,7 +595,7 @@ def test_default_stability_no_policy_field_is_byte_identical(tmp_path):
 
 
 # =====================================================================================================
-# COORDINATE-POLICY MARKER PINS ( - the boot-loaded generalised/withheld signal)
+# COORDINATE-POLICY MARKER PINS (the boot-loaded generalised/withheld signal)
 # =====================================================================================================
 
 def _aid_by_id(out):

@@ -55,9 +55,9 @@ function handoffSnack(filename,bytes){
 
 // CSV rows (header + one per station). See docs: portal internals, exports.js.
 function csvRows(stations){
-  // `license`, `license_url` (the deed URL keyed off the canonical id) and `attribution` (the rendered
-  // attribution line - the custodian's verbatim statement when declared. See docs: portal internals,
-  // exports.js.
+  // `license`, `license_url` (the deed URL keyed off the canonical id) and `attribution`, the
+  // rendered attribution line: the custodian's verbatim statement when declared. See docs: portal
+  // internals, exports.js.
   const rows=[["ausmt_id","station","country","organisation","survey","lat","lon","type","components","n_periods","period_min_s","period_max_s","source_doi","timeseries_collection_doi","survey_version","collection","license","license_url","attribution"]];
   stations.forEach(s=>{const m=SMETA[s.survey]||{};rows.push([s.ausmt_id,s.id,s.country,s.org,s.survey,s.lat,s.lon,s.type,s.comps,s.nper,s.pmin,s.pmax,m.doi||"",TS_COLLECTION.doi,m.version||"",(m.collection||{}).id||"",m.lic||"",licenseUrl(m.lic),attributionLine(m)]);});
   return rows;

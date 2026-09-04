@@ -38,8 +38,8 @@ from .orcid import is_valid_orcid
 
 logger = logging.getLogger("ausmt.gateway")
 
-# Stream the multipart body in these chunks so a 250 MB upload never lands whole in RAM (design
-#). Also the granularity at which the size cap is enforced mid-stream.
+# Stream the multipart body in these chunks so a 250 MB upload never lands whole in RAM. Also the
+# granularity at which the size cap is enforced mid-stream.
 _UPLOAD_CHUNK = 1024 * 1024
 _POLL_INTERVAL_S = 5.0
 _STATUS_404_BODY = b"not found"  # byte-identical for every unknown/invalid token
@@ -189,7 +189,7 @@ class Gateway:
     async def _handle_submit_reserved(self, request: Request, auth: "_SubmitAuth"):
         # Parse the multipart body under a hard total-byte cap that fires as bytes arrive (chunked-
         # safe, no Content-Length dependency) and spools only onto the measured incoming volume
-        # (- see gateway/upload.py for why request.form alone is unsafe here).
+        # (see gateway/upload.py for why request.form alone is unsafe here).
         submission_id = db.new_id()
         part_path = self.cfg.incoming_dir / f"{submission_id}.zip.part"
         final_path = self.cfg.incoming_dir / f"{submission_id}.zip"
@@ -1412,7 +1412,7 @@ class Gateway:
                 version = result.get("version")
                 fields = result.get("fields") or {}
         if tab == "history":
-            # The runner OWNS the git read : enqueue a `history` read-job and render
+            # The runner OWNS the git read: enqueue a `history` read-job and render
             # the returned commit list. A runner error/refusal degrades to a curator-facing message on
             # the tab (never a 500, never a blank page) — the audit trail is informational, not gating.
             try:
@@ -2528,7 +2528,7 @@ class Gateway:
             return self._not_found()
         note = (note or "").strip()
         if not note:
-            # EVERY action requires a non-empty decision note (- no reject exemption). Empty
+            # EVERY action requires a non-empty decision note (no reject exemption). Empty
             # note => 400, no transition. The reject form supplies a real curator note.
             return JSONResponse({"detail": "a decision note is required"}, status_code=400)
         sub = self.db.get(submission_id)
@@ -2558,7 +2558,7 @@ class Gateway:
         expected = states.VALIDATED if action == "approve" else states.PUBLISH_FAILED
         if sub.state != expected:
             return JSONResponse({"detail": f"cannot {action} from {sub.state}"}, status_code=409)
-        # Blocking-FAIL guard (+): re-check server-side and REFUSE with 409 even if
+        # Blocking-FAIL guard: re-check server-side and REFUSE with 409 even if
         # the button/checkbox was hidden — that is UX; the 409 is the guarantee. Retry from
         # PUBLISH_FAILED re-checks too, and acknowledgement is PER-ACTION: nothing about the
         # ack persists on the row, so a retry needs ack_pii again.
@@ -2978,7 +2978,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
-        # The single asyncio poll loop (- the ONE background task). Started here so the
+        # The single asyncio poll loop (the ONE background task). Started here so the
         # app has a running loop; cancelled + DB closed on shutdown. Tests construct the app without
         # entering the lifespan and drive gw.poll_once directly, so this task never competes with
         # their deterministic assertions.
@@ -3379,9 +3379,9 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
                              ack_pii: str = Form(default="")):
         if action not in ("approve", "return", "reject", "retry"):
             return gw._not_found()
-        # Parse confirm_overwrite AND ack_pii as EXACT affirmative tokens, default DENY (
-        #). NOT bool(str): "0"/"false"/any non-empty string would otherwise enable a silent
-        # overwrite or a silent PII acknowledgement.
+        # Parse confirm_overwrite AND ack_pii as EXACT affirmative tokens, default DENY. NOT
+        # bool(str): "0"/"false"/any non-empty string would otherwise enable a silent overwrite
+        # or a silent PII acknowledgement.
         confirm = confirm_overwrite.strip().lower() in ("1", "yes", "true", "on")
         ack = ack_pii.strip().lower() in ("1", "yes", "true", "on")
         return await gw.handle_curator_action(

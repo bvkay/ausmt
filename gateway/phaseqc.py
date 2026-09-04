@@ -45,10 +45,11 @@ QUADRANT_SLACK_DEG = 10.0
 def wrap180(phase: float) -> float:
     """Wrap a phase (degrees) into [−180, 180) — Python's floored % (non-negative remainder for the
     positive modulus), the same wrap _edi_tf.norm_phase applies. NOTE for the JS mirror: JS `%` is
-    TRUNCATED (keeps the dividend's sign), which is a divergence of 735 sweep mismatches
-    exactly this. The mirror must ALSO be bit-faithful, not merely floored-in-semantics: CPython's
-    float % is fmod + ONE conditional add, so the JS mirror is `floormod` (r = x % y; r < 0 && r !== 0
-    ? r + y : r) — the ((x%360)+360)%360 idiom's unconditional add drifts 1 ulp on negative remainders
+    TRUNCATED (keeps the dividend's sign), and that divergence was worth 735 sweep mismatches.
+    The mirror must ALSO be bit-faithful, not merely floored-in-semantics: CPython's
+    float % is fmod + ONE conditional add, so the JS mirror is
+    `floormod`: `r = x % y; r < 0 && r !== 0 ? r + y : r`. The ((x%360)+360)%360 idiom's
+    unconditional add drifts 1 ulp on negative remainders
     and flips 1dp rounding at the slack edges (caught by the executable parity pin)."""
     return ((phase + 180.0) % 360.0) - 180.0
 

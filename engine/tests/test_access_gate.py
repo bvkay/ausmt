@@ -169,8 +169,8 @@ def test_open_baseline_serves(tmp_path):
 ])
 def test_withheld_surveys_serve_no_bytes_but_stay_discoverable(tmp_path, access_block):
     """CC-BY + (embargoed future | metadata_only | embargoed past) => ZERO served bytes/rows, yet the
-    survey is fully discoverable in catalogue/surveys/mtcat. FAILS against a gate that serves everything
-    with a redistributable licence served)."""
+    survey is fully discoverable in catalogue/surveys/mtcat. FAILS against a gate that serves
+    everything carrying a redistributable licence."""
     pytest.importorskip("mt_metadata")
     pytest.importorskip("mth5")
     out, man, cat, smeta, mtcat, _err = _build(tmp_path, access_block)

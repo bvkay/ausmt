@@ -22,7 +22,7 @@ from ausmt_science.ingest.normalize import _survey_meta_get  # noqa: E402
 # --------------------------------------------------------------- the suppression kill (headline RED-prove)
 
 def test_citation_names_all_creators_even_with_lead_and_pis():
-    """RED-prove the suppression kill : a survey carrying BOTH a lead_investigator AND
+    """RED-prove the suppression kill: a survey carrying BOTH a lead_investigator AND
     principal_investigators AND creators[] must cite ALL creators, in order. Pre-change cite.au was always
     org_name (the retired lead suppressed the PIs and creators were never read), so it named none of the
     creators - this fails on origin/main and passes after the change."""

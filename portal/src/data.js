@@ -1,5 +1,5 @@
 "use strict";
-// The portal computes nothing. It loads generated JSON products (incl. See docs: portal internals, data.js.
+// The portal computes nothing. It loads generated JSON products. See docs: portal internals, data.js.
 function dataUrl(name){
   // Absolute URLs pass through unchanged — manifest artifact urls built with the producer's --base-url
   // (e.g. an NCI/THREDDS host) are already absolute, so prefixing data_base_url would corrupt them
@@ -22,7 +22,7 @@ function fetchOptional(name,fallback,opts){return fetchJson(name,opts).then(v=>v
 
 // ---- PHASE 1: the first-paint set ---------------------------------------------------------------
 // Everything the map dots, the filter rail and the survey/collection views need, and nothing else:
-// catalogue.json (~320KB, REQUIRED. See docs: portal internals, data.js.
+// catalogue.json (~320KB) is REQUIRED. See docs: portal internals, data.js.
 async function loadPhase1(){
   const [c,sv,prov,coll,build,cpol]=await Promise.all([
     fetchJson("catalogue.json"),

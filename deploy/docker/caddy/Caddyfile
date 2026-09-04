@@ -143,7 +143,7 @@
 	}
 
 
-	# ---- Access log (- usage analytics enablement, masked at the edge) -----------------
+	# ---- Access log (usage analytics enablement, masked at the edge) -----------------
 	# Privacy-preserving HTTP access log: the CLIENT ADDRESS IS MASKED AT WRITE TIME (IPv4 -> /24,
 	# IPv6 -> /48) via Caddy's built-in ip_mask log filter, so a FULL IP never touches disk. This is
 	# the one honest change behind the amended portal privacy promise (portal/index.html). The log

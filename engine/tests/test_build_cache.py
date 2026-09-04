@@ -253,7 +253,7 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
 
     # Exact counter arithmetic (deterministic): the edited station misses parse + xml (2) and
     # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each). On failure, dump
-    # Both builds' full counters + the cache listing (- the failures left nothing
+    # Both builds' full counters + the cache listing (the failures left nothing
     # to diagnose from; salt_fp/degenerate/write_errors in the dump now name the class directly).
     assert counters["misses"] == 2, \
         f"the byte-changed EDI did not miss exactly (parse+xml): {counters}\n{_forensics(cache, out1, out2)}"
@@ -323,7 +323,7 @@ def test_verify_catches_post_build_tamper_of_served_files(tmp_path, clean_salt):
     AFTER the build wrote its manifest. This is the OUTER integrity gate: verify.py re-hashes served
     bytes against the manifest, so it catches post-build tampering of the delivered tree.
 
-    What it does NOT prove ( - the review's design-level correction): verify.py CANNOT
+    What it does NOT prove (the review's design-level correction): verify.py CANNOT
     catch a poisoned CACHE entry, because the manifest sha is computed FROM the served bytes, so a
     poison that flows through the build verifies self-consistently. Cache-entry integrity is the
     CACHE's own checksum-on-read job - see the corrupt-entry tests below."""

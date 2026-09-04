@@ -105,7 +105,7 @@ def default_edit_runner(job: dict, jobs_dir: Path, *, timeout_s: float = 120.0,
 
 def list_published_slugs(surveys_live: Path | None) -> list[str]:
     """The PUBLISHED surveys editable in v1: the immediate child directories of surveys-live/surveys/
-    that contain a survey.yaml (- a DIRECTORY LISTING, not content parsing; the survey.yaml
+    that contain a survey.yaml (a DIRECTORY LISTING, not content parsing; the survey.yaml
     presence check is a stat, not a load). Sorted so the order is deterministic across platforms
     (the CI OS-portability tripwire — an unsorted os.listdir differs Linux vs Windows)."""
     if surveys_live is None:

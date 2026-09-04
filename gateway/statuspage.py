@@ -118,7 +118,7 @@ def _validator_section(report: dict) -> str:
     # The real validator (ausmt-surveys/_validation/validate_survey.py --json) writes {"items":[...]}
     # (review #8); accept that FIRST, then the historical checks/rows shapes so a shape change on
     # either side degrades gracefully rather than silently dropping the whole table. Every rendered
-    # cell is html.escaped AND absolute-path-stripped (- a leaked status URL must not leak
+    # cell is html.escaped AND absolute-path-stripped (a leaked status URL must not leak
     # a server path; keeping the strip on these rows is why fixing the key does not re-open a leak).
     rows = report.get("items") or report.get("checks") or report.get("rows") or []
     if not isinstance(rows, list) or not rows:

@@ -141,9 +141,9 @@ def _run_caddy(cfg_text: str, td: Path, name: str) -> subprocess.Popen:
 def _stub_cfg(port: int, tag: str = "STUB") -> str:
     # A stand-in upstream: echoes the path so a test can prove a request REACHED it. `tag` distinguishes
     # the READER stub (STUB) from the GATEWAY-container stub (GWSTUB) in the end-to-end compositions.
-    # The stub accepts h2c exactly as the real reader listener does serve-path tuning:
-    # the front door's box_upstream snippet dials h2c with no h1 fallback, so a stub that only
-    # spoke h1 would 502 every composed end-to-end request).
+    # The stub accepts h2c exactly as the real reader listener does: the front door's box_upstream
+    # snippet dials h2c with no h1 fallback, so a stub that only spoke h1 would 502 every composed
+    # end-to-end request.
     return ("{\n\tadmin off\n\tauto_https off\n\tservers {\n\t\tprotocols h1 h2c\n\t}\n}\n"
             + f":{port} {{\n\trespond \"{tag} {{http.request.uri}}\" 200\n}}\n")
 

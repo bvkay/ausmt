@@ -187,7 +187,12 @@ jobs:
       #                                       _pages.py inlines into every emitted page. Reads only
       #                                       paths under engine/, so it runs unchanged in the image
       #                                       lanes where portal/, docs/ and .github/ are not shipped.
-      # (the 46 enumerated above, plus tests/test_ci_check_skips.py which gates the
+      #   tests/test_cli_help_identity.py      the operator text of every argparse module here: a
+      #                                       docstring IS the interface a --help prints, so the
+      #                                       behaviour guard that blanks docstrings cannot see a
+      #                                       long flag that lost a hyphen. Reads only engine/ and
+      #                                       contract/, both of which the image ships.
+      # (the 47 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
@@ -275,6 +280,7 @@ jobs:
             tests/test_reference_coordinate_sign.py \
             tests/test_stations_dropped_gate.py \
             tests/test_comment_hygiene.py \
+            tests/test_cli_help_identity.py \
             tests/test_ci_check_skips.py \
             | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out

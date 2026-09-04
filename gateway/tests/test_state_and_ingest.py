@@ -69,8 +69,8 @@ def test_terminal_state_cannot_transition(tmp_path):
 
 
 def test_allowed_set_matches_state_diagram():
-    # Guard against silent widening of the state machine: the exact legal set is frozen (+
-    #). If a future change adds a transition, it must be reflected HERE deliberately.
+    # Guard against silent widening of the state machine: the exact legal set is frozen. If a
+    # future change adds a transition, it must be reflected HERE deliberately.
     assert states.ALLOWED == frozenset({
         (states.RECEIVED, states.SCANNED),
         (states.RECEIVED, states.REJECTED_AV),

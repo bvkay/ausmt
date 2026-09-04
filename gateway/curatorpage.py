@@ -2588,7 +2588,7 @@ _ACTION_SHOW_TAIL = ("failed", "sync_failed", "untracked_blocked", "paused", "pi
 def _reconcile_status_block(status: dict | None) -> str:
     """Render the last reconcile outcome from reconcile-status.json. None => the agent is not
     installed yet (a hint, not an error). A `failed`/`sync_failed` shows the log tail so a shell-less
-    curator sees WHY without console access (- the NCI no-console requirement)."""
+    curator sees WHY without console access (the NCI no-console requirement)."""
     if status is None:
         return ('<p class="sub">No reconcile status yet — the host reconcile agent is not installed, '
                 'its status file is unreadable by the gateway (permissions on gateway/state — see the '
@@ -4688,7 +4688,7 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
             f'{csrf}{note}<p><button class="b-warn" type="submit">Return to submitter</button></p>'
             '</form></div>'
         )
-        # Reject now REQUIRES a real note too (- no exemption). Its own note field.
+        # Reject now REQUIRES a real note too (no exemption). Its own note field.
         forms.append(
             f'<div class="panel"><h2>Reject</h2>'
             f'<form method="post" action="/gateway/curator/submission/{sid}/reject" '
@@ -7609,7 +7609,7 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
                      nav: "NavContext | None" = None) -> str:
     """The uploader-key management page: a create form +
     the list of issued keys. The list shows name, email (curator-only PII, never on a public page),
-    created (by/when), last used, submission count, a free-text NOTE (- sqlite only, never git), and
+    created (by/when), last used, submission count, a free-text NOTE (sqlite only, never git), and
     status (active/revoked with when/by). A revoked row STAYS listed for the audit trail — there is no
     delete — and its note becomes read-only (audit context, not an editable field). The plaintext key
     is NEVER shown here (displayed exactly once at creation). deltas over the v2 page:

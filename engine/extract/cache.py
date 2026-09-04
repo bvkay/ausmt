@@ -20,7 +20,7 @@ this module upholds:
   * A DEGENERATE salt (unknown engine commit, or a dirty checkout where a git checkout exists)
     silently DISABLES the cache for that build - no reads, no writes. A degenerate/ambiguous salt
     must never key a cache. --raw builds are a POLICY exclusion with the same inert behaviour
-    (: --seed-meta feeds served citations but is not a key component).
+    (--seed-meta feeds served citations but is not a key component).
   * Entries are SELF-VERIFYING: each file is `<sha256-hex-of-payload>\n<payload>`,
     written temp-then-atomic-rename. Every read re-hashes the payload; a mismatch (disk corruption,
     tampering) DELETES the entry, counts in the `corrupt` counter, tallies as a MISS, and the

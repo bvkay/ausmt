@@ -247,7 +247,7 @@ def corrupt_deflate_zip() -> bytes:
 # App harness
 # --------------------------------------------------------------------------------------------------
 # Curator fixtures. A configured curator key (>= 16 chars per the fail-closed floor) and a fake
-# git seam so publish tests need no real git (- same injected-callable pattern as the clamd
+# git seam so publish tests need no real git (same injected-callable pattern as the clamd
 # scanner seam). No rebuild seam: v2 publish is commit-and-push ONLY (the operator rebuilds by hand).
 CURATOR_NAME = "curator1"
 CURATOR_KEY = "curator-secret-key-0123456789"     # >= 16 chars

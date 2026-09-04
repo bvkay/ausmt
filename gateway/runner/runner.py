@@ -552,8 +552,8 @@ def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) ->
 
     Canonical shape (the runner's positional-first form): the package folder is the REQUIRED
     positional and `--json` names the OUTPUT report file. edit.py must not assemble the flags
-    -json-first (`--json <file> <folder>`); argparse accepts both, but a single form is the point of
-    The positional-first order is the one the real-vendored-validator oracles pin. All args are
+    --json-first (`--json <file> <folder>`); argparse accepts both, and a single form is the point:
+    the positional-first order is the one the real-vendored-validator oracles pin. All args are
     stringified here so callers pass Paths and the whole subprocess contract is described in one line."""
     return [sys.executable, str(validator_file), str(target_dir), "--json", str(report_path)]
 

@@ -394,8 +394,8 @@ def derived_rendition_withheld(r):
 # EMTF XML) and per-survey bundles (EDI zip, survey MTH5) — each carrying size + sha256 for integrity
 # and a tier-resolved URL. It rides BESIDE the positional catalogue (never as new r[] columns), so
 # adding download metadata costs the index-read consumers nothing.
-#   tier=repo : a portal-relative URL the portal joins onto its data_base_url (or base_url, if set).
-#   tier=nci  : an ABSOLUTE NCI THREDDS fileServer URL. A survey may declare a single `nci_base`
+#   tier=repo: a portal-relative URL the portal joins onto its data_base_url (or base_url, if set).
+#   tier=nci: an ABSOLUTE NCI THREDDS fileServer URL. A survey may declare a single `nci_base`
 #               (survey.yaml) — the fileServer directory its files sit flat under — and the build
 #               then emits <nci_base>/<filename> for that survey's artifacts (the NCI storage tier).
 # The sha256 is ALWAYS computed from the LOCAL bytes the build has at hand: the integrity ledger the
@@ -1650,7 +1650,7 @@ def _publications_of(y: dict) -> list:
 
 
 def _related_identifiers_of(y: dict) -> list:
-    """The identifiers design - the related-identifiers model): the top-level related_identifiers list,
+    """The related-identifiers model: the top-level related_identifiers list,
     passed through carrying the typed-core keys the drawer renders — identifier, identifier_type,
     relation, custodian - plus `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
     terms). The stored entry may hold the wider SOURCE_KEYS allow-list (it TYPES the sources[] object);
@@ -1673,7 +1673,7 @@ def _related_identifiers_of(y: dict) -> list:
 
 
 def _instrument_pid_of(y: dict):
-    """The identifiers design ): identifiers.instrument_pid - the ONE survey/platform-level instrument
+    """identifiers.instrument_pid is the ONE survey/platform-level instrument
     PID (the PIDINST platform DOI), verbatim or None. Distinct from the per-instrument `pid`s carried by
     _instruments_of; this is the survey-wide platform identifier the editor writes."""
     ids = y.get("identifiers", {}) or {}
@@ -2016,7 +2016,7 @@ def _mini_yaml(text: str) -> dict:
     # which YAML can express only quoted. Before this alternation the fallback matched neither and
     # silently dropped the whole map, so a no-PyYAML build published the raw contractor DATAIDs.
     # The closing quote must be followed IMMEDIATELY by ':', so a quoted list-item SCALAR that happens
-    # to contain a colon (- "a: b") is still a scalar, not a one-key map (pinned by test).
+    # to contain a colon ("a: b") is still a scalar, not a one-key map (pinned by test).
     key_re = re.compile(r"""^("[^"]+"|'[^']+'|[\w.\-]+):\s*(.*)$""")
 
     def _key(k: str) -> str:
@@ -3622,7 +3622,7 @@ def build_identity(surveys_root) -> dict:
     exact engine + surveys commits that produced it. Deterministic
     aside from `generated` (an ISO UTC timestamp), so two builds of identical inputs differ only there.
 
-    engine_commit  : short HEAD of THIS repo (ausmt/), via the same _git_commit_at helper _build_prov
+    engine_commit    short HEAD of THIS repo (ausmt/), via the same _git_commit_at helper _build_prov
                      uses (HERE = engine/extract/). the engine image COPYs engine/ WITHOUT .git,
                      so git resolution ALWAYS yields None in a container build -- when that happens,
                      fall back to the AUSMT_ENGINE_COMMIT env var (baked in at image-build time by
@@ -3630,13 +3630,13 @@ def build_identity(surveys_root) -> dict:
                      result first, env var second, the literal string "unknown" last (a genuinely
                      unresolvable build identity, e.g. a bare pip install with no .git and no env var --
                      still a valid string, never Python's None).
-    source_commit  : short HEAD of the ausmt-surveys checkout at `surveys_root`, when that directory
+    source_commit    short HEAD of the ausmt-surveys checkout at `surveys_root`, when that directory
                      sits inside a git work tree; None for --raw builds or a non-git --surveys dir (a
                      plain directory copy, or CI's PR-diff checkout of just a subtree) -- graceful, not
                      a hard error, since building without a resolvable surveys commit is legitimate.
                      (No env fallback for this one -- there is exactly one source repo per deployment
                      and it is always bind-mounted with its .git intact; see engine.Dockerfile.)
-    build_id       : "<engine_commit>-<source_commit>-<generated>" - plain concatenation, opaque to
+    build_id         "<engine_commit>-<source_commit>-<generated>" - plain concatenation, opaque to
                      the portal (displayed verbatim, never parsed). source_commit's None (the
                      legitimate no-surveys-commit case) renders as "unknown" IN THE JOIN ONLY, never
                      the Python str(None) "None" -- the live footer showed the literal
@@ -4843,8 +4843,8 @@ def discover_work(a, ap, validator):
     yaml_digest)]; survey_extent maps a survey label to its declared geographic_extent (for the
     out-of-extent QC). A pure discovery phase -- it reads the filesystem + validator and produces the
     work list; the per-survey extract/science/products happen in main's loop over what this returns.
-    yaml_digest is the sha256 of the SAME survey.yaml bytes the meta was parsed from (:
-    one read feeds both, so an edit landing mid-build can never split them; "" for --raw entries).
+    yaml_digest is the sha256 of the SAME survey.yaml bytes the meta was parsed from (one read
+    feeds both, so an edit landing mid-build can never split them; "" for --raw entries).
 
     also returns coord_policy = {label: (default, overrides)} - the coordinate-access policy per
     survey. Carried in a SIDE CHANNEL (not on SMETA, which is emitted to surveys.json - putting

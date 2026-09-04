@@ -2137,7 +2137,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "R8: the hand-off adds no track() call site; it is measured at the front door, from the route it uses");
   ok(!/progress|complete|finished|%/i.test(snackEl.textContent),
     "the page claims no progress and no completion; the browser owns both, got " + JSON.stringify(snackEl.textContent));
-  // POINTERS (: the merged document - EVERY scope station appears; routable stations
+  // POINTERS: the merged document - EVERY scope station appears; routable stations
   // carry levels[]; the embargoed station appears WITHOUT levels (identity is public, routes are not).
   clipboard.length = 0;
   doc.getElementById("dlSh").click();

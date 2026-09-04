@@ -386,7 +386,7 @@ def test_a_warm_cache_hit_masks_and_withholds_exactly_as_a_cold_build(tmp_path, 
 
     The whole mask runs AFTER the cache so the cached parse stays survey-independent, and the
     rendition withholding reads a flag stamped at that same seam. Production rebuilds run
-    -incremental (deploy/Makefile), so every masked survey after its first build is a cache HIT: if
+    --incremental (deploy/Makefile), so every masked survey after its first build is a cache HIT: if
     that flag ever moved into the cached parse product, a warm rebuild would republish the
     renditions a cold build withholds, and only the warm one would leak. Cold and warm are built
     over one cache dir, the hit is asserted rather than assumed, and the two builds are compared.

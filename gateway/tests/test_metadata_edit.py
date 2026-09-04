@@ -1,4 +1,4 @@
-"""Metadata-editor gateway-flow tests (-). Driven through the real HTTP surface
+"""Metadata-editor gateway-flow tests. Driven through the real HTTP surface
 (httpx in-process) edit seam injected in-process (conftest.inproc_edit_runner) and the
 publish git seam faked (conftest.FakeGit) - the same injected-seam discipline as the clamd and
 Git tests. Proven-failing-first where a behaviour change is the deliverable.

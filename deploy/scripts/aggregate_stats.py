@@ -418,7 +418,7 @@ class AuStates(_RangeTable):
 
 
 # --------------------------------------------------------------------------------------------------
-# Manifest reverse map: the download-URL -> dataset resolver (- manifest.json is the
+# Manifest reverse map: the download-URL -> dataset resolver (manifest.json is the
 # authoritative reverse map). Keys are the manifest's portal-relative urls (e.g. 'edi/slug/A1.edi');
 # tier=nci rows carry ABSOLUTE urls that never match a /data path, so they self-exclude harmlessly.
 # --------------------------------------------------------------------------------------------------
@@ -1633,7 +1633,7 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 
 # --------------------------------------------------------------------------------------------------
 # The APPEND-ONLY DAILY ARCHIVE: capture maximal non-geo granularity at day
-# grain now, so a report nobody has asked for yet can still be derived later).
+# grain now, so a report nobody has asked for yet can still be derived later.
 #
 # WHY IT EXISTS. The raw log rotates in about a week and the daily rows in stats.json roll off after 92
 # days, so today the only permanent record is the calendar-month rollup. Every question finer than a

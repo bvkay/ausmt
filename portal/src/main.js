@@ -25,9 +25,8 @@ function buildState(){
   const _cp=(typeof COORD_POLICY!=="undefined"&&COORD_POLICY)||{};
   ST.forEach(s=>{s.coordPolicy=_cp[s.ausmt_id]||null;});
   surveys=[...new Set(ST.map(s=>s.survey))].sort();
-  // slug -> survey label, for the #/survey/<slug> route (the published /surveys/<slug> path URLs The
-  // sitemap now emits 301 into this route at the front door - path-URL contract. See docs: portal
-  // internals, main.js.
+  // slug -> survey label, for the #/survey/<slug> route. The front door emits 301 from the
+  // published /surveys/<slug> path URLs into this route. See docs: portal internals, main.js.
   SLUG_TO_SURVEY={};
   surveys.forEach(sv=>{const slug=(SMETA[sv]||{}).slug;if(slug)SLUG_TO_SURVEY[slug]=sv;});
   ST.forEach(s=>{if(!SLUG_TO_SURVEY[s.slug||""]&&s.ausmt_id){
@@ -434,7 +433,7 @@ function wireHydration(){
     if(typeof paintDownloadRows==="function")paintDownloadRows();});
   // ts_access.json settles the availability facet: until it lands nothing on the page knows which stations
   // this deployment can hand off, so the Download rows and the Data available options are repainted here
-  // (counts, sizes. See docs: portal internals, main.js.
+  // with counts and sizes. See docs: portal internals, main.js.
   const tsa=TSACC_READY.then(()=>{
     if(typeof paintDownloadRows==="function")paintDownloadRows();
     if(typeof paintAvailSelect==="function")paintAvailSelect();

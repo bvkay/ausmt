@@ -1,4 +1,4 @@
-"""The identifiers design - the related-identifiers model): survey.yaml -> SMETA must carry the
+"""The related-identifiers model: survey.yaml -> SMETA must carry the
 top-level related_identifiers list (typed-core keys only) and the survey/platform-level
 identifiers.instrument_pid, and mtcat_document must federate related_identifiers when present.
 

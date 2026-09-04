@@ -103,8 +103,8 @@ function headerDownloadBtn(s,m){
   const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
-// (The Overview "primary download" tile - overviewDownload, the gated descriptor rendered as a single
-// product tile inside the Station summary - is REMOVED. See docs: portal internals, drawer.js.
+// The Overview "primary download" tile - overviewDownload, the gated descriptor rendered as a
+// single product tile inside the Station summary - is REMOVED. See docs: portal internals, drawer.js.
 
 // The PLAIN-TEXT APA sentence: what the citation pack's CITATIONS.txt and the clipboard copy carry.
 // A text file must never receive HTML entities (O'Brien is not O&#39;Brien on disk).
@@ -679,7 +679,7 @@ function openStation(i,opts){
     `<div class="dactions">${headerDownloadBtn(s,m)}</div>`+
     tabStrip+`</div>`;
   // ---- Panel content -------------------------------------------------------------------------------
-  // Response (default) - the four plots FIRST (the centerpiece. See docs: portal internals, drawer.js.
+  // Response (default) - the four plots FIRST, the centerpiece. See docs: portal internals, drawer.js.
   const _rspOpen=isOpenAccess(m);
   // Two-phase boot: the curves live in tf.json (PHASE 2). See docs: portal internals, drawer.js.
   const _tfGate=_rspOpen?hydrGate("tf","response functions",true):"";
@@ -1197,7 +1197,7 @@ function miniScatter(ss){
   const box=`<rect x="${bx0}" y="${by0}" width="${bw}" height="${bh}" fill="none" stroke="var(--line)"/>`;
   return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:#16242f;border:1px solid var(--line);border-radius:6px">`+
     box+latTicks+lonTicks+dots+`</svg>`;}
-// The "Related surveys" section and its relatedSurveys scorer are REMOVED . See docs: portal internals,
+// The "Related surveys" section and its relatedSurveys scorer are REMOVED. See docs: portal internals,
 // drawer.js.
 function surveySummary(ss,m){
   // The "dimensionality mix (screening only)" row was removed from this table (dimensionality is inferable

@@ -603,7 +603,7 @@ function parseEdi(text){
     const per=nums.map(f=>f?1/f:null).filter(p=>p&&p>0); nper=per.length;
     if(per.length){pmin=Math.min.apply(null,per);pmax=Math.max.apply(null,per);} }
   const dataid=grab("DATAID");
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   const im=raw.match(/LATITUDE\s*:\s*([-+]?\d+(?:\.\d+)?(?::\d+(?:\.\d+)?){0,2})/), io=raw.match(/LONGITUDE\s*:\s*([-+]?\d+(?:\.\d+)?(?::\d+(?:\.\d+)?){0,2})/);
   const info_lat=im?parseAngle(im[1]):null, info_lon=io?parseAngle(io[1]):null;
   let coord_flag=null;
@@ -622,7 +622,7 @@ function parseEdi(text){
 const EDI_HEAD_SCAN_BYTES=65536;   // See docs: portal internals, add-survey.html.
 function ediDataId(text){
   const head=String(text==null?"":text).slice(0, EDI_HEAD_SCAN_BYTES);
-  // See docs: portal internals, add-survey.html.e.
+  // See docs: portal internals, add-survey.html.
   const m=head.match(/^\s*DATAID\s*=\s*(?:"([^"\r\n]*)"|([^\s"\r\n]+))/m);
   if(!m) return null;
   const raw=(m[1]!=null?m[1]:m[2]||"").trim();
@@ -884,7 +884,7 @@ function validateSurvey(meta, edis, mth5s, xmls){
       +"It is the date this dataset was PUBLISHED or released, never a bare year and never the "
       +"fieldwork window; leave it blank if you do not know it");
   if(!meta.ror) add("WARNING","attribution","no organisation ROR (recommended)");
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   var hasProvId=(meta.related_identifiers||[]).some(function(r){return r&&(r.identifier||"").toString().trim();});
   if(!hasProvId) add("WARNING","provenance","no related identifier recorded (a dataset DOI, collection PID, or archive handle under 'This dataset elsewhere'), recommended so the record has a citable provenance identifier");
   if(meta.processing_software==="Unknown") add("WARNING","provenance","processing software is 'Unknown', recommended to identify it");
@@ -915,12 +915,12 @@ function validateSurvey(meta, edis, mth5s, xmls){
     const key=parsed.lat.toFixed(4)+","+parsed.lon.toFixed(4);
     if(seen[key]) add("WARNING","duplicate",name+": same coordinates as "+seen[key]); else seen[key]=name;
   });
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   edis.forEach(({name,parsed})=>{ if(!(parsed&&parsed.dataid))
     add("WARNING","dataid",name+": no DATAID in the EDI HEAD; the station id was auto-derived from the filename as '"
       +deriveDataId(name)+"' and flagged for curator review"); });
   ediNameGate(edis.map(e=>({name:e.name, dataid:e.parsed&&e.parsed.dataid}))).forEach(msg=>add("FAIL","dataid",msg));
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   const anyCoords=edis.some(e=>e.parsed.lat!=null);
   const anyFlagged=edis.some(e=>e.parsed.coord_flag);   // See docs: portal internals, add-survey.html.
   if(anyFlagged) add(meta.locations_confirmed?"PASS":"FAIL","locations",
@@ -961,14 +961,14 @@ function buildSurveyYaml(m){
   const ext=[m.west,m.east,m.south,m.north].every(v=>v!=null&&v!=="")
     ? `{ west: ${+m.west}, east: ${+m.east}, south: ${+m.south}, north: ${+m.north}, datum: WGS84 }` : "{}";
   const dts=(m.data_types||[]);
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   const declaredBy=String(m.declared_by||m.uploader_name||"").trim();
   const rawDeclared=String(m.declared_date||"").trim();
   const declaredDate=/^\d{4}-\d{2}-\d{2}$/.test(rawDeclared)?rawDeclared:tsUTCDate();
   const emitAttribution=!!m.license_declaration&&(declaredBy||declaredDate);
-  // See docs: portal internals, add-survey.html.s.
+  // See docs: portal internals, add-survey.html.
   const relIds=relatedIdentifiersEmit(m.related_identifiers);
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   const citeRow=citationIdentifierRow(m);
   if(citeRow && !relIds.some(r=>r.identifier===citeRow.identifier)) relIds.push(citeRow);
   const citeText=String(m.citation_text==null?"":m.citation_text).trim();
@@ -1002,7 +1002,7 @@ function buildSurveyYaml(m){
       if(c.ror) L.push("    ror: "+q(c.ror));
     });
   }
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   const leadName=String(m.lead_name==null?"":m.lead_name).trim();
   const typedContributors=creditRowsEmit(m.contributors,true);
   const leadRow=leadName?{name:leadName,name_type:"person",role:"ProjectLeader",
@@ -1026,7 +1026,7 @@ function buildSurveyYaml(m){
     L.push("  dms_sign: "+m.coord_resolution.dms_sign);
     L.push("  basis: "+q(m.coord_resolution.basis));
   }
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   const dq=v=>{v=String(v==null?"":v).trim(); if(!v) return null;
     return /^\d{4}$/.test(v)||/^\d{4}-\d{2}-\d{2}$/.test(v)?v:q(v);};
   const dStart=dq(m.date_start), dEnd=dq(m.date_end);
@@ -1047,11 +1047,11 @@ function buildSurveyYaml(m){
   L.push("identifiers:");
   L.push("  project_raid: "+(m.raid?q(m.raid):"null"));
   L.push("  instrument_pid: "+(instrPid?q(instrPid):"null"));
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   if(relIds.length){
     L.push("related_identifiers:");
     relIds.forEach(r=>{
-      // See docs: portal internals, add-survey.html.survey.html.
+      // See docs: portal internals, add-survey.html.
       if(r.citation_note) L.push("  "+CITATION_ID_NOTE);
       L.push("  - identifier: "+q(r.identifier));
       if(r.identifies) L.push("    identifies: "+r.identifies);              // See docs: portal internals, add-survey.html.
@@ -1067,7 +1067,7 @@ function buildSurveyYaml(m){
     L.push("  preferred_text: "+q(citeText));
     L.push("  text_source: "+CITATION_TEXT_SOURCE_FORM);   // See docs: portal internals, add-survey.html.
   }
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   if(orgRows.length){
     L.push("organisations:");
     orgRows.forEach(o=>{
@@ -1128,10 +1128,10 @@ function buildSurveyYaml(m){
     // See docs: portal internals, add-survey.html.
     L.push("  declared_date: "+q(declaredDate));
   }
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   L.push("time_series:");
   L.push("  levels_available: []");
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   if(pubs.length){
     L.push("publications:");
     pubs.forEach(p=>{
@@ -1276,7 +1276,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   populateLicenseSelect($("m_license"),{selected:"CC-BY-4.0",tbd:true});
 
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   function relIdRow(){
     const wrap=document.createElement("div"); wrap.className="relidrow";
     const levelOpts='<option value="">What does this identifier point at?</option>'+
@@ -1449,7 +1449,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   $("addPub").onclick=()=>$("pubRows").appendChild(pubRow());
   $("pubRows").appendChild(pubRow());   // See docs: portal internals, add-survey.html.
 
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   function creatorRow(){
     const wrap=document.createElement("div"); wrap.className="creatorrow"; wrap.style.marginBottom="8px";
     wrap.innerHTML=
@@ -1477,7 +1477,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   $("addCreator").onclick=()=>$("creatorRows").appendChild(creatorRow());
   $("creatorRows").appendChild(creatorRow());   // See docs: portal internals, add-survey.html.
 
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   function contributorRow(){
     const wrap=document.createElement("div"); wrap.className="contribrow"; wrap.style.marginBottom="8px";
     const ntOpts=NAME_TYPES.map(t=>`<option value="${escAttr(t)}">${esc(t==="person"?"Person":"Organisation")}</option>`).join("");
@@ -1506,7 +1506,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addContributor").onclick=()=>$("contributorRows").appendChild(contributorRow());
 
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   function orgRow(){
     const wrap=document.createElement("div"); wrap.className="orgrow"; wrap.style.marginBottom="8px";
     const boxes=ORG_ROLES_OFFERED.map(t=>
@@ -1531,7 +1531,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addOrg").onclick=()=>$("orgRows").appendChild(orgRow());
 
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   function ackRow(){
     const wrap=document.createElement("div"); wrap.className="ackrow"; wrap.style.marginBottom="8px";
     const opts='<option value="">(type not stated)</option>'+ACKNOWLEDGEMENT_TYPES.map(t=>
@@ -1555,7 +1555,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addAck").onclick=()=>$("ackRows").appendChild(ackRow());
 
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   (function(){
     const sel=$("m_cite_identifies"); if(!sel) return;
     IDENTIFIES_LEVELS.forEach(lv=>{ const o=document.createElement("option");
@@ -1584,12 +1584,12 @@ if(typeof document!=="undefined"&&document.getElementById){
       if(typeSelect && String(typeSelect.value||"").trim()!=="DOI") return;   // See docs: portal internals, add-survey.html.
       const n=normalizeDoi(input.value); if(n!==input.value) input.value=n; }); }
 
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   (function(){
     const nameInp=$("m_name"), inp=$("m_slug"), ok=$("slugOk");
     if(!inp||!ok) return;
     let slugTouched=false;
-    // See docs: portal internals, add-survey.html.tml.
+    // See docs: portal internals, add-survey.html.
     let SERVED_SLUGS={}, STATION_COUNTS={}, servedLoaded=false;
     function ensureServed(){
       if(servedLoaded||typeof fetch!=="function") return; servedLoaded=true;
@@ -1616,7 +1616,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   async function rorLookup(name, abortHolder){
     if(abortHolder.a) abortHolder.a.abort();
     abortHolder.a=new AbortController();
-    // See docs: portal internals, add-survey.html.ey.html.
+    // See docs: portal internals, add-survey.html.
     const r=await fetch("https://api.ror.org/v2/organizations?query="+encodeURIComponent(name),{signal:abortHolder.a.signal});
     if(!r.ok) throw 0;
     return rorMatchesFromResponse(await r.json());
@@ -1628,7 +1628,7 @@ if(typeof document!=="undefined"&&document.getElementById){
         `<div class="rm">${esc(m.country||"-")}${m.acronym?" · aka "+esc(m.acronym):""}<br>ROR: ${esc(m.id)}</div></div>`).join("");
     box.querySelectorAll(".rorcard").forEach(c=>c.onclick=()=>{ onPick(matches[+c.dataset.i]); track("RORMatchSelected"); box.innerHTML=""; });
   }
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   function wireRor(orgInput, box, rorInput){
     let timer=null; const holder={a:null};
     orgInput.addEventListener("input",()=>{ const v=orgInput.value.trim(); clearTimeout(timer);
@@ -1639,7 +1639,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   wireRor($("m_org"), $("rorMatches"), $("m_ror"));
 
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   function updateEmbargoFields(){
     $("embargoBlock").style.display = ($("m_access").value!=="open") ? "block" : "none";
   }
@@ -1677,10 +1677,10 @@ if(typeof document!=="undefined"&&document.getElementById){
     locations_confirmed:$("m_locconf").checked,
     dms_choice:(document.querySelector('input[name="dmschoice"]:checked')||{}).value||"head"};}
 
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   function renameLabel(f){
     if(f.kind!=="edi") return "";
-    // See docs: portal internals, add-survey.html.er).
+    // See docs: portal internals, add-survey.html.
     if(!f.dataid) return ` <span class="autoid">→ ${esc(packagedEdiName(deriveDataId(f.name)))} (auto from filename, flagged for curator)</span>`;
     return ` <span class="rename">→ ${esc(packagedEdiName(f.dataid))}</span>`;
   }
@@ -1688,7 +1688,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   function renderFiles(){ $("filelist").innerHTML=files.map((f,i)=>
     `<div class="f"><span class="meta"><span>${esc(f.name)} <span style="color:var(--muted)">${KIND_LABEL[f.kind]||"EDI"}</span>${renameLabel(f)}</span><span>${(f.bytes/1024).toFixed(1)} KB</span></span><button type="button" class="rm" data-i="${i}" title="Remove ${escAttr(f.name)}" aria-label="Remove ${escAttr(f.name)}">✕</button></div>`).join("")
     || '<span style="color:var(--muted)">No files yet.</span>'; updateConf(); }
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   $("filelist").addEventListener("click",e=>{ const b=e.target.closest("button.rm"); if(!b) return;
     const i=+b.getAttribute("data-i"); if(i>=0&&i<files.length){ files.splice(i,1); renderFiles(); } });
   function ediFiles(){ return files.filter(f=>f.kind==="edi"); }
@@ -1699,7 +1699,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     return b.length>=8 && b[0]===0x89&&b[1]===0x48&&b[2]===0x44&&b[3]===0x46&&b[4]===0x0d&&b[5]===0x0a&&b[6]===0x1a&&b[7]===0x0a; }
   function addFiles(list){ Array.from(list).forEach(file=>{
     const isMth5=/\.(h5|mth5)$/i.test(file.name);
-    // See docs: portal internals, add-survey.html.ey.html.
+    // See docs: portal internals, add-survey.html.
     const isXml=/\.xml$/i.test(file.name);
     const r=new FileReader();
     if(isMth5){ r.onload=e=>{ const buf=e.target.result;
@@ -1709,7 +1709,7 @@ if(typeof document!=="undefined"&&document.getElementById){
         files.push({name:file.name,kind:"emtfxml",text,buf,bytes:buf.byteLength,emtf:emtfxmlLooksReal(text)}); renderFiles(); };
       r.readAsText(file);
     } else { r.onload=e=>{ const text=e.target.result; const buf=new TextEncoder().encode(text).buffer;
-        // See docs: portal internals, add-survey.html.ey.html.
+        // See docs: portal internals, add-survey.html.
         files.push({name:file.name,kind:"edi",text,buf,bytes:text.length,dataid:ediDataId(text)}); renderFiles(); };
       r.readAsText(file); } }); }
   const drop=$("drop"), filein=$("filein");
@@ -1732,7 +1732,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   ["m_w","m_e","m_s","m_n"].forEach(id=>$(id).addEventListener("input",updateReadout));
   function clearPick(){ corners=[]; if(rect&&pmap){pmap.removeLayer(rect);} rect=null; $("pickHint").textContent="Click two corners to set a bounding box. Your loaded stations are shown as dots."; }
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   function openPicker(){
     if(typeof L==="undefined"){ $("locReadout").textContent="Map unavailable, use 'Edit extent values manually'."; return; }
     $("modal").classList.add("show");
@@ -1769,7 +1769,7 @@ if(typeof document!=="undefined"&&document.getElementById){
 
   // See docs: portal internals, add-survey.html.
   let cmap=null, cmarkers=[];
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   let t0map=null, t0markers=[];
   function renderT0Map(withCoords){
     if(typeof L==="undefined") return;
@@ -1801,7 +1801,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     $("t0mapwrap").style.display=withCoords.length?"block":"none";
     // See docs: portal internals, add-survey.html.
     $("locNudge").style.display=(withCoords.length&&!flagged.length)?"block":"none";
-    // See docs: portal internals, add-survey.html.tml.
+    // See docs: portal internals, add-survey.html.
     const nOther=xmlFiles().length+mth5Files().length;
     const otherNote=nOther
       ? (pf.length?" &middot; ":"")+"<b>"+nOther+"</b> EMTF XML/MTH5 file"+(nOther===1?"":"s")
@@ -1878,7 +1878,7 @@ if(typeof document!=="undefined"&&document.getElementById){
       (p.n?`<div>recommended EDI extractor: <b>${p.extractor}</b>${p.spectra?`  (incl. ${p.spectra} spectra-section EDI(s), read directly)`:""}</div>`:"");
     $("pPreview").classList.add("show");
   };
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   async function buildPackage(meta, pf, ediF, mh, gatewayAvailable, xf){
     xf = xf || [];
     if(pf.some(e=>e.parsed.coord_flag))
@@ -1905,7 +1905,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     if(xf.length){ const xdir=root.folder("transfer_functions").folder("emtfxml");
       for(const f of xf){ xdir.file(f.name, f.text); tf.push({file:"transfer_functions/emtfxml/"+f.name, source_filename:f.name, format:"emtfxml", dataid_source:"emtfxml", bytes:f.bytes, sha256:await sha256Hex(f.buf)}); } }
     if(mh.length){ const mhdir=root.folder("transfer_functions").folder("mth5");
-      // See docs: portal internals, add-survey.html.entry.
+      // See docs: portal internals, add-survey.html.
       for(const f of mh){ mhdir.file(f.name, f.buf); tf.push({file:"transfer_functions/mth5/"+f.name, source_filename:f.name, format:"mth5", dataid_source:"mth5", bytes:f.bytes, sha256:await sha256Hex(f.buf)}); } }
     // input_format names every format actually packaged, in the order the engine prefers them, so a
     // mixed submission is described honestly rather than collapsed to its first format.
@@ -2037,7 +2037,7 @@ if(typeof document!=="undefined"&&document.getElementById){
       .catch(()=>{ if(timer) clearTimeout(timer); /* See docs: portal internals, add-survey.html. */ });
   })();
 
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   function setKeyReqEnabled(on){
     const btn=$("btnRequestKey"), inp=$("m_keyreq_email"), msg=$("keyReqMsg");
     if(!btn) return;
@@ -2060,7 +2060,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     };
   })();
 
-  // See docs: portal internals, add-survey.html.l.
+  // See docs: portal internals, add-survey.html.
   let submitInFlight=null;   // See docs: portal internals, add-survey.html.
   let submitBusy=false;      // See docs: portal internals, add-survey.html.
                              // See docs: portal internals, add-survey.html.
@@ -2080,13 +2080,13 @@ if(typeof document!=="undefined"&&document.getElementById){
     // See docs: portal internals, add-survey.html.
     const v=validateSurvey(meta, pf, mh.map(f=>({name:f.name,hdf5:f.hdf5})), xf.map(f=>({name:f.name,emtf:f.emtf})));
     if(v.counts.FAIL>0){ submitBlocked("Cannot submit: "+v.counts.FAIL+" validation FAIL(s). Run Validate and fix them first."); return; }
-    // See docs: portal internals, add-survey.html.tml.
+    // See docs: portal internals, add-survey.html.
     const orcid=(meta.uploader_orcid||"").trim();
     if(orcid && !isOrcidChecksum(orcid)){ submitBlocked("Your ORCID failed its checksum. Correct it (or clear it, ORCID is optional) before submitting."); return; }
     // See docs: portal internals, add-survey.html.
     const key=$("m_submit_key").value;
     if(!key){ submitBlocked("Enter your submit key."); return; }
-    // See docs: portal internals, add-survey.html.se).
+    // See docs: portal internals, add-survey.html.
     setSubmitting(true);
     $("pSubmit").classList.remove("show");
     // See docs: portal internals, add-survey.html.
@@ -2114,7 +2114,7 @@ if(typeof document!=="undefined"&&document.getElementById){
       submitPanel('<b>Upload cancelled.</b> Nothing was submitted. You can edit and try again.'); };
     xhr.send(fd);
   };
-  // See docs: portal internals, add-survey.html.tml.
+  // See docs: portal internals, add-survey.html.
   function renderSubmitResult(status, body){
     const msg=submitResultMessage(status, body);        // See docs: portal internals, add-survey.html.
     if(status===201){

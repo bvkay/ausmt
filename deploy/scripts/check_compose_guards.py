@@ -34,8 +34,9 @@ import re
 import sys
 from pathlib import Path
 
-# ${ NAME [ (:?) (- | ? | +) WORD ] }  — the op group captures an optional leading ':' plus one of
-# -/?/+; WORD runs (non-greedy in effect, [^}]) to the matching '}'. Bare ${NAME} => op/word empty.
+# `${ NAME [ (:?) (| ? | +) WORD ] }`: the op group captures an optional leading ':' plus one of
+# -/?/+; WORD runs (non-greedy in effect, `[^}]`) to the matching '}'. Bare `${NAME}` leaves op and
+# word empty.
 _TOKEN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:?[-?+])?([^}]*)\}")
 
 

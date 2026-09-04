@@ -24,8 +24,8 @@ import threading
 import time
 
 # Minimum curator-key length. Each configured key must clear this or the whole config is malformed
-# and curator routes fail closed — a short curator key is refused, not accepted-then-weak (design
-#, mirroring the submit-key floor).
+# and curator routes fail closed - a short curator key is refused, not accepted-then-weak,
+# mirroring the submit-key floor.
 _MIN_CURATOR_KEY_LEN = 16
 
 # Cookie + form field names. The session cookie is the ONLY place the raw session token lives.

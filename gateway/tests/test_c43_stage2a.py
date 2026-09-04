@@ -347,7 +347,8 @@ def test_stations_split_no_page_scroll_on_row_select():
     assert "'st-row'" in js, "each list row carries the .st-row selection class"
     assert "classList.add('on')" in js, "the selected row gets a visible highlight (.on)"
     # No scroll CALL and no scroll-to-hash navigation in the JS (a prose mention in a comment is fine;
-    # a .scrollIntoView( invocation or an assignment to location.hash is the viewport-jumping vector).
+    # a `.scrollIntoView()` invocation or an assignment to location.hash is the viewport-jumping
+    # vector).
     assert ".scrollIntoView(" not in js, "row selection must not call scrollIntoView (viewport jump)"
     assert "location.hash" not in js, "row selection must not navigate to a fragment (viewport jump)"
     assert "link.href = '#'" not in js, "the merged in-list hash anchor (viewport-jumping) must be gone"

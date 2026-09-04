@@ -119,7 +119,7 @@ def test_serve_page_missing_ops_is_stale_and_still_200(tmp_path):
 # Route: the sync_failed loud band (the incident, as a test) — driven by FRESH reconcile-status.json
 # --------------------------------------------------------------------------------------------------
 def test_sync_failed_renders_loud_band_incident_as_test(tmp_path):
-    """SYNC_FAILED SURFACING PIN (- the incident as a test). A reconcile-status.json with
+    """SYNC_FAILED SURFACING PIN (the incident as a test). A reconcile-status.json with
     action=sync_failed must render the LOUD sync band on the serve screen; a healthy noop must NOT.
     FAILS IF a sync_failed stays invisible (the 4-hour hidden failure) OR a noop renders the alarm."""
     async def _body():

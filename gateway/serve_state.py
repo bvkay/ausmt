@@ -14,7 +14,7 @@ TRUST BOUNDARY: the gateway gains NO new privileges. It reads its OWN state dir
 mounts for the publish flow (via the same scrubbed_env the publish git calls use). It does NOT read
 site-data (it has no such mount) — the served build.json/build_report.json are fetched by the BROWSER
 same-origin from Caddy, never by this server. The request file's CONTENT is audit-only: the host
-reconcile agent keys only on the file's EXISTENCE and never parses it (- zero-argument by
+reconcile agent keys only on the file's EXISTENCE and never parses it (zero-argument by
 design), so a compromised gateway can at worst trigger one rebuild per timer tick of the same corpus.
 """
 from __future__ import annotations
@@ -100,7 +100,7 @@ def _atomic_write(state_dir: Path, filename: str, payload: dict) -> Path:
 
 def write_rebuild_request(state_dir: Path, *, requested_by: str, full: bool = False) -> Path:
     """Write {requested_at, requested_by[, full]} to <state_dir>/rebuild.request ATOMICALLY. Idempotent:
-    a second press overwrites the same path (- "pressing twice = still one file"). The content
+    a second press overwrites the same path ("pressing twice = still one file"). The content
     is AUDIT ONLY for reconcile's existence-keyed consume, EXCEPT the optional `full` boolean (the
     force-full-rebuild flag): reconcile reads ONLY that one flag and, when true, runs the build in
     cache-REFRESH mode (recompute everything, no cache reuse). A bounded parse: the worst a compromised

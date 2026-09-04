@@ -481,7 +481,7 @@ class Database:
 
     def create_session(self, session_hash: str, curator_name: str, ttl_s: int) -> None:
         """Store a new session row keyed by the sha256 of the raw token (mirrors token_hash: the raw
-        secret is NEVER stored). Absolute expiry (- not sliding): created + ttl_s."""
+        secret is NEVER stored). Absolute expiry (not sliding): created + ttl_s."""
         now = time.time()
         created = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
         expires = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + ttl_s))

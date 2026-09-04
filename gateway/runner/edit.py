@@ -463,8 +463,8 @@ def _merge_map_into(node, new_map: dict) -> bool:
 
 
 def append_release_note(data, version: str, date: str, note: str) -> None:
-    """Set the top-level `version` and append a {version, date, note} entry to release_notes (
- - every content edit records one). Creates the release_notes list if the survey had none.
+    """Set the top-level `version` and append a {version, date, note} entry to release_notes
+    (every content edit records one). Creates the release_notes list if the survey had none.
     The entry's strings pass through quote_ambiguous too: the date is exactly the ISO shape PyYAML
     retypes to datetime.date, and the note is curator free text."""
     data["version"] = quote_ambiguous(version)
@@ -511,7 +511,7 @@ def _run_validator(validator_path: str, package_root: Path) -> dict:
 
 
 def report_has_fail(report: dict) -> bool:
-    """True iff the validator report carries any FAIL/ERROR item (- WARNINGs do not block).
+    """True iff the validator report carries any FAIL/ERROR item (WARNINGs do not block).
     Mirrors runner._validator_passed's item interpretation, inverted."""
     items = report.get("items") if isinstance(report, dict) else None
     if not isinstance(items, list):
@@ -679,7 +679,7 @@ def run_read_job(package_root: Path) -> dict:
 
 
 # ---- history (read-only git log) job -------------------------------------------------------------
-# The runner OWNS the git read for the History tab (- the gateway process issues NO git verb
+# The runner OWNS the git read for the History tab (the gateway process issues NO git verb
 # for this beyond what already exists; the runner already mounts surveys-live read-only for the
 # validator). The ONLY git verb this job runs is the READ-ONLY `log` — a pin asserts the argv carries
 # no mutating verb. Ownership: surveys-live is operator-owned while the runner is uid 10002, so git
@@ -816,7 +816,7 @@ _COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS
                                       if f not in ("last_updated", "prose"))
 # Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality (
 # round 2): the editor's no-op check compares str-form, the divergence detector buckets
-# str-form (- else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
+# str-form (else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
 # Normalise then no-ops on: an un-clearable "Need attention"), and emission writes a round-trip-stable
 # decimal as a plain int.
 _COLLECTION_NUMERIC_FIELDS = frozenset({"start_year"})
