@@ -2096,11 +2096,32 @@ SURFACES = {"the deploy tree": deploy_tree, "the gateway tree": gateway_tree,
 
 
 def workflows():
-    """The CI workflow files. They are read for SHAPE and never for vocabulary: `lane` there names
-    a job on a runner, not a run of work, and 27 of the 28 vocabulary hits over these four files
-    are that word in its CI sense. A class left outside the sweep while the sweep's own shape rules
-    can find its scars is not an exemption, it is an unswept class."""
+    """The CI workflow files. They are read for SHAPE and for WORK-ITEM TAGS, and never for the rest
+    of the vocabulary: `lane` there names a job on a runner, not a run of work, and 27 of the 28
+    vocabulary hits over these four files are that word in its CI sense. A tag carries none of that
+    ambiguity - C35a/F2 names a work item on a runner as surely as it does anywhere else - and a
+    class left outside the sweep while the sweep's own rules can find its scars is not an exemption,
+    it is an unswept class."""
     return sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+
+
+def test_no_workflow_comment_carries_a_work_item_tag():
+    """The half of the vocabulary that is unambiguous in a workflow. FAILS IF a comment on a CI
+    surface names the work item a step belonged to: a reader of the workflow can open no such
+    thing, and the step already states what it does."""
+    files = workflows()
+    assert files, "the workflow class resolved to no files, so this would pass over nothing"
+    found = []
+    for path in files:
+        text = source_text(path)
+        for lineno, comment in comment_runs(path, text):
+            tags = sorted({tag for _match, tag in work_item_tags(bare(comment))})
+            if tags:
+                found.append("%s:%s: %s: %s"
+                             % (path.relative_to(ROOT), lineno, ", ".join(tags),
+                                flattened(bare(comment))[:110]))
+    assert not found, (
+        f"{len(found)} workflow comment(s) name a work item:\n" + "\n".join(found))
 
 
 def test_workflow_comments_are_whole_prose():

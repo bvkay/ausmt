@@ -1,14 +1,14 @@
 name: gateway-ci
 
 # The gateway (submission intake + antivirus + curator publish flow) is a first-class subsystem
-# that takes real community submissions, so a workflow must run its unit suite
-# and ruff excluded it entirely. This job closes that hole: it runs the
+# that takes real community submissions, so a workflow must run its unit suite and ruff must not
+# exclude it. This job closes that hole: it runs the
 # gateway unit suite and lints gateway/ on every gateway-touching push/PR, so a gateway source
 # change is TESTED before it can ship inside an unrelated deploy-triggered image rebuild.
 #
 # The pytest command below covers gateway/tests AND deploy/tests. Measured on the dev box
-# (full engine stack installed): ~1,220 tests, ~4 minutes. This header must not claim "179
-# passed, ~10s" long after both had trebled, so read the figures as a dated scale that needs
+# (full engine stack installed): ~1,220 tests, ~4 minutes. The figures in this header go stale (a
+# "179 passed, ~10s" line outlived a trebling of both), so read them as a scale that needs
 # re-measuring, not a contract. The suite drives async bodies via asyncio.run(), so no
 # pytest-asyncio plugin is needed (see gateway/requirements-dev.txt). The runner is STACK-LESS (no
 # mt_metadata), so the same collection skips the engine-stack pins accounted for at the tripwire
@@ -126,7 +126,7 @@ jobs:
       #
       # Pipe the report through the skip tripwire with the gateway lane's OWN allow-list
       # (--allow REPLACES the engine built-in). That one reason excuses every pin that needs the real
-      # engine stack (mt_metadata), which this runner does not install: 22 tests across four files as of
+      # engine stack (mt_metadata), which this runner does not install: 22 tests across four files -
       # test_runner.py's two real-engine e2e oracles, test_collections_runner.py's two engine
       # parity pins, and the module-scoped engine-corpus fixtures behind test_c43_stage2a_js_parity.py (3)
       # and test_c43_hub_js_parity.py (15). ci_check_skips.py matches by SUBSTRING, so a new test joins the

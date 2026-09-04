@@ -104,7 +104,7 @@ on:
   # and portal-only PRs DO pay for a full build + e2e again. That is a real cost increase, taken over
   # for the two most common lane types, and it is the price of the check being honest. A required
   # gate that skips itself on exactly the PRs that change the engine is worse than no gate: it is a
-  # green tick over an untested image. The narrower reasoning (engine/portal PRs are already covered by
+  # green tick over an untested image. That reasoning (engine/portal PRs are already covered by
   # build-products.yml / portal-ci.yml) still holds for the UNIT suites, but those lanes do not run
   # the pinned-lock pytest INSIDE the shipped image, which is what engine-full-tests exists to prove.
   pull_request:
@@ -525,8 +525,8 @@ jobs:
           cd deploy
           # The gateway profile adds ${AUSMT_SUBMIT_KEY:?...} / ${AUSMT_CODE_DIR:?...} guards on top
           # of the base ones — .env.example carries placeholder values for both, so this validates
-          # the profile's structure (services, mounts, caps) rather than starting anything. This job adds
-          # AUSMT_CURATOR_KEYS / AUSMT_SURVEYS_LIVE / the surveys-live rw + git-creds mounts; the
+          # the profile's structure (services, mounts, caps) rather than starting anything. The profile also
+          # declares AUSMT_CURATOR_KEYS / AUSMT_SURVEYS_LIVE / the surveys-live rw + git-creds mounts; the
           # curator vars have empty-string defaults so config validates with .env.example as-is, and
           # the git-creds mount falls back to the committed placeholder dir.
           docker compose -f compose.yaml --profile gateway config > /dev/null
@@ -567,9 +567,9 @@ jobs:
   # Gateway end-to-end (the Stage-2 acceptance scenarios): with REAL clamd + the REAL
   # runner (engine image), submit the _example fixture package end-to-end -> VALIDATED with populated
   # reports; submit an EICAR zip -> REJECTED_AV. Wired with `docker run` on a shared network that
-  # mirrors the compose gateway profile's topology (C35a/F2 — this now includes the runner's
+  # mirrors the compose gateway profile's topology (this includes the runner's
   # PYTHONPATH=/opt, the value compose.yaml:197 uses; the previous /opt/gateway here was the exact
-  # production ModuleNotFoundError this reproduces, stated at compose.yaml:198-201):
+  # production ModuleNotFoundError, stated at compose.yaml:198-201):
   #   - clamd + gateway share a user network (gateway reaches clamd:3310 INSTREAM);
   #   - gw-runner runs with --network none, user 10002, read-only rootfs + tmpfs /tmp -
   #     it never reaches clamd; the gateway does the raw-zip scan and the post-unpack sweep.
@@ -618,10 +618,10 @@ jobs:
           # The gateway tree owned by uid 10002; the runner also runs as 10002.
           sudo mkdir -p /srv/ausmt/gateway/{incoming,quarantine,jobs,state,clamav}
           sudo chown -R 10002:10002 /srv/ausmt/gateway
-          # The runner needs the validator from the SEPARATE ausmt-surveys repo. This step
+          # The runner needs the validator from the SEPARATE ausmt-surveys repo. This step once
           # only echoed the repo var into GITHUB_ENV — no clone existed anywhere, so the checkout the
           # gates below test for was NEVER created and the VALIDATED half was permanently skipped even
-          # when the var was set: dead wiring. If the var is set, REALLY
+          # when the var was set: dead wiring. It clones for real now: if the var is set, REALLY
           # clone it into $GITHUB_WORKSPACE/../ausmt-surveys (the exact path every gate below reads),
           # and FAIL LOUDLY if the clone or the _validation check fails — an operator who set the var
           # to enable the VALIDATED half must never get a silent skip. If the var is unset, skip the
@@ -924,7 +924,7 @@ jobs:
           # the demo e2e (the box is single-tenant CI, not production).
           # /srv/ausmt itself is ROOT-OWNED (created by the sudo gateway-tree mkdir above), so a plain
           # mkdir under it is Permission denied — surfaced the first time this leg actually ran on the
-          # public repo, where it must not be skipped. Create as root, hand to the runner user;
+          # public repo, having been skipped on every run before that. Create as root, hand to the runner user;
           # the git init/seed below then runs unprivileged as intended.
           sudo mkdir -p /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
           sudo chown "$(id -u):$(id -g)" /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
@@ -1047,7 +1047,7 @@ jobs:
             [ "$i" = 60 ] && { echo "never VALIDATED"; docker logs gw-runner; exit 1; }
             sleep 3
           done
-          # Curator login (cookie jar) -> read the detail page (scrape the CSRF token) -> decide.
+          # Curator login (cookie jar) -> read the detail page (scrape the CSRF token) -> approve.
           COOKIES=/tmp/cj.txt
           curl -s -c "$COOKIES" -X POST --data 'curator_key=ci-curator-key-abcdefgh1234' \
             http://127.0.0.1:8444/gateway/curator/login >/dev/null
@@ -1110,7 +1110,7 @@ jobs:
             http://127.0.0.1:8444/gateway/submit)
           # ANY answer other than the expected 409 dumps the status, the body and the gateway log
           # BEFORE exiting. A leg that goes straight from a non-409 into json.load dies
-          # with "Expecting value: line 1 column 1", and left the run with no status code, no body
+          # with "Expecting value: line 1 column 1", and leaves the run with no status code, no body
           # and no gateway log to diagnose from. A harness that discards its own evidence turns a
           # one-run diagnosis into a guessing game.
           if [ "$RESP" != "409" ]; then

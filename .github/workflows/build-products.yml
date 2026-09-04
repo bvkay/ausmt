@@ -135,7 +135,7 @@ jobs:
       #                                       the closed vocabularies, the unmatched-station stop
       #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
       #   tests/test_station_time_series.py   kind=time_series rows from the register: the route, the
-      #                                       vocabularies, the day-by-state exclusion, the access gate and
+      #                                       vocabularies, the level2 exclusion, the access gate and
       #                                       the ts_access.json boot artifact it renders beside them
       #   tests/test_ts_projection.py         the ONE projection: existence follows the register,
       #                                       route detail follows the gate, level2 opens nothing
@@ -190,7 +190,7 @@ jobs:
       #                                       behaviour guard that blanks docstrings cannot see a
       #                                       long flag that lost a hyphen. Reads only engine/ and
       #                                       contract/, both of which the image ships.
-      # (the 47 enumerated above, plus tests/test_ci_check_skips.py which gates the
+      # (the 48 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
