@@ -639,6 +639,14 @@ TAG_NOT_A_TAG = (
     ("a percentile", re.compile(r"^P(?:50|95|99)$"),
      re.compile(r"percentile|median|\btail\b|budget|threshold|profile", re.I)),
 )
+# ONE MEANING ON THAT TABLE READS THE WHOLE RUN RATHER THAN THE WINDOW. A licence identifier is
+# named by the word licence, license or dedication standing anywhere in the prose that carries it:
+# a run about licensing names the licence and then uses the alias, and the alias commonly ends the
+# sentence while the word that identifies it opened one. A sixty-character window read a message
+# that said "licence" twice and still could not see either, and the licence name was traded for a
+# paraphrase to get the run green. Every other entry keeps the window, because a station id or a
+# quadrant IS its neighbourhood; a licence id is not.
+TAG_CONTEXT_IS_THE_WHOLE_RUN = ("a public-domain dedication",)
 # A token that IS an id is named by the noun that says so, immediately before it
 # with one space between. The test is on the TOKEN. A window wide enough to hold
 # a sentence excuses any token standing NEAR the word, and on a corpus about
@@ -757,8 +765,11 @@ def work_item_tags(text):
         compound = start >= 2 and text[start - 1] == "-" and text[start - 2].isalpha()
         if all(CORPUS_ID.match(part) for part in parts):
             continue
-        if not compound and all(any(token.match(part) and near.search(window)
-                                    for _, token, near in TAG_NOT_A_TAG) for part in parts):
+        if not compound and all(
+                any(token.match(part)
+                    and near.search(text if meaning in TAG_CONTEXT_IS_THE_WHOLE_RUN else window)
+                    for meaning, token, near in TAG_NOT_A_TAG)
+                for part in parts):
             continue
         if TAG_ID_NOUN.search(text[:start]):
             continue
@@ -2242,6 +2253,29 @@ def test_each_false_positive_names_its_meaning_and_is_caught_without_it(tmp_path
         assert hits and "work-item identifier" in hits[0], (
             f"the same token in work-item position was excused: {work_item}"
         )
+
+
+def test_a_licence_id_is_named_by_its_licence_anywhere_in_the_run(tmp_path):
+    """The one exemption whose context is the whole run. A message about licensing names the
+    licence and then uses the alias, and the alias regularly ends a sentence the word opened, so a
+    window measured in characters cannot reach from one to the other. The token still has to be
+    NAMED: the same alias in work-item position, in prose that says nothing about licensing, is
+    still an audit trail."""
+    far = ('def test_a():\n'
+           '    assert 1, ("the metadata licence must be scoped explicitly: it is not the '
+           'per-survey data licence, "\n'
+           '               "and a harvester that conflates the two republishes restricted data '
+           'under CC0")\n')
+    f = tmp_path / "far.py"
+    f.write_text(far, encoding="utf-8")
+    assert not message_offences([f]), (
+        "a licence id was read as a work item because the word licence stood outside the window")
+    near = tmp_path / "near.py"
+    near.write_text('def test_a():\n    assert 1, "CC0 reshaped the download panel"\n',
+                    encoding="utf-8")
+    hits = message_offences([near])
+    assert hits and "work-item identifier" in hits[0], (
+        "the alias in work-item position, in prose about nothing licensed, was excused")
 
 
 def test_a_tag_is_a_tag_wherever_it_stands(tmp_path):

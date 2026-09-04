@@ -641,6 +641,14 @@ TAG_NOT_A_TAG = (
     ("a percentile", re.compile(r"^P(?:50|95|99)$"),
      re.compile(r"percentile|median|\btail\b|budget|threshold|profile", re.I)),
 )
+# ONE MEANING ON THAT TABLE READS THE WHOLE RUN RATHER THAN THE WINDOW. A licence identifier is
+# named by the word licence, license or dedication standing anywhere in the prose that carries it:
+# a run about licensing names the licence and then uses the alias, and the alias commonly ends the
+# sentence while the word that identifies it opened one. A sixty-character window read a message
+# that said "licence" twice and still could not see either, and the licence name was traded for a
+# paraphrase to get the run green. Every other entry keeps the window, because a station id or a
+# quadrant IS its neighbourhood; a licence id is not.
+TAG_CONTEXT_IS_THE_WHOLE_RUN = ("a public-domain dedication",)
 # A token that IS an id is named by the noun that says so, immediately before it
 # with one space between. The test is on the TOKEN. A window wide enough to hold
 # a sentence excuses any token standing NEAR the word, and on a corpus about
@@ -759,8 +767,11 @@ def work_item_tags(text):
         compound = start >= 2 and text[start - 1] == "-" and text[start - 2].isalpha()
         if all(CORPUS_ID.match(part) for part in parts):
             continue
-        if not compound and all(any(token.match(part) and near.search(window)
-                                    for _, token, near in TAG_NOT_A_TAG) for part in parts):
+        if not compound and all(
+                any(token.match(part)
+                    and near.search(text if meaning in TAG_CONTEXT_IS_THE_WHOLE_RUN else window)
+                    for meaning, token, near in TAG_NOT_A_TAG)
+                for part in parts):
             continue
         if TAG_ID_NOUN.search(text[:start]):
             continue
