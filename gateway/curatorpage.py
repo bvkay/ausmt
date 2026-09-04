@@ -313,7 +313,7 @@ _HEAD = """<!doctype html>
 # Every curator page loads the shared UI script (delegated data-confirm / data-toggle-big handlers)
 # as an EXTERNAL same-origin script — the strictPages CSP (script-src 'self') silently blocks inline
 # script blocks AND on*-attribute handlers on every /gateway/* page, so inline handlers are dead code
-# That only fails in production.
+# that only fails in production.
 _TAIL = '<script src="/gateway/curator/ui.js" defer></script></body></html>'
 
 

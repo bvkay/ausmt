@@ -33,7 +33,7 @@ def test_related_block_labels_by_level_when_identifies_present(tmp_path):
     assert "Derived from: " not in station, "an identifies row still showed the relation label:\n" + station
     # ---- SURVEY GRID SLOT MAPPING -------------------------------
     # collection -> slot 1, raw_packed -> slot 2. This fixture carries BOTH `collection` and `entire`, so
-    # The drawer-polish COLLISION RULE applies: `entire` is an ALIAS for the Collection
+    # the drawer-polish COLLISION RULE applies: `entire` is an ALIAS for the Collection
     # slot, but the exact `collection` match wins the slot and `entire` falls to the extra-tile bucket -
     # nothing silently dropped, and the header count tallies the SLOT (2 of 6), never both rows.
     tiles = re.findall(r'<div class="prod[^"]*dl-tile"[^>]*>.*?</div></div>', story, re.S)

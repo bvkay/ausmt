@@ -1894,7 +1894,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "D7: each row's action carries its one-line gloss, got " + JSON.stringify(tsBtn("raw_packed").title));
   // THE SCOPE RULE: with no selection the rows price the filtered corpus; a selection
   // re-prices them to exactly the chosen stations, and the scope line says which state the reader
-  // Is in.
+  // is in.
   ok(/^Across 5 filtered stations:$/.test(doc.getElementById("scopeLine").textContent),
     "the scope line must state the filtered-corpus scope, got " + JSON.stringify(doc.getElementById("scopeLine").textContent));
   A.setSelected(["A1"]);

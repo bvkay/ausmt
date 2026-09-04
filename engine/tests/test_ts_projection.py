@@ -23,7 +23,7 @@ def test_the_flag_follows_the_register_for_a_withheld_station():
     rows = [_row()]
     assert station_flag(rows) is True
     # ...while the route detail is EMPTY for the same station: existence survives withholding,
-    # The route does not (the sharpest seam in the workflow)
+    # the route does not (the sharpest seam in the workflow)
     assert route_rows(rows, station_open=False) == {}
 
 

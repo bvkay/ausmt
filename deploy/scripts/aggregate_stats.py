@@ -183,7 +183,7 @@ _LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
 # What is left is the documents About points a programmatic reader at. mtcat.schema.json is the `$id`
 # the MTCAT document declares (engine/schema/mtcat.schema.json), so every validator and every harvester
 # that resolves the schema fetches it: the cleanest machine-consumer signal the corpus has, and the one
-# That was counted nowhere. stations.geojson is the corpus as a vector layer:
+# that was counted nowhere. stations.geojson is the corpus as a vector layer:
 # a GIS user adds it as a layer straight from the URL and the SPA never fetches it, so it belongs on
 # this line for the same reason -- and without it every QGIS reader of the corpus would count nowhere,
 # because a `.geojson` at the data root is in no download family and would fall through to `ignore`.

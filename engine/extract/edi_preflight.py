@@ -72,7 +72,7 @@ WILL_NOT_READ = "will_not_read"      # no code path in AusMT reads this file; it
 # of the read and the file does not open at all.
 #
 # MEASURED, not assumed: each key below was injected into a real EDI with a non-numeric value against
-# The pinned mt_metadata 1.0.9 and observed to RAISE. Keys that looked equally dangerous
+# the pinned mt_metadata 1.0.9 and observed to RAISE. Keys that looked equally dangerous
 # and were observed NOT to raise are deliberately absent -- `station.location.declination.model`,
 # `transfer_function.software.name`, `station.time_period.start` and `provenance.creation_time` all
 # absorb junk quietly, and reporting them fatal would be a false alarm.
@@ -109,7 +109,7 @@ _FATAL_INFO_FIELDS = {
 # published station carries no contact resistance at all.
 #
 # Keyed by the attribute path AFTER `run.<component>.`, with the words the report uses. Every entry
-# Was MEASURED against mt_metadata 1.0.9's Electric/Magnetic models: each one exists,
+# was MEASURED against mt_metadata 1.0.9's Electric/Magnetic models: each one exists,
 # each one accepts "12.5", and each one refuses "12 bananas". That matters because the sentence this
 # table produces blames the units, so it must only ever be said about a field that is really a number
 # and really there. Two plausible-looking names are deliberately ABSENT because the measurement says

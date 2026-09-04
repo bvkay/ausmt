@@ -22,7 +22,7 @@ def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
     # the iframe must be sandbox="allow-scripts" WITHOUT allow-same-origin
     # (opaque origin — the framed submitter JS cannot read the curator cookie/DOM or make credentialed
     # same-origin requests). Failure criterion: fails if allow-same-origin is present, or allow-scripts
-    # Is absent. proven failing: the first pass had the tokens INVERTED
+    # is absent. proven failing: the first pass had the tokens INVERTED
     # (sandbox="allow-same-origin", no allow-scripts) — same origin as the curator AND broken render.
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):
