@@ -1,11 +1,11 @@
 # AusMT gateway image lock: the EXACT transitive closure of gateway/requirements.txt, resolved for
-# linux/amd64 CPython 3.12 (the python:3.12-slim base gateway.Dockerfile builds on). Captured
-# deploy/docker/gateway.Dockerfile installs THIS file, so the shipped image is
+# linux/amd64 CPython 3.12 (the python:3.12-slim base gateway.Dockerfile builds on). Captured by
+# the refresh recipe below. deploy/docker/gateway.Dockerfile installs THIS file, so the shipped image is
 # reproducible: rebuilding the same commit installs the same versions, today and in six months.
 #
 # WHY A COMMITTED LOCK, NOT FLOORS. requirements.txt carries deliberate FLOORS (fastapi>=..., the
-# tested majors), and an image that resolved them fresh on every build would make two builds of the SAME
-# commit could ship different dependency versions and a PyPI release could break the image with no
+# tested majors), and an image that resolved them fresh on every build would let two builds of the SAME
+# commit ship different dependency versions, and a PyPI release could break the image with no
 # repo change. That matters more here than in a typical web app because gateway/upload.py imports
 # starlette.formparsers.MultiPartParser DIRECTLY (a non-public API, see that module's header) to cap
 # a multipart stream by bytes; a floating starlette can move or rename it with no deprecation. The
