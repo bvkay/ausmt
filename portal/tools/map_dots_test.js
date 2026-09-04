@@ -122,7 +122,8 @@ ok(A.hasPosition(null) === false, "a missing station must not crash the predicat
 
 // ---- composition with change 2 ------------------------------------------------------------------
 // Every map object is a station dot now, so the focus dim is one rule over one kind of thing, keyed on the
-// survey. Non-focused must be dimmer, and still VISIBLE (Option A keeps the national context on the map).
+// survey. Non-focused must be dimmer, and still VISIBLE (a dim that hides them takes the national
+// context off the map).
 ok(A.dimStyleFor("Compact", "Compact").fillOpacity > A.dimStyleFor("Spread", "Compact").fillOpacity,
   "the focus dim must dim a non-focused survey");
 ok(A.dimStyleFor("Spread", "Compact").fillOpacity > 0,

@@ -568,6 +568,16 @@ RULES = (
           # A licence's numbered clause is the same obligation the section mark names, written out.
           (re.compile(r"(?i)^clause\s+\d"),
            re.compile(r"CC-?BY|CC0|ODbL|Creative Commons|licen[cs]e", re.I)))),
+    # A DESIGN BRIEF AND ITS OPTIONS ARE THE ARGUMENT, NOT THE RULE. "Brief 9, Option A" names the
+    # document a choice was argued in and the arm of it that won; a reader of the code can open
+    # neither, and the line the label stands over already states what holds. It is the same
+    # vocabulary as a ruling or a wave, and it ships: one of these stood in bytes every visitor
+    # downloads. The brief is read wherever it carries a number. The option is read only where it
+    # stands as a LABEL - at the head of a comment, or in front of the colon that introduces what
+    # was chosen - because "option A or B" is ordinary prose about a choice the code still offers.
+    Rule(re.compile(r"(?<![\w-])brief\s+\d+(?![\w-])", re.I), "design-history vocabulary"),
+    Rule(re.compile(r"(?i:\Aoption\s+[A-Z](?![\w-]))|(?i:option)\s+[A-Z](?![\w-])[)\]\s]*:"),
+         "design-history vocabulary"),
     Rule(re.compile(r"YOUR-"), "placeholder"),
     Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
     Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),

@@ -1191,8 +1191,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "ruling 2: fitBounds must be padded right by the drawer width, got: " + JSON.stringify(_fitOpts));
   ok(_fitOpts.paddingBottomRight[1] === 0 && _fitOpts.paddingTopLeft[0] === 0,
     "ruling 2: only the RIGHT edge is padded (the drawer covers no other edge), got: " + JSON.stringify(_fitOpts));
-  // (b) OPTION A: other surveys stay VISIBLE but dimmed. The rejected behaviour filtered them off the map,
-  //     so the strongest pin is that the visible station set is UNCHANGED by focusing one survey.
+  // (b) OTHER SURVEYS STAY VISIBLE, DIMMED. A dim that filtered them off the map would be a
+  //     different behaviour, so the strongest pin is that the visible station set is UNCHANGED
+  //     by focusing one survey.
   ok(A.visIds().length === 5,
     "ruling 2 (Option A): focusing a survey must NOT remove other surveys from the map, got " + A.visIds().length);
   ok(A.dimFocus() === "Alpha Survey", "ruling 2: focusing must record the focused survey, got: " + JSON.stringify(A.dimFocus()));
@@ -2274,7 +2275,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!recentStrip.classList.contains("hidden"), "#recentStrip must be shown when the window has a survey");
   // The strip is a CONCISE HORIZONTAL LINE, not a block. It was a heading over a
   // column of rows in a full-width container, which on a wide screen was a large sparse box of mostly
-  // empty space sitting between the reader and the catalogue. Option A is one wrapping line:
+  // empty space sitting between the reader and the catalogue. The strip is one wrapping line:
   // "Recently added: Vulcan 2022 (interpunct) AusLAMP Queensland Phase 3". Pins moved with the markup per
   // contract section 1, ("section N pins move with the markup"); the WINDOW LOGIC above is untouched
   // and its pins are unchanged, which is the point - this commit may only change how the strip reads.
@@ -2403,7 +2404,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // un-scoped tree (the restore hook puts the tree back); mirrors the section-CC tree reset below.
   A.setSidebarMode("browse");
 
-  // THE ABSTRACT LIVES IN THE RECORD, NOT ON THE CARD (brief 4/6). Rendering the survey.yaml abstract as
+  // THE ABSTRACT LIVES IN THE RECORD, NOT ON THE CARD. Rendering the survey.yaml abstract as
   // a 12px muted italic block on every card makes a grid of cards a wall of prose and pushes the facts a
   // reader scans for below the fold. It is absent from the card and stays where a reader who has chosen
   // a survey meets it: the drawer story view here, and the static survey page,
@@ -3328,7 +3329,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C5: the workspace line's station count takes the en-AU thousands separator, got " +
     JSON.stringify(bigSlot.textContent));
 
-  // THE DISCOVERY BAR AS THE PRIMARY FILTER SURFACE (brief 10). Two gaps, one cause: the year-range
+  // THE DISCOVERY BAR AS THE PRIMARY FILTER SURFACE. Two gaps, one cause: the year-range
   // and downloadable-only filters lived in the map rail, and the rail is HIDDEN on the Surveys view, so
   // on the view that is entirely about choosing a survey neither question could be asked at all. They
   // are promoted here, beside the licence and type chips that ask the same kind of question, and the

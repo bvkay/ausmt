@@ -1295,7 +1295,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
 
     def tile(num, lab):
         return f'<div class="cstat"><div class="cnum">{num}</div><div class="clab">{lab}</div></div>'
-    # The FIXED core (brief 13): stations, type, acquisition, period. Every survey answers these in
+    # The FIXED core: stations, type, acquisition, period. Every survey answers these in
     # the same four slots and the same order, so the rhythm is predictable across the corpus; each
     # is still presence-guarded, because a predictable slot is not a licence to invent a value.
     core = [tile(n_stations, "stations")]

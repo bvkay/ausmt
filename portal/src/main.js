@@ -104,7 +104,7 @@ function recentlyAdded(limit){
   out.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.sv<b.sv?1:-1));
   return out.slice(0,limit||3);
 }
-// Brief 9, Option A: ONE concise horizontal line, wrapping - "Recently added: Vulcan 2022 (interpunct)
+// ONE concise horizontal line, wrapping - "Recently added: Vulcan 2022 (interpunct)
 // AusLAMP Queensland Phase 3" - not a heading over a column of rows. See docs: portal internals, main.js.
 function recentlyAddedHtml(entries){
   if(!entries.length)return"";
