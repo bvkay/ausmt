@@ -559,7 +559,7 @@ def test_write_routes_require_session_and_csrf(tmp_path):
 
 
 # ==================================================================================================
-# STAGE-3b FIX ROUND (C)., each red-then-green.
+# STAGE-3b FIX ROUND: the fix blocks below, each red-then-green.
 # ==================================================================================================
 
 # (material) - NUMERIC FIELD TYPE COERCION. The form hands start_year back as the string "2003"; an

@@ -3,9 +3,13 @@ not the mean. The emitted key name must say so: skew_beta_median_deg, never the 
 skew_beta_mean_deg.
 
 NON-VACUOUS failure criterion: this test FAILS against the pre-rename tree, because the build
-emitted "skew_beta_mean_deg" in both station.json and dimensionality.json.: station.json stopped RESTATING the dimensionality call and its skew statistic, because
+emitted "skew_beta_mean_deg" in both station.json and dimensionality.json.
+
+station.json stopped RESTATING the dimensionality call and its skew statistic, because
 the copy beside it travelled without the "screening diagnostic, not an interpretation product"
-caveat that qualifies them. (the station promotion): the call is FOLDED BACK IN, and the caveat and the method
+caveat that qualifies them.
+
+WITH THE STATION PROMOTION the call is FOLDED BACK IN, and the caveat and the method
 string come with it, so the qualification travels with the numbers rather than sitting one file
 away. The sidecar keeps being written byte-unchanged through 1.x because deleting a served
 file is a deprecation, not a refactor. So the two surfaces now state the same thing, and the pin

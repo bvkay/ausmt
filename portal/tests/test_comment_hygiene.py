@@ -1079,14 +1079,55 @@ SUBJECTLESS_SENTENCE = re.compile(
 # A pronoun subject makes that ordinary English ("git carries what was."), so the shape is anchored
 # to the bracket that closes hard in front of the verb.
 ORPHANED_COPULA = re.compile(r"[)\]][ \t]+(?:was|were|is|are|be|been|being)[ \t]*[.;](?:\s|\Z)")
-# Two sentence marks standing together, where the cut took the token that stood between them
-# ("must not both build,;"). A decimal and an ellipsis carry a digit or a further dot after the
-# mark, so neither is this. The second class carries the COLON: where the cut takes the token
-# that introduced a clause, the comma of the phrase in front of it is left hard against that
-# colon ("a production regression,:"), and a class of [.,;] misses it by one character in the
-# same way a rule reading a line of exactly one bracket missed ")." by one. A group that closed
-# before the cut token carries the same scar with its own full stop in between ("anyway).:").
-MARKS_TOGETHER = re.compile(r"[\w)\]][,;][.,;:](?![.\d])|[)\]]\.[:;](?![.\d])")
+# TWO SENTENCE MARKS WITH NOTHING BETWEEN THEM, whatever character stands in front of them. Where
+# the cut takes the token that stood between a mark and the mark of the clause around it, the two
+# are left together and no WORD is missing to a reader: "STAGE-3b FIX ROUND (C)., each
+# red-then-green", "and dimensionality.json.: station.json stopped". Read as a CLASS, any of
+# . , ; : ! ? against any other, because three rounds of naming the pairs one at a time each
+# missed the next one by a single character.
+#
+# Four shapes this tree writes on purpose are not that, and each is named by the origin/main prose
+# that forces it. A decimal and a run of dots: the ellipsis, and the range a comment writes between
+# two bounds. A pair belonging to the TOKENS around it rather than to the sentence: standing
+# between word characters (the accept list ".edi,.h5,.mth5"), or a mark that CLOSES a word and is
+# followed by a list separator ("javascript:, data:," naming two URI schemes, "{name, ror?,
+# roles[]}" naming an optional field, "&#x27;, &#x27;" naming an entity), or standing among the
+# glyphs a legend lists ("the state for a colour-blind
+# READER (check/half/cross/?, not colour alone)"). An operator a comment quotes, which is a mark
+# doubled or the question mark against the colon ("conftest.py::resolve_validator_dir", "${VAR:?}",
+# "block?:{...}"), or any run of three or more marks that is not dots ("remote_ref:!!undefined").
+# And an ABBREVIATION'S dot, which ends a word and not a sentence: "e.g.: if (m.model_doi)",
+# "Kay, B.; Heinson, G.", a numbered list's "1., 2.". That last exemption is the widest and it is
+# a declared hole: a cut that leaves "e.g.:" standing writes the same two characters origin/main
+# writes deliberately, so no shape rule can tell them apart and such a site is read as sense.
+MARK_RUN = re.compile(r"[.,;:!?]{2,}")
+QUOTED_OPERATOR = ("::", ":?", "?:", "??", "!!")
+ABBREVIATION = re.compile(r"(?:\A|[^\w])[A-Za-z0-9]\.\Z")
+
+
+def marks_together(text):
+    """Every pair of sentence marks a cut left standing together, as the matched pairs."""
+    found = []
+    for run in MARK_RUN.finditer(text):
+        body = run.group(0)
+        if set(body) == {"."} or len(body) >= 3:
+            continue
+        for at in range(len(body) - 1):
+            pair, start = body[at:at + 2], run.start() + at
+            before, after = text[:start], text[start + 2:]
+            if before[-1:] == "." or after[:1] in (".", "") or after[:1].isdigit():
+                continue
+            if pair in QUOTED_OPERATOR:
+                continue
+            if before[-1:] == "/":
+                continue
+            if before[-1:].isalnum() and (after[:1].isalnum()
+                                          or (pair[0] in ":;?" and pair[1] in ",;")):
+                continue
+            if pair[0] == "." and ABBREVIATION.search(before + "."):
+                continue
+            found.append(pair)
+    return found
 # THE WORD LEFT HARD AGAINST THE BRACKET THAT CLOSED ITS GROUP. Where the cut takes the citation a
 # bracketed aside was about, the word that introduced it is left standing against the bracket
 # ("as amended by)", "restated for)", "those are)", "(was ro in)"). A stranded preposition closes
@@ -1383,8 +1424,9 @@ def shape_offences(files, root=None):
             if headless:
                 said.append("a sentence opening on a verb with no subject (%s)"
                             % headless.group(1))
-            if MARKS_TOGETHER.search(unquoted(flat)):
-                said.append("two sentence marks with nothing between them")
+            pairs = marks_together(unquoted(flat))
+            if pairs:
+                said.append("two sentence marks with nothing between them (%s)" % pairs[0])
             if (PARTICIPLE_PREPOSITION.search(unquoted(flat))
                     or DEMONSTRATIVE_COPULA.search(unquoted(flat))
                     or COPULA_GROUP.search(unquoted(flat))):
@@ -3286,6 +3328,35 @@ def test_a_run_may_open_on_a_decimal_or_an_ellipsis(tmp_path):
         f = tmp_path / "whole.py"
         f.write_text(body, encoding="utf-8")
         assert not shape_offences([f]), body
+
+
+def test_two_sentence_marks_are_read_as_a_class(tmp_path):
+    """Naming the pairs one at a time missed the next one by a single character three rounds
+    running, so the rule reads the CLASS. What it may not read is the punctuation of a token the
+    prose is naming, an operator a comment quotes, or an abbreviation's dot: each of those is
+    written on purpose in this tree, and the last of them is a declared hole."""
+    for pair, body in (
+            (",;", "# Two overlapping ticks must not both build,; the second is a no-op.\na = 1\n"),
+            (".,", "# STAGE-3b FIX ROUND (C)., each red-then-green.\na = 1\n"),
+            (".:", "# emitted in both station.json and dimensionality.json.: station.json stopped.\na = 1\n"),
+            (",:", "# a production regression,: the gate refuses it.\na = 1\n"),
+            (";.", "# the runner is the only parser;. the gateway never is.\na = 1\n"),
+            ("!,", "# it must NEVER be served!, and the gate says so.\na = 1\n")):
+        f = tmp_path / "broken.py"
+        f.write_text(body, encoding="utf-8")
+        hits = shape_offences([f])
+        assert hits and ("two sentence marks with nothing between them (%s)" % pair) in hits[0], \
+            (pair, hits)
+
+    whole = tmp_path / "whole.py"
+    whole.write_text(
+        "# The vendored copy resolves through conftest.py::resolve_validator_dir, compose keeps a\n"
+        "# ${VAR:?} guard on these two, and the operations are {slug, op, block?:{id, title}}.\n"
+        "# The accept list was '.edi,.h5,.mth5'; the schemes it flags are javascript:, data:, and a\n"
+        "# bare word. The state reads as a glyph (tick/half/cross/?, not colour alone). Cite it\n"
+        "# as Kay, B.; Heinson, G., e.g.: one entry per author, numbered 1., 2., 3.\n"
+        "a = 1\n", encoding="utf-8")
+    assert not shape_offences([whole]), shape_offences([whole])
 
 
 def test_a_sweep_may_not_rewrite_the_expression_a_comment_carries(tmp_path):
