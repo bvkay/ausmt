@@ -390,7 +390,7 @@ esac
 def test_unreadable_surveys_live_git_warns_rather_than_reporting_clean(tmp_path):
     """`git status --porcelain` prints NOTHING and exits non-zero on a dubious-ownership or locked
     index error, and the leg suppressed stderr and read empty-as-clean. That is plausible on this
-    very repo (the gateway writes it as a different uid), and it turned the incident-
+    very repo (the gateway writes it as a different uid), and it turned the
     dirty-checkout guard into a green light.
 
     FAILS IF a git error still reports 'checkout is clean'."""

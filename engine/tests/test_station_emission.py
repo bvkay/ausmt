@@ -19,7 +19,7 @@ What this module pins, all of it read off documents a REAL build wrote:
   * the NEW blocks carry no null and no empty container. This is scoped to runs[] and resources[] on
     purpose: the frozen keys carry legitimate nulls (remote_site, coordinate_qc, the frame rotation
     sources), so the survey-metadata document's corpus-wide rule cannot be imported here.
-  * the leak rejections and, applied to BUILT withheld stubs rather than to a
+  * the leak rejections, applied to BUILT withheld stubs rather than to a
     hand-written fixture, so what is proven closed is the document the corpus actually publishes.
   * No non-exact station's true position reaches any published free text. The per-station mask
     withholds a masked station's OWN note; nothing stops ANOTHER station's note naming it, and the

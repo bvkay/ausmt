@@ -42,7 +42,7 @@ def test_retiring_the_last_verified_row_takes_the_flag_down():
 
 def test_a_verified_level2_row_is_evidence_but_never_a_claim():
     rows = [_row(level="level2")]
-    assert rows[0]["review"] == "verified"  # non-vacuity: the row would project but
+    assert rows[0]["review"] == "verified"  # non-vacuity: only the LEVEL keeps this row out
     assert station_flag(rows) is False
     assert route_rows(rows, station_open=True) == {}
 

@@ -1043,7 +1043,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // CARET CLICK-TARGET: a caret click must NOT toggle the row's checkbox (the rows are
   // label-wrapped, so an unguarded child click would activate the label) — and must collapse/expand.
   // "Australia" sorts before "New Zealand"; find its country row directly in #tree (the shared
-  // kids/firstCountryIdx indices were dropped when the collections group moved out of the tree in).
+  // kids/firstCountryIdx indices do not cover the collections group).
   const ausRow = [...treeEl.querySelectorAll("label.country")]
     .find(r => { const i = r.querySelector("input[data-country]"); return i && i.getAttribute("data-country") === "Australia"; });
   ok(ausRow, "UX5: no Australia country row found in #tree");

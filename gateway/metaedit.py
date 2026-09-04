@@ -161,7 +161,7 @@ def make_collections_job() -> dict:
 
 
 def make_collection_batch_job(operations: list, note: str, today: str) -> dict:
-    """A `collection_batch` edit-job (Stage 3b /-A): the runner applies each per-survey
+    """A `collection_batch` edit-job: the runner applies each per-survey
     collection-block operation, bumps each affected survey's version, appends the ONE shared release
     note, and validates each on a scratch copy — returning each affected survey's patched bytes +
     validator report (it does NOT commit; the gateway's publish.commit_collection_batch does the atomic

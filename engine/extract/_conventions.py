@@ -17,7 +17,8 @@ GATE 1, rotation/frame guard. mt_metadata 1.0.9 RECORDS rotation but never compe
     rotation metadata. The raw-text evidence parse below is therefore load-bearing, not advisory.
 So the gate reads BOTH sources — the TF's _rotation_angle AND a cheap lexical parse of the source
 EDI (ZROT/TROT blocks, SPECTRA ROTSPEC attributes, HMEAS azimuths) — cross-checks them, and
-applies frame. The engine NEVER rotates served data - DETECTION stays, CORRECTION goes:
+applies the frame policy below. The engine NEVER rotates served data - DETECTION stays,
+CORRECTION goes:
   * Arm A - survey-uniform declared angle (ANY magnitude): serve AS STORED, record the angle
     (frame_served="declared-azimuth", declared_azimuth_deg) + a note. The archive respects
     acquisition frames; rotation joins byte-rewriting as a thing the archive does not do. (Absorbs
@@ -32,7 +33,7 @@ applies frame. The engine NEVER rotates served data - DETECTION stays, CORRECTIO
     names the per-period rotation and the fix ("re-export in a single coherent frame").
   * rotation UNKNOWABLE (sentinel/missing angles at data-bearing periods, reader/text disagreement,
     ROTSPEC-vs-azimuth conflict, RHOROT declared rotated while the Z frame is undeclared) -> FAIL:
-    the station is skipped loudly (fail-closed, posture) - never served in an unresolvable frame.
+    the station is skipped loudly (fail-closed) - never served in an unresolvable frame.
   * no declaration at all, or azimuth metadata too inconsistent to be evidence (e.g. the harness
     Tasmania files' HX AZM=180/HY AZM=90 non-orthogonal placeholders) -> serve with the frame
     facts recorded; Gate 2 still checks the convention. Azimuths on the impedance branch are
@@ -300,7 +301,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
     frame recorded in facts) or action="fail" (refuse - per-period frame mixing, or an
     unknowable frame). A survey-uniform declaration of ANY magnitude records and serves;
     per-period ZROT/TROT/ROTSPEC refuses; every FAIL reason names the angles and the fix
-    (fail-closed, posture)."""
+    (fail-closed)."""
     facts: dict = {
         "evidence": {
             "branch": ev["branch"],

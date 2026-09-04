@@ -1162,7 +1162,7 @@ def _sm_designated_identifiers(y: dict) -> list:
     MAPPING designates them - represents[] for case_a (the source identifiers this record is the SAME
     dataset/release as), own_identifiers[] for case_b (the distinct AusMT release's own). Curated order,
     exact duplicates dropped. An absent classification, or the legacy scalar form (unreachable in a
-    validated build since), designates nothing: identifiers[] is absent and every related row is a
+    validated build), designates nothing: identifiers[] is absent and every related row is a
     relationship."""
     ic = y.get("identity_classification")
     if not isinstance(ic, dict):
@@ -2276,8 +2276,8 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                  mask_tipper=False, mask_impedance=False):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
-    mt_metadata is the SOLE engine (the dependency-free regex extractor + _spectra were retired in
-    reader). The TF object is read ONCE and reused for the record, components and processing info;
+    mt_metadata is the SOLE engine, and the only extractor on this read path. The TF object is
+    read ONCE and reused for the record, components and processing info;
     the raw EDI text is read once more for the kept coord-QC + processing-metadata helpers. The
     `extractor` param is retained for call-site compatibility and is ignored (mt_metadata is the sole
     engine).

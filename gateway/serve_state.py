@@ -28,7 +28,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # The two state files the reconcile agent and the button share, under the gateway state dir
-# (cfg.state_dir == /gw/state; host: $AUSMT_DATA_DIR/gateway/state). Names fixed by.
+# (cfg.state_dir == /gw/state; host: $AUSMT_DATA_DIR/gateway/state). The two names are fixed:
+# the agent and the button must spell them identically.
 REQUEST_FILENAME = "rebuild.request"
 STATUS_FILENAME = "reconcile-status.json"
 # The ops floor's host-written state file. Written by the alert timer

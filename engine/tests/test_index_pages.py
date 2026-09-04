@@ -145,7 +145,7 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 
 
 # The fetched assets a page in this tier may carry, restated (not weakened) per
-# LANE-CONTRACT-BRAND-ASSETS.md The rule was "no src at all", which was the right rule while the
+# LANE-CONTRACT-BRAND-ASSETS.md. The rule was "no src at all", which was the right rule while the
 # pages had no identity mark: it kept out build-time reads, inlined copies and every external fetch.
 # The marks make an exception worth stating precisely rather than loosening the rule to
 # "images are fine": same-origin files, served by the portal image, cached once for the whole site.
@@ -703,7 +703,7 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # footer must resolve to, and whether the header's right status slot carries anything. The footer
 # column must NOT differ per row, which is exactly what the one-footer rule settles; it is
 # kept as a column, one value repeated, so a re-divergence shows up here as rows that disagree.
-# LANE-ADDENDUM-HUB-FEEDBACK.md The tokens asserted below are the SPA header's own
+# LANE-ADDENDUM-HUB-FEEDBACK.md. The tokens asserted below are the SPA header's own
 # (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
 # rather than read across, because the engine image ships engine/ and contract/ and cannot see
 # portal/ at all, and a test that reaches out of the image is a test the image cannot run.
@@ -989,7 +989,7 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
 
 
 def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
-    """Brand-assets workflow This tier shipped no icon link at all, so every entity page asked for
+    """Brand-assets workflow. This tier shipped no icon link at all, so every entity page asked for
     /favicon.ico and got a 404 on every visit. FAILS IF a page kind loses either link, or if either
     href stops being a same-origin portal path (an absolute URL here would be an external fetch on
     2,655 documents, which is exactly what this tier forbids)."""

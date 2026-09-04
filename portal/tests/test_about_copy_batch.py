@@ -433,7 +433,7 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
 # beside it.
 #
 # The page is eight sections and nothing else. "This build" must not close it WITHOUT a number, as a
-# colophon rather than a ninth answer to "what is this site"; it has been deleted it. Its two
+# colophon rather than a ninth answer to "what is this site"; it is not on the page. Its two
 # paragraphs that were not build identity moved into the numbered sections that own their subjects,
 # and the route to the citable releases moved into section 8, so nothing the colophon carried is
 # lost except the running build's identity, which is what the rule excludes.

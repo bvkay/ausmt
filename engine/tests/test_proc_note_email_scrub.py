@@ -1,7 +1,7 @@
 """An email address in a source EDI's raw >INFO block must never survive into the
 DERIVED, publicly-consumed processing_note (station.json processing.note is NOT licence-gated), and
 must be surfaced as a loud per-survey WARNING so a curator can look at the ORIGINAL upstream file
-(which this build never mutates --). This is the build_portal.process_edis integration point;
+(which this build never mutates). This is the build_portal.process_edis integration point;
 the regex-only unit coverage for proc_note itself lives in test_coords_of.py (stack-less workflow).
 """
 import re

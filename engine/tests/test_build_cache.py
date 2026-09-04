@@ -1209,7 +1209,7 @@ def test_key_binds_edi_sha_survey_digest_and_kind(tmp_path):
 
 def test_key_binds_engine_commit_libs_and_contract(tmp_path):
     """FAILS IF: changing the engine commit, a library version, or the contract digest does not change
-    the derived key (the coarse salt fields,-)."""
+    the derived key (the coarse salt fields)."""
     args = dict(edi_sha="s", survey_digest="y", kind="xml")
     base = _bc(root=tmp_path).key(**args)
     assert base != _bc(root=tmp_path, engine_commit="commitB").key(**args), "key ignores engine commit"

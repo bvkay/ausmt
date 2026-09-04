@@ -176,7 +176,7 @@ class BuildCache:
             # counted as a miss, never a replay of a stale-shape parse. One full re-derive on the first
             # build lands; then warm again. (The contract_digest below ALSO shifts on the
             # column append; the tag bump is the explicit, self-documenting belt-and-suspenders — same
-            # discipline as) Old-format entries age out via the prune.
+            # discipline.) Old-format entries age out via the prune.
             # v5 = the served-XML CONTENT changed corpus-wide: the EMTF-XML Copyright block now
             # carries the survey's real licence-derived release_status + conditions_of_use instead of
             # mt_metadata's default "Unrestricted Release"/"may be copied freely" boilerplate (a truth
