@@ -1222,10 +1222,10 @@ def signed_tokens(text):
 
 
 # THE RANGE A CUT SIGN LEFT STANDING, which is the half of that guard one tree can hold on its own.
-# A quadrant written -180..-90 loses its leading minus to a cut and becomes 180..-90, a range whose
-# lower bound stands above its upper: it states no interval at all, and the sentence around it is
-# untouched, so no vocabulary or shape rule can see it. Both bounds are read as NUMBERS, so a range
-# of identifiers, of commit shas or of column positions is never one.
+# A quadrant written `-180..-90` loses its leading minus to a cut and becomes `180..-90`, a range
+# whose lower bound stands above its upper: it states no interval at all, and the sentence around
+# it is untouched, so no vocabulary or shape rule can see it. Both bounds are read as NUMBERS, so a
+# range of identifiers, of commit shas or of column positions is never one.
 RANGE_BOUNDS = re.compile(r"(?<![\w.])(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)(?![\w.])")
 
 
