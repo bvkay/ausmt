@@ -41,7 +41,7 @@ def test_select_all_clears_drawn_shapes():
 
 
 def test_selection_hint_copy_is_single_sourced():
-    # The empty-state hint used to be typed twice (index.html markup default + the filters.js
+    # The empty-state hint must not be typed twice (index.html markup default + the filters.js
     # ternary), so a copy edit had to touch both or they diverged. The markup owns it; filters.js
     # reads it at load.
     literal = "take everything that passes the filters."

@@ -178,7 +178,7 @@ def test_the_station_record_carries_the_section_of_record(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------
-# the pre-flight vocabulary: AusMT rescues this class, so it is no longer terminal
+# the pre-flight vocabulary: AusMT rescues this class, so it is not terminal
 # --------------------------------------------------------------------------------------------
 
 def test_preflight_calls_a_refused_dataid_needs_repair_not_will_not_read():

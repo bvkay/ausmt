@@ -116,7 +116,7 @@ def test_undecodable_secret_fails_closed():
 
 
 def test_empty_or_blank_secret_fails_closed():
-    """Verify against an empty or whitespace-only secret returns None (F2). An empty base32 string
+    """Verify against an empty or whitespace-only secret returns None. An empty base32 string
     decodes to b'' - a VALID HMAC key - so without the empty-secret guard verify would compute an
     empty-key code and MATCH it. This pin is MUTATION-PROOF: it feeds verify the exact code an
     empty-key HMAC produces, so removing the guard in _decode_secret makes verify return the matched

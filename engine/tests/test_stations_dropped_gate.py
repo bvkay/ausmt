@@ -121,7 +121,7 @@ def test_a_pass_states_how_many_stations_the_build_actually_dropped(clean_build,
 
 def test_verify_fails_naming_the_survey_and_the_file(clean_build, tmp_path):
     """The defect itself. FAILS IF the deploy gate blesses a build that dropped a station nobody
-    ruled on: that is what it does today, for every drop path the build has."""
+    decided on: that is what it does today, for every drop path the build has."""
     out, slug = _with_one_drop(clean_build, tmp_path)
     r = _verify(out)
     assert r.returncode != 0, r.stdout + r.stderr

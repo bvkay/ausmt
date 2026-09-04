@@ -219,7 +219,7 @@ def test_the_cards_corner_mark_is_a_generated_export_the_gate_holds():
     from brand.json's geometry by png_mark, listed in the output index, and compared by --check.
 
     It exists at all because the 1024 px mark is a third of a megabyte to show at 42 px, and the
-    engine image would have to carry that. The export size is a whole multiple of the drawn height,
+    engine image has to carry that. The export size is a whole multiple of the drawn height,
     so the card's resample is a clean box rather than an arbitrary ratio.
 
     Teeth: the gate must go red when this one file is perturbed, which is what proves it is compared

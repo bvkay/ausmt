@@ -94,9 +94,9 @@ def _sweep_vectors() -> list:
 # Wrap180 / trueYx / inQ1 / inQ3 parity (executable - Node vs phaseqc)
 # --------------------------------------------------------------------------------------------------
 def test_js_wrap180_trueyx_quadrant_parity_sweep(tmp_path):
-    """EXECUTABLE PARITY (F1). The extracted STATIONS_JS wrap180/trueYx/inQ1/inQ3 must agree EXACTLY
+    """EXECUTABLE PARITY. The extracted STATIONS_JS wrap180/trueYx/inQ1/inQ3 must agree EXACTLY
     with phaseqc over the full ±360 sweep + seam values. FAILS IF the JS modulo/band semantics diverge
-    from the Python spec anywhere in the domain — in particular the truncated-% bug: JS `%` keeps the
+    from the Python spec anywhere in the domain - in particular the truncated-% bug: JS `%` keeps the
     dividend's sign, so a negative stored t[4] (exactly the wrong-convention stations this feature
     exists to catch) unwraps to the wrong value and flips the verdict (shown red against the pre-fix
     JS: 362 trueYx mismatches, verdict flip at stored≈−0.05)."""
@@ -138,11 +138,11 @@ process.stdout.write(JSON.stringify(out));
 # URL construction parity (executable - absolute /data/... URLs, tricky slug/id encoding)
 # --------------------------------------------------------------------------------------------------
 def test_js_data_urls_absolute(tmp_path):
-    """EXECUTABLE URL PIN (F2). The extracted STATIONS_JS dataUrl/stationJsonUrl must produce the
-    exact expected ABSOLUTE strings for a tricky slug/id (space, plus, hash — hash unencoded would
+    """EXECUTABLE URL PIN. The extracted STATIONS_JS dataUrl/stationJsonUrl must produce the
+    exact expected ABSOLUTE strings for a tricky slug/id (space, plus, hash - hash unencoded would
     truncate the URL at a fragment). ALSO asserts (source-level) that EVERY fetchJson target in the
-    JS is absolute (/data/... or a variable built from these helpers). FAILS IF any fetch is
-    page-relative — from /gateway/curator/survey/<slug> a relative 'data/...' resolves to
+    JS is absolute (data/... or a variable built from these helpers). FAILS IF any fetch is
+    page-relative - from /gateway/curator/survey/<slug> a relative 'data/...' resolves to
     /gateway/curator/survey/data/... → 404 → the whole Stations tab is dead (the shipped pre-fix
     state, shown red)."""
     js = curatorpage.STATIONS_JS
@@ -173,7 +173,7 @@ process.stdout.write(JSON.stringify(out));
 # Classify (slack + median) parity (executable - series semantics, seam-straddling medians)
 # --------------------------------------------------------------------------------------------------
 def test_js_classify_median_parity(tmp_path):
-    """EXECUTABLE SERIES PARITY (F4d). The extracted STATIONS_JS classify (slack-widened per-point
+    """EXECUTABLE SERIES PARITY. The extracted STATIONS_JS classify (slack-widened per-point
     flags + seam-mapped median + median-vs-band verdict) must agree exactly with
     phaseqc.classify_series over boundary-heavy series, including a yx cluster straddling the ±180
     seam (where a naive median of (−180,180]-wrapped values is catastrophically wrong). FAILS IF the
@@ -360,7 +360,7 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
     on-disk <slug>/survey.yaml package exists — so no non-fixed-point slug is reachable. The literal
     every-validate_slug-legal-slug form of the gate is FALSE; such
     a slug fails EMPTY (zero rows — the honest no-stations message), never WRONG (a sibling's rows).
-    FAILS IF the engine's slug normalisation drifts so a produced slug is no longer a fixed point
+    FAILS IF the engine's slug normalisation drifts so a produced slug is not a fixed point
     (the prefix join would then silently blank that survey's Stations tab), or a fixture-tree
     package declares a non-fixed-point slug."""
     import importlib
@@ -486,7 +486,7 @@ process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(
     assert any(g == "declared-zero · no rotation declared" for g in got), got
     # Synthetic engine-shaped variants exercise the OTHER branches (values in the engine's own
     # field vocabulary; the real corpus is all-clean so cannot reach them). The third is the
-    # C25-V3 F2 panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances) —
+    # Panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances),
     # tipper_declared_azimuth_deg is emitted by the engine ONLY when divergent, so its presence
     # must surface a 'tipper declared azimuth' part.
     variants = [{"frame_served": "declared-zero", "derotated": True,

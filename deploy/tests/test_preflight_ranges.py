@@ -13,7 +13,7 @@ gateway container start (fail_closed_startup). This suite pins the two gaps that
      interpreter (config.py is stdlib-only, so it imports fine).
 
   2. THE RUNNER (gateway/runner/runner.py::RunnerConfig.from_env) reads AUSMT_JOB_TIMEOUT_S and
-     AUSMT_MAX_UPLOAD_MB - the same knobs the gateway floors - but historically int'd them with no
+     AUSMT_MAX_UPLOAD_MB - the same knobs the gateway floors - but int'ing them with no
      floor, so a zero was accepted where the gateway rejects it. from_env now fails closed (SystemExit)
      on a sub-1 value, identically to the gateway.
 

@@ -29,7 +29,7 @@ def _load_sync():
 
 def _load_vendored_validator():
     """Import the committed vendored validate_survey.py so its orcid_checksum_ok can be exercised
-    against the shared ORCID vectors (M2). Stdlib+optional-yaml only — imports in the gateway env."""
+    against the shared ORCID vectors. Stdlib+optional-yaml only - imports in the gateway env."""
     spec = importlib.util.spec_from_file_location("vendored_validate_survey", _VENDORED_VALIDATOR)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

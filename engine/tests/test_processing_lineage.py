@@ -222,7 +222,7 @@ def test_station_json_states_the_dimensionality_call_with_its_caveat(tmp_path):
         assert diag["method"] == "phase-tensor (Caldwell 2004)", diag
         assert diag["note"] == "screening diagnostic, not an interpretation product", diag
         assert "skew_beta_mean_deg" not in diag, "the statistic is a median; the key must say so"
-        # the sidecar keeps being written byte-unchanged (D14) and states the same call
+        # the sidecar keeps being written byte-unchanged and states the same call
         dim = json.loads((base / st / "dimensionality.json").read_text(encoding="utf-8"))
         assert dim["classification"] == diag["classification"], (dim, diag)
         assert dim["skew_beta_median_deg"] == diag["skew_beta_median_deg"], (dim, diag)

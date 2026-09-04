@@ -106,7 +106,7 @@ def test_portal_config_omitting_schema_version_still_stamps_the_current_version(
     """A readable portal config that OMITS portal.schema_version must stamp the version the served
     schema declares, not a stale one.
 
-    build_portal used to carry THREE independent literal defaults for this single value: the
+    build_portal must not carry THREE independent literal defaults for this single value: the
     no-config/unreadable-config default in load_portal_config, its parsed-config default, and the
     emitter's own p.get fallback. All three now read MTCAT_SCHEMA_VERSION, generated from the schema's
     own title, so the value has one home; engine/tests/test_mtcat_version_parity.py pins every surface

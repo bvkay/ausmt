@@ -1,6 +1,6 @@
 """Kind=time_series rows on station.json: the archive's bytes, described but never re-hosted.
 
-A2 projects the verified-resource register through the ONE internal model (`station_document`) as
+The engine projects the verified-resource register through the ONE internal model (`station_document`) as
 resource rows that carry a ROUTE and nothing local: `access_url` on the canonical NCI fileServer
 host, `repository`, the closed `processing_level`/`packaging` vocabularies crosswalked out of the
 station concepts, the D19 role axes, and the R9 fieldnote naming the day the CRAWLER read a 200.
@@ -9,7 +9,7 @@ There is no `path`, no checksum and no `service_urls`: AusMT hands the reader of
 Four gates decide whether a row exists at all, and each is pinned separately because each fails
 differently:
 
-  * `review: verified` (D9). A pending row is an ADJUDICATION QUEUE entry, and best-guess attachment
+  * `review: verified`. A pending row is an ADJUDICATION QUEUE entry, and best-guess attachment
     of a file to a station is silent scientific error; a retired row (D17) is evidence of a resource
     that ceased to exist. Neither projects.
   * `level != level2`. NCI's level_2 tree holds transfer functions, not time
@@ -194,7 +194,7 @@ def test_a_derived_row_links_to_the_runs_this_record_publishes(built_with_runs):
 
 
 def test_the_fieldnote_names_the_crawl_and_not_the_build(built):
-    """R9 as amended by D18: rule 14 forbids a network call inside the build, so a build cannot
+    """As amended by rule 14 forbids a network call inside the build, so a build cannot
     say it verified anything. The date is the crawler's, carried through unchanged."""
     for row in _rows(_station(built, "example-survey", "EXAMPLE01")):
         assert row["note"] == "verified against NCI THREDDS on 2026-08-24", row
@@ -218,7 +218,7 @@ def test_only_the_hand_off_row_states_a_size(built):
 # ---- what never projects -------------------------------------------------------------------------
 
 def test_a_verified_level2_row_projects_nothing(built):
-    """Ruled. The fixture register carries a VERIFIED level2 row, so this is the
+    """The fixture register carries a VERIFIED level2 row, so this is the
     exclusion rule under test and not a corpus that happens to hold no level_2 files."""
     yaml = pytest.importorskip("yaml")
     register = yaml.safe_load((TS_INDEX / "example-survey" / "ts-index.yaml").read_text(encoding="utf-8"))
@@ -300,7 +300,7 @@ def built_masked(tmp_path_factory):
 
 
 def test_a_coordinate_gated_station_gets_no_route(built_masked):
-    """The C1 gate, reusing the SAME two scalars the byte gate ANDs rather than a parallel check: a
+    """The access gate, reusing the SAME two scalars the byte gate ANDs rather than a parallel check: a
     generalised or position-withheld station's raw time series carries the position the mask
     withholds, so it is excluded even though its survey is open and its register row is verified."""
     c42 = _c42()
@@ -311,7 +311,7 @@ def test_a_coordinate_gated_station_gets_no_route(built_masked):
         assert _rows(docs[station]) == [], docs[station].get("resources")
 
 
-# ---- ts_access.json, the route-detail boot artifact (A5) ------------------------------------------
+# --- ts_access.json, the route-detail boot artifact ------------------------------------------
 
 def _ts_access(out):
     """The emitted artifact, or None when the build wrote none (which is itself an assertion)."""
@@ -322,7 +322,7 @@ def _ts_access(out):
 def test_ts_access_carries_bytes_and_url_path_per_open_station_and_level(built):
     """`{ausmt_id: {level: {bytes, url_path}}}`. station.json is never fetched on navigation
     (build_portal:5369-5370), so this is the only artifact that can carry the archive's route into a
-    manifest the portal builds (D3). `url_path` is the archive's own string VERBATIM, which is the
+    manifest the portal builds. `url_path` is the archive's own string VERBATIM, which is the
     form that identifies the file; the encoding happens where it becomes a URL, never in storage."""
     doc = _ts_access(built)
     assert doc, "the fixture register projects three routes, so the artifact must exist"
@@ -487,8 +487,8 @@ def test_a_build_with_no_register_writes_no_artifact_at_all(tmp_path):
 
 
 def test_a_coordinate_gated_station_is_absent_from_the_artifact(built_masked):
-    """R5 stated in the artifact: suppression lives in RESOLUTION, so a masked station is not in the
-    file at all. Membership IS the guard here - the shape carries route detail by design (D3)."""
+    """Stated in the artifact: suppression lives in RESOLUTION, so a masked station is not in the
+    file at all. Membership IS the guard here - the shape carries route detail by design."""
     c42 = _c42()
     ids = {json.loads(p.read_text(encoding="utf-8"))["station"]:
            json.loads(p.read_text(encoding="utf-8"))["ausmt_id"]

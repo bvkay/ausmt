@@ -1,4 +1,4 @@
-"""C45 D2/D5: access-log masked-at-edge config pin + the portal promise-text consistency pin.
+"""Access-log masked-at-edge config pin + the portal promise-text consistency pin.
 
 The load-bearing privacy requirement is that the CLIENT ADDRESS IS MASKED AT WRITE TIME so a full IP
 never touches disk. The ideal proof is a LIVE Caddy writing a log line whose address field is
@@ -12,7 +12,7 @@ truncated (red-then-green vs an unfiltered block). This dev/CI harness has no `c
     file writer and the shipped container path (/var/log/caddy) is unwritable to an unprivileged
     user; a companion meta-pin proves the redirect did not turn the leg into a rubber stamp;
   * the PROMISE-CONSISTENCY PIN checks the shipped portal/index.html text matches the logging
-    behaviour keywords (truncate/mask at the edge, no cookies) and no longer makes the now-false
+    behaviour keywords (truncate/mask at the edge, no cookies) and does not make the now-false
     absolute "no IPs stored" claim.
 
 The live masked-log-LINE leg (start caddy, hit it, assert the on-disk line is truncated) is UBUNTU/CI
@@ -171,7 +171,7 @@ def test_logs_volume_is_mounted_on_portal():
 def test_portal_promise_matches_logging_behaviour():
     """PROMISE-CONSISTENCY PIN. The privacy paragraph in portal/about.html section 4 matches the
     logging behaviour: it states IPs are TRUNCATED/MASKED at the edge, keeps only aggregate counts, and
-    no cookies — and it no longer makes the now-FALSE absolute 'no IPs stored' claim. FAILS IF the
+    no cookies, and it does not make the now-FALSE absolute 'no IPs stored' claim. FAILS IF the
     public promise and the implementation diverge (a public commitment must not lie)."""
     text = _PROMISE.read_text(encoding="utf-8").lower()
     assert "no ips stored" not in text, \

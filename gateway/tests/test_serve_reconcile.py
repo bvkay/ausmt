@@ -180,7 +180,7 @@ def test_rebuild_unwritable_state_dir_503(tmp_path):
 
 
 # ---- panel rendering on the SERVE-STATE screen -------------------------------------------------
-# C43 FR2-1: the serve-state panel was REMOVED from the queue page
+# The serve-state panel does not belong on the queue page
 # — the dedicated /gateway/curator/serve screen (which embeds render_serve_panel) + the ever-present
 # drift chip own the served-vs-published job now. These panel-render pins MOVE with the panel to its
 # new home /serve (checked against test_c43_stage2b_ops.py: that file pins the ops floor / sync strip
@@ -253,7 +253,7 @@ def test_published_head_via_git_seam_on_shell_and_serve(tmp_path):
     """The server-side published HEAD comes from the injected git seam (the publish flow's runner). It
     is surfaced on EVERY shelled page by the context-bar drift chip AND on the serve screen's panel;
     with a seam returning a known short sha the page shows it, with a failing seam it shows
-    'unavailable' and does NOT 500. (C43 FR2-1: the queue no longer carries the panel, but the drift
+    'unavailable' and does NOT 500. (C43 FR2-1: the queue does not carry the panel, but the drift
     chip carries the published HEAD hub-wide, so the queue page still reflects the seam.) FAILS IF: the
     git seam result is not reflected, or a git error 500s the page."""
     async def _body():

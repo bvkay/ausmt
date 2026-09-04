@@ -5,7 +5,7 @@ sources widget is GONE.
 
 The schema key stays READABLE — the engine keeps reading sources[] until the ausmt follow-up (§9.3 note) —
 so a survey that still carries a sources[] list must not have it silently dropped the next time a curator
-saves an unrelated change. Because sources is no longer a widget section, build_section_patch never
+saves an unrelated change. Because sources is not a widget section, build_section_patch never
 assembles it, so it is never entered into ANY patch and apply_patch touches nothing: byte-preserved on disk.
 
 This mirrors test_editor_retired_identifiers_roundtrip.py. The two unit assertions are RED before the fix

@@ -274,7 +274,7 @@ def test_the_cache_format_tag_records_the_parse_product_shape_change(tmp_path):
 
 def test_non_channel_dotted_keys_never_become_channels():
     """The named-components rule is an ALLOW-LIST over the known component families. Any dotted
-    run.<x>.<y> key used to be promoted to a channel, so a structured non-channel path like
+    run.<x>.<y> key must not be promoted to a channel, or a structured non-channel path like
     run.acquired_by.author fabricated an acquired_by channel row in the citable station.json
     (the schema types `component` as a free string, so nothing downstream refused it)."""
     d = rf.run_facts("run.acquired_by.author = A. Person\n"

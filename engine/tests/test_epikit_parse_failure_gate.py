@@ -87,7 +87,7 @@ def test_the_build_still_exits_zero_and_records_the_refusal(tmp_path):
 
 def test_verify_fails_naming_the_file_the_reader_refused(tmp_path):
     """The defect itself. FAILS IF the deploy gate blesses a build that silently lost a station:
-    that is what it does today, and it is how nine Roxby stations would have reached a green swap."""
+    that is what it does today, and it is how nine Roxby stations reach a green swap."""
     surveys, broken = _survey_with_one_unreadable_file(tmp_path)
     out = tmp_path / "out"
     assert _build(surveys, out).returncode == 0

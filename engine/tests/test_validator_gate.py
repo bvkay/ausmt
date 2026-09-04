@@ -18,7 +18,7 @@ sys.path.insert(0, str(REPO / "extract"))
 sys.path.insert(0, str(REPO))
 import build_portal  # noqa: E402
 
-# C35b/D3 (review F7) + amendment D3.1: the
+# (review F7) +.1: the
 # validator resolves via the FOUR-arm environment enumeration recorded in
 # maintainer/C35b-GitTruthDesign.md §D3.1. The validator is stdlib-only import plumbing here
 # (_load_validator imports the module, no mt_metadata), so the vendored copy resolves in the
@@ -132,7 +132,7 @@ def test_env_var_path_resolves_real_validator(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------------
-# C35b/D3.1 falsifiability — both new arms of the environment enumeration must be reachable and
+# Falsifiability: both arms of the environment enumeration must be reachable and
 # distinct (Invariant 10: a skip arm that could swallow a real broken checkout would be vacuous).
 # _repo_root is the seam: point it at a scratch topology, never at the real tree.
 # --------------------------------------------------------------------------------------------------

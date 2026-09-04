@@ -27,7 +27,7 @@ from gateway.tests.conftest import (
 # a map with a null (organisation.ror), repeatable publications (dict form) / funding / instruments,
 # a full identifiers map, time_series with a levels list, access, processing, collection, and a care
 # block (advanced-JSON-only section). An unknown key + a comment prove the round-trip fidelity is
-# unbroken by the widget rework. A2: it ALSO keeps the two RETIRED flat credit keys on disk, which
+# unbroken by the widget rework. it ALSO keeps the two RETIRED flat credit keys on disk, which
 # the editor now models with nothing - so this fixture doubles as the pre-migration-corpus tolerance
 # proof (they must round-trip byte-clean through every unchanged submit).
 RICH_SURVEY = """\
@@ -257,7 +257,7 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             assert 'name="s_organisation_name"' in body
             assert 'name="s_organisation_ror"' in body
             assert 'name="s_access_level"' in body and "<select" in body
-            assert 'name="s_access_coordinates"' in body  # C42 coordinate-access <select>
+            assert 'name="s_access_coordinates"' in body  # Coordinate-access <select>
             assert 'name="s_access_embargo_until"' in body and 'type="date"' in body
             assert 'name="c_time_series_levels_available_raw_packed"' in body  # checkbox
             # CONTRIBUTOR-CREDIT-SPEC (§6): the unified People & credit panel replaces the four
@@ -310,7 +310,7 @@ def test_empty_optional_sections_render_empty_widgets_with_placeholders(tmp_path
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             body = (await client.get("/gateway/curator/edit/demo-survey-2026")).text
-            # Absent sections still render their widgets (empty), with example placeholders. IDCONS D2:
+            # Absent sections still render their widgets (empty), with example placeholders:
             # the flat dataset_doi input is RETIRED; the identifiers surface now renders project_raid +
             # the survey/platform instrument PID, and a dataset-level DOI is a typed related_identifiers row.
             assert 'name="s_identifiers_project_raid"' in body
@@ -618,7 +618,7 @@ def test_editor_js_route_and_no_inline_js(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# C42 coordinate-access <select>: render pin + end-to-end diff-minimality
+# Coordinate-access <select>: render pin + end-to-end diff-minimality
 # --------------------------------------------------------------------------------------------------
 def test_coordinate_widget_renders_options_with_current_value_selected():
     """RENDER PIN: the coordinate-access <select> offers the allowed options with the stored value

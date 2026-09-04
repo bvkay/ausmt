@@ -1160,7 +1160,7 @@ def test_the_survey_csv_blanks_the_country_cell_it_never_measured():
 
 def test_the_country_table_says_api_requests_joined_it_later(tmp_path):
     """GEO SCOPE SEAM PIN. The caption says the map counts downloads plus visits plus API requests,
-    and it does, NOW. The map is cumulative, and API requests used to be the one counted class with no
+    and it does. The map is cumulative, and API requests are the youngest counted class to carry
     geography at all, so on a box with days folded before that change the caption describes only the
     later part of its own map. The table must say so where it is true, and must not say it where it is
     not. FAILS IF the seam goes unstated, or if a box with no such history carries the note anyway."""
@@ -1224,7 +1224,7 @@ def test_no_disclosure_points_at_a_note_that_is_not_on_the_page(tmp_path):
     quarterly table names the months", but that note is built from the THREE months the quarterly
     table shows while the disclosures citing it fire off a scan of every retained month, which the
     aggregator never prunes. Once a second-seam month ages out of the three-month window the citation
-    points at a note the page no longer renders, and the reader is sent to nothing.
+    points at a note the page does not render, and the reader is sent to nothing.
 
     FAILS IF any text on the page cites the quarterly note while that note is absent. The fixture is
     exactly that shape and the assertions below prove it is not vacuous: the country-table seam note
@@ -1448,7 +1448,7 @@ def test_the_monthly_country_csv_has_one_row_per_month_and_country(tmp_path):
 def test_the_country_csv_leaves_an_unmeasured_cell_empty_rather_than_zero(tmp_path):
     """COUNTRY EXPORT HONESTY PIN. The detail is forward-only, so a (month, country) the fold counted
     before it existed has no download figure. This file is what a funding report is built from, and a
-    zero there outlives the screen that would have said 'not measured' -- every spreadsheet reads an
+    zero there outlives the screen that says 'not measured' -- every spreadsheet reads an
     empty cell as missing and a zero as measured. FAILS IF an unmeasured cell exports as 0, or if the
     combined request count is blanked along with it."""
     async def _body():
@@ -1621,9 +1621,9 @@ def test_the_bulk_line_does_not_claim_the_export_produces_a_citation_pack(tmp_pa
 
 
 def test_the_screen_states_the_one_thing_the_portal_adds_to_the_log(tmp_path):
-    """DISCLOSURE PIN. The preamble used to say, truthfully, that nothing here is a beacon and nothing
+    """DISCLOSURE PIN. A preamble saying, truthfully, that nothing here is a beacon and nothing
     new is collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
-    the second half of that sentence is no longer true as written and must be amended rather than left
+    the second half of that sentence is not true as written and must be amended rather than left
     standing. The amendment has to be specific: WHAT is added (a query flag), to WHAT (fetches that
     already happen), and what is NOT added (a request, an identity).
 

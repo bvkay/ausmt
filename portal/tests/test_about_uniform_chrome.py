@@ -178,7 +178,7 @@ def test_about_references_no_nonexistent_federation_doc():
     the HONEST half of the sentence: the spec reference must SURVIVE the removal, so an over-deletion also
     fails here.
 
-    MTCAT 1.2 fix round: the over-deletion pin used to be the literal string "MTCAT v1.0". That was a
+    The over-deletion pin must not be the literal string "MTCAT v1.0". That is a
     VERSION NUMBER doing a link's job, and it went stale the moment the served schema moved past 1.0 (it
     was already wrong at 1.1). It is now pinned to the docs-site URL the bullet actually links, which is
     what a reader needs and which does not rot on a schema bump. The version a consumer should trust is

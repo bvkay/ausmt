@@ -63,7 +63,7 @@ ok(tsArchiveUrl(null) === VEC.prefix && tsArchiveUrl(undefined) === VEC.prefix,
 // THE LEVEL SEGMENT of /go/ts/<survey>/<station>/<level>, the other half of a hand-off address.
 // state.js DECLARES this vocabulary; the engine DERIVES it (_tsindex.LEVELS minus what never
 // projects) and the route table EMITS it. Nothing re-derived it here, so a sixth routable token
-// would have shipped in ts_access.json and routed at the front door while the chooser, the drawer
+// ships in ts_access.json and routes at the front door while the chooser, the drawer
 // action rows and the pointer file stayed silent about it - an under-claim with no red anywhere.
 const stateSrc = fs.readFileSync(path.join(SRC, "state.js"), "utf8");
 const sctx = { ...ctx };

@@ -1,16 +1,16 @@
-"""C18 — the content-addressed incremental build cache (engine/extract/cache.py + its two seams).
+"""The content-addressed incremental build cache (engine/extract/cache.py + its two seams).
 
 Every test here is written to be ABLE TO FAIL (Invariant 10): each states its failure criterion and
 tests an INDEPENDENT observable, never cache-metadata self-consistency. The load-bearing ones:
 
   * ★ stale-cache refusal: mutate an impedance value in a source EDI -> the rebuild MUST serve the
     NEW value (fails if a byte-changed EDI is ever served from a stale entry).
-  * cache-entry integrity is the CACHE's own job (Amendment A1b): every entry embeds a sha256 of its
-    payload, verified on read — a bit-flipped entry is counted (`corrupt`), deleted and recomputed,
+  * cache-entry integrity is the CACHE's own job: every entry embeds a sha256 of its
+    payload, verified on read - a bit-flipped entry is counted (`corrupt`), deleted and recomputed,
     so the poison can never ship. verify.py guards POST-BUILD tampering of served files only: the
     manifest sha is computed FROM the served bytes, so a poison that flowed through the build would
-    verify self-consistently — the outer gate cannot see it (the review proved this; §4.2 as amended).
-  * raw-mode exclusion (Amendment A1a): --raw builds never touch the cache (seed-meta feeds served
+    verify self-consistently - the outer gate cannot see it (the review proved this; §4.2 as amended).
+  * raw-mode exclusion: --raw builds never touch the cache (seed-meta feeds served
     citations but is not a key component).
   * salt invalidations (engine commit / library version / survey.yaml edit) each force misses.
   * degenerate-salt refusal: unknown engine commit / dirty checkout -> zero reads AND zero writes.
@@ -56,14 +56,14 @@ EXPECTED_WRITES = 3 * N_STATIONS
 
 @pytest.fixture
 def clean_salt(monkeypatch):
-    """Force the cache's dirty-checkout gate to see a CLEAN tree so the cache fires (the dev worktree
-    is dirty during development; CI is clean). Patches the gate INPUT, not the gate — is_salt_degenerate
+    """Force the cache's dirty-checkout gate to see a CLEAN tree so the cache fires (a dev worktree
+    is dirty while it is edited; CI is clean). Patches the gate INPUT, not the gate: is_salt_degenerate
     still runs its real logic over engine_commit + this (clean) result.
 
-    A4 (the C18c flake): ALSO pin the engine commit and clear the cache-relevant env vars. The commit
-    used to be re-resolved via a live `git rev-parse` inside every in-process build, so concurrent git
+    ALSO pin the engine commit and clear the cache-relevant env vars. Re-resolving the commit
+    via a live `git rev-parse` inside every in-process build lets concurrent git
     activity on the machine between a test's two builds
-    flipped the salt and full-missed the 'warm' build — a nondeterministic counter failure that passed
+    flip the salt and full-miss the 'warm' build, a nondeterministic counter failure that passes
     on rerun. Pinned here so no cache test's counters can ever depend on ambient git or shell state;
     the salt tests below patch this NAME themselves when they need a moving commit."""
     monkeypatch.setattr(cache_mod, "_dirty_checkout", lambda cwd: False)
@@ -106,9 +106,9 @@ def _digest(p: Path) -> str:
 
 
 def _forensics(cache_dir: Path, *outs: Path) -> str:
-    """Failure-time context for counter asserts (A4): every build's FULL counters block (salt_fp,
+    """Failure-time context for counter asserts: every build's FULL counters block (salt_fp,
     degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. The C18c failures were undiagnosable afterwards because none of this was captured; with
-    it, one glance discriminates the classes — degenerate/salt_fp drift -> salt instability;
+    it, one glance discriminates the classes - degenerate/salt_fp drift -> salt instability;
     write_errors/read_errors -> environmental I/O; plain counter drift -> content. Evaluated only
     when an assert actually fails (Python's assert-message lazy evaluation)."""
     lines = ["--- forensics ---"]
@@ -148,15 +148,15 @@ def _xml_authors(xml_path: Path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Amendment A1a: --raw builds are EXCLUDED from caching entirely
+#--raw builds are EXCLUDED from caching entirely
 # --------------------------------------------------------------------------------------------------
 
 def test_raw_mode_build_never_touches_the_cache(tmp_path, clean_salt):
     """FAILS IF: a --raw --incremental build reads OR writes the cache, or a warm raw rebuild serves
     the PREVIOUS seed-meta's citation in the served XML. In raw mode survey metadata comes from
     --seed-meta JSON, which NO key component covers (survey_meta_digest is empty when there is no
-    survey.yaml) — so a seed edit would spuriously HIT and serve stale DOI/authors/title. Adjudicated
-    fix (Amendment A1a): raw mode is excluded from caching entirely — the cache is inert exactly like
+    survey.yaml) - so a seed edit would spuriously HIT and serve stale DOI/authors/title. Adjudicated
+    fix: raw mode is excluded from caching entirely - the cache is inert exactly like
     a degenerate salt (hits == misses == writes == 0), and the build derives everything fresh.
 
     Proven failing on pre-fix HEAD: the warm raw rebuild reported hits=6 misses=0 and the served XML
@@ -323,10 +323,10 @@ def test_verify_catches_post_build_tamper_of_served_files(tmp_path, clean_salt):
     AFTER the build wrote its manifest. This is the OUTER integrity gate: verify.py re-hashes served
     bytes against the manifest, so it catches post-build tampering of the delivered tree.
 
-    What it does NOT prove (Amendment A1b — the review's design-level correction): verify.py CANNOT
+    What it does NOT prove ( - the review's design-level correction): verify.py CANNOT
     catch a poisoned CACHE entry, because the manifest sha is computed FROM the served bytes, so a
     poison that flows through the build verifies self-consistently. Cache-entry integrity is the
-    CACHE's own checksum-on-read job — see the corrupt-entry tests below."""
+    CACHE's own checksum-on-read job - see the corrupt-entry tests below."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     assert _build(surveys, tmp_path / "out1", cache) == 0
@@ -539,7 +539,7 @@ def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypat
     subsequent clean warm build serves the pre-edit citation from cache. Independent observable:
     the citation INSIDE the served XML bytes vs the organisation in the on-disk survey.yaml —
     never counters, never stamp self-consistency (which is exactly what this poisoning defeats:
-    the poisoned entry's stamp EQUALS the live digest, so the C18b gate stayed green over it).
+    the poisoned entry's stamp EQUALS the live digest, so the consistency gate stays green over it).
 
     Proven failing on pre-fix HEAD: survey.yaml was read TWICE per build — metadata at
     discover_work, the cache-key digest at the per-survey loop top, a window spanning every
@@ -618,7 +618,7 @@ def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# Amendment A1b: self-verifying cache entries (checksum-on-read; corrupt => delete + recompute)
+#self-verifying cache entries (checksum-on-read; corrupt => delete + recompute)
 # --------------------------------------------------------------------------------------------------
 
 def _flip_payload_byte(blob: Path):
@@ -635,7 +635,7 @@ def test_corrupt_cached_xml_payload_detected_and_recomputed(tmp_path, clean_salt
     """FAILS IF: a bit-flipped cached XML payload is SERVED (the poison ships) instead of being
     detected by the entry's own embedded checksum, counted in the `corrupt` counter, deleted, and
     recomputed from source. Every byte must equal the populating build's served XML: nothing a
-    recompute writes depends on the build clock (Amendment A5). Proven failing pre-fix: the flipped
+    recompute writes depends on the build clock. Proven failing pre-fix: the flipped
     bytes were served verbatim with hits=6 and no corrupt counter existed."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
@@ -1081,7 +1081,7 @@ def test_no_change_rebuild_counters_are_deterministic(tmp_path, clean_salt):
     assert c_cold["misses"] == EXPECTED_COLD_MISSES, c_cold
     assert c_cold["writes"] == EXPECTED_WRITES, c_cold
 
-    # warm rw build: all hit, none miss, none write. Forensics on failure (A4): this pair of
+    # warm rw build: all hit, none miss, none write. Forensics on failure: this pair of
     # counter asserts is the other load-bearing shape the C18c flake class can fire.
     assert _build(surveys, tmp_path / "warm", cache) == 0
     c_warm = _cache_counters(tmp_path / "warm")

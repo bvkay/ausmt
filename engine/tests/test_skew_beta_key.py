@@ -5,9 +5,9 @@ skew_beta_mean_deg.
 NON-VACUOUS failure criterion: this test FAILS against the pre-rename tree, because the build
 emitted "skew_beta_mean_deg" in both station.json and dimensionality.json.: station.json stopped RESTATING the dimensionality call and its skew statistic, because
 the copy beside it travelled without the "screening diagnostic, not an interpretation product"
-caveat that qualifies them. (D1, the station promotion): the call is FOLDED BACK IN, and the caveat and the method
+caveat that qualifies them. (the station promotion): the call is FOLDED BACK IN, and the caveat and the method
 string come with it, so the qualification travels with the numbers rather than sitting one file
-away. The sidecar keeps being written byte-unchanged through 1.x (D14) because deleting a served
+away. The sidecar keeps being written byte-unchanged through 1.x because deleting a served
 file is a deprecation, not a refactor. So the two surfaces now state the same thing, and the pin
 that used to forbid the restatement forbids DISAGREEMENT instead: both carry the honest median key,
 neither carries the misleading mean key, and every member the fold covers is equal on both. A
@@ -27,7 +27,7 @@ ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "extract"))
 SURVEYS = ROOT / "data"          # data/sample-survey: CC-BY-4.0, access.level=open => products emitted
 
-# The members station.json's `diagnostics` and dimensionality.json must state identically (D1). The
+# The members station.json's `diagnostics` and dimensionality.json must state identically. The
 # sidecar's own `screening_diagnostic` flag is not folded: the caveat text carries that meaning.
 FOLDED = ("classification", "skew_beta_median_deg", "pct_periods_3d", "method", "note")
 
@@ -69,7 +69,7 @@ def test_skew_beta_key_is_median_not_mean(tmp_path):
 def test_the_fold_omits_a_member_the_call_leaves_undetermined():
     """Over the emitter directly because no fixture corpus carries an indeterminate station: when
     most periods are unusable the classification is `indeterminate` and the skew statistic and the
-    3-D percentage are UNDETERMINED. The sidecar states them as null and keeps doing so (D14); the
+    3-D percentage are UNDETERMINED. The sidecar states them as null and keeps doing so; the
     fold OMITS them, because absence is the open-world statement and a null is a value. Four corpus
     records take this branch."""
     import build_portal as bp  # noqa: PLC0415
@@ -85,7 +85,7 @@ def test_the_fold_omits_a_member_the_call_leaves_undetermined():
 
 
 def test_the_fold_and_the_sidecar_state_the_same_call(tmp_path):
-    """D1/D14: one computation, two surfaces, no drift. FAILS against a fold that recomputed the call
+    """One computation, two surfaces, no drift. FAILS against a fold that recomputed the call
     for station.json, and against a sidecar left behind by a later change to the fold."""
     pytest.importorskip("mt_metadata")
     prod = _build_products(tmp_path)

@@ -394,8 +394,8 @@ def test_chip_and_qa_card_share_one_flag_definition(warn_report, tmp_path):
 def test_conditioning_scope_all_n_form(warn_report, tmp_path):
     """CONDITIONING-TABLE PIN. The scope cell renders the mockup's 'all N' form when every served
     station carries the note (the fixture's lineage notes are survey-wide), never a bare count
-    with a redundant enumeration. FAILS IF the all-N form regresses to '6 (A1, CP1B10, …)' or
-    the count no longer matches the engine's."""
+    with a redundant enumeration. FAILS IF the all-N form regresses to '6 (CP1B10, …)' or
+    the count does not match the engine's."""
     got = _run_plan(tmp_path, warn_report)
     survey = warn_report["survey"]
     assert got["scopes"], "fixture carries conditioning entries"
@@ -407,7 +407,7 @@ def test_conditioning_scope_all_n_form(warn_report, tmp_path):
 
 
 def test_no_metadata_info_row_is_ever_planned(warn_report, tmp_path):
-    """A2 (D19) INFO-ROW PIN, inverted. The citation-author metadata info row is retired with the
+    """ INFO-ROW PIN, inverted. The citation-author metadata info row is retired with the
     server-side heuristic that stamped it, so attentionPlan now plans fail rows, ONE package note and
     warn rows, and NEVER an info row. FAILS IF an info row (or the deleted email helpers) returns."""
     got = _run_plan(tmp_path, warn_report)
@@ -805,7 +805,7 @@ process.stdout.write(JSON.stringify({
 
 
 # ==================================================================================================
-# C43 FR2-3 - the ONE combined ±180 phase plot's pure data mapper (the rule: both
+# The ONE combined ±180 phase plot's pure data mapper (the rule: both
 # phases on a single axis; supersedes the mockup's two separate plots). combinedPhasePlan +
 # phaseVerdictParts run IN NODE against the tf rows the REAL ENGINE emitted, judged against the
 # parity-tested phaseqc.classify_series (the SAME seam the plot dots use) and an INDEPENDENT Python

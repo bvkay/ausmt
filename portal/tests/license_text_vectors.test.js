@@ -1,4 +1,4 @@
-// C46-W2 Node test: portal/src/exports.js licenseInstrumentText MUST reproduce the shared vector file
+// Node test: portal/src/exports.js licenseInstrumentText MUST reproduce the shared vector file
 // (engine/tests/fixtures/license_instrument_vectors.json) byte-for-byte — the SAME file the engine
 // pytest (test_license_instrument_vectors.py) pins the Python leaf against. So the two implementations
 // of the licence INSTRUMENT text cannot drift silently: corrupt one vector and exactly that vector reds

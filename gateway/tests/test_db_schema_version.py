@@ -1,11 +1,10 @@
 """Schema-version stamp + migration runner + forward-compat guard (audit Angle 1 minor / Angle 4 §3).
 
-gateway/db.py created its schema with no version stamp, so the first future schema change would have
-had no migration path. db.Database now stamps PRAGMA user_version and refuses a DB written by a newer
-build.
+A schema created with no version stamp leaves the first future schema change with no migration path.
+db.Database stamps PRAGMA user_version and refuses a DB written by a newer build.
 
-NON-VACUOUS failure criteria (each fails against the pre-stamp db.py):
-  * a fresh DB opens stamped at SCHEMA_VERSION (pre-fix: user_version stayed 0);
+NON-VACUOUS failure criteria (each fails against an unstamped db.py):
+  * a fresh DB opens stamped at SCHEMA_VERSION (unstamped: user_version stays 0);
   * a legacy DB carrying the current tables at user_version 0 upgrades to SCHEMA_VERSION cleanly and
     its existing rows survive;
   * a DB stamped 99 (newer than this build) is REFUSED with SchemaTooNew (pre-fix: opened blind).

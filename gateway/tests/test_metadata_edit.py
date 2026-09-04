@@ -1,7 +1,7 @@
 """C31 metadata-editor gateway-flow tests (design §3.2-§3.8). Driven through the real HTTP surface
 (httpx in-process) with the C31 edit seam injected in-process (conftest.inproc_edit_runner) and the
 publish git seam faked (conftest.FakeGit) — the same injected-seam discipline as the C10 clamd and
-C11 git tests. Proven-failing-first where a behaviour change is the deliverable.
+Git tests. Proven-failing-first where a behaviour change is the deliverable.
 
 The load-bearing guarantees proved here: the §0.6 hash pin (stale/tampered hash ⇒ 409, nothing
 committed), the validator-FAIL server-side refusal (§0.4/§3.3), session+CSRF on every route (§3.6),

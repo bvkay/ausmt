@@ -86,7 +86,7 @@ def test_entire_only_survey_fills_the_collection_slot(tmp_path):
         "slot 6 (Level 3) did not take the level3 row:\n" + tiles[5]
     assert "2 of 6 recorded" in story, \
         "the count must read '2 of 6 recorded' once `entire` fills the Collection slot:\n" + story
-    # the orphan is gone: `entire`'s own vocabulary label must no longer head a tile of its own
+    # the orphan is gone: `entire`'s own vocabulary label must not head a tile of its own
     assert "Entire dataset" not in story, \
         "the `entire` row rendered as an extra tile as well as filling the Collection slot:\n" + story
 
@@ -150,7 +150,7 @@ def test_legacy_row_without_identifies_falls_back_to_relation_label(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_files_tab_level_row_links_its_identifies_doi(tmp_path):
-    """D-L4: on the files tab, a level row links the related_identifiers DOI whose identifies matches that
+    """On the files tab, a level row links the related_identifiers DOI whose identifies matches that
     level — so a user jumps straight to the DOI for the data level. FAILS IF the level row falls back to
     the collection PID instead of its own level's identifier."""
     extra = {"ts": "ok", "ts_levels": ["raw_packed", "level0", "level1"],

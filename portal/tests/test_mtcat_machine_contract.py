@@ -175,7 +175,7 @@ def _schema_version() -> str:
 def _constant_schema_version() -> str:
     """The MTCAT version as its SINGLE SOURCE declares it since the ratified 2.0 inversion: the
     MTCAT_VERSION constant in contract/generate.py, read raw from the source text (this suite is
-    deliberately import-light). portal.config.yaml no longer declares a schema_version key at all -
+    deliberately import-light). portal.config.yaml does not declare a schema_version key at all -
     config.js is GENERATED from this constant, and the engine parity suite pins that the key never
     returns."""
     src = (REPO / "contract" / "generate.py").read_text(encoding="utf-8")

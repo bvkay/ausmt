@@ -1,8 +1,8 @@
 """Deploy preflight (deploy/scripts/preflight.sh) — the shared-group permissions time-bomb check.
 
-C43 S2b-i (B7): preflight gained a gateway-profile check that catches the incident-
+Preflight carries a gateway-profile check that catches the incident-
 lockout BEFORE it happens — a `surveys-live/.git` whose entries have lost the group-write bit means
-the gateway (uid 10002) is creating foreign-owned, non-g+w object dirs the operator can no longer
+the gateway (uid 10002) is creating foreign-owned, non-g+w object dirs the operator cannot
 `git pull`/gc, so the checkout silently rots behind GitHub.
 
 Tested as a BLACK BOX through `sh` over a fabricated data tree: preflight does many other checks

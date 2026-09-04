@@ -53,7 +53,7 @@ def test_runner_and_edit_share_one_argv_builder():
 
 
 def test_neither_call_site_hand_builds_a_validator_argv():
-    # Source-text pin (M7): a future edit that reverts to an inline `[sys.executable, ..., "--json",
+    # Source-text pin: a future edit that reverts to an inline `[sys.executable, ..., "--json",
     # ...]` argv at either call site — re-opening the drift M7 closed — goes RED here. We assert the
     # tell-tale inline-argv literal is absent from BOTH runner._run_validator and edit._run_validator.
     for mod in (runner, edit):

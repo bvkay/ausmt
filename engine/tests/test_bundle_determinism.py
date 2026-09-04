@@ -1,7 +1,7 @@
 """The published bundle digests are cross-build invariants: same inputs in, same bytes out.
 
 The manifest publishes a SHA-256 for every served file and every bundle, and the download reference
-invites a consumer to check one against a previously published one. That is only meaningful if
+invites a consumer to check one against an earlier published one. That is only meaningful if
 identical inputs and identical code produce identical bytes, so this module pins BOTH halves of the
 claim for the per-survey EMTF-XML zip (the one product the project cannot A/B across builds any
 other way) alongside the EDI zip that already held it:

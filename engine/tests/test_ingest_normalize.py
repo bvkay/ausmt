@@ -55,7 +55,7 @@ def test_normalize_rejects_empty_tf(tmp_path):
         normalize(empty, tmp_path, survey_id="x", station_id="EMPTY01")
 
 
-# --- C17: the round-trip gate must not vacuously pass a re-read with fewer periods or a dropped
+# -- The round-trip gate must not vacuously pass a re-read with fewer periods or a dropped
 # Tipper (the prefix-`min`-and-allclose the gate used to run over would happily "verify" either).
 # We simulate a broken re-read by monkeypatching TF.read so ONLY the SECOND call inside normalize
 # (the canonical-XML round-trip re-read) is mutated afterward — the first call (reading `src`) is
@@ -107,7 +107,7 @@ def test_normalize_rejects_dropped_tipper_roundtrip(tmp_path, monkeypatch):
 # --- Fill-mask fix: some real EDIs (Geotools/MT-GFZ producer; all 57 auslamp-tas stations) carry the
 # community missing-data sentinel 1.000000E+32 INSIDE impedance blocks at undetermined periods.
 # mt_metadata's EDI reader turns those into 0+0j but its EMTF-XML writer faithfully re-emits the 1e32
-# sentinel (D6: the canonical XML stays mt_metadata-faithful), which re-reads as (1e32+1e32j). The
+# sentinel (the canonical XML stays mt_metadata-faithful), which re-reads as (1e32+1e32j). The
 # unmasked gate compared orig 0+0j vs re-read (1e32+1e32j) => maxdiff=sqrt(2)*1e32=1.414e+32 and
 # refused to publish a canonical XML. The fix masks fill cells (|v|>_FILL_MAX) on EITHER side in the
 # impedance and derived-EDI comparisons, exactly as _compare_optional_field already did for the
@@ -169,7 +169,7 @@ def _perturb_impedance_cell(tf) -> None:
 
 def test_normalize_still_rejects_genuine_impedance_drift(tmp_path, monkeypatch):
     """ANTI-VACUOUS COMPANION. FAILS IF: the fill mask is so broad that a GENUINE impedance value drift
-    between write and re-read no longer raises — i.e. the gate has been neutered into always-pass. We
+    between write and re-read does not raise, i.e. the gate has been neutered into always-pass. We
     perturb one NON-fill impedance cell on the re-read side (Zxx[0], well beyond rtol) and assert the
     round-trip gate STILL raises with the fix in place. A mask that (wrongly) covered every cell would
     make this test fail — proving it guards against over-masking (demonstrated separately in scratchpad
@@ -179,7 +179,7 @@ def test_normalize_still_rejects_genuine_impedance_drift(tmp_path, monkeypatch):
         normalize(STANDARD, tmp_path, survey_id="vulcan")
 
 
-# --- C2: canonical EMTF-XML must not FABRICATE metadata; conditioning must be persisted. ----------
+# -- Canonical EMTF-XML must not FABRICATE metadata; conditioning must be persisted. ----------
 def _read_back(res):
     """Re-read the written canonical XML and return its TF (fresh read, not the in-memory object)."""
     rt = TF()
@@ -396,7 +396,7 @@ def test_default_notes_are_edi_gated(tmp_path):
     assert "declination" not in joined, notes
 
 
-# --- C46-W3a: EMTF-XML Copyright truth fix. The served XML must NOT carry mt_metadata's default
+# --- EMTF-XML Copyright truth fix. The served XML must NOT carry mt_metadata's default
 # "Unrestricted Release" / "may be copied freely … IRIS" boilerplate; it must state the survey's REAL
 # declared licence + access level, and those fields must SURVIVE the write->read round-trip. --------
 import re as _re2  # noqa: E402

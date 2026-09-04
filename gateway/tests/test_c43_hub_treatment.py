@@ -3,18 +3,18 @@ seam. The EXECUTABLE JS pins (clusterWarnings & co, producer-truth build_report)
 test_c43_hub_js_parity.py; this file pins what the SERVER renders and the JS source invariants.
 
 Load-bearing pins:
-  * H1 HEADER — every hub tab renders the mockup's header: survey title + mono slug chip +
+  * H1 HEADER - every hub tab renders the mockup's header: survey title + mono slug chip +
     orientation line (v<version> · <licence> · <access> · collection <id>) from the metadata
     read-job fields, with a hidden browser-filled counts span; the tab strip carries the hidden
     Stations chip slot + the slug data attribute. The header DEGRADES to the slug when the
     read-job fails on a non-metadata tab (never a bounce, never a 500).
   * H2 SCAFFOLD: the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at
-    JS-source level here (executable form in the parity file). A2 (D19): the Q3 citation-author
+    JS-source level here (executable form in the parity file). the Q3 citation-author
     email heuristic and its three surfaces (the data-citation-email scaffold attribute, the TOC
     issue chip and the Metadata inline field error) are DELETED with the retired flat credit keys
     they read; the pins below assert their absence.
-  * SEVERITY CSS — .qa.fail/.qa.warn/.qa.info map to the dark palette's bad/warn/info hues
-    (red fail / amber warn / blue info — the mockup's severity semantics).
+  * SEVERITY CSS - .qa.fail/.qa.warn/.qa.info map to the dark palette's bad/warn/info hues
+    (red fail / amber warn / blue info - the mockup's severity semantics).
 
 Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run.
 """
@@ -179,7 +179,7 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
 # H2 - overview scaffold + citation-email stamp
 # --------------------------------------------------------------------------------------------------
 def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
-    """A2 (D19) SCAFFOLD PIN, inverted. The Q3 citation-author email heuristic read ONLY the two
+    """ SCAFFOLD PIN, inverted. The Q3 citation-author email heuristic read ONLY the two
     retired flat credit keys, so with those migrated away it could never fire again; it and its
     scaffold attribute are deleted outright. FAILS IF the attribute or the helper comes back."""
     assert not hasattr(curatorpage, "citation_author_email")
@@ -204,7 +204,7 @@ def test_survey_hub_js_four_cards_and_no_build_id_card():
     """FOUR-CARDS SOURCE PIN incl. the build-id-card-ABSENT assertion. SURVEY_HUB_JS builds
     exactly the mockup's four cards (Serving / published, QA flags, Frame, Last build); the
     Stage-1 'Served build' build-id card is REMOVED (that fact lives in the drift chip + serve
-    screen), and /data/build.json is no longer fetched here at all. FAILS IF the build-id card
+    screen), and /data/build.json is not fetched here at all. FAILS IF the build-id card
     or its fetch returns, or a mockup card label disappears."""
     js = curatorpage.SURVEY_HUB_JS
     for label in ("'Serving / published'", "'QA flags'", "'Frame'", "'Last build'"):
@@ -218,8 +218,8 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
     """SEVERITY-ROW + DEAD-BRANCH SOURCE PIN. The needs-attention rows are severity rows
     ('qa ' + kind, with the terse text and the full diagnosis in a title attr) and the refusal
     boilerplate is a single REFUSED_NOTE constant appended once by the plan builder. Both the old
-    string-matching metadata branch (/citation|author|email/…) and the server-stamped
-    data-citation-email info row that replaced it are now DELETED (A2/D19). FAILS IF either
+    string-matching metadata branch (citation|author|email/…) and the server-stamped
+    data-citation-email info row that replaced it are now DELETED. FAILS IF either
     citation-author branch returns, the note constant multiplies, or the severity-row classes
     disappear."""
     js = curatorpage.SURVEY_HUB_JS

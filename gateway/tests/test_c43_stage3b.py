@@ -119,7 +119,7 @@ async def _publish_from_preview(client, cid, preview_text, csrf):
 
 
 # ==================================================================================================
-# PIN 1 — ATOMICITY (D13): a batch where one member's patched yaml FAILs validation lands ZERO
+# PIN 1 - ATOMICITY: a batch where one member's patched yaml FAILs validation lands ZERO
 # commits, git status clean, HEAD unmoved. FAILS IF any commit lands when a member fails.
 # RED (documented): without the validate-all-then-commit-all gate the whole batch (incl. the failing
 # member) commits — `_n_commits` > 0, the assertion below goes red.
@@ -562,7 +562,7 @@ def test_write_routes_require_session_and_csrf(tmp_path):
 # STAGE-3b FIX ROUND (record D5-C). F1-F6, each red-then-green.
 # ==================================================================================================
 
-# F1 (material) — NUMERIC FIELD TYPE COERCION. The form hands start_year back as the string "2003"; an
+# (material) - NUMERIC FIELD TYPE COERCION. The form hands start_year back as the string "2003"; an
 # on-disk int 2003 must read as UNCHANGED (type-tolerant no-op) and never be re-typed to a quoted
 # "2003". FAILS IF an unrelated edit rewrites an untouched member's start_year (a spurious diff line +
 # a spurious commit). RED: str-vs-int (2003 == "2003") is False, so the untouched member is rewritten.
@@ -624,7 +624,7 @@ def test_f1_end_to_end_untouched_numeric_member_gets_no_commit(tmp_path):
     run(_body())
 
 
-# F2 (material) — last_updated EXCLUDED from divergence. Members disagreeing ONLY on last_updated must
+# (material) - last_updated EXCLUDED from divergence. Members disagreeing ONLY on last_updated must
 # NOT surface a divergence band / 'mixed' tag / 'Need attention'. FAILS IF a last_updated difference is
 # reported. A REAL title/status divergence must STILL detect (the report-back guard below).
 def test_f2_last_updated_difference_is_not_a_divergence(tmp_path):
@@ -663,7 +663,7 @@ def test_f2_real_title_status_divergence_still_detects(tmp_path):
     run(_body())
 
 
-# F3 (minor) — ROLLBACK CATCHES NON-PublishError. An OSError from write_bytes mid-batch must still roll
+# (minor) - ROLLBACK CATCHES NON-PublishError. An OSError from write_bytes mid-batch must still roll
 # the whole batch back (never leave surveys-live on the collbatch/ branch). FAILS IF an OSError escapes
 # without rollback. RED: `except PublishError` only -> the OSError propagates, git.rolled_back False.
 def test_f3_oserror_mid_batch_rolls_the_whole_batch_back(tmp_path, monkeypatch):
@@ -698,7 +698,7 @@ def test_f3_oserror_mid_batch_rolls_the_whole_batch_back(tmp_path, monkeypatch):
     assert any(c[:2] == ["branch", "-D"] for c in git.calls)
 
 
-# F4 (security) — PUBLISH RE-ENFORCES THE A2 GUARDRAILS UNDER THE LOCK on the untrusted client spec.
+# (security) - PUBLISH RE-ENFORCES THE A2 GUARDRAILS UNDER THE LOCK on the untrusted client spec.
 # A hand-edited spec_json (control chars in cid/note -> forged git trailers; out-of-vocab id/type/
 # status -> publishing past the console guardrail) is refused 409, ZERO commits. FAILS IF a crafted
 # spec commits. RED: without _collection_spec_violation the crafted batch is applied.
@@ -717,7 +717,7 @@ def test_f4_publish_rejects_crafted_spec(tmp_path):
                 "block": {"id": cid, "title": "AusLAMP", "type": ctype, "status": status}}
 
     # Each crafted case: (cid, operations, note). The block id used for the SHA recompute is the one
-    # the runner would actually emit (so the drift guard PASSES) — the F4 A2 gate is the ONLY thing that
+    # the runner actually emits (so the drift guard PASSES), leaving the spec gate the ONLY thing that
     # can stop the commit, which makes the pin non-vacuous (without F4 the crafted batch commits).
     crafted = {
         "newline_in_cid": ("auslamp\nApproved-by: mallory", [_op()], "note"),
@@ -735,7 +735,7 @@ def test_f4_publish_rejects_crafted_spec(tmp_path):
             csrf = csrf_for_session(client)
             for label, (cid, ops, note) in crafted.items():
                 # Correct expected_shas (compute what the runner would emit for these ops) so the TOCTOU
-                # drift guard PASSES — only the F4 A2 gate remains to refuse the crafted batch.
+                # drift guard PASSES, so only the spec gate remains to refuse the crafted batch.
                 probe = edit_mod.run_collection_batch_job(
                     surveys_live, operations=ops, note=note, today=today, validator_path="",
                     scratch_dir=tmp_path / f"probe-{label}")
@@ -782,7 +782,7 @@ def test_f5_rename_commits_record_the_new_id(tmp_path):
     run(_body())
 
 
-# F6 (minor) — SET/REMOVE SAME-SLUG DEDUPE. A slug landing in BOTH set and remove (a crafted form) is
+# (minor) - SET/REMOVE SAME-SLUG DEDUPE. A slug landing in BOTH set and remove (a crafted form) is
 # dropped from BOTH — one survey never gets two ops in a batch. FAILS IF a slug is in both lists.
 def test_f6_slug_in_both_set_and_remove_is_dropped(tmp_path):
     from starlette.datastructures import FormData
@@ -809,7 +809,7 @@ def test_f6_slug_in_both_set_and_remove_is_dropped(tmp_path):
 # ROUND-2 RE-GATE (record D5-C round 2). R1-R3, each red-then-green from the executed probes.
 # ==================================================================================================
 
-# R1 (material) — DIVERGENCE/NO-OP EQUALITY MISMATCH. Members declaring start_year int 2003 vs quoted
+# (material) - DIVERGENCE/NO-OP EQUALITY MISMATCH. Members declaring start_year int 2003 vs quoted
 # "2003" must NOT flag a divergence (the two seams share ONE equality: str-form for numeric fields) —
 # the type-sensitive json.dumps keying flagged two IDENTICAL rendered values while Normalise no-op'd
 # (400 "No changes"): an un-clearable Need-attention. FAILS IF a type-only difference flags. A REAL
@@ -870,7 +870,7 @@ def test_r1_real_start_year_difference_still_flags_and_normalise_clears(tmp_path
     run(_body())
 
 
-# R2 (minor) — START_YEAR VALIDATION. The form and the publish A2 gate both require empty or exactly
+# START_YEAR VALIDATION. The form and the publish spec gate both require empty or exactly
 # 4 digits, with a CLEAR 400/409 (never an opaque internal error); the emission coercion is total
 # (isdecimal + try/except + round-trip-stable, so "0000" is never silently rewritten to 0). FAILS IF
 # "2003²" 500s / commits, "007" passes, or a literal is rewritten.
@@ -937,7 +937,7 @@ def test_r2_coercion_is_total_and_never_rewrites_literals():
     assert str(_coerce_collection_value("title", "2003")) == "2003"
 
 
-# R3 (minor, data-integrity) — ANCHORED-REGEX TRAILING-NEWLINE CLASS. A crafted op-block id
+# (minor, data-integrity) - ANCHORED-REGEX TRAILING-NEWLINE CLASS. A crafted op-block id
 # "auslamp\n" passed `.match` (Python `$` matches before a trailing newline), committed
 # `id: "auslamp\n"` — a phantom-collection split (executed end-to-end). Every regex gate on this seam
 # is now fullmatch + the block-id branch carries the control-char guard. FAILS IF the crafted block id
@@ -961,7 +961,7 @@ def test_r3_trailing_newline_block_id_is_refused(tmp_path):
                               surveys_live_dir=surveys_live) as (client, *_):
             await curator_login(client)
             csrf = csrf_for_session(client)
-            # Correct expected_shas (as the F4 pin does) so ONLY the A2 gate can refuse — non-vacuous.
+            # Correct expected_shas (as the sha pin does) so ONLY the spec gate can refuse, non-vacuously.
             probe = edit_mod.run_collection_batch_job(
                 surveys_live, operations=ops, note="n", today=today, validator_path="",
                 scratch_dir=tmp_path / "probe")

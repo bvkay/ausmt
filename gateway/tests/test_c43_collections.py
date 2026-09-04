@@ -180,7 +180,7 @@ def test_index_renders_cards_bands_and_table(tmp_path):
             assert "&middot; mixed" in html or "· mixed" in html
             # Membership-by-slug honesty line.
             assert "resolved by survey <b>slug</b>" in html
-            # C43 Stage 3b: the 'New collection…' entry (record A5) and the actionable band remedies
+            # Stage 3b: the 'New collection…' entry (record A5) and the actionable band remedies
             # (record E) now appear (the read-only 3a 'next stage' copy is superseded).
             assert "New collection" in html
             assert 'href="/gateway/curator/collections/new"' in html

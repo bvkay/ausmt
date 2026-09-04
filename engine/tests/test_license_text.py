@@ -49,7 +49,7 @@ def test_build_portal_delegates_to_the_same_object():
 
 
 def test_leaf_is_stdlib_only_no_heavy_stack():
-    # The leaf's whole purpose (D2) is that the runner can import it WITHOUT the engine build stack.
+    # The leaf's whole purpose is that the runner can import it WITHOUT the engine build stack.
     # Import it in a fresh subprocess with only extract/ on the path and assert none of numpy /
     # mt_metadata / mth5 / yaml were pulled in as a side effect. FAILS if the leaf grows a heavy import.
     import subprocess
@@ -65,7 +65,7 @@ def test_leaf_is_stdlib_only_no_heavy_stack():
 
 
 def test_recognised_gate_accepts_recognised_rejects_unknown():
-    # D3 fail-closed gate for LICENSE.md generation.
+    # Fail-closed gate for LICENSE.md generation.
     assert lt.recognised("CC-BY-4.0")                      # redistributable
     assert lt.recognised("cc-by-4.0")                      # case-insensitive
     assert lt.recognised("CC-BY")                          # bare alias -> canonical

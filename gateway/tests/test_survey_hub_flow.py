@@ -550,7 +550,7 @@ def test_hub_per_section_submit_is_section_scoped(tmp_path):
 # SIDEBARMERGE - M1/M2/M3 merged sidebar entries
 # --------------------------------------------------------------------------------------------------
 def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
-    """SIDEBARMERGE IA PIN (M1/M2/M3). The Metadata sidebar collapses to ONE entry per merged group in
+    """SIDEBARMERGE IA PIN. The Metadata sidebar collapses to ONE entry per merged group in
     the settled order: Core fields (scalars + Organisation + Instruments) / Investigators (Lead +
     Principal) / Identifiers & PIDs (now incl. Time series levels) / Publications / Funding / Access /
     Attribution & rights / Processing / Collection / CARE governance. The retired standalone entries
@@ -588,7 +588,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             def _form(key):
                 return _section_html(body, key)
 
-            # M3 Core fields: three grouped headings + all three constituents' widgets + o_ snapshots.
+            # Core fields: three grouped headings + all three constituents' widgets + o_ snapshots.
             core = _form("_scalars")
             for needle in ("<h2>Core fields</h2>", "<h2>Organisation</h2>", "<h2>Instruments</h2>",
                            'name="f_project_name"', 'name="s_organisation_name"', 'name="o_organisation"',

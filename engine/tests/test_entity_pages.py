@@ -448,7 +448,7 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
 def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
     """The page hierarchy (design brief 11 to 14 and 41), asserted as ORDER rather than as prose.
 
-    The page used to read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
+    The page must not read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
     stations: a citation box and an unlabelled abstract held the top of the document and the map was
     a 240px right rail, so the one thing a reader opens a survey to see arrived below the fold with
     no section it belonged to. FAILS IF the map stops leading the hero, if the lede is not the
@@ -977,7 +977,7 @@ def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations
         f"a five-column table must not be forced into a horizontal scrollbar: .stbl{{{stbl}}}"
     assert "position:sticky" in page, "the station column still pins while the table scrolls"
 
-    # the move, followed fact by fact on the station whose survey row used to carry them
+    # the split, followed fact by fact on the station whose survey row could carry them instead
     run = doc["runs"][0]
     for key in ("start", "end"):
         assert str(run["time_period"][key])[:16].replace("T", " ") in stn
@@ -1206,7 +1206,7 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
 
     Level names and badges follow portal/src/state.js TS_LEVELS as of the download-cards commit
     (LANE-CONTRACT-PAGE-HIERARCHY.md B3), so "Raw time series" is now "Packed raw", "MTH5 time
-    series" is "Level 1 MTH5", and the L0 badge is no longer shared by two levels."""
+    series" is "Level 1 MTH5", and the L0 badge is not shared by two levels."""
     pages = _pages_module()
     docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
              "location": {"lat": -30.0, "lon": 137.0},
@@ -1369,7 +1369,7 @@ def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
                             member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
                                            for i in range(14)},
                             member_facts=None, level_counts=None, formats=None)
-    # A member's colour is stated once, on the group carrying that member's dots; it used to be
+    # A member's colour is stated once, on the group carrying that member's dots, and never
     # repeated on every circle. Either element answers this test, which is about fourteen members
     # getting fourteen distinct colours and not about where the attribute sits. The coast rings are
     # excluded by naming the two elements rather than by matching a bare fill, because a <path>
@@ -1506,7 +1506,7 @@ def test_the_register_lookup_matches_the_documented_ausmt_id_prefix():
 
 
 def test_a_page_with_empty_slots_carries_no_stray_blank_lines():
-    """13 of the 27 served survey pages carried a blank line where an absent block would have been
+    """A served survey page must carry no blank line in an absent block's place
     (the collection edge, the citation record, the publications list). Cosmetic, but a page emitter
     that leaves the shape of what it did not write is a page emitter that will one day leave the
     content too. FAILS IF a rendered body contains two consecutive newlines."""
@@ -1533,7 +1533,7 @@ def test_activity_scope_identifiers_render_as_project_links():
 
 
 # ==================================================================================================
-# B9 R1 to R3: how a period, a range and a licence PRINT (presentation only)
+# The display grammar: how a period, a range and a licence PRINT (presentation only)
 # ==================================================================================================
 def test_the_period_display_helper_holds_the_owners_worked_examples():
     """The worked examples, verbatim, as the specification of ONE shared display helper.
@@ -1585,7 +1585,7 @@ def test_the_licence_reads_in_human_form_in_chrome_and_keeps_its_identifier_in_j
     """The SPDX identifier is the machine's name for the licence and "CC BY 4.0" is the
     reader's; the page owes the reader the second and the machine the first.
 
-    R3's second clause is "the same pattern for the other recognised CC ids", so the coverage owed
+    The licence rule's second clause is "the same pattern for the other recognised CC ids", so the coverage owed
     is the licence instrument's whole CC list, not the subset today's corpus happens to declare.
     The expected strings below are LITERAL, so this test states the reader's form itself rather
     than restating the emitter's derivation of it; the key-set assertion is what makes the coverage
@@ -1658,7 +1658,7 @@ def _prose_collection(pages, prose=_PROSE, **over):
 
 
 def test_collection_prose_renders_as_paragraphs_with_a_subheading(tmp_path):
-    """FAULT 1. The whole collection description used to be emitted as ONE escaped <p>, so every
+    """FAULT 1. The whole collection description must not be emitted as ONE escaped <p>, or every
     paragraph break and every section heading the author wrote was destroyed: about 450 words
     arrived as a single block.
 

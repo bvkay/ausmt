@@ -32,7 +32,7 @@ from gateway.tests.conftest import (
 # Phase quadrant classification + the φyx +180 unwrap (phaseqc — the authoritative seam)
 # ==================================================================================================
 def test_phi_xy_quadrant_classification():
-    """φxy (t[3], stored = true) classifies against Q1 widened by the engine-gate slack (fix-round F4:
+    """φxy (t[3], stored = true) classifies against Q1 widened by the engine-gate slack (a point is
     band −10…100 with QUADRANT_SLACK_DEG = 10). FAILS IF an in-band(+slack) value is flagged (a red
     dot on a point the engine gate tolerates), an outside-by-more-than-slack value is not flagged, or
     the slack edges are wrong (the −10.0/100.0 edge vectors are IN; −10.1/100.1 are OUT — a
@@ -101,7 +101,7 @@ def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():
 
 
 def test_phi_yx_slack_and_seam_edges():
-    """Fix-round F4 edge semantics for yx: (a) a true value within the slack of the band (−85, −80) is
+    """Edge semantics for yx: (a) a true value within the slack of the band (−85, −80) is
     IN (the engine gate tolerates it — no red dot); (b) a true value just past +180 THROUGH THE SEAM
     (+175 maps to −185 on the (−360,0] axis, within slack of the −180 edge) is IN — the seam mapping is
     what makes Q3±slack one contiguous window. FAILS IF the seam mapping is dropped (naive (−180,180]
@@ -115,7 +115,7 @@ def test_phi_yx_slack_and_seam_edges():
 
 
 def test_classify_series_median_verdict():
-    """classify_series (fix-round F4c — engine-rule alignment): the VERDICT is the MEDIAN of classified
+    """classify_series, aligned with the engine rule: the VERDICT is the MEDIAN of classified
     points vs band+slack (median_in), per-point flags mark only beyond-slack points (red dots), and the
     reported median rides the engine's seam-mapped axis for yx. FAILS IF a scattered outlier flips the
     verdict (median-vs-point confusion), the median seam mapping is dropped (a ±180-straddling cluster
@@ -148,14 +148,14 @@ def test_classify_series_median_verdict():
 def test_stations_js_mirrors_phaseqc_constants():
     """SOURCE ASSERTION: the browser-side STATIONS_JS embeds the SAME phase constants + structural
     elements phaseqc defines (the EXECUTABLE parity pin proves the semantics; this cheap sweep catches
-    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the
-    Q1/Q3 bounds, the slack, the floored modulo, the seam map, or the unwrap-then-classify structure."""
+    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the Q1
+    and Q3 bounds, the slack, the floored modulo, the seam map, or the unwrap-then-classify shape."""
     js = curatorpage.STATIONS_JS
     assert "YX_SHIFT = 180.0" in js, "the +180 presentation shift must be in the JS mirror"
     assert "Q1_LO = 0.0" in js and "Q1_HI = 90.0" in js
     assert "Q3_LO = -180.0" in js and "Q3_HI = -90.0" in js
     assert "SLACK = 10.0" in js, "the engine-gate slack must be in the JS mirror (fix-round F4)"
-    # FLOORED modulo (fix-round F1): the CPython float-% form, never bare truncated %.
+    # FLOORED modulo: the CPython float-% form, never bare truncated %.
     assert "function floormod" in js and "if (r !== 0 && r < 0) r += y" in js
     # trueYx must SUBTRACT the shift then wrap (the unwrap), and inQ3 must go through trueYx + mapYx.
     assert "wrap180(stored - YX_SHIFT)" in js, "φyx must be unwrapped (stored - shift), not read raw"
@@ -280,7 +280,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert 'class="st-list"' in body, "the table container carries the grid-left .st-list class"
             assert 'class="st-facts"' in body, "the facts container carries the middle .st-facts class"
             assert 'class="st-plots"' in body, "the plots container carries the right .st-plots class"
-            # C43 FR2-1 scope (invariant FLIPPED): the hub's OTHER tabs are ALSO wide now — wide-by-
+            # Scope: the hub's OTHER tabs are ALSO wide, which is wide-by-
             # default supersedes the H2 'stations-only opt-in', so the overview tab (the old negative
             # control) is wide too.
             r2 = await client.get("/gateway/curator/survey/s2a-survey")
@@ -409,7 +409,7 @@ def test_stations_and_history_rendered_surfaces_csp_clean(tmp_path):
 
 
 # ==================================================================================================
-# History read-only (allowlist assertion, S1 fix-round F1 style)
+# History read-only (allowlist assertion)
 # ==================================================================================================
 def test_history_argv_is_read_only_log_verb():
     """HISTORY READ-ONLY PIN (allowlist style). The history-job argv carries ONLY the read-only `log`
@@ -486,7 +486,7 @@ def test_history_tab_renders_real_git_log(tmp_path):
             # no <form> and no rename/retire action route. (The copy may mention "rename" descriptively
             # — the pin is on the absence of an ACTION, not the word.) Anchor: the tab body's own
             # lead copy (C43-HUB replaced the per-tab h1 with the unified mockup header, so the old
-            # '…— history</h1>' anchor no longer exists; the context-bar rebuild form sits ABOVE it).
+            # 'history</h1>' anchor does not exist; the context-bar rebuild form sits ABOVE it).
             assert "Read-only audit trail" in r.text
             history_body = r.text.split("Read-only audit trail", 1)[-1]
             assert "<form" not in history_body, "the History tab must carry no action form (read-only)"
@@ -580,7 +580,7 @@ def test_quarantine_non_quarantined_id_404s(tmp_path):
 
 
 # ==================================================================================================
-# Keys deltas (D7)
+# Keys deltas
 # ==================================================================================================
 def test_key_note_stored_rendered_and_counts(tmp_path):
     """KEYS PIN. A note set on a key is stored (sqlite), rendered on the page, and the submission count
@@ -669,7 +669,7 @@ def test_revoked_key_note_post_refused(tmp_path):
     id is refused 4xx and the stored note is UNCHANGED — the UI hiding the editor is not the
     enforcement; the route + the DB `AND revoked_utc IS NULL` guard are. FAILS IF the route accepts a
     note update on a revoked id (the shipped pre-fix behaviour, 'by-design' docstring overruled), or
-    the DB layer alone would have persisted it."""
+    the DB layer alone persists it."""
     async def _body():
         from gateway import uploader_keys as uploader_keys_mod
         async with app_client(tmp_path, git_runner=FakeGit()) as (client, _app, gw, cfg):

@@ -83,7 +83,7 @@ def test_empty_input_for_present_key_clears_to_none():
 def test_absent_key_left_empty_is_omitted():
     """A sub-key the original section did NOT carry, left empty, is not introduced. FAILS IF the
     assembler adds an empty key the source lacked (breaking round-trip on subset-map surveys)."""
-    # identifiers originally only carried dataset_doi + project_raid (a real subset case).
+    # identifiers carries only dataset_doi + project_raid (a real subset case).
     original = {"dataset_doi": None, "project_raid": None}
     form = {
         "s_identifiers_dataset_doi": "",
@@ -183,7 +183,7 @@ def test_coordinate_policy_key_parity_through_real_engine_parser():
         assert default == policy, (
             f"editor-assembled {assembled!r} parsed by the engine to {default!r}, not the intended "
             f"{policy!r} — a key/spelling mismatch would make the policy a silent no-op")
-        assert overrides == {}  # survey-level lane only; no per-station overrides written here
+        assert overrides == {}  # survey level only; no per-station overrides written here
 
 
 def test_coordinate_policy_unset_round_trips_to_omit():
@@ -351,8 +351,8 @@ def test_coordinate_overrides_empty_and_inherit_omit_the_key():
 
 
 def test_coordinate_overrides_inherit_removes_a_present_key():
-    """INHERIT removes a previously-pinned station: original had {CP1L04: withheld}; resubmitting an
-    empty map yields an access block that no longer carries coordinate_overrides, so apply_patch's
+    """INHERIT removes a pinned station: the original carries {CP1L04: withheld}; resubmitting an
+    empty map yields an access block that carries no coordinate_overrides, so apply_patch's
     surgical map-merge DELETES the key (byte-clean removal). FAILS IF a removed override lingers."""
     original = {"level": "open", "coordinate_overrides": {"CP1L04": "withheld"}}
     form = {
@@ -452,7 +452,7 @@ def test_stations_panel_clear_all_removes_overrides_despite_original_map():
     """OVER-PRESERVATION GUARD: field PRESENT + explicit EMPTY map (the stations-panel set-all-to-
     inherit) must still DELETE the key even when the original carried a map and a sibling scalar also
     changed. This is the OTHER side of the absent/present distinction — the fix must not over-preserve
-    a map the curator explicitly cleared. FAILS IF the clear-all no longer removes the key."""
+    a map the curator explicitly cleared. FAILS IF the clear-all does not remove the key."""
     original = {"level": "open", "contact": "old@example.org",
                 "coordinate_overrides": {"SITE1": "withheld"}}
     form = {
@@ -544,7 +544,7 @@ def test_coordinate_and_level_selects_validate_independently():
 
 def test_time_series_levels_checkboxes():
     """levels_available assembles from the checked c_time_series_levels_available_* boxes in canonical
-    order. FAILS IF checkbox names are not read or order is not canonical. IDCONS D2: collection_pid is
+    order. FAILS IF checkbox names are not read or order is not canonical. IDCONS collection_pid is
     RETIRED from the editor UI, so a stray s_time_series_collection_pid input is IGNORED (not assembled);
     a stored collection_pid instead ROUND-TRIPS verbatim via the unmodelled-key carry-forward."""
     form = {
@@ -562,7 +562,7 @@ def test_time_series_levels_checkboxes():
 
 def test_list_rows_assemble_and_blank_rows_dropped():
     """A list section assembles filled rows; an all-empty spare row is dropped. FAILS IF a blank spare
-    row lands in the yaml as a row of nulls (the no-JS degradation must be inert). A2: retargeted off
+    row lands in the yaml as a row of nulls (the no-JS degradation must be inert). retargeted off
     the retired principal_investigators section onto publications, an all-scalar list of the same shape
     (creators/contributors are assembled by the unified People panel, not this generic path)."""
     form = {
@@ -579,8 +579,8 @@ def test_list_rows_assemble_and_blank_rows_dropped():
 
 def test_list_partial_row_kept_with_nulls():
     """A partially-filled row is kept with the empty sub-fields as null. FAILS IF a partial row is
-    dropped (losing curator input). IDCONS D2: instruments[].pid is RETIRED from the row widgets, so a
-    stray l_instruments_0_pid input is IGNORED — the assembled row carries only the modelled sub-keys."""
+    dropped (losing curator input). IDCONS instruments[].pid is RETIRED from the row widgets, so a
+    stray l_instruments_0_pid input is IGNORED - the assembled row carries only the modelled sub-keys."""
     form = {
         "l_instruments_0_manufacturer": "Phoenix",
         "l_instruments_0_model": "",
@@ -661,7 +661,7 @@ def test_build_section_patch_empty_form_is_empty_patch():
     assert patch == {} and errors == []
 
 
-# ---- C46: attribution (map) + sources (list) capture --------------------------------------------
+# --- Attribution (map) + sources (list) capture --------------------------------------------
 
 # The GENERATED engine contract seam, loaded by path (engine-truth). _contract.py is a stdlib-only
 # generated constants file (no heavy stack), so it loads cleanly in the stack-less gateway test env.
@@ -785,7 +785,7 @@ def test_attribution_bool_and_round_trip():
         **_snap("attribution", {"custodian": "GSSA", "changes_made": True, "declared_date": "2026-07-13"}),
     }
     assert ef.assemble_section(form, "attribution") is ef._OMIT
-    # unticking a previously-true flag is a real change to False (not a silent drop)
+    # unticking a flag the original set true is a real change to False (not a silent drop)
     form2 = {"s_attribution_custodian": "GSSA",
              **_snap("attribution", {"custodian": "GSSA", "changes_made": True})}
     assert ef.assemble_section(form2, "attribution") == {"custodian": "GSSA", "changes_made": False}
@@ -1054,7 +1054,7 @@ def test_retired_flat_credit_keys_are_no_longer_editor_sections():
     """Lead_investigator and principal_investigators are GONE from the editor registries,
     and with them the legacy Convert surface (_LEGACY_CREDIT_KEYS / convert_requested /
     _apply_legacy_convert / DELETE_DIRECTIVE). FAILS IF any of them survives - a curator control that
-    edits a key the migration deleted and the engine no longer reads."""
+    edits a key the migration deleted and the engine does not read."""
     assert "lead_investigator" not in ef.MAP_SECTIONS
     assert "principal_investigators" not in ef.LIST_SECTIONS
     for gone in ("_LEGACY_CREDIT_KEYS", "convert_requested", "_apply_legacy_convert",
@@ -1264,7 +1264,7 @@ def test_acknowledgements_type_vocab_is_warn_only_not_fail_closed():
 
 def test_identity_classification_assembles_case_and_represents_rows():
     """The designation mapping {case, represents[] | own_identifiers[]} assembles from the case select
-    plus its pair rows. FAILS IF the rows are not read (the citation chain would have nothing to
+    plus its pair rows. FAILS IF the rows are not read (the citation chain then has nothing to
     match) or the retired scalar-string form is emitted."""
     form = {"s_identity_classification_case": "case_a",
             "l_identity_classification_represents_0_scheme": "DOI",
@@ -1315,7 +1315,7 @@ def test_identity_classification_absent_rows_preserve_the_stored_designation():
 # ---- vocab parity pins against the vendored surveys validator ------------------------------------
 
 def test_mtcat20_vocabs_match_the_vendored_validator():
-    """PARITY PIN (A2): the editor's baked ORG_ROLES_ORDERED / ACKNOWLEDGEMENT_TYPES /
+    """PARITY PIN: the editor's baked ORG_ROLES_ORDERED / ACKNOWLEDGEMENT_TYPES /
     CITATION_TEXT_SOURCES / IDENTITY_CLASSIFICATIONS equal the surveys validator's FROZEN
     vocabularies, and the modelled section keys equal its row allow-lists. FAILS IF a vocab or key set
     is extended surveys-side and not mirrored here - the drift that publishes an unrecognised key or
@@ -1363,7 +1363,7 @@ _MTCAT20_FORM = {
 
 
 def test_key_parity_mtcat20_patch_through_real_validator(tmp_path):
-    """KEY-PARITY PIN (A2, the important one): an editor-assembled citation + identity_classification +
+    """KEY-PARITY PIN (the important one): an editor-assembled citation + identity_classification +
     organisations + acknowledgements patch, written to a survey.yaml and read back by the REAL vendored
     surveys validator, produces ZERO unknown-key warnings AND ZERO FAILs - the editor's frozen section
     keys equal the validator's allow-lists and the assembled citation chain is internally consistent.
@@ -1401,7 +1401,7 @@ def test_key_parity_mtcat20_mutation_proof(tmp_path):
 
 
 def test_gateway_carries_no_retired_credit_key_outside_tests():
-    """GREP PIN (A2): no retired flat credit key is read anywhere in the gateway package outside the
+    """GREP PIN: no retired flat credit key is read anywhere in the gateway package outside the
     test tree and the vendored validator copy. The legitimate needles are the PII fixture in
     test_intake_files.py and the round-trip fixture in test_edit_runner.py, both under tests/.
     FAILS IF a reader, a registry entry or a rendered control survives the retirement."""

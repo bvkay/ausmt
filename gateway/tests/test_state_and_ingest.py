@@ -70,7 +70,7 @@ def test_terminal_state_cannot_transition(tmp_path):
 
 def test_allowed_set_matches_state_diagram():
     # Guard against silent widening of the state machine: the exact legal set is frozen (C10 §2 +
-    # C11 §1). If a future change adds a transition, it must be reflected HERE deliberately.
+    # §1). If a future change adds a transition, it must be reflected HERE deliberately.
     assert states.ALLOWED == frozenset({
         (states.RECEIVED, states.SCANNED),
         (states.RECEIVED, states.REJECTED_AV),
@@ -86,9 +86,9 @@ def test_allowed_set_matches_state_diagram():
 
 
 def test_validated_is_no_longer_terminal():
-    # C11 §1: VALIDATED stops being terminal (curator actions reopen it). PUBLISHING/PUBLISH_FAILED
+    # §1: VALIDATED stops being terminal (curator actions reopen it). PUBLISHING/PUBLISH_FAILED
     # Are transient/recoverable, not terminal. proven failing: with the C10 TERMINAL set
-    # (VALIDATED terminal) a VALIDATED->PUBLISHING approve was refused as an illegal transition.
+    # (VALIDATED terminal) a VALIDATED->PUBLISHING curator approve was refused as an illegal transition.
     assert not states.is_terminal(states.VALIDATED)
     assert not states.is_terminal(states.PUBLISHING)
     assert not states.is_terminal(states.PUBLISH_FAILED)
@@ -134,7 +134,7 @@ def test_ingest_quarantined_done(tmp_path):
 
 def test_forged_done_file_ignored(tmp_path):
     # A done-file with an unknown outcome / unknown submission must NOT drive any transition
-    # (design §8). proven failing: read_done returned a DoneFile for outcome='approve'
+    # (design §8). proven failing: read_done returned a DoneFile for outcome='curator approve'
     # and _apply_done attempted a transition.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, gw, cfg):

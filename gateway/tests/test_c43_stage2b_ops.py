@@ -186,7 +186,7 @@ def test_freshness_card_both_repos_behind_amber_current_green(tmp_path):
 # Route: build detail renders the C18-A4 cache forensics (render side of the B4 producer pin)
 # --------------------------------------------------------------------------------------------------
 def test_build_detail_renders_a4_cache_counters(tmp_path):
-    """BUILD-DETAIL RENDER PIN (B4). The build-detail view must render the C18-A4 cache forensics
+    """BUILD-DETAIL RENDER PIN. The build-detail view must render the C18-A4 cache forensics
     (salt_fp / write_errors / read_errors) from the ops-status inventory, and 'no such build' for an
     unknown ref (no filesystem access, no traversal). FAILS IF a counter is dropped, the salt_fp is
     not shown, or an unknown ref is not handled."""
@@ -347,7 +347,7 @@ def test_ops_status_stale_future_timestamp_is_stale():
 
 
 # --------------------------------------------------------------------------------------------------
-# C43 S2b-ii: the _ACTION_COLOUR render gap (incident-backed) + the new pause/pinned states.
+# The _ACTION_COLOUR render gap + the pause/pinned states.
 # --------------------------------------------------------------------------------------------------
 def test_untracked_blocked_renders_red_with_log_tail():
     """RENDER-GAP PIN (incident-backed). action=untracked_blocked is a REFUSED rebuild that needs an

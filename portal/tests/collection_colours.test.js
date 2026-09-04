@@ -1,4 +1,4 @@
-// C7 PARITY: a collection's member colours, the SPA against the static pages.
+// PARITY: a collection's member colours, the SPA against the static pages.
 //
 // A collection is drawn twice - as the static collection page's scatter (engine/extract/_pages.py
 // _collection_scatter, over _member_colours) and as the SPA's collScatter - and a reader moving between

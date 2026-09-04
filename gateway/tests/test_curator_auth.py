@@ -173,7 +173,7 @@ def test_approve_without_csrf_403_no_transition_no_git(tmp_path):
     # transition, NO git call.
     # Failure criterion: fails if the submission left VALIDATED, or if the fake git recorded ANY call.
     # Proven failing: disabling the csrf_ok gate in handle_curator_action (if False:)
-    # made this approve POST return 303 (not 403) and proceed to PUBLISHING — verified by patching
+    # made this curator approve POST return 303 (not 403) and proceed to PUBLISHING, verified by patching
     # the guard off and observing this exact assertion break.
     async def _body():
         git = FakeGit()

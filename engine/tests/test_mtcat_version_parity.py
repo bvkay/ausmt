@@ -1,6 +1,6 @@
 """THE MTCAT SCHEMA VERSION HAS ONE SOURCE, AND THIS IS THE PIN THAT KEEPS IT THAT WAY.
 
-The version used to be a literal, and a literal reproduces. Three consecutive review rounds each found
+The version must not be a literal, because a literal reproduces. Three consecutive review rounds each found
 another hardcoded default: two in build_portal (the no-config/unreadable-config default in
 load_portal_config and the emitter's own p.get fallback), a third in load_portal_config's parsed-config
 branch, and a fourth in portal/tools/gen_config.py still defaulting to "1.0" two schema releases after
@@ -10,7 +10,7 @@ read it.
 
 SINGLE SOURCE: the MTCAT_VERSION constant in contract/generate.py (the ratified MTCAT 2.0 version
 machinery: "the machine-readable version source becomes a constant; the title displays the version;
-it is no longer parsed as the source"). The schema artifact's `title` is a DISPLAY surface generated
+it is not parsed as the source"). The schema artifact's `title` is a DISPLAY surface generated
 from the constant and verified against it; contract/generate.py:mtcat_schema_version returns the
 constant after that verification and emits MTCAT_SCHEMA_VERSION into engine/extract/_contract.py
 (the same generated-constant mechanism the positional column contract uses, gated by
@@ -138,7 +138,7 @@ def _generated_engine_constant() -> str:
 
 def _docs_display() -> str:
     """The docs current-version display: the reference index states which schema version the
-    documentation describes. This surface previously lacked a pin (the version-literal class has
+    documentation describes. Without this pin the version-literal class has
     bitten three times); it has one now, so a version bump cannot leave the docs describing the
     previous release."""
     docs_index = REPO / "docs" / "docs" / "reference" / "index.md"
@@ -226,7 +226,7 @@ DOCS_INDEX = REPO / "docs" / "docs" / "reference" / "index.md"
                            "(designed topology; the docs surface is pinned from checkout lanes)")
 def test_docs_current_version_display_agrees():
     """Statement 8: the docs reference index states which schema version the documentation
-    describes. This surface previously had no pin at all; a version bump could leave the whole
+    describes. Without a pin here, a version bump can leave the whole
     reference tree describing the previous release with nothing failing. Skipped only where the
     docs tree is not shipped (the engine image); asserted on every checkout workflow."""
     want = _authority()

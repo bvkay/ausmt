@@ -6,7 +6,7 @@ input widgets are gone from editor_form.MAP_SECTIONS / LIST_SECTIONS) but the sc
 the engine keeps its flat-key fallback reads until the corpus migration lands (SPEC §3/§6). So a survey
 that still carries an un-migrated dataset_doi (or collection_pid, or per-row instrument pid) must not have
 it silently dropped the next time a curator saves an unrelated change. The fix is the unmodelled-key
-carry-forward in editor_form._assemble_map / _assemble_list: a key the widget no longer models is re-
+carry-forward in editor_form._assemble_map / _assemble_list: a key the widget does not model is re-
 emitted verbatim, so the assembled section still equals its o_<section> round-trip anchor (-> _OMIT) and
 the section never enters the patch, leaving apply_patch to touch nothing.
 

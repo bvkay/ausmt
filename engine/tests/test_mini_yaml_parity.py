@@ -105,7 +105,7 @@ def test_parity_quoted_mapping_keys():
 def test_parity_comment_on_key_line_before_nested_block():
     """ (section-2 D3): a trailing comment on a KEY line whose value is a nested block
     ('data_types:  # pick one' followed by indented items) must parse like PyYAML parses it. The
-    fallback used to read the comment as the key's scalar VALUE, then bail out of the nested block,
+    fallback must not read the comment as the key's scalar VALUE and then bail out of the nested block,
     truncating every later top-level key (block sequences) or flattening children into the parent
     (nested maps). The shipped _template/_example both carry this shape, so a no-PyYAML box failed
     the reference package against its own validator."""

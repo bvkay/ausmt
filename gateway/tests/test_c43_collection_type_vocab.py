@@ -1,6 +1,6 @@
 """The collection type vocabulary, held equal as a SET across every carrier that states it.
 
-Record D5-A A2: `type` is validator-unenforced, so the console's select IS the guardrail. That makes
+Record D5-A `type` is validator-unenforced, so the console's select IS the guardrail. That makes
 the vocabulary a contract with no schema behind it, and it is written out in seven places. Adding a
 value to the prose carriers alone left the two gateway tuples short, which is a hard 400 on the
 publish spec path and a select that renders (unset) for a value the corpus legitimately carries: the

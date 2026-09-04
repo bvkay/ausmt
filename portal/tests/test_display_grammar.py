@@ -1,10 +1,10 @@
 """Runs the display_grammar Node test: portal/src/state.js's fmtPeriod / fmtRange / licHuman against
 the SAME worked examples the engine suite pins engine/extract/_pages.py's _fmt_period / _range /
-_fmt_licence against (engine/tests/test_entity_pages.py, the B9 R1/R2/R3 block). Both sides carry the
+_fmt_licence against (engine/tests/test_entity_pages.py, the display-grammar block). Both sides carry the
 pairs as literals, so neither can be made green by editing the other's source of truth. Skips if Node
 is unavailable (CI installs Node - see .github/workflows/portal-ci.yml).
 
-R3's DOMAIN is pinned here as well, on the engine's own leaf. The worked examples held the two helpers
+The licence rule's DOMAIN is pinned here as well, on the engine's own leaf. The worked examples held the two helpers
 to the same reading of every identifier the corpus declares; what they could not see was an identifier
 it does not. The JS derived a reader's form from the CC grammar alone while _fmt_licence looks its
 input up in a table built from contract/licenses.json, so a survey released under a CC id the

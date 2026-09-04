@@ -158,7 +158,7 @@ def test_tipper_components_match_component_dict_and_mask_fills():
 
 
 def test_placeholder_tipper_masked_with_notice(capsys):
-    """★ FAILS IF: the real-corpus placeholder tipper (Phoenix EMpower A01: |T| flat at 1.0) is NOT
+    """★ FAILS IF: the real-corpus placeholder tipper (Phoenix EMpower |T| flat at 1.0) is NOT
     masked, or no NOTICE names the station. This is the D2 honesty guard on a REAL file."""
     per, comp = mtm.components(REAL / "phoenix_empower_A01.edi")
     # all four tipper series masked to null (dict collapses an all-None series to None)
@@ -195,7 +195,7 @@ def test_real_varying_tipper_is_not_masked():
 
 
 def test_placeholder_tipper_note_rides_the_report_channel(capsys):
-    """The mask's NOTICE used to be a bare stderr print inside the parse layer - the one C20
+    """The mask's NOTICE must not be a bare stderr print inside the parse layer, which is the one
     honesty decision that never reached build_report.json, and under a C18 cache hit it did not
     fire at all (a hit and a miss must emit the same diagnostics). With a notes channel the caller
     owns emission: the fact rides the cached parse product and the report, and stderr stays quiet

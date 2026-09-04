@@ -200,9 +200,9 @@ def test_the_two_headers_measure_text_in_one_font_stack():
 
 # --------------------------------------------------------------------------- the identity mark
 #
-# Brand-assets workflow E3: the header identity is the AusMT mark on EVERY surface, replacing the
+# Brand-assets workflow the header identity is the AusMT mark on EVERY surface, replacing the
 # AuScope-derived symbol the SPA carried alone. The relationship with AuScope stays explicit in
-# footer and About content; it is no longer embedded in the lockup.
+# footer and About content; it is not embedded in the lockup.
 #
 # The mark is a fixed 30 x 30 box, which is why it can join the zero-basis .hleft zone without
 # moving the centre tabs: a flex:1 1 0 side hands its leftover space out evenly whatever it holds,
@@ -483,9 +483,9 @@ def test_every_chrome_surface_declares_the_headers_own_line_height():
 
 def test_every_chrome_surface_carries_the_same_zone_geometry():
     """The zone rules, character-identical on EVERY surface wearing the chrome, not just across the
-    pair above. The pair covers the SPA and the generated pages, which is where the geometry was
-    ruled; releases.html and about.html each carry their OWN copy of the chrome, and both kept the
-    auto-basis sides the C9 rule replaced. An auto basis sizes each side zone from its own content,
+    pair above. The pair covers the SPA and the generated pages, which is where the geometry is
+    specified; releases.html and about.html each carry their OWN copy of the chrome, and an
+    auto-basis side is what the zone rule replaces. An auto basis sizes each side zone from its own content,
     so on those two pages the identity block set the width of its own zone and shoved the tab group
     out to x=525.63 and x=525.27 at 1280px, while the SPA, the generated pages and brand.html all
     sat at x=350.83. A reader following the header's own Releases or About link watched the nav jump

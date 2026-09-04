@@ -33,7 +33,7 @@ def _runner_cfg(tmp_path) -> RunnerConfig:
 
 # The REAL validator the gw-runner invokes in production. C35b/D3 (review F7): resolve it
 # UNCONDITIONALLY — the sibling ausmt-surveys checkout when present (dev box / compose e2e), else the
-# committed VENDORED pinned copy (CI / fresh clones). The validator-only oracle below no longer skips;
+# committed VENDORED pinned copy (CI / fresh clones). The validator-only oracle below does not skip;
 # the engine-preview oracle (which additionally needs the mt_metadata stack) still does, legitimately.
 from gateway.tests.conftest import require_validator_dir, resolve_validator_dir  # noqa: E402
 
@@ -138,7 +138,7 @@ def test_preview_refuses_package_without_survey_folder(tmp_path, monkeypatch):
 
 
 def test_preview_spawns_engine_with_explicit_engine_dir_cwd(tmp_path, monkeypatch):
-    # C37/F8: the preview subprocess must be spawned with an EXPLICIT cwd == cfg.engine_dir, not
+    # The preview subprocess must be spawned with an EXPLICIT cwd == cfg.engine_dir, not
     # cwd=None (which inherited the runner's cwd and rode silently on compose's WORKDIR — the
     # undocumented contract that broke the first live runner). Captures the cwd the runner hands to
     # _run_subprocess for the engine module and pins it to the configured engine_dir.
@@ -219,7 +219,7 @@ def test_preview_spawns_engine_with_the_configured_validator_path(tmp_path, monk
 
 
 def test_from_env_reads_engine_dir_knob():
-    # C37/F8: AUSMT_ENGINE_DIR is read in from_env like its siblings, default /app/engine (the image
+    # AUSMT_ENGINE_DIR is read in from_env like its siblings, default /app/engine (the image
     # WORKDIR). FAILS IF the knob is dropped or its default drifts.
     default_cfg = RunnerConfig.from_env({})
     assert default_cfg.engine_dir == Path("/app/engine")
@@ -262,7 +262,7 @@ def test_preview_end_to_end_real_engine(tmp_path):
         # Require_validator_dir (sibling -> vendored -> FAIL, never a bare skip), and the engine
         # spawns with C37's EXPLICIT cwd (cfg.engine_dir) instead of inheriting the process cwd —
         # the dev-box analogue of the image's WORKDIR /app/engine. No monkeypatch.chdir: with
-        # `extract` a real installed package, resolution no longer rides on the cwd at all.
+        # `extract` a real installed package, resolution does not ride on the cwd at all.
         jobs_dir=tmp_path / "jobs", validator_path=str(require_validator_dir()), timeout_s=900,
         engine_dir=_ENGINE_DIR)
     summary_path = tmp_path / "preview-summary.json"
@@ -424,7 +424,7 @@ def _emulate_real_validator(cmd, report: dict) -> None:
     than re-encoded by hand here — the observed cmd must be exactly what the shared helper would build
     for the same (validator_file, folder, report_file). So a change to the canonical argv moves the
     helper AND this expectation together, and a call site that DRIFTED from the helper reds this
-    assertion (it would no longer match the helper's output)."""
+    assertion (it does not match the helper's output)."""
     assert cmd[1].endswith("validate_survey.py"), f"unexpected validator argv: {cmd}"
     folder = Path(cmd[2])
     assert folder.is_dir(), f"folder positional missing or not a dir: {cmd}"
@@ -458,7 +458,7 @@ def test_run_validator_against_the_real_validator(tmp_path):
     # INTEGRATION, no mocks: _run_validator must drive the REAL validate_survey.py to a parsed
     # {counts, items, ...} report and a True (no-FAIL) verdict on a minimal valid package.
     #
-    # C35b/D3 (review F7): UNCONDITIONAL now — resolves the sibling validator if present, else the
+    # (review F7): UNCONDITIONAL now - resolves the sibling validator if present, else the
     # Committed vendored copy; require_validator_dir FAILS (never skips) if neither is present. The
     # Validator is stdlib+yaml so this runs in the stack-less gateway workflow too.
     #
@@ -896,7 +896,7 @@ def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeyp
 # Compose-e2e coverage in a workflow where the runner never boots).
 # --------------------------------------------------------------------------------------------------
 def test_poll_once_drains_edit_jobs_before_submission_jobs(tmp_path, monkeypatch):
-    # D4(i) — FAILS IF a submission job is processed before a pending edit job in the same pass. Edit
+    # FAILS IF a submission job is processed before a pending edit job in the same pass. Edit
     # jobs are request/response (a curator is blocked polling) and must drain FIRST. proven by ordering:
     # reorder the drain after the submission claim on a scratch copy and this goes RED (transcript in
     # the report).
@@ -922,7 +922,7 @@ def test_poll_once_drains_edit_jobs_before_submission_jobs(tmp_path, monkeypatch
 
 
 def test_poll_once_crash_leaves_running_file_and_no_done_file(tmp_path, monkeypatch):
-    # D4(ii) — the crash-recovery contract: if process_job CRASHES (unhandled), poll_once must let the
+    # The crash-recovery contract: if process_job CRASHES (unhandled), poll_once must let the
     # exception propagate WITHOUT writing a done-file, leaving the running-file present for the
     # gateway's dead-job sweep to re-queue. A crashed job is NEVER silently marked done. FAILS IF the
     # running-file vanishes or a done-file appears on a crash.

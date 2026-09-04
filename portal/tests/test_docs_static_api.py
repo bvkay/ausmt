@@ -33,7 +33,7 @@ Four groups of claim.
     compared name-by-name and index-by-index against contract/columns.json, which is the single
     source the generated maps come from. Public-surface audit: catalogue.json is
     portal-internal, not a contract, so the table lives on developer/data-files.md (the engine-to-
-    portal positional contract) and the public data reference no longer carries it; the pin follows
+    portal positional contract) and the public data reference does not carry it; the pin follows
     the table.
 
 (4) THE HONESTY CLAIMS ARE BACKED BY CODE. Three of them, each pinned to the line in
@@ -276,7 +276,7 @@ def test_the_withheld_station_record_is_documented_as_the_emitter_writes_it():
     The evidence is fixtures/station-products/, a per-station products tree the REAL build emitted. This
     workflow installs no engine stack, so the emitter cannot run here; a grep for a source literal pinned
     the emitter's TEXT, which survives no refactor. The emitter's own live gate is the engine suite's
-    C1c build (engine/tests/test_access_gate.py), which asserts the same two facts over a real build."""
+    access-gate build (engine/tests/test_access_gate.py), which asserts the same two facts over a real build."""
     held = STATION_PRODUCTS / "withheld-survey" / "SPHELD"
     assert json.loads((held / "station.json").read_text(encoding="utf-8"))["withheld"] is True, (
         "the docs describe a withheld station.json stub; the emitter must write the marker")

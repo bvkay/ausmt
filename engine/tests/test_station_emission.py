@@ -49,7 +49,7 @@ from test_station_schema_v01 import validator as schema_validator  # noqa: E402
 import _stationcheck as stcheck  # noqa: E402
 
 # The station.json KEY SET on each branch. Frozen = emitted before the promotion and byte-stable
-# through 1.x; markers = the three ratified additions (D8); new model = the canonical blocks, which are
+# through 1.x; markers = the three ratified additions; new model = the canonical blocks, which are
 # CONDITIONAL because a source that asserts no acquisition fact publishes no runs[]; conditional =
 # coordinate_policy, present only for a non-exact station.
 FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "location", "data",
@@ -117,7 +117,7 @@ def built_open(tmp_path_factory):
 def built_access(tmp_path_factory):
     """One survey per access state, each over the same EDIs: the open control plus the two states that
     emit a withheld stub. Two withheld surveys rather than one because the embargo date is CONDITIONAL
-    (D6) and metadata_only is the branch that carries a null one."""
+    and metadata_only is the branch that carries a null one."""
     pytest.importorskip("mt_metadata")
     root = tmp_path_factory.mktemp("station-emission-access")
     surveys = root / "surveys"
@@ -179,14 +179,14 @@ def test_every_record_opens_with_the_markers_and_survey_id_is_the_slug(built_acc
         assert doc["survey"] != doc["survey_id"], "the display title stays a separate, legacy surface"
 
 
-# ---------------------------------------------------------------- D1: one call, two surfaces
+# --------------------------------------------------------------- One call, two surfaces
 
 def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
     """`diagnostics` gains the call, the method string and the caveat, from the SAME computation the
-    sidecar reads. The sidecar keeps being written byte-unchanged through 1.x (D14), so the two must
+    sidecar reads. The sidecar keeps being written byte-unchanged through 1.x, so the two must
     never be able to disagree.
 
-    R2: what the fold carries is bound to the sidecar; what the sidecar states as null is ABSENT
+    what the fold carries is bound to the sidecar; what the sidecar states as null is ABSENT
     here, never copied across."""
     full, _ = _split(built_open)
     for key, doc in full.items():
@@ -209,7 +209,7 @@ def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
 
 def test_a_withheld_record_gains_no_diagnostics_and_no_sidecar(built_access):
     """The asymmetry the fold could have collapsed: a withheld station has no dimensionality.json, and
-    folding the call in would have given it one under another name."""
+    folding the call in gives it one under another name."""
     _, withheld = _split(built_access)
     for key, doc in withheld.items():
         assert "diagnostics" not in doc, f"{key}: the interpretation product must stay out of a stub"
@@ -275,7 +275,7 @@ def test_built_withheld_stubs_reject_the_ratified_leaks(built_access, why, mutat
         assert stcheck.violations(leaked), f"{key}: the semantic layer accepted {why}"
 
 
-# ---------------------------------------------------------------- D11: no masked position in a note
+# --------------------------------------------------------------- No masked position in a note
 
 def _coord_fixtures():
     """The C42 coordinate fixtures and their leak-string generator, reused rather than restated."""
@@ -357,7 +357,7 @@ def test_the_masked_stations_still_publish_a_record(built_masked):
     assert by_station[c42.HID["id"]]["location"] == {"lat": None, "lon": None}
 
 
-# ---------------------------------------------------------------- C42 x D3: archives are containment
+# --------------------------------------------------------------- X archives are containment
 
 def test_a_masked_station_advertises_no_archive_it_put_no_bytes_into(built_masked):
     """An `archive` row is a CONTAINMENT claim, and the byte gate decides containment per station: a

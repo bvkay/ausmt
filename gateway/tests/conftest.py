@@ -54,7 +54,7 @@ def resolve_validator_dir() -> Path | None:
 
 def require_validator_dir() -> Path:
     """Resolve_validator_dir or FAIL loudly (never skip). The vendored copy is committed, so a None
-    result means a broken checkout — an assert, not a skip (F7: no more silent same-author-mock fallback)."""
+    result means a broken checkout - an assert, not a skip (no more silent same-author-mock fallback)."""
     d = resolve_validator_dir()
     assert d is not None, (
         "no validator available: neither the sibling ausmt-surveys/_validation checkout nor the "
@@ -246,7 +246,7 @@ def corrupt_deflate_zip() -> bytes:
 # --------------------------------------------------------------------------------------------------
 # App harness
 # --------------------------------------------------------------------------------------------------
-# C11 curator fixtures. A configured curator key (>= 16 chars per the fail-closed floor) and a fake
+# Curator fixtures. A configured curator key (>= 16 chars per the fail-closed floor) and a fake
 # git seam so publish tests need no real git (design §8 — same injected-callable pattern as the clamd
 # scanner seam). No rebuild seam: v2 publish is commit-and-push ONLY (the operator rebuilds by hand).
 CURATOR_NAME = "curator1"
@@ -279,12 +279,12 @@ def make_config(tmp_path: Path, **overrides) -> Config:
 
 
 class FakeGit:
-    """A small in-memory model of the surveys-live git repo (design §5 v2, commit-and-push ONLY —
+    """A small in-memory model of the surveys-live git repo (design §5 v2, commit-and-push ONLY -
     NO rebuild). Records every invocation AND tracks enough state (current branch, HEAD ref, whether
     a rollback happened) to prove the fail-closed rollback restores the pre-state. No real repo, no
-    real git — the whole point of the injected seam (design §8).
+    real git - the whole point of the injected seam (design §8).
 
-    STRICT (C35b/D2): every git verb this fake serves is enumerated in __call__; an unmodeled verb
+    STRICT: every git verb this fake serves is enumerated in __call__; an unmodeled verb
     RAISES AssertionError naming the argv instead of returning a silent rc=0. Extending the fake to a
     new verb must be a conscious act, with the real-git workflow (test_publish_real_git.py) as the
     reference for honest behaviour. The verbs modeled today: status, rev-parse, checkout, add, commit,
@@ -331,7 +331,7 @@ class FakeGit:
             rc, err = self.fail_on[key]
             return GitResult(returncode=rc, stdout="", stderr=err)
 
-        # Model the mutating verbs so branch/ref/rollback state stays coherent. STRICT (C35b/D2):
+        # Model the mutating verbs so branch/ref/rollback state stays coherent. STRICT:
         # every verb this fake serves is enumerated below; the final `else` RAISES on any unmodeled
         # verb rather than returning a silent rc=0 (the old behaviour, which made push/merge/a typo'd
         # flag look like unconditional success). Extending the fake is now a deliberate act — add an
@@ -357,7 +357,7 @@ class FakeGit:
                 self.head_ref = target
         elif verb == "clean":
             # `git clean -fd -- surveys` removes UNTRACKED files under surveys/ only. A real repo
-            # leaves TRACKED (previously-committed) survey dirs in place. Model that faithfully: on
+            # leaves TRACKED survey dirs in place. Model that faithfully: on
             # the FIRST git call for a cwd, snapshot the surveys/ entries that already existed (they
             # stand in for tracked/committed state); clean removes only entries added SINCE that
             # snapshot (this publish's freshly-staged tree). So a rollback removes the staged tree but
@@ -375,7 +375,7 @@ class FakeGit:
         elif verb == "rm":
             # `git rm -- <path>...` removes from the index AND the working tree. Model the working-tree
             # side so the removal rollback tests are honest (a rollback must restore a git-rm'd path).
-            # The leading `--` and any flags are skipped; the rest are repo-relative paths. C41: `git rm
+            # The leading `--` and any flags are skipped; the rest are repo-relative paths. `git rm
             # -r -- surveys/<slug>` retires a WHOLE survey (a DIRECTORY), so when `-r`/`-rf` is present a
             # directory target is removed recursively (rmtree) — modeled explicitly (C35b strict-fake:
             # Extending the fake to survey-scope removal is a deliberate act, with the real-git workflow in
@@ -493,7 +493,7 @@ def seed_validated(gw, cfg, *, slug: str = "mysurvey", email: str = GOOD_EMAIL,
     foreign_email_in_preview -> writes a DIFFERENT person's email into the preview (proves the
         generic email pattern fires, not just the submitter-email needle).
     package_files -> extra files written UNDER the package tree (relative path -> text). Used by the
-        C11b tests to inject a hostile file name and a many-generic-hits case that the PII sweep sees.
+        the tests to inject a hostile file name and a many-generic-hits case that the PII sweep sees.
     token -> when given, the submission gets this REAL status token (hashed like the app does) so the
         test can fetch /gateway/status/<token>; the default is an unusable placeholder hash.
     """
@@ -558,7 +558,7 @@ def run(coro):
 
 
 # --------------------------------------------------------------------------------------------------
-# C31 metadata-editor seams + fixtures
+# Metadata-editor seams + fixtures
 # --------------------------------------------------------------------------------------------------
 # A well-formed block-style survey.yaml with comments, a null field, a block-scalar abstract, and an
 # UNKNOWN custom key the editor form does not model. The round-trip-fidelity contract (C31 §0.2/§3.1)

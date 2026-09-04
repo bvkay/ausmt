@@ -1,6 +1,6 @@
 """The programmatic-fetch documentation, and the death of the fictional /api tier.
 
-DOCS WAVE, STAGE 2. About's seventh answer used to carry three worked patterns: whole-survey bundles, a
+About's seventh answer must not carry the three worked patterns: whole-survey bundles, a
 manifest-driven per-station loop and a bounding-box fetch. About is now the two-minute front door, so it
 keeps a ten-line quickstart and the bundle forms, and the two deep patterns moved to the docs site's API
 reference (docs/docs/interoperability/api-reference.md, "Fetching data today"). Every assertion those

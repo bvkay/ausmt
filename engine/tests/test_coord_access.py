@@ -217,7 +217,7 @@ def _sweep_non_exact_true_values(out_dir):
 
 
 def _sweep_h5_for_non_exact(out_dir, *, epsilon=1e-3):
-    """The NUMERIC HDF5 leg of the leak-sweep (F1): open every served *.h5 under out_dir with the
+    """The NUMERIC HDF5 leg of the leak-sweep: open every served *.h5 under out_dir with the
     engine's own mth5 reader and read each transfer function's summary position
     (latitude/longitude/elevation) as NUMBERS. Returns hits [(file, msg)] when:
 
@@ -230,7 +230,7 @@ def _sweep_h5_for_non_exact(out_dir, *, epsilon=1e-3):
     (bundles/<slug>-tf.h5) and the tier-1 per-station files (h5/<slug>/<station>.h5) are the same
     container class from the same writer, so neither gets its own weaker check.
 
-    Exists because the text sweep cannot see into binary containers. Historically RED against the
+    Exists because the text sweep cannot see into binary containers. RED against the
     pre-F1 build, where emit_survey_mth5 received the FULL station list and re-read the RAW source
     EDIs (TF(fn=...)), bypassing both the mask and the byte gate; RED again against a tier-1 producer
     handed the same unfiltered list, which is why the fixture build must enable both emitters."""
@@ -595,7 +595,7 @@ def test_default_stability_no_policy_field_is_byte_identical(tmp_path):
 
 
 # =====================================================================================================
-# COORDINATE-POLICY MARKER PINS (Amendment A1 — the boot-loaded generalised/withheld signal)
+# COORDINATE-POLICY MARKER PINS ( - the boot-loaded generalised/withheld signal)
 # =====================================================================================================
 
 def _aid_by_id(out):
@@ -779,7 +779,7 @@ def test_probe_e_stem_keyed_override_fails_loudly_not_silently_misapplied(tmp_pa
     the pre-emission point (survey dropped, the survey's REAL station ids listed so the custodian
     learns the correct handles), rc=0, and the healthy co-survey must serve.
 
-    HISTORICALLY RED against the pre-fix build: rc=0 with the sensitive station's TRUE coordinates
+    RED against a build whose validation does not run: rc=0 with the sensitive station's TRUE coordinates
     served on every surface (the sweep below found them) and the unrelated station silently masked.
     """
     base = tmp_path / "surveys"
@@ -863,7 +863,7 @@ def test_variant_pair_base_override_masks_all_variants(tmp_path):
     """VARIANT PIN (fix round 2): two processings of ONE physical station (same DATAID, deduped to
     SITE1.lemigraph / SITE1.ohmega by the engine's variant tagging). Privacy of the physical site
     covers ALL its variants: an override on the BASE id must mask BOTH records and byte-gate BOTH
-    files. HISTORICALLY RED: pre-fix, the base key passed validation then matched NO record at
+    files. RED against a build that lets the base key pass validation and then match NO record at
     application (r['id'] carries the variant suffix), and the corpus backstop aborted the whole
     build (rc=1)."""
     vara = {"id": "SITE1", "file": "SITE1_LemiGraph.edi", "lat": -34.501234, "lon": 138.401234,
@@ -890,7 +890,7 @@ def test_variant_pair_base_override_masks_all_variants(tmp_path):
 
 def test_variant_suffixed_override_key_is_rejected(tmp_path):
     """VARIANT-KEY PIN (fix round 2): a FULL variant-suffixed id as an override key is INVALID — the
-    survey is dropped loudly and the message lists the BASE ids. HISTORICALLY RED: pre-fix the
+    survey is dropped loudly and the message lists the BASE ids. RED against a build where the
     prefix tolerance validated it and the mask applied it to ONE variant only — the other variant
     of the same physical station served its TRUE position (silent partial mask)."""
     vara = {"id": "SITE1", "file": "SITE1_LemiGraph.edi", "lat": -34.501234, "lon": 138.401234,
@@ -925,8 +925,8 @@ def test_mth5_input_survey_bad_override_dropped_before_bytes(tmp_path):
     """MTH5-INPUT PIN (fix round 2): override validation for an mth5-input survey runs at the point
     its station ids become known (after the h5 opens) and BEFORE any of that survey's bytes/products
     are emitted — a bad override drops that survey alone, loudly, rc=0, the co-survey serves.
-    HISTORICALLY RED: pre-fix, mth5-input surveys skipped discovery validation entirely and the
-    corpus backstop aborted the WHOLE build (rc=1). The mth5 fixture is ENGINE-PRODUCED: a first
+    RED against a build where mth5-input surveys skip discovery validation entirely and the
+    corpus backstop aborts the WHOLE build (rc=1). The mth5 fixture is ENGINE-PRODUCED: a first
     real build's --survey-h5 bundle is re-staged as an mth5-input package."""
     # build 1: produce a real TF MTH5 through the real pipeline
     out1, r1 = _build(tmp_path / "seed", [{**EXACT}], extra=("--survey-h5",), declare_policy=False)

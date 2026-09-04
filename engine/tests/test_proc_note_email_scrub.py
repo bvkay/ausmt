@@ -62,4 +62,4 @@ def test_build_redacts_note_and_warns(tmp_path, capsys):
 
     err = capsys.readouterr().err
     assert re.search(r"WARNING.*EmailScrubSurvey.*email_leak\.edi", err, re.S), err   # loud curator flag
-    assert p.read_bytes() == before_bytes           # D1: original EDI bytes are NEVER modified
+    assert p.read_bytes() == before_bytes           # Original EDI bytes are NEVER modified

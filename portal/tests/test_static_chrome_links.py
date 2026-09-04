@@ -115,9 +115,9 @@ def test_the_spa_header_surveys_and_collections_are_real_links():
 
 
 def test_the_spa_keeps_its_in_app_surveys_and_collections_views_on_their_hash_routes():
-    """The other half of R10: making the header controls into links must not RETIRE the in-app
+    """The other half of making the header controls into links must not RETIRE the in-app
     views. #/surveys and #/collections are published in the wild and still switch the SPA's own
-    grid views, and the header no longer wires a click handler onto controls that navigate away.
+    grid views, and the header does not wire a click handler onto controls that navigate away.
 
     FAILS IF the hash branches go, or if a click handler is left on a control that is now a link
     (which would run a view switch the browser is about to navigate away from)."""

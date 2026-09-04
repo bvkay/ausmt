@@ -2,18 +2,18 @@
 
 jsdom does no layout, so the runtime interaction driver cannot observe scroll geometry; these are static
 STYLE + DOM-order assertions parsed from index.html. Each states its failure criterion, and each is proven
-non-vacuous against the pre-source (the exact thing it forbids USED to be present):
+non-vacuous against a source that carries the exact thing it forbids:
 
-  * A4 tree flex-fill/scroll — the base .tree rule must flex-grow and scroll internally, with NO fixed
+  * tree flex-fill/scroll: the base .tree rule must flex-grow and scroll internally, with NO fixed
     height and NO resize handle. Pre-it was `height:300px;max-height:60vh;resize:vertical` and had no
     `flex:` — so this rule FAILS on the old CSS.
-  * A4 flex chain — #browseMode and #treeSection must carry `min-height:0` (so the tree can shrink below
+  * flex chain: #browseMode and #treeSection must carry `min-height:0` (so the tree can shrink below
     its content and scroll instead of pushing the rail into an outer scrollbar). Pre-neither selector
     existed — FAILS on the old CSS.
-  * A2 collapse anchored bottom — #sidebarCollapse must be the LAST child of <aside class="filters">
+  * collapse anchored bottom: #sidebarCollapse must be the LAST child of <aside class="filters">
     (after both mode panes) and .railcollapse must carry `margin-top:auto`. Pre-the button was the
     FIRST child and had no margin-top — FAILS on the old markup/CSS.
-  * A3 collections above the tree — #collGroup must appear BEFORE #treeSection/#tree in source order.
+  * collections above the tree: #collGroup must appear BEFORE #treeSection/#tree in source order.
     Pre-there was no #collGroup at all - FAILS on the old markup.
 """
 import re
@@ -49,7 +49,7 @@ def _aside_block(html):
     return m.group(1)
 
 
-# ---- A4: the tree flex-fills and scrolls internally -------------------------------------------------
+# --- The tree flex-fills and scrolls internally -------------------------------------------------
 
 def test_tree_flex_fills_and_scrolls_internally():
     body = _rule(_style(_html()), ".tree")
@@ -80,7 +80,7 @@ def test_browse_and_tree_flex_chain_has_min_height_zero():
         assert "min-height:0" in body, f"{sel} needs min-height:0 so the tree can scroll (no outer rail scroll); got: {body}"
 
 
-# ---- A2: the collapse control is anchored bottom-right ----------------------------------------------
+# --- The collapse control is anchored bottom-right ----------------------------------------------
 
 def test_collapse_control_is_last_child_of_the_rail():
     # FAILS if #sidebarCollapse is not the LAST element in the rail (i.e. anchored below both mode panes).
@@ -106,7 +106,7 @@ def test_collapse_control_css_anchors_to_bottom():
         f".railcollapse must use margin-top:auto to anchor the control at the bottom of the rail; got: {body}"
 
 
-# ---- A3: the collections block sits above the tree (static source order) ----------------------------
+# --- The collections block sits above the tree (static source order) ----------------------------
 
 def test_collections_block_is_above_the_tree_in_source():
     # Complements the runtime driver pin (interaction_test.js C2): statically, #collGroup must appear

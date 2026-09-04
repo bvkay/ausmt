@@ -355,7 +355,7 @@ def test_releases_js_does_not_parse_the_catalogue():
 def test_about_carries_the_entry_point_the_footer_gave_up():
     """The Releases link was in every footer until the one-footer rule; the page still needs ONE
     entry point or it is unreachable from the site. It was about.html's #build colophon, which also
-    carried the running build's identity; it has been deleted that section and ruled the identity
+    carried the running build's identity; that section is deleted and the identity
     off the page, so the route alone survives in section 8, Documentation, beside the other places
     a reader is sent for more.
 

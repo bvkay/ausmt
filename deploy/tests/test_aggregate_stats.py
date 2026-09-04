@@ -135,9 +135,9 @@ def test_attribution_pin_over_engine_truth_manifest():
     assert rmap, "the engine-truth manifest must yield a non-empty reverse map"
     geoip = AGG.GeoIP.load(_DBIP)
     lines = [
-        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5"),   # A1 edi
-        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.6"),   # A1 edi (2nd)
-        _line("/data/xml/sample-survey/A2.xml", "1.2.3.0"),               # A2 emtfxml
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5"),   # station A1 edi
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.6"),   # station A1 edi (2nd)
+        _line("/data/xml/sample-survey/A2.xml", "1.2.3.0"),               # station A2 emtfxml
         _line("/data/bundles/sample-survey-tf.h5", "198.51.100.0"),       # survey mth5 bundle
         _line("/data/edi/mystery-survey/ghost.edi", "8.8.8.0"),           # UNKNOWN -> unattributed
         _line("/data/catalogue.json?_=1", "203.0.113.5"),                 # visit (query stripped)
@@ -540,7 +540,7 @@ def test_daily_window_keeps_92_days_and_drops_the_93rd():
     in rows rather than days, or is off by one."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
-    run = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)      # watermark 2026-07-11
+    run = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)      # watermark: the day before
     inside = (dt.date(2026, 7, 11) - dt.timedelta(days=91)).isoformat()   # exactly 92 days inclusive
     outside = (dt.date(2026, 7, 11) - dt.timedelta(days=92)).isoformat()  # one day too old
     lines = [_line("/data/catalogue.json", "203.0.113.5", date=outside),
@@ -561,7 +561,7 @@ def test_v1_stats_file_upgrades_in_place_without_losing_or_inventing_anything():
     absent from the daily tail is invented, or if a seeded month claims byte/format detail it lacks."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
-    run = dt.datetime(2026, 7, 11, 3, 30, tzinfo=dt.timezone.utc)   # folds 2026-07-10
+    run = dt.datetime(2026, 7, 11, 3, 30, tzinfo=dt.timezone.utc)   # folds the day before
     lines = [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-10", size=50)]
     stats = AGG.aggregate(_v1_stats(), lines, rmap, geoip, run)
 
@@ -701,8 +701,8 @@ def test_a_prior_file_carrying_legacy_day_states_folds_and_is_left_to_age_out():
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
     states = AGG.AuStates.load(_AU_STATES_CSV)
-    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-01
-    run2 = dt.datetime(2026, 6, 4, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-03
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to the day before
+    run2 = dt.datetime(2026, 6, 4, 3, 30, tzinfo=dt.timezone.utc)   # folds up to the day before
 
     s1 = AGG.aggregate(None, [_line("/data/catalogue.json", _AU_NSW, date="2026-06-01")],
                        rmap, geoip, run1, au_states=states)
@@ -766,8 +766,8 @@ def test_state_data_is_forward_only_and_never_backfills_a_folded_day():
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
     states = AGG.AuStates.load(_AU_STATES_CSV)
-    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-01
-    run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)  # folds up to 2026-07-11
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to the day before
+    run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)  # folds up to the day before
 
     before = [_line("/data/catalogue.json", _AU_NSW, date="2026-06-01"),
               _line("/data/catalogue.json", _AU_NSW2, date="2026-06-01")]
@@ -1572,7 +1572,7 @@ def test_an_archive_line_is_sparse_and_an_active_day_matches_the_fold():
 def test_no_archive_line_ever_carries_a_country_or_a_state():
     """ARCHIVE GEO PIN. Geography stops at the MONTH, rendered or archived. The day rows here are the
     finest-grained record in the whole pipeline, and a named country on a named day is a smaller cell
-    than the named-state-in-a-named-month the brief already ruled out. FAILS IF any geographic key or
+    than the named-state-in-a-named-month the brief already excludes. FAILS IF any geographic key or
     value reaches an archive line, even though the very same fold is counting countries and states
     into stats.json beside it."""
     states = AGG.AuStates.load(_AU_STATES_CSV)
@@ -1757,7 +1757,7 @@ def test_main_writes_the_archive_beside_stats_json_outside_the_served_tree(tmp_p
 def test_an_unwritable_archive_warns_and_still_lets_stats_json_land(tmp_path, monkeypatch, capsys):
     """ARCHIVE NEVER-RAISE PIN. The archive is a bonus record, not the fold. An archive path that
     cannot be written (a directory in its place, a read-only mount) must produce a loud note and leave
-    stats.json exactly as it would have been. FAILS IF the run raises, returns non-zero, or costs the
+    stats.json exactly as it stands. FAILS IF the run raises, returns non-zero, or costs the
     stats write."""
     data = tmp_path / "data"
     logdir = data / "logs" / "caddy"
@@ -1870,7 +1870,7 @@ def test_country_detail_is_forward_only_and_never_reaches_a_day_row():
     """COUNTRY DETAIL SEAM PIN. The detail map is a new dimension and obeys every rule its siblings do:
     it starts at the fold that first wrote it, no earlier month gains it, and it exists at the
     cumulative and month grains ONLY. A day-by-country cell is a smaller cell than the day-by-state one
-    already ruled out. FAILS IF an older file cannot be read, if an earlier month is backfilled, or if
+    already excluded. FAILS IF an older file cannot be read, if an earlier month is backfilled, or if
     a day row gains country detail."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
@@ -2066,7 +2066,7 @@ def test_the_select_split_accumulates_across_folds_and_is_never_backfilled():
     every later run (which would walk the disclosed date forward forever)."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
-    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)    # folds up to 2026-06-01
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)    # folds up to the day before
     run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)
     run3 = dt.datetime(2026, 7, 14, 3, 30, tzinfo=dt.timezone.utc)
 
@@ -2328,7 +2328,7 @@ def test_hand_off_bytes_and_destination_come_from_the_register_never_the_log():
 
 def test_an_unresolvable_hand_off_route_is_its_own_skew_bucket_and_never_dropped():
     """DRIFT PIN. The route table lives on the front door and the data on the box, so a 302 CAN
-    arrive for a route the served index no longer publishes. That is drift, and drift must be
+    arrive for a route the served index does not publish. That is drift, and drift must be
     visible: the request counts, its bytes do not (nothing measured them), and it lands in the
     hand-off family's OWN unattributed bucket.
 
@@ -2349,9 +2349,9 @@ def test_an_unresolvable_hand_off_route_is_its_own_skew_bucket_and_never_dropped
 
 
 def test_hand_offs_ride_every_grain_with_by_survey_by_level_and_by_destination():
-    """GRAIN PIN (D13/D16). by_survey and by_level ride EVERY grain the family has -- cumulative,
+    """GRAIN PIN. by_survey and by_level ride EVERY grain the family has -- cumulative,
     calendar month, day row and the permanent archive line -- and by_destination rides beside them
-    (D16: cardinality is one today, and that is exactly when a missing breakdown is cheap to add).
+    (cardinality is one today, and that is exactly when a missing breakdown is cheap to add).
     The archive additionally keeps the station-grain cell, the by_dataset of this family, because the
     92-day window is what otherwise loses "which station, on which day" forever.
 
@@ -2381,7 +2381,7 @@ def test_hand_offs_ride_every_grain_with_by_survey_by_level_and_by_destination()
 
 def test_a_hand_off_carries_a_country_at_month_grain_and_nowhere_finer():
     """GEO BOUNDARY PIN. The hand-off family takes a by-country figure at the cumulative and
-    calendar-month grains ONLY (D13). A named country on a named day is the finest cell this
+    calendar-month grains ONLY. A named country on a named day is the finest cell this
     pipeline could produce and the ratified exclusion of day-by-state data covers it, so
     neither the day row nor the permanent archive may carry one.
 
@@ -2543,7 +2543,7 @@ def test_the_destination_host_is_the_one_the_engine_publishes():
 
 
 def test_the_hand_off_class_adds_no_client_side_measurement():
-    """PRIVACY-POSTURE PIN (R8, framing invariant). Measuring the hand-off adds NOTHING in the
+    """PRIVACY-POSTURE PIN (framing invariant). Measuring the hand-off adds NOTHING in the
     browser: the 302 is a request the reader was making anyway and the front door already logs it.
     So Plausible stays off, and the six existing track call sites stay six -- a seventh would be a
     new client-side beacon, which is the one thing this measurement was designed not to need.

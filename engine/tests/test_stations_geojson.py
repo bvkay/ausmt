@@ -6,7 +6,7 @@ FeatureCollection at `/data/stations.geojson`, mirrored under `/data/products/` 
 top-level documents.
 
 The whole risk of this product is that it becomes a SECOND coordinate surface. Every other served
-position passes through the C42 mask seam; a document that derived its own geometry could disclose a
+position passes through the coordinate mask seam; a document that derives its own geometry can disclose a
 position the catalogue withholds and nothing would notice, because a GeoJSON is not something the
 leak sweep's JSON parse reads as a catalogue row. So the pins here are coordinate-access pins first
 and GIS-shape pins second:
@@ -21,7 +21,7 @@ and GIS-shape pins second:
     build that dropped them here would quietly contradict the access record.
 
 These drive the REAL pipeline (subprocess build) over the engine-produced coordinate fixtures the
-C42 workflow already stages, so no catalogue row is ever hand-typed (house rule). Requires the
+coordinate-policy fixture already stages, so no catalogue row is ever hand-typed (house rule). Requires the
 mt_metadata/mth5 build stack; skips cleanly otherwise.
 """
 import json

@@ -1,17 +1,17 @@
-"""Write-path parity pins for gateway/publish.py (section-3 workflow H: findings G5 + G6).
+"""Write-path parity pins for gateway/publish.py.
 
 Two guarantees, proved over the REAL publish primitives with conftest.FakeGit against a real on-disk
 surveys-live checkout (the seam test_station_removal_publish.py already uses). The sibling flow tests
 monkeypatch the blocking commit wholesale, so they never enter publish.py and never ask either
 question; these do.
 
-G5 ROLLBACK PARITY. Every commit path must roll the working tree back on an error BELOW the
+ROLLBACK PARITY. Every commit path must roll the working tree back on an error BELOW the
 PublishError layer (an OSError from write_bytes/copytree, a subprocess failure from the injected git
 runner), not only commit_collection_batch. An escaping error leaves surveys-live on the feature
 branch with files already git-rm'd, and publish.preflight then refuses EVERY subsequent publish for
 EVERY curator until an operator intervenes.
 
-G6 AUDIT-TRAILER INJECTION. A control character in a curator note or curator name must not open a new
+AUDIT-TRAILER INJECTION. A control character in a curator note or curator name must not open a new
 line in the commit subject/body: the git history IS the audit trail, so a forged `Approved-by:` line
 would be indistinguishable from a real one. The guard lives in the body builders, so it holds for
 every caller rather than only the route that remembers to check.

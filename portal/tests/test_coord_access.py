@@ -12,7 +12,7 @@ It FAILS if:
   null/undefined, or leaks a lat/lon-like decimal pair (the DOM-layer leak sweep);
 - a generalised station's drawer omits the "position generalised to ~0.1°" badge or leaks its true
   6-dp coordinates (the A1 badge + DOM-layer leak pin);
-- a withheld station is spatially selected (bbox/polygon) or is no longer findable by text;
+- a withheld station is spatially selected (bbox/polygon) or is not findable by text;
 - the survey station count drops the withheld station.
 
 Skips when Node or the jsdom dev-dependency is absent (CI runs `npm ci` in portal/ first)."""

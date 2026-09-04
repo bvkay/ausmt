@@ -5,7 +5,7 @@ as canonical EMTF XML and as MTH5, plus the per-survey archives those files are 
 carries the path the download manifest records for the same bytes, and none carries `identifiers[]`,
 because a DOI identifying THIS EXACT file does not exist for anything AusMT serves today.
 
-D19 splits the role question in two, and the workflow emits both axes only where they are mechanically
+The role question splits in two, and the engine emits both axes only where they are mechanically
 certain: the served EDI is the never-edited source in its original form; the EMTF XML and the MTH5
 are engine conversions of it, so they are derived alternates. The bundle archives carry NEITHER
 axis, because whether a zip of source EDIs is source or derived is a semantics call this module must

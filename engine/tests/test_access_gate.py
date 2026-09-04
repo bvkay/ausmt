@@ -1,19 +1,19 @@
-"""C1 access-level + embargo serving gate (Invariant 10).
+"""The access-level + embargo serving gate (Invariant 10).
 
 access.level (open | metadata_only | embargoed) and embargo_until were ADVERTISED (template, docs,
 form, SMETA, mtcat) but enforced by NOTHING: the serving gate was `can_serve = bundle_edi and
 redistributable(lic) and kind=="edi"`. A CC-BY survey marked embargoed/metadata_only still had every
-EDI byte-copied and every manifest row emitted. C1 makes the gate additionally require the survey be
+EDI byte-copied and every manifest row emitted. The gate additionally requires the survey be
 OPEN and not under an active embargo.
 
-NON-VACUOUS failure criteria (each fails against the pre-C1 gate or a broken helper):
+NON-VACUOUS failure criteria (each fails against a level-only gate or a broken helper):
 
   Pure gate (stack-less — the logic is pure):
     * open + no embargo                       -> SERVED               (regression: must still serve)
     * open + future embargo_until             -> SERVED               (level is the state of record;
                                                                         a stray date doesn't withhold)
-    * metadata_only                           -> NOT served           (pre-C1: served)
-    * embargoed + FUTURE date                 -> NOT served, active   (pre-C1: served)
+    * metadata_only                           -> NOT served           (a level-only gate serves it)
+    * embargoed + FUTURE date                 -> NOT served, active   (a level-only gate serves it)
     * embargoed + PAST date                   -> NOT served + STALE-embargo warning
                                                   (DECISION: level is state of record; no silent
                                                    auto-publish on a lapsed date — a curator flips it)
@@ -23,7 +23,7 @@ NON-VACUOUS failure criteria (each fails against the pre-C1 gate or a broken hel
 
   Build path (drives the real pipeline; requires mt_metadata/mth5):
     * CC-BY + embargoed(future)   -> ZERO manifest rows/bytes, edi_available=0, survey STILL in
-                                     catalogue/surveys/mtcat (discovery universal)   (pre-C1: served)
+                                     catalogue/surveys/mtcat (discovery universal)   (bytes withheld)
     * CC-BY + metadata_only       -> same
     * CC-BY + embargoed(past)     -> STILL not served (lapsed embargo is not auto-publication)
     * open + no embargo (baseline sample) -> served (regression)
@@ -222,8 +222,8 @@ def test_embargoed_survey_smeta_badges_honestly(tmp_path):
     assert sv["access"] == "embargoed" and isinstance(sv["access"], str)
 
 
-# --------------------------------------------------------------------------- C1b: DISPLAY-PRODUCT gate
-# C1 withholds the BYTES (manifest/edi/xml/bundles); C1b extends the gate to the DERIVED DISPLAY products
+# -------------------------------------------------------------------------- DISPLAY-PRODUCT gate
+# Withholds the BYTES (manifest/edi/xml/bundles); C1b extends the gate to the DERIVED DISPLAY products
 # the portal PLOTS. For an embargoed dataset the response curves ARE the data — a portal that plots the
 # thinned tf.json curves for an embargoed survey has published the data it withheld from download. So for
 # a non-served survey the tf.json series columns become EMPTY ARRAYS and the sci.json science-derived
@@ -319,7 +319,7 @@ def test_withheld_build_passes_verify_data_dir(tmp_path):
     assert r.returncode == 0, f"verify.py --data-dir failed on the withheld build:\n{r.stdout}\n{r.stderr}"
 
 
-# --------------------------------------------------------------------------- C1c: --products SURFACE gate
+# -------------------------------------------------------------------------- --products SURFACE gate
 # The per-station --products tree (station.json + dimensionality.json) IS a distribution surface: the
 # deploy Makefile writes products/ INSIDE the served build dir (deploy/Makefile ~:89, --products
 # /out/$BUILD_REL/products), and the portal serves it at /data/products/. So it rides the SAME C1 access
@@ -338,7 +338,7 @@ _PRODUCTS_SCIENCE_KEYS = ("median_relative_error", "dimensionality", "skew_beta_
                           "convention_check", "phs_xy_median_deg", "phs_yx_median_deg", "input_sha256")
 # The station.json KEY SET on each branch, pinned so byte-stability is enforceable at all: before this
 # pin existed nothing forbade a new top-level key on either branch, and the leak sweep above tests
-# VALUES, not membership. The three promotion markers are the ratified exception (D8) and are listed
+# VALUES, not membership. The three promotion markers are the ratified exception and are listed
 # separately so a fourth addition to either branch fails here rather than shipping.
 _STATION_FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "location",
                              "data", "diagnostics", "processing", "distribution", "provenance",
@@ -613,7 +613,7 @@ def test_root_artifacts_carry_no_register_route_detail(tmp_path):
 def test_ts_access_membership_is_exactly_the_open_stations(tmp_path):
     """The MEMBERSHIP claim itself, stated as a set rather than as a string sweep: under a register
     covering every access state, the artifact's keys are the served surveys' ausmt_ids and no
-    others. This is the guarantee A5 trades the leak-clean-by-construction shape for (D3)."""
+    others. This is the guarantee A5 trades the leak-clean-by-construction shape for."""
     out, prod, served, nonserved = _build_products_corpus(tmp_path)
     out2, _forbidden, _routes = _build_with_leak_register(tmp_path, prod, (*served, *nonserved))
     ids = {}

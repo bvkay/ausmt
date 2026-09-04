@@ -1,29 +1,29 @@
-"""C43 Stage 2b-ii curator-actions host agent (deploy/scripts/actions.sh) — decision-logic tests.
+"""Stage 2b-ii curator-actions host agent (deploy/scripts/actions.sh) - decision-logic tests.
 
 The actions agent is POSIX sh, tested as a BLACK BOX through `sh` over a fake data tree built under
 tmp_path: a gateway state dir (where intents land), a site-data/builds inventory (rollback targets), a
 backups inventory (restore snapshots), a code checkout, and SHIMS for `docker compose` / `git` / the
 backup script / the restore drill (AUSMT_ACTIONS_*) that RECORD their invocation to a marker file. Every
 assertion is an INDEPENDENT OBSERVABLE (the shim's recorded argv, the audit log's lines, the live DB
-bytes, the intent file's presence, the process exit code) — never the script's own self-report.
+bytes, the intent file's presence, the process exit code) - never the script's own self-report.
 
 Each test names its failure criterion (Invariant 10). The D9 hardening + D13 pins carried here:
-  * unknown-intent refusal (D9.1) — an unknown *.request is IGNORED + audited, never executed.
-  * rollback id validation (D9.2) — a bad-charset id and an id not in the retained inventory are both
+  * unknown-intent refusal (D9.1) - an unknown *.request is IGNORED + audited, never executed.
+  * rollback id validation (D9.2) - a bad-charset id and an id not in the retained inventory are both
     REFUSED + audited; NO rebuild, NO engine.
-  * restore id validation (D9.2/D9.5) — a snapshot id not in the backup inventory is REFUSED; the live
+  * restore id validation (D9.2/D9.5) - a snapshot id not in the backup inventory is REFUSED; the live
     DB is byte-untouched.
-  * restore drill-first (D8) — a FAILING drill ABORTS with the live DB byte-identical (proven against a
+  * restore drill-first - a FAILING drill ABORTS with the live DB byte-identical (proven against a
     passing-drill control that DOES swap).
-  * update fixed-recipe (D13) — the executed command sequence is CONSTANT regardless of the intent's
+  * update fixed-recipe - the executed command sequence is CONSTANT regardless of the intent's
     content (a hostile-content intent runs the identical git-pull + compose-pull + up -d).
-  * single-flight (D9.3) — with two privileged intents pending, exactly ONE recipe runs per invocation.
-  * rate limit (D9.3) — a repeat intent inside the cooldown window is REFUSED + audited.
-  * audit-line-per-action (D9.4) — every executed/refused action appends exactly one audit line.
+  * single-flight (D9.3) - with two privileged intents pending, exactly ONE recipe runs per invocation.
+  * rate limit (D9.3) - a repeat intent inside the cooldown window is REFUSED + audited.
+  * audit-line-per-action (D9.4) - every executed/refused action appends exactly one audit line.
 
 PLATFORM SPLIT (standing rule): the rollback FS-repoint POSITIVE leg (current symlink actually moves +
 the pin file lands) needs a symlink-capable filesystem and is UBUNTU-ONLY (skipped where symlinks are
-unavailable — Windows dev boxes without the privilege). The rollback DECISION half (validation, no
+unavailable - Windows dev boxes without the privilege). The rollback DECISION half (validation, no
 rebuild, audit) runs everywhere. flock true-concurrency is likewise not exercised here (Windows has no
 flock); the one-intent-per-invocation structure is the everywhere-runnable single-flight guarantee.
 """
@@ -289,7 +289,7 @@ def test_restore_success_swaps_db(tmp_path):
         _audit_lines(t["state"])
 
 
-# ---- update fixed-recipe (D13) ------------------------------------------------------------------
+# --- update fixed-recipe ------------------------------------------------------------------
 _HOSTILE_UPDATE = {
     "requested_by": "c1",
     "cmd": "rm -rf /",

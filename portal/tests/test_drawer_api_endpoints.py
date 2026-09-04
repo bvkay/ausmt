@@ -182,7 +182,7 @@ def test_drawer_edi_line_absent_for_an_embargoed_station(tmp_path):
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 @pytest.mark.parametrize("access", ["open", "embargoed", "metadata_only"])
 def test_drawer_never_advertises_dimensionality_and_always_lists_station_json(tmp_path, access):
-    """Dimensionality.json is served alongside station.json and is NOT a contract, so the API section never advertises it, for any access level. It used to be listed for
+    """Dimensionality.json is served alongside station.json and is NOT a contract, so the API section never advertises it, for any access level. It must not be listed for
     an open survey only, because the engine returns before writing it for a non-served survey
     (build_portal.py _write_station_products, "no dimensionality.json for a non-served survey"); the
     open-survey row is gone too now.

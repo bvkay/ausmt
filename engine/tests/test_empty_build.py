@@ -11,7 +11,7 @@ ROOT = HERE.parent
 
 FILES = ["catalogue.json", "tf.json", "sci.json", "surveys.json",
          "collections.json", "mtcat.json", "build_provenance.json", "manifest.json",
-         "build.json"]   # C12: build identity — every build writes it, including an empty one
+         "build.json"]   # Build identity - every build writes it, including an empty one
 
 
 def test_empty_build_generates_valid_json(tmp_path):

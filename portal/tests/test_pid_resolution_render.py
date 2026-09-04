@@ -10,7 +10,7 @@ The resolution facets (doi_resolution / ts_pid_resolution / related_identifiers[
 what build_portal.apply_pid_resolution attaches from the pid_status.json cache. Skips without Node (CI has it).
 
 SURFACE NOTE: the identifiersHtml rollup - the "Dataset DOI",
-"Related identifiers:" and "Platform/instrument PID:" rows - no longer renders on the SURVEY story, which is
+"Related identifiers:" and "Platform/instrument PID:" rows - does not render on the SURVEY story, which is
 now a six-slot data-level tile grid. That rollup is unchanged and still renders on the STATION drawer
 (its "Identifiers & instruments" expander), so the per-row resolution pins below assert against `station`.
 The pins that concern the SURVEY surface assert the same honesty on the new grid, which routes every

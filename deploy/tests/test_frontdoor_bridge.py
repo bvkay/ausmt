@@ -690,7 +690,7 @@ def test_reader_data_carries_cors_but_gateway_does_not_at_runtime():
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
 def test_reader_data_cors_redproof():
     """(a) RED-PROOF. With the /data ACAO header STRIPPED from the shipped :8081 body (the PRE-CHANGE
-    Caddyfile), /data/catalogue.json no longer carries Access-Control-Allow-Origin — proving the added
+    Caddyfile), /data/catalogue.json does not carry Access-Control-Allow-Origin, proving the added
     header is what makes the data world-readable, not incidental. FAILS IF the pre-change config still
     carries ACAO (which would mean the pin proves nothing)."""
     with tempfile.TemporaryDirectory() as td:

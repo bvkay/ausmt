@@ -6,7 +6,7 @@ override fieldset — the functions the drill-down radios and the Save button re
 
   * buildOverrideControls — the per-BASE control state, keyed via the base-id surface (baseStationId):
     a variant record collapses to its engine base; a DATAID-with-a-dot record keys by its OWN id
-    (never a file stem, never a dot-guess); variant siblings SHARE one control (D2);
+    (never a file stem, never a dot-guess); variant siblings SHARE one control;
   * assembleOverrideMap — the {BASE_station_id: policy} map to POST: a base at INHERIT emits NO key;
   * overrideMapChanged — the Save no-op guard (an unchanged map must not POST — no phantom version bump).
 
@@ -17,7 +17,7 @@ covered) — so a JS↔engine key/vocab drift can never pass silently.
 
 Reds on pre-change code: buildOverrideControls / assembleOverrideMap / overrideMapChanged did not exist
 in STATIONS_JS (the extraction assert raises), so the interactive fieldset had no drivable core — the
-A2 stop-and-report gap this module closes.
+stop-and-report gap this module closes.
 """
 from __future__ import annotations
 

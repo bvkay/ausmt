@@ -5,7 +5,7 @@ The engine suite gates the release, but ~20 of its files `pytest.importorskip("m
 `("mth5")` at module top. If the pinned lock ever silently stopped installing that stack, those files
 would ALL skip and the release gate would go green over a hollowed-out suite. No workflow accounted for
 that. This tripwire does: it reads a `pytest -q -rs ...` report on stdin and FAILS if any skip's reason
-is not on the allow-list below. It is deliberately tiny — a tripwire, not a framework.
+is not on the allow-list below. It is deliberately tiny - a tripwire, not a framework.
 
 The allow-list is the set of skips that are LEGITIMATE in the CI engine workflows, where the mt_metadata/
 mth5 stack IS installed (pinned lock / engine image) but the sibling ausmt-surveys checkout is NOT
@@ -13,20 +13,20 @@ present. Both engine workflows (build-products.yml and deploy-images.yml's engin
 exact environment, so the allow-list is the same for both:
 
   * "sibling ausmt-surveys/_validation not present"
-        engine/tests/test_validator_gate.py::test_env_var_path_resolves_real_validator — the only test
+        engine/tests/test_validator_gate.py::test_env_var_path_resolves_real_validator - the only test
         gated purely on a sibling ausmt-surveys checkout, which neither engine CI workflow has (the private
         repo is not cross-checked-out here; see build-products.yml's --no-validate note and
         engine.Dockerfile's `ENV AUSMT_VALIDATOR_PATH` block, which explains that the validator
         arrives at RUNTIME on a bind mount and is never baked into the image). LEGITIMATE: it is a
         dev-box-only cross-repo integration check.
-        Empirically confirmed (C35a verification): with the stack present and no sibling checkout, this
+        Empirically confirmed (verification): with the stack present and no sibling checkout, this
         is the ONE and ONLY skip the engine suite produces; every mt_metadata/mth5/yaml/jsonschema/
         _mth5 importorskip RUNS (all of those deps ARE in the CI lock / image).
 
 A skip whose reason contains "mt_metadata not installed" / "mth5 not installed" / "could not import
 'mt_metadata'" / "mth5/mt_metadata not installed" / "could not import 'yaml'" etc. is NOT on the list
 on purpose: in these workflows those deps are present, so such a skip means the lock/image silently dropped
-a core dependency — the exact failure this tripwire exists to catch.
+a core dependency - the exact failure this tripwire exists to catch.
 
 Two independent checks (either one FAILS the tripwire):
   1. every parsed skip's reason must be on the allow-list; and
@@ -40,10 +40,10 @@ Two independent checks (either one FAILS the tripwire):
 Usage (from the engine/ cwd, both workflows):
     pytest -q -rs tests | tee /tmp/pytest.out ; python tests/ci_check_skips.py < /tmp/pytest.out
 
-C35b/D5: a repeatable --allow flag lets a DIFFERENT workflow supply its own allow-list. Passing --allow at
+a repeatable --allow flag lets a DIFFERENT workflow supply its own allow-list. Passing --allow at
 least once (even `--allow ""`) REPLACES the built-in list entirely; passing it zero times keeps today's
 behaviour (the engine built-in list below). The gateway workflow pipes its report through this with a
-single `--allow ""` — i.e. NO substantive allow entries — so after D3 (which made the validator oracles
+single `--allow ""` - i.e. NO substantive allow entries - so after D3 (which made the validator oracles
 run via the vendored copy) the gateway suite's ONE legitimate skip (the mt_metadata-needing engine-
 preview oracle) is the only entry it allows; every other skip fails the workflow:
     pytest -q -rs gateway/tests | python engine/tests/ci_check_skips.py \
@@ -62,21 +62,21 @@ import sys
 # For that skip to be allowed. Add an entry ONLY with a comment saying which test/workflow produces it and
 # why it is legitimate.
 #
-# C35b/D3 note: test_validator_gate.py::test_env_var_path_resolves_real_validator NO LONGER skips —
-# D3 made it resolve to the committed vendored validator when the sibling is absent, so it RUNS in the
+# Note: test_validator_gate.py::test_env_var_path_resolves_real_validator does NOT skip -
+# Made it resolve to the committed vendored validator when the sibling is absent, so it RUNS in the
 # Engine workflows too. This entry is therefore DEFENSIVE now (it matches a skip the current suite does not
-# emit); it is retained per the C35b/D5 amendment so an older checkout or a re-introduced sibling-gated
+# emit); it is retained per the amendment so an older checkout or a re-introduced sibling-gated
 # skip stays allow-listed, and the accounting check below catches any genuinely unaccounted skip.
 ALLOWED_SKIP_REASON_SUBSTRINGS = [
     "sibling ausmt-surveys/_validation not present",  # test_validator_gate.py — pre-D3 sibling gate (now defensive)
-    # C35b/D3.1: test_validator_gate.py's oracle skips (exact reason below) when the gateway package
+    # test_validator_gate.py's oracle skips (exact reason below) when the gateway package
     # Tree itself is absent from the repo root - legitimately reachable ONLY in the engine-image workflows
     # (the engine image COPYs engine/ only, so /app/gateway never exists: deploy-images' in-image
     # engine-full-tests run — the sole remaining engine-image pytest since C39 dropped the
     # In-Dockerfile duplicate - pipes through THIS tripwire). INERT on every checkout workflow: a
     # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the oracle
     # (D3.1 arm iv), never skips.
-    "engine image build: gateway tree not shipped",   # test_validator_gate.py — D3.1 arm (iii), image lanes only
+    "engine image build: gateway tree not shipped",   # test_validator_gate.py, image builds only
     # test_mtcat_version_parity.py, the SAME designed-topology class as the entry above, for the
     # other tree the engine image does not ship. The MTCAT schema version has one source (the schema
     # title) and that module reads it back off every surface that restates it; four of those surfaces
@@ -90,13 +90,13 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # out the whole monorepo and its path filter names all five portal files, so there these tests RUN
     # (a checkout missing one of them fails the read rather than skipping; the guard opens as soon as
     # any pinned portal file is present).
-    "engine image build: portal tree not shipped",    # test_mtcat_version_parity.py, image lanes only
+    "engine image build: portal tree not shipped",    # test_mtcat_version_parity.py, image builds only
     # test_mtcat_version_parity.py again, the SAME designed-topology class, for the docs tree: the
     # ratified MTCAT 2.0 version machinery added a pin on the docs current-version display
     # (docs/docs/reference/index.md), and engine.Dockerfile does not COPY docs/ either, so in the
     # Image workflow that one test skips with the exact reason below. INERT on checkout workflows, where the
     # docs tree is always present and the pin asserts.
-    "engine image build: docs tree not shipped",      # test_mtcat_version_parity.py docs pin, image lanes only
+    "engine image build: docs tree not shipped",      # test_mtcat_version_parity.py docs pin, image builds only
     # Test_convention_gates_realdata.py - the real-corpus convention-gate pins (the three
     # named USArray negative controls, the ccmt-2017 de-rotation acceptance, the AusLAMP-SA
     # custodian-twin proof) run only where the .audit/realdata harness exists (the dev box; the
@@ -171,9 +171,9 @@ _SUMMARY_SKIPPED = re.compile(r"\b(\d+)\s+skipped\b")
 
 
 def _resolve_allow_list(allow_args: list[str] | None) -> list[str]:
-    """The allow-list to enforce (C35b/D5). If --allow was passed at least once, it REPLACES the
+    """The allow-list to enforce. If --allow was passed at least once, it REPLACES the
     built-in list entirely (empty-string entries are dropped, so a single `--allow ""` yields an EMPTY
-    allow-list — every skip fails); if it was never passed, use the engine built-in list."""
+    allow-list - every skip fails); if it was never passed, use the engine built-in list."""
     if allow_args is None:
         return list(ALLOWED_SKIP_REASON_SUBSTRINGS)
     return [a for a in allow_args if a]

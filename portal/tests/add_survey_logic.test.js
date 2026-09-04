@@ -141,7 +141,7 @@ ok(M.deriveDataId("A B.mth5") === "A-B", "deriveDataId strips .mth5 too");
 ok(M.effectiveDataId({ name: "whatever.edi", dataid: "ROX9" }) === "ROX9", "effectiveDataId: real DATAID wins");
 ok(M.effectiveDataId({ name: "no-id.edi", dataid: null }) === "no-id", "effectiveDataId: falls back to the filename stem");
 
-// ediNameGate: a MISSING DATAID no longer errors on its own (auto-derived); a distinct set is clean.
+// ediNameGate: a MISSING DATAID does not error on its own (auto-derived); a distinct set is clean.
 ok(M.ediNameGate([{ name: "a.edi", dataid: "ROX000" }, { name: "b.edi", dataid: "ROX001" }]).length === 0,
    "ediNameGate: distinct DATAIDs -> no error");
 ok(M.ediNameGate([{ name: "noid.edi", dataid: null }]).length === 0,
@@ -226,7 +226,7 @@ ok(/schema_version: "0.3"/.test(yPub), "a publications[] entry declares schema_v
 ok(/- doi: "10\.5/.test(M.buildSurveyYaml({ ...base, license_declaration: false, pub: "", pub_doi: "10.5281/zenodo.1" })),
    "a DOI-only publication emits a bare {doi} entry");
 
-// ============================ R3: DOI-first publications + citation harvest (H1/H2/H4) ============================
+// ============================ DOI-first publications + citation harvest ============================
 // The publications block is a repeatable list of rows whose PRIMARY input is one DOI. A valid-looking DOI is
 // harvested client-side (Crossref first, DataCite on a miss) into {author,year,title,journal,doi}; harvest
 // failure OR a thin record degrades to the manual fields prefilled with whatever partial data exists. The
@@ -344,7 +344,7 @@ async function r3HarvestTests() {
   ok(!hB.ok && hB.pub.doi === B, "harvestDoi row B (both hosts throw) degrades independently to manual, DOI kept");
 }
 
-// dates block (T1) emits only when a date is provided; year + ISO stay bare, free text is quoted.
+// dates block emits only when a date is provided; year + ISO stay bare, free text is quoted.
 ok(/dates: \{ start: 2020, end: 2021 \}/.test(M.buildSurveyYaml({ ...base, date_start: "2020", date_end: "2021" })),
    "dates block emits bare year scalars");
 ok(!/dates:/.test(M.buildSurveyYaml({ ...base })), "no dates block when neither date is filled");
@@ -506,7 +506,7 @@ ok(/matches the existing survey /.test(html) && /Continue if you are updating th
    "the collision warning copy informs (non-blocking), it does not wall");
 ok(/orcidok warn/.test(html), "the collision state uses a distinct 'warn' chip class (not the valid/invalid states)");
 
-// ============================ A3: the retired flat credit keys leave the public form ============
+// ============================ The retired flat credit keys leave the public form ============
 // LANE-CONTRACT-FORM-CREDIT: the form stops writing lead_investigator/principal_investigators (the
 // migration deleted them corpus-wide and no reader survives), and the credit questions are rewritten
 // in plain language onto the ratified homes.
@@ -560,7 +560,7 @@ const yLeadPlus = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming",
 ok(yLeadPlus.indexOf('- name: "Duan, Jingming"') < yLeadPlus.indexOf('- name: "Zonge Engineering"'),
    "the lead row is FIRST in contributors, ahead of the typed rows");
 
-// ---- "Does this dataset already have a citation or DOI?" -> citation + ONE related row (D9/D18) ----
+// --- "Does this dataset already have a citation or DOI?" -> citation + ONE related row ----
 const yCite = M.buildSurveyYaml({ ...base,
   citation_text: "GSSA (2016). AusLAMP South Australia. [Data set].",
   citation_identifier: "https://doi.org/10.25914/abc" });
@@ -675,7 +675,7 @@ ok([...vTextSrc.matchAll(/"([^"]+)"/g)].map(m => m[1]).indexOf(M.CITATION_TEXT_S
 ok(M.CITATION_TEXT_SOURCE_FORM === "source_provided",
    "a contributor's wording is ALWAYS source_provided (ausmt_generated is never a contributor value)");
 
-// ---- R5: DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). ----
+// --- DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). ----
 ok(M.normalizeDoi("https://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an https://doi.org/ URL to the bare DOI");
 ok(M.normalizeDoi("http://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an http:// resolver URL");
 ok(M.normalizeDoi("https://dx.doi.org/10.5281/zenodo.1") === "10.5281/zenodo.1", "normalizeDoi folds a dx.doi.org URL");
@@ -696,7 +696,7 @@ ok(/wireDoiBlur\(wrap\.querySelector\("\.f-doi"\)\)/.test(html), "the funding DO
 ok(/wireConditionalDoiBlur\(wrap\.querySelector\("\.ri-identifier"\), wrap\.querySelector\("\.ri-type"\)\)/.test(html),
    "a related-identifier row normalises its identifier ONLY when the type is DOI (URL-typed rows untouched)");
 
-// ---- R3: the collection block is its own collapsed card (own <details>, exact heading), renumbered. ----
+// --- The collection block is its own collapsed card (own <details>, exact heading), renumbered. ----
 ok(/<details class="tier" id="tierCollection">/.test(html), "the collection block is its own tier-style <details> card");
 ok(/<h2>4\. Was this survey part of a collection \/ program \(eg AusLAMP\)\?<\/h2>/.test(html),
    "the collection card carries the exact owner-ruled heading (numbered 4)");
@@ -709,7 +709,7 @@ const yColl = M.buildSurveyYaml({ ...base, collection_id: "auslamp", collection_
 ok(/collection:\s*\n\s*id: "auslamp"\s*\n\s*title: "AusLAMP"\s*\n\s*type: "programme"/.test(yColl),
    "collection emission is unchanged by the card move (id/title/type still emitted)");
 
-// ---- R2: the download-zip path is hidden on a live gateway (visibility wiring only; zip code intact). ----
+// --- The download-zip path is hidden on a live gateway (visibility wiring only; zip code intact). ----
 ok(/const bp=\$\("btnPackage"\); if\(bp\) bp\.style\.display="none";/.test(html),
    "showGatewayUI hides the package .zip button when the gateway probe passes");
 ok(!/Package \.zip to email \(fallback path\)/.test(html), "the old rewording of the package button is gone (it is hidden, not reworded)");
@@ -792,7 +792,7 @@ ok(!!slugItem && /limit is 40/.test(slugItem.message), "the message names the li
 ok(!!slugItem && !/lowercase-hyphenated/.test(slugItem.message),
    "a too-long but charset-clean slug is NOT misreported as a charset problem");
 
-// R3 harvest tests are async (harvestDoi returns a Promise); run them, THEN report + exit.
+// Harvest tests are async (harvestDoi returns a Promise); run them, THEN report + exit.
 r3HarvestTests().then(() => {
   console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");
   process.exit(fail ? 1 : 0);

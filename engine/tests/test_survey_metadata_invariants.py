@@ -385,7 +385,7 @@ def test_d8_corpus_documents_validate_and_hold_every_chain(built_d8):
     assert set(docs) == set(_D8_CORPUS)
     mt = {s["survey_id"]: s for s in _mtcat(built_d8)["surveys"]}
     for slug, doc in docs.items():
-        # every class present on open, embargoed and metadata_only alike (D8)
+        # every class present on open, embargoed and metadata_only alike
         for cls in ("identifiers", "activities", "abstract", "subjects", "creators", "contributors",
                     "organisations", "funders", "citation", "acknowledgements", "rights", "extent",
                     "relationships", "attribution", "dates"):

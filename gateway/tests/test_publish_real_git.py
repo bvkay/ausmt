@@ -4,9 +4,9 @@ F6: `real_git_runner` (publish.py:86) is the ONLY place the gateway executes the
 pytest coverage went through FakeGit — which (pre-C35b/D2) returned rc=0 for any unmodeled verb. The
 sole real-git workflow (curator-e2e) was F5-unrunnable. So the fail-closed rollback (publish.py _rollback)
 — the core publication-ledger guarantee — had NEVER run against a real repository, and the first live
-approve failed twice on real-git behaviours FakeGit cannot represent.
+curator approve failed twice on real-git behaviours FakeGit cannot represent.
 
-This file drives the FULL approve flow (and the metadata-edit commit path) with
+This file drives the FULL curator approve flow (and the metadata-edit commit path) with
 git_runner=publish.real_git_runner — NO FakeGit anywhere here — against a REAL repo pair built per
 test in tmp_path: surveys-live (`git init` + identity + an initial commit on main) and a bare origin.
 
@@ -120,10 +120,10 @@ def _commit_message(surveys_live: Path, env: dict[str, str], ref: str = "HEAD") 
 
 
 # --------------------------------------------------------------------------------------------------
-# D1 assertions — the full approve flow on a REAL repo pair
+# Assertions - the full curator approve flow on a REAL repo pair
 # --------------------------------------------------------------------------------------------------
 def test_real_git_commit_lands_on_main_with_gateway_identity(tmp_path, hermetic_git_env):
-    # D1.a — FAILS IF: the approve does not reach PUBLISHED, the commit does not land on main, or the
+    # FAILS IF: the curator approve does not reach PUBLISHED, the commit does not land on main, or the
     # author/committer identity is not the FIXED gateway identity (proves the publish's -c user.* config
     # OVERRIDES the ambient 'Ambient Dev' global identity the fixture deliberately set).
     env = hermetic_git_env
@@ -158,7 +158,7 @@ def test_real_git_commit_lands_on_main_with_gateway_identity(tmp_path, hermetic_
 
 
 def test_real_git_push_arrives_at_bare_origin(tmp_path, hermetic_git_env):
-    # D1.b — FAILS IF: the bare origin's main does not equal the local commit after publish (i.e. the
+    # FAILS IF: the bare origin's main does not equal the local commit after publish (i.e. the
     # push did not actually ARRIVE). This is the observable a FakeGit rc=0 could never prove.
     env = hermetic_git_env
 
@@ -182,7 +182,7 @@ def test_real_git_push_arrives_at_bare_origin(tmp_path, hermetic_git_env):
 
 
 def test_real_git_no_submitter_pii_in_tree_or_message(tmp_path, hermetic_git_env):
-    # D1.c — THE PII guarantee against a real commit. FAILS IF the submitter name or email appears
+    # THE PII guarantee against a real commit. FAILS IF the submitter name or email appears
     # anywhere in the committed tree contents OR the commit message. (Mutation-proved by writing the
     # submitter email into the commit body -> this must go RED; transcript in the report.)
     env = hermetic_git_env
@@ -237,7 +237,7 @@ def test_real_git_preflight_refuses_dirty_tree(tmp_path, hermetic_git_env):
 
 
 def test_real_git_preflight_refuses_non_main_head(tmp_path, hermetic_git_env):
-    # D1.d(ii) — a checkout NOT on main (a stale submit branch left by a prior failed publish) =>
+    # A checkout NOT on main (a stale submit branch left by a prior failed publish) =>
     # preflight ABORT. FAILS IF the publish proceeds off main.
     env = hermetic_git_env
 
@@ -260,7 +260,7 @@ def test_real_git_preflight_refuses_non_main_head(tmp_path, hermetic_git_env):
 
 
 def test_real_git_rollback_restores_state_then_next_publish_succeeds(tmp_path, hermetic_git_env):
-    # D1.e — THE never-executed core guarantee. A pre-receive hook on the bare origin exits 1 so the
+    # THE never-executed core guarantee. A pre-receive hook on the bare origin exits 1 so the
     # PUSH fails mid-sequence; _rollback must restore the captured ref+branch, leave a CLEAN working
     # tree back on main, and a SUBSEQUENT publish (hook removed) must SUCCEED. This is the red state the
     # test exists to prevent: the wedged ledger (left on a submit branch, every later publish refusing).
@@ -308,7 +308,7 @@ def test_real_git_rollback_restores_state_then_next_publish_succeeds(tmp_path, h
 
 
 # --------------------------------------------------------------------------------------------------
-# D1.f — the metadata-edit commit path (commit_metadata_edit) on a REAL repo pair
+# The metadata-edit commit path (commit_metadata_edit) on a REAL repo pair
 # --------------------------------------------------------------------------------------------------
 def _seed_published_survey(surveys_live: Path, env: dict[str, str], slug: str,
                            yaml_text: str) -> None:
@@ -325,7 +325,7 @@ def _seed_published_survey(surveys_live: Path, env: dict[str, str], slug: str,
 
 
 def test_real_git_metadata_edit_commits_and_pushes(tmp_path, hermetic_git_env):
-    # D1.f(i) — commit_metadata_edit writes the confirmed yaml bytes, commits with the gateway identity,
+    # commit_metadata_edit writes the confirmed yaml bytes, commits with the gateway identity,
     # and pushes to origin. FAILS IF the edited bytes are not committed, the identity is wrong, or the
     # push does not arrive.
     env = hermetic_git_env
@@ -357,7 +357,7 @@ def test_real_git_metadata_edit_commits_and_pushes(tmp_path, hermetic_git_env):
 
 
 def test_real_git_metadata_edit_rollback_on_push_reject(tmp_path, hermetic_git_env):
-    # D1.f(ii) — the metadata-edit commit+push+rollback SKELETON against real git: a pre-receive reject
+    # The metadata-edit commit+push+rollback SKELETON against real git: a pre-receive reject
     # rolls surveys-live back byte-for-byte (ref+branch, clean tree) and re-raises PublishError. FAILS
     # IF the edited bytes survive, the ref moved, or the tree is left dirty/off-main.
     env = hermetic_git_env
@@ -405,7 +405,7 @@ def _seed_published_survey_with_edis(surveys_live: Path, env: dict[str, str], sl
 
 
 def test_real_git_station_removal_deletes_edis_and_pushes(tmp_path, hermetic_git_env):
-    # D1.g(i) — commit_station_removal git-rms the selected EDIs, writes the version-bumped survey.yaml,
+    # commit_station_removal git-rms the selected EDIs, writes the version-bumped survey.yaml,
     # commits with the gateway identity, and pushes. FAILS IF the removed EDI is still in the committed
     # tree, a survivor was removed, the yaml was not updated, or the push did not arrive.
     env = hermetic_git_env
@@ -549,7 +549,7 @@ def test_real_git_survey_retirement_rollback_on_push_reject(tmp_path, hermetic_g
 
 
 def test_real_git_survey_retirement_revert_restores_package_byte_identical(tmp_path, hermetic_git_env):
-    # D1.h(iii) — THE UNDO GUARANTEE (record D2, load-bearing): `git revert` of the retirement commit
+    # THE UNDO GUARANTEE (load-bearing): `git revert` of the retirement commit
     # restores the package BYTE-IDENTICALLY. Capture every file's exact bytes before retiring, retire
     # (real commit+push), then revert the commit and assert every file returns byte-for-byte. FAILS IF
     # the revert does not restore the package exactly (the 'git IS the soft delete' property that lets
@@ -638,7 +638,7 @@ def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_e
 
 
 # --------------------------------------------------------------------------------------------------
-# D5-A A6 — the collection-batch commit path (commit_collection_batch) on a REAL repo pair
+# The collection-batch commit path (commit_collection_batch) on a REAL repo pair
 # --------------------------------------------------------------------------------------------------
 def _seed_collection_member(surveys_live: Path, env: dict[str, str], slug: str, yaml_text: str) -> None:
     pkg = surveys_live / "surveys" / slug
@@ -650,7 +650,7 @@ def _seed_collection_member(surveys_live: Path, env: dict[str, str], slug: str, 
 
 
 def test_real_git_collection_batch_n_commits_diff_minimal(tmp_path, hermetic_git_env):
-    # C43-3b D13 pins 4 (diff-minimality) + N-commits on REAL git: a 2-survey batch lands EXACTLY 2
+    # Diff-minimality + N-commits on REAL git: a 2-survey batch lands EXACTLY 2
     # commits on main (one per member), each commit's diff touches ONLY that member's survey.yaml, and
     # both share the one release note. FAILS IF the count is wrong, a commit's diff spans another
     # survey, or the push does not arrive.
@@ -701,7 +701,7 @@ def test_real_git_collection_batch_n_commits_diff_minimal(tmp_path, hermetic_git
 
 
 def test_real_git_collection_batch_rollback_on_push_reject(tmp_path, hermetic_git_env):
-    # C43-3b D13 pin 2 (rollback) on REAL git: a pre-receive reject rolls the WHOLE batch back byte-for-
+    # Rollback on REAL git: a pre-receive reject rolls the WHOLE batch back byte-for-
     # byte (ref + branch + clean tree) and re-raises. FAILS IF any member's bytes survive, the ref moved,
     # or the tree is left dirty/off-main (a partial batch on the ledger).
     import hashlib

@@ -193,7 +193,7 @@ def test_collection_producer_groups_members_distinctly(tmp_path):
 
 
 def test_collection_guard_disabled_by_default_and_ram_capped():
-    """SPEC A4: the tier-3 producer is disabled by construction (collection_h5_enabled default OFF) and,
+    """SPEC the tier-3 producer is disabled by construction (collection_h5_enabled default OFF) and,
     when enabled, refuses a build above max_collection_stations so an AusLAMP-national ~6 GiB build cannot
     OOM the host."""
     off = bp.load_flags(None)
@@ -206,10 +206,10 @@ def test_collection_guard_disabled_by_default_and_ram_capped():
     assert capped is False and "max_collection_stations" in why, "over the cap => refused (RAM gate)"
 
 
-# --------------------------------------------------------------------- version pin on the manifest (A2)
+# -------------------------------------------------------------------- version pin on the manifest
 
 def test_manifest_records_mth5_version_pin(tmp_path):
-    """SPEC A2: the download manifest self-declares the mth5 / mt_metadata pin its served bundles were
+    """SPEC the download manifest self-declares the mth5 / mt_metadata pin its served bundles were
     written with, so a consumer reads the exact library version beside the artifact's size/sha256."""
     import mt_metadata  # noqa: PLC0415
     import mth5  # noqa: PLC0415

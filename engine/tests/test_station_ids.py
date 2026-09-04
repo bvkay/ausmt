@@ -334,7 +334,7 @@ def test_the_block_parses_identically_without_pyyaml():
 # Default stability for a survey with no `station_ids` block is pinned by
 # test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field, in the review-round section
 # below. It replaced a test named ..._is_byte_identical_... that compared no bytes at all: it
-# asserted two catalogue ids and the site_name column, so nothing in this suite would have caught
+# asserted two catalogue ids and the site_name column, so nothing in this suite catches
 # the feature's additive fields leaking into a survey that never declared the block.
 
 
@@ -618,10 +618,10 @@ def test_a_station_ids_block_without_pyyaml_drops_the_survey_loudly(tmp_path, ca
 
 def test_the_pyyaml_refusal_never_asks_the_parser_it_gates(tmp_path, capsys, monkeypatch):
     """The refusal reads the survey.yaml SOURCE, not the parse, and this fixture is why. HISTORY:
-    this test originally pinned the refusal against the fallback's after-a-list blind spot, where a
+    this test pins the refusal against the fallback's after-a-list blind spot, where a
     trailing comment on a key line (`data_types:   # select all that apply`) swallowed every later
     top-level key and the station_ids block VANISHED from the parse entirely - so a parse-based
-    gate would have asked the parser being gated, got None, and built the survey with no override
+    gate asks the parser being gated, gets None, and builds the survey with no override
     at all. Engine 02e6fe5 (section-2 review, D3) fixed that truncation at the source, so the same
     fixture now PARSES - asserted below so a regression of that fix reds here too - and the refusal
     must fire anyway, because the gate reads the text. The surviving reason the block stays
@@ -660,7 +660,7 @@ def test_the_mini_yaml_fallback_under_reads_an_unquoted_filename_key():
 def test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field(tmp_path):
     """Default stability: a package with NO `station_ids` block builds as it did before the workflow.
     The previous name claimed byte-identity and asserted only two catalogue ids, so nothing in the
-    suite would have caught the feature leaking into a survey that never asked for it. The two
+    suite catches the feature leaking into a survey that never asked for it. The two
     additive surfaces this module created are named here: no record carries `source_provenance`, and
     no station.json carries `provenance.source`."""
     surveys = _make_survey(tmp_path, slug="plain", name="Plain")

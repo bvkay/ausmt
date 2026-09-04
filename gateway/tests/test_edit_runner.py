@@ -227,13 +227,13 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
 
 def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
     """[FC-4] PER-SECTION PATCH PIN (record D13). Submitting a change to section A (organisation)
-    that BOTH adds a sub-key AND deletes a sub-key (via the advanced-JSON path — the section is
+    that BOTH adds a sub-key AND deletes a sub-key (via the advanced-JSON path - the section is
     submitted without `legacy_code`, so _merge_map_into's deletion loop drops it) must leave section
-    B (lead_investigator) byte-for-byte identical — every one of its lines, comment included, survives
+    B (lead_investigator) byte-for-byte identical - every one of its lines, comment included, survives
     with no +/- diff line.
 
-    Review F2: the PREVIOUS form of this test submitted only a scalar change and asserted section B
-    was untouched — but the pre-C43 wholesale emitter ALSO never touched a sibling SECTION (it
+    Review the PREVIOUS form of this test submitted only a scalar change and asserted section B
+    was untouched - but the pre-C43 wholesale emitter ALSO never touched a sibling SECTION (it
     rebuilt only the edited section's node), so that assertion passed against every implementation
     that ever existed and could not fail (Invariant 10). The add+delete here goes through the exact
     deletion loop whose failability was PROVEN by mutation (evidence in the C43 fix-round report):
@@ -400,7 +400,7 @@ def test_scalar_edit_in_section_with_list_member_leaves_list_block_stable(tmp_pa
 
 
 # --------------------------------------------------------------------------------------------------
-# C42 coordinate-privacy: the Metadata-tab access edit must PRESERVE access.coordinate_overrides
+# Coordinate-privacy: the Metadata-tab access edit must PRESERVE access.coordinate_overrides
 # end-to-end (build_section_patch -> apply_patch on a ruamel doc — the reviewer's exact leak path).
 # --------------------------------------------------------------------------------------------------
 def test_access_edit_preserves_coordinate_overrides_end_to_end():
@@ -442,7 +442,7 @@ def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
     # Proven failing (pre-fix HEAD 4f4e999..a31fc8e): patched region "on" emitted as bare
     # `region: on` -> PyYAML safe_load read True (bool); name "no" -> False; abstract "12:34:56" ->
     # 45296 (YAML-1.1 sexagesimal int). ruamel's own re-read kept them strings, so the diff, the
-    # §0.6 sha pin, and the confirm re-run all agreed and NO guard fired — the portal would have
+    # §0.6 sha pin, and the confirm re-run all agree and NO guard fires, so the portal
     # served a bool/int the curator never wrote. FAILS IF quote_ambiguous stops quoting the
     # YAML-1.1-retypeable tokens.
     import base64
@@ -759,7 +759,7 @@ access:
 custom_note: "unknown key survives"
 """
 
-# C35b/D3 (review F7): resolve the validator UNCONDITIONALLY — sibling if present, else the committed
+# (review F7): resolve the validator UNCONDITIONALLY - sibling if present, else the committed
 # Vendored pinned copy; require_validator_dir FAILS (never skips) if neither is present.
 from gateway.tests.conftest import require_validator_dir  # noqa: E402
 
@@ -791,7 +791,7 @@ def test_merge_runs_the_real_validator(tmp_path):
 def test_merge_real_validator_flags_fail(tmp_path):
     # The real validator FAILs an out-of-enum access.level (a required, enumerated field), and the
     # merge reports has_fail=True — the signal the gateway turns into a confirm 409 (§0.4).
-    # C35b/D3 (review F7): UNCONDITIONAL — sibling-or-vendored, FAILS if neither present.
+    # (review F7): UNCONDITIONAL - sibling-or-vendored, FAILS if neither present.
     pkg = _write_package(tmp_path / "surveys-live", slug="intg-survey-2026",
                          yaml_text=_VALID_PACKAGE_YAML)
     (pkg / "transfer_functions" / "edi" / "S01.edi").write_text(

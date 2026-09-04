@@ -170,7 +170,7 @@ def test_invalid_email_mints_nothing_and_never_mails(tmp_path):
 
 def test_smtp_unconfigured_disables_issuance(tmp_path):
     """With no mailer seam AND no SMTP config, issuance is DISABLED: the endpoint mints nothing and
-    still returns the neutral 202 (K3). RED-proves: a handler that minted regardless of a configured
+    still returns the neutral 202. RED-proves: a handler that minted regardless of a configured
     mail path would leave an undeliverable key row."""
     async def _body():
         # No mailer injected and make_config sets no SMTP -> cfg.mail_configured is False.
@@ -491,7 +491,7 @@ def test_mailer_unconfigured_returns_false(tmp_path):
 
 def test_mailer_body_has_no_em_dash_and_carries_reply_to(tmp_path, monkeypatch):
     """The email body carries no em dash (house rule for user-facing strings) and the message sets
-    Reply-To to the From address (K3). Fails if an em dash slips into the body or Reply-To is missing."""
+    Reply-To to the From address. Fails if an em dash slips into the body or Reply-To is missing."""
     _FakeSMTP.instances = []
     monkeypatch.setattr(smtplib, "SMTP", _FakeSMTP)
     monkeypatch.setattr(smtplib, "SMTP_SSL", _FakeSMTPSSL)
@@ -522,7 +522,7 @@ def test_smtp_pass_redacted_from_config_dump(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# K1 integration seam: the PORTAL FORM posts JSON, not urlencoded
+# Integration seam: the PORTAL FORM posts JSON, not urlencoded
 # --------------------------------------------------------------------------------------------------
 def test_request_key_accepts_the_portal_forms_json_body(tmp_path):
     """Add-survey.html posts {"email": ...} as application/json. The original route read a

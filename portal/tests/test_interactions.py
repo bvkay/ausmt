@@ -44,7 +44,7 @@ def test_portal_interactions(tmp_path):
     # station D1 drives the drawer access-panel test (no plots; verbatim embargo copy). Its curves are
     # withheld at the ENGINE (empty tf series); the fixture mirrors that so the driver sees what ships.
     stations = [
-        # A1 carries a site_name that DIFFERS from its (sanitised) displayed id, so the drawer's
+        # Carries a site_name that DIFFERS from its (sanitised) displayed id, so the drawer's
         # Station summary renders the "site name" row for it (the SA28_2B -> SA282B case).
         {"id": "A1", "survey": "Alpha Survey", "lat": -30.0, "lon": 136.0, "ausmt_id": "au.alpha.A1", "edi_available": 1, "site_name": "A_1"},
         {"id": "A2", "survey": "Alpha Survey", "lat": -31.0, "lon": 137.0, "ausmt_id": "au.alpha.A2", "edi_available": 1},
@@ -62,7 +62,7 @@ def test_portal_interactions(tmp_path):
     #   * tzx_re > 0 (with everything else 0) => REAL Parkinson north = -tzx_re < 0 => arrow points
     #     SOUTH (down) — the D3 sign-mapping check;
     #   * rho + phase errors present => the D4 error bars must render.
-    # A2 has NO tipper and NO errors => the "no tipper" state (empty arrow panel) + no error bars.
+    # Has NO tipper and NO errors => the "no tipper" state (empty arrow panel) + no error bars.
     per2 = [0.01, 1000.0]
     zero2 = [None, None]
 
@@ -88,7 +88,7 @@ def test_portal_interactions(tmp_path):
     tf = []
     for s in stations:
         if s["survey"] == "Delta Survey":
-            tf.append([[] for _ in COLS["tf"]])          # C1b: withheld display curves (all series empty)
+            tf.append([[] for _ in COLS["tf"]])          # Withheld display curves (all series empty)
         elif s["id"] == "A1":
             tf.append(open_tf(with_tipper=True, with_errors=True))    # arrow panel + error bars
         else:

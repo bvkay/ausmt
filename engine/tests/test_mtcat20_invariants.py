@@ -6,8 +6,8 @@ zero-null/zero-empty posture. Sources:
 
   * AusMT_2026/schemas-draft/run-fixture-suite.py - the ratified executable fixture suite. Its
     migrate_12_to_20 IS the 1.2 -> 2.0 emitter-change specification and is carried here
-    VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example (T3/T4) and a
-    corpus-shaped 1.2 migration input (T2a/T2b).
+    VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example and a
+    corpus-shaped 1.2 migration input.
   * the schema-level accept/reject checks live in test_mtcat_schema_v20.py; the emitter-behaviour
     checks live in test_mtcat20_emission.py. THIS module owns the migration transform, the
     reference invariant implementations (counts, ordering, rollups, coordinate-state consistency),
@@ -270,7 +270,7 @@ def _document_invariants(doc):
 # ---------------------------------------------------------------- layer 1: fixtures
 
 def test_spec_example_validates_and_holds_its_invariants():
-    """T3 + T4: the interchange spec's worked example validates against the ratified schema and
+    """+ the interchange spec's worked example validates against the ratified schema and
     passes every reference invariant (in-bbox stations, represented bands, ordered periods,
     unique sorted rates, reconciling counts)."""
     errs = list(_validator().iter_errors(SPEC_DOC))
@@ -279,7 +279,7 @@ def test_spec_example_validates_and_holds_its_invariants():
 
 
 def test_migration_input_is_really_a_break_and_migrates_clean():
-    """T2a + T2b: the corpus-shaped 1.2 fixture does NOT validate raw against the 2.0 schema (the
+    """+ the corpus-shaped 1.2 fixture does NOT validate raw against the 2.0 schema (the
     break is real: nulls-as-undeclared, empty formats, legacy blocks), and migrate_12_to_20 over
     it DOES validate, with zero nulls (outside the defined pair), zero empties, and every
     reference invariant holding."""

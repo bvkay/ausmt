@@ -59,7 +59,7 @@ def test_status_page_never_has_script_or_raw_html_injection():
 
 
 def test_note_renders_only_for_submitter_intended_states():
-    # Review finding 2 (C11b): the decision/AV note used to render for ANY state with a truthy note,
+    # Review finding 2: the decision/AV note used to render for ANY state with a truthy note,
     # so the PII-ACK audit reason — curator-only by C11b §2 — leaked onto the public page during the
     # PUBLISHING window (and raw curator notes / internal git failure text leaked in
     # PUBLISHING/PUBLISH_FAILED). The note renders ONLY for states where it is intended for the

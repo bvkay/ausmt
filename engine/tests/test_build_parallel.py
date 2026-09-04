@@ -20,7 +20,7 @@ places, all of them deliberate build records rather than leaks:
 
 plus the build.json / build_provenance.json / build_report.json build records (timings and wall
 stamps by design). The served EDI, the served EMTF XML and BOTH zips are byte-compared with no
-exemption: their published digests are cross-build invariants (C18 Amendment A5), so a
+exemption: their published digests are cross-build invariants, so a
 <CreateTime> or a zip-metadata leak fails here rather than being normalised away. The comparator
 normalises ONLY the places above and byte-compares everything else, default-deny: a file with no
 rule is byte-compared, so any NEW nondeterminism the pool introduced fails loudly instead of being

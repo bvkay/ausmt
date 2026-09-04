@@ -86,7 +86,7 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
     _mk(sroot, "cap", name="Capricorn 2010",
         collection="collection:\n  id: capricorn\n  title: Capricorn\n  type: programme\n"
                    "  status: completed\n", n_edi=4)
-    # F1 edge (D5-B): an out-of-vocab status FIRST (wamt-a sorts first) then a VALID status LATER. The
+    # Edge (D5-B): an out-of-vocab status FIRST (wamt-a sorts first) then a VALID status LATER. The
     # engine drops the invalid status inside the per-member fold, re-opening the slot, so the rollup
     # lands on 'active' — the runner must agree (this reds the pre-F1 end-of-loop drop).
     _mk(sroot, "wamt-a", name="WA MT A",
@@ -164,7 +164,7 @@ def test_near_duplicate_behavioural_case_fold(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# F1 (D5-B) — out-of-vocab status drop happens INSIDE the per-member fold. FAILS IF an invalid status
+# (D5-B) - out-of-vocab status drop happens INSIDE the per-member fold. FAILS IF an invalid status
 # on the first member permanently nulls the field: an invalid-first + valid-later corpus must roll up
 # to the VALID status (the pre-fix end-of-loop drop yielded None here — red-proven vs the engine).
 # --------------------------------------------------------------------------------------------------
@@ -188,7 +188,7 @@ def test_out_of_vocab_status_with_no_valid_member_is_none(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# F2 (D5-B) — membership predicate is the engine's truthiness. FAILS IF a falsy id (unquoted 0/False)
+# (D5-B) - membership predicate is the engine's truthiness. FAILS IF a falsy id (unquoted 0/False)
 # forms a collection: such a member must be dropped exactly as the engine drops it.
 # --------------------------------------------------------------------------------------------------
 def test_falsy_id_member_is_excluded(tmp_path):
@@ -201,7 +201,7 @@ def test_falsy_id_member_is_excluded(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# F3 (D5-B) — malformed-YAML resilience (NEGATIVE CONTROL). FAILS IF one unparseable survey.yaml blanks
+# (D5-B) - malformed-YAML resilience (NEGATIVE CONTROL). FAILS IF one unparseable survey.yaml blanks
 # the WHOLE projection: a malformed member is dropped and the OTHER collections still project (mirrors
 # build_portal.py:810-817 dropping just the one bad package). Red-proven: catching only OSError before
 # let the ruamel YAMLError propagate to {ok:False} and the gateway's empty state.
@@ -230,7 +230,7 @@ def test_non_mapping_survey_yaml_is_dropped(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# F5 (D5-B) — PUBLISHED-SOURCE behaviour (documents the intentional non-served semantics). A member
+# (D5-B) - PUBLISHED-SOURCE behaviour (documents the intentional non-served semantics). A member
 # carrying a collection.id but ZERO EDIs (a build-dropped-class survey) IS included in the console
 # rollup — the console reads the published survey.yaml, not the served post-gate build. FAILS IF the
 # runner silently drops a 0-station member (which would make it a served mirror, not the edit truth).

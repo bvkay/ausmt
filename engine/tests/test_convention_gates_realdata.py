@@ -32,7 +32,7 @@ pytestmark = pytest.mark.skipif(
 REALDATA = Path(_REALDATA) if _REALDATA else Path(".")
 
 # The three REAL convention-flipped stations (both off-diagonal medians coherently out of
-# quadrant: arg Zxy ~ -140..-124 (Q3), arg Zyx ~ +34..+44 (Q1) — the axis-swap/convention class).
+# quadrant: arg Zxy ~ -140..-124, arg Zyx ~ +34..+44 - the axis-swap/convention class).
 # Pinned BY NAME per the adjudication: Gate 2 FAILING these is the living proof it can fail.
 NEGATIVE_CONTROLS = [
     "USArray.TTW52.2016.edi",
@@ -118,9 +118,9 @@ def test_ccmt_uniform_zrot_served_as_stored_v3a():
 
 def test_auslamp_pax_serve_path_refuses_v3c():
     """V3-C on real bytes. FAILS IF: a PAX-rotated (per-period ZROT) AusLAMP-SA specimen is SERVED.
-    Under frame POLICY v3 the serve path REFUSES per-period frame mixing — a single served curve
+    Under frame POLICY v3 the serve path REFUSES per-period frame mixing - a single served curve
     from period-varying frames is misleading-by-construction.
-    Historical red: v2 de-rotated per period (R1) and served it (disp.action == "derotate")."""
+    Historical red: v2 de-rotated per period and served it (disp.action == "derotate")."""
     spec = REALDATA / "_specimens" / "auslamp-pax"
     if not spec.is_dir():
         pytest.skip("realdata corpus not present (AUSMT_REALDATA unset) — _specimens/auslamp-pax "

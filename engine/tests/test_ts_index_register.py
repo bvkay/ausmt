@@ -150,7 +150,7 @@ def test_a_malformed_match_method_is_a_curator_warning_and_not_a_build_stop(tmp_
 
     match_method is PROVENANCE and gates nothing: a row stands or falls on its `review` state, and a
     malformed method costs it only its place in the adjudication queue. The validator says WARNING
-    and the ratified FAIL list (S1) does not name the field, so an engine that raised here was
+    and the ratified FAIL list does not name the field, so an engine that raised here was
     STRICTER THAN RATIFIED - a register that passed surveys CI green hard-stopped the ausmt build
     (build_portal returns 2 on TsIndexError), which surfaces as a mystery red on a curator's PR.
     The value is carried through verbatim so nothing downstream loses the provenance it does have."""

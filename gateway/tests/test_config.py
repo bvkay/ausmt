@@ -38,7 +38,7 @@ def test_redacted_items_omit_key(tmp_path):
 
 def test_env_defaults():
     cfg = load_config({"AUSMT_SUBMIT_KEY": "x" * 20})
-    assert cfg.max_upload_mb == DEFAULT_MAX_UPLOAD_MB  # M2: the ONE default, not a re-typed 250
+    assert cfg.max_upload_mb == DEFAULT_MAX_UPLOAD_MB  # The ONE default, not a re-typed 250
     assert cfg.max_inflight == 8
     assert cfg.max_per_day == 25
     assert cfg.job_timeout_s == 900

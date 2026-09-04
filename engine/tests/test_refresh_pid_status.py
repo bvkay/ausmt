@@ -42,7 +42,7 @@ def test_is_doi_and_normalise():
 
 
 def test_doi_identifiers_of_union_of_typed_and_flat():
-    """SPEC §8.2 A-C5: sweep the UNION of DOI-typed related_identifiers rows AND the flat dataset_doi /
+    """SPEC §8.2: sweep the UNION of DOI-typed related_identifiers rows AND the flat dataset_doi /
     collection_pid, deduped by string. A non-DOI-typed row and a Handle flat value are excluded. FAILS IF
     a flat-only DOI is missed or a non-DOI is swept."""
     y = {"identifiers": {"dataset_doi": "10.25914/flat"},

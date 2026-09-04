@@ -178,12 +178,12 @@ def test_uniform_zrot_served_as_stored_v3a(tmp_path):
 
 
 def test_olympic_dam_class_neg60_served_as_stored_v3a(tmp_path):
-    """V3-A pin (olympic-dam class: uniform ZROT −60, beyond any declination — the old R4 class).
+    """V3-A pin (olympic-dam class: uniform ZROT −60, beyond any declination - the old R4 class).
     FAILS IF: the −60° station is served de-rotated. Compares the served pt_az against the SAME
     fixture built at angle 0 (the de-rotated target): they must DIFFER in the rotated way (~60°),
     proving the served values are the SOURCE (as-stored) values, not the de-rotated ones. Both go
     through the identical mt_metadata path so the comparison is index-aligned.
-    Historical red: v2 de-rotated −60 (R4) so the served pt_az matched the angle-0 fixture (~0)."""
+    Historical red: v2 de-rotated −60 so the served pt_az matched the angle-0 fixture (~0)."""
     az_zero = _pt_az_row(bp._parse_one_edi(VULCAN))        # angle-0 = the de-rotated target
     rot_text = _vulcan_rotated(-60.0)
     tf_raw = mtm.read(_write(tmp_path, "od_raw.edi", rot_text))
@@ -208,7 +208,7 @@ def test_per_period_zrot_refused_v3c(tmp_path):
     """FAILS IF: a per-period (PAX-style) ZROT station is SERVED. A single served curve from
     period-varying frames is misleading-by-construction, so the station is REFUSED at the gate with
     a reason naming the per-period rotation and the fix.
-    Historical red: v2 de-rotated per period (R1) and SERVED it (derotated True)."""
+    Historical red: v2 de-rotated per period and SERVED it (derotated True)."""
     n = len(_read_block(VULCAN.read_text(encoding="latin-1"), "ZROT"))
     theta = [5.0 + (35.0 * i / (n - 1)) for i in range(n)]
     parsed = _parse(tmp_path, "pax.edi", _vulcan_rotated(theta))
@@ -224,7 +224,7 @@ def test_threshold_death_14_vs_16_serve_identically_as_stored(tmp_path):
     """Threshold-death pin. FAILS IF: any serve-path behaviour differs at 14° vs 16° — the old
     v2 FRAME_KEEP_MAX_DEG=15 boundary (R3 record ≤15 vs R4 de-rotate >15) is GONE. Under v3 both
     are survey-uniform declarations served AS STORED, each recording its own angle; neither is
-    de-rotated. Also proves FRAME_KEEP_MAX_DEG no longer exists as a constant."""
+    de-rotated. Also proves FRAME_KEEP_MAX_DEG does not exist as a constant."""
     assert not hasattr(conv, "FRAME_KEEP_MAX_DEG"), "the v2 15° threshold constant must be gone"
     for ang in (14.0, 16.0):
         parsed = _parse(tmp_path, f"a{ang}.edi", _vulcan_rotated(ang))
@@ -314,7 +314,7 @@ def test_conjugated_z_fails_with_convention_message(tmp_path):
     Zyx Q3->Q2) — the exact hazard that would invert the C20 induction-arrow claim."""
     text = VULCAN.read_text(encoding="latin-1")
     Z = _z_from_text(text)
-    # PRECONDITION: the base really is e^{+iωt} (Q1/Q3)
+    # PRECONDITION: the base really is e^{+iωt}
     assert 0 < np.median(np.degrees(np.angle(Z[:, 0, 1]))) < 90
     assert -180 < np.median(np.degrees(np.angle(Z[:, 1, 0]))) < -90
     parsed = _parse(tmp_path, "conj.edi", _z_to_text(text, np.conj(Z)))
@@ -473,9 +473,9 @@ def test_spectra_rotated_blackhill_shape_served_as_stored_v3a(tmp_path):
     GEOTOOLS shape: 7-channel, ROTSPEC=90, HMEAS azimuths at the rotated axes) is DE-ROTATED, fails
     ingest, or is served without the declared angle recorded. mt_metadata reads this class with NO
     rotation metadata (_rotation_angle None, azimuths ignored), so ONLY the raw-text evidence path
-    sees the frame — and under v3 it RECORDS it and serves as stored. The served pt_az must equal
+    sees the frame - and under v3 it RECORDS it and serves as stored. The served pt_az must equal
     the as-stored (rotated) shape, i.e. shifted ~90° vs the unrotated original.
-    Historical red: v2 de-rotated ROTSPEC=90 (R4) so the served pt_az matched the original."""
+    Historical red: v2 de-rotated ROTSPEC=90 so the served pt_az matched the original."""
     base = bp._parse_one_edi(PHOENIX)                      # unrotated original (~ the de-rot target)
     assert "skip" not in base
     rot_text = _rotate_spectra_text(PHOENIX.read_text(encoding="latin-1"), 90.0)
@@ -666,7 +666,7 @@ def test_survey_zero_member_gets_mixed_frames_note_f1(tmp_path):
 
 
 # ---------------------------------------------------------------------------------------------
-# Fix round F2: divergent tipper/impedance declared frames are REPORTED (never rotated)
+# Fix round divergent tipper/impedance declared frames are REPORTED (never rotated)
 # ---------------------------------------------------------------------------------------------
 _N_VULCAN = 62   # Vulcan_A1's period count (>FREQ //62)
 

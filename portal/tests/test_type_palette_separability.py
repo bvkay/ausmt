@@ -27,7 +27,7 @@ FAILS IF:
   * LP stops being teal-family (a rewrite that "fixed" separability by moving the wrong one).
 
 The colour maths is stdlib-only on purpose (no new dependency for a four-colour check): sRGB -> linear ->
-XYZ(D65) -> CIELAB, CIEDE2000, and the Vienot 1999 LMS-projection dichromat simulation.
+XYZ -> CIELAB, CIEDE2000, and the Vienot 1999 LMS-projection dichromat simulation.
 """
 import math
 import re
@@ -193,11 +193,10 @@ def test_the_two_palette_authorities_agree():
 def test_the_static_pages_draw_the_same_palette_as_the_portal():
     """The THIRD consumer, added once the static entity pages started drawing type-coloured maps.
 
-    This is the pin the BBMT drift proved was missing. The engine's _TYPE_COL kept the superseded
-    #5B54D6 after this file's own workflow moved BBMT to #3730B8, so a reader who opened a survey page
-    and then the same survey in the portal saw two different blues for one data type; and because an
-    ENGINE test asserted the stale hex as a literal, applying the measured value there would have
-    failed CI. A palette drift that CI defends is the precise failure a parity pin exists to catch.
+    Without it the engine's _TYPE_COL can keep a superseded hex after this file's palette moves, so a
+    reader who opens a survey page and then the same survey in the portal sees two different blues for
+    one data type; and while an ENGINE test asserts the stale hex as a literal, applying the measured
+    value there fails CI. A palette drift that CI defends is the precise failure a parity pin catches.
 
     The engine side is still asserted as a literal in the engine's own suite, which is right: that
     pin says "this hex, deliberately". This one says the two files agree, which is the property no

@@ -33,7 +33,7 @@ def test_populated_portal_value_binding(tmp_path):
                 "p3d": 10, "gd": 0, "ellip": 0.15, "skew": 3.1, "mre": 0.02, "decades": 5.0}
     cat_row = [cat_vals[c] for c in COLS["catalogue"]]
     sci_row = [sci_vals[c] for c in COLS["sci"]]
-    # tf entry: 18 arrays in TF_COLUMNS order (C20). Built by NAME and projected through COLS["tf"] so
+    # tf entry: 18 arrays in TF_COLUMNS order. Built by NAME and projected through COLS["tf"] so
     # it self-follows the contract; the smoke test asserts on catalogue/sci/build values, not tf columns.
     tf_vals = {"periods": [0.01, 1000.0], "rho_xy": [1.0, 2.0], "rho_yx": [3.0, 4.0],
                "phs_xy": [10.0, 20.0], "phs_yx_adj": [30.0, 40.0], "tip_mag": [0.1, 0.2],
@@ -97,7 +97,7 @@ def test_populated_portal_value_binding(tmp_path):
     # no attribution.statement and no dates, so the attribution falls back to the org with no year.
     assert ex[17] == "https://creativecommons.org/licenses/by/4.0/", ex  # license_url <- canonical table
     assert ex[18] == "X", ex                            # attribution <- org (no statement/date)
-    # W3b DROP is real (not just reordered): the six removed values are absent from the row. sc[SC.q]=4.2,
+    # DROP is real (not just reordered): the six removed values are absent from the row. sc[SC.q]=4.2,
     # sc[SC.sw]="BIRRP", sc[SC.dim]="2-D" and the file "ST1.edi" would all be present pre-drop.
     for gone in (4.2, "BIRRP", "2-D", "ST1.edi", "error"):
         assert gone not in ex, ("dropped CSV field %r still present: %r" % (gone, ex))

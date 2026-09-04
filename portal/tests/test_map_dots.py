@@ -138,7 +138,7 @@ def test_a_zoom_restyles_but_does_not_reroute():
 
 def test_the_legend_keys_only_data_types():
     """A legend states what the map draws. The badge swatch (and the .legcluster it was renamed from) key
-    objects that no longer exist, so both must be gone from the markup AND the stylesheet."""
+    objects that not exist, so both must be gone from the markup AND the stylesheet."""
     main = MAIN_JS.read_text(encoding="utf-8")
     html = INDEX.read_text(encoding="utf-8")
     for gone in ("legbadge", "legcluster"):
@@ -158,7 +158,7 @@ def test_the_drawer_badges_are_untouched():
     """THE OVERLOADED-NAME GUARD, and the reason this file does not sweep for the word `badge`.
 
     Three surfaces share the name and NONE of them is map furniture: the drawer's generalised-position
-    badge is coordinate POLICY (C42), the format-availability badges are a distribution claim, and both
+    badge is coordinate POLICY, the format-availability badges are a distribution claim, and both
     render through the same `.badge` CSS. A future tidy-up that greps `badge` to zero would delete a
     coordinate-policy disclosure and a served-format claim, which is why the boundary is a test."""
     html = INDEX.read_text(encoding="utf-8")

@@ -118,7 +118,7 @@ def test_surveys_index_lists_every_survey_with_its_discovery_facts(built):
             f"{slug}: every row link must resolve to an emitted page"
     assert "Test Org" in page and "South Australia" in page
     # The licence reads in HUMAN form in chrome and the SPDX identifier stays the machine's name
-    # for it (LANE-ADDENDUM-HUB-FEEDBACK.md R3); ranges take the spaced hyphen (R1).
+    # for it (LANE-ADDENDUM-HUB-FEEDBACK.md R3); ranges take the spaced hyphen.
     assert "stations" in page and "CC BY 4.0" in page
     assert re.search(r"[\d,.]+ - [\d,.]+ s", page), "the period range must render"
     # No abstract on the cards: the index is a discovery summary, not a page of miniature records.
@@ -487,7 +487,7 @@ def test_the_hub_card_draws_a_dot_for_every_member_station():
     assert size < 300_000, (
         f"the collections hub must draw every station AND stay under 300 KB, got {size} bytes")
 
-    # the collection page draws the same footprint: the card is no longer a reduced version of it
+    # the collection page draws the same footprint: the card is not a reduced version of it
     detail = _detail_page(pages, rows)
     assert detail.count("<circle") == sum(len(v) for v in rows[0]["member_points"].values()), \
         "the collection page draws the whole footprint"
@@ -554,7 +554,7 @@ def test_the_locator_ring_follows_extent_not_station_count():
 
 
 # ==================================================================================================
-# B9 R1 to R3 on the hubs: the same display rules the entity pages answer to
+# The display grammar on the hubs: the same rules the entity pages answer to
 # ==================================================================================================
 def test_the_hub_cards_print_ranges_licences_and_periods_the_way_the_entity_pages_do():
     """One display grammar across the whole tier. The hub card is where a reader compares surveys
@@ -573,7 +573,7 @@ def test_the_hub_cards_print_ranges_licences_and_periods_the_way_the_entity_page
 
 
 # ==================================================================================================
-# B9 R4 to R9: the hub as a place to browse, not a list to read
+# The hub as a place to browse, not a list to read
 # ==================================================================================================
 def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor():
     """The stretched-link pattern. A card is one destination, so the whole card should behave
@@ -698,7 +698,7 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 
 
 # ==================================================================================================
-# B9 R11 to R14: ONE header and ONE footer, across every page kind
+# ONE header and ONE footer, across every page kind
 # ==================================================================================================
 # The page kinds this tier emits, with the tab that must be active, the machine-readable link the
 # footer must resolve to, and whether the header's right status slot carries anything. The footer
@@ -795,7 +795,7 @@ def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(bui
 def test_one_footer_of_three_regions_on_every_page_kind(built):
     """Restated to the rule: ONE footer, three regions, byte-identical on every page.
 
-    The footer used to be contextual, so a reader could not learn it once. Left is the catalogue,
+    The footer must not be contextual, or a reader cannot learn it once. Left is the catalogue,
     the same document from every page; centre is the AuScope acknowledgement with the attribution
     and the licence note, carrying the one navigation link in the line; right is the AuScope-NCRIS
     lockup, linked where that URL text links. The separator is U+00B7, written as the numeric
@@ -904,7 +904,7 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     lets a side zone go under its own content rather than force a wrap.
 
     Below 1421px of footer CONTENT the centre takes a row of its own UNDER the two side regions,
-    where it spans the footer and is centred on its axis. Below 520px the side phrases no longer
+    where it spans the footer and is centred on its axis. Below 520px the side phrases not
     share a row either, so every region takes one and aligns left, which is the 375px stack. Both
     numbers are the portal's, because this tier and the portal now carry ONE rule set: the wider
     surface sets the number and portal/tests/test_footer_regions.py holds the two sides identical.

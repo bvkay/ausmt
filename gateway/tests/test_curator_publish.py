@@ -1,4 +1,4 @@
-"""Approve -> commit-to-surveys-live flow + fail-closed rollback (design §5 v2/§8), with git faked
+"""curator Approve -> commit-to-surveys-live flow + fail-closed rollback (design §5 v2/§8), with git faked
 at its injected seam (no real git). v2 is COMMIT-AND-PUSH ONLY — NO rebuild: PUBLISHED means
 committed+pushed, not served.
 
@@ -51,7 +51,7 @@ def test_happy_path_commits_and_stages(tmp_path):
             commit_calls = [c for c in git.calls if "commit" in c]
             assert commit_calls, "no git commit was issued"
             assert any(m in " ".join(commit_calls[0]) for m in COMMIT_AUTHOR_MARKERS)
-            # v2 + C40: PUBLISHED reason states it is committed, and that the reconcile agent (not
+            # v2 + PUBLISHED reason states it is committed, and that the reconcile agent (not
             # a manual make) closes the serve gap.
             reason = gw.db.transitions_for(sid)[-1]["reason"].lower()
             assert "committed" in reason and "reconcile" in reason
@@ -124,7 +124,7 @@ def test_git_runner_env_scrubs_secrets(tmp_path, monkeypatch):
 
 
 def test_blocking_fail_refuses_approve_409(tmp_path):
-    # Proven failing: disabling has_blocking_fail (if False:) let an approve on a FAIL
+    # Proven failing: disabling has_blocking_fail (if False:) let an curator approve on a FAIL
     # submission transition to PUBLISHING and run git (verified earlier).
     async def _body():
         git = FakeGit()
@@ -333,13 +333,13 @@ def test_slug_charset_validation():
 
 
 # --------------------------------------------------------------------------------------------------
-# C11b — curator-acknowledgeable PII sweep (design maintainer/C11b-PiiAcknowledge.md).
+# Curator-acknowledgeable PII sweep (design maintainer/C11b-PiiAcknowledge.md).
 # Every behaviour change below is proven-failing-first against pre-C11b code (evidence in the report).
 # --------------------------------------------------------------------------------------------------
 def test_generic_email_without_ack_refuses_approve_409(tmp_path):
-    # C11b §4.1: a generic (non-submitter) email in the package, NO ack => approve 409 listing the PII
+    # §4.1: a generic (non-submitter) email in the package, NO ack => approve 409 listing the PII
     # reason (the CURRENT hard-block behaviour, now pinned as an explicit regression). Failure
-    # criterion: fails if the approve is not 409, or the reason does not mention the PII check, or the
+    # criterion: fails if the curator approve is not 409, or the reason does not mention the PII check, or the
     # submission left VALIDATED, or any git ran.
     async def _body():
         git = FakeGit()
@@ -357,10 +357,10 @@ def test_generic_email_without_ack_refuses_approve_409(tmp_path):
 
 
 def test_generic_email_with_ack_publishes_and_audits(tmp_path):
-    # C11b §4.2: generic email + ack_pii=yes + note => publish proceeds; the PUBLISHING audit reason
+    # §4.2: generic email + ack_pii=yes + note => publish proceeds; the PUBLISHING audit reason
     # carries the PII-ACK prefix with the file name and the curator note. Failure criterion: fails if
     # the submission does not reach PUBLISHED, or the audit reason lacks PII-ACK / the file name / the
-    # note. proven failing against pre-C11b code: there was no ack_pii path, so this approve 409'd and
+    # note. proven failing against pre-C11b code: there was no ack_pii path, so this curator approve 409'd and
     # the submission stayed VALIDATED.
     async def _body():
         git = FakeGit()
@@ -383,11 +383,11 @@ def test_generic_email_with_ack_publishes_and_audits(tmp_path):
 
 
 def test_submitter_email_with_ack_still_409(tmp_path):
-    # C11b §0 / §4.3 — THE CONTRACT TEST. The submitter's OWN email present + ack_pii=yes => 409. No
+    # §0 / §4.3 - THE CONTRACT TEST. The submitter's OWN email present + ack_pii=yes => 409. No
     # acknowledgement can override a submitter-email hit. Also the MIXED case (submitter + generic) is
     # a 409 with ack, and a CASE-VARIANT of the submitter email is still a submitter hit (review
     # finding 1 — submitter-needle matching is case-insensitive by contract). Failure criterion: fails
-    # if ANY acknowledged approve is not 409, or the state left VALIDATED, or any git ran.
+    # if ANY acknowledged curator approve is not 409, or the state left VALIDATED, or any git ran.
     async def _body():
         git = FakeGit()
         async with app_client(tmp_path, git_runner=git) as (client, _app, gw, cfg):
@@ -423,7 +423,7 @@ def test_submitter_email_case_variants_classified_submitter(tmp_path):
     # generic_hits => acknowledgeable => ack_pii published the submitter's own address. Both case
     # orientations must classify as SUBMITTER hits: approve with ack => 409, no ack checkbox rendered,
     # detail says the block is absolute. Failure criterion: fails if either orientation is
-    # acknowledgeable (approve+ack != 409) or renders the ack checkbox.
+    # acknowledgeable (curator approve+ack != 409) or renders the ack checkbox.
     async def _body():
         cases = [
             ("User@Example.com", "user@example.com"),   # DB mixed-case, artifact lower
@@ -440,7 +440,7 @@ def test_submitter_email_case_variants_classified_submitter(tmp_path):
                 assert 'name="ack_pii"' not in page.text, (
                     f"case variant {db_email!r}/{artifact_email!r} rendered an ack checkbox")
                 assert "absolute" in page.text.lower()
-                # And the approve gate must refuse even with ack.
+                # And the curator approve gate must refuse even with ack.
                 r = await _approve(client, sid, note="case-variant bypass attempt", ack_pii="yes")
                 assert r.status_code == 409, (
                     f"case variant {db_email!r}/{artifact_email!r} was acknowledgeable (§0 bypass)")
@@ -455,9 +455,9 @@ def test_submitter_email_case_variants_classified_submitter(tmp_path):
 
 
 def test_ack_pii_exact_token_parsing(tmp_path):
-    # C11b §4.4: ack_pii is an EXACT affirmative token, default DENY (mirrors confirm_overwrite). The
+    # §4.4: ack_pii is an EXACT affirmative token, default DENY (mirrors confirm_overwrite). The
     # four affirmatives allow; "", "0", "false", "anything" deny. Failure criterion: fails if a
-    # non-affirmative value lets the acknowledged approve proceed, or an affirmative is refused.
+    # non-affirmative value lets the acknowledged curator approve proceed, or an affirmative is refused.
     # proven failing against pre-C11b code: there was no ack path at all, so every affirmative 409'd.
     async def _body():
         deny_values = ["", "0", "false", "anything", "YESa", " ", "2"]
@@ -485,7 +485,7 @@ def test_ack_pii_exact_token_parsing(tmp_path):
 
 
 def test_ack_address_never_echoed_and_report_capped(tmp_path):
-    # C11b §4.5: needle-vs-generic separation; the report caps at 20 names with '+N more'; the matched
+    # §4.5: needle-vs-generic separation; the report caps at 20 names with '+N more'; the matched
     # ADDRESS string appears in NO output (checklist detail, HTML, audit reason). Failure criterion:
     # fails if any matched address leaks, or the cap/+N-more is absent, or a submitter hit is
     # misclassified as generic.
@@ -515,7 +515,7 @@ def test_ack_address_never_echoed_and_report_capped(tmp_path):
 
 
 def test_retry_after_acknowledged_failure_needs_ack_again(tmp_path):
-    # C11b §4.6: acknowledgement is PER-ACTION. A retry from PUBLISH_FAILED re-evaluates and needs
+    # §4.6: acknowledgement is PER-ACTION. A retry from PUBLISH_FAILED re-evaluates and needs
     # ack_pii again — a retry WITHOUT ack on a still-acknowledgeable submission is a 409. Failure
     # criterion: fails if the retry proceeds without a fresh ack. proven failing against pre-C11b
     # code: retry did not consider PII acknowledgement at all (the block was absolute), so this path

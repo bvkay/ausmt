@@ -472,7 +472,7 @@ def test_has_metadata_relation_with_scheme_accepted():
 
 
 def test_policy_transition_open_to_embargoed_still_validates():
-    """T38c/T38d: an access-policy transition neither breaks validation nor alters identity."""
+    """An access-policy transition neither breaks validation nor alters identity."""
     doc = copy.deepcopy(CORPUS_SHAPED)
     sv = doc["surveys"][0]
     sv["access"] = "embargoed"

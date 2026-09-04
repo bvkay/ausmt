@@ -347,7 +347,7 @@ def test_the_committed_lockup_is_the_brand_kit_file_unaltered():
 # They were the drift the rule did not reach: each carried its own footer, and the "About this
 # build" the old footer pointed at landed on one of them.
 #
-# 404.html used to be the ONE difference, because About this build could only be a link there: Caddy
+# 404.html is not a difference, though About this build can only be a link there: Caddy
 # rewrites any unmatched path to that document, so every link it carries is root-absolute, and it
 # loads no script and so could never fill a version chip. With Releases and About this build out of
 # the footer, that difference is gone and all six documents carry the identical three regions; the
@@ -712,7 +712,7 @@ _FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 #
 # THE OWN-ROW BREAKPOINT IS A MEASUREMENT, and it moved with the equal zero basis. Two side zones of
 # the same width need twice the WIDER one, not one of each, so the three regions want more footer
-# than they did: measured in Chrome with the ruled strings at the ruled weight, the widest surface's
+# than they did: measured in Chrome with the specified strings at the specified weight, the widest surface's
 # centre is 813.22px and its machine-readable link 285.98px, so one row needs
 # 813.22 + 2x285.98 + two 18px gaps + two 18px paddings = 1457.18px of footer. A container query
 # asks the CONTENT box, which is 36px narrower, so the rule fires at or below 1421px and the three

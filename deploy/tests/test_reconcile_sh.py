@@ -576,7 +576,7 @@ def test_status_file_readable_by_gateway_uid(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# C43 Stage 2b-ii: PAUSE auto-rebuild + ROLLBACK PIN (record D8/D13). A fresh pause.flag suppresses the
+# Stage 2b-ii: PAUSE auto-rebuild + ROLLBACK PIN (record D8/D13). A fresh pause.flag suppresses the
 # drift rebuild; a STALE flag (older than the expiry) is IGNORED (auto-expires); a rollback.pin holds
 # reconcile off an auto-revert until an explicit rebuild.request moves forward. RED-then-green pins:
 # each proves it can fail (the paused/pinned case does NOT rebuild; the expired/explicit case DOES).
@@ -934,7 +934,7 @@ def test_failed_build_with_unreadable_journal_says_oom_not_ruled_out(tmp_path):
     this notice"). With -q, or with stderr thrown away, that is indistinguishable from a quiet kernel and
     the incident's OOM kill is recorded as a plain "rebuild FAILED" (exactly how it hid for a week). The
     failure must stay action=failed / oom_kill=false (nothing was SEEN), exit 1, keep the build log tail,
-    but the detail must say the kernel journal could not be read, that an OOM kill CANNOT BE RULED OUT,
+    but the detail must say the kernel journal could not be read, that an OOM kill CANNOT BE EXCLUDED,
     and name the systemd-journal group fix; the console line must say so too; and the query must not
     pass -q. FAILS IF: the status is the plain failure with no such note, oom_kill is claimed true
     (nothing was seen), the log tail is lost, or -q is passed."""
@@ -962,7 +962,7 @@ def test_failed_build_with_unreadable_journal_says_oom_not_ruled_out(tmp_path):
 def test_failed_build_with_journalctl_denied_says_oom_not_ruled_out(tmp_path):
     """The older hard-denial shape: journalctl exits non-zero ("No journal files were opened due to
     insufficient permissions."). Same contract as the exit-0 hint: failed, oom_kill=false, note that a
-    kill cannot be ruled out, log tail kept."""
+    kill cannot be excluded, log tail kept."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     shim, _ = _journalctl_shim(tmp_path)
     r = _run(tree, env_extra={"SHIM_FAIL": "1", "SHIM_HINT": "1", "SHIM_RC": "1",
@@ -978,8 +978,8 @@ def test_failed_build_with_journalctl_denied_says_oom_not_ruled_out(tmp_path):
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_permission_hint_does_not_hide_a_visible_kill(tmp_path):
     """A partly readable journal (notice printed AND the kill line present) is a POSITIVE answer: the
-    kill is named by name, oom_kill=true. FAILS IF: the notice downgrades a visible kill to "not ruled
-    out"."""
+    kill is named by name, oom_kill=true. FAILS IF: the notice downgrades a visible kill to "not
+    excluded"."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     shim, _ = _journalctl_shim(tmp_path)
     r = _run(tree, env_extra={"SHIM_FAIL": "1", "SHIM_HINT": "1", "SHIM_OOM": "1",

@@ -1,6 +1,6 @@
 """The projection seam, pinned: existence and route detail part ways, and level2 opens nothing.
 
-These are the rules a leak or a wrong claim would have to get past, so every fixture is the
+These are the rules a leak or a wrong claim has to get past, so every fixture is the
 adversarial case, not the happy path.
 """
 import sys

@@ -45,7 +45,7 @@ CLEAN = {
     "station": "EB077", "survey": "Example Basin MT", "survey_id": "example-basin-2024",
     "distribution": {"edi_available": True, "license": "CC-BY-4.0",
                      "edi_path": "edi/example-basin-2024/EB077.edi"},
-    # The dimensionality fold (D1) and two of the eight frozen legitimate nulls, so the null scan's
+    # The dimensionality fold and two of the eight frozen legitimate nulls, so the null scan's
     # SCOPE is provable in both directions: the fold members are covered, the frozen keys are not.
     "diagnostics": {"median_relative_error": 0.03, "remote_reference": True, "tipper_available": True,
                     "completeness_smoothness_diagnostic": {

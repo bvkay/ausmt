@@ -221,10 +221,10 @@ def test_generator_reproduces_every_shared_percent_encoding_vector():
 def test_generator_honours_a_per_station_coordinate_override_and_keeps_generating(tmp_path):
     """A position-withheld station LOSES ITS ROUTE, and every other survey keeps its own.
 
-    The station's raw time series carries the true position in every corner the C42 mask exists to
-    hide, so the route has to go. Refusing to generate was the WRONG way to achieve that: main
-    then wrote nothing, so a single override anywhere left the whole table un-regenerable while the
-    previously committed one went on resolving the station the mask had just withheld. Suppression
+    The station's raw time series carries the true position in every corner the coordinate mask
+    exists to hide, so the route has to go. Refusing to generate is the WRONG way to achieve that:
+    main then writes nothing, so a single override anywhere leaves the whole table un-regenerable
+    while the committed one goes on resolving the station the mask has just withheld. Suppression
     that cannot be published is not suppression.
 
     The override keys the BASE station id and this reader holds no variant tag, so it resolves
@@ -415,8 +415,8 @@ def test_committed_table_is_generated_shape_and_routable_tokens_only():
 
 
 def test_the_drift_gate_is_wired_into_the_lane_that_owns_deploy():
-    """`--check` IS the R5 gate on the committed table's membership, and this file's shape pins
-    cannot stand in for it: they hold no registers, so a table naming a route the registers no longer
+    """`--check` IS the gate on the committed table's membership, and this file's shape pins
+    cannot stand in for it: they hold no registers, so a table naming a route the registers not
     admit passes every one of them. gateway-ci is the workflow that triggers on `deploy/**`, so the gate
     belongs there, with the sibling register checkout it needs. FAILS IF the step is renamed away or
     the invocation drifts off `--check`."""

@@ -1,21 +1,21 @@
 """Build identity. Every build writes <out>/build.json - {build_id, engine_commit,
-source_commit, generated} — so a served portal can be traced to the engine + surveys commits that
+source_commit, generated} - so a served portal can be traced to the engine + surveys commits that
 produced it (the build<->data handshake the review flagged as missing). build_id is a plain
 concatenation "<engine_commit>-<source_commit>-<generated>", but an unresolved commit segment is
-now rendered as the literal string "unknown" (never the Python str(None) "None" — U2: the live
+now rendered as the literal string "unknown" (never the Python str(None) "None" - the live
 footer showed "None - None - <date>" on the first container deployment because a bare f-string
 folded None straight into the join). source_commit is ALSO folded into build_provenance.json so the
 one existing provenance document carries the handshake too, not just the new file.
 
-U2: engine_commit also falls back to the AUSMT_ENGINE_COMMIT env var when git resolution yields
-None — the engine image COPYs engine/ WITHOUT a .git directory, so _git_commit_at(HERE) is always
+engine_commit also falls back to the AUSMT_ENGINE_COMMIT env var when git resolution yields
+None - the engine image COPYs engine/ WITHOUT a .git directory, so _git_commit_at(HERE) is always
 None inside a container; CI bakes the actual commit into that env var at image-build time (see
 engine.Dockerfile's ARG GIT_SHA / ENV AUSMT_ENGINE_COMMIT and deploy-images.yml's build-arg).
 Precedence: real git result first, then the env var, then the "unknown" placeholder.
 
 NON-VACUOUS (Invariant 10): source_commit is asserted None for a --surveys root that is NOT inside a
 git repo, and asserted EQUAL to the actual `git rev-parse --short HEAD` of a tmp_path git repo built
-around a fixture survey copy for the git case — an independent observable (the git command's own
+around a fixture survey copy for the git case - an independent observable (the git command's own
 output), not a re-derivation of whatever the build computed internally.
 """
 import json
@@ -127,7 +127,7 @@ def test_build_json_deterministic_aside_from_generated(tmp_path):
     assert d1["source_commit"] == d2["source_commit"]
 
 
-# --- U2: engine_commit env fallback + "unknown" (never literal "None") ---------------------------
+# -- engine_commit env fallback + "unknown" (never literal "None") ---------------------------
 # These call build_identity directly (unit-level, not a subprocess build) so git resolution can be
 # monkeypatched to None regardless of whether this checkout happens to be a git repo -- the container
 # scenario the bug came from (engine/ COPYed without .git, so _git_commit_at(HERE) is always None).
@@ -161,7 +161,7 @@ def test_build_id_never_contains_literal_none_string(tmp_path, monkeypatch):
     assert "unknown" in doc["build_id"], f"expected 'unknown' placeholder in build_id: {doc['build_id']!r}"
 
 
-# --- U2: build_provenance.json git_commit env fallback, HONEST about "unavailable" ----------------
+# -- build_provenance.json git_commit env fallback, HONEST about "unavailable" ----------------
 # _build_prov's git_commit gets the SAME AUSMT_ENGINE_COMMIT fallback build_identity has (the engine
 # image ships engine/ WITHOUT .git, so _git_commit_at(HERE) is always None in a container), but where
 # build_identity's opaque build_id renders the terminal string "unknown", provenance stays HONEST: an

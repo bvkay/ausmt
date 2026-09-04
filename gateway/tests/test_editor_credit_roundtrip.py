@@ -428,7 +428,7 @@ def test_people_no_op_round_trip_is_a_runner_no_op(tmp_path):
 
 # ==================================================================================================
 # The legacy Convert flow and its _delete_keys directive are GONE
-# (D7), and the three ratified curated homes plus the designation mapping round-trip end to end.
+#and the three ratified curated homes plus the designation mapping round-trip end to end.
 # ==================================================================================================
 
 def test_the_legacy_convert_surface_is_gone(tmp_path):
@@ -569,7 +569,7 @@ _ORG_SEEDED_YAML = (
 
 
 def test_read_job_surfaces_organisations_review_flags(tmp_path):
-    """The corpus-wide custodian seeding (T4) marks every organisations row it writes, so the runner
+    """The corpus-wide custodian seeding marks every organisations row it writes, so the runner
     read job must surface organisations markers exactly as it does creators/contributors. RED before
     organisations joins _CREDIT_LIST_KEYS and the read job's loop: the chip would never appear and the
     curator would never be asked to confirm the seeded roles."""
@@ -579,7 +579,7 @@ def test_read_job_surfaces_organisations_review_flags(tmp_path):
 
 
 def test_saving_organisations_strips_its_marker_and_leaves_creators(tmp_path):
-    """Per-LIST-SECTION marker stripping (D17, no per-row stripping): editing organisations clears ITS
+    """Per-LIST-SECTION marker stripping (no per-row stripping): editing organisations clears ITS
     marker (the adjudication) and leaves the untouched creators marker alone."""
     form = {
         "l_organisations_0_name": "Geological Survey of South Australia",

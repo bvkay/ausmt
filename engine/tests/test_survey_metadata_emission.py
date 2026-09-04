@@ -13,19 +13,19 @@ What this module pins, each RED-proven against the unchanged tree:
     emitted as assertions;
   * the class rules: title = project_name else name (never the directory name); abstract, subjects,
     creators, contributors, organisations, citation, acknowledgements, dates.issued and attribution
-    VERBATIM when present; no engine-appended HostingInstitution row (D9) and no engine-authored
-    acknowledgement (D10); funders per D6 (funding_doi -> award_uri); dates.coverage from the year
+    VERBATIM when present; no engine-appended HostingInstitution row and no engine-authored
+    acknowledgement; funders per D6 (funding_doi -> award_uri); dates.coverage from the year
     range; rights {license raw, access normalised, embargo_until ISO}; extent from the curated
     geographic_extent only, WGS84 only, all-zero = placeholder, omitted under withheld coordinates
     (D7); identifiers[] from the identity_classification mapping (case_a represents[] / case_b
     own_identifiers[]) and every other related_identifiers row to relationships[] {identifier,
     identifier_type, relation} with the DOI resolver prefix stripped, case kept, exact duplicates
-    dropped (D12); activities[] from identifiers.project_raid only (D13); placeholders (None, "",
+    dropped; activities[] from identifiers.project_raid only; placeholders (None, "",
     TBD, TODO, the template's REPLACE sentinel) treated as absent; no nulls and no empty containers
     ever;
-  * D8: a non-served (embargoed / metadata_only) survey emits every curated class exactly as an open
+  * a non-served (embargoed / metadata_only) survey emits every curated class exactly as an open
     one does, and no formats or distribution facts anywhere;
-  * D11: INFERRED-REVIEW and [CONFIRM] are YAML comments and never reach a document; the marked
+  * INFERRED-REVIEW and [CONFIRM] are YAML comments and never reach a document; the marked
     values emit as curated facts;
   * the T25 hard stop (_validate_survey_metadata raises naming the survey when
     citation.preferred_identifier has no equal designated identifier), on both classifications;
@@ -301,7 +301,7 @@ def test_served_flag_withholds_no_class(monkeypatch):
     assert "formats" not in held_doc and "distribution" not in held_doc
 
 
-# ---------------------------------------------------------------- D11: markers never leak
+# --------------------------------------------------------------- Markers never leak
 
 MARKED_YAML = """\
 slug: marked-survey
@@ -487,7 +487,7 @@ _RICH_CLASSES = ("abstract", "dates", "identifiers", "subjects", "creators", "co
 
 
 def test_defaults_build_emits_exactly_the_minimal_key_set_under_the_served_root(tmp_path):
-    """The presence rule on BUILT output, and D2: the document lands under out/products/<slug>/ (the
+    """The presence rule on BUILT output, and the document lands under out/products/<slug>/ (the
     served root) on every build, even with --products pointing elsewhere, and not under --products."""
     pytest.importorskip("mt_metadata")
     surveys = tmp_path / "surveys"
@@ -572,7 +572,7 @@ def test_t25_hard_stop_fails_the_build_naming_the_survey(tmp_path):
     assert "t25-survey" in r.stderr and "preferred_identifier" in r.stderr, r.stderr[-2000:]
 
 
-# ---------------------------------------------------------------- D20: the loud skip
+# --------------------------------------------------------------- The loud skip
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
                               "(designed topology; vendored oracle lives in gateway/tests)")

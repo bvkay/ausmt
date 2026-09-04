@@ -167,8 +167,8 @@ def test_the_contribute_card_states_the_formats_and_the_review():
 
 
 def test_the_api_card_leads_with_mtcat_and_points_at_the_served_geojson():
-    """The card no longer opens on 'Machine-readable catalogue exports for GIS and scripts' (a label,
-    not a fact), and no longer describes GeoJSON as an in-browser export, because the build now SERVES
+    """The card does not open on 'Machine-readable catalogue exports for GIS and scripts' (a label,
+    not a fact), and does not describe GeoJSON as an in-browser export, because the build now SERVES
     one. FAILS on a revert to either."""
     howto = _flat(_section("howto"))
     assert "Machine-readable catalogue exports for GIS and scripts" not in howto, (
@@ -436,7 +436,7 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
 # colophon rather than a ninth answer to "what is this site"; it has been deleted it. Its two
 # paragraphs that were not build identity moved into the numbered sections that own their subjects,
 # and the route to the citable releases moved into section 8, so nothing the colophon carried is
-# lost except the running build's identity, which is what the rule ruled out.
+# lost except the running build's identity, which is what the rule excludes.
 NUMBERED = [
     ("what", "1 \u00b7 What AusMT is"),
     ("who", "2 \u00b7 Who enables AusMT"),
@@ -602,7 +602,7 @@ def test_section_two_carries_the_official_lockup_the_footer_already_ships():
 
     The width is capped in the page rather than in the file: the committed raster is 1919px wide, so
     without a cap the mark would be five times the reading column. max-width:100% is what keeps it
-    inside a narrow column once the declared width no longer fits."""
+    inside a narrow column once the declared width does not fit."""
     who = _section("who")
     m = re.search(r'<img class="orglockup"[^>]*>', who)
     assert m, "section 2 must carry the AuScope-NCRIS lock-up"
