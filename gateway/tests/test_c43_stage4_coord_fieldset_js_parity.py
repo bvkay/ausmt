@@ -108,7 +108,7 @@ def test_js_sibling_variants_share_one_control(tmp_path):
     (MBV20.a / MBV20.b) resolve to the SAME base key and therefore ONE control, whose members list
     names both siblings. Setting that control writes a SINGLE base-keyed override that covers all
     variants. FAILS IF a sibling gets its own control (two competing keys) or a variant serves the
-    physical site's true position while its sibling is masked (the variant class fix-round-2 outlawed)."""
+    physical site's true position while its sibling is masked (the outlawed variant class)."""
     tail = ("const c = buildOverrideControls(P.stations, P.baseMap, {});\n"
             "process.stdout.write(JSON.stringify({\n"
             "  keys: Object.keys(c).sort(),\n"

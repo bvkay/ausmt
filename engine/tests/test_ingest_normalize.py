@@ -205,7 +205,7 @@ def test_citation_authors_are_the_survey_org_not_ausmt(tmp_path):
 
 def test_citation_prefers_named_creators_over_org(tmp_path):
     """FAILS IF: named creators are present in survey_meta but the citation authors fall back to the org
-    (or worse, "AusMT"). creators[] is the ratified citation author list, joined with '; ' so a
+    (or worse, "AusMT"). creators[] is the citation author list, joined with '; ' so a
     'Last, First' name stays unambiguous."""
     sm = {"org": "Geoscience Australia",
           "creators": [{"name": "A. Researcher", "orcid": "0000-0002-1825-0097"},

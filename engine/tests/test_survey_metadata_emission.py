@@ -2,7 +2,7 @@
 
 The second public contract: data/products/<survey_id>/survey-metadata.json, one per survey, the
 canonical public metadata of one survey dataset/release, generated from survey.yaml by
-build_portal.survey_metadata_document (the ratified design: AusMT_2026/AUSMT-SURVEY-METADATA-SCOPE.md,
+build_portal.survey_metadata_document (the design: AusMT_2026/AUSMT-SURVEY-METADATA-SCOPE.md,
 AUSMT-METADATA-INTERFACE-CONTRACT.md, the 0.1 schema; LANE-CONTRACT-SURVEY-METADATA).
 
 What this module pins, each RED-proven against the unchanged tree:

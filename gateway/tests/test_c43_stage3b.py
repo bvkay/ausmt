@@ -806,7 +806,7 @@ def test_f6_slug_in_both_set_and_remove_is_dropped(tmp_path):
 
 
 # ==================================================================================================
-# ROUND-2 RE-GATE (record D5-C round 2). R1-R3, each red-then-green from the executed probes.
+# The three probes below, each red-then-green.
 # ==================================================================================================
 
 # (material) - DIVERGENCE/NO-OP EQUALITY MISMATCH. Members declaring start_year int 2003 vs quoted

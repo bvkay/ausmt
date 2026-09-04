@@ -366,7 +366,7 @@ def test_ts_access_holds_the_blessed_row_shape_and_the_additive_rule(built):
     `bytes` is stated CONDITIONALLY on purpose, because that is what the emitter guarantees. The
     register tolerates a row with no size (_tsindex._row checks the figure only when it is present,
     and the surveys validator mirrors that rule verbatim by design, so requiring it here would make
-    the engine stricter than ratified and hard-stop a build on a register surveys CI passed green),
+    the engine stricter than the validator and hard-stop a build on a register surveys CI passed green),
     and _tsproject.route_rows omits the key rather than inventing a zero. Suppressing the whole route
     instead is worse than a missing figure: route_rows also feeds the front door's /go/ts table
     (deploy/scripts/gen_ts_routes.py, which reads only url_path), so a size-less row would cost the
@@ -416,7 +416,7 @@ def test_the_blessed_docs_section_promises_what_the_emitter_guarantees():
 
     Making the register demand the figure was the other way out and is the wrong one twice over: the
     surveys validator mirrors the engine's row reader verbatim BY DESIGN and states that absence
-    stays silent, so an engine that refused would be stricter than ratified and would hard-stop a
+    stays silent, so an engine that refused would be stricter than the validator and would hard-stop a
     build on a register surveys CI passed green; and route_rows also feeds the front door's /go/ts
     table, which reads only url_path, so suppressing a size-less route would cost a reader a working
     download over a missing number. The prose moved to the truth instead.

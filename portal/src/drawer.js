@@ -884,7 +884,7 @@ function orcidLink(o){if(!o)return "";const href="https://orcid.org/"+o;
 // echoes a raw token).
 const CONTRIBUTOR_ROLE_LABELS={ProjectLeader:"led",ProjectMember:"project member",DataCollector:"collected the data",
   ContactPerson:"contact",DataCurator:"curated",Sponsor:"sponsored",RightsHolder:"rights holder",Distributor:"distributed"};
-// The RATIFIED display order for a person's role phrases when they hold several (SPEC §3.1). See docs:
+// The display order for a person's role phrases when they hold several (SPEC §3.1). See docs:
 // portal internals, drawer.js.
 const CONTRIBUTOR_ROLE_ORDER=["ProjectLeader","ProjectMember","DataCollector","ContactPerson","DataCurator","Sponsor","RightsHolder","Distributor"];
 // An ORCID grouping key: lower-cased, resolver-prefix stripped, trailing slashes dropped, so the bare id
@@ -1029,7 +1029,7 @@ function relatedIdentifiersHtml(m){
     const idCell=r.resolution==="reserved"?reservedText(r.identifier):relatedIdLink(r.identifier,r.identifier_type);
     return `${label}: ${idCell}${cust}`;}).join("<br>");
   return `Related identifiers:<br><span class="pidline">${rows}</span>`;}
-// §2a: "a persistent dataset identifier exists in this survey's provenance chain" - the ratified reading of
+// §2a: "a persistent dataset identifier exists in this survey's provenance chain" - the reading of
 // the DOI maturity badge. See docs: portal internals, drawer.js.
 function hasDatasetDoi(m){return !!(m&&(m.doi||(m.related_identifiers||[]).some(r=>r&&r.identifier_type==="DOI")));}
 // The rollup renders ONLY the rows that carry a value. No "not recorded", no "(no PID)", no "not recorded

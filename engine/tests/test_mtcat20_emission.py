@@ -1,4 +1,4 @@
-"""MTCAT 2.0 emission semantics, implemented at the source (the ratified migrate_12_to_20
+"""MTCAT 2.0 emission semantics, implemented at the source (the migrate_12_to_20
 transform IS the emitter-change specification; AusMT_2026/schemas-draft/run-fixture-suite.py).
 
 The 2.0 breaking list, each pinned here against the real emitter:
@@ -145,7 +145,7 @@ def test_sources_and_changes_are_never_emitted_and_sources_rows_map_to_related_i
 
 def test_sources_row_with_rights_content_is_a_hard_stop():
     """A sources row carrying statement/licence/retrieved/profile content must HARD STOP the build
-    (per the ratified transform): that content moves to survey-metadata, never silently deleted."""
+    (per the transform): that content moves to survey-metadata, never silently deleted."""
     import pytest
     meta = {"Demo Survey": dict(_BASE, sources=[
         {"identifier": "10.99999/upstream", "statement": "Attribution wording to reproduce."}])}
@@ -202,7 +202,7 @@ def test_subjects_pass_through_verbatim_and_absent_means_absent():
 # ---------------------------------------------------------------- sample_rates_hz
 
 def test_sample_rates_canonicalised_from_float_artefacts():
-    """The float-artefact fixture (RED-proof mandated by the ratified plan): binary-float noise on
+    """The float-artefact fixture (RED-proof mandated by the plan): binary-float noise on
     the same physical rate collapses under round-to-6-significant-figures; the result is deduped
     and sorted ascending."""
     meta = {"Demo Survey": dict(_BASE)}

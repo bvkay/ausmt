@@ -1,10 +1,10 @@
-"""MTCAT 2.0 invariant suite: the ratified fixture checks, ported into the engine tests.
+"""MTCAT 2.0 invariant suite: the fixture checks, ported into the engine tests.
 
 PERMANENT TEST STAGE (final pre-freeze review section 39): this suite runs on every later emitter
 change, forever - a future feature can never silently break identity, migration, ordering or the
 zero-null/zero-empty posture. Sources:
 
-  * AusMT_2026/schemas-draft/run-fixture-suite.py - the ratified executable fixture suite. Its
+  * AusMT_2026/schemas-draft/run-fixture-suite.py - the executable fixture suite. Its
     migrate_12_to_20 IS the 1.2 -> 2.0 emitter-change specification and is carried here
     VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example and a
     corpus-shaped 1.2 migration input.
@@ -63,7 +63,7 @@ def _validator():
     return jsonschema.Draft7Validator(SCHEMA, format_checker=fc)
 
 
-# ---------------------------------------------------------------- the ratified transform (verbatim)
+# ---------------------------------------------------------------- the transform (verbatim)
 
 def migrate_12_to_20(doc):
     """The 1.2 -> 2.0 migration transform; doubles as the emitter-change spec.
@@ -270,7 +270,7 @@ def _document_invariants(doc):
 # ---------------------------------------------------------------- layer 1: fixtures
 
 def test_spec_example_validates_and_holds_its_invariants():
-    """+ the interchange spec's worked example validates against the ratified schema and
+    """+ the interchange spec's worked example validates against the schema and
     passes every reference invariant (in-bbox stations, represented bands, ordered periods,
     unique sorted rates, reconciling counts)."""
     errs = list(_validator().iter_errors(SPEC_DOC))
@@ -317,7 +317,7 @@ def test_migration_hard_stops_on_rights_content_in_a_sources_row():
 
 
 def test_reference_checks_actually_detect_violations():
-    """Guard on the guards (the ratified suite's Txxb pattern): each reference implementation must
+    """Guard on the guards (the suite's Txxb pattern): each reference implementation must
     CATCH a planted violation, or a green scan proves nothing."""
     assert not count_invariant({"survey_id": "s", "n_stations_time_series_verified": 7,
                                 "n_stations": 9}, SPEC_DOC["stations"])
@@ -427,7 +427,7 @@ def _strip_new_keys(doc):
     migrated 1.2 document exactly. The THREDDS projection pair is new-in-2.0 too and, unlike the rest
     of this list, is now genuinely EMITTED - migrate_12_to_20 only deletes and moves, so a 1.2
     baseline can never carry it, and leaving it in would read every projected station as a residual
-    diff. Those are the framing invariant's TWO ratified exceptions and this is where they are
+    diff. Those are the framing invariant's TWO exceptions and this is where they are
     normalised away; their SHAPE is pinned by projection_shape_ok, not waived."""
     out = copy.deepcopy(doc)
     for sv in out.get("surveys", []):
@@ -471,7 +471,7 @@ def test_corpus_emitter_equivalence_dict_test():
     """THE framing proof: migrate_12_to_20(previous-build mtcat.json) equals the new build's
     document after stripping the new-in-2.0 keys and portal.{version,generated_at}. Dict
     equality, not eyeballing; any residual diff is a finding. With the THREDDS projection live the
-    normaliser carries its TWO ratified exceptions, which is what makes the framing invariant
+    normaliser carries its TWO exceptions, which is what makes the framing invariant
     measurable on a register-carrying corpus instead of only on a registerless one."""
     baseline = json.loads(Path(CORPUS_BASELINE).read_text(encoding="utf-8"))
     new_doc = json.loads((Path(CORPUS_DATA) / "mtcat.json").read_text(encoding="utf-8"))

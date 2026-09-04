@@ -131,7 +131,7 @@ def _row(path, sid, idx, row, taken) -> dict:
         raise TsIndexError(f"{label} is retired without `retired` and `retired_reason`; retirement "
                            f"is a dated curator act, not a deletion, and the row stays as evidence")
     # match_method is provenance, not a gate: a row stands or falls on `review`, and its severity
-    # is the surveys validator's WARNING (S1's ratified FAIL list does not name it). Raising here
+    # is the surveys validator's WARNING (S1's FAIL list does not name it). Raising here
     # hard-stopped builds on registers that passed surveys CI green. Carried through verbatim.
     url_path = _text(row.get("url_path"))
     if not url_path:

@@ -861,8 +861,7 @@ def test_credit_vocab_matches_surveys_validator():
     surveys validator's FROZEN credit vocabularies, read from the arm conftest resolves. Skipped only when
     that validator predates the credit vocab - a stale sibling checkout, since the vendored copy carries
     it; that skip is deliberately NOT on gateway-ci's allow-list, so a CI run that lost the vocab reds the
-    workflow instead of passing quietly. Where it runs it FAILS IF the editor vocab drifts from the ratified
-    validator vocab - a mis-typed name_type/role would mis-classify an actor or publish a wrong provenance
+    workflow instead of passing quietly. Where it runs it FAILS IF the editor vocab drifts from the validator vocab - a mis-typed name_type/role would mis-classify an actor or publish a wrong provenance
     claim, so the two must never disagree."""
     vv = _load_credit_validator()
     if vv is None:
@@ -870,7 +869,7 @@ def test_credit_vocab_matches_surveys_validator():
     assert set(ef.NAME_TYPES) == set(vv.NAME_TYPES), "editor NAME_TYPES drifted from the validator"
     assert set(ef.CONTRIBUTOR_ROLES) == set(vv.CONTRIBUTOR_ROLES), \
         "editor CONTRIBUTOR_ROLES drifted from the validator"
-    # the ordered tuple must match the validator's ratified order too (creators/contributors selects
+    # the ordered tuple must match the validator's order too (creators/contributors selects
     # present the roles in the spec's §3.1 order).
     assert tuple(ef.CONTRIBUTOR_ROLES) == tuple(vv.CONTRIBUTOR_ROLES_ORDERED), \
         "editor CONTRIBUTOR_ROLES order drifted from the validator's ratified order"
@@ -880,7 +879,7 @@ def test_credit_vocab_pin_reads_the_resolved_validator_arm(monkeypatch):
     """The credit-vocab pin must read the SAME validator arm as every other cross-repo oracle in this
     suite, i.e. whatever conftest.resolve_validator_dir returns. FAILS IF this pin re-derives its own
     candidate order and prefers the vendored copy: that inversion shipped, so on every dev box the
-    ratified vocab was compared against a snapshot while the live sibling went unread. Both arms are
+    vocab was compared against a snapshot while the live sibling went unread. Both arms are
     asserted because they resolve to the same file in CI, where only the vendored copy exists."""
     for forced in (None, "1"):
         if forced is None:
@@ -973,7 +972,7 @@ def test_identifies_out_of_vocab_is_fail_closed():
         ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
                              "l_related_identifiers_0_identifies": "level9",
                              **_snap("related_identifiers", [])}, "related_identifiers")
-    # every ratified level is accepted
+    # every level is accepted
     for lvl in ef.IDENTIFIES_LEVELS:
         out = ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
                                    "l_related_identifiers_0_identifier_type": "DOI",
@@ -985,7 +984,7 @@ def test_identifies_out_of_vocab_is_fail_closed():
 def test_relation_auto_derives_from_identifies_server_side():
     """When a row states `identifies`, the DataCite relation DERIVES from it server-side - the form
     carries NO explicit relation (the control is hidden on an identifies row), and the assembler writes the
-    derived value. Every level maps to its ratified relation. FAILS IF a level does not derive its relation."""
+    derived value. Every level maps to its relation. FAILS IF a level does not derive its relation."""
     expected = {"collection": "IsPartOf", "raw_packed": "IsDerivedFrom", "level0": "IsDerivedFrom",
                 "level1": "IsDerivedFrom", "level2": "IsVariantFormOf", "level3": "IsSourceOf",
                 "entire": "IsVariantFormOf"}
@@ -1043,7 +1042,7 @@ def test_instrument_pid_persists_and_round_trips():
 
 # ==================================================================================================
 # The retired flat credit keys leave the editor, and the
-# ratified MTCAT 2.0 curated homes arrive - citation{}, organisations[], acknowledgements[] and the
+# MTCAT 2.0 curated homes arrive - citation{}, organisations[], acknowledgements[] and the
 # identity_classification designation mapping. Every vocab is pinned to the vendored surveys
 # validator (the fail-closed parity discipline), and the key-parity pin feeds a fully assembled
 # patch through the REAL validator so an editor key the validator does not recognise is caught

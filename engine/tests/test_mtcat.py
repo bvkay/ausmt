@@ -37,7 +37,7 @@ SCHEMA_VERSION = re.match(r"^MTCAT v(\d+\.\d+):", SCHEMA["title"]).group(1)
 def _check(node, schema, path="$"):
     """Minimal draft-07 subset validator: type, required, const, enum, pattern, items, properties.
 
-    MTCAT 1.2 pins the ratified vocabularies (name_type, contributor role, identifier_type, relation,
+    MTCAT 1.2 pins the vocabularies (name_type, contributor role, identifier_type, relation,
     identifies, the station band) with `enum`, so this stdlib checker learns `enum` too: without it every
     _check call in this file would silently pass an out-of-vocabulary token through, and the vocab pins
     would only ever be enforced where jsonschema happens to be installed. `integer` is honoured as a

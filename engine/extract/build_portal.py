@@ -799,7 +799,7 @@ def _formats_by_survey(manifest_doc):
 
 
 def _canonical_sample_rates(values) -> list:
-    """The ONE sample-rate canonicaliser (ratified, deterministic, RED-proven against a
+    """The ONE sample-rate canonicaliser (deterministic, RED-proven against a
     float-artefact fixture): round each explicit rate to 6 SIGNIFICANT figures, dedupe, sort
     ascending. Integral canonical values are emitted as integers (the spec example's [10, 150,
     24000] shape); binary-float noise on the same physical rate (149.99999999999997 vs
@@ -820,7 +820,7 @@ def _canonical_sample_rates(values) -> list:
 
 def _omit_none(node):
     """MTCAT 2.0 omit-when-undeclared: recursively drop every None-valued dict key (the exact
-    clean() of the ratified migrate_12_to_20 transform). List elements are cleaned in place-order;
+    clean() of the migrate_12_to_20 transform). List elements are cleaned in place-order;
     scalars pass through. Callers apply this to surveys[]/collections[]/portal - NEVER to
     stations[], whose paired latitude/longitude nulls are the one defined null."""
     if isinstance(node, dict):
@@ -831,7 +831,7 @@ def _omit_none(node):
 
 
 def _coordinates_state(policies, declared_default):
-    """The ratified aggregation rule over a survey's per-station effective coordinate policies:
+    """The aggregation rule over a survey's per-station effective coordinate policies:
     all exact => exact; all withheld => withheld; any other mixture => generalised (the
     conservative reading). A survey with no stations falls back to its DECLARED survey default
     (today's survey-level policy makes every case trivial; the rule is implemented anyway)."""
@@ -855,7 +855,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     `coll_by_id` may be passed in so the (single) collection grouping is shared with
     collections_document instead of being recomputed here.
 
-    MTCAT 2.0 (the ratified migrate_12_to_20 transform implemented AT THE SOURCE):
+    MTCAT 2.0 (the migrate_12_to_20 transform implemented AT THE SOURCE):
 
       * omit-when-undeclared everywhere (see _omit_none); the paired station position nulls are
         the one defined null.
@@ -947,7 +947,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
             "year_end": m.get("year_end")}
         # MTCAT 2.0: the concise discovery text. The explicit survey.yaml discovery_description
         # wins; else the UNCAPPED abstract rides through only when it is already within the
-        # ratified 1200-char discovery budget. The engine NEVER truncates: an over-long abstract
+        # 1200-char discovery budget. The engine NEVER truncates: an over-long abstract
         # with no discovery text is a surveys-side validation failure, not an engine edit.
         _desc = m.get("discovery_description")
         if not _desc:
@@ -985,7 +985,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
             entry["attribution"] = m["attribution"]
         # §2a: the typed provenance relations, PRESENT ONLY when the survey declares any. SMETA
         # carries this as always-a-list ([] when absent); emit only the non-empty list (2.0 forbids
-        # empty arrays). A legacy sources[] row is MAPPED here (spec 6.9, the ratified transform):
+        # empty arrays). A legacy sources[] row is MAPPED here (spec 6.9, the transform):
         # its identifier keys become a relationship row; rights content in a row is a HARD STOP
         # because it must be captured in survey-metadata, never silently deleted.
         _rel = list(m.get("related_identifiers") or [])
@@ -1225,8 +1225,7 @@ def _sm_rows(seq, required: tuple) -> list:
 
 def _sm_funders(y: dict) -> list:
     """funders[] per D6 (DataCite-aligned): organisation -> name, organisation_ror -> ror, grant_id ->
-    award_number, grant_title -> award_title, funding_doi -> award_uri (https://doi.org/<bare>, ratified
-    at GO). A name-only row is valid; a row without a funder name is not a funder. The legacy
+    award_number, grant_title -> award_title, funding_doi -> award_uri (https://doi.org/<bare>, at GO). A name-only row is valid; a row without a funder name is not a funder. The legacy
     name/pid/id spellings _funders_of tolerates are read the same way."""
     out = []
     for f in (y.get("funding") or y.get("funders") or []):
@@ -2930,7 +2929,7 @@ STATION_VOCABULARY_UNMAPPED = ("collection", "entire")
 _PLACEABLE_SCOPES = frozenset({"collection"} | {v["mtcat_identifies"]
                                                 for v in STATION_VOCABULARY_CROSSWALK.values()})
 # The repository that holds the bytes a `time_series` row routes to. The schema's deferral
-# trigger (:327) has fired; the crawler knows the host with certainty, NCI is the ratified token, and
+# trigger (:327) has fired; the crawler knows the host with certainty, NCI is the token, and
 # a controlled string is additively replaceable by a richer object when one exists.
 TS_REPOSITORY = "NCI"
 # {register level token: what a `time_series` row for it states}. `vocab` is a crosswalk KEY, so a
@@ -3841,7 +3840,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
         # The coordinate byte gate: a non-exact (generalised/withheld) station's EMTF-XML - a full elevation +
         # coordinate bearer (HEAD/INFO/DEFINEMEAS carried through by normalize()) — is NOT served. Skip
         # it here so it is absent from out/xml, the xml zip and the manifest (all derive from `written`).
-        # r.get("variant") rides along (fix round 2): a variant record inherits its BASE id's policy.
+        # r.get("variant") rides along: a variant record inherits its BASE id's policy.
         if not coordacc.coordinates_served(
                 coordacc.station_policy(coord_default, coord_overrides, r.get("id"), r.get("variant"))):
             continue
@@ -4852,7 +4851,7 @@ def discover_work(a, ap, validator):
     the always-'exact' default there would break the default-stability pin). Absent field => ('exact',
     {}); --raw entries have no survey.yaml so are always 'exact'. An UNKNOWN enum value raises
     CoordinatePolicyError from parse_coordinate_policy - the survey-level build fails LOUDLY (fail
-    closed). Override IDS are deliberately NOT validated here (fix round 2): any discovery-time scrape
+    closed). Override IDS are deliberately NOT validated here: any discovery-time scrape
     is a SECOND id derivation and hence a divergence risk (the probe-e hole: a stem∪DATAID∪prefix
     candidate set validated keys the mask never applied). They are validated in main's build loop at
     the point the REAL parsed station ids exist - for both EDI and MTH5 inputs, before any of that
@@ -4954,7 +4953,7 @@ def discover_work(a, ap, validator):
             # Parse the coordinate-access policy from THIS survey's access block. An unknown enum
             # value is a SURVEY-level build failure (fail-closed, D2): the survey is DROPPED loudly,
             # NOTHING is served for it, and the REST of the corpus builds — never a silent fallback to
-            # exact. Override IDS are NOT validated here (fix round 2): a discovery-time scrape is a
+            # exact. Override IDS are NOT validated here: a discovery-time scrape is a
             # second id derivation and hence a divergence risk (probe-e); they are validated in the
             # build loop against the REAL parsed station records, before any bytes are emitted.
             try:
@@ -6227,7 +6226,7 @@ def _main_build(argv=None):
             (prod / "ts_access.json").write_text(_ts_access_bytes, encoding="utf-8")
     # ---- the BASE-STATION-ID surface (boot artifact) ----
     # The C43 stations-panel override fieldset must key by BASE station id — never a file stem, never a
-    # variant-suffixed id (D2 fix-round-2, the probe-e discipline). A base id is the record id with its
+    # variant-suffixed id (the probe-e discipline). A base id is the record id with its
     # engine-appended processing-variant tag stripped, derivable ONLY via the record's `variant` field
     # (never dot-guessing). No served/boot artifact exposed that (A2 gap), so the workbench could not
     # construct guaranteed-base keys. Emit a compact map ausmt_id -> base_station_id for the VARIANT
@@ -6389,7 +6388,7 @@ def _main_build(argv=None):
     mtcat = mtcat_document(surveys_meta, all_stations, portal=load_portal_config(a.portal_config),
                            coll_by_id=coll_by_id, manifest_doc=manifest_doc)
     (out / "mtcat.json").write_text(_jdump(mtcat, indent=1), encoding="utf-8")
-    # FAIR-I: serve the schema beside the data at BOTH published routes (the ratified $id policy,
+    # FAIR-I: serve the schema beside the data at BOTH published routes (the $id policy,
     # MTCAT 2.0): data/schemas/mtcat/<version>/mtcat.schema.json is the VERSION-SPECIFIC IMMUTABLE
     # route the schema's own $id names, and data/mtcat.schema.json is the latest-convenience copy
     # that mtcat.json's relative schema_url ("mtcat.schema.json") resolves to - so a harvester can

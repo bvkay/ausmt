@@ -1300,7 +1300,7 @@ function pubRowsOf(m){
   if(Array.isArray(m&&m.publications)){
     m.publications.forEach(p=>{ const r=norm(p||{}); if(nonEmpty(r)) rows.push(r); });
   }
-  if(!rows.length){   // legacy single-field fallback (round-2 pub/pub_doi)
+  if(!rows.length){   // legacy single-field fallback: the flat pub/pub_doi pair.
     const r=norm({title:m&&m.pub, doi:m&&m.pub_doi});
     if(nonEmpty(r)) rows.push(r);
   }
@@ -1624,7 +1624,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   $("addOrg").onclick=()=>$("orgRows").appendChild(orgRow());
 
   // ----- acknowledgements[] rows ("Is there wording you must include?"). The wording IS the row, so a
-  // textless row is dropped at emit time; the type <select> only offers the ratified candidate vocab. See
+  // textless row is dropped at emit time; the type <select> only offers the candidate vocab. See
   // docs: portal internals, add-survey.html.
   function ackRow(){
     const wrap=document.createElement("div"); wrap.className="ackrow"; wrap.style.marginBottom="8px";

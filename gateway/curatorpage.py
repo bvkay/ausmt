@@ -4018,7 +4018,7 @@ def _country_table(stats: dict) -> str:
 
 
 # ---- Australia by state: the sub-country breakdown beneath the AU country row --------------------
-# WHY STATE, AND WHY NOT CITY -- a ratified design decision, recorded here (and in the aggregator, and
+# WHY STATE, AND WHY NOT CITY -- a design decision, recorded here (and in the aggregator, and
 # in docs/docs/introduction/usage-analytics.md) so it is not casually "improved" into a city breakdown:
 #   * the address behind these counts was ALREADY TRUNCATED at the edge (IPv4 /24, IPv6 /48). A /24
 #     prefix does not place a request in a city reliably -- mobile carrier and CGNAT pools routinely
@@ -4761,7 +4761,7 @@ _EDIT_JSON_ONLY = (
 # now optional keys on a related_identifiers row, and the standalone sidebar entry + panel are gone. The
 # sources[] schema key stays byte-preserved on disk (never entered into any patch, because it is not a
 # widget section, so build_section_patch never assembles it) and the engine keeps reading it.
-# The two retired flat credit entries are GONE, and the ratified
+# The two retired flat credit entries are GONE, and the
 # MTCAT 2.0 curated homes arrive as their own panels - organisations[] (the full role statement),
 # citation{} (preferred wording + the preferred identifier), acknowledgements[] (verbatim required
 # wording) and identity_classification{} (the designation mapping the citation chain is checked
@@ -5203,10 +5203,9 @@ _ACK_TYPE_DISPLAY = {
 
 
 def _org_roles_widget(section: str, index, label: str, value, submitted: dict | None) -> str:
-    """organisations[<i>].roles as a PER-ROW checkbox group (c_<section>_<i>_<role>) over the ratified
-    ORG_ROLES_ORDERED vocabulary. A list-valued sub-field has no scalar input, and the group is the
+    """organisations[<i>].roles as a PER-ROW checkbox group (c_<section>_<i>_<role>) over the ORG_ROLES_ORDERED vocabulary. A list-valued sub-field has no scalar input, and the group is the
     honest control: an organisation is often several things at once. Fail-closed by construction (only
-    ratified tokens are offered; the assembler REFUSES any other token in the POST). After a validation
+    tokens are offered; the assembler REFUSES any other token in the POST). After a validation
     error the ticks come from `submitted` so the curator's selection survives the round trip."""
     from . import editor_form
     prefix = f"c_{section}_{index}_"
@@ -5615,7 +5614,7 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
 # CONTRIBUTOR-CREDIT-SPEC (§6): the unified "People & credit" panel, replacing
 # the four-panel Investigators hub group with "one huge list which makes no sense"). ONE row per person
 # or organisation: name, name_type, ORCID (people) / ROR (orgs), a Cited-author checkbox, and the eight
-# ratified role checkboxes. The panel DECOMPOSES to the two ratified served lists on save
+# role checkboxes. The panel DECOMPOSES to the two served lists on save
 # (editor_form.assemble_people); the served creators[]/contributors[] shape is byte-for-byte unchanged.
 # ==================================================================================================
 _PEOPLE_SECTION = "people"
@@ -5651,7 +5650,7 @@ def _people_name_type_select(name: str, value) -> str:
 
 
 def _people_role_checkboxes(index, roles: set) -> str:
-    """The eight ratified role checkboxes (l_people_<i>_role_<Token>) with the human glosses. The option
+    """The eight role checkboxes (l_people_<i>_role_<Token>) with the human glosses. The option
     NAME carries the exact vocab token so the decomposed contributors[] role is byte-identical."""
     from . import editor_form
     boxes = []
@@ -6116,8 +6115,8 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     # identical; the mirror is presentation-only.
     # CONTRIBUTOR-CREDIT-SPEC: the retired Lead/Principal investigator and
     # the separate Creators/Contributors panels are REPLACED by ONE unified "People & credit" panel
-    # (keyword "people") that decomposes to the two ratified served lists on save.
-    # The three ratified curated homes plus the designation mapping join the order, next to the
+    # (keyword "people") that decomposes to the two served lists on save.
+    # The three curated homes plus the designation mapping join the order, next to the
     # parties/credit material they belong with.
     _FULL_FORM_ORDER = ("organisation", "instruments", "people", "organisations",
                         "identifiers", "citation", "identity_classification", "acknowledgements",
@@ -6959,7 +6958,7 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
 # Record D5-A collection type is validator-unenforced, so the console's select IS the guardrail
 # and these tuples ARE that select's options. app.py imports them for its write-path gates rather than
 # restating them, so the gate can never refuse a value the console offers, or admit one it does not.
-# The ratified vocabulary is docs/docs/developer/collection-ids.md; a value added here must be added
+# The vocabulary is docs/docs/developer/collection-ids.md; a value added here must be added
 # to every carrier gateway/tests/test_c43_collection_type_vocab.py reads, or that pin goes red.
 _COLLECTION_TYPE_VOCAB = ("programme", "release", "institutional", "compilation", "other")
 _COLLECTION_STATUS_VOCAB = ("active", "completed", "archived")

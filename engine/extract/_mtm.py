@@ -896,7 +896,7 @@ def explicit_sample_rates_from_tf(tf) -> list:
     EDI dialect the pinned mt_metadata actually parses a run rate from). MTCAT 2.0 rule: a rate is
     explicit ONLY when a run declares it > 0; mt_metadata's Run.sample_rate default is 0.0
     (undeclared) and is never emitted, and nothing here reads instrument models or period coverage
-    (never inferred - the ratified sample_rates_hz source rule). Returns a sorted deduped list of
+    (never inferred - the sample_rates_hz source rule). Returns a sorted deduped list of
     floats; [] when no run declares a rate, which the record builder maps to NO key at all."""
     rates = set()
     for run in (getattr(getattr(tf, "station_metadata", None), "runs", None) or []):

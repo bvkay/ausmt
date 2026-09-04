@@ -503,6 +503,20 @@ RULES = (
                     r"|\b(?:in|during|from) the review\b"
                     r"|\breview[- ]rounds?\b"
                     r"|\bcode-health review\b", re.I), "review or slice identifier"),
+    # A ROUND is the run of work a change belonged to, named beside the kind of work it was. The
+    # ordinary senses of the word (a retry round, rounding a number) carry none of those words.
+    Rule(re.compile(r"\b(?:feedback|fix(?:es|ed)?|review|re-gate|UX|work)\b[^\n]{0,30}?\brounds?\s*#?\s*\d"
+                    r"|\brounds?\s*#?\s*\d[^\n]{0,30}?\b(?:feedback|fix(?:es|ed)?|review|re-gate|UX|work)\b"
+                    r"|\bROUND-\d", re.I), "round-of-work identifier"),
+    # Who settled the argument, and the sitting it was settled in, are the same provenance the
+    # word owner carries. "Operator" alone is a role the console serves and stays.
+    # "live session" is also an ordinary HTTP session, so only the provenance grammar is named: a
+    # preposition in front of it makes the sitting the place a decision came from.
+    Rule(re.compile(r"\boperator\s+decisions?\b|\bchief[- ]architect\b"
+                    r"|\b(?:from|in|during|after|at)\s+(?:the\s+|a\s+)?(?:\w+\s+)?live session\b", re.I),
+         "decision-owner language"),
+    # To ratify is to bless a decision, which is what "approved" and "ruling" already name.
+    Rule(re.compile(r"\bratif(?:y|ies|ied|ication)\b", re.I), "ruling language"),
     Rule(re.compile(r"YOUR-"), "placeholder"),
     Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
     Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),
@@ -1238,6 +1252,37 @@ def test_each_false_positive_names_its_meaning_and_is_caught_without_it(tmp_path
         assert hits and "work-item identifier" in hits[0], (
             f"the same token in work-item position was excused: {work_item}"
         )
+
+
+def test_a_round_of_work_is_provenance(tmp_path):
+    """A round is the run of work a change belonged to, which is the same audit trail as a wave or
+    a slice. So is the person or the sitting that settled the argument, and so is the verb that
+    says a decision was blessed."""
+    cases = [
+        '"Go to place" was removed in UX feedback round 1.',
+        "The frame is fixed (fix round 2).",
+        "ROUND-2 RE-GATE: the record is read once.",
+        "The panel was reshaped during the work round 3.",
+        "The list is short: operator decision, and the long one was slow.",
+        "Never published to PyPI (chief-architect ruling).",
+        "The chief-architect design freezes the editor shape.",
+        "The eight roles are held in the ratified order.",
+        "The reading the reviewers ratify is the narrow one.",
+        "This ratifies the narrow reading.",
+        "Removed as redundant, an operator decision from the first live session.",
+    ]
+    for i, line in enumerate(cases):
+        f = tmp_path / f"round{i}.js"
+        f.write_text(f"// {line}\nvar a = 1;\n", encoding="utf-8")
+        assert offences([f]), f"a round of work went unseen: {line}"
+    for clean in ("The ramp rounds to two decimal places.",
+                  "Round 3 of the retry loop is the last one the budget allows.",
+                  "The operator sees the failure on the console.",
+                  "SameSite=Strict means a cross-site form cannot send it even while a session is live.",
+                  "A session cookie is never set."):
+        f = tmp_path / "clean.js"
+        f.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
+        assert not offences([f]), f"the round rule flagged ordinary prose: {clean}"
 
 
 def test_the_id_exemption_tests_the_token_and_not_its_neighbourhood(tmp_path):

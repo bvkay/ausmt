@@ -59,9 +59,8 @@ const TS_LEVELS=[
   ["level1_mth5","Level 1 MTH5","calibrated, resampled, filtered"],
   ["level1_netcdf","Level 1 NetCDF","the same Level 1 product, as NetCDF"],
 ];
-// UX feedback round 1: "Go to place" (+ its AU_PLACES quick-zoom list) was removed as redundant - operator
-// decision from the first live session; see index.html/filters.js for the rest of the removal. See docs:
-// portal internals, state.js.
+// No AU_PLACES quick-zoom list exists here, and no "Go to place" control exists in index.html or
+// filters.js. See docs: portal internals, state.js.
 const AUSMT_SELF={au:"AusMT contributors",yr:"2026",ti:"AusMT: curated station metadata, quality and provenance for Australian magnetotelluric transfer functions",ve:(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.version)||"",pb:"AusMT"};
 const NCI_CITE={au:"AuScope; NCI Australia",yr:"",ti:"NCI-AuScope Magnetotelluric Collection — packed raw, Level 1 and Level 2 time series",ve:"",pb:"NCI Australia"};
 

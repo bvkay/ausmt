@@ -503,6 +503,20 @@ RULES = (
                     r"|\b(?:in|during|from) the review\b"
                     r"|\breview[- ]rounds?\b"
                     r"|\bcode-health review\b", re.I), "review or slice identifier"),
+    # A ROUND is the run of work a change belonged to, named beside the kind of work it was. The
+    # ordinary senses of the word (a retry round, rounding a number) carry none of those words.
+    Rule(re.compile(r"\b(?:feedback|fix(?:es|ed)?|review|re-gate|UX|work)\b[^\n]{0,30}?\brounds?\s*#?\s*\d"
+                    r"|\brounds?\s*#?\s*\d[^\n]{0,30}?\b(?:feedback|fix(?:es|ed)?|review|re-gate|UX|work)\b"
+                    r"|\bROUND-\d", re.I), "round-of-work identifier"),
+    # Who settled the argument, and the sitting it was settled in, are the same provenance the
+    # word owner carries. "Operator" alone is a role the console serves and stays.
+    # "live session" is also an ordinary HTTP session, so only the provenance grammar is named: a
+    # preposition in front of it makes the sitting the place a decision came from.
+    Rule(re.compile(r"\boperator\s+decisions?\b|\bchief[- ]architect\b"
+                    r"|\b(?:from|in|during|after|at)\s+(?:the\s+|a\s+)?(?:\w+\s+)?live session\b", re.I),
+         "decision-owner language"),
+    # To ratify is to bless a decision, which is what "approved" and "ruling" already name.
+    Rule(re.compile(r"\bratif(?:y|ies|ied|ication)\b", re.I), "ruling language"),
     Rule(re.compile(r"YOUR-"), "placeholder"),
     Rule(re.compile(r"TODO\(", re.I), "unowned marker"),
     Rule(re.compile(r"\bFIXME\b", re.I), "unowned marker"),

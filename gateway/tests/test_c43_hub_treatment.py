@@ -290,7 +290,7 @@ def test_metadata_toc_state_hints(tmp_path):
 
 
 def test_metadata_tab_renders_the_curated_home_panels(tmp_path):
-    """PANEL PIN. The Metadata tab renders the three ratified curated homes plus the designation
+    """PANEL PIN. The Metadata tab renders the three curated homes plus the designation
     mapping, prefilled from the survey's own values: the organisations role checkbox group with the
     stored custodian ticked and its primary-custodian radio selected, the citation preferred-text and
     nested preferred-identifier inputs, the acknowledgement wording, and the identity_classification

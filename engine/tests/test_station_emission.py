@@ -19,7 +19,7 @@ What this module pins, all of it read off documents a REAL build wrote:
   * the NEW blocks carry no null and no empty container. This is scoped to runs[] and resources[] on
     purpose: the frozen keys carry legitimate nulls (remote_site, coordinate_qc, the frame rotation
     sources), so the survey-metadata document's corpus-wide rule cannot be imported here.
-  * the ratified leak rejections T13, T14 and T28a-d, applied to BUILT withheld stubs rather than to a
+  * the leak rejections T13, T14 and T28a-d, applied to BUILT withheld stubs rather than to a
     hand-written fixture, so what is proven closed is the document the corpus actually publishes.
   * No non-exact station's true position reaches any published free text. The per-station mask
     withholds a masked station's OWN note; nothing stops ANOTHER station's note naming it, and the
@@ -49,7 +49,7 @@ from test_station_schema_v01 import validator as schema_validator  # noqa: E402
 import _stationcheck as stcheck  # noqa: E402
 
 # The station.json KEY SET on each branch. Frozen = emitted before the promotion and byte-stable
-# through 1.x; markers = the three ratified additions; new model = the canonical blocks, which are
+# through 1.x; markers = the three additions; new model = the canonical blocks, which are
 # CONDITIONAL because a source that asserts no acquisition fact publishes no runs[]; conditional =
 # coordinate_policy, present only for a non-exact station.
 FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "location", "data",
@@ -238,7 +238,7 @@ def test_a_withheld_record_publishes_neither_block(built_access):
         assert not set(NEW_MODEL_KEYS) & set(doc), f"{key}: the stub carries {sorted(set(NEW_MODEL_KEYS) & set(doc))}"
 
 
-# ---------------------------------------------------------------- the ratified leak rejections
+# ---------------------------------------------------------------- the leak rejections
 
 def _leaks():
     """The emission vectors, as mutations of a BUILT stub. Each differs from the emitted document by

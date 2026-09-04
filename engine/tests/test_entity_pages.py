@@ -1725,8 +1725,7 @@ def test_collection_prose_wraps_the_generated_member_cards(tmp_path):
 
 
 def test_collection_prose_is_escaped_and_carries_no_markup(tmp_path):
-    """The prose is author-supplied text on a public serving surface. Only the one ratified
-    structural convention is interpreted; everything else is inert.
+    """The prose is author-supplied text on a public serving surface. Only the one structural convention is interpreted; everything else is inert.
 
     FAILS IF any author-supplied character reaches the page as markup, in a paragraph OR in a
     subheading (the subheading path is the easy one to forget, because it builds its own element)."""

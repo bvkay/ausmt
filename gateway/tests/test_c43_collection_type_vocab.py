@@ -109,7 +109,7 @@ def test_collection_type_vocabulary_is_one_set_across_every_carrier():
 
 # The two gateway tuples are ONE object, not two equal copies: app.py imports the select's tuple, so
 # the write path cannot refuse a value the console offers. FAILS IF app.py restates it (the drift that
-# left the publish spec path 400-ing on a ratified value while every doc said it was legal).
+# left the publish spec path 400-ing on a value while every doc said it was legal).
 def test_app_write_path_uses_the_selects_own_tuple():
     assert app_mod._COLLECTION_TYPE_VOCAB is curatorpage._COLLECTION_TYPE_VOCAB  # noqa: SLF001
 
@@ -123,14 +123,14 @@ def test_hub_lede_names_every_vocabulary_value_but_the_catch_all():
 
 
 # The vocabulary is CLOSED. test_c43_stage3b.py's F4 probe publishes ctype="campaign" and expects a
-# refusal, so this keeps that negative pin non-vacuous: if "campaign" is ever ratified, that probe
+# refusal, so this keeps that negative pin non-vacuous: if "campaign" is ever added to the vocabulary, that probe
 # must move to another out-of-vocab value rather than quietly passing for the wrong reason.
 def test_campaign_stays_out_of_vocab():
     assert "campaign" not in curatorpage._COLLECTION_TYPE_VOCAB  # noqa: SLF001
 
 
 # The vocabulary change has to REACH behaviour, not just the constants: the publish spec gate admits
-# the ratified value, the select marks it selected instead of falling through to (unset), and the
+# the value, the select marks it selected instead of falling through to (unset), and the
 # dropped value is still refused.
 def test_compilation_passes_the_spec_gate_and_renders_selected():
     op = {"slug": "auslamp-b", "op": "set",

@@ -623,7 +623,7 @@ def test_v2_fold_still_leaks_nothing():
 # ==================================================================================================
 # Australian STATE workflow (schema 2, additive): a second-level breakdown BENEATH the AU country row.
 #
-# State, never city -- the ratified design decision. The address resolved here was already truncated
+# State, never city -- the design decision. The address resolved here was already truncated
 # at the edge (IPv4 /24, IPv6 /48): a /24 geolocates to a city unreliably (carrier and CGNAT pools
 # span a state from one prefix), and in a research community this small a city cell is
 # quasi-identifying ("3 downloads from Hobart" names a group). These pins fix state as the grain.
@@ -1305,7 +1305,7 @@ def test_the_honesty_lane_still_leaks_nothing():
 # daily window, and the denominator that turns "12 surveys downloaded" into "12 of 40 served".
 #
 # All of it forward-only, all of it at the two grains that are kept, and none of it at day-by-state or
-# city grain: those exclusions are ratified and the pins above hold them.
+# city grain: those exclusions are required and the pins above hold them.
 # ==================================================================================================
 
 def test_state_rows_carry_downloads_visits_api_and_volume_beside_the_request_count():
@@ -1500,7 +1500,7 @@ def test_the_state_and_funding_detail_still_leaks_nothing():
 # day at maximal NON-GEO granularity, appended beside stats.json, read by nothing and served by
 # nothing.
 #
-# The boundary these pins hold is the geographic one. The ratified exclusion of day-by-state
+# The boundary these pins hold is the geographic one. The exclusion of day-by-state
 # data generalises: no country and no state below month grain, RENDERED OR ARCHIVED. A named country
 # on a named day is a smaller cell than a named state in a named month.
 # ==================================================================================================
@@ -2382,7 +2382,7 @@ def test_hand_offs_ride_every_grain_with_by_survey_by_level_and_by_destination()
 def test_a_hand_off_carries_a_country_at_month_grain_and_nowhere_finer():
     """GEO BOUNDARY PIN. The hand-off family takes a by-country figure at the cumulative and
     calendar-month grains ONLY. A named country on a named day is the finest cell this
-    pipeline could produce and the ratified exclusion of day-by-state data covers it, so
+    pipeline could produce and the exclusion of day-by-state data covers it, so
     neither the day row nor the permanent archive may carry one.
 
     FAILS IF a country reaches a day row or an archive line, or if the month grain stops carrying

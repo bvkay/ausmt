@@ -994,7 +994,7 @@ def _channel_key(name) -> str:
 def _channels_declared(declared) -> str:
     """The channels tile from the survey's OWN channels_recorded declaration.
 
-    The declaration is the ratified authority on what a survey measured: it is what masks the
+    The declaration is the authority on what a survey measured: it is what masks the
     impedance and the tipper survey-wide, so it is also what the page may state. Known channels
     print in the corpus's spelling and in one fixed order, and a channel outside that vocabulary
     prints as the declaration spells it rather than being dropped, because a tile that silently
@@ -1714,7 +1714,7 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
 
 
 def _prose_block(paragraphs) -> str:
-    """Curator paragraphs as escaped <p class="collprose">, with one ratified structural
+    """Curator paragraphs as escaped <p class="collprose">, with one structural
     convention: a paragraph whose first two characters are '# ' is that section's subheading and
     renders as <h3>. Everything else is a paragraph.
 
@@ -1925,7 +1925,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
 _INDEX_MAP_WIDTH = 230          # the surveys index card map
 _COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
 
-# The vocabulary named here is the one docs/docs/developer/collection-ids.md ratifies, and the two
+# The vocabulary named here is the one docs/docs/developer/collection-ids.md declares, and the two
 # must not drift: a reader meeting a chip on this hub looks the value up in that page. Every value but
 # `other` is named; `other` is the catch-all, and a lede that named it would tell a reader nothing.
 # gateway/tests/test_c43_collection_type_vocab.py holds this sentence to that rule.

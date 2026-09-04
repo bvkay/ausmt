@@ -1,4 +1,4 @@
-"""MTCAT 2.0: the ratified schema DESCRIBES what the portal serves, and CONSTRAINS it.
+"""MTCAT 2.0: the schema DESCRIBES what the portal serves, and CONSTRAINS it.
 
 Successor to the retired v1.2 acceptance module. MTCAT 2.0 is a MAJOR version; its breaking list is small and
 deliberate: null-as-undeclared removed (one defined null: the paired withheld station
@@ -16,7 +16,7 @@ Two halves, as before:
      constraining it are not the same act, and only the second one catches a bad build.
 
 The RED set keeps every 1.2-era case whose constraint survives into 2.0 and adds the 2.0 cases
-from the ratified fixture suite (AusMT_2026/schemas-draft/run-fixture-suite.py): subject rows
+from the fixture suite (AusMT_2026/schemas-draft/run-fixture-suite.py): subject rows
 without a scheme, duplicate/empty/non-positive sample rates, has_time_series false, unknown
 coordinates_state, the withheld-footprint leak, empty formats/subjects arrays, identifier-less
 relationship rows, half-null coordinate pairs, and a malformed generated_at (which requires
@@ -188,7 +188,7 @@ CORPUS_SHAPED = {
 
 
 def test_schema_self_identifies_as_the_versioned_immutable_uri():
-    """The ratified $id policy (final walk-through s49): the canonical identifier is the
+    """The $id policy (final walk-through s49): the canonical identifier is the
     VERSION-SPECIFIC immutable URI under /data/schemas/mtcat/<version>/; the unversioned
     /data/mtcat.schema.json remains the latest-convenience route (portal.schema_url still names
     it, and the build serves BOTH). This supersedes the 1.2-era unversioned-$id rule; the pin
@@ -201,7 +201,7 @@ def test_schema_self_identifies_as_the_versioned_immutable_uri():
 
 
 def test_no_version_string_in_any_field_description():
-    """The ratified editorial gate: ZERO version strings in field descriptions (the schema text
+    """The editorial gate: ZERO version strings in field descriptions (the schema text
     must be timeless; the version lives in the title/$id alone)."""
     offenders = []
 
@@ -260,7 +260,7 @@ def _mutate(path, value):
 
 
 # One mutation per constraint. The 1.2-era cases whose constraints survive are kept; the 2.0 cases
-# are ported from the ratified fixture suite (T5/T6/T7/T9/T10/T10b/T30a-b/T34a/T34c and friends).
+# are ported from the fixture suite (T5/T6/T7/T9/T10/T10b/T30a-b/T34a/T34c and friends).
 RED_CASES = [
     # ---- derived discovery facets ---------------------------------------------------------------
     (("surveys", 0, "n_stations"), "3",
@@ -484,8 +484,7 @@ def test_policy_transition_open_to_embargoed_still_validates():
 
 
 def test_access_description_names_no_phantom_level():
-    """The schema is SERVED, so a wrong sentence in it is a published wrong claim. The ratified
-    2.0 access description names the three well-known values and deliberately does NOT enum-pin
+    """The schema is SERVED, so a wrong sentence in it is a published wrong claim. The 2.0 access description names the three well-known values and deliberately does NOT enum-pin
     (an unrecognised value means a withheld survey, not a broken document). Both halves survive
     from the 1.2 gate: the named values must equal the producer's ACCESS_LEVELS set-for-set, and
     NO description anywhere in the schema may name the phantom 'legacy' level."""

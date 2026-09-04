@@ -59,7 +59,7 @@ def parse_coordinate_policy(access_block):
     Returns (default: str, overrides: dict[str, str]) with every value a member of
     COORDINATE_POLICIES. Raises CoordinatePolicyError on any unknown enum value (survey default OR an
     override value) — fail-closed, never coerced to exact. Override IDS are validated separately, via
-    validate_overrides (fix round 2: in the build loop at the point the REAL parsed station ids exist,
+    validate_overrides (in the build loop at the point the REAL parsed station ids exist,
     for both EDI and MTH5 inputs, before any of that survey's bytes are emitted), because the station
     ids are only known after parsing.
 
@@ -96,7 +96,7 @@ def parse_coordinate_policy(access_block):
 
 
 def base_station_id(station_id, variant=None):
-    """THE id half of the one shared matcher (fix round 2): the PHYSICAL station id an override keys
+    """THE id half of the one shared matcher: the PHYSICAL station id an override keys
     on — the record id with its engine-appended processing-variant tag stripped. build_portal's
     _disambiguate dedups DATAID collisions as `<base>.<variant>` AND stores the tag on the record
     (`r["variant"]`), so stripping uses that field — NEVER dot-guessing on the id string, because a
@@ -144,7 +144,7 @@ def station_policy_by_published_id(default, overrides, station_id):
 
 
 def validate_overrides(overrides, stations):
-    """THE VALIDATION half of the one shared matcher (fix round 2): every override key must be the
+    """THE VALIDATION half of the one shared matcher: every override key must be the
     BASE station id of at least one ACTUAL parsed station record in `stations` [(path, record), ...]
     — the same records, the same base_station_id derivation that station_policy applies with, so
     validation and application cannot diverge BY CONSTRUCTION (the probe-e class: a stem∪prefix
@@ -270,7 +270,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
 
     Returns the set of ausmt_ids that were masked (non-exact), for the caller's byte-gate/logging.
     """
-    # Fail-closed BACKSTOP (defence in depth, fix round 2): the SAME validate_overrides the build
+    # Fail-closed BACKSTOP (defence in depth): the SAME validate_overrides the build
     # loop already ran — on the SAME station records, at the point their ids became known and before
     # any bytes were emitted, for BOTH input kinds (EDI and MTH5 alike). Same function + same inputs
     # => this raise is UNREACHABLE on every input path of a full build, by construction (pinned:

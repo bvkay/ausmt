@@ -164,31 +164,21 @@ def test_no_portal_document_carries_a_ver_chip():
 
 
 def test_about_references_no_nonexistent_federation_doc():
-    """Citation honesty. FAILS if about.html references FEDERATION.md - no such file
-    exists anywhere in the repository (verified repo-wide before this test was written), so the pre-C22
-    line 236 ("see the MTCAT v1.0 specification and FEDERATION.md in the project repositories") pointed
-    readers at a fabricated document. Chief-architect rule: REMOVE the claim, do not repoint (federation
-    is documented as a property of MTCAT itself, and docs/docs/developer/data-files.md describes
-    mtcat.json as the discovery/federation document). the restructured About now DOES link
-    docs-site pages (the "Detailed documentation" answer points at real mkdocs pages, incl. the MTCAT page),
-    but the fabricated FEDERATION.md filename must still never reappear here — that is what this guards.
+    """Citation honesty. FAILS if about.html names FEDERATION.md: no such file exists anywhere in the
+    repository, so the reference sends a reader after a document that is not there. Federation is a
+    property of MTCAT itself and docs/docs/developer/data-files.md describes mtcat.json as the
+    discovery and federation document, so the claim is stated rather than repointed at a file name.
 
-    Raw-text check ON PURPOSE (unlike this module's parsed-DOM tests): even a commented-out reference is
-    a stale claim waiting to be resurrected, and the parser drops comments. The companion assertion pins
-    the HONEST half of the sentence: the spec reference must SURVIVE the removal, so an over-deletion also
-    fails here.
+    Raw-text check ON PURPOSE (unlike this module's parsed-DOM tests): a commented-out reference is
+    still a claim waiting to be resurrected, and the parser drops comments. The companion assertion
+    pins the HONEST half of the sentence: the spec reference must SURVIVE the removal, so an
+    over-deletion fails here too.
 
-    The over-deletion pin must not be the literal string "MTCAT v1.0". That is a
-    VERSION NUMBER doing a link's job, and it went stale the moment the served schema moved past 1.0 (it
-    was already wrong at 1.1). It is now pinned to the docs-site URL the bullet actually links, which is
-    what a reader needs and which does not rot on a schema bump. The version a consumer should trust is
-    the one the document declares about itself, never a number typed into this page.
-
-    Docs-consolidation round: the pinned URL moved from /data-model/mtcat/ to
-    /reference/mtcat-schema/. The two pages were a stub and its own reference, saying the same thing
-    twice; the stub was merged into the reference under the one-page-per-topic pass, and About's
-    bullet now points at the surviving page. The pin is still a URL rather than a version, for the
-    reason given above."""
+    The over-deletion pin is the docs-site URL the bullet links, never the literal string
+    "MTCAT v1.0". A version number doing a link's job goes stale on the next schema bump, and the
+    version a consumer should trust is the one the document declares about itself, never a number
+    typed into this page. The URL is /reference/mtcat-schema/, the one page carrying the schema
+    reference."""
     raw = ABOUT.read_text(encoding="utf-8")
     assert "FEDERATION.md" not in raw, (
         "about.html must not reference FEDERATION.md — that file does not exist in the repository")

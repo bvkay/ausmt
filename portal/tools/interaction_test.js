@@ -1810,7 +1810,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(tNo.querySelectorAll("label.country").length === 2, "UX5: countries missing in the no-collections boot");
   ok(tNo.querySelectorAll(".caret").length > 0, "UX5: disclosure carets missing in the no-collections boot");
 
-  // J. YEAR RANGE filter (S3 + UX feedback round 1 #2): Alpha [2010,2012], Beta [2018,2019], Gamma
+  // J. YEAR RANGE filter: Alpha [2010,2012], Beta [2018,2019], Gamma
   // undated (no year fields at all). The two inputs get corpus-wide HINTS (placeholder + min/max) from
   // buildState()'s applyYearRangeHints() — min year_start / max year_end across SMETA, here 2010/2019 —
   // but must stay EMPTY on load (a value would immediately exclude Gamma under the filter semantics).
@@ -2249,12 +2249,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the fetch commands carry the AusMT routes, not the archive addresses, got " + JSON.stringify(_mac));
   A.setSelected([]);
 
-  // L. GO TO PLACE REMOVED (UX feedback round 1 #1): operator decision, redundant. Assert the input
-  // (and its datalist) are gone from the rendered page, not merely unused.
+  // L. NO GO TO PLACE CONTROL. The input and its datalist are absent from the rendered page, not
+  // merely unused.
   ok(!doc.getElementById("goPlace"), "#goPlace should have been removed from the filter rail");
   ok(!doc.getElementById("auPlaces"), "#auPlaces datalist should have been removed along with #goPlace");
 
-  // M. SCREENING (advanced) (UX feedback round 1 #4): the specialist controls live inside ONE
+  // M. SCREENING (advanced): the specialist controls live inside ONE
   // <details class="advanced"> collapsed by default (no `open` attribute) at the bottom of the filter
   // rail. The Availability group and the colour-by segmented control are both inside it, and
   // there is exactly ONE Availability group: the standalone "Downloadable here" checkbox and the
@@ -2474,12 +2474,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.setBlurb("Alpha Survey", null);
   doc.getElementById("drawer").classList.remove("open");
 
-  // S. DIMENSIONALITY HIDDEN FROM SCREENING DISPLAYS (UX feedback round 3, item 7): removed from the
-  // station-drawer screening grid (7a), the survey-card stats line (7b) and the survey-story table (7c) —
-  // while the phase-tensor/skew and strike lines STAY (dimensionality is inferable from them).
-  // (a) station drawer: no "Dimensionality" cell. (HIDDEN: the strike + mean-|β| lines lived
-  //     ONLY in the now-hidden Screening panel, so they are ABSENT too — flipped from the prior "KEPT" pins.
-  //     Restore the strike/|β| "KEPT" assertions when the Screening surface is re-enabled.)
+  // S. NO DIMENSIONALITY IN THE SCREENING DISPLAYS. It is absent from the station-drawer screening
+  // grid, the survey-card stats line and the survey-story table, while the phase-tensor/skew and strike
+  // lines stay, because dimensionality is inferable from them.
+  // (a) station drawer: no "Dimensionality" cell. The strike and mean-|B| lines live ONLY in the
+  //     Screening panel, which does not render, so they are absent here too.
   win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
   const drw = doc.getElementById("drawer");
   ok(drw.innerHTML.indexOf(">Dimensionality<") < 0, "station drawer still shows a 'Dimensionality' screening cell (item 7a)");
@@ -3941,7 +3940,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // GC. GROUPED CONTRIBUTORS (card-credit rework). The per-(person, role) list is replaced by a collapsed
   // <details> GROUPED by person: 7 distinct people/orgs across 15 declared (person, role) rows must render as
-  // ONE line each with roles comma-joined in the RATIFIED order (ProjectLeader, ProjectMember, DataCollector,
+  // ONE line each with roles comma-joined in the FIXED vocabulary order (ProjectLeader, ProjectMember, DataCollector,
   // ContactPerson, DataCurator, Sponsor, RightsHolder, Distributor), deduping by ORCID (case / URL-form
   // insensitive) else name + name_type, dropping a nameless row and an out-of-vocab role SILENTLY. RED-proven
   // (tools/../scratchpad red-proof + these pins flip on origin/main drawer.js): the pre-change contributorsHtml
@@ -3977,7 +3976,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "GROUP: 7 distinct people render as 7 lines (6 <br> separators) inside the collapsed details, got sep count: " + (gcBlock.match(/<br>/g) || []).length);
   ok(/<details class="prov-d survey-contributors">/.test(gcH),
     "GROUP: contributors render inside a <details class='prov-d survey-contributors'> collapsed like the Persistent identifiers rollup");
-  // Roles join in the RATIFIED order regardless of declared order: Alice declared DataCurator BEFORE
+  // Roles join in the FIXED vocabulary order regardless of declared order: Alice declared DataCurator BEFORE
   // ProjectLeader -> "led, curated"; and she appears exactly once (grouped). RED: pre-change never joins.
   ok(/led, curated/.test(gcH) && (gcH.match(/Alice Anderson/g) || []).length === 1,
     "GROUP: a multi-role person groups to ONE line with roles in the ratified order (led, curated)");

@@ -50,7 +50,7 @@ def clean_salt(monkeypatch):
 # Each station gets a UNIQUE lat/lon/elev so the sweep can attribute a leak to a specific policy class.
 # Elevations are distinctive DECIMALS (not round integers like 222.0 whose bare '222' string collides
 # with impedance-data substrings in the served EDI/XML) so an elevation hit unambiguously means a leak.
-# HID's FILE NAME differs from its DATAID (fix round 2, pin 5): the withheld station is keyed CORRECTLY
+# HID's FILE NAME differs from its DATAID (pin 5): the withheld station is keyed CORRECTLY
 # by its STATION id (HIDENINE, from DATAID) while living in HIDEFILE.edi — proving the correct path
 # masks everything even when the file name and station id disagree.
 EXACT = {"id": "EXACTONE", "lat": -31.234567, "lon": 135.234567, "elev": 111.61, "policy": "exact"}
@@ -93,7 +93,7 @@ def _stage_survey(base, stations, *, declare_policy=True, extent=True, overrides
     edidir = d / "transfer_functions" / "edi"
     edidir.mkdir(parents=True)
     for st in stations:
-        # a station dict may carry "file" to decouple the FILE NAME from the DATAID (fix round 2:
+        # a station dict may carry "file" to decouple the FILE NAME from the DATAID (
         # the station id derives from DATAID, never the file name — probe-e's whole attack class).
         (edidir / st.get("file", f"{st['id']}.edi")).write_text(_rewrite_edi(src, st), encoding="utf-8")
     lines = [
@@ -379,7 +379,7 @@ def test_byte_gate_non_exact_edi_xml_absent_from_all_surfaces(tmp_path):
         f"only the exact station may be served; manifest served: {sorted(served_stations)}"
 
     # on-disk EDI/XML: only the exact station's files exist. Check BOTH the station id AND the file
-    # stem (HID's file name differs from its DATAID since fix round 2 — a leaked copy would be
+    # stem (HID's file name differs from its DATAID by construction, and a leaked copy would be
     # HIDEFILE.edi, which an id-only check would miss).
     edi_names = {p.stem for p in out.rglob("edi/**/*.edi")}
     xml_names = {p.stem for p in out.rglob("xml/**/*.xml")}
@@ -758,7 +758,7 @@ def test_fail_closed_override_typo_drops_only_that_survey(tmp_path):
 
 
 # =====================================================================================================
-# FIX ROUND 2: one shared matcher — validation and application cannot diverge (probe-e class)
+# one shared matcher, so validation and application cannot diverge (probe-e class)
 # =====================================================================================================
 
 # Probe-e (the verifier's constructed leak): file ALPHA.edi whose DATAID is BRAVO — the custodian
@@ -773,7 +773,7 @@ DECOY = {"id": "ALPHA", "file": "gamma.edi", "lat": -34.933333, "lon": 138.74444
 
 
 def test_probe_e_stem_keyed_override_fails_loudly_not_silently_misapplied(tmp_path):
-    """PROBE-E PIN (fix round 2, blocking). The stem-keyed override + id/stem-coincidence fixture:
+    """PROBE-E PIN (blocking). The stem-keyed override + id/stem-coincidence fixture:
     override key 'ALPHA' is simultaneously the id of one station AND the file stem of a DIFFERENT
     station — an ambiguous, almost-certainly-filename-keyed policy. Validation must FAIL LOUDLY at
     the pre-emission point (survey dropped, the survey's REAL station ids listed so the custodian
@@ -813,7 +813,7 @@ def test_probe_e_stem_keyed_override_fails_loudly_not_silently_misapplied(tmp_pa
 
 
 def test_validated_override_keys_always_apply(tmp_path):
-    """VALIDATED=>APPLIES PROPERTY PIN (fix round 2): for an engine-built survey containing a
+    """VALIDATED=>APPLIES PROPERTY PIN: for an engine-built survey containing a
     DATAID!=stem station AND a processing-variant pair, EVERY override key that passes validation
     changes at least one station record's effective policy — validation and application share ONE
     matcher, so a validated no-op key is structurally impossible. FAILS IF any validated key is a
@@ -860,7 +860,7 @@ def test_validated_override_keys_always_apply(tmp_path):
 
 
 def test_variant_pair_base_override_masks_all_variants(tmp_path):
-    """VARIANT PIN (fix round 2): two processings of ONE physical station (same DATAID, deduped to
+    """VARIANT PIN: two processings of ONE physical station (same DATAID, deduped to
     SITE1.lemigraph / SITE1.ohmega by the engine's variant tagging). Privacy of the physical site
     covers ALL its variants: an override on the BASE id must mask BOTH records and byte-gate BOTH
     files. RED against a build that lets the base key pass validation and then match NO record at
@@ -889,7 +889,7 @@ def test_variant_pair_base_override_masks_all_variants(tmp_path):
 
 
 def test_variant_suffixed_override_key_is_rejected(tmp_path):
-    """VARIANT-KEY PIN (fix round 2): a FULL variant-suffixed id as an override key is INVALID — the
+    """VARIANT-KEY PIN: a FULL variant-suffixed id as an override key is INVALID, so the
     survey is dropped loudly and the message lists the BASE ids. RED against a build where the
     prefix tolerance validated it and the mask applied it to ONE variant only — the other variant
     of the same physical station served its TRUE position (silent partial mask)."""
@@ -922,7 +922,7 @@ def test_variant_suffixed_override_key_is_rejected(tmp_path):
 
 
 def test_mth5_input_survey_bad_override_dropped_before_bytes(tmp_path):
-    """MTH5-INPUT PIN (fix round 2): override validation for an mth5-input survey runs at the point
+    """MTH5-INPUT PIN: override validation for an mth5-input survey runs at the point
     its station ids become known (after the h5 opens) and BEFORE any of that survey's bytes/products
     are emitted — a bad override drops that survey alone, loudly, rc=0, the co-survey serves.
     RED against a build where mth5-input surveys skip discovery validation entirely and the
@@ -1051,7 +1051,7 @@ def test_unit_apply_mask_in_place_and_validates_override_ids():
 
 # =====================================================================================================
 # BASE-STATION-ID SURFACE PINS (base_ids.json - the boot artifact keyed by base id for the C43
-# stations-panel override fieldset; D2 fix-round-2 requires override keys to be BASE ids)
+# stations-panel override fieldset; D2 requires override keys to be BASE ids)
 # =====================================================================================================
 
 # One physical station processed by two codes: SAME DATAID (SITE1), two files -> the engine dedups to

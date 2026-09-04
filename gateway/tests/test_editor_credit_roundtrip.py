@@ -9,7 +9,7 @@ Three failure modes this pins:
   2. Byte-clean round-trip: an unchanged creators/contributors list (org creator with ror-but-no-orcid,
      person creator with orcid-but-no-ror) reassembles to its snapshot -> _OMIT, so an unrelated edit
      never blanks or re-quotes a credit list the curator did not touch.
-  3. INFERRED-REVIEW adjudication: the RATIFIED migration marks a
+  3. INFERRED-REVIEW adjudication: the migration marks a
      seeded row with a COMMENT-ABOVE INFERRED-REVIEW note (its own line directly above `- name:`), NOT an
      inline comment. ruamel re-homes that above-comment onto a NEIGHBOUR (row 0 -> the parent list key;
      row i>0 -> the previous row's trailing comment), so the runner detector (inferred_review_indices) reads
@@ -57,7 +57,7 @@ def test_people_name_type_is_fail_closed():
     assert any(getattr(x, "section", "") == "people" for x in e1), e1
 
     # A bogus role checkbox contributes nothing (no error, no contributors entry) - the panel can only
-    # ever tick a ratified role.
+    # ever tick a role.
     bogus_role = {"l_people_0_name": "X", "l_people_0_name_type": "person",
                   "l_people_0_role_Wizard": "1", **_snap("creators", []), **_snap("contributors", [])}
     patch, errs = ef.build_section_patch(bogus_role)
@@ -177,11 +177,11 @@ def test_people_panel_contributors_save_is_accepted_by_the_runner(tmp_path):
 
 # ---- INFERRED-REVIEW detection + save-strips-the-marker adjudication -----------------------------
 
-# GROUND TRUTH (hermetic): the BYTE-EXACT output of the ratified credit migration
+# GROUND TRUTH (hermetic): the BYTE-EXACT output of the credit migration
 #  on a survey carrying legacy
 # principal_investigators (-> two person creators) + lead_investigator (-> one ProjectLeader contributor).
 # The INFERRED-REVIEW note rides its OWN comment line directly ABOVE each `- name:` row (comment-ABOVE) -
-# the ratified format, because an inline comment after a quoted scalar tripped the vendored mini parser.
+# the format, because an inline comment after a quoted scalar tripped the vendored mini parser.
 # Reproduced literally here so the test carries NO sibling-repo dependency. Captured verbatim by running
 # the migration against a minimal fixture and copying its emitted bytes.
 _SEEDED_YAML = (
@@ -354,7 +354,7 @@ def test_merge_people_keys_by_orcid_url_form_then_name():
 
 def test_people_multi_role_decomposition_in_ratified_order():
     """SAVE. One person with several ticked roles decomposes to one contributors[] entry per role,
-    ordered by the RATIFIED role order (not tick/checkbox order). A cited tick adds a creators[] entry."""
+    ordered by the role order (not tick/checkbox order). A cited tick adds a creators[] entry."""
     form = _people_form([{"name": "Kay, Ben", "name_type": "person", "cited": True,
                           "roles": ["DataCurator", "ProjectLeader"]}])  # deliberately reverse order
     patch, errs = ef.build_section_patch(form)
@@ -428,7 +428,7 @@ def test_people_no_op_round_trip_is_a_runner_no_op(tmp_path):
 
 # ==================================================================================================
 # The legacy Convert flow and its _delete_keys directive are GONE
-#and the three ratified curated homes plus the designation mapping round-trip end to end.
+#and the three curated homes plus the designation mapping round-trip end to end.
 # ==================================================================================================
 
 def test_the_legacy_convert_surface_is_gone(tmp_path):

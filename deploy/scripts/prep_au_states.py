@@ -9,7 +9,7 @@ nothing downstream ever reads it again.
     python3 deploy/scripts/prep_au_states.py ~/Downloads/dbip-city-lite-2026-07.csv.gz
     python3 deploy/scripts/prep_au_states.py <city-csv> --out /srv/ausmt/geoip/dbip-au-states.csv
 
-WHY STATE, AND WHY NOT CITY  (a ratified design decision -- do NOT "improve" this to cities later):
+WHY STATE, AND WHY NOT CITY  (a design decision -- do NOT "improve" this to cities later):
   * the address this table is looked up with was ALREADY TRUNCATED at the edge: IPv4 to a /24, IPv6 to
     a /48. A /24 prefix does not place a request in a city reliably -- mobile carrier and CGNAT pools
     routinely serve a whole state from one prefix -- so a city column would be confidently wrong;

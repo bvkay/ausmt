@@ -394,7 +394,7 @@ class AuStates(_RangeTable):
     """AU STATE lookup for a (masked) address, over the compact table deploy/scripts/prep_au_states.py
     distils from the db-ip "IP to City Lite" CSV.
 
-    WHY STATE, AND WHY NOT CITY -- a ratified design decision, recorded here so it is not casually
+    WHY STATE, AND WHY NOT CITY -- a design decision, recorded here so it is not casually
     "improved" into a city breakdown later:
       * the address resolved here was ALREADY TRUNCATED at the edge (IPv4 /24, IPv6 /48). A /24 prefix
         does not place a request in a city reliably -- mobile carrier and CGNAT pools routinely serve a
@@ -1645,7 +1645,7 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 # not rewritten: a day is appended once, when it folds, and the fold watermark guarantees that happens
 # exactly once. Nothing here is ever backfilled.
 #
-# THE GEO BOUNDARY, which is the one line that must not move. The ratified exclusion of
+# THE GEO BOUNDARY, which is the one line that must not move. The exclusion of
 # day-by-state data generalises: NO country and NO state below month grain, rendered OR archived. A
 # named country on a named day is a smaller cell than a named state on a named month, and the
 # small-cell argument that excludes a city column excludes it too. So these rows carry counts,

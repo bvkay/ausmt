@@ -2674,7 +2674,7 @@ class Gateway:
     def _set_session_cookie(self, resp: Response, token: str) -> None:
         # Secure; HttpOnly; SameSite=Strict (design §2). Path scoped to the curator area. HttpOnly
         # keeps the token out of page JS entirely; SameSite=Strict means a cross-site form cannot send
-        # it even with a live session; max_age matches the absolute session TTL.
+        # it even while a session is live; max_age matches the absolute session TTL.
         resp.set_cookie(
             curator_auth.SESSION_COOKIE, token, max_age=self.cfg.session_ttl_s,
             httponly=True, secure=True, samesite="strict", path="/gateway/curator")

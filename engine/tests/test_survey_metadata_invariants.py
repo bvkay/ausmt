@@ -29,7 +29,7 @@ Three layers:
 
 The chain checkers are TEST-TIME assertions (the validator enforces citation designation at the
 entry gates; the build refuses an undesignated preferred identifier); each is proven non-vacuous
-against a planted violation, the ratified suite's Txxb pattern.
+against a planted violation, the suite's Txxb pattern.
 """
 import copy
 import json

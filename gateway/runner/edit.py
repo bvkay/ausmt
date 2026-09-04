@@ -531,7 +531,7 @@ def report_has_fail(report: dict) -> bool:
 # note. GROUND-TRUTH VERIFIED against the migration output at surveys origin/main
 # (migrate_credit._creator_lines/_contributor_lines): the note rides its OWN comment
 # line ABOVE the `- name:` row (`  # INFERRED-REVIEW: ...` then `  - name: ...`); an inline comment after a
-# quoted scalar tripped the vendored mini parser, so comment-ABOVE is the ratified format. ruamel does NOT
+# quoted scalar tripped the vendored mini parser, so comment-ABOVE is the format. ruamel does NOT
 # attach that above-comment to the row it visually precedes; it re-homes it onto a NEIGHBOUR:
 #   * row 0's marker  -> the PARENT map's post-key comment for the list key (data.ca.items['creators']);
 #   * row i>0's marker -> a TRAILING own-line comment on row i-1 (in item[i-1]'s ca);
@@ -587,8 +587,7 @@ def _marker_is_own_line(text: str) -> bool:
 
 def inferred_review_indices(seq, parent_comment=None) -> list[int]:
     """The 0-based indices of rows in a loaded creators[]/contributors[] CommentedSeq that carry an
-    INFERRED-REVIEW marker, tolerant of BOTH the migration's comment-ABOVE placement (the ratified
-    origin/main format) AND a hand-edited INLINE marker. Empty for a plain list, a non-sequence, or a list
+    INFERRED-REVIEW marker, tolerant of BOTH the migration's comment-ABOVE placement (the origin/main format) AND a hand-edited INLINE marker. Empty for a plain list, a non-sequence, or a list
     with no markers.
 
     `parent_comment` is the parent map's comment association for THIS list key (data.ca.items.get(key)):

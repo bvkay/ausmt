@@ -1,18 +1,17 @@
-"""Survey metadata 0.1: the ratified schema DESCRIBES what the build serves, and CONSTRAINS it.
+"""Survey metadata 0.1: the schema DESCRIBES what the build serves, and CONSTRAINS it.
 
-The second public contract, data/products/<survey_id>/survey-metadata.json, ships with the ratified
-0.1-draft artifact AusMT_2026/schemas-draft/ausmt-survey-metadata.schema.json copied byte-for-byte to
+The second public contract, data/products/<survey_id>/survey-metadata.json, ships with the 0.1-draft artifact AusMT_2026/schemas-draft/ausmt-survey-metadata.schema.json copied byte-for-byte to
 engine/schema/ausmt-survey-metadata.schema.json (the MTCAT 2.0 core pattern). This module is the
 schema gate, the sibling of test_mtcat_schema_v20.py:
 
   1. the artifact's own shape: legal draft-07, the required set {schema, version, survey_id, title},
      every array property minItems 1 (the zero-empty posture is enforced by the schema, not only by
      the emitter), the versioned $id, the open top level;
-  2. four committed fixtures that must VALIDATE with format checking on: the ratified suite's T20
+  2. four committed fixtures that must VALIDATE with format checking on: the suite's T20
      document verbatim, a synthetic Case B release, a synthetic multi-activity survey and a synthetic
      no-identifier survey cited by source-provided text (the matrix rows the real corpus cannot
      instantiate today);
-  3. the RED proof: the ratified T21-T23 rejections plus a mutation set, one mutation per constraint,
+  3. the RED proof: the T21-T23 rejections plus a mutation set, one mutation per constraint,
      each differing from a PASSING document by exactly the field under test;
   4. the T25 reference check (citation.preferred_identifier designated in identifiers[]) and the
      zero-null / zero-empty scanner the emission and invariant suites reuse.
@@ -139,7 +138,7 @@ def test_fixture_validates_with_format_checking_and_scans_clean(name):
 
 
 def test_t20_fixture_is_the_ratified_suite_document_verbatim():
-    """The committed T20 document is the ratified suite's `svm` (run-fixture-suite.py T20); the
+    """The committed T20 document is the suite's `svm` (run-fixture-suite.py T20); the
     load-bearing values are pinned so a silent edit to the fixture is a visible one.
 
     THE ACKNOWLEDGEMENT IS PINNED BY ITS TEXT, not only by its type. The row is a CURATED
@@ -286,7 +285,7 @@ def test_a_withheld_embargoed_document_validates_with_the_same_schema():
 # ---------------------------------------------------------------- 4. the reference checks on the guards
 
 def test_reference_checks_actually_detect_violations():
-    """Guard on the guards (the ratified suite's Txxb pattern): the scanner must catch a planted null
+    """Guard on the guards (the suite's Txxb pattern): the scanner must catch a planted null
     and a planted empty container, and the T25 check must catch a preferred identifier that is not
     designated in identifiers[]."""
     nulls, empties = scan_nulls_and_empties({"a": None, "b": [], "c": {"d": {}}, "e": [{"f": None}]})

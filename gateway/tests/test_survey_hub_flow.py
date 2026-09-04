@@ -595,7 +595,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
                            'name="l_instruments_0_manufacturer"', 'name="o_instruments"'):
                 assert needle in core, f"Core fields form missing {needle}"
 
-            # §6 People & credit: ONE panel of unified rows + the ratified widgets and the short
+            # §6 People & credit: ONE panel of unified rows + the widgets and the short
             # credit explainer (NOT the retired precedence sentence). (The o_creators/o_contributors
             # round-trip anchors render only when the survey CARRIES those lists; this survey has
             # neither, so their absence is correct - it keeps an empty panel absent -> _OMIT.)

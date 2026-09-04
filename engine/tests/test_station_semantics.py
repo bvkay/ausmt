@@ -39,7 +39,7 @@ import _stationcheck as stcheck  # noqa: E402
 import build_portal as bp  # noqa: E402
 
 # A full record carrying every member the semantic layer has an opinion about, so each mutation below
-# differs from a PASSING document by exactly the field under test (the ratified suite's Txxb pattern).
+# differs from a PASSING document by exactly the field under test (the suite's Txxb pattern).
 CLEAN = {
     "schema": "ausmt-station", "version": "0.1", "ausmt_id": "au.example-basin-2024.EB077",
     "station": "EB077", "survey": "Example Basin MT", "survey_id": "example-basin-2024",

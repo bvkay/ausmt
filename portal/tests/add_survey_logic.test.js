@@ -509,7 +509,7 @@ ok(/orcidok warn/.test(html), "the collision state uses a distinct 'warn' chip c
 // ============================ The retired flat credit keys leave the public form ============
 // LANE-CONTRACT-FORM-CREDIT: the form stops writing lead_investigator/principal_investigators (the
 // migration deleted them corpus-wide and no reader survives), and the credit questions are rewritten
-// in plain language onto the ratified homes.
+// in plain language onto the homes.
 const yRetired = M.buildSurveyYaml({ ...base, pi: "Ada Lovelace", pi_orcid: "0000-0002-1825-0097",
   principal_investigators: [{ name: "Grace Hopper", orcid: "" }] });
 for (const retired of ["lead_investigator", "principal_investigators"]) {
@@ -526,7 +526,7 @@ ok(/Leave blank and AusMT cites the organisation and the year/.test(html.replace
 ok(!/or the lead \/ principal investigators above/.test(html.replace(/\s+/g, " ")),
    "the creators hint no longer points at the retired fields");
 
-// ---- tier 3 question set (the plain-language questions, in the ratified order) ----
+// ---- tier 3 question set (the plain-language questions, in the order the form asks them) ----
 const flat = html.replace(/\s+/g, " ");
 for (const q of ["Who should the citation name, in order?", "Who led this survey?", "Who did what?",
                  "Does this dataset already have a citation or DOI?",

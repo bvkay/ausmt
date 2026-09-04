@@ -277,7 +277,7 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             assert "Legacy field" not in body
             assert "people_convert" not in body
             assert "Ada Lovelace" not in body and "Grace Hopper" not in body
-            # The ratified curated homes have their own controls.
+            # The curated homes have their own controls.
             assert 'name="l_organisations_0_name"' in body
             assert 'name="c_organisations_0_custodian"' in body
             assert 'name="c_organisations_primary"' in body

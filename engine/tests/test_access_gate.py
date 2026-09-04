@@ -338,7 +338,7 @@ _PRODUCTS_SCIENCE_KEYS = ("median_relative_error", "dimensionality", "skew_beta_
                           "convention_check", "phs_xy_median_deg", "phs_yx_median_deg", "input_sha256")
 # The station.json KEY SET on each branch, pinned so byte-stability is enforceable at all: before this
 # pin existed nothing forbade a new top-level key on either branch, and the leak sweep above tests
-# VALUES, not membership. The three promotion markers are the ratified exception and are listed
+# VALUES, not membership. The three promotion markers are the exception and are listed
 # separately so a fourth addition to either branch fails here rather than shipping.
 _STATION_FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "location",
                              "data", "diagnostics", "processing", "distribution", "provenance",

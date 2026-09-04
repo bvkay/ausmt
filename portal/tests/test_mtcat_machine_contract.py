@@ -1,6 +1,6 @@
 """The MTCAT machine contract, as stated on the two surfaces that state it.
 
-MTCAT v1.2 typed every field AusMT already served and enum-pinned the ratified vocabularies, which turned
+MTCAT v1.2 typed every field AusMT already served and enum-pinned the vocabularies, which turned
 those vocabularies into BUILD GATES. Prose is exactly the wrong place for a vocabulary to live twice, so
 nothing here checks that the copy reads well; every assertion checks that a statement on a page is still
 TRUE of the artifact it describes:
@@ -173,7 +173,7 @@ def _schema_version() -> str:
 
 
 def _constant_schema_version() -> str:
-    """The MTCAT version as its SINGLE SOURCE declares it since the ratified 2.0 inversion: the
+    """The MTCAT version as its SINGLE SOURCE declares it since the 2.0 inversion: the
     MTCAT_VERSION constant in contract/generate.py, read raw from the source text (this suite is
     deliberately import-light). portal.config.yaml does not declare a schema_version key at all -
     config.js is GENERATED from this constant, and the engine parity suite pins that the key never

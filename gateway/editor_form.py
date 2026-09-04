@@ -162,7 +162,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     ],
     # Organisations[] is the FULL role statement where the parties
     # genuinely differ (industry-collected government releases make collector / custodian / publisher /
-    # distributor different parties). The scalar organisation: block keeps its ratified meaning (primary
+    # distributor different parties). The scalar organisation: block keeps its meaning (primary
     # custodial responsibility, the discovery projection). Two sub-fields are NOT plain scalars: roles
     # is a PER-ROW checkbox group over ORG_ROLES_ORDERED (fail-closed) and primary_custodian is a radio
     # ACROSS the rows (at most one, and only on a row that ticks custodian). PUBLISHER is explicit and
@@ -297,7 +297,7 @@ LICENSE_REDISTRIBUTABLE = LICENSE_IDS[:13]
 SOURCE_PROFILES = ("ga", "generic")
 
 # §2a (identifiers design — the related-identifiers model): the two FROZEN, FAIL-CLOSED vocabularies the
-# typed relation adds. RELATION_TYPES is the curated DataCite subset ratified as the editor presets;
+# typed relation adds. RELATION_TYPES is the curated DataCite subset as the editor presets;
 # IDENTIFIER_TYPES is the small set AusMT records against. Both are BAKED copies — the gateway APP image
 # is content-blind (ships only gateway/, never the surveys validator — see gateway.Dockerfile), so a
 # runtime import of the sibling vocab is impossible; the copies are PINNED byte-for-byte to the surveys
@@ -379,10 +379,10 @@ IDENTITY_DESIGNATION_LISTS = ("represents", "own_identifiers")
 
 # CONTRIBUTOR-CREDIT-SPEC (§6, the unified People & credit panel: "one huge
 # list which makes no sense"): the served schema keeps creators[] (citation authors) and contributors[]
-# (who-did-what roles) as TWO ratified lists, but the editor presents them as ONE panel of unified rows
+# (who-did-what roles) as TWO lists, but the editor presents them as ONE panel of unified rows
 # (one row per person/org). The panel is the `people` section: its rows POST as l_people_<i>_<subkey>
 # (name / name_type / orcid / ror), a cited-author checkbox l_people_<i>_cited, and one checkbox per role
-# l_people_<i>_role_<Token>. assemble_people() DECOMPOSES those rows back into the two ratified lists, so
+# l_people_<i>_role_<Token>. assemble_people() DECOMPOSES those rows back into the two lists, so
 # the served creators[]/contributors[] shape is byte-for-byte unchanged (UI/assembly only). The two lists
 # stay registered as LIST_SECTIONS above for the per-list advanced-JSON escape and the vocab pins; they
 # are NOT assembled by the generic build_section_patch loop (they are decomposed here instead).
@@ -964,7 +964,7 @@ def _new_people_row(name, name_type, orcid, ror):
 
 
 def merge_people(creators, contributors) -> list[dict]:
-    """LOAD: merge the two ratified lists into ordered unified rows (one per person/org). Keyed by
+    """LOAD: merge the two lists into ordered unified rows (one per person/org). Keyed by
     normalised ORCID else exact name+name_type. A creators[] row sets cited=True (and records its
     creators index for chip attribution); each contributors[] row ticks that role (and records its
     contributors index). Creators are added FIRST so the cited rows keep the citation author order,
@@ -1006,7 +1006,7 @@ def merge_people(creators, contributors) -> list[dict]:
 
 
 def _credit_dict(row: dict, role: str | None) -> dict:
-    """One decomposed creators[]/contributors[] entry from a unified row, in the ratified key order
+    """One decomposed creators[]/contributors[] entry from a unified row, in the key order
     (name, name_type, [role], orcid?, ror?). ORCID/ROR are emitted only when non-empty, so a person
     row (no ror) and an organisation row (no orcid) reproduce their stored shape - the byte-clean
     round-trip. The name is emitted VERBATIM as the curator typed it."""
@@ -1023,8 +1023,8 @@ def _credit_dict(row: dict, role: str | None) -> dict:
 def _decompose_people(rows: list[dict]) -> tuple[list, list]:
     """SAVE: decompose the unified rows back into (creators[], contributors[]). creators[] = the cited
     rows in DISPLAY order (so the citation order is the order among the cited rows only). contributors[]
-    = one entry per (row, ticked role), stable-ordered by ROW order then the ratified role order, with
-    exact duplicates dropped. The two ratified served lists come straight out of here."""
+    = one entry per (row, ticked role), stable-ordered by ROW order then the role order, with
+    exact duplicates dropped. The two served lists come straight out of here."""
     creators = [_credit_dict(r, None) for r in rows if r["cited"]]
     contributors: list = []
     seen: set = set()
@@ -1141,7 +1141,7 @@ def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
     with the scalar fields and, if errors is non-empty, re-renders the form with them.
 
     creators[]/contributors[] are NOT assembled in the generic loop: the unified People & credit panel
-    (assemble_people) owns them, decomposing its unified rows back into the two ratified served lists.
+    (assemble_people) owns them, decomposing its unified rows back into the two served lists.
     there is no delete directive any more - the legacy Convert is gone with the keys it
     converted, so a patch can only ever carry editable field values."""
     patch: dict = {}

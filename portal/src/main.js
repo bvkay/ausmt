@@ -52,7 +52,7 @@ function buildAuslampSet(){
   if(!c||!Array.isArray(c.surveys))return;                         // no auslamp collection -> nothing is AusLAMP
   c.surveys.forEach(label=>{const slug=(SMETA&&SMETA[label]||{}).slug;if(slug)AUSLAMP_SET.add(slug);});
 }
-// UX feedback round 1 (#2): corpus-wide year hints on the two Year range inputs — placeholder + min/max
+// Corpus-wide year hints on the two Year range inputs: placeholder + min/max
 // attrs from the min year_start / max year_end across ALL of SMETA (not just ST, so an undated-in-CAT
 // survey with declared dates still counts). See docs: portal internals, main.js.
 function applyYearRangeHints(){

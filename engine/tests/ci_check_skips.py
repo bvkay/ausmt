@@ -92,7 +92,7 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # any pinned portal file is present).
     "engine image build: portal tree not shipped",    # test_mtcat_version_parity.py, image builds only
     # test_mtcat_version_parity.py again, the SAME designed-topology class, for the docs tree: the
-    # ratified MTCAT 2.0 version machinery added a pin on the docs current-version display
+    # MTCAT 2.0 version machinery added a pin on the docs current-version display
     # (docs/docs/reference/index.md), and engine.Dockerfile does not COPY docs/ either, so in the
     # Image workflow that one test skips with the exact reason below. INERT on checkout workflows, where the
     # docs tree is always present and the pin asserts.

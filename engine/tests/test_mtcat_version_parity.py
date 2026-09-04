@@ -8,7 +8,7 @@ branch, and a fourth in portal/tools/gen_config.py still defaulting to "1.0" two
 asserted that the sites agreed, so each fix left the next one undiscovered until a human happened to
 read it.
 
-SINGLE SOURCE: the MTCAT_VERSION constant in contract/generate.py (the ratified MTCAT 2.0 version
+SINGLE SOURCE: the MTCAT_VERSION constant in contract/generate.py (the MTCAT 2.0 version
 machinery: "the machine-readable version source becomes a constant; the title displays the version;
 it is not parsed as the source"). The schema artifact's `title` is a DISPLAY surface generated
 from the constant and verified against it; contract/generate.py:mtcat_schema_version returns the
@@ -117,7 +117,7 @@ def _authority() -> str:
 
 def _schema_title_display() -> str:
     """The version the schema artifact DISPLAYS in its title (a generated display surface since the
-    ratified inversion, verified here against the constant like every other surface)."""
+    inversion, verified here against the constant like every other surface)."""
     title = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))["title"]
     m = re.match(r"^MTCAT v(\d+\.\d+):", title)
     assert m, f"the schema must display its version in its title as 'MTCAT v<MAJOR>.<MINOR>: ...'; got {title!r}"
@@ -210,7 +210,7 @@ def test_every_portal_surface_that_states_the_mtcat_version_agrees():
 
 @portal_surface
 def test_portal_config_yaml_does_not_redeclare_the_version():
-    """Since the ratified inversion the portal config carries NO schema_version key: the value is
+    """Since the inversion the portal config carries NO schema_version key: the value is
     GENERATED into config.js from the constant, and a re-declared key here would be the duplicated
     literal returning under its old name (the class that bit three passes running)."""
     assert not re.search(r"^\s*schema_version\s*:", PORTAL_CFG.read_text(encoding="utf-8"), flags=re.M), (
@@ -234,7 +234,7 @@ def test_docs_current_version_display_agrees():
 
 
 def test_the_schema_id_is_the_versioned_immutable_uri():
-    """The $id IS a version surface now, and it is pinned like every other one. The ratified MTCAT
+    """The $id IS a version surface now, and it is pinned like every other one. The MTCAT
     2.0 $id policy (final walk-through s49) supersedes the 1.2-era unversioned-$id rule: the
     canonical identifier is the version-specific immutable URI under /data/schemas/mtcat/<version>/,
     with the unversioned /data/mtcat.schema.json kept as the latest-convenience route (still what
