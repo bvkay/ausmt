@@ -3092,8 +3092,9 @@ _MAGNETIC_CHANNEL_KEYS = ("measurement_azimuth_deg", "sample_rate_hz", "sensor")
 def _measured_components(comps) -> set:
     """The channels the SERVED transfer function was measured from. An impedance is estimated from
     the two electric and the two horizontal magnetic channels; a tipper adds the vertical magnetic.
-    This is the corroboration accepts alongside the >INFO naming a channel; DEFINEMEAS is not
-    consulted at all, because a declaration there is what rules insufficient."""
+    This is the corroboration this rule accepts alongside the >INFO naming a channel; DEFINEMEAS
+    is not consulted at all, because a declaration there is what this rule reads as
+    insufficient."""
     out = set()
     if "Z" in (comps or ""):
         out |= {"ex", "ey", "hx", "hy"}
@@ -6199,7 +6200,8 @@ def _main_build(argv=None):
     # {ausmt_id: {level token: {bytes, url_path}}}, beside coord_policy.json and for its stated
     # reason (:5368-5380): the drawer and the exports render from the boot-loaded catalogue, and
     # station.json is never fetched on navigation, so a per-level size and route cannot reach the
-    # portal any other way. That is what rules and what makes the pointer file portal-generated.
+    # portal any other way. That is what this artifact rules, and what makes the pointer file
+    # portal-generated.
     #
     # THE GUARANTEE IS MEMBERSHIP, NOT SHAPE, and the trade is deliberate: _ts_rows holds only
     # stations that passed the SAME access gate the hand-off rows did, captured at :5187 and never

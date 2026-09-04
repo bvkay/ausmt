@@ -432,7 +432,8 @@ check_ts_routes() {
 	# The WITHHELD probe: by default the same survey with a station id no register can carry, which
 	# proves the closed-world default. Set AUSMT_DOCTOR_TS_WITHHELD_PATH to a REAL withheld station's
 	# route (one carrying has_time_series in mtcat.json while carrying no resources) once the corpus
-	# has one - that is the enumeration defends against, so probe it rather than assume it.
+	# has one - that is the enumeration the closed-world default defends against, so probe it
+	# rather than assume it.
 	wh_path="${AUSMT_DOCTOR_TS_WITHHELD_PATH:-$(printf '%s' "$open_path" | sed 's#/[^/]*/[^/]*$#/AUSMT-DOCTOR-ABSENT/raw_packed#')}"
 	if grep -q "^\"$wh_path\"" "$TS_MAP" 2>/dev/null; then
 		warn "ts-routes: the withheld probe path $wh_path IS in the table - set AUSMT_DOCTOR_TS_WITHHELD_PATH to a suppressed route"

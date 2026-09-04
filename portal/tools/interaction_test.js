@@ -3538,7 +3538,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // over `present` - the members that HAVE positioned stations - so a wholly coordinate-withheld member
   // (is a live corpus state, and hasPosition already keeps such a station off every map surface) is
   // not counted there. Counting it here gave the SPA a different n and moved every later member one step
-  // along the ramp, which is the divergence exists to remove.
+  // along the ramp, which is the divergence this pin exists to remove.
   const withheldMix = [
     { id: "P1", survey: "Sv A", lat: -30, lon: 136, type: "LPMT" },
     { id: "P2", survey: "Sv B", lat: null, lon: null, type: "LPMT" },

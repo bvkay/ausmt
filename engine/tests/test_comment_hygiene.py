@@ -1063,15 +1063,32 @@ ORPHANED_DETERMINER = re.compile(r"(?<![\w-])(?:the|an|a|and|or|nor|than|per|who
 # its tail. Where the cut token WAS the subject, the verb is left with nothing doing it: "C40 adds a
 # host-side reconcile timer" becomes "adds a host-side reconcile timer". A sentence opening in lower
 # case is ordinary in this tree (a thousand of them open on an identifier or a shell variable), so
-# what is read is a CLOSED LIST of finite verbs, none of which can open an English sentence. The
-# list is a floor rather than a grammar: it holds the verbs this tree's prose actually uses this
-# way, and a verb it does not name is a site this rule will not find.
+# what is read is a LIST of finite verbs, none of which can open an English sentence.
+#
+# THE LIST IS A SAMPLER AND NOT A GRAMMAR, and the measurement says how far short of one it falls.
+# The rule a grammar would state is "the/this/that <noun> <verb>", and the only mark of a verb this
+# scanner has is the -s: read open, as any lower-case word ending in s, that shape fires 51 times
+# over a pristine origin/main export on prose that is whole ("is the incident class", "is the EDI
+# files themselves", "is the corpus as a vector layer"), because English writes a plural noun in
+# exactly the slot a cut leaves a verb in and nothing short of a lexicon tells the two apart. So
+# the list holds the verbs this tree's prose is measured to use this way, one list for both ends of
+# the sentence, and a round that adds a verb to it is finding SITES, not closing the class.
+#
+# Two shapes do not end a sentence and so cannot open the next one: an ellipsis, and the dot of an
+# abbreviation ("... routes you straight to the archive", "i.e. proves that pin can fail"). Both
+# stand in origin/main prose.
+SUBJECT_VERBS = (
+    r"accepts|adds|allows|answers|asserts|blocks|breaks|brings|broadened|bumped|carries|catches|"
+    r"closes|costs|counts|defends|defines|describes|documents|drives|drops|enforces|ensures|"
+    r"exists|extends|feeds|fixes|folds|forbids|gates|gives|guarantees|hides|holds|introduces|"
+    r"inverts|invokes|keeps|leaves|lifts|loses|lowers|made|makes|marks|means|moved|moves|names|"
+    r"narrows|needs|owns|pins|prevents|protects|proves|puts|raises|reads|refuses|removes|renames|"
+    r"repairs|replaces|requires|restores|retargeted|retires|routes|rules|runs|says|sends|serves|"
+    r"sets|shows|splits|stands|states|supersedes|takes|trades|treats|turns|uses|widens|wins|"
+    r"writes"
+)
 SUBJECTLESS_SENTENCE = re.compile(
-    r"(?<![A-Z0-9])[.!?]\s+("
-    r"adds|stands|splits|inverts|makes|made|moves|moved|bumped|broadened|retargeted|routes|"
-    r"carries|invokes|keeps|holds|removes|replaces|extends|narrows|widens|closes|fixes|"
-    r"introduces|retires|supersedes|renames|drops|folds|lifts|raises|lowers|gives|takes|"
-    r"turns|puts|sets|reads|writes|runs|leaves|brings|sends|pins|gates|blocks|allows)\b")
+    r"(?<![A-Z0-9])(?<!\.)(?<!\.[a-z])[.!?]\s+(" + SUBJECT_VERBS + r")\b")
 # The same cut at the other end of the sentence: where what a bracketed aside was ABOUT is taken
 # away, the copula is left with nothing after it ("the sole real-git workflow (curator-e2e) was.").
 # A pronoun subject makes that ordinary English ("git carries what was."), so the shape is anchored
@@ -1152,15 +1169,13 @@ OPERATOR_ORPHAN = re.compile(r"(?:=>|->|<-)[ \t]*[.,;](?:\s|\Z)|[\w)\]]=[ \t]+[.
 # THE SUBJECT A CUT TOOK OUT OF THE MIDDLE OF A SENTENCE. SUBJECTLESS_SENTENCE is anchored to a
 # sentence boundary, so it reads only the cut that took the opening word; where the subject stood
 # mid-sentence the copula is left introducing the object of the verb that follows it ("This is the
-# guarantee trades the leak-clean-by-construction shape for"). The verbs are the same floor the
-# sentence-opening rule reads, and a verb the list does not name is a site this rule will not find.
+# guarantee trades the leak-clean-by-construction shape for"). It reads the same sampler, with the
+# same hole: "is what <verb>" is ordinary English in this tree at nine origin/main sites ("this is
+# what catches a prefix regression", "the canonical block's own map is what answers"), so a cut
+# that leaves "is what rules insufficient" behind writes a shape origin/main writes on purpose and
+# is read as sense rather than shape.
 MIDSENTENCE_SUBJECT = re.compile(
-    r"(?<![\w-])is[ \t]+the[ \t]+[\w-]+[ \t]+"
-    r"(?:trades|adds|carries|keeps|holds|removes|replaces|extends|narrows|widens|closes|fixes|"
-    r"drops|folds|gives|takes|turns|puts|sets|reads|writes|runs|leaves|brings|sends|pins|gates|"
-    r"blocks|allows|names|says|shows|proves|means|needs|uses|treats|counts|marks|stands|splits|"
-    r"inverts|makes|moves|routes|invokes|introduces|retires|supersedes|renames|lifts|raises|"
-    r"lowers)(?![\w-])")
+    r"(?<![\w-])is[ \t]+the[ \t]+[\w-]+[ \t]+(?:" + SUBJECT_VERBS + r")(?![\w-])")
 # A BRACKET THAT POINTS AT NOTHING. Where the cut takes the record a bracketed aside cited, the
 # label that introduced it is left alone between the brackets ("(design)", "(note)"): it names no
 # record and states no constraint, so the aside is restated as the constraint it stood for or it

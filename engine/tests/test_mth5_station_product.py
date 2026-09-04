@@ -150,8 +150,9 @@ def test_a_non_exact_station_is_byte_gated_out_of_tier_one(tmp_path):
     assert on_disk == [f"{EXACT['id']}.h5"], on_disk
     # And the true positions of the two gated stations appear nowhere in the h5 tree. Checked with the
     # Leak-sweep's OWN numeric HDF5 leg (the engine's mth5 reader, values compared as floats), not
-    # a byte-string search: a search for b"-33.555551" inside an HDF5 file is the check documents
-    # as structurally blind, because an IEEE-754 double has no decimal spelling in the container.
+    # a byte-string search: a search for b"-33.555551" inside an HDF5 file is the check this
+    # module documents as structurally blind, because an IEEE-754 double has no decimal spelling
+    # in the container.
     hits = _sweep_h5_for_non_exact(out)
     assert not hits, "a byte-gated station's position reached a per-station MTH5:\n" + "\n".join(
         f"  {f}: {h}" for f, h in hits)
