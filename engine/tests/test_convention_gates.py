@@ -753,6 +753,7 @@ def test_conventions_header_states_the_same_rotation_sign_as_the_derotation_docs
     header = inspect.getmodule(_conventions).__doc__ or ""
     assert "R(-θi) Z(i) R(-θi)^T" in header, "the header's impedance de-rotation must carry R(-θi) on both sides"
     assert "T(i) R(-θi)^T" in header, "the header's tipper de-rotation must carry R(-θi)"
-    assert "(-180..-90°)" in header, "the third impedance quadrant is (-180..-90°)"
+    assert "first quadrant (0..90°)" in header and "third quadrant (-180..-90°)" in header, (
+        "the impedance quadrants are named with their signed bounds")
     src = inspect.getsource(_conventions)
     assert re.search(r"applies R\(-θ\)\)", src), "the de-rotation docstring states R(-θ)"
