@@ -1222,6 +1222,11 @@ def capitals_mid_sentence(comment, symbols, names):
         # that carried on is continued by the line under it.
         if not before.strip() or not line.strip():
             continue
+        # A line that is nothing but banner decoration is not a sentence and cannot leave one
+        # unfinished, so the line under a rule-off opens what follows rather than continuing it.
+        # Without this the head of every banner-led block reads as a capital in mid-sentence.
+        if not before.strip(BANNER):
+            continue
         if SENTENCE_END.search(unquoted(before).rstrip(RULE_OFF)):
             continue
         if LIST_MARKER.match(line.strip()) or LIST_MARKER.match(before.strip()):

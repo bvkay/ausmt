@@ -1226,6 +1226,11 @@ def capitals_mid_sentence(comment, symbols, names):
         # that carried on is continued by the line under it.
         if not before.strip() or not line.strip():
             continue
+        # A line that is nothing but banner decoration is not a sentence and cannot leave one
+        # unfinished, so the line under a rule-off opens what follows rather than continuing it.
+        # Without this the head of every banner-led block reads as a capital in mid-sentence.
+        if not before.strip(BANNER):
+            continue
         if SENTENCE_END.search(unquoted(before).rstrip(RULE_OFF)):
             continue
         if LIST_MARKER.match(line.strip()) or LIST_MARKER.match(before.strip()):
@@ -1845,6 +1850,24 @@ SURFACES = {"the deploy tree": deploy_tree, "the gateway tree": gateway_tree,
             "the gateway configuration": gateway_config}
 
 
+def workflows():
+    """The CI workflow files. They are read for SHAPE and never for vocabulary: `lane` there names
+    a job on a runner, not a run of work, and 27 of the 28 vocabulary hits over these four files
+    are that word in its CI sense. A class left outside the sweep while the sweep's own shape rules
+    can find its scars is not an exemption, it is an unswept class."""
+    return sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+
+
+def test_workflow_comments_are_whole_prose():
+    """SHAPE only, for the reason workflows() gives."""
+    files = workflows()
+    assert files, "the workflow class resolved to no files, so this would pass over nothing"
+    hits = shape_offences(files, root=ROOT)
+    assert not hits, (
+        f"{len(hits)} workflow comment(s) carry the shape a cut token leaves behind:\n"
+        + "\n".join(hits))
+
+
 def test_deploy_comments_state_constraints_only():
     hits = offences([p for p in deploy_tree() if "tests" not in p.parts], root=ROOT)
     assert not hits, (
@@ -2084,15 +2107,17 @@ def test_operator_strings_state_what_the_tool_does():
         f"{len(hits)} argparse string(s) print provenance to an operator:\n" + "\n".join(hits))
 
 
-# The deploy operator tools and the mode each one answers on a checkout. reconcile.sh reconciles a
-# LIVE box: it cannot be driven here, so it is read rather than run and is named here as such.
+# The deploy operator tools and the mode each one answers on a checkout. A tool is READ instead of
+# run when running it proves nothing: reconcile.sh reconciles a LIVE box and cannot be driven here,
+# and aggregate_stats.py carries no argparse at all, so "--help" is not a help mode for it and the
+# run reads one environment line (73 bytes) rather than any operator prose. Both are still read in
+# full by the assembled surface below, which is where every literal they print is guarded.
 RUNNABLE_TOOLS = (
     ("scripts/check_compose_guards.py", ("--self-test",)),
     ("scripts/gen_ts_routes.py", ("--check",)),
-    ("scripts/aggregate_stats.py", ("--help",)),
     ("scripts/prep_au_states.py", ("--help",)),
 )
-READ_NOT_RUN = ("scripts/reconcile.sh",)
+READ_NOT_RUN = ("scripts/reconcile.sh", "scripts/aggregate_stats.py")
 
 
 def test_every_operator_tool_is_either_run_here_or_named_as_unrunnable():
