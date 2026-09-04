@@ -9,7 +9,7 @@
 #                    explanation; do NOT change this to a bare "8443:8080" published port.
 #   build-runner -- one-shot job image (profile "jobs", so a bare `docker compose up` never starts
 #                    it). Invoked as `docker compose --profile jobs run --rm build-runner <args>`
-#                    (rebuild-data in the Makefile is the S4-implemented wrapper around this; this
+#                    (rebuild-data in the Makefile is the wrapper around this; this
 #                    contract only stubs that target -- see deploy/Makefile). Mounts the
 #                    surveys-live checkout read-only (the engine only ever READS survey packages
 #                    and the validator) and the site-data tree read-write (its build output).
@@ -91,14 +91,14 @@ services:
       # here so the compose file is self-documenting and survives an image rebuild that changes
       # the default.
       AUSMT_VALIDATOR_PATH: /srv/surveys/_validation
-      # OPTIONAL TUNING: the C18 build-cache size cap (deploy/.env.example). Read by the ENGINE
+      # OPTIONAL TUNING: the build-cache size cap (deploy/.env.example). Read by the ENGINE
       # (engine/extract/cache.py) — build-runner is the engine-build service the cache actually
       # accelerates (the by-hand `rebuild-data`), so the knob lives here. ${VAR:-DEFAULT} matches the
       # code default (cache.py CACHE_MAX_MB_DEFAULT=2048); unset == today's behaviour. Never ${VAR:?}.
       AUSMT_CACHE_MAX_MB: ${AUSMT_CACHE_MAX_MB:-2048}   # build-cache size cap (MB), pruned oldest-first
 
   # ---------------------------------------------------------------------------------------------
-  # Gateway (Stage 2, contract C10) — submission gateway + antivirus + no-network runner. All three
+  # Gateway (Stage 2, contract) - submission gateway + antivirus + no-network runner. All three
   # services live under the "gateway" profile so a bare `docker compose up` (the always-on portal)
   # never starts them; bring them up with `docker compose --profile gateway up -d`. Topology is the
   # design's table exactly. The host tree /srv/ausmt/gateway/{incoming,quarantine,jobs,state} is
@@ -140,7 +140,7 @@ services:
       # reasoning as the portal's 8443 bind: never widen this to 0.0.0.0 or a bare port (README).
       - "127.0.0.1:8444:8000"
     # Publish flow needs read access to the QUARANTINE package tree (to stage it) - so quarantine
-    # is mounted read-WRITE here now (was ro in C10). Rationale: the publish step copies
+    # is mounted read-WRITE here now (was ro in). Rationale: the publish step copies
     # quarantine/<id>/package into surveys-live; it reads quarantine, and the post-unpack sweep still
     # only reads. It does NOT need to write quarantine, but the runner (10002) and gateway (10002)
     # share the uid, and giving the gateway rw here keeps the topology simple without widening trust
@@ -244,7 +244,7 @@ services:
       # The operator's surveys-live checkout, mounted READ-WRITE - this is the publish target the
       # gateway stages into, commits, and pushes (v2). Demo publish is COMMIT-AND-PUSH ONLY:
       # the gateway writes the git history here and NOTHING ELSE — it does NOT build, so it needs NO
-      # Docker socket (keeping the C10 invariant intact). The operator runs `make rebuild-data` by
+      # Docker socket (keeping the invariant intact). The operator runs `make rebuild-data` by
       # hand afterward to actually serve it (see README "Curator publish + manual rebuild"). This is
       # the SAME checkout build-runner reads (there ro); site-data is untouched by the gateway.
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/surveys-live:/srv/surveys-live:rw

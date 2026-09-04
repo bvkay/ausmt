@@ -27,7 +27,7 @@ from gateway.runner.runner import RunnerConfig
 # quirks that no YAML round-tripper preserves (manual intra-flow-map column alignment, and a
 # pre-existing unquoted `LEMI (LC ISR, Lviv)` flow value whose internal comma any conformant parser —
 # ruamel AND the PyYAML the validator uses — splits into a spurious key). See the residual note in
-# Edit._yaml and the C31 report.
+# Edit._yaml and the report.
 EXEMPLAR = """\
 schema_version: "0.2"
 slug: demo-survey-2026
@@ -143,11 +143,11 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# [FC-4] C43 Stage-1 diff-minimality pins (record D13). The editor submits WHOLE sections as plain
-# JSON dicts; the pre-C43 apply_patch replaced the section's CommentedMap wholesale, so editing ONE
+# [FC-4] Stage-1 diff-minimality pins. The editor submits WHOLE sections as plain
+# JSON dicts; the apply_patch replaced the section's CommentedMap wholesale, so editing ONE
 # sub-field re-emitted every sibling line and dropped intra-section comments. These pin the surgical
 # In-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter (a
-# single organisation.ror edit rewrote organisation.name and lost its trailing comment); see the C43
+# single organisation.ror edit rewrote organisation.name and lost its trailing comment); see the
 # report's red-then-green evidence.
 # --------------------------------------------------------------------------------------------------
 
@@ -191,7 +191,7 @@ custom_local_note: "keep me byte-for-byte"
 
 
 def test_single_field_edit_diff_touches_only_that_field(tmp_path):
-    """[FC-4] DIFF-MINIMALITY PIN (record D13). Change ONE sub-field of a map section
+    """[FC-4] DIFF-MINIMALITY PIN. Change ONE sub-field of a map section
     (organisation.ror null -> a URL) and the emitted survey.yaml diff must touch ONLY that field's
     line(s) plus the managed version/release_notes — never the untouched sibling (organisation.name)
     and never its comment. FAILS IF editing one sub-field re-emits a sibling line or strips an
@@ -199,7 +199,7 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
     # A pure single-field edit: submit the WHOLE organisation section back with only `ror` changed
     # (name + legacy_code carried through unchanged, so nothing is deleted — the add/delete case is
-    # test_editing_section_a_never_rewrites_section_b_bytes / the F3 pins below).
+    # test_editing_section_a_never_rewrites_section_b_bytes / the pins below).
     result = _merge(_cfg(tmp_path),
                     patch={"organisation": {"name": "University of Example",
                                             "ror": "https://ror.org/03yghzc09",
@@ -226,17 +226,17 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
 
 
 def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
-    """[FC-4] PER-SECTION PATCH PIN (record D13). Submitting a change to section A (organisation)
+    """[FC-4] PER-SECTION PATCH PIN. Submitting a change to section A (organisation)
     that BOTH adds a sub-key AND deletes a sub-key (via the advanced-JSON path - the section is
     submitted without `legacy_code`, so _merge_map_into's deletion loop drops it) must leave section
     B (lead_investigator) byte-for-byte identical - every one of its lines, comment included, survives
     with no +/- diff line.
 
     Review the PREVIOUS form of this test submitted only a scalar change and asserted section B
-    was untouched - but the pre-C43 wholesale emitter ALSO never touched a sibling SECTION (it
+    was untouched - but the wholesale emitter ALSO never touched a sibling SECTION (it
     rebuilt only the edited section's node), so that assertion passed against every implementation
     that ever existed and could not fail (Invariant 10). The add+delete here goes through the exact
-    deletion loop whose failability was PROVEN by mutation (evidence in the C43 fix-round report):
+    deletion loop whose failability was PROVEN by mutation (evidence fix-round report):
     pointing that loop at the ROOT document instead of the section node makes it delete top-level
     keys, which rewrites section B and reds this test. That mutation is evidence only, reverted, never
     committed. FAILS IF an add+delete in one section disturbs a sibling section's bytes."""
@@ -275,8 +275,8 @@ def _body_diff_lines(diff: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------------------------------
-# [FC-4] F3 diff pins on the REAL emitted diff. Each pins one guarantee of the surgical map merge AND
-# is failable by a NAMED mutation (temporary, evidence captured in the C43 fix-round report, reverted
+# [FC-4] diff pins on the REAL emitted diff. Each pins one guarantee of the surgical map merge AND
+# is failable by a NAMED mutation (temporary, evidence captured fix-round report, reverted
 # — never committed): a pin nothing can fail is not a pin (Invariant 10). The mutation for each is
 # stated in its docstring so a future reader can reproduce the red.
 # --------------------------------------------------------------------------------------------------
@@ -314,7 +314,7 @@ def test_added_subkey_with_ambiguous_value_is_quoted_no_sibling_moves(tmp_path):
 
 def test_deleting_subkey_removes_only_that_line_neighbours_byte_stable(tmp_path):
     """Deleting a sub-key (advanced-JSON: the section is submitted without `legacy_code`)
-    removes ONLY that key's line; its neighbours' comments stay byte-stable. Failable via the F2
+    removes ONLY that key's line; its neighbours' comments stay byte-stable. Failable
     mutation (deletion loop iterating the root document rather than the section node) — which deletes
     the wrong nodes and rewrites neighbouring lines; proven RED in the fix-round report."""
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)

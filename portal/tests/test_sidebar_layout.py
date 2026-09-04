@@ -109,7 +109,7 @@ def test_collapse_control_css_anchors_to_bottom():
 # --- The collections block sits above the tree (static source order) ----------------------------
 
 def test_collections_block_is_above_the_tree_in_source():
-    # Complements the runtime driver pin (interaction_test.js C2): statically, #collGroup must appear
+    # Complements the runtime driver pin (interaction_test.js): statically, #collGroup must appear
     # BEFORE #treeSection/#tree. Non-vacuous: pre-there was no #collGroup element at all.
     html = _html()
     i_cg = html.find('id="collGroup"')

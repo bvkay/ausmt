@@ -397,7 +397,7 @@ ok(qM.length === 1 && qM[0].id === "https://ror.org/028g18b61" && qM[0].name ===
 ok(M.rorMatchesFromResponse({ items: [{ id: null, names: [] }] }).length === 0,
    "drops un-nameable / un-identifiable items (never shows 'undefined')");
 
-// ---- C3 (PII scrub): the packaged submission .zip must NOT embed submitter email/ORCID ----
+// ---- (PII scrub): the packaged submission .zip must NOT embed submitter email/ORCID ----
 const pkgBlock = html.slice(html.indexOf("async function buildPackage"), html.indexOf('$("btnPackage").onclick'));
 ok(!/submitter:\{[^}]*email:\s*meta\.uploader_email/.test(pkgBlock), "MANIFEST submitter block does NOT write uploader_email");
 ok(!/submitter:\{[^}]*orcid:\s*meta\.uploader_orcid/.test(pkgBlock), "MANIFEST submitter block does NOT write uploader_orcid");
@@ -405,7 +405,7 @@ ok(/submitter:\{[^}]*name:\s*meta\.uploader_name/.test(pkgBlock), "MANIFEST subm
 ok(!/uploader_email/.test(pkgBlock), "the packager block does NOT reference uploader_email");
 ok(/m_up_email/.test(html), "the uploader email form field itself is still present (feeds Stage-2 gateway)");
 
-// ============================ C13 direct-upload pure logic (unchanged) ============================
+// ============================ direct-upload pure logic (unchanged) ============================
 const ORCID_VECTORS = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "..", "gateway", "tests", "fixtures", "orcid_vectors.json"), "utf8"));
 for (const v of ORCID_VECTORS.vectors.filter(v => v.applies_to.includes("portal")))
@@ -434,7 +434,7 @@ ok(M.submitFormFields({uploader_name: "A", uploader_email: "a@x.co", uploader_or
 // ============================ connection targets + key-request stub ============================
 const conns = [...html.matchAll(/(?:fetch|\.open)\(\s*(?:"[^"]*",\s*)?"([^"]+)"/g)].map(m => m[1])
   .filter(u => !/^\$\{/.test(u));
-// same-origin, the ROR API, or the R3 citation-harvest registries (Crossref + DataCite). These three
+// same-origin, the ROR API, or the citation-harvest registries (Crossref + DataCite). These three
 // external hosts are the ONLY connect-src additions the add-survey CSP allows; a NEW origin fails here.
 const ALLOWED_CONN = u => /^\//.test(u) || /^https:\/\/api\.ror\.org\//.test(u)
   || /^https:\/\/api\.crossref\.org\//.test(u) || /^https:\/\/api\.datacite\.org\//.test(u);
@@ -593,7 +593,7 @@ const yCiteDedupe = M.buildSurveyYaml({ ...base, citation_identifier: "10.25914/
 ok((yCiteDedupe.match(/- identifier:/g) || []).length === 1,
    "the citation row is deduped against an existing 'This dataset elsewhere' row");
 
-// ---- "Which organisations were involved, and how?" -> organisations[] (+ the seeded custodian, D4) ----
+// ---- "Which organisations were involved, and how?" -> organisations[] (+ the seeded custodian) ----
 const yOrg = M.buildSurveyYaml({ ...base, organisation: "Geological Survey of South Australia",
                                  ror: "https://ror.org/04y8k6r48" });
 ok(/organisations:\s*\n\s*# INFERRED-REVIEW: custodian seeded from the essential organisation; confirm roles\s*\n\s*- name: "Geological Survey of South Australia"\s*\n\s*ror: "https:\/\/ror\.org\/04y8k6r48"\s*\n\s*roles:\s*\n\s*- custodian\s*\n\s*primary_custodian: true/.test(yOrg),
@@ -686,7 +686,7 @@ ok(M.normalizeDoi("10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi leaves
 ok(M.normalizeDoi("not a doi at all") === "not a doi at all", "normalizeDoi leaves a non-DOI string untouched");
 ok(M.normalizeDoi("https://example.org/paper") === "https://example.org/paper", "normalizeDoi leaves a NON-doi.org URL untouched (it is not a DOI resolver)");
 ok(M.normalizeDoi("") === "" && M.normalizeDoi(null) === "", "normalizeDoi handles empty / null");
-// wiring: R3 folded the single publication DOI into per-row publication rows whose .p-doi input normalises
+// wiring: folded the single publication DOI into per-row publication rows whose .p-doi input normalises
 // on blur (via normalizeDoi directly); the funding DOI still uses wireDoiBlur; a related-identifier row
 // normalises ONLY when its type is DOI (a URL-typed row keeps its URL).
 ok(/class="p-doi"/.test(html) && /doiInp\.addEventListener\("blur"/.test(html),

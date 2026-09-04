@@ -5,7 +5,7 @@ The csv is the custodian's curated per-station acquisition record, distilled fro
 Two properties carry all the safety: (1) WHITELIST - only the named columns ever cross into a
 served document, because raw field sheets carry crew names and free-text deployment notes; (2)
 ID DISCIPLINE - the sheet supplies facts only, never run ids, so the run-id store stays the sole
-id authority and a sheet without a stored id still publishes no runs (D2 unchanged).
+id authority and a sheet without a stored id still publishes no runs (unchanged).
 
 NON-VACUOUS: the build half writes a real csv into a staged fixture package, runs the actual
 producer, validates the emitted station.json against the shipped schema artifact, and greps the
@@ -96,7 +96,7 @@ def _row_dict(tmp_path):
 
 def test_a_sheet_only_station_qualifies_for_runs(tmp_path):
     """Vulcan-shaped: the EDI asserts nothing, the sheet asserts the acquisition. The merged
-    document qualifies under D2 and carries the whole curated record."""
+    document qualifies and carries the whole curated record."""
     doc = rs.merge(None, _row_dict(tmp_path), "EXAMPLE01", [])
     assert "time_period" in doc["facts"] and "sensor" in doc["facts"]
     runs, _notes = bp.station_runs(doc, {"EXAMPLE01": ["EXAMPLE01-r01"]}, "EXAMPLE01", "Z")

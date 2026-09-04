@@ -68,7 +68,7 @@ done
 
 SURVEYS_LIVE="$AUSMT_DATA_DIR/surveys-live"
 SITE_DATA="$AUSMT_DATA_DIR/site-data"
-# build.json lives at the BUILD ROOT (the engine writes `out/build.json`; see build_portal.py C12).
+# build.json lives at the BUILD ROOT (the engine writes `out/build.json`; see build_portal.py).
 # The /data/build.json URL the panel fetches maps to the SAME file because Caddy's handle_path
 # STRIPS the /data prefix (deploy/docker/caddy/Caddyfile), so a data/ segment must NOT appear here.
 # A phantom data/ segment in this path means build.json is never found,
@@ -85,11 +85,11 @@ JOURNALCTL="${AUSMT_RECONCILE_JOURNALCTL:-journalctl}"
 # rollback pin: both host-written by the actions agent (deploy/scripts/actions.sh) / the gateway, and
 # RESPECTED here (this agent never writes them). A FRESH pause.flag suppresses the drift rebuild; a
 # pause older than PAUSE_EXPIRY_MIN is IGNORED (auto-expired — a stale flag never freezes serving
-# forever, D13 pause-expiry). rollback.pin holds reconcile off an auto-revert of a manual rollback
-# until an explicit rebuild.request moves forward (D13 rollback-repoints).
+# forever, pause-expiry). rollback.pin holds reconcile off an auto-revert of a manual rollback
+# until an explicit rebuild.request moves forward (rollback-repoints).
 PAUSE_FLAG="$STATE_DIR/pause.flag"
 ROLLBACK_PIN="$STATE_DIR/rollback.pin"
-PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"   # 6 h (record D8/D13)
+PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"   # 6 h
 BUILDS_DIR="$SITE_DATA/builds"
 # How many build dirs to keep besides the one `current` points at. Matches the Makefile's own
 # `ls -1t | tail -n +6` retention so the two cannot drift into different answers.
@@ -383,7 +383,7 @@ run_pass() {
   # 0. PAUSE + ROLLBACK-PIN state (record D9.7). Computed FIRST so EVERY status write below surfaces
   #    it (an authenticated attacker must not be able to keep serving frozen silently). PAUSED == a
   #    pause.flag within its expiry window (honoured); PAUSE_EXPIRED == a stale flag that is IGNORED
-  #    (auto-expired, D13); PINNED == a manual "serve this build" rollback pin standing.
+  # (auto-expired); PINNED == a manual "serve this build" rollback pin standing.
   PAUSED=0; PAUSE_EXPIRED=0; PAUSE_SINCE=""
   if [ -f "$PAUSE_FLAG" ]; then
     if [ -n "$(find "$PAUSE_FLAG" -maxdepth 0 -mmin "+$PAUSE_EXPIRY_MIN" 2>/dev/null)" ]; then
@@ -546,7 +546,7 @@ PYEOF
     esac
   fi
 
-  # 2b. PAUSE (record D8/D13). A FRESH pause.flag suppresses the DRIFT-triggered rebuild ("pause
+  # 2b. PAUSE. A FRESH pause.flag suppresses the DRIFT-triggered rebuild ("pause
   #     auto-rebuild during a multi-edit session"). An explicit rebuild.request is deliberate, not
   #     "auto", so it is honoured even while paused. A pause older than PAUSE_EXPIRY_MIN was already
   #     resolved to PAUSE_EXPIRED (ignored) in step 0 — a stale flag NEVER suppresses (pause-expiry pin).
@@ -561,7 +561,7 @@ PYEOF
     return 0
   fi
 
-  # 2c. ROLLBACK PIN (record D13 rollback-repoints). While a manual "serve this build" pin stands,
+  # 2c. ROLLBACK PIN (rollback-repoints). While a manual "serve this build" pin stands,
   #     reconcile must NOT auto-rebuild — that would revert the rollback the curator deliberately made.
   #     An explicit rebuild.request is a deliberate MOVE-FORWARD: it clears the pin and proceeds to
   #     build. Without a request, hold and report the pin honestly (drift is EXPECTED under a pin).

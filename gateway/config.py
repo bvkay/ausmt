@@ -1,7 +1,7 @@
 """Gateway config - env only, no config files.
 
 The submit key is a SECRET: it is compared with hmac.compare_digest and is never logged.
-`Config.redacted_items()` is the ONLY sanctioned way to print config at startup — it drops the
+`Config.redacted_items()` is the ONLY sanctioned way to print config at startup - it drops the
 key entirely rather than masking it, so a formatting slip can never leak even a prefix.
 
 fail_closed_startup is called before the app binds a port: an unset or short key aborts the
@@ -46,7 +46,7 @@ class Config:
     # result before surfacing a retryable error to the curator. Bounded by design — the gw-runner may
     # be mid-validation of a long submission job (its loop is single-threaded).
     edit_timeout_s: int = 120
-    # Self-serve key issuance (K1-K3). The public POST /gateway/request-key mints an email_verified
+    # Self-serve key issuance. The public POST /gateway/request-key mints an email_verified
     # uploader key and mails it. These are all SECONDARY to the operator-issued path (which stays the
     # env AUSMT_SUBMIT_KEY + curator-issued DB keys); every value has a working default so a deploy
     # that does not configure SMTP simply runs with issuance disabled (the endpoint still 202s).
@@ -211,7 +211,7 @@ def operator_env_vars() -> tuple[str, ...]:
 # Numeric knobs whose zero or negative value is never a legitimate operator intent, as
 # (field, env var, minimum, maximum). Each one fails INVISIBLY at runtime if it is allowed through:
 # max_upload_mb=0 is a universal 413, max_inflight=0 a universal 429, session_ttl_s=0 an infinite
-# login bounce (total curator lockout), and a zeroed K1 daily cap disables self-serve issuance behind
+# login bounce (total curator lockout), and a zeroed daily cap disables self-serve issuance behind
 # its by-design neutral 202 - while /gateway/healthz, the compose healthcheck and the portal probe all
 # keep reporting green. Issuance is disabled by leaving SMTP unconfigured (mail_configured, which the
 # startup log states), never by zeroing a cap. Ports are checked at both ends: 0 and 65536 are not

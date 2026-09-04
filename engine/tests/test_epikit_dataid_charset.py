@@ -183,7 +183,7 @@ def test_the_station_record_carries_the_section_of_record(tmp_path):
 
 def test_preflight_calls_a_refused_dataid_needs_repair_not_will_not_read():
     """The pre-flight tells a curator what a delivery will do BEFORE a build runs, so its verdict has
-    to move with the reader. Until R2 this class was WILL_NOT_READ, which was true then and is a lie
+    to move with the reader. Until this class was WILL_NOT_READ, which was true then and is a lie
     now: AusMT reads the file by conditioning a temporary copy."""
     finding = pf.preflight_file(CHARSET)
     assert finding["outcome"] == pf.NEEDS_REPAIR, finding

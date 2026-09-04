@@ -366,7 +366,7 @@ def test_fieldnotes_drop_is_targeted_not_wholesale(tmp_path):
 def test_edi_library_defaults_are_noted_not_silently_asserted(tmp_path):
     """FAILS IF: normalize writes a canonical XML that asserts a sign convention, a declination
     epoch/model, or channel orientations for an EDI source WITHOUT a conditioning note saying the
-    source never stated them. This is the LG-2 fabrication class the C2 fix did not cover (final
+    source never stated them. This is the LG-2 fabrication class the fix did not cover (final
     hostile audit 4.2, reproduced on this very fixture: Vulcan_A1's XML asserts <SignConvention>+,
     Declination epoch="1995", and Ey orientation 0.0 = NORTH — from zero-length, azimuth-less EMEAS
     lines — none of it source-stated). The values may stay (the writer requires them, exactly like
@@ -412,7 +412,7 @@ def _copyright_xml(res):
 
 def test_copyright_boilerplate_never_emitted(tmp_path):
     """FAILS IF: any served canonical XML carries the mt_metadata default Copyright boilerplate — the
-    live mis-statement C46-W3a fixes (every pre-fix XML claimed "Unrestricted Release" and "may be copied
+    live mis-statement fixes (every pre-fix XML claimed "Unrestricted Release" and "may be copied
     freely … neither the author(s) … nor IRIS …" on the LIBRARY's authority, not the custodian's).
     Checked across an open survey, an embargoed one, AND a bare (no survey_meta) call — the fix runs
     unconditionally so NO emitted XML keeps the boilerplate."""

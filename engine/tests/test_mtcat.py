@@ -1,7 +1,7 @@
 """MTCAT emission (2.0 semantics; the field-level 2.0 pins live in test_mtcat20_emission.py).
 
 The build emits mtcat.json — the portal-owned discovery document other portals could harvest.
-This validates structure against schema/mtcat.schema.json with a dependency-free checker (jsonschema
+This validates structure against engine/schema/mtcat.schema.json with a dependency-free checker (jsonschema
 is optional; a small recursive validator keeps the core test suite stdlib-only) and confirms the
 required Portal / Survey / Station objects are populated from real data.
 

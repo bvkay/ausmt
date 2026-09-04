@@ -119,7 +119,7 @@ def test_serve_page_missing_ops_is_stale_and_still_200(tmp_path):
 # Route: the sync_failed loud band (the incident, as a test) — driven by FRESH reconcile-status.json
 # --------------------------------------------------------------------------------------------------
 def test_sync_failed_renders_loud_band_incident_as_test(tmp_path):
-    """SYNC_FAILED SURFACING PIN (record D15 — the incident as a test). A reconcile-status.json with
+    """SYNC_FAILED SURFACING PIN (- the incident as a test). A reconcile-status.json with
     action=sync_failed must render the LOUD sync band on the serve screen; a healthy noop must NOT.
     FAILS IF a sync_failed stays invisible (the 4-hour hidden failure) OR a noop renders the alarm."""
     async def _body():
@@ -183,10 +183,10 @@ def test_freshness_card_both_repos_behind_amber_current_green(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Route: build detail renders the C18-A4 cache forensics (render side of the B4 producer pin)
+# Route: build detail renders the cache forensics (render side producer pin)
 # --------------------------------------------------------------------------------------------------
 def test_build_detail_renders_a4_cache_counters(tmp_path):
-    """BUILD-DETAIL RENDER PIN. The build-detail view must render the C18-A4 cache forensics
+    """BUILD-DETAIL RENDER PIN. The build-detail view must render the cache forensics
     (salt_fp / write_errors / read_errors) from the ops-status inventory, and 'no such build' for an
     unknown ref (no filesystem access, no traversal). FAILS IF a counter is dropped, the salt_fp is
     not shown, or an unknown ref is not handled."""
@@ -238,11 +238,11 @@ def test_serve_routes_require_session(tmp_path):
 
 def test_serve_screen_action_forms_are_allowlisted(tmp_path):
     """Stage 2b-ii ADDS the privileged actions (supersedes the 2b-i read-only pin). The serve screen
-    now renders the D8 buttons, but every <form> action MUST be in the closed allow-list of curator
+    now renders the buttons, but every <form> action MUST be in the closed allow-list of curator
     serve-action routes — no form may post to an unexpected route. This is the render-side guard that a
     stray/typo'd action route never ships. FAILS IF a form posts outside the allow-list."""
     allowed = {
-        "/gateway/curator/rebuild",                 # shipping C40 request-rebuild
+        "/gateway/curator/rebuild",                 # shipping request-rebuild
         "/gateway/curator/serve/update",
         "/gateway/curator/serve/snapshot",
         "/gateway/curator/serve/rebuild-full",
@@ -259,7 +259,7 @@ def test_serve_screen_action_forms_are_allowlisted(tmp_path):
             # Rollback/restore are LINKS to their own confirm pages (not inline forms on this screen).
             for action in actions:
                 assert action in allowed, f"a serve-screen form posts to a non-allowlisted route: {action!r}"
-            # The D8 action buttons are present (the actions surface actually shipped).
+            # The action buttons are present (the actions surface actually shipped).
             assert "/gateway/curator/serve/update" in actions, "the Update box action must render"
             assert "/gateway/curator/serve/snapshot" in actions, "the Snapshot action must render"
             assert ("/gateway/curator/serve/pause" in actions
@@ -286,7 +286,7 @@ def test_serve_screen_pause_and_resume_are_mutually_exclusive(tmp_path):
 
 
 def test_serve_page_and_build_detail_have_no_inline_js(tmp_path):
-    """CSP SWEEP (record D13) extended to the new serve screen + build detail: no inline <script>
+    """CSP SWEEP extended to the new serve screen + build detail: no inline <script>
     (every <script> carries src=), no on*= handlers — both are dead under the strictPages CSP
     (script-src 'self'). FAILS IF either new surface ships inline JS."""
     async def _body():

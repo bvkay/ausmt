@@ -5,7 +5,7 @@ The gw-runner calls generate_intake_files AFTER safe-extraction and BEFORE the v
 validator checks structure — the two 'LICENSE.md/README.md missing' WARNINGs flip to PASS in the
 SAME run, and the curator reviews/approves the COMPLETE package (approve-what-you-publish).
 
-Design rules (maintainer/C34-IntakeFilesDesign.md D3), all fail-closed:
+Design rules (maintainer/C34-IntakeFilesDesign.md), all fail-closed:
   * LICENSE.md is generated ONLY for a licence id the engine RECOGNISES (recognised()); an
     unrecognised id (typo / 'TBD' / free text / absent) generates nothing and the validator WARNING
     correctly stands. The rights text is the engine's single source (_license_text), byte-shared
@@ -64,7 +64,7 @@ def _import_license_text():
 
 
 def _stamp(now_utc: datetime) -> str:
-    """The machine provenance line both generated files open with (design D3, verbatim). The date is
+    """The machine provenance line both generated files open with, verbatim. The date is
     the UTC calendar date only (no clock time) so the stamp is stable within a day and never leaks a
     sub-day processing timestamp."""
     stamp_date = now_utc.astimezone(timezone.utc).strftime("%Y-%m-%d")
@@ -196,7 +196,7 @@ def _license_md_body(y: dict, now_utc: datetime) -> str | None:
 
 
 def _readme_md_body(y: dict, package_root: Path, now_utc: datetime) -> str:
-    """The README.md skeleton (design D3): name, organisation, year/dates, abstract, station count
+    """The README.md skeleton (design): name, organisation, year/dates, abstract, station count
     (when cheaply known), citation guidance, licence line. NO submitter contact details — only
     survey.yaml-declared fields are used."""
     name = _name_of(y)
@@ -236,7 +236,7 @@ def _readme_md_body(y: dict, package_root: Path, now_utc: datetime) -> str:
 
 def generate_intake_files(package_root: Path, *, now_utc: datetime | None = None) -> list[str]:
     """Generate LICENSE.md and README.md into `package_root` (the extracted <slug>/ folder) when they
-    are ABSENT, per the C34/D3 rules. Returns the sorted list of filenames actually written (so the
+    are ABSENT, rules. Returns the sorted list of filenames actually written (so the
     caller can log/report exactly what was generated).
 
     Fail-closed and non-destructive:

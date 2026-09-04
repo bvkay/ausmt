@@ -1,4 +1,4 @@
-""" (identifiers design - the related-identifiers model): survey.yaml -> SMETA must carry the
+"""The identifiers design - the related-identifiers model): survey.yaml -> SMETA must carry the
 top-level related_identifiers list (typed-core keys only) and the survey/platform-level
 identifiers.instrument_pid, and mtcat_document must federate related_identifiers when present.
 
@@ -124,7 +124,7 @@ def test_mtcat_emits_related_identifiers_when_present():
 
 
 def test_mtcat_carries_identifies_when_present():
-    """mtcat federates the SMETA related_identifiers verbatim, so D-L1's identifies rides along."""
+    """mtcat federates the SMETA related_identifiers verbatim, so identifies rides along."""
     y = {**_MIN, "related_identifiers": [
         {"identifier": "10.25914/sv5r-zw68", "identifies": "raw_packed", "identifier_type": "DOI",
          "relation": "IsDerivedFrom", "custodian": "NCI"}]}

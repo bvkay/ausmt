@@ -66,7 +66,7 @@ def test_display_grammar_parity():
 
 
 def test_the_engine_reads_a_recognised_licence_the_way_the_workspace_does():
-    """The engine half of R3's worked examples, over the ids the instrument carries."""
+    """The engine half's worked examples, over the ids the instrument carries."""
     fmt = _engine_fmt_licence()
     for identifier, shown in RECOGNISED.items():
         assert fmt(identifier) == shown, (

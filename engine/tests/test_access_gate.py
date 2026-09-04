@@ -193,8 +193,8 @@ def test_withheld_surveys_serve_no_bytes_but_stay_discoverable(tmp_path, access_
 def test_embargoed_survey_emits_none_of_the_three_bundles(tmp_path, access_block):
     """The two new bundles (EMTF-XML zip, TF MTH5) flow through the IDENTICAL can_serve
     gate as the EDI zip — so a withheld survey emits NONE of the three, even with --survey-h5 ON. FAILS
-    if any bundle row is emitted OR any bundle file lands on disk for a withheld survey. (The pre-C32
-    generic 'bundles == []' assertion never exercised the flag-gated MTH5 path; this does.)"""
+    if any bundle row is emitted OR any bundle file lands on disk for a withheld survey. (The
+    generic 'bundles == ' assertion never exercised the flag-gated MTH5 path; this does.)"""
     pytest.importorskip("mt_metadata")
     pytest.importorskip("mth5")
     out, man, cat, smeta, mtcat, _err = _build(tmp_path, access_block, "--survey-h5")
@@ -223,13 +223,13 @@ def test_embargoed_survey_smeta_badges_honestly(tmp_path):
 
 
 # -------------------------------------------------------------------------- DISPLAY-PRODUCT gate
-# Withholds the BYTES (manifest/edi/xml/bundles); C1b extends the gate to the DERIVED DISPLAY products
+# Withholds the BYTES (manifest/edi/xml/bundles); extends the gate to the DERIVED DISPLAY products
 # the portal PLOTS. For an embargoed dataset the response curves ARE the data — a portal that plots the
 # thinned tf.json curves for an embargoed survey has published the data it withheld from download. So for
 # a non-served survey the tf.json series columns become EMPTY ARRAYS and the sci.json science-derived
 # fields are nulled; the CATALOGUE row (locations/band/nper/sha256) stays public (discovery is universal),
 # and the processing-metadata sci fields (rr/sw/alg) stay (metadata, not data). The --products tree is a
-# DISTRIBUTION surface too (deploy/Makefile writes products/ INSIDE the served build dir; D1), so C1c
+# DISTRIBUTION surface too (deploy/Makefile writes products/ INSIDE the served build dir), so
 # withholds its derived science for a non-served survey — asserted by the products leak-sweep below.
 
 def _tf_sci(out):
@@ -282,7 +282,7 @@ def test_embargoed_survey_withholds_display_curves(tmp_path):
 def test_open_baseline_curves_present(tmp_path):
     """Regression: the unmodified OPEN CC-BY sample survey still emits real curves — at least one tf row
     carries a non-empty periods array and at least one sci row a non-null dimensionality/q. (Guards that
-    the C1b withholding is CONDITIONAL on access, not a blanket wipe.)"""
+    the withholding is CONDITIONAL on access, not a blanket wipe.)"""
     pytest.importorskip("mt_metadata")
     pytest.importorskip("mth5")
     out, man, cat, smeta, mtcat, _err = _build(tmp_path)          # no access rewrite => open
@@ -322,14 +322,14 @@ def test_withheld_build_passes_verify_data_dir(tmp_path):
 # -------------------------------------------------------------------------- --products SURFACE gate
 # The per-station --products tree (station.json + dimensionality.json) IS a distribution surface: the
 # deploy Makefile writes products/ INSIDE the served build dir (deploy/Makefile ~:89, --products
-# /out/$BUILD_REL/products), and the portal serves it at /data/products/. So it rides the SAME C1 access
+# /out/$BUILD_REL/products), and the portal serves it at /data/products/. So it rides the SAME access
 # gate as tf.json/sci.json: a NON-SERVED survey (embargoed w/ active embargo, or metadata_only) must NOT
 # emit the TF-derived science (median_relative_error, dimensionality classification, skew_beta, the
 # completeness diagnostic, the frame phase medians), the exact source position, or the input sha256 — that
 # is exactly the embargoed pre-publication science the byte/display gates withhold elsewhere. Its
 # dimensionality.json (a pure interpretation product) is NOT emitted at all. The OPEN survey in the SAME
 # build is unaffected. These PINs build a 3-survey corpus (open + embargoed + metadata_only) and sweep the
-# WHOLE emitted products/ tree; the pre-C1c emitter emitted full science for every station (see
+# WHOLE emitted products/ tree; the emitter emitted full science for every station (see
 # _reconstruct_prefix_station_json + test_products_leak_sweep_catches_prefix_emitter, the red-prove).
 
 # TF-derived science field NAMES that must never appear under a non-served survey's products.
@@ -484,7 +484,7 @@ def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
 
 
 def _reconstruct_prefix_station_json(sci_science_present=True):
-    """Reconstruct the PRE-C1c per-station station.json shape (full TF science, emitted for EVERY survey
+    """Reconstruct the PRE- per-station station.json shape (full TF science, emitted for EVERY survey
     regardless of access state). Used by the red-prove below to show the leak-sweep is non-vacuous: the
     sweep MUST flag this pre-fix document."""
     return {
@@ -501,7 +501,7 @@ def _reconstruct_prefix_station_json(sci_science_present=True):
 
 
 def test_products_leak_sweep_catches_prefix_emitter(tmp_path):
-    """RED-PROVE (non-vacuity): hermetically export the PRE-C1c station.json + dimensionality.json into a
+    """RED-PROVE (non-vacuity): hermetically export the PRE- station.json + dimensionality.json into a
     products/ tree and run the SAME sweep the PIN above uses — it MUST flag the leak (science fields present,
     exact coordinates present, dimensionality.json emitted). If this passed, the PIN would be vacuous."""
     prod = tmp_path / "products"
@@ -521,7 +521,7 @@ def test_products_leak_sweep_catches_prefix_emitter(tmp_path):
 # ------------------------------------------------- THREDDS section 2: the ROOT-level leak sweep
 
 def _root_leak_hits(out, forbidden, names=("mtcat.json", "ts_access.json")):
-    """Scan the named DATA-ROOT artifacts for any of the forbidden route strings. The C1c sweep
+    """Scan the named DATA-ROOT artifacts for any of the forbidden route strings. The sweep
     rglobs products/<slug>/ and sees nothing at the root, so this is the second net the five-artifact
     leak enumeration requires.
 
@@ -613,7 +613,7 @@ def test_root_artifacts_carry_no_register_route_detail(tmp_path):
 def test_ts_access_membership_is_exactly_the_open_stations(tmp_path):
     """The MEMBERSHIP claim itself, stated as a set rather than as a string sweep: under a register
     covering every access state, the artifact's keys are the served surveys' ausmt_ids and no
-    others. This is the guarantee A5 trades the leak-clean-by-construction shape for."""
+    others. This is the guarantee trades the leak-clean-by-construction shape for."""
     out, prod, served, nonserved = _build_products_corpus(tmp_path)
     out2, _forbidden, _routes = _build_with_leak_register(tmp_path, prod, (*served, *nonserved))
     ids = {}

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AusMT front-door doctor (ops-hardening O4) — one-screen health of the VPS public edge.
+# AusMT front-door doctor (ops-hardening) - one-screen health of the VPS public edge.
 #
 # Runs ON THE VPS, from deploy/frontdoor/. Prints ONE labelled PASS / WARN / FAIL line per check and a
 # final summary. Exits NON-ZERO if any check FAILs, so it can gate a script or a cron alert; a WARN
@@ -11,7 +11,7 @@
 #   2. the RUNNING edge config matches a FRESH RENDER of the repo Caddyfile (install-frontdoor.sh
 #      mounts Caddyfile.rendered, the repo template with the legacy redirect block templated in or
 #      out on AUSMT_LEGACY_REDIRECT_NAME; this check re-renders the same way and hash-compares the
-#      container-mounted file against it, catching the O1 stale-config trap: a template that changed
+# container-mounted file against it, catching the stale-config trap: a template that changed
 #      on disk while the container kept an old rendering / an uncommitted hand-edit on the VPS)
 #   3. the box reader upstream is reachable over the tailnet (curl AUSMT_BOX_READER_UPSTREAM)
 #   4. the public TLS certificate is present and not near expiry
@@ -39,7 +39,7 @@
 #
 # SUBCOMMANDS:
 #   ./doctor.sh            run the full report (default)
-#   ./doctor.sh zombies    the O3 zombie-diagnosis kit: count Z-state processes, GROUP them by parent
+# ./doctor.sh zombies the zombie-diagnosis kit: count Z-state processes, GROUP them by parent
 #                          so the leaking parent is NAMED, and print the likely fixes. Read-only.
 #
 # CONFIG (env; every external command + path is overridable so the checks are testable and portable):
@@ -372,11 +372,11 @@ check_pathurl_redirect() {
 check_ts_routes() {
 	# 4d, the TIME-SERIES HAND-OFF TABLE. Three facts, one leg, because they fail for one reason:
 	#   * the container-mounted ts-routes.map hashes EQUAL to the repo copy. Check 2 hash-compares
-	#     only the rendered Caddyfile, so without this line the O1 stale-config trap reaches the map
+	# only the rendered Caddyfile, so without this line the stale-config trap reaches the map
 	#     unguarded - and a stale map is a stale ACCESS DECISION, not just stale config.
 	#   * an OPEN route 302s to the exact NCI Location the table names (probe + expectation both read
 	#     from the repo table, so the pin cannot rot when the corpus moves).
-	#   * a route the table does NOT name 404s. That is the R5 property: the map's `default ""` is the
+	# * a route the table does NOT name 404s. That is the property: the map's `default ""` is the
 	#     suppression, so a path outside it must produce no Location at all.
 	#   * any survey the generator could not resolve is recorded in the table as `# UNRESOLVED`, and
 	#     its hand-offs are OFFLINE. Dropping one survey's routes is the safe direction (they 404),
@@ -432,7 +432,7 @@ check_ts_routes() {
 	# The WITHHELD probe: by default the same survey with a station id no register can carry, which
 	# proves the closed-world default. Set AUSMT_DOCTOR_TS_WITHHELD_PATH to a REAL withheld station's
 	# route (one carrying has_time_series in mtcat.json while carrying no resources) once the corpus
-	# has one - that is the enumeration R5 defends against, so probe it rather than assume it.
+	# has one - that is the enumeration defends against, so probe it rather than assume it.
 	wh_path="${AUSMT_DOCTOR_TS_WITHHELD_PATH:-$(printf '%s' "$open_path" | sed 's#/[^/]*/[^/]*$#/AUSMT-DOCTOR-ABSENT/raw_packed#')}"
 	if grep -q "^\"$wh_path\"" "$TS_MAP" 2>/dev/null; then
 		warn "ts-routes: the withheld probe path $wh_path IS in the table - set AUSMT_DOCTOR_TS_WITHHELD_PATH to a suppressed route"

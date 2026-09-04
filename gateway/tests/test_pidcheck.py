@@ -1,4 +1,4 @@
-"""IDCONS D4/D5 (identifier-consolidation) - the curator DOI-resolution check (gateway side).
+"""The identifier-consolidation ) - the curator DOI-resolution check (gateway side).
 
 The alive-rule is the load-bearing semantics: only doi.org's OWN 404 is `unregistered`;
 every other doi.org answer (200 / 30x redirect / 403 / 5xx) is `resolved`; a network failure is `error`.

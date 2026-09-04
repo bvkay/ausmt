@@ -1,4 +1,4 @@
-"""IDCONS D4 (identifier-consolidation) - build_portal CONSUMES pid_status.json and annotates
+"""The identifier-consolidation ) - build_portal CONSUMES pid_status.json and annotates
 each served identifier's resolution facet (ok|reserved), fully backward-compatible.
 
 Load-bearing invariants:

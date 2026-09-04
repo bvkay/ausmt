@@ -71,7 +71,7 @@ down:
 # container (/out) and inside the portal container (/srv/data), so the swap stays live-atomic.
 #
 # This is the ONE place the incremental build cache is switched ON
-# (--incremental --cache-dir /out/cache --cache-mode $CACHE_MODE, default rw). C43 S2b-ii: a curator
+# (incremental --cache-dir /out/cache --cache-mode $CACHE_MODE, default rw). a curator
 # "Force full rebuild" writes rebuild.request with a `full` flag; reconcile.sh reads it and sets
 # AUSMT_BUILD_CACHE_MODE=refresh, so the engine recomputes everything (no cache reuse) for that one
 # build. Unset => rw (today's behaviour, byte-identical). The cache lives at /out/cache -- a SIBLING

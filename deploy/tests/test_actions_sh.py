@@ -7,7 +7,7 @@ backup script / the restore drill (AUSMT_ACTIONS_*) that RECORD their invocation
 assertion is an INDEPENDENT OBSERVABLE (the shim's recorded argv, the audit log's lines, the live DB
 bytes, the intent file's presence, the process exit code) - never the script's own self-report.
 
-Each test names its failure criterion (Invariant 10). The D9 hardening + D13 pins carried here:
+Each test names its failure criterion (Invariant 10). The hardening + pins carried here:
   * unknown-intent refusal (D9.1) - an unknown *.request is IGNORED + audited, never executed.
   * rollback id validation (D9.2) - a bad-charset id and an id not in the retained inventory are both
     REFUSED + audited; NO rebuild, NO engine.
@@ -222,7 +222,7 @@ def test_rollback_repoints_no_rebuild(tmp_path):
             _audit_lines(t["state"])
 
 
-# ---- restore id validation + drill-first (D9.2/D9.5/D8) ------------------------------------------
+# ---- restore id validation + drill-first ------------------------------------------
 def _live_db(state: Path, content: bytes = b"LIVE-DB-ORIGINAL") -> Path:
     db = state / "gateway.sqlite"
     db.write_bytes(content)
@@ -250,7 +250,7 @@ def test_restore_snapshot_not_in_inventory_refused_db_untouched(tmp_path):
 
 
 def test_restore_drill_fail_aborts_db_untouched(tmp_path):
-    """RESTORE DRILL-FAIL PIN (record D8). A snapshot whose restore DRILL FAILS aborts the restore with
+    """RESTORE DRILL-FAIL PIN. A snapshot whose restore DRILL FAILS aborts the restore with
     the live DB BYTE-IDENTICAL — the drill runs FIRST, before any swap. FAILS IF a failing drill still
     swaps the DB. Proven against the passing-drill control (next test) that DOES swap: the ONLY
     difference is the drill's exit code."""
@@ -300,8 +300,8 @@ _HOSTILE_UPDATE = {
 
 
 def test_update_fixed_recipe_ignores_intent_content(tmp_path):
-    """UPDATE FIXED-RECIPE PIN (record D13). The executed command sequence is CONSTANT regardless of the
-    intent's content: git pull --ff-only ; compose pull ; compose up -d. A hostile-content update.request
+    """UPDATE FIXED-RECIPE PIN. The executed command sequence is CONSTANT regardless of the
+    intent's content: git pull --ff-only; compose pull; compose up -d. A hostile-content update.request
     (carrying cmd/recipe/build_id/extra fields) runs the IDENTICAL commands as a bare one. FAILS IF any
     intent field reaches the executed argv (content can vary the commands)."""
     # bare intent

@@ -6,7 +6,7 @@ per-survey bundle it serves, cut into `<data-root>/releases/<tag>/`, with a `rel
 provenance document and a pre-generated DataCite record beside it. It exists so a paper can cite a
 specific state of the corpus: `builds/<ts>` dirs are pruned (deploy/Makefile rebuild-data keeps the
 newest five) and `current` moves every rebuild, so neither is citable. `releases/` is a SIBLING of
-`builds/` under the data root, exactly like the C18 `cache/` tier, so it survives both the prune and
+`builds/` under the data root, exactly like the `cache/` tier, so it survives both the prune and
 the atomic `current` symlink swap.
 
 WHAT THIS IS NOT. This tool MINTS NOTHING. It has no network access, no DataCite credentials and no
@@ -17,13 +17,13 @@ corpus git tag is PRINTED for a person to run; this tool never invokes git.
 
 USAGE (host, against a data root):
 
-    python -m extract.cut_release --data <site-data root> --tag 2026-Q3 [--note "one line"]
-    python -m extract.cut_release --data <site-data root> --tag 2026-Q3 --doi 10.xxxxx/yyyy
+    python -m extract.cut_release --data <site-data root> --tag 2026- [--note "one line"]
+    python -m extract.cut_release --data <site-data root> --tag 2026- --doi 10.xxxxx/yyyy
 
 The production invocation runs INSIDE the build-runner container (site-data mounted at /out), the
 same context rebuild-data builds in, so the release is written by the uid that owns site-data:
 
-    make -C deploy cut-release TAG=2026-Q3 NOTE="first citable snapshot"
+    make -C deploy cut-release TAG=2026- NOTE="first citable snapshot"
 
 INTEGRITY. Every copied bundle is re-hashed from the bytes that landed in the release dir and
 checked against the download manifest's own sha256 claim; ANY mismatch, and any repo-tier bundle the
@@ -158,7 +158,7 @@ def resolve_current(data_root: Path) -> Path:
 
 
 def build_identity(build: Path) -> dict:
-    """The C12 build.json identity block a release must carry. Absent build.json fails the cut: a
+    """The build.json identity block a release must carry. Absent build.json fails the cut: a
     snapshot whose commits cannot be named is not citable provenance, it is just a pile of files."""
     doc = read_json(build / "build.json", "build.json")
     if not isinstance(doc, dict) or not doc.get("build_id"):
@@ -249,7 +249,7 @@ def corpus_counts(mtcat) -> tuple[int, int]:
 
 def _rights_row(licence_id: str) -> dict:
     """One rightsList row for a corpus licence id. `rights` is the id VERBATIM and the SPDX
-    identifier/scheme ride along only for ids the C6 contract actually knows a deed URL for, so a
+    identifier/scheme ride along only for ids the contract actually knows a deed URL for, so a
     non-SPDX corpus value (e.g. 'PUBLIC DOMAIN') is never dressed up as an SPDX id it is not."""
     row = {"rights": licence_id}
     url = (LICENSES.get("urls") or {}).get(licence_id)

@@ -42,7 +42,7 @@ from . import orcid
 
 # ---- section specifications ---------------------------------------------------------------------
 # Each MAP section: the ordered scalar sub-keys the widget renders. Each LIST section: the per-row
-# scalar sub-keys. These mirror docs/reference/survey-yaml.md exactly — no invented fields.
+# scalar sub-keys. These mirror docs/docs/reference/survey-yaml.md exactly - no invented fields.
 
 # Map sections rendered as labelled inputs. (key, label, placeholder, kind) per sub-field;
 # kind drives the input type / validation: "text" | "doi" | "orcid" | "ror" | "date" | "email".
@@ -89,7 +89,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         # ("coordinates") and value vocab (COORDINATE_POLICIES) are EXACTLY what the engine's
         # extract/_coordaccess.parse_coordinate_policy reads (access.get("coordinates")), so a set
         # value is never a silent no-op. Blank/unset => the key is not written (absent => exact; the
-        # record's zero-change promise). The per-station coordinate_overrides map is the C43 Stage-4
+        # record's zero-change promise). The per-station coordinate_overrides map is the Stage-4
         # stations panel, NOT here.
         ("coordinates", "Coordinate access", "", "select"),
         ("embargo_until", "Embargo until", "", "date"),
@@ -138,7 +138,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
 
 # List (repeatable-row) sections: per-row scalar sub-fields.
 LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
-    # the contributor-credit model C1 (editor typed rows): creators[] - who the citation names, an ORDERED
+    # the contributor-credit model (editor typed rows): creators[] - who the citation names, an ORDERED
     # editorial list (order IS the citation author order, so the row renders with up/down reorder controls
     # in curatorpage). name_type is FAIL-CLOSED (person|organisation); orcid is people-only and ror
     # organisations-only, both OPTIONAL curator hints (WARNING-only at the validator). orcid/ror sit in
@@ -333,7 +333,7 @@ IDENTIFIES_RELATION = {
 
 
 def derived_relation(identifies) -> str | None:
-    """The DataCite relation a given `identifies` level auto-derives to (D-L2). None when the level is
+    """The DataCite relation a given `identifies` level auto-derives to. None when the level is
     absent/blank/out-of-vocab (nothing to derive). Pinned to the surveys validator's derived_relation."""
     if identifies in (None, ""):
         return None
@@ -529,7 +529,7 @@ _ABSENT = object()  # the section had no original value (distinct from a real nu
 
 # Keys a section's assembler MANAGES itself - so their absence from the assembled
 # value is INTENTIONAL and the unmodelled-key carry-forward must NOT resurrect them. access.coordinate_-
-# overrides is the one such key: _resolve_coordinate_overrides may deliberately DROP it (the C42 set-all-
+# overrides is the one such key: _resolve_coordinate_overrides may deliberately DROP it (set-all-
 # to-inherit-removes-the-key path), so carrying it back from the snapshot would un-delete a curator's
 # removal. Every other section is fully covered by "modelled subfields ∪ nothing", so the map is sparse.
 # Adds two more: citation.preferred_identifier (the nested pair, assembled both-or-neither by
@@ -568,7 +568,7 @@ def _assemble_map(form: dict, section: str):
                 out[subkey] = levels
             continue
         if kind == "bool":
-            # A checkbox (C46 attribution.changes_made) submits its value when CHECKED and is ABSENT
+            # A checkbox (attribution.changes_made) submits its value when CHECKED and is ABSENT
             # when unchecked (mirrors _collect_levels' `is not None` test). Present => True. Unchecked:
             # null it to False only if the original carried the key (a real change); never INTRODUCE
             # it on a section that lacked it (the round-trip / never-introduce-an-absent-key rule).
@@ -596,7 +596,7 @@ def _assemble_map(form: dict, section: str):
     # section access form does NOT render that field at all. So the field's ABSENCE and an explicit
     # EMPTY map mean OPPOSITE things and are resolved apart (_resolve_coordinate_overrides) — else an
     # ordinary access edit (change level/embargo/contact) silently drops a withheld/generalised station
-    # back to the survey default, serving its TRUE coordinates (a coordinate-privacy leak, C42).
+    # back to the survey default, serving its TRUE coordinates (a coordinate-privacy leak).
     if section == "access":
         overrides = _resolve_coordinate_overrides(form, original)
         if overrides:
@@ -623,7 +623,7 @@ def _assemble_map(form: dict, section: str):
             if rows:
                 out[key] = rows
 
-    # IDCONS D2 - carry forward UNMODELLED original keys verbatim. Any key the source section
+    # - carry forward UNMODELLED original keys verbatim. Any key the source section
     # carried that the widget does not model (the retired flat identifier keys dataset_doi / project /
     # related_publication(_doi), OR any unknown/legacy key the editor never modelled) is re-emitted exactly
     # as stored, so the assembled value still equals the o_<section> snapshot on an untouched section
@@ -647,7 +647,7 @@ def _assemble_map(form: dict, section: str):
 
 def _resolve_coordinate_overrides(form: dict, original) -> dict:
     """The access.coordinate_overrides map to emit, distinguishing field-ABSENT from field-EMPTY —
-    the C42 coordinate-privacy contract (a withheld/generalised station must NEVER silently un-mask).
+    the coordinate-privacy contract (a withheld/generalised station must NEVER silently un-mask).
 
       * field ABSENT (form.get is None): the submitting form does not model overrides (the Metadata-
         tab per-section access form), so an unrelated access edit must PRESERVE the survey's existing
@@ -686,7 +686,7 @@ def _resolve_preferred_identifier(form: dict, original) -> dict:
     typed half would lose curator input, so the form refuses it with a curator-facing message.
 
     The pair is NOT checked against identity_classification here: that cross-section invariant is the
-    validator's (emitter D20 FAIL) and the runner refuses the merge with the validator's own message.
+    validator's (emitter FAIL) and the runner refuses the merge with the validator's own message.
     """
     scheme_raw = form.get("s_citation_preferred_identifier_scheme")
     ident_raw = form.get("s_citation_preferred_identifier_identifier")
@@ -782,7 +782,7 @@ def _org_primary_index(form: dict):
 
 
 def _assemble_coordinate_overrides(form: dict) -> dict:
-    """Assemble access.coordinate_overrides (C43 Stage-4) from the stations-panel fieldset. The panel
+    """Assemble access.coordinate_overrides (Stage-4) from the stations-panel fieldset. The panel
     builds a {BASE_station_id: policy} map from REAL served station records — keys are NEVER free-text
     — and submits it as ONE canonical-JSON field, s_access_coordinate_overrides; a station left at
     INHERIT is simply ABSENT from the map (it follows the survey default). Returns {} for an absent or
@@ -888,7 +888,7 @@ def _assemble_list(form: dict, section: str) -> list:
         if idf and str(idf).strip() in IDENTIFIES_LEVELS:
             row["relation"] = derived_relation(idf)
             any_value = True
-        # IDCONS D2 - carry forward UNMODELLED per-row keys from the correspondingly-indexed
+        # - carry forward UNMODELLED per-row keys from the correspondingly-indexed
         # original row (the render assigns row index i to original[i]). The retired instruments[].pid — and
         # any unknown/legacy per-row key — is re-emitted verbatim, so an untouched list reassembles equal to
         # its o_<section> snapshot (-> _OMIT, byte-preserved) instead of the wholesale-replace dropping it.
@@ -1121,7 +1121,7 @@ def assemble_section(form: dict, section: str):
         value = _assemble_list(form, section)
     else:
         # A JSON-only section (JSON_SECTIONS) with a blank j_<section>: the panel's own copy says
-        # blank means unchanged, so it contributes nothing. Reachable since the G1 care fix.
+        # blank means unchanged, so it contributes nothing. Reachable care fix.
         return _OMIT
 
     original = _original_snapshot(form, section)

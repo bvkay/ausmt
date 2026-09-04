@@ -217,7 +217,7 @@ def _station(out, slug, station):
 
 
 def test_a_built_station_publishes_its_run_and_validates(tmp_path):
-    """FAILS against the pre-A7 emitter, which published no runs[] at all."""
+    """FAILS against the emitter, which published no runs[] at all."""
     pytest.importorskip("mt_metadata")
     jsonschema = pytest.importorskip("jsonschema")
     out = _build(tmp_path)

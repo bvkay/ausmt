@@ -143,7 +143,7 @@ def test_preview_spawns_engine_with_explicit_engine_dir_cwd(tmp_path, monkeypatc
     # undocumented contract that broke the first live runner). Captures the cwd the runner hands to
     # _run_subprocess for the engine module and pins it to the configured engine_dir.
     # FAILS IF the engine spawn reverts to cwd=None or ignores cfg.engine_dir (proven RED on a scratch
-    # revert of the cwd arg back to None — recorded in the C37 verification transcript).
+    # revert of the cwd arg back to None - recorded verification transcript).
     engine_dir = tmp_path / "app" / "engine"
     engine_dir.mkdir(parents=True)
     cfg = RunnerConfig(
@@ -168,7 +168,7 @@ def test_preview_spawns_engine_with_explicit_engine_dir_cwd(tmp_path, monkeypatc
                              tmp_path / "preview-summary.json", deadline=10**12)
     assert ok is True
     assert seen_cwd == [engine_dir], f"engine spawned with cwd {seen_cwd}, expected [{engine_dir}]"
-    assert seen_cwd[0] is not None  # never inherit the runner's cwd (the F8 regression)
+    assert seen_cwd[0] is not None  # never inherit the runner's cwd (regression)
 
 
 def test_preview_spawns_engine_with_the_configured_validator_path(tmp_path, monkeypatch):
@@ -258,9 +258,9 @@ def test_preview_end_to_end_real_engine(tmp_path):
 
     cfg = RunnerConfig(
         incoming_dir=tmp_path / "incoming", quarantine_dir=tmp_path / "quarantine",
-        # Merge of c35b + C37 (both semantics): the validator resolves via c35b's
+        # Merge of c35b + (both semantics): the validator resolves via c35b's
         # Require_validator_dir (sibling -> vendored -> FAIL, never a bare skip), and the engine
-        # spawns with C37's EXPLICIT cwd (cfg.engine_dir) instead of inheriting the process cwd —
+        # spawns's EXPLICIT cwd (cfg.engine_dir) instead of inheriting the process cwd -
         # the dev-box analogue of the image's WORKDIR /app/engine. No monkeypatch.chdir: with
         # `extract` a real installed package, resolution does not ride on the cwd at all.
         jobs_dir=tmp_path / "jobs", validator_path=str(require_validator_dir()), timeout_s=900,
@@ -851,7 +851,7 @@ def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeyp
     NOT here. FAILS IF the runner ever grows a cache flag on the engine subprocess.
 
     Captures the actual cmd list the runner hands to _run_subprocess for the engine module (the
-    preview build), and asserts no C18 cache flag is present."""
+    preview build), and asserts no cache flag is present."""
     cfg = _runner_cfg(tmp_path)
     jobs.ensure_dirs(cfg.jobs_dir)
     sid = "01NOCACHE"
@@ -892,7 +892,7 @@ def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeyp
 # --------------------------------------------------------------------------------------------------
 # run_forever's loop contracts, pinned at the poll_once seam.
 # run_forever's body is now poll_once(cfg); these tests enforce the ordering + crash-recovery
-# contracts the M4 finding said were enforced NOWHERE (the old run_forever docstring falsely claimed
+# contracts the finding said were enforced NOWHERE (the old run_forever docstring falsely claimed
 # Compose-e2e coverage in a workflow where the runner never boots).
 # --------------------------------------------------------------------------------------------------
 def test_poll_once_drains_edit_jobs_before_submission_jobs(tmp_path, monkeypatch):

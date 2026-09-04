@@ -5,9 +5,9 @@
 # Trust boundary) writes an INTENT FILE into the shared gateway state dir; THIS agent, running as
 # the operator uid that owns the code checkout and can drive `docker compose`, scans the state dir and
 # executes a FIXED RECIPE for each recognised intent. The gateway can only ASK; the host decides and
-# acts. (design C43 D8 "operations floor / actions"; D9 "request-file hardening spec".)
+# acts. (design "operations floor / actions"; "request-file hardening spec".)
 #
-# THE D9 HARDENING (frozen — implemented in full here; the gateway-side checks are UX only, THIS is the
+# THE HARDENING (frozen - implemented in full here; the gateway-side checks are UX only, THIS is the
 # real gate):
 #   D9.1 Fixed-enum intents only. A closed allow-list of intent FILENAMES (update/backup/rollback/
 #        restore .request). An unknown file in the state dir is IGNORED and audited, never executed.
@@ -34,7 +34,7 @@
 # command argument (the "update fixed-recipe" pin proves this by construction + a hostile-content pin).
 #
 # RECIPES (fixed; nothing parameterised except the two validated ids):
-#   update    git -C CODE pull --ff-only ; COMPOSE pull ; COMPOSE up -d          (the C40 exception)
+# update git -C CODE pull --ff-only; COMPOSE pull; COMPOSE up -d (exception)
 #   backup    invoke deploy/backup.sh                                            (existing snapshot)
 #   rollback  atomic `current` symlink repoint to the named RETAINED build; write rollback.pin so the
 #             reconcile tick does NOT auto-revert while the manual pin stands. NEVER rebuilds.
@@ -112,7 +112,7 @@ now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 now_epoch() { date -u +%s 2>/dev/null || date +%s; }
 
 # compose <args...>: run `docker compose` against THIS deployment's compose file. Uses `-f <file>`
-# (NOT `-C <dir>` — compose has no -C flag; that was a real-box breakage the shim masked, S2). `-f`
+# (NOT `-C <dir>` - compose has no -C flag; that was a real-box breakage the shim masked). `-f`
 # also anchors the project directory to the file's parent, so .env loads from deploy/ regardless of
 # the CWD (the systemd unit sets WorkingDirectory, but a manual run must work too). No fragile
 # `|| bare` fallback — a compose error surfaces honestly.
@@ -151,7 +151,7 @@ PYEOF
 
 # _scrub <value>: return the value stripped of EVERYTHING that could forge an audit line under a
 # compromised gateway. `LC_ALL=C tr -dc '[:print:]'` keeps ONLY ASCII printable bytes 0x20-
-# 0x7E — dropping all C0/C1 control chars (\n\r\t\v\f) AND every byte of a multibyte UTF-8 sequence,
+# 0x7E - dropping all control chars (\n\r\t\v\f) AND every byte of a multibyte UTF-8 sequence,
 # so unicode line separators U+2028/U+2029 (which the gateway's splitlines-free reader also ignores)
 # cannot survive. Then drop `=` so an attacker-controlled `by`/`id` can never inject a `key=value`
 # token (e.g. a forged `outcome=ok`). Capped at 120 chars.
@@ -228,13 +228,13 @@ record_ran() {
 
 # ---- the recipes --------------------------------------------------------------------------------
 
-# recipe_update: THE ONE BOUNDED C40 EXCEPTION (record D8). git pull --ff-only on the code checkout,
+# recipe_update: THE ONE BOUNDED EXCEPTION. git pull --ff-only on the code checkout,
 # then compose pull + up -d. NOTHING here is derived from the intent — the command sequence is
 # constant (the "update fixed-recipe" pin asserts this by construction). Returns the recipe rc.
 recipe_update() {
   [ -n "$CODE_DIR" ] || { printf 'actions: update needs AUSMT_CODE_DIR (the code checkout)\n' >&2; return 1; }
   [ -e "$CODE_DIR/.git" ] || { printf 'actions: update: %s is not a git checkout\n' "$CODE_DIR" >&2; return 1; }
-  # git DOES take -C (it is a git checkout); compose does NOT - it goes through compose (`-f`, S2).
+  # git DOES take -C (it is a git checkout); compose does NOT - it goes through compose (`-f`).
   # shellcheck disable=SC2086 -- GIT_CMD may be multi-word (default `git`/a test shim).
   $GIT_CMD -C "$CODE_DIR" pull --ff-only || return 1
   compose pull || return 1
@@ -249,10 +249,10 @@ recipe_backup() {
   $BACKUP_CMD
 }
 
-# recipe_rollback <build_id>: atomic `current` symlink repoint to a RETAINED build (record D8; the
+# recipe_rollback <build_id>: atomic `current` symlink repoint to a RETAINED build (; the
 # "rollback-repoints" pin). NEVER rebuilds — it only moves the pointer. The id is already charset- +
 # inventory-validated by the caller. Writes rollback.pin so the reconcile tick does NOT auto-revert
-# while the manual pin stands (record D13 rollback-repoints).
+# while the manual pin stands (rollback-repoints).
 recipe_rollback() {
   _bid="$1"; _by="$2"
   _target="$BUILDS_DIR/$_bid"
@@ -292,7 +292,7 @@ PYEOF
 # swap, 1 on any failure; sets $RESTORE_OUTCOME to a human phrase for the audit line.
 RESTORE_OUTCOME=""
 
-# _gateway_start / _gateway_stop: bring the gateway container down/up via compose (`-f`, S2). Best-
+# _gateway_start / _gateway_stop: bring the gateway container down/up via compose (`-f`). Best-
 # effort — a shim records the call in tests; a real failure to restart is bounded by compose's own
 # `restart: unless-stopped`.
 _gateway_stop()  { compose --profile gateway stop gateway 2>/dev/null || true; }

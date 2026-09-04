@@ -38,16 +38,16 @@ Two independent checks (either one FAILS the tripwire):
      cannot see part of its own input must not report PASS over it).
 
 Usage (from the engine/ cwd, both workflows):
-    pytest -q -rs tests | tee /tmp/pytest.out ; python tests/ci_check_skips.py < /tmp/pytest.out
+    pytest -q -rs tests | tee /tmp/pytest.out; python tests/ci_check_skips.py < /tmp/pytest.out
 
 a repeatable --allow flag lets a DIFFERENT workflow supply its own allow-list. Passing --allow at
 least once (even `--allow ""`) REPLACES the built-in list entirely; passing it zero times keeps today's
 behaviour (the engine built-in list below). The gateway workflow pipes its report through this with a
-single `--allow ""` - i.e. NO substantive allow entries - so after D3 (which made the validator oracles
+single `--allow ""` - i.e. NO substantive allow entries - so (which made the validator oracles
 run via the vendored copy) the gateway suite's ONE legitimate skip (the mt_metadata-needing engine-
 preview oracle) is the only entry it allows; every other skip fails the workflow:
     pytest -q -rs gateway/tests | python engine/tests/ci_check_skips.py \
-        --allow "real engine stack / sample survey / validator not present"
+        -allow "real engine stack / sample survey / validator not present"
 
 Exit 0 iff every parsed skip matches an allow-list entry AND the parsed count equals pytest's own
 skip total. Exit 1 on any unexpected skip OR any count mismatch.
@@ -68,11 +68,11 @@ import sys
 # emit); it is retained per the amendment so an older checkout or a re-introduced sibling-gated
 # skip stays allow-listed, and the accounting check below catches any genuinely unaccounted skip.
 ALLOWED_SKIP_REASON_SUBSTRINGS = [
-    "sibling ausmt-surveys/_validation not present",  # test_validator_gate.py — pre-D3 sibling gate (now defensive)
+    "sibling ausmt-surveys/_validation not present",  # test_validator_gate.py - sibling gate (now defensive)
     # test_validator_gate.py's oracle skips (exact reason below) when the gateway package
     # Tree itself is absent from the repo root - legitimately reachable ONLY in the engine-image workflows
     # (the engine image COPYs engine/ only, so /app/gateway never exists: deploy-images' in-image
-    # engine-full-tests run — the sole remaining engine-image pytest since C39 dropped the
+    # engine-full-tests run - the sole remaining engine-image pytest dropped the
     # In-Dockerfile duplicate - pipes through THIS tripwire). INERT on every checkout workflow: a
     # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the oracle
     # (D3.1 arm iv), never skips.

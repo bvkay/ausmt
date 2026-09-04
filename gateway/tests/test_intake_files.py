@@ -107,7 +107,7 @@ def test_intake_and_build_state_identical_attribution(tmp_path):
     # Parity: the intake LICENSE.md and the build_portal bundle LICENSE.txt must state the SAME rights
     # for the same survey. Both call sites derive their (attribution, sources, changes) through the shared
     # _license_text.instrument_params_from_survey helper, so a survey carrying an attribution+sources block
-    # renders IDENTICAL instrument text on both paths. FAILS IF intake drops a param (the pre-C46 defect:
+    # renders IDENTICAL instrument text on both paths. FAILS IF intake drops a param (the defect:
     # _license_md_body never passed attribution) — the source paragraph / supersession / changes clause
     # would then be missing from the intake rendering while the build reference carries them.
     import _license_text as lt  # noqa: PLC0415
@@ -145,7 +145,7 @@ def test_intake_and_build_state_identical_attribution(tmp_path):
     assert intake_rights == build_rights, (
         "intake LICENSE.md and build LICENSE.txt state DIVERGENT rights:\n"
         f"--- intake ---\n{intake_rights}\n--- build ---\n{build_rights}")
-    # Non-vacuity: the fixture must actually exercise the C46 additions, else the equality is hollow.
+    # Non-vacuity: the fixture must actually exercise the additions, else the equality is hollow.
     assert "Source datasets" in intake_rights
     assert "AusLAMP SA" in intake_rights and "Geoscience Australia" in intake_rights
     assert "The upstream dataset was obtained under CC-BY-3.0-AU" in intake_rights   # supersession
@@ -212,7 +212,7 @@ def test_unrecognised_license_generates_no_license_md(tmp_path):
 
 
 def test_typo_license_generates_no_license_md(tmp_path):
-    # The exact C6 typo hole, at intake: a single-char typo (letter O for zero) is NOT recognised.
+    # The exact typo hole, at intake: a single-char typo (letter O for zero) is NOT recognised.
     bad_yaml = _SURVEY_YAML.replace("license: CC-BY-4.0", "license: CC-BY-4.O")
     pkg = _make_package(tmp_path, survey_yaml=bad_yaml)
     written = intake.generate_intake_files(pkg, now_utc=_NOW)
@@ -397,7 +397,7 @@ def _structure_levels(report: dict, needle: str) -> list[str]:
 def test_real_validator_structure_warnings_flip_to_pass(tmp_path):
     # NO MOCKS: the REAL validate_survey.py (sibling or committed vendored). BEFORE generation the
     # validator WARNs 'LICENSE.md missing' + 'README.md missing'; AFTER generation both are PASS — in
-    # the same package the runner would hand it. This is the D1 property: the generated files are
+    # the same package the runner would hand it. This is the property: the generated files are
     # visible to the validator in the same run. FAILS IF generation stops running before validation,
     # or the validator does not see the generated files.
     validator_dir = require_validator_dir()

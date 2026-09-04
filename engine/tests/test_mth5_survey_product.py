@@ -1,6 +1,6 @@
 """Tier 2 survey MTH5 product (MTH5-PRODUCT): the survey.yaml -> survey_metadata mapping and
 the INJECTED dataset DOI, the blocking round-trip gate (a faithful build
-passes; a corrupted h5 is RED-proven to fail and be withheld), the A2 version-pin recorded on the
+passes; a corrupted h5 is RED-proven to fail and be withheld), the version-pin recorded on the
 manifest, and the tier-3 (designed-but-disabled) collection producer + its RAM guard.
 
 These exercise the producer directly with the vendored two-station example survey; the manifest/embargo/

@@ -23,7 +23,7 @@ def test_the_flag_follows_the_register_for_a_withheld_station():
     rows = [_row()]
     assert station_flag(rows) is True
     # ...while the route detail is EMPTY for the same station: existence survives withholding,
-    # The route does not (R13 vs R5, the sharpest seam in the workflow)
+    # The route does not (the sharpest seam in the workflow)
     assert route_rows(rows, station_open=False) == {}
 
 
@@ -42,7 +42,7 @@ def test_retiring_the_last_verified_row_takes_the_flag_down():
 
 def test_a_verified_level2_row_is_evidence_but_never_a_claim():
     rows = [_row(level="level2")]
-    assert rows[0]["review"] == "verified"  # non-vacuity: the row would project but for D19
+    assert rows[0]["review"] == "verified"  # non-vacuity: the row would project but
     assert station_flag(rows) is False
     assert route_rows(rows, station_open=True) == {}
 

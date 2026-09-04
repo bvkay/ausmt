@@ -24,7 +24,7 @@ from pathlib import Path
 NUM = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
 _EMPTY = 1e30  # EDI 'no data' sentinel magnitude
 
-# One canonical empty transfer-function row: 18 component arrays (C20 grew tf.json 10 -> 18 with the
+# One canonical empty transfer-function row: 18 component arrays (grew tf.json 10 -> 18 with the
 # error columns + full complex tipper). Module-level so the many placeholder sites share a single
 # definition; kept literal here because _ediparse imports NO project module (it must be safe to import
 # from anywhere on the extract/ path) so it can't read TF_COLUMNS from the generated contract. The

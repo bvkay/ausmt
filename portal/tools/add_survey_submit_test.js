@@ -1,4 +1,4 @@
-// jsdom-backed INTERACTION + KEY-HYGIENE test for the add-survey page's C13 direct-upload flow.
+// jsdom-backed INTERACTION + KEY-HYGIENE test for the add-survey page's direct-upload flow.
 //
 // The pure logic (isOrcidChecksum/gatewayPresent/statusUrlSafe/submitResultMessage/submitFormFields)
 // is unit-tested in tests/add_survey_logic.test.js. This driver covers what only a live DOM can: the
@@ -260,7 +260,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
 
   // --------------------------------------------------------------------------------------------------
   // 3. XSS REGRESSION: a hostile 400 `detail` and a hostile status_url must render as inert
-  //    TEXT — no element injection. This assertion FAILS if someone removes the esc()/escAttr()/
+  // TEXT - no element injection. This assertion FAILS if someone removes the esc()/escAttr()/
   //    statusUrlSafe guards (non-vacuous).
   // (3a) hostile 400 detail.
   {
@@ -419,7 +419,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     ok(sequential(nums),
       "gateway-PRESENT SUBMISSION.md list numbering must be strictly sequential; got: " + JSON.stringify(nums));
   }
-  // (5b) gateway-ABSENT package via the DOWNLOAD path (the pre-C13 primary flow on static deploys).
+  // (5b) gateway-ABSENT package via the DOWNLOAD path (the primary flow on static deploys).
   {
     const e = await boot({ probe: probeAbsent });
     await fillValidForm(e.win, { key: null });          // no key needed to package
@@ -665,7 +665,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
 
   // --------------------------------------------------------------------------------------------------
   // 8. ROUND 2: slug-collision awareness, zip-path visibility, the collection
-  //    card, the A3 credit questions' emission, DOI normalisation. Live-DOM behaviours the pure tests
+  // card, the credit questions' emission, DOI normalisation. Live-DOM behaviours the pure tests
   //    (add_survey_logic.test.js) cannot cover.
   const JSON_OK_BODY = { status: 200, text: () => Promise.resolve('{"ok":true}') };
   // A fetch router: routes the gateway healthz probe, data/surveys.json, and data/catalogue.json. A null
@@ -680,7 +680,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
   const settle = () => new Promise((res) => setTimeout(res, 15));   // let the two lazy fetch chains + re-render run
 
-  // (8a) R1 SLUG COLLISION: typing "Vulcan 2022" derives vulcan-2022, which matches a served survey ->
+  // (8a) SLUG COLLISION: typing "Vulcan 2022" derives vulcan-2022, which matches a served survey ->
   //      the amber 'warn' chip names the survey + station count, and NEVER blocks (packaging still works).
   {
     const surveys = { "Vulcan 2022": { slug: "vulcan-2022" }, "Otway 2019": { slug: "otway-2019" } };
@@ -710,7 +710,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     await settle();
     ok(e.doc.getElementById("slugOk").className.indexOf("good") >= 0, "R1: a non-colliding slug shows the plain green valid cue");
   }
-  // (8a-ii) R1 FETCH-FAILURE DEGRADE: surveys.json unreachable -> no served set -> a valid slug shows the
+  // (8a-ii) FETCH-FAILURE DEGRADE: surveys.json unreachable -> no served set -> a valid slug shows the
   //         plain green cue (no false collision), and the page never blocks on the missing data.
   {
     const e = await boot({ probe: makeFetch({ gateway: false, surveys: null, catalogue: null }) });
@@ -723,7 +723,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
       "R1: fetch-failure degrade - an unreachable surveys.json yields a plain green cue (no false collision); got: " + JSON.stringify(chip.textContent));
   }
 
-  // (8b) R2 ZIP-PATH VISIBILITY: the package .zip (download/email fallback) button is VISIBLE with no
+  // (8b) ZIP-PATH VISIBILITY: the package .zip (download/email fallback) button is VISIBLE with no
   //      gateway and HIDDEN when the gateway probe passes. Checked in both probe states.
   {
     const eAbsent = await boot({ probe: probeAbsent });
@@ -736,7 +736,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     ok(ePresent.doc.getElementById("btnPackage") !== null, "R2: the package button is hidden, not removed (zip code intact)");
   }
 
-  // (8c) R3 COLLECTION CARD: its own collapsed <details> with the exact heading; emission is unchanged.
+  // (8c) COLLECTION CARD: its own collapsed <details> with the exact heading; emission is unchanged.
   {
     const e = await boot({ probe: probeAbsent });
     const card = e.doc.getElementById("tierCollection");
@@ -757,7 +757,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
       "R3: the collection still emits from the new card (id/title unchanged by the move)");
   }
 
-  // (8d) A3 THE PLAIN-LANGUAGE CREDIT QUESTIONS, driven through the LIVE DOM and inspected in the
+  // (8d) THE PLAIN-LANGUAGE CREDIT QUESTIONS, driven through the LIVE DOM and inspected in the
   //      PACKAGED survey.yaml: "Who led this survey?" -> one ProjectLeader contributors row; the citation
   //      question -> preferred_text + a typed related_identifiers row under its curator note, and NEVER
   //      citation.preferred_identifier; the organisations rows -> the marked seeded custodian plus a
@@ -811,7 +811,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
       "A3: removing an organisation row drops it (repeatable add/remove)");
   }
 
-  // (8e) R5 DOI NORMALISATION on blur: a pasted resolver URL folds to the bare DOI in the publication DOI
+  // (8e) DOI NORMALISATION on blur: a pasted resolver URL folds to the bare DOI in the publication DOI
   //      field; a bare DOI is untouched; a related-identifier row folds ONLY when its type is DOI (a
   //      URL-typed row keeps its URL).
   {
@@ -843,7 +843,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 8f. CONTRIBUTOR CREDIT MODEL (the contributor-credit model C1/C2). The "who should be credited?" question
+  // 8f. CONTRIBUTOR CREDIT MODEL (the contributor-credit model). The "who should be credited?" question
   //     -> creators[] (basic tier: name + Organisation checkbox, ORDER preserved) and the advanced typed
   //     contributors[] rows (name_type + the 8-token fail-closed role <select>). Drives every new field
   //     for real, then reads the REAL packaged survey.yaml and asserts the emitted shape the validator

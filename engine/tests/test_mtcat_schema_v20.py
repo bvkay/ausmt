@@ -260,7 +260,7 @@ def _mutate(path, value):
 
 
 # One mutation per constraint. The 1.2-era cases whose constraints survive are kept; the 2.0 cases
-# are ported from the fixture suite (T5/T6/T7/T9/T10/T10b/T30a-b/T34a/T34c and friends).
+# are ported from the fixture suite (and friends).
 RED_CASES = [
     # ---- derived discovery facets ---------------------------------------------------------------
     (("surveys", 0, "n_stations"), "3",

@@ -3,7 +3,7 @@ HDF5 content type, and the branded 404.
 
   * /index.html served the same bytes as / with no canonical anywhere - the host's one
     duplicate-content pair. The alias 301s home now, and index.html itself carries the canonical.
-  * .h5 has no extension entry Caddy resolves correctly (its table guesses application/mipc), so
+  * h5 has no extension entry Caddy resolves correctly (its table guesses application/mipc), so
     the server contradicted the survey pages' own JSON-LD encodingFormat
     (application/x-hdf5). An explicit matcher states the real type.
   * an unknown entity id returned a ZERO-BYTE 404: correct for crawlers, a dead end for a human
@@ -11,7 +11,7 @@ HDF5 content type, and the branded 404.
     preserved (file_server status 404), so crawl semantics are unchanged.
 
 BOTH reader listeners carry all three: :8081 is what the public reaches through the front door,
-:8080 is the tailnet-side twin, and the C47 discipline is that the two never drift.
+:8080 is the tailnet-side twin, and the discipline is that the two never drift.
 """
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
-# AusMT front-door log shipping (C47 deliverable 3). A oneshot the ausmt-frontdoor-logs.timer fires
-# once a day, a few minutes AHEAD of the C45 fold (ausmt-stats.timer, 03:35 UTC): it runs
+# AusMT front-door log shipping (deliverable 3). A oneshot the ausmt-frontdoor-logs.timer fires
+# once a day, a few minutes AHEAD fold (ausmt-stats.timer, 03:35 UTC): it runs
 # deploy/frontdoor/ship-frontdoor-logs.sh, which rsyncs the masked access-frontdoor*.json logs off the
 # VPS over the tailnet into $AUSMT_DATA_DIR/logs/caddy — the exact dir the aggregator globs. Same
 # trust class + install idiom as ausmt-stats.service: NON-root operator uid, .env-driven (no shell

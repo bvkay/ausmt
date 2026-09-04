@@ -11,7 +11,7 @@ Three layers:
 
   1. built layer, vendored fixtures: TWO consecutive real builds over engine/tests/fixtures (the
      vendored surveys). Proves: catalogue.json and surveys.json byte-identical across the two builds
-     (the document rides a side channel and touches neither, D18); mtcat.json dict-equal minus
+     (the document rides a side channel and touches neither); mtcat.json dict-equal minus
      portal.generated_at; every survey-metadata.json validates with format checking, carries no null
      and no empty container, is dict-equal across the two builds minus provenance.generated, and is
      under the 16 KB budget; the schema served at both routes byte-identical to the in-tree artifact
@@ -19,8 +19,8 @@ Three layers:
      ; the doi / raid / organisation projection chains hold; no manifest row names the
      document; the shared-definition guarantee (subject_row and the relationship core vs the mtcat
      schema, structurally).
-  2. built layer, the 3-survey D8 corpus (open + embargoed + metadata_only, each curating every
-     class): the same proofs on documents that carry every class, plus the C1c discipline (the
+  2. built layer, the 3-survey corpus (open + embargoed + metadata_only, each curating every
+     class): the same proofs on documents that carry every class, plus the discipline (the
      curated extent is never station-derived, so no exact station coordinate reaches a non-served
      survey's document) and the projection chains on real emitted values (organisation, raid).
   3. the corpus arm (dev box): when AUSMT_SURVEY_METADATA_DATA names a full-corpus build output dir,
@@ -128,7 +128,7 @@ def document_invariants(doc, mtcat_survey=None):
 
 
 def test_reference_checks_actually_detect_violations():
-    """Guard on the guards: each chain checker must CATCH its planted violation (T31b pattern)."""
+    """Guard on the guards: each chain checker must CATCH its planted violation (pattern)."""
     doc = fixture("t20-synthetic")
     good = copy.deepcopy(doc)
     good["identifiers"].append({"scheme": "DOI", "identifier": "10.99999/example-basin-2024"})
@@ -378,7 +378,7 @@ def test_the_mtcat_schema_copy_lines_are_textually_intact():
     assert '(out / "ausmt-survey-metadata.schema.json").write_bytes(_sm_schema_bytes)' in src
 
 
-# ---------------------------------------------------------------- layer 2: the D8 corpus
+# ---------------------------------------------------------------- layer 2: the corpus
 
 def test_d8_corpus_documents_validate_and_hold_every_chain(built_d8):
     docs = _assert_documents_clean(built_d8)

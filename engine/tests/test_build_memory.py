@@ -3,7 +3,7 @@ station-sized unit of MTH5 work plus a small corpus-wide index, never by the num
 
 The incident: the engine was OOM-killed by the kernel five times in one
 night ("Killed process (python) anon-rss:13,740,244 kB" on a 14 GB box) at ~2,580 stations, one
-night after 2,485 stations had built. Retries with a warm C18 cache (6,349 hits, 1 miss) reached the
+night after 2,485 stations had built. Retries with a warm cache (6,349 hits, 1 miss) reached the
 same 13.7 GB, so per-station parsing was not the cost. The step-0 profile found every MiB of the
 growth inside _write_tf_mth5: mth5 0.6.8 creates a FRESH pydantic model class per group instance
 (about 75 per served station across the tier-1 file, the tier-2 bundle and the round-trip gate's
@@ -47,7 +47,7 @@ SAMPLE_SURVEYS = ROOT / "data"          # data/sample-survey: two real EDIs, CC-
 SAMPLE_EDIS = sorted((ROOT / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
 sys.path.insert(0, str(ROOT / "extract"))
 import build_portal as bp  # noqa: E402
-# The C42 module's engine-produced fixture writer (one EDI per station, distinctive positions, a
+# The module's engine-produced fixture writer (one EDI per station, distinctive positions, a
 # Survey.yaml). Reused so the synthetic corpora are the SAME shape the coordinate-access workflow builds.
 from test_coord_access import _stage_survey  # noqa: E402
 

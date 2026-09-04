@@ -95,7 +95,7 @@ def test_build_json_and_provenance_carry_served_tool_versions(tmp_path):
     keys, read from the SINGLE lib_versions source of truth. This build runs the real mt_metadata/mth5
     stack (pytest.importorskip at module top), so both keys must be present and match the imported
     library __version__ (an independent observable — not a re-read of the build's own output). FAILS if a
-    key is missing or disagrees with the actually-installed library, or if the C12 build_id format drifted."""
+    key is missing or disagrees with the actually-installed library, or if the build_id format drifted."""
     import mt_metadata
     import mth5
     surveys_copy = tmp_path / "surveys_ver"
@@ -108,7 +108,7 @@ def test_build_json_and_provenance_carry_served_tool_versions(tmp_path):
             f"{name} mt_metadata_version {doc.get('mt_metadata_version')!r} != {mt_metadata.__version__!r}"
         assert doc.get("mth5_version") == mth5.__version__, \
             f"{name} mth5_version {doc.get('mth5_version')!r} != {mth5.__version__!r}"
-    # additive only: the C12 identity fields + build_id string format are untouched by the version keys
+    # additive only: the identity fields + build_id string format are untouched by the version keys
     assert bj["build_id"] == f"{bj['engine_commit']}-unknown-{bj['generated']}", \
         "C32 version keys must not alter the C12 build_id string format"
 
@@ -202,7 +202,7 @@ def test_build_prov_git_commit_prefers_real_git_over_env(monkeypatch):
 # --- lib_versions is the ONE source of truth for served tool versions --------------------
 
 def test_lib_versions_is_single_source_reused_by_cache_salt():
-    """The same lib_versions helper feeds BOTH the C18 cache salt and the C32 served version keys, so
+    """The same lib_versions helper feeds BOTH the cache salt and the served version keys, so
     the two facts can never diverge. Sane shape: a dict whose keys, when present, are strings; and when
     the mt_metadata/mth5 stack IS installed (it is here — module-top importorskip) both keys resolve to
     the imported __version__. FAILS if the helper returns a non-dict, a non-string version, or disagrees

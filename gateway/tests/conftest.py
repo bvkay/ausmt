@@ -377,7 +377,7 @@ class FakeGit:
             # side so the removal rollback tests are honest (a rollback must restore a git-rm'd path).
             # The leading `--` and any flags are skipped; the rest are repo-relative paths. `git rm
             # -r -- surveys/<slug>` retires a WHOLE survey (a DIRECTORY), so when `-r`/`-rf` is present a
-            # directory target is removed recursively (rmtree) — modeled explicitly (C35b strict-fake:
+            # directory target is removed recursively (rmtree) - modeled explicitly (strict-fake:
             # Extending the fake to survey-scope removal is a deliberate act, with the real-git workflow in
             # test_publish_real_git.py as the reference for the true recursive-rm semantics).
             import shutil
@@ -420,9 +420,9 @@ async def app_client(tmp_path: Path, *, scanner=None, run_poll: bool = False,
     """In-process app + httpx client. When run_poll is False the poll-loop task is NOT started (the
     tests drive gw.poll_once explicitly for determinism); the app object is still returned so a
     test can reach gw = app.state.gw. git_runner injects the publish seam (there is no rebuild seam
-    in the v2 commit-and-push model); edit_runner injects the C31 metadata-editor seam (an in-process
+    in the v2 commit-and-push model); edit_runner injects the metadata-editor seam (an in-process
     call to the runner edit bodies, so no subprocess/yaml enters the gateway process during tests);
-    mailer injects the K3 mail seam (a fake sender so smtplib never touches the network — when
+    mailer injects the mail seam (a fake sender so smtplib never touches the network - when
     provided, self-serve issuance is ENABLED regardless of SMTP config)."""
     cfg = make_config(tmp_path, **cfg_overrides)
     app = create_app(cfg=cfg, scanner=scanner, git_runner=git_runner, edit_runner=edit_runner,
@@ -485,7 +485,7 @@ def seed_validated(gw, cfg, *, slug: str = "mysurvey", email: str = GOOD_EMAIL,
                    package_files: dict[str, str] | None = None,
                    token: str | None = None) -> str:
     """Insert a submission and drive it directly to VALIDATED via the DB (bypassing the scan/job
-    pipeline — those are C10-tested), materialising a package tree + reports on disk so the checklist
+    pipeline - those are), materialising a package tree + reports on disk so the checklist
     and preview have something to read. Returns the submission id.
 
     fail_item -> writes a FAIL validator item so the blocking-FAIL guard fires.
@@ -616,7 +616,7 @@ def validator_fail(_package_root) -> dict:
 
 def inproc_edit_runner(surveys_live: Path, *, validator_override=validator_pass,
                        validator_path: str = ""):
-    """An in-process C31 edit seam for the gateway-flow tests: dispatch a job dict straight through
+    """An in-process edit seam for the gateway-flow tests: dispatch a job dict straight through
     the runner's REAL job dispatch (_dispatch_edit — slug charset validation, containment, scratch
     layout included), just without the file queue in between. ruamel/yaml stays out of every
     gateway/ module exactly as in production — the import lives in gateway.runner.edit, invoked here
@@ -638,7 +638,7 @@ def inproc_edit_runner(surveys_live: Path, *, validator_override=validator_pass,
         import uuid
         scratch = cfg.jobs_dir / "edit" / "scratch" / uuid.uuid4().hex
         try:
-            # The merge AND the C43 Stage-3b collection_batch jobs both validate patched packages via
+            # The merge AND the Stage-3b collection_batch jobs both validate patched packages via
             # edit._validate_patched (per survey for the batch); override it so the test controls the
             # per-survey verdict. The override callable receives the survey package_root, so a batch
             # test can PASS most surveys and FAIL a chosen one by inspecting package_root.name (slug).

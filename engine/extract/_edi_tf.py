@@ -4,7 +4,7 @@
 `tf_from_components` returns one entry per station as a column set (TF_COLUMNS order):
   [periods, rho_xy, rho_yx, phs_xy, phs_yx_adj, tip_mag, pt_min, pt_max, pt_az, pt_beta,
    rho_xy_err, rho_yx_err, phs_xy_err, phs_yx_err, tzx_re, tzx_im, tzy_re, tzy_im]   (10 -> 18)
-Arrays are thinned to <=32 periods and rounded; nulls where data absent/invalid. The eight C20
+Arrays are thinned to <=32 periods and rounded; nulls where data absent/invalid. The eight
 columns ride the SAME per-row thinning as the original ten (they are appended to each row before
 the thin), so all 18 columns share one period axis. Errors from RHO*.ERR / PHS*.ERR (impedance-error
 propagation, in _mtm); tzx/tzy are the tipper components TX/TY as read (no sign changes - the

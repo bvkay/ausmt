@@ -9,9 +9,9 @@ schema gate, the sibling of test_survey_metadata_schema_v01.py:
      branch open with `withheld` forbidden outright;
   2. three committed fixtures that must VALIDATE with format checking on: the live open station and
      the live withheld stub, each seeded from the suite's own live fixture plus the three
-     promotion markers, and the suite's T15 synthetic full record (the runs[]/resources[]
+     promotion markers, and the suite's synthetic full record (the runs[]/resources[]
      shape no live station instantiates yet);
-  3. the RED proof: the T12b-T19b, T28a-d, T29a-e and T34d rejections, each differing from a
+  3. the RED proof: the schema rejections, each differing from a
      PASSING document by exactly the field under test.
 
 The in-tree artifact is a byte copy, so running the suite's own checks against it is what

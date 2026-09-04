@@ -1,8 +1,8 @@
 """The REAL-git publish workflow.
 
 `real_git_runner` (publish.py:86) is the ONLY place the gateway executes the git binary, yet ALL
-pytest coverage went through FakeGit — which (pre-C35b/D2) returned rc=0 for any unmodeled verb. The
-sole real-git workflow (curator-e2e) was F5-unrunnable. So the fail-closed rollback (publish.py _rollback)
+pytest coverage went through FakeGit, which returned rc=0 for any unmodeled verb. The
+sole real-git workflow (curator-e2e) was. So the fail-closed rollback (publish.py _rollback)
 — the core publication-ledger guarantee — had NEVER run against a real repository, and the first live
 curator approve failed twice on real-git behaviours FakeGit cannot represent.
 
@@ -586,7 +586,7 @@ def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_e
     # gate is pinned separately). A slow git-push shim makes the first-acquiring retire HOLD the lock
     # while the second queues, guaranteeing the interleave. Assert: exactly one 200 + one 409, the
     # surviving survey remains, and the corpus NEVER empties.
-    # HISTORICAL RED (HEAD before F1, no inside-lock guard): BOTH retires succeed (statuses [200, 200])
+    # HISTORICAL RED (HEAD, no inside-lock guard): BOTH retires succeed (statuses [200, 200])
     # And list_published_slugs == 0 (corpus emptied) - captured verbatim in the report.
     import time as _time
 

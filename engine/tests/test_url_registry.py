@@ -246,7 +246,7 @@ def test_committed_registry_against_a_real_built_tree():
 
 
 def test_the_hand_off_namespace_can_never_reach_the_registry_or_the_sitemap():
-    """NEGATIVE PIN (THREDDS A10). `/go/ts/<survey>/<station>/<level>` is a front-door redirect into
+    """NEGATIVE PIN (THREDDS). `/go/ts/<survey>/<station>/<level>` is a front-door redirect into
     the NCI archive, NOT a published entity URL: it resolves through a generated table whose
     membership is the access decision, so an id reaching this registry through it would freeze a
     route the access gate is entitled to withdraw.

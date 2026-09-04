@@ -29,7 +29,7 @@ drives the SPA's control in the real document it builds, and tools/map_attributi
 all three of add-survey's. The pixel half is a browser measurement, recorded with the round's
 screenshots.
 
-The rule: AusMT_2026/LANE-CONTRACT-ABOUT-PAGE.md A9-REVISED.
+The rule: AusMT_2026/LANE-CONTRACT-ABOUT-PAGE.md-REVISED.
 """
 import re
 import shutil

@@ -91,7 +91,7 @@ class _RaisingGit(FakeGit):
 
 
 def _assert_rolled_back(git: FakeGit) -> None:
-    """The F3 pin shape (test_c43_stage3b.py:666-693), extended with the branch assertion: the tree
+    """The pin shape (test_c43_stage3b.py:666-693), extended with the branch assertion: the tree
     went back to the captured pre-state AND HEAD is on main again, not left on the feature branch."""
     assert git.rolled_back, f"the error escaped without a rollback: {git.calls}"
     assert git.start_ref in git.reset_targets, f"no reset to the pre-state ref: {git.reset_targets}"

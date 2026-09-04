@@ -1,6 +1,6 @@
 """Portal bundle tiles (Invariant 10).
 
-The survey drawer renders per-survey download tiles from the manifest's `bundles` rows. C32 adds a
+The survey drawer renders per-survey download tiles from the manifest's `bundles` rows. adds a
 second always-on bundle (EMTF-XML zip) beside the EDI zip, and re-labels the flag-gated survey MTH5 as
 TRANSFER FUNCTIONS ONLY (it holds TFs, never time series — matching the engine's <slug>-tf.h5 file).
 

@@ -1,4 +1,4 @@
-"""Usage-analytics screen (gateway half - record D4/D5).
+"""Usage-analytics screen (gateway half -).
 
 The consumer side of the aggregator: the gateway reads stats.json SERVER-side (serve_state.read_stats,
 the ops-status.json seam) and renders the READ-ONLY Analytics screen (Operations rail). These pins
@@ -163,7 +163,7 @@ def test_analytics_stale_staleness_is_fail_closed_both_directions():
 # CSP sweep: the Analytics route ships NO inline JS (server-rendered SVG only).
 # --------------------------------------------------------------------------------------------------
 def test_analytics_screen_has_no_inline_js(tmp_path):
-    """CSP SWEEP (record D13 extended). The Analytics screen must ship no inline <script> (every
+    """CSP SWEEP (extended). The Analytics screen must ship no inline <script> (every
     <script> carries src=) and no on*= handlers — both dead under the strictPages CSP (script-src
     'self'). The daily series is a server-rendered inline SVG with no scripting. FAILS IF the screen
     ships any inline JS (fresh OR empty state)."""

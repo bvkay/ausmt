@@ -9,7 +9,7 @@ Load-bearing pins:
     Stations chip slot + the slug data attribute. The header DEGRADES to the slug when the
     read-job fails on a non-metadata tab (never a bounce, never a 500).
   * SCAFFOLD: the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at
-    JS-source level here (executable form in the parity file). the Q3 citation-author
+    JS-source level here (executable form in the parity file). the citation-author
     email heuristic and its three surfaces (the data-citation-email scaffold attribute, the TOC
     issue chip and the Metadata inline field error) are DELETED with the retired flat credit keys
     they read; the pins below assert their absence.
@@ -29,7 +29,7 @@ from gateway.tests.conftest import (
 )
 
 # A survey carrying every orientation-line fact (version/licence/access/collection) + a display
-# title, so the H1 header has real fields to render. The citation author is a NAME (the email
+# title, so the header has real fields to render. The citation author is a NAME (the email
 # variant is a separate fixture below).
 HUB_YAML = """\
 schema_version: "0.2"
@@ -62,7 +62,7 @@ publications:
     title: "Earlier interpretation"
 """
 
-# The H4 email-author variant is retired with the heuristic that read it. What replaces it
+# The email-author variant is retired with the heuristic that read it. What replaces it
 # as the "this survey carries curated MTCAT 2.0 homes" fixture is a survey that actually carries them,
 # so the new panels have real values to render.
 HUB_YAML_CURATED = HUB_YAML + """
@@ -157,7 +157,7 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
     """DEGRADATION PIN. When the metadata read-job fails on a NON-metadata tab, the hub still
     renders (200): the title falls back to the slug, the orientation line carries no fact
     segments, and the tab's own content is unaffected. FAILS IF the failure bounces the curator
-    off the hub (the pre-C43-HUB metadata-only behaviour) or 500s."""
+    off the hub (the -HUB metadata-only behaviour) or 500s."""
     async def _body():
         surveys_live = _live(tmp_path)
 
@@ -179,7 +179,7 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
 # Overview scaffold + citation-email stamp
 # --------------------------------------------------------------------------------------------------
 def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
-    """ SCAFFOLD PIN, inverted. The Q3 citation-author email heuristic read ONLY the two
+    """ SCAFFOLD PIN, inverted. The citation-author email heuristic read ONLY the two
     retired flat credit keys, so with those migrated away it could never fire again; it and its
     scaffold attribute are deleted outright. FAILS IF the attribute or the helper comes back."""
     assert not hasattr(curatorpage, "citation_author_email")
@@ -236,7 +236,7 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
 
 
 def test_station_panel_no_raw_json_outside_collapsed_details():
-    """GATE F1/F2 SOURCE PIN. The stations panel renders NO raw JSON
+    """GATE SOURCE PIN. The stations panel renders NO raw JSON
     outside a collapsed <details>: the ONLY <pre> in STATIONS_JS is the collapsed 'raw
     station.json' dump; the old visible 'Conditioning / QA notes' and 'Coordinate QC' pre blocks
     are gone; conditioning and coordinate QC render as ONE terse dl line each
@@ -295,7 +295,7 @@ def test_metadata_tab_renders_the_curated_home_panels(tmp_path):
     stored custodian ticked and its primary-custodian radio selected, the citation preferred-text and
     nested preferred-identifier inputs, the acknowledgement wording, and the identity_classification
     case select with both designation row groups. FAILS IF a curator cannot edit a key the public
-    form and the migration can write (the no-raw-JSON-escape rule, D2)."""
+    form and the migration can write (the no-raw-JSON-escape rule)."""
     async def _body():
         surveys_live = _live(tmp_path, yaml_text=HUB_YAML_CURATED)
         async with app_client(tmp_path, git_runner=FakeGit(),

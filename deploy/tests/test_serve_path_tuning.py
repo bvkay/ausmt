@@ -65,7 +65,7 @@ def test_box_reader_listener_accepts_h2c():
 
 def test_box_trusted_proxies_survive_the_server_split():
     """FAILS IF splitting the servers options into scoped blocks dropped trusted_proxies from either
-    listener. The C45 masking promise depends on client_ip derivation on BOTH listeners; scoped
+    listener. The masking promise depends on client_ip derivation on BOTH listeners; scoped
     blocks do not inherit from an unscoped one, so each must carry the directive itself."""
     text = _box()
     for scope in (":8080", ":8081"):

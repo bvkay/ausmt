@@ -22,7 +22,7 @@ from ausmt_science.ingest.normalize import _survey_meta_get  # noqa: E402
 # --------------------------------------------------------------- the suppression kill (headline RED-prove)
 
 def test_citation_names_all_creators_even_with_lead_and_pis():
-    """RED-prove the suppression kill (C3 /): a survey carrying BOTH a lead_investigator AND
+    """RED-prove the suppression kill : a survey carrying BOTH a lead_investigator AND
     principal_investigators AND creators[] must cite ALL creators, in order. Pre-change cite.au was always
     org_name (the retired lead suppressed the PIs and creators were never read), so it named none of the
     creators - this fails on origin/main and passes after the change."""
@@ -164,7 +164,7 @@ def test_orcid_url_canonicalises_or_none():
 
 def test_project_lead_prefers_projectleader_contributor_then_creator_and_never_a_retired_facet():
     """The mth5 project_lead is the lead-most credited party: a ProjectLeader contributor first, else the
-    lead creator. A1 inverts the third rung: the retired investigators facet is not a fallback, so a
+    lead creator. inverts the third rung: the retired investigators facet is not a fallback, so a
     SMETA carrying only that stale key yields None. Pre-change it returned {"name": "Inv, I"}."""
     proj = bp._mth5_project_lead({
         "creators": [{"name": "Creator, C", "orcid": "0000-0002-1825-0097"}],

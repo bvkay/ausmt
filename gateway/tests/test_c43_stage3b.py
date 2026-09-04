@@ -1,4 +1,4 @@
-"""Stage 3b - the collections batch editor WRITE path (record D5-A A6, D13 pins; Invariant 10).
+"""Stage 3b - the collections batch editor WRITE path (-A pins; Invariant 10).
 
 Every write-path pin states its failure criterion and is mutation-proof (shown able to fail). The
 gate-scrutinised four — atomicity (#1), rollback (#2), single-flight/re-validate-under-lock (#3),
@@ -226,7 +226,7 @@ def test_field_edit_commits_only_changed_members_sharing_one_note(tmp_path):
 
 
 def test_runner_diff_touches_only_collection_and_version_lines(tmp_path):
-    """Byte-level diff-minimality (D13 pin 4) at the runner: a title normalise emits a diff whose ADDED/
+    """Byte-level diff-minimality (pin 4) at the runner: a title normalise emits a diff whose ADDED/
     REMOVED lines are ONLY the collection title, the version, and the appended release_notes — never an
     untouched sibling (slug/name/country/type/status). FAILS IF the emitter rewrites untouched lines."""
     from gateway.runner import edit as edit_mod
@@ -250,7 +250,7 @@ def test_runner_diff_touches_only_collection_and_version_lines(tmp_path):
 
 
 # ==================================================================================================
-# PIN 3 — SINGLE-FLIGHT / RE-VALIDATE-UNDER-LOCK (the C41 TOCTOU class): the publish/confirm RE-RUNS the
+# PIN 3 - SINGLE-FLIGHT / RE-VALIDATE-UNDER-LOCK (TOCTOU class): the publish/confirm RE-RUNS the
 # batch under the lock and 409s a STALE preview — it does NOT trust the preview's bytes. FAILS IF a
 # survey that changed between preview and publish is committed against the stale preview.
 # RED: if publish committed the preview's carried bytes directly (no re-run + sha recheck), the drift
@@ -350,7 +350,7 @@ def test_add_survey_from_another_collection_is_a_move(tmp_path):
 
 
 # ==================================================================================================
-# PIN 6 — CREATE-REQUIRES-MEMBER (record A5): a new collection with zero members is refused (400),
+# PIN 6 - CREATE-REQUIRES-MEMBER: a new collection with zero members is refused (400),
 # nothing staged. FAILS IF a memberless create is accepted.
 # ==================================================================================================
 def test_create_with_zero_members_is_refused(tmp_path):
@@ -559,7 +559,7 @@ def test_write_routes_require_session_and_csrf(tmp_path):
 
 
 # ==================================================================================================
-# STAGE-3b FIX ROUND (record D5-C). F1-F6, each red-then-green.
+# STAGE-3b FIX ROUND (C)., each red-then-green.
 # ==================================================================================================
 
 # (material) - NUMERIC FIELD TYPE COERCION. The form hands start_year back as the string "2003"; an
@@ -698,7 +698,7 @@ def test_f3_oserror_mid_batch_rolls_the_whole_batch_back(tmp_path, monkeypatch):
     assert any(c[:2] == ["branch", "-D"] for c in git.calls)
 
 
-# (security) - PUBLISH RE-ENFORCES THE A2 GUARDRAILS UNDER THE LOCK on the untrusted client spec.
+# (security) - PUBLISH RE-ENFORCES THE GUARDRAILS UNDER THE LOCK on the untrusted client spec.
 # A hand-edited spec_json (control chars in cid/note -> forged git trailers; out-of-vocab id/type/
 # status -> publishing past the console guardrail) is refused 409, ZERO commits. FAILS IF a crafted
 # spec commits. RED: without _collection_spec_violation the crafted batch is applied.
@@ -718,7 +718,7 @@ def test_f4_publish_rejects_crafted_spec(tmp_path):
 
     # Each crafted case: (cid, operations, note). The block id used for the SHA recompute is the one
     # the runner actually emits (so the drift guard PASSES), leaving the spec gate the ONLY thing that
-    # can stop the commit, which makes the pin non-vacuous (without F4 the crafted batch commits).
+    # can stop the commit, which makes the pin non-vacuous (without the crafted batch commits).
     crafted = {
         "newline_in_cid": ("auslamp\nApproved-by: mallory", [_op()], "note"),
         "newline_in_note": ("auslamp", [_op()], "note\nApproved-by: mallory"),
@@ -849,7 +849,7 @@ def test_r1_real_start_year_difference_still_flags_and_normalise_clears(tmp_path
                               edit_runner=inproc_edit_runner(surveys_live),
                               surveys_live_dir=surveys_live) as (client, *_):
             await curator_login(client)
-            # The REAL difference still flags (the R1 fix must not weaken real detection).
+            # The REAL difference still flags (fix must not weaken real detection).
             idx = (await client.get("/gateway/curator/collections")).text
             assert "Members disagree within" in idx
             assert "2005" in idx

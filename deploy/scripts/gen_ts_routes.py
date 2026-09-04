@@ -46,7 +46,7 @@ SURVEYS_DEFAULT = ROOT.parent / "ausmt-surveys" / "surveys"
 # The engine seams this table must not have a second opinion about. Both are stdlib-only modules;
 # build_portal itself is NOT imported (it pulls mt_metadata/mth5, which a deploy tool must not need).
 sys.path.insert(0, str(ROOT / "engine" / "extract"))
-import _coordaccess as coordacc      # noqa: E402  (the C42 per-station coordinate gate)
+import _coordaccess as coordacc      # noqa: E402 (per-station coordinate gate)
 import _stationcheck as stcheck      # noqa: E402  (the route prefix, the ENCODER, the encoded-route rule)
 import _tsindex as tsindex           # noqa: E402  (the register reader and its closed vocabularies)
 import _tsproject as tsproject       # noqa: E402  (THE projection: who gets a route)
@@ -189,7 +189,7 @@ def render(rows, unresolved=None) -> str:
     """The committed file: banner, one UNRESOLVED comment per dropped survey, one `"key" "value"`
     line per route. No date (a churning header fails --check on quiet days) and no host (it lives
     once, in the Caddyfile's redir target). The UNRESOLVED lines are in the FILE because membership
-    is the R5 decision: a change belongs in a human-readable diff and a `--check` that reds."""
+    is the decision: a change belongs in a human-readable diff and a `--check` that reds."""
     unresolved = unresolved or {}
     head = (f"# {BANNER}\n"
             f"# {len(rows)} route(s): open access + review:verified only (R5); level2 never routes "

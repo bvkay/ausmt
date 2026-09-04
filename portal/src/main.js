@@ -402,7 +402,7 @@ function buildIdText(){
   const short=raw.slice(0,12);
   return " · data build "+short+(date?" · "+date:"");
 }
-// Uses textContent (not innerHTML+esc()) — never parses markup at all, the strictest available
+// Uses textContent (not innerHTML+esc()) - never parses markup at all, the strictest available
 // guard — even though build_id/generated are engine-generated, not user input. The full raw id (even
 // when display-defended above) rides in the title attr so it's still inspectable, not lost.
 function renderBuildId(){

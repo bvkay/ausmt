@@ -1,4 +1,4 @@
-"""Box doctor (deploy/scripts/doctor-box.sh, ops-hardening O4).
+"""Box doctor (deploy/scripts/doctor-box.sh, ops-hardening).
 
 Black-box over `sh` with a REAL git surveys-live tree (so the git/perms/staleness checks exercise real
 git) plus stubs for docker/curl/systemctl. The load-bearing pins: the report is one labelled line per
@@ -278,7 +278,7 @@ def test_permission_hint_does_not_hide_a_kill_that_is_visible(tmp_path):
 # TS-ROUTE KEY-SET PARITY (THREDDS workflow). The route table lives on the VPS and the data lives here, so
 # a withheld flip is suppressed only once the table is regenerated, committed and installed. Both
 # renderings come from ONE projection, so their (station, level) key sets must be EQUAL: a route that
-# resolves for a station the data does not publish is the R5 leak, and a published route that 404s is
+# resolves for a station the data does not publish is the leak, and a published route that 404s is
 # a broken hand-off. Neither direction may pass quietly.
 # --------------------------------------------------------------------------------------------------
 _TSA = '{"au.demo.A1":{"raw_packed":{"bytes":1,"url_path":"arch/A1.zip"}}}'
@@ -303,7 +303,7 @@ def test_ts_parity_passes_when_the_table_and_the_served_data_agree(tmp_path):
 
 
 def test_ts_parity_fails_when_the_table_names_a_route_the_data_does_not_publish(tmp_path):
-    """THE R5 DIRECTION. A route the served data does not publish is a station whose bytes resolve
+    """THE DIRECTION. A route the served data does not publish is a station whose bytes resolve
     while its record says nothing - exactly the suppression failure the split-host shape risks.
     FAILS IF a table ahead of the data is reported green."""
     data = _make_tree(tmp_path)

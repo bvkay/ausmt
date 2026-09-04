@@ -71,7 +71,7 @@ def _docs(out):
 
 @pytest.fixture(scope="module")
 def flagless(tmp_path_factory):
-    """FAILS against the pre-A1 build_portal only in its flagged sibling below; this arm is the
+    """FAILS against the build_portal only in its flagged sibling below; this arm is the
     control it is measured against."""
     pytest.importorskip("mt_metadata")
     out = tmp_path_factory.mktemp("ts-index-flagless") / "data"
@@ -81,7 +81,7 @@ def flagless(tmp_path_factory):
 
 
 def test_the_flag_is_accepted_and_the_register_root_is_read_as_files(tmp_path):
-    """FAILS against the pre-A1 build_portal, which does not know --ts-index (argparse exits 2).
+    """FAILS against the build_portal, which does not know --ts-index (argparse exits 2).
 
     Rule 14 in one assertion: the committed register names an archive host, the build completes, and
     nothing resolved anything - the register is an input file like survey.yaml."""
@@ -132,7 +132,7 @@ def test_a_well_formed_register_loads_with_its_unknown_row_keys_intact(tmp_path)
 ])
 def test_a_row_outside_the_closed_vocabulary_stops_the_load(tmp_path, field, value, expect):
     """The three vocabularies are the surveys validator's, restated in the engine because the build
-    must not depend on a sibling checkout. FAILS against the pre-A1 engine, which had no reader."""
+    must not depend on a sibling checkout. FAILS against the engine, which had no reader."""
     with pytest.raises(tsindex.TsIndexError) as e:
         _load(tmp_path, {"EXAMPLE01": [{**GOOD, field: value}]})
     assert expect in str(e.value), str(e.value)

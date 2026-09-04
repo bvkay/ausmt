@@ -4,7 +4,7 @@ by curators through the authenticated UI — so at the NCI/facility home, where 
 shell, key rotation is a UI action, not a service restart.
 
 A key is `ausmt_up_` + secrets.token_urlsafe(32): a high-entropy random token. Only its sha256 hex
-digest is ever stored (mirroring the C10 submit-token / curator-session hashing); the plaintext is
+digest is ever stored (mirroring the submit-token / curator-session hashing); the plaintext is
 returned to the curator EXACTLY once at creation and can never be retrieved again (lost => revoke +
 create a new one). Because the key is high-entropy random, sha256 is the correct one-way store — no
 KDF/salt is needed (there is nothing to brute-force), and lookups compare hex digests with

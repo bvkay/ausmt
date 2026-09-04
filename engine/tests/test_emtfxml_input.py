@@ -384,7 +384,7 @@ def test_a_real_round_trip_failure_leaves_no_unverified_bytes_for_an_edi_station
 
 def test_embargoed_emtfxml_survey_serves_no_bytes(tmp_path):
     """EMBARGO INHERITANCE (the reviewer must PROVE it, not accept it). The XML ingest lands in the
-    same station pipeline, so the C1 access gate applies unchanged.
+    same station pipeline, so the access gate applies unchanged.
 
     FAILS IF an embargoed EMTF-XML-only survey serves any byte: no canonical XML, no generated EDI,
     no bundles, no manifest rows, and a WITHHELD station.json carrying no TF-derived science -- while
@@ -409,7 +409,7 @@ def test_embargoed_emtfxml_survey_serves_no_bytes(tmp_path):
 
 
 def test_withheld_coordinate_emtfxml_station_serves_no_coordinates_and_no_bytes(tmp_path):
-    """COORDINATE POLICY INHERITANCE. The C42 per-station byte gate is applied at the emit seam, which
+    """COORDINATE POLICY INHERITANCE. The per-station byte gate is applied at the emit seam, which
     the XML path shares, so a withheld-coordinate station must lose its coordinates AND its bytes --
     an EMTF XML is a full coordinate + elevation bearer, so it is withheld, never redacted.
 

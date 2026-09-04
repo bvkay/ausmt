@@ -3,7 +3,7 @@
 The engine projects the verified-resource register through the ONE internal model (`station_document`) as
 resource rows that carry a ROUTE and nothing local: `access_url` on the canonical NCI fileServer
 host, `repository`, the closed `processing_level`/`packaging` vocabularies crosswalked out of the
-station concepts, the D19 role axes, and the R9 fieldnote naming the day the CRAWLER read a 200.
+station concepts, the role axes, and the fieldnote naming the day the CRAWLER read a 200.
 There is no `path`, no checksum and no `service_urls`: AusMT hands the reader off, it does not host.
 
 Four gates decide whether a row exists at all, and each is pinned separately because each fails
@@ -18,7 +18,7 @@ differently:
     not an accident of the corpus.
   * the station is OPEN. A non-served survey's record is the withheld stub, whose key set is
     closed-world; a coordinate-gated station inside a served survey is excluded by the SAME two
-    scalars the C42 byte gate ANDs, because its raw time series carries the position the mask
+    scalars the byte gate ANDs, because its raw time series carries the position the mask
     withholds.
   * a level with nothing verified produces NO row, never a row with a null `access_url`.
 
@@ -78,7 +78,7 @@ def _build(surveys, out, *extra):
 def built(tmp_path_factory):
     """The vendored corpus built WITH the committed register.
 
-    FAILS against the pre-A2 emitter, which read the register and projected nothing from it."""
+    FAILS against the emitter, which read the register and projected nothing from it."""
     pytest.importorskip("mt_metadata")
     out = tmp_path_factory.mktemp("station-ts") / "data"
     r = _build(SURVEYS, out, "--ts-index", str(TS_INDEX))
@@ -106,7 +106,7 @@ def test_a_verified_row_becomes_a_time_series_resource(built):
 
 
 def test_the_access_url_is_the_absolute_percent_encoded_fileserver_route(built):
-    """The C5 fixture: NVP_2019 serves `C5 [REMOTE].zip`, whose encoded form is the only string that
+    """The remote-zip fixture: NVP_2019 serves `C5 [REMOTE].zip`, whose encoded form is the only string that
     HEADs 200. A literal space in an emitted route is a dead download."""
     rows = {r["id"]: r for r in _rows(_station(built, "example-survey", "EXAMPLE01"))}
     url = rows["ts-raw_packed"]["access_url"]
@@ -284,7 +284,7 @@ def _register_for(root, package, station_ids):
 @pytest.fixture(scope="module")
 def built_masked(tmp_path_factory):
     """One exact, one generalised and one withheld-position station in ONE open survey, each with a
-    verified register row, built by the C42 stager."""
+    verified register row, built stager."""
     pytest.importorskip("mt_metadata")
     c42 = _c42()
     root = tmp_path_factory.mktemp("station-ts-masked")
@@ -423,7 +423,7 @@ def test_the_blessed_docs_section_promises_what_the_emitter_guarantees():
 
     The level-token leg is the same debt in the other enumerated fact. The section listed the four
     tokens as a closed set one paragraph above the one promising that new tokens may appear, and no
-    pin read the list at all: the B0 pin asserts row shape and the mtcat identity join and never the
+    pin read the list at all: the pin asserts row shape and the mtcat identity join and never the
     names. So the one enumerated fact on a surface blessed as third-party-stable could go stale in
     silence the next time a level was added. The list is now read out of the emitter's own
     vocabulary rather than restated here, which is what makes the sentence self-maintaining.

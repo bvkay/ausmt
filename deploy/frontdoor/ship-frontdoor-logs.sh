@@ -1,8 +1,8 @@
 #!/bin/sh
-# AusMT front-door log shipping (C47 deliverable 3). Runs ON THE BOX (systemd oneshot, fired by
-# ausmt-frontdoor-logs.timer a few minutes AHEAD of the daily C45 fold). It PULLS the masked
+# AusMT front-door log shipping (deliverable 3). Runs ON THE BOX (systemd oneshot, fired by
+# ausmt-frontdoor-logs.timer a few minutes AHEAD of the daily fold). It PULLS the masked
 # access-frontdoor*.json logs off the VPS over the tailnet into the box's Caddy log dir — the exact
-# directory the C45 aggregator already globs (`access*.json`). Once landed, the daily ausmt-stats fold
+# directory the aggregator already globs (`access*.json`). Once landed, the daily ausmt-stats fold
 # attributes the public downloads/visits/countries just as it does the box's own log.
 #
 # WHY PULL (box -> VPS), not push: the tailnet ACL grants the front-door tag reach ONLY to the box's

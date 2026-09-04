@@ -77,7 +77,7 @@ def _log_block() -> str:
 
 
 def test_access_log_masks_client_address_at_edge():
-    """MASKED-AT-EDGE CONFIG PIN (C45 D2). The Caddyfile access log applies Caddy's ip_mask filter to
+    """MASKED-AT-EDGE CONFIG PIN. The Caddyfile access log applies Caddy's ip_mask filter to
     the client-address fields with the /24 (IPv4) + /48 (IPv6) masks, so a FULL IP never touches disk.
     FAILS IF the log block omits the mask on remote_ip/client_ip, or the mask widths are wrong
     (config-only in this harness; the caddy-validate leg + CI's live leg cover the runtime)."""
@@ -87,7 +87,7 @@ def test_access_log_masks_client_address_at_edge():
         "remote_ip must be ip_mask'd (a full peer IP must never be logged)"
     assert re.search(r"request>client_ip\s+ip_mask", block), \
         "client_ip must be ip_mask'd (the resolved client IP must never be logged in full)"
-    # The masks: IPv4 -> /24, IPv6 -> /48 (record D2).
+    # The masks: IPv4 -> /24, IPv6 -> /48.
     assert re.search(r"ipv4\s+24", block), "IPv4 must be masked to /24"
     assert re.search(r"ipv6\s+48", block), "IPv6 must be masked to /48"
     # No cookies / credentials logged (the promise: no cookies, no personal data).
@@ -110,7 +110,7 @@ def _status_redaction(block: str) -> tuple[str, str] | None:
 
 
 def test_status_token_redacted_from_uri_at_both_edges():
-    """STATUS-TOKEN REDACTION PIN (deploy review section 5, R28). GET /gateway/status/{token} carries a
+    """STATUS-TOKEN REDACTION PIN (deploy review section 5). GET /gateway/status/{token} carries a
     secrets.token_urlsafe(32) capability; the DB stores only its SHA-256 hash, but the masked access
     logs mask IPs and delete credential HEADERS while never touching request>uri - so the raw token
     landed in the log VERBATIM (retained 7 days, shipped to the box). BOTH log-writing edges must redact
@@ -150,7 +150,7 @@ def test_trusted_proxies_configured_for_real_client_masking():
 
 
 def test_access_log_has_rotation_and_7_day_retention():
-    """RETENTION PIN (C45 D2). The log rolls and is retained ~7 days (Caddy's roll options — no
+    """RETENTION PIN. The log rolls and is retained ~7 days (Caddy's roll options - no
     logrotate/cron). FAILS IF rotation/retention config is absent."""
     block = _log_block()
     assert "output file" in block, "the log must write to a file on the logs volume"

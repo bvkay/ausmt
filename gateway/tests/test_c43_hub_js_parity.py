@@ -4,7 +4,7 @@ build_report.json the REAL ENGINE produced over a doctored fixture survey — ne
 (standing rule: data-seam pins consume PRODUCER-TRUTH fixtures).
 
 THE FIXTURE (module-scoped, one real build): the engine's CC-BY sample survey EDI (Vulcan_A1,
-clean e^{+iωt}, ZROT=0) copied under new DATAIDs and phase-doctored to trip the C25 gates
+clean e^{+iωt}, ZROT=0) copied under new DATAIDs and phase-doctored to trip the gates
 DETERMINISTICALLY (the test_convention_gates manipulation, reimplemented as pure-text transforms):
   * CP1L02..CP1L05 — Zyx alone conjugated, each with a distinct extra twist (0/1/2/3 deg), so the
     quadrant gate WARNs (single off-diagonal out) with a DISTINCT median per station: four
@@ -39,7 +39,7 @@ import pytest
 
 from gateway import curatorpage
 
-# Shared harness helpers + skip posture (the S2a parity file is the house pattern).
+# Shared harness helpers + skip posture (parity file is the house pattern).
 from gateway.tests.test_c43_stage2a_js_parity import (  # noqa: F401
     _ENGINE_DIR, _ENGINE_SKIP_REASON, _extract_js_function, _run_node,
 )
@@ -54,7 +54,7 @@ pytestmark = pytest.mark.skipif(
 
 def _has_engine() -> bool:
     """The producer-truth fixture needs the REAL engine (mt_metadata) + its sample survey. No
-    validator needed (--no-validate build), unlike the S2a _run_preview corpus."""
+    validator needed (--no-validate build), unlike the _run_preview corpus."""
     import importlib.util
     return (importlib.util.find_spec("mt_metadata") is not None
             and (_ENGINE_DIR / "data" / "sample-survey" / "survey.yaml").is_file())
@@ -261,7 +261,7 @@ def _run_plan(tmp_path, warn_report):
 # The pins
 # --------------------------------------------------------------------------------------------------
 def test_cluster_warnings_producer_truth(warn_report, tmp_path):
-    """CLUSTERING ENGINE-TRUTH PIN (contract H2 acceptance shape). Driven with the REAL engine's
+    """CLUSTERING ENGINE-TRUTH PIN (contract acceptance shape). Driven with the REAL engine's
     build_report: the four same-class Zyx warns on the CP1L prefix run collapse to ONE row
     ('CP1L02 … CP1L05', '4 stations — …; clustered on one line', full notes in the title); the
     second class (CP1B10, Zxy) stays its own row and NEVER joins the cluster; the TWO refusals
@@ -315,7 +315,7 @@ def test_refusal_rows_terse_with_full_reason_in_title(warn_report, tmp_path):
 
 
 def test_package_note_renders_once_despite_multiple_refusals(warn_report, tmp_path):
-    """BOILERPLATE-ONCE PIN (contract H2). With TWO refusals in the report, the refused-stations-
+    """BOILERPLATE-ONCE PIN (contract). With TWO refusals in the report, the refused-stations-
     stay-in-package note appears EXACTLY ONCE in the plan, positioned after the last fail row and
     before the first warn row. FAILS IF the note repeats per refusal row (the mockup regression
     this pin exists for) or disappears."""
@@ -353,7 +353,7 @@ def test_four_cards_producer_truth_and_build_id_absent(warn_report, tmp_path):
     assert "geomagnetic" not in json.dumps(cards), "the engine never asserts 'geomagnetic'"
     lb = cards[3]
     assert re.match(r"^\d+(\.\d)? s$", lb["value"]), lb["value"]
-    # PRODUCER TRUTH: this fixture build runs WITHOUT the C18 cache (no cache dir), so its
+    # PRODUCER TRUTH: this fixture build runs WITHOUT the cache (no cache dir), so its
     # counters are all zero and there IS no cold/warm fact — the sub must carry only the engine
     # sha, never an invented 'cold'. The cold/warm/mixed words are pinned below on cache states
     # DERIVED from the real report (counter fields mutated, shape preserved).
@@ -374,7 +374,7 @@ process.stdout.write(JSON.stringify(p.cases.map(function (c) {
 
 
 def test_chip_and_qa_card_share_one_flag_definition(warn_report, tmp_path):
-    """SHARED-DEFINITION PIN. The H1 Stations-chip flagged number and the H2 QA-flags card
+    """SHARED-DEFINITION PIN. The Stations-chip flagged number and the QA-flags card
     render the SAME number from the SAME input (qaFlagCount over the convention-warn frame
     entries): chip '2 dropped · 5 flagged', card value '5', counts {serving 6, published 8}.
     FAILS IF the two surfaces disagree, published stops being built + dropped, or a healthy
@@ -419,9 +419,9 @@ def test_no_metadata_info_row_is_ever_planned(warn_report, tmp_path):
 
 def test_frame_card_derotation_headline_from_note_vocabulary(warn_report, tmp_path):
     """FRAME-CARD PIN (both branches). Headline derives from DE-ROTATION notes ONLY: the real
-    as-stored fixture yields 'as-stored'; grafting the ENGINE'S OWN derotation/R3 note shapes
+    as-stored fixture yields 'as-stored'; grafting the ENGINE'S OWN derotation/ note shapes
     (verbatim vocabulary from _conventions.py) onto the real report yields 'N de-rotated' with
-    the enumerated-carrier union, and the R3 sub-line 'declared acquisition frame recorded'.
+    the enumerated-carrier union, and the sub-line 'declared acquisition frame recorded'.
     Convention-warn entries must NEVER flip the headline. FAILS IF warns count as frame state,
     the union double-counts a station carried by two derotation notes, or the sub-line invents
     vocabulary the record does not carry."""
@@ -439,8 +439,8 @@ process.stdout.write(JSON.stringify(p.cases.map(function (c) { return frameCardF
     r3 = {"note": "frame: served in its declared acquisition frame, x-axis 8 deg",
           "count": 3, "stations": None, "except": None}
     cases = [real_frame,                       # as-stored (warns present, no derotation)
-             real_frame + [imp, tip],          # 2 de-rotated (S02 counted ONCE across two notes)
-             real_frame + [r3]]                # as-stored + R3 declared-frame sub-line
+             real_frame + [imp, tip],          # 2 de-rotated (counted ONCE across two notes)
+             real_frame + [r3]]                # as-stored + declared-frame sub-line
     got = _run_node(tmp_path, driver, {"cases": cases})
     assert got[0] == {"headline": "as-stored", "sub": "declared-zero reference"}
     assert got[1]["headline"] == "2 de-rotated", got[1]
@@ -584,7 +584,7 @@ process.stdout.write(JSON.stringify(cases.map(function (c) {
 
 
 def test_short_sha_canonical_and_verbatim_fallback(warn_report, tmp_path):
-    """TRUNCATED-SHA PIN (contract H3). A REAL engine-emitted catalogue sha256 truncates to
+    """TRUNCATED-SHA PIN (contract). A REAL engine-emitted catalogue sha256 truncates to
     'xxxx…yy' (first 4 + last 2, the mockup's inline form; the FULL hash rides the title attr —
     render pin in the styling file); an odd/short/non-hex value renders VERBATIM (never hide
     information — the builddisplay posture), and empty stays empty. FAILS IF the canonical form
@@ -592,7 +592,7 @@ def test_short_sha_canonical_and_verbatim_fallback(warn_report, tmp_path):
     cat = _load_corpus(warn_report)["catalogue"]
     js_c = re.search(r"var C = \{.*?\};", curatorpage.STATIONS_JS, re.DOTALL)
     assert js_c
-    real_sha = next(r[14] for r in cat if r[14])   # C.sha256 = 14 (pinned by the S2a column map)
+    real_sha = next(r[14] for r in cat if r[14])   # C.sha256 = 14 (pinned column map)
     assert re.match(r"^[0-9a-f]{64}$", real_sha), "engine sha256 must be 64 lowercase hex"
     vectors = [real_sha, "ABCDEF123456", "abcdef12345", "not-a-hash", "", None]
     driver = _stations_driver("""
@@ -691,7 +691,7 @@ def test_stations_list_merged_latlon_and_portal_link_source():
 
 
 # ==================================================================================================
-# Gate fix round: F1/F2 terse lines + F3 numeric range ordering
+# Gate fix round: terse lines + numeric range ordering
 # ==================================================================================================
 def _station_docs(warn_report) -> list:
     """Every station.json document the REAL engine wrote for the fixture survey, read from the SERVED
@@ -714,7 +714,7 @@ def _station_docs(warn_report) -> list:
 
 
 def test_terse_conditioning_and_coordqc_lines_from_real_station_json(warn_report, tmp_path):
-    """GATE F1/F2 ENGINE-TRUTH PIN. terseConditioningNote / conditioningLine / coordQcLine driven
+    """GATE ENGINE-TRUTH PIN. terseConditioningNote / conditioningLine / coordQcLine driven
     with the station.json documents the REAL engine wrote. Invariants: every conditioning
     fragment is a PREFIX of its source note (derivation, never invention); a note carrying the
     engine's ' — ' explanation is genuinely TERSED (fragment strictly shorter); no fragment
@@ -774,9 +774,9 @@ process.stdout.write(JSON.stringify({
 
 
 def test_cluster_range_label_numeric_order(warn_report, tmp_path):
-    """GATE F3 PIN. The cluster range label orders NUMERICALLY on the trailing digit run: the
-    PRODUCER-TRUTH CP1L items remapped to the panel's unpadded-id vector (CP1L02→L2, CP1L03→L3,
-    CP1L04→L10, CP1L05→L15 — same items, only the id text changed) must render 'L2 … L15', never
+    """GATE PIN. The cluster range label orders NUMERICALLY on the trailing digit run: the
+    PRODUCER-TRUTH CP1L items remapped to the panel's unpadded station ids (CP1L02→L2, CP1L03→L3,
+    CP1L04→L10, CP1L05→L15 - same items, only the id text changed) must render 'L2 … L15', never
     the lexicographic 'L10 … L3'-class backwards label; the zero-padded real corpus renders
     unchanged ('CP1L02 … CP1L05'). FAILS IF the sort reverts to lexicographic (shown red) or the
     remap disturbs grouping/count."""
@@ -810,7 +810,7 @@ process.stdout.write(JSON.stringify({
 # phaseVerdictParts run IN NODE against the tf rows the REAL ENGINE emitted, judged against the
 # parity-tested phaseqc.classify_series (the SAME seam the plot dots use) and an INDEPENDENT Python
 # band model. The named mutation-proofs (drop the yx unwrap; merge the two bands into one; drop a
-# verdict component) each red this pin; the verbatim reds ride the C43 record.
+# verdict component) each red this pin; the verbatim reds ride the record.
 # ==================================================================================================
 def _phase_driver(body: str) -> str:
     from gateway.tests.test_c43_stage2a_js_parity import _extract_constants
@@ -831,8 +831,8 @@ def test_combined_phase_plan_mapper_from_real_corpus(warn_report, tmp_path):
     with the tf rows the REAL engine emitted, produces: (1) the φxy series verbatim (stored = true) and
     the φyx series UNWRAPPED to true phase (stored − 180, re-wrapped — trueYx); (2) per-point flags +
     median verdicts MATCHING phaseqc.classify_series (the parity-tested seam the plot dots use); (3)
-    TWO bands own the ±180 axis - Q1 belongs to xy, Q3 (+ the +170..+180 seam continuation) to yx,
-    and NO band crosses 0 (Q1 and Q3 stay separately owned). phaseVerdictParts yields BOTH component
+    TWO bands own the ±180 axis - belongs to xy, (+ the +170..+180 seam continuation) to yx,
+    and NO band crosses 0 (and stay separately owned). phaseVerdictParts yields BOTH component
     verdicts, in order, with the out flag = median-out.
 
     MUTATION-PROOFS (each reds this pin): dropping the yx unwrap (reading yx RAW) — non-vacuous because
@@ -880,7 +880,7 @@ process.stdout.write(JSON.stringify(out));
         assert plan["yx"]["median"] == cyx["median"], sid
         assert plan["xy"]["medianIn"] == cxy["median_in"], sid
         assert plan["yx"]["medianIn"] == cyx["median_in"], sid
-        # (3) band ownership: Q1 -> xy; Q3 (+ seam) -> yx; NO band crosses 0 (merged-band mutation dies).
+        # (3) band ownership: -> xy; (+ seam) -> yx; NO band crosses 0 (merged-band mutation dies).
         bands = plan["bands"]
         assert [b for b in bands if b["comp"] == "xy"] == [{"comp": "xy", "lo": 0.0, "hi": 90.0}], sid
         yx_bands = [b for b in bands if b["comp"] == "yx"]

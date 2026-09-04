@@ -9,7 +9,7 @@ UX, the 409 is the guarantee). Non-blocking checks (DOI/PID) only ever WARN.
 The single most important check is the PII grep: it looks for the submitter's own email (the needle
 comes from the DB, curator-only) plus a generic email pattern across the built preview product +
 package tree. A hit is a FAIL — publishing PII is the one thing the whole confinement design exists
-to prevent. C11b splits that FAIL: a submitter-email hit is an ABSOLUTE block no acknowledgement can
+to prevent. splits that FAIL: a submitter-email hit is an ABSOLUTE block no acknowledgement can
 override; a hit on only OTHER addresses (e.g. a historical EDI `>INFO` contact line in a source
 record) is a blocking FAIL a named curator MAY acknowledge (`acknowledgeable=True`). Either way the
 detail names files ONLY — the matched address is never echoed anywhere.

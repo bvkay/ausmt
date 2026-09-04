@@ -1,4 +1,4 @@
-"""Unit pins for gateway.totp — the RFC 6238 destructive-op second factor (C41 D2 / T1).
+"""Unit pins for gateway.totp - the RFC 6238 destructive-op second factor.
 
 Failure criterion is in each test's docstring (Invariant 10). These are PURE-FUNCTION pins: no app,
 no DB, no git - just the RFC arithmetic + the window/malformed policy verify must enforce.
@@ -64,7 +64,7 @@ def test_generate_secret_roundtrips_and_is_high_entropy():
 
 
 def test_window_edges_accept_prev_and_next_step_but_reject_two_away():
-    """A code from the PREVIOUS or NEXT 30 s step verifies (±1 clock-skew tolerance, D2); a code from
+    """A code from the PREVIOUS or NEXT 30 s step verifies (±1 clock-skew tolerance); a code from
     TWO steps away is REFUSED. FAILS IF the window is wider or narrower than ±1 step. This is the
     mutation-proof for the window bound: shrinking to window=0 makes the ±1 asserts RED; widening to
     window=2 makes the two-away reject RED."""

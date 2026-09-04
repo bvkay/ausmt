@@ -1,4 +1,4 @@
-# AusMT curator-actions timer (C43 Stage 2b-ii). Fires ausmt-actions.service every 2 minutes so a
+# AusMT curator-actions timer (Stage 2b-ii). Fires ausmt-actions.service every 2 minutes so a
 # curator's Update / Snapshot / Rollback / Restore press lands within a couple of minutes. Install:
 #   sudo cp deploy/systemd/ausmt-actions.{service,timer} /etc/systemd/system/
 #   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)

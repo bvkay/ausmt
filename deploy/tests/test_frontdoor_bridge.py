@@ -19,7 +19,7 @@ Every OTHER /gateway path (the entire curator/admin workbench) and any wrong-met
 route is refused — at wall 1 (front door) AND, independently, at wall 2 (the box listener behind the
 port-scoped ACL). A breach needs BOTH walls to widen simultaneously.
 
-Runtime legs run a real Caddy against stub upstreams (C47 deliverable 4):
+Runtime legs run a real Caddy against stub upstreams (deliverable 4):
   (i)    the public reader path-space reaches the box reader (a request reaches the reader stub);
   (ii)   the four public GATEWAY routes traverse frontdoor -> reader -> a GATEWAY stub end-to-end, and
          GET /add-survey.html is served by the reader — method-scoped, red-proven;
@@ -281,8 +281,8 @@ def _stop(proc: subprocess.Popen) -> None:
 # ==================================================================================================
 def test_frontdoor_masked_log_at_the_edge():
     """The front-door access log masks the client address at write time (ip_mask /24 + /48) and deletes
-    every address/credential header — the SAME at-edge guarantee as the box C45 block, now the public
-    analytics feed (C47 invariant c). FAILS IF the mask or any header-delete is missing."""
+    every address/credential header - the SAME at-edge guarantee as the box block, now the public
+    analytics feed (invariant c). FAILS IF the mask or any header-delete is missing."""
     body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
     log = _brace_match(body, body.index("\tlog {"))
     assert re.search(r"request>remote_ip\s+ip_mask", log), "remote_ip must be ip_mask'd at the edge"
@@ -423,7 +423,7 @@ def test_box_compose_publishes_reader_listener_loopback_only():
 
 
 # ==================================================================================================
-# Runtime pins — real Caddy against stub upstreams (C47 deliverable 4)
+# Runtime pins - real Caddy against stub upstreams (deliverable 4)
 # ==================================================================================================
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
 def test_public_subset_traverses_frontdoor_reader_gateway_end_to_end():
@@ -791,7 +791,7 @@ def test_ship_service_documentation_resolves_to_the_runbook():
 
 
 def test_ship_timer_is_daily_persistent_and_before_the_fold():
-    """The timer fires DAILY, is Persistent, and fires BEFORE the C45 fold (03:35) so each day's public
+    """The timer fires DAILY, is Persistent, and fires BEFORE the fold (03:35) so each day's public
     logs are on the box when the aggregator reads them. FAILS IF it uses a sub-daily interval, drops
     Persistent, or is scheduled at/after 03:35."""
     cal = _lines(_TIMER, "OnCalendar=")

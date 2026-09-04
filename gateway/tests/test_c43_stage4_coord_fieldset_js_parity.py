@@ -1,6 +1,6 @@
 """Stage-4 - executable JS pins for the INTERACTIVE per-station coordinate-policy fieldset.
 
-The C43-S2a standing rule requires the stations-panel behaviour to be pinned with EXECUTABLE JS (the
+The standing rule requires the stations-panel behaviour to be pinned with EXECUTABLE JS (the
 functions actually run under node), never a string match alone. This pins the DOM-free CORE of the
 override fieldset — the functions the drill-down radios and the Save button rest on:
 

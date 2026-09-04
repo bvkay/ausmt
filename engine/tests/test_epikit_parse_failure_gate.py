@@ -10,7 +10,7 @@ The split these tests pin. The BUILD still exits 0 on a parse failure, because o
 file must not take the whole corpus down with it. The VERIFIER is the gate: scripts/verify.py FAILs,
 naming the survey and the file, unless the curator has written that file into the allow file, a
 reviewed repository artifact that is EMPTY over the whole corpus. That is the same posture the
-survey-level D20 loud-skip gate already takes one level up.
+survey-level loud-skip gate already takes one level up.
 
 The rule-8 pin at the end reads .github/workflows/build-products.yml, which the engine image does
 not ship; it skips there on the allow-listed image-topology reason and asserts on every checkout workflow.

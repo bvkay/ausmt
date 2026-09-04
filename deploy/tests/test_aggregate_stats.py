@@ -1,4 +1,4 @@
-"""Usage-analytics aggregator pins (record D6 - the C45-impl workflow).
+"""Usage-analytics aggregator pins (the workflow).
 
 These prove the load-bearing aggregator behaviours against INDEPENDENT OBSERVABLES (the emitted
 stats.json bytes, the attribution over an ENGINE-TRUTH manifest, the bisect result over a fixture
@@ -38,11 +38,11 @@ _DBIP = _FIXTURES / "dbip-country-lite.sample.csv"
 #
 # What is NOT expected, and is what drift looks like: a field appearing or changing value across a
 # regeneration. Regenerating for tier 1 flipped `custodian` (null -> "AusMT CI") and `canon_license`
-# (null -> "CC-BY-4.0") on all seven pre-existing rows, which are C46-W3a manifest fields this fixture
+# (null -> "CC-BY-4.0") on all seven pre-existing rows, which are manifest fields this fixture
 # had never carried. If a regeneration moves anything other than the h5/xml/xml-zip digests, the
 # fixture was stale and the diff is a real engine change to read, not noise to accept.
 
-# IP-like tokens the leak sweep hunts (record D6 leak pin): any IPv4 dotted-quad, or an IPv6 token —
+# IP-like tokens the leak sweep hunts (leak pin): any IPv4 dotted-quad, or an IPv6 token -
 # one carrying a `::` (every masked /48 compresses to one) OR >=4 hextet groups (>=3 internal colons).
 # That discriminates a real address from a `HH:MM:SS` timestamp (2 colons, no `::`), so the sweep flags
 # a leaked address but not the file's own generated_at — a precise, non-vacuous hunt.
@@ -86,11 +86,11 @@ def _sweep_ip_or_ua(text: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------------------------------
-# Leak pin (record D6): stats.json carries NO address (masked or not) and NO UA string.
+# Leak pin: stats.json carries NO address (masked or not) and NO UA string.
 # --------------------------------------------------------------------------------------------------
 def test_leak_pin_stats_has_no_ip_or_ua_and_sweep_can_fail():
     """LEAK PIN. The emitted stats.json must contain no IPv4/IPv6 token and no user-agent string —
-    only aggregates leave the pipeline (record D2). FAILS IF a masked address or a UA fingerprint
+    only aggregates leave the pipeline. FAILS IF a masked address or a UA fingerprint
     survives into stats.json. NEGATIVE CONTROL (red-proven): the SAME sweep, run over a dict that DID
     store the address + UA, MUST report hits — a sweep that cannot fail would be vacuous."""
     manifest = json.loads(_MANIFEST.read_text(encoding="utf-8"))
@@ -121,7 +121,7 @@ def test_leak_pin_stats_has_no_ip_or_ua_and_sweep_can_fail():
 
 
 # --------------------------------------------------------------------------------------------------
-# Attribution pin (record D6): engine-truth manifest -> right survey/station/format; unknown ->
+# Attribution pin: engine-truth manifest -> right survey/station/format; unknown ->
 # unattributed, never dropped.
 # --------------------------------------------------------------------------------------------------
 def test_attribution_pin_over_engine_truth_manifest():
@@ -176,7 +176,7 @@ def test_attribution_negative_control_unknown_path_not_attributed():
 
 
 # --------------------------------------------------------------------------------------------------
-# Country pin (record D6): bisect resolves known ranges incl a masked /24; missing/stale CSV ->
+# Country pin: bisect resolves known ranges incl a masked /24; missing/stale CSV ->
 # unknown, aggregator still completes.
 # --------------------------------------------------------------------------------------------------
 def test_country_pin_bisect_resolves_known_ranges_including_masked():
@@ -199,7 +199,7 @@ def test_country_pin_bisect_resolves_known_ranges_including_masked():
 
 def test_country_missing_csv_degrades_to_unknown_and_still_folds(tmp_path):
     """COUNTRY DEGRADATION PIN. A missing OR malformed CSV must degrade every lookup to 'unknown' and
-    the aggregator must STILL complete a full fold (record D6). FAILS IF a missing/garbage CSV raises,
+    the aggregator must STILL complete a full fold. FAILS IF a missing/garbage CSV raises,
     or a lookup returns anything but 'unknown'."""
     # (a) missing file
     missing = AGG.GeoIP.load(tmp_path / "does-not-exist.csv")
@@ -218,7 +218,7 @@ def test_country_missing_csv_degrades_to_unknown_and_still_folds(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Retention / absent-log pin (record D6): the aggregator tolerates an absent (already-rotated) log.
+# Retention / absent-log pin: the aggregator tolerates an absent (already-rotated) log.
 # --------------------------------------------------------------------------------------------------
 def test_absent_log_is_tolerated(tmp_path):
     """RETENTION / ABSENT-LOG PIN. read_log_lines over a missing dir (logs already rotated away) yields
@@ -298,7 +298,7 @@ def test_a_compressed_log_is_not_also_read_as_a_plain_one(tmp_path):
 # --------------------------------------------------------------------------------------------------
 def test_reruns_never_double_count():
     """IDEMPOTENCY PIN. Re-folding the SAME lines (same run instant) over the produced stats must not
-    change any total — only complete days AFTER last_folded_date are folded (record D4). FAILS IF a
+    change any total - only complete days AFTER last_folded_date are folded. FAILS IF a
     re-run double-counts, i.e. the cumulative totals grow on a repeated fold."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
@@ -1602,7 +1602,7 @@ def test_no_archive_line_ever_carries_a_country_or_a_state():
 
 def test_the_daily_archive_leaks_no_address_and_no_user_agent():
     """LEAK PIN (daily archive). The archive is a SECOND file leaving the fold, kept forever, so the
-    record D2/D6 promise has to hold over it exactly as it holds over stats.json: no address, masked
+ promise has to hold over it exactly as it holds over stats.json: no address, masked
     or not, and no user-agent string. FAILS IF either survives into an archive line. Non-vacuous by
     the same negative control the stats.json sweep uses."""
     states = AGG.AuStates.load(_AU_STATES_CSV)
@@ -2245,7 +2245,7 @@ def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
 # can never count completed transfers: everything after the Location is between the browser and NCI,
 # and every published string says so.
 #
-# TWO things the log cannot tell us, and they are the whole of D4. The `size` on a 302 line is the
+# TWO things the log cannot tell us, and they are the whole. The `size` on a 302 line is the
 # REDIRECT BODY, not the file, and the Location header is never logged at all. So the bytes and the
 # destination host come from the register-derived `ts_access.json` the build serves, joined on the
 # route path exactly as a frozen release bundle joins on its filename (_release_bundle_row).

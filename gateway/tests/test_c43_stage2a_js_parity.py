@@ -1,7 +1,7 @@
 """EXECUTABLE JS↔Python parity pins for the Stations-tab classification and
 URL construction (modelled on portal/tests/test_interactions.py's node-driver pattern).
 
-WHY EXECUTABLE: the fix round's F1 (JS truncated `%` vs Python floored `%` on negatives — 362 trueYx
+WHY EXECUTABLE: the fix round's (JS truncated `%` vs Python floored `%` on negatives - 362 trueYx
 mismatches and a verdict flip at stored≈−0.05) SHIPPED PAST the source-string parity pin, which only
 asserted the JS *contains* certain substrings. These pins EXECUTE the extracted JS functions in Node
 and compare against gateway.phaseqc (the authoritative spec) over a boundary-heavy vector set, so a
@@ -203,7 +203,7 @@ process.stdout.write(JSON.stringify(out));
         {"mode": "xy", "values": [10.0, 45.0, 95.0, -5.0, 200.0, None]},
         # xy: median beyond band+slack (coherent wrong quadrant).
         {"mode": "xy", "values": [-120.0, -130.0, -140.0]},
-        # yx: healthy Q3 cluster (stored values for true -135/-100/-170).
+        # yx: healthy cluster (stored values for true -135/-100/-170).
         {"mode": "yx", "values": [_stored_for_true_yx(t) for t in (-135.0, -100.0, -170.0)]},
         # yx: SEAM-STRADDLING cluster — true values -179, -178, +179 (stored 1.0, 2.0, -1.0). A naive
         # (-180,180] median would average across the seam; the engine's (-360,0] mapping keeps it sane.
@@ -250,7 +250,7 @@ _ENGINE_SKIP_REASON = "real engine stack / sample survey / validator not present
 def _has_real_engine() -> bool:
     """Mirrors test_runner.py's precondition for the no-mocks engine e2e: mt_metadata importable +
     the sample survey + a validator (sibling or vendored — _run_preview's in-build validation needs
-    one). The mt_metadata requirement is what legitimately skips the H1 engine-truth pins in the
+    one). The mt_metadata requirement is what legitimately skips the engine-truth pins in the
     stackless gateway workflow."""
     import importlib.util
 
@@ -420,7 +420,7 @@ def _py_frame_words(frame: dict) -> str:
     """The reference frameWords mapping (VERBATIM coercion, no recompute) the JS must match.
     Mirrors the JS String coercions (see _js_str) so the pin compares the JS against the SERVED
     values, not against itself: frame_served as stored, then de-rotated / declared-azimuth /
-    no-rotation from the derotated + declared_azimuth_deg fields, then (C25-V3 F2) the divergent
+    no-rotation from the derotated + declared_azimuth_deg fields, then the divergent
     tipper frame from tipper_declared_azimuth_deg (present only when it diverges — the engine omits
     it when equal or undeclared)."""
     fs = frame.get("frame_served")
@@ -460,7 +460,7 @@ def _real_frames(engine_corpus) -> list:
 
 
 def test_frame_words_verbatim_from_real_station_json(engine_corpus, tmp_path):
-    """FRAME-WORDS ENGINE-TRUTH PIN (C43-HUB H3, superseding the S2a frameRows table). The
+    """FRAME-WORDS ENGINE-TRUTH PIN (superseding the frameRows table). The
     extracted STATIONS_JS frameWords, driven in Node with the `frame` block a REAL engine build
     wrote to station.json, must render the mockup's worded line from VERBATIM served values —
     'declared-zero · no rotation declared' for the clean sample corpus — never a recompute.

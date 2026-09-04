@@ -87,7 +87,7 @@ def test_allowed_set_matches_state_diagram():
 
 def test_validated_is_no_longer_terminal():
     # VALIDATED stops being terminal (curator actions reopen it). PUBLISHING/PUBLISH_FAILED
-    # Are transient/recoverable, not terminal. proven failing: with the C10 TERMINAL set
+    # Are transient/recoverable, not terminal. proven failing: TERMINAL set
     # (VALIDATED terminal) a VALIDATED->PUBLISHING curator approve was refused as an illegal transition.
     assert not states.is_terminal(states.VALIDATED)
     assert not states.is_terminal(states.PUBLISHING)

@@ -16,7 +16,7 @@ A map value may instead be a mapping, carrying the custodian's own provenance fo
 alongside the optional published id (see PROVENANCE_KEYS below). The provenance travels in AusMT's
 own records only; the source file is never rewritten.
 
-Semantics, all fail-closed (the refuse-to-serve posture the C25 convention gates and the C42
+Semantics, all fail-closed (the refuse-to-serve posture the convention gates and the
 coordinate policy already take):
 
   * an ABSENT block leaves the EDI DATAID authoritative for every station, exactly as before. The
@@ -208,7 +208,7 @@ def parse_station_ids(block) -> StationIds:
     a mapping-form value, a value that declares nothing (null or an empty mapping), a value outside
     the published-id charset or longer than MAX_STATION_ID_LEN, or two keys mapping to the SAME
     published id. Key EXISTENCE is validated separately by validate_station_ids, against the package's
-    real files (the same split the C42 coordinate policy uses: enum shape at discovery, identity
+    real files (the same split the coordinate policy uses: enum shape at discovery, identity
     against reality in the build loop)."""
     if block in (None, "", {}):
         return StationIds(STATION_ID_SOURCES[0], {}, {})

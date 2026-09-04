@@ -1,7 +1,7 @@
-# AusMT curator-workbench ACTIONS agent (C43 Stage 2b-ii, record D8/D9). A oneshot unit the
+# AusMT curator-workbench ACTIONS agent (Stage 2b-ii). A oneshot unit the
 # ausmt-actions.timer fires every ~2 min: it scans the gateway state dir for privileged INTENT files
 # the curator wrote through the workbench (update / backup / rollback / restore) and executes a FIXED
-# recipe for each — the host-side half of the C40 request-file pattern (the gateway has no shell,
+# recipe for each - the host-side half request-file pattern (the gateway has no shell,
 # docker socket, or site-data mount). See deploy/README.md "Curator actions (privileged host agent)".
 #
 # INSTALL — replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (there is no %-spec

@@ -1,4 +1,4 @@
-"""D-L3 (identifiers-by-level): the "Source datasets" (sources) section is RETIRED from the
+"""(identifiers-by-level): the "Source datasets" (sources) section is RETIRED from the
 editor UI. Its acquisition fields (title / licence-as-obtained / retrieved / attribution statement /
 attribution profile) are now OPTIONAL keys on a related_identifiers row (identifies: entire); the standalone
 sources widget is GONE.

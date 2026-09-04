@@ -63,7 +63,7 @@ def _manifest(out):
 # ---- the rows ------------------------------------------------------------------------------------
 
 def test_an_open_station_publishes_its_served_renditions(built):
-    """FAILS against the pre-A8 emitter, which published no resources[] at all."""
+    """FAILS against the emitter, which published no resources[] at all."""
     doc = _station(built, "example-survey", "EXAMPLE01")
     rows = {r["id"]: r for r in doc["resources"]}
     assert "edi" in rows and "emtfxml" in rows

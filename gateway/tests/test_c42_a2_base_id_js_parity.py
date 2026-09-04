@@ -1,8 +1,8 @@
 """Executable JS pin for the base-station-id resolver (the override-fieldset key).
 
-The C43-S2a standing rule requires stations-panel behaviour to be pinned with EXECUTABLE JS (the
+The standing rule requires stations-panel behaviour to be pinned with EXECUTABLE JS (the
 function actually runs under node), never a string match alone. This pins baseStationId — the DOM-free
-helper that resolves a station's BASE id (the id the coordinate-override fieldset MUST key by, D2
+helper that resolves a station's BASE id (the id the coordinate-override fieldset MUST key by:
 base ids only, never file stems, never variant-suffixed ids) from the boot-loaded
 base_ids.json map, falling back to the station's own catalogue id when absent (a non-variant station is
 its own base; a variant-free corpus has no base_ids.json => empty map => every station its own base).

@@ -26,7 +26,7 @@ LEMIMT SITE line's `S-<rate>Hz` band token, which records the MERGING OF DOWNSAM
 not the rate the station was acquired at, so publishing it as a run rate would state a processing
 parameter as a measurement.
 
-The result is a plain-JSON dict so it can ride the C18 parse cache beside the record it describes.
+The result is a plain-JSON dict so it can ride the parse cache beside the record it describes.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ INFERRED = "inferred"
 CONFIDENCE_CLASSES = (FORMAL_EDI_FIELD, STRUCTURED_DIALECT, PATTERN_EXTRACTED,
                       CURATOR_SUPPLIED, INFERRED)
 
-# The D2 fact vocabulary, shared with the surveys repo's run-id assignment tool so the store and the
+# The fact vocabulary, shared with the surveys repo's run-id assignment tool so the store and the
 # emitter qualify the same stations. A station asserting none of these gets no runs[] at all.
 FACTS = ("source_run_id", "sample_rate", "time_period", "data_logger", "serial", "sensor",
          "dipole_length", "contact_resistance")
@@ -394,7 +394,7 @@ def run_facts(info: str) -> dict:
     """The acquisition facts one EDI's >INFO block asserts. `facts` is the run gate's input (empty =>
     the station publishes no runs[] at all); `run` and `channels` carry the values themselves;
     `confidence` records the extraction class behind each; `named_components` and
-    `excluded_components` feed the D9 channel rule."""
+    `excluded_components` feed the channel rule."""
     text = _text(info)
     if not text:
         return _blank_document()

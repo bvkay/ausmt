@@ -1,7 +1,7 @@
 """Rolled access logs must still reach the fold (the rotation blind spot).
 
 ONE invariant, three config surfaces, so it gets one home rather than a third of a pin in each of
-three files: a log line that has ROLLED must still be readable by the daily C45 fold.
+three files: a log line that has ROLLED must still be readable by the daily fold.
 
 Caddy compresses a rolled log file by default, producing `access-<stamp>.json.gz`. Both consumers key
 on the plain `.json` name: the aggregator's fold glob (deploy/scripts/aggregate_stats.py) and the

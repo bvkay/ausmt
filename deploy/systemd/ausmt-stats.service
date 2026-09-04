@@ -1,4 +1,4 @@
-# AusMT usage-analytics aggregator (C45 D4/D5). A oneshot unit the ausmt-stats.timer fires once a day:
+# AusMT usage-analytics aggregator. A oneshot unit the ausmt-stats.timer fires once a day:
 # it runs deploy/scripts/aggregate_stats.py, which folds the Caddy access log (masked-at-edge IPs, from
 # the 2b-ii log block) into a cumulative stats.json in the gateway state dir. The workbench Analytics
 # screen reads that file. The aggregator is STDLIB-only (no maxminddb, no new dependency), never raises

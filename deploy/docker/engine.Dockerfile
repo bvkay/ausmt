@@ -140,7 +140,7 @@ WORKDIR /app/engine
 # Editable install, no deps (the lock already installed every dependency pinned). This install is
 # what makes `python -m extract.build_portal` resolve: pyproject's [tool.setuptools.packages.find]
 # includes BOTH ausmt_science* AND extract*, so `extract` is a real installed package on
-# sys.path -- NOT a cwd artifact. (Pre-C37 the comment here claimed the install did this while it
+# sys.path -- NOT a cwd artifact. (Pre- the comment here claimed the install did this while it
 # did not: `extract` was excluded from the package list, and the module only resolved because this
 # WORKDIR put the engine dir on sys.path. That undocumented cwd contract is retired.) The image
 # ENTRYPOINT below still runs from this WORKDIR, but resolution must not DEPEND on it; and the
@@ -160,7 +160,7 @@ RUN python ../contract/generate.py --check
 #       `locker` stage happened to resolve at build time, NOT the pinned lock the image ships (see
 #       the HISTORY note at the top of this file, which admits exactly that). Least faithful → dropped.
 #   (b) deploy-images.yml's `engine-full-tests` job — runs `pytest` INSIDE the SHIPPED image with
-#       the pinned lock installed, piped through the M5 skip tripwire. This is the real release gate
+# the pinned lock installed, piped through the skip tripwire. This is the real release gate
 #       and is UNCHANGED; it is also where the D3.1 topology skip ("gateway tree not shipped")
 #       legitimately fires (engine image ships engine/ only, no /app/gateway), covered by the
 #       ci_check_skips.py allow-list. That skip is unaffected by removing (a): the image topology at

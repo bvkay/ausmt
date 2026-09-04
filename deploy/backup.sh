@@ -10,7 +10,7 @@
 #                                          miss committed transactions still in the -wal sidecar. A
 #                                          correct hot backup copies the DB *through SQLite*, not the
 #                                          filesystem (see snapshot_sqlite below).
-#   IN  - gateway/state/reconcile-status.json + any OTHER non-secret file in the state dir -- small
+# IN - reconcile-status.json + any OTHER non-secret file in the gateway's runtime state dir -- small
 #                                          operational metadata the box has no other copy of.
 #   OUT - deploy/.env                    -- NEVER. The secrets live in the operator's PASSWORD MANAGER,
 #                                          out of band. A backup that copied .env would put secrets in a

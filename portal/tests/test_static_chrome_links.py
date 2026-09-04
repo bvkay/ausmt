@@ -95,7 +95,7 @@ def test_the_404_page_recovers_to_the_surveys_index():
 
 
 def test_the_spa_header_surveys_and_collections_are_real_links():
-    """LANE-ADDENDUM-HUB-FEEDBACK.md R10, the live review of /surveys.
+    """LANE-ADDENDUM-HUB-FEEDBACK.md, the live review of /surveys.
 
     The hub pages exist and are served at /surveys and /collections, so the SPA header's own Surveys
     and Collections controls stop being in-app view switches and become links to them, matching the

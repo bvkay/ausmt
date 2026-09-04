@@ -35,7 +35,7 @@ def test_aggregate_all_stations_share_one_note():
 
 
 def test_aggregate_note_on_one_of_two():
-    """A on both, B on one -> two entries in first-appearance order. A: all 2. B: count 1, stations=[S1]."""
+    """A on both, B on one -> two entries in first-appearance order. A: all 2. B: count 1, stations=."""
     notes = {"S1": ["A", "B"], "S2": ["A"]}
     entries = bp.aggregate_conditioning(notes)
     assert [e["note"] for e in entries] == ["A", "B"]

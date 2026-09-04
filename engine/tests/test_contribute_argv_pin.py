@@ -3,12 +3,12 @@
 ausmt-surveys/_validation/contribute.py builds the engine preview by spawning
 `python -m extract.build_portal` with a HAND-BUILT argv. Nothing on the engine side notices when a
 build_portal flag that consumer depends on is renamed/removed — engine changes cannot trigger the
-surveys tests (the cross-repo triggering gap M6 names). This test pins the PROVIDER side: every flag
+surveys tests (the cross-repo triggering gap names). This test pins the PROVIDER side: every flag
 contribute.py passes must still exist in build_portal's CLI.
 
 CI has no ausmt-surveys sibling (private repo, no token — see build-products.yml), so the flag list is
 VENDORED here (committed, from a read of contribute.py) rather than read at runtime — the same
-unconditional-contract discipline C35b/D3 used for the validator. When the sibling IS present (dev
+unconditional-contract discipline used for the validator. When the sibling IS present (dev
 box), an extra assertion re-derives the flags from contribute.py's live source and checks the vendored
 list still matches, so the two cannot silently diverge without this test noticing on the next dev run.
 """
@@ -42,7 +42,7 @@ def _build_portal_help() -> str:
 
 def test_build_portal_still_offers_every_flag_contribute_uses():
     # FAILS IF build_portal renames/removes any flag the surveys consumer passes — the cross-repo
-    # break M6 pins. Proven non-vacuous: renaming build_portal's `--extractor` (or dropping it from the
+    # break pins. Proven non-vacuous: renaming build_portal's `--extractor` (or dropping it from the
     # vendored list's target) makes the flag absent from --help and reds this test.
     help_text = _build_portal_help()
     present = set(re.findall(r"--[A-Za-z][A-Za-z0-9-]*", help_text))

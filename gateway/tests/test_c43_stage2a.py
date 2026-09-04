@@ -1,10 +1,10 @@
-"""Stage 2a verification pins (record D13 + the contract's pin list). Each pin states its failure
+"""Stage 2a verification pins (+ the contract's pin list). Each pin states its failure
 criterion (Invariant 10) and is mutation-provable — the report carries a captured failing run for each
 guarded behaviour. Async bodies run under conftest.run.
 
 Pins here:
   * PHASE QUADRANT + φyx UNWRAP (phaseqc, the authoritative server-side seam the STATIONS_JS mirrors):
-    the +180 presentation shift on t[4] is inverted before classifying — a TRUE-Q3 station (stored t[4]
+    the +180 presentation shift on t[4] is inverted before classifying - a TRUE- station (stored t[4]
     near 0…90) classifies IN-quadrant; reading the stored value as true phase mis-classifies it.
   * [FC-2] LAG LABEL: with served ≠ published the Stations panel carries the publish-pending label.
   * CSP SWEEP extended to every NEW Stage-2a renderer/JS constant + rendered surface.
@@ -32,7 +32,7 @@ from gateway.tests.conftest import (
 # Phase quadrant classification + the φyx +180 unwrap (phaseqc — the authoritative seam)
 # ==================================================================================================
 def test_phi_xy_quadrant_classification():
-    """φxy (t[3], stored = true) classifies against Q1 widened by the engine-gate slack (a point is
+    """φxy (t[3], stored = true) classifies widened by the engine-gate slack (a point is
     band −10…100 with QUADRANT_SLACK_DEG = 10). FAILS IF an in-band(+slack) value is flagged (a red
     dot on a point the engine gate tolerates), an outside-by-more-than-slack value is not flagged, or
     the slack edges are wrong (the −10.0/100.0 edge vectors are IN; −10.1/100.1 are OUT — a
@@ -72,14 +72,14 @@ def test_quadrant_slack_matches_engine_gate():
 
 
 def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
-    """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits in Q3 (−180…−90) has a STORED t[4] near 0…90
+    """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits (−180…−90) has a STORED t[4] near 0…90
     (because engine _edi_tf stores phs_yx_adj = true + 180, re-wrapped). The workbench MUST subtract
-    the shift and classify the TRUE phase — so a true-Q3 station classifies IN-quadrant. FAILS IF the
+    the shift and classify the TRUE phase - so a true- station classifies IN-quadrant. FAILS IF the
     workbench reads the stored value as the true phase (then stored 45° would look like Q1 = 'in Q1',
-    and against Q3 it would read as OUT — the mis-classification this pin catches).
+    and it would read as OUT - the mis-classification this pin catches).
 
     NON-VACUOUS: for true φyx = −135°, stored t[4] = +45°. in_quadrant_yx(+45°) must be True (it
-    unwraps to −135° ∈ Q3). A naive `Q3_LO <= 45 <= Q3_HI` is False — so a no-unwrap implementation
+    unwraps to −135° ∈). A naive `Q3_LO <= 45 <= Q3_HI` is False - so a no-unwrap implementation
     fails this exact assertion."""
     for true_yx in (-135.0, -100.0, -170.0, -90.0, -180.0, -91.0):
         stored = phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG)  # == engine norm_phase
@@ -91,9 +91,9 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
 
 
 def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():
-    """The converse: a station whose TRUE φyx is beyond the Q3 band by MORE than the slack (a genuinely
+    """The converse: a station whose TRUE φyx is beyond the band by MORE than the slack (a genuinely
     wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (stored −135 would then read
-    as Q3 = 'in', hiding the real wrong-quadrant station) or the slack edge is wrong (−79.9 is 10.1°
+    as = 'in', hiding the real wrong-quadrant station) or the slack edge is wrong (−79.9 is 10.1°
     outside the band => OUT; −80.0 is exactly at the slack edge => IN)."""
     for true_yx in (45.0, 10.0, -45.0, -79.9):
         stored = round(phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
@@ -104,7 +104,7 @@ def test_phi_yx_slack_and_seam_edges():
     """Edge semantics for yx: (a) a true value within the slack of the band (−85, −80) is
     IN (the engine gate tolerates it — no red dot); (b) a true value just past +180 THROUGH THE SEAM
     (+175 maps to −185 on the (−360,0] axis, within slack of the −180 edge) is IN — the seam mapping is
-    what makes Q3±slack one contiguous window. FAILS IF the seam mapping is dropped (naive (−180,180]
+    what makes the quadrant plus slack one contiguous window. FAILS IF the seam mapping is dropped (naive (−180,180]
     comparison calls +175 OUT) or the slack is not applied."""
     for true_yx in (-85.0, -80.0, 175.0, 171.0):
         stored = round(phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
@@ -129,7 +129,7 @@ def test_classify_series_median_verdict():
     # xy: a coherently wrong series => median beyond band+slack => verdict OUT.
     xy_bad = phaseqc.classify_series([-120.0, -130.0, -140.0], mode="xy")
     assert xy_bad["median"] == -130.0 and xy_bad["median_in"] is False
-    # yx healthy Q3 cluster: median reported in (−180,180], verdict IN.
+    # yx healthy cluster: median reported in (−180,180], verdict IN.
     yx_stored = [round(phaseqc.wrap180(v + 180.0), 1) for v in (-135.0, -100.0, -170.0)]
     yx = phaseqc.classify_series(yx_stored, mode="yx")
     assert yx["median"] == -135.0 and yx["median_in"] is True and yx["any_out"] is False
@@ -148,8 +148,8 @@ def test_classify_series_median_verdict():
 def test_stations_js_mirrors_phaseqc_constants():
     """SOURCE ASSERTION: the browser-side STATIONS_JS embeds the SAME phase constants + structural
     elements phaseqc defines (the EXECUTABLE parity pin proves the semantics; this cheap sweep catches
-    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the Q1
-    and Q3 bounds, the slack, the floored modulo, the seam map, or the unwrap-then-classify shape."""
+    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the quadrant
+    and bounds, the slack, the floored modulo, the seam map, or the unwrap-then-classify shape."""
     js = curatorpage.STATIONS_JS
     assert "YX_SHIFT = 180.0" in js, "the +180 presentation shift must be in the JS mirror"
     assert "Q1_LO = 0.0" in js and "Q1_HI = 90.0" in js
@@ -281,7 +281,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert 'class="st-facts"' in body, "the facts container carries the middle .st-facts class"
             assert 'class="st-plots"' in body, "the plots container carries the right .st-plots class"
             # Scope: the hub's OTHER tabs are ALSO wide, which is wide-by-
-            # default supersedes the H2 'stations-only opt-in', so the overview tab (the old negative
+            # default supersedes the 'stations-only opt-in', so the overview tab (the old negative
             # control) is wide too.
             r2 = await client.get("/gateway/curator/survey/s2a-survey")
             assert r2.status_code == 200 and 'class="wrap wide"' in r2.text, (
@@ -485,7 +485,7 @@ def test_history_tab_renders_real_git_log(tmp_path):
             # NO rename/retire ACTION in the History tab (Stage 4). Read-only: the History body carries
             # no <form> and no rename/retire action route. (The copy may mention "rename" descriptively
             # — the pin is on the absence of an ACTION, not the word.) Anchor: the tab body's own
-            # lead copy (C43-HUB replaced the per-tab h1 with the unified mockup header, so the old
+            # lead copy (replaced the per-tab h1 with the unified mockup header, so the old
             # 'history</h1>' anchor does not exist; the context-bar rebuild form sits ABOVE it).
             assert "Read-only audit trail" in r.text
             history_body = r.text.split("Read-only audit trail", 1)[-1]

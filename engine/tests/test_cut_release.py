@@ -310,7 +310,7 @@ def test_datacite_contributors_include_ausmt_as_hosting_institution(tmp_path):
 
 def test_datacite_rights_are_derived_from_the_manifest_plus_metadata_cc0(tmp_path):
     """rightsList states what the corpus IS licensed under this quarter (read off the manifest rows),
-    with the catalogue-metadata CC0 row always present."""
+    with the catalogue-metadata row always present."""
     root = _data_root(tmp_path)
     assert _cut(root) == 0
     dc = _datacite(root)

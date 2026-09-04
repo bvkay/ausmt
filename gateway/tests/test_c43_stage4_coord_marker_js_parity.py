@@ -1,6 +1,6 @@
 """Stage-4 - executable JS pin for the per-station EFFECTIVE coordinate-policy marker.
 
-The C43-S2a standing rule requires the stations-panel behaviour to be pinned with EXECUTABLE JS (the
+The standing rule requires the stations-panel behaviour to be pinned with EXECUTABLE JS (the
 functions actually run under node), never a string match alone. This pins the two DOM-free helpers the
 Stage-4 marker rests on: effectivePolicy (coord_policy.json override-or-'exact') and positionText (the
 Position fact row's '(exact)' / '(generalised)' / '(withheld)' marker). The node-driver mechanics are

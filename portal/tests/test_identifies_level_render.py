@@ -184,7 +184,7 @@ def test_files_tab_reserved_level_doi_is_inert(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_files_tab_hostile_url_level_doi_is_never_an_open_action(tmp_path):
-    """SCHEME GUARD (D-L4 files tab): a URL-typed related_identifier is relatedIdHref's RAW value, so a
+    """SCHEME GUARD (files tab): a URL-typed related_identifier is relatedIdHref's RAW value, so a
     javascript: identifier that matches a served level would otherwise ride the level row straight into a
     product-tile open action (data-url -> window.open). The tsLevelRow scheme guard admits ONLY http(s),
     so the hostile level DOI yields NO open action on the files-tab level row; it falls through to the

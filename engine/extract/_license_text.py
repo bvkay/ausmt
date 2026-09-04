@@ -5,7 +5,7 @@ stdlib-generated table. This is what lets BOTH sides share one implementation of
 
   * build_portal - the bundle LICENSE.txt that travels inside every distributed survey zip
     (`license_instrument_text`), plus the redistribution allow-list gate (`redistributable`); its
-    output stays byte-identical to the pre-C34 in-module version (pinned by
+    output stays byte-identical to the in-module version (pinned by
     tests/test_license_gate.py + tests/test_manifest.py).
   * the gw-runner - the LICENSE.md it writes into a submitted package at intake. The runner
     executes on the ENGINE image, where `extract` is an installed package, so
@@ -56,7 +56,7 @@ def redistributable(license_str) -> bool:
     matches the contract/licenses.json redistributable allow-list. Ties the distribution model to licensing
     (the honest gate). 'TBD'/None/unknown/metadata-only -> NOT served (catalogue still lists the station;
     download -> archive). See the DECISION note in contract/licenses.json (NC/ND stay redistributable-verbatim,
-    but ONLY via exact ids — killing the pre-C6 typo hole)."""
+    but ONLY via exact ids - killing the typo hole)."""
     return canon_license(license_str) in _LIC_REDIST
 
 
@@ -119,7 +119,7 @@ def instrument_params_from_survey(*, attribution_block, sources_block, derived_p
                                   synthesized_attribution=None):
     """The (attribution, sources, changes) kwargs for license_instrument_text, derived ONCE from a
     survey's attribution/sources blocks so build_portal (the bundle LICENSE.txt) and the gw-runner (the
-    intake LICENSE.md) state IDENTICAL rights for the same survey — the single-source parity the C46 map
+    intake LICENSE.md) state IDENTICAL rights for the same survey - the single-source parity the map
     found the two call sites lacked. `attribution` = the custodian's verbatim attribution.statement when
     present, else `synthesized_attribution` (None -> license_instrument_text synthesises who(year))."""
     ab = attribution_block or {}

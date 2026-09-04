@@ -1,4 +1,4 @@
-# AusMT gateway image — runs the FastAPI submission gateway (gateway/, contract C10). Upload ->
+# AusMT gateway image - runs the FastAPI submission gateway (gateway/, contract). Upload ->
 # zip-safety -> clamd scan -> job queue -> tokenised status. The gateway NEVER parses EDI/YAML and
 # NEVER runs the validator/engine itself: content parsing happens in the gw-runner service, which is
 # the ENGINE image with a user:10002 + network_mode:none override (see compose.yaml's gateway
@@ -39,7 +39,7 @@ ENV AUSMT_GATEWAY_COMMIT=${GIT_SHA}
 # Publish flow (v2) shells out to `git` ONLY - stage/commit/push into surveys-live. It
 # does NOT invoke the build: demo publish is COMMIT-AND-PUSH ONLY, and the operator runs
 # `make rebuild-data` by hand afterward. So NO `make` here, and crucially NO Docker socket — which is
-# exactly what keeps the C10 no-socket invariant intact. `git` is not in python:3.12-slim, so
+# exactly what keeps the no-socket invariant intact. `git` is not in python:3.12-slim, so
 # install it (+ openssh-client so a `git push` over an ssh deploy key at /srv/git-creds authenticates;
 # ca-certs for an https remote). The gateway still NEVER parses EDI/YAML; it only invokes git.
 RUN apt-get update \

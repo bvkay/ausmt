@@ -254,7 +254,7 @@ def test_projection_1_the_flag_follows_the_register_and_rows_imply_it(built):
 
 
 def test_projection_2_a_withheld_stub_keeps_the_flag_and_none_of_the_detail(access_arm):
-    """SCOPE:310-311 with R13 live: the flag FOLLOWS THE REGISTER for a withheld station - the
+    """SCOPE:310-311 live: the flag FOLLOWS THE REGISTER for a withheld station - the
     register on this arm carries live rows for EXAMPLE01, so its flag is TRUE - while the stub
     stays closed-world and carries no resources, no route, no url_path. Existence survives
     withholding; detail does not. The two assertion classes exist for that asymmetry."""

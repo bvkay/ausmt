@@ -1,4 +1,4 @@
-"""End-to-end tests for the curator TOTP enrolment surface (C41 T2) through the HTTP layer.
+"""End-to-end tests for the curator TOTP enrolment surface through the HTTP layer.
 
 The Security page enrols the per-curator authenticator that gates survey retirement. These pins cover
 the enrolment lifecycle (begin -> show-once secret -> activate -> active), the collapse guard
@@ -139,7 +139,7 @@ def test_begin_when_already_active_is_refused(tmp_path):
 # --------------------------------------------------------------------------------------------------
 def test_rotate_without_current_code_refused_collapse_guard(tmp_path):
     """Rotation with a WRONG/absent current code is refused (400) and the secret is UNCHANGED — a
-    session alone must never rotate the secret (D2 collapse guard). FAILS IF a session-only rotation
+    session alone must never rotate the secret (collapse guard). FAILS IF a session-only rotation
     succeeds. Mutation-proof: dropping the current-code check in handle_security_rotate makes this RED
     (a wrong code would then rotate)."""
     async def _body():

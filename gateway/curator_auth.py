@@ -6,7 +6,7 @@ identity).
 
 Auth is a cookie session, not a header: the curator POSTs their key once to /login and the server
 sets a `Secure; HttpOnly; SameSite=Strict` cookie holding a random 32-byte token, stored sha256-
-hashed in curator_sessions (the raw token is NEVER stored — mirror of the C10 submit-token pattern).
+hashed in curator_sessions (the raw token is NEVER stored - mirror submit-token pattern).
 HttpOnly keeps the secret out of page JS entirely.
 
 Because auth is a cookie, every state-changing POST carries a CSRF token: a per-session value derived

@@ -1,4 +1,4 @@
-"""Ops-hardening config pins (O1 admin socket, O2 boot-ordering drop-in).
+"""Ops-hardening config pins (admin socket, boot-ordering drop-in).
 
 Pure text + path resolution over the shipped files, so these RUN everywhere (no docker/systemd/sh
 needed) and never trip the CI skip tripwire. They pin the config-side decisions the runbook documents:

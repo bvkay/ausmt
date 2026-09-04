@@ -138,7 +138,7 @@ def _build(tmp_path):
 
 
 def test_build_report_carries_the_presence_rows_for_the_defaults_survey(tmp_path):
-    """FAILS against the pre-A5 build: build_report.json had no `presence` field at all, so the
+    """FAILS against the build: build_report.json had no `presence` field at all, so the
     defaults the parse dropped were invisible to a curator."""
     rep, _r = _build(tmp_path)
     rows = rep["surveys"]["defaults-survey"]["presence"]

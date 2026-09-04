@@ -58,7 +58,7 @@ def _make_survey(root, edis):
 
 
 def _build(surveys, out):
-    """A full, cache-blind build. The C18 cache is deliberately NOT used: a warm build is trivially
+    """A full, cache-blind build. The cache is deliberately NOT used: a warm build is trivially
     byte-identical to the build that populated it, so a cached comparison could not see this defect
     (it is why the defect survived). INDEPENDENT full builds are the baseline here."""
     rc = build_portal.main([

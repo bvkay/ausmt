@@ -118,7 +118,7 @@ def test_surveys_index_lists_every_survey_with_its_discovery_facts(built):
             f"{slug}: every row link must resolve to an emitted page"
     assert "Test Org" in page and "South Australia" in page
     # The licence reads in HUMAN form in chrome and the SPDX identifier stays the machine's name
-    # for it (LANE-ADDENDUM-HUB-FEEDBACK.md R3); ranges take the spaced hyphen.
+    # for it (LANE-ADDENDUM-HUB-FEEDBACK.md); ranges take the spaced hyphen.
     assert "stations" in page and "CC BY 4.0" in page
     assert re.search(r"[\d,.]+ - [\d,.]+ s", page), "the period range must render"
     # No abstract on the cards: the index is a discovery summary, not a page of miniature records.
@@ -146,7 +146,7 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 
 
 # The fetched assets a page in this tier may carry, restated (not weakened) per
-# LANE-CONTRACT-BRAND-ASSETS.md E3. The rule was "no src at all", which was the right rule while the
+# LANE-CONTRACT-BRAND-ASSETS.md The rule was "no src at all", which was the right rule while the
 # pages had no identity mark: it kept out build-time reads, inlined copies and every external fetch.
 # The marks make an exception worth stating precisely rather than loosening the rule to
 # "images are fine": same-origin files, served by the portal image, cached once for the whole site.
@@ -163,7 +163,7 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # footer's AuScope-NCRIS lockup. The lockup arrived with the one-footer rule, which made the parent
 # organisation's acknowledgement the footer's right region on every surface; it is the same
 # same-origin, vendored, cached-once class of asset as the header mark and is allow-listed on
-# the same terms (see AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F1).
+# the same terms (see AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md).
 ALLOWED_HEADER_SRCS = ["/vendor/brand/ausmt-mark.svg"]
 ALLOWED_FOOTER_SRCS = ["/vendor/auscope-ncris-white.png"]
 ALLOWED_PAGE_SRCS = ALLOWED_HEADER_SRCS + ALLOWED_FOOTER_SRCS
@@ -624,7 +624,7 @@ def test_the_collections_card_keeps_its_explore_link_above_the_stretched_overlay
 
 def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
     """The hub's own words, verbatim, between the summary line and the
-    list; and the map action carries the in-site forward arrow (R14 keeps U+2192 for actions that
+    list; and the map action carries the in-site forward arrow (keeps U+2192 for actions that
     stay on the site and U+2197 for links that leave the page)."""
     pages = _pages_module()
     page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
@@ -704,7 +704,7 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # footer must resolve to, and whether the header's right status slot carries anything. The footer
 # column must NOT differ per row, which is exactly what the one-footer rule settles; it is
 # kept as a column, one value repeated, so a re-divergence shows up here as rows that disagree.
-# LANE-ADDENDUM-HUB-FEEDBACK.md R11 to R13. The tokens asserted below are the SPA header's own
+# LANE-ADDENDUM-HUB-FEEDBACK.md The tokens asserted below are the SPA header's own
 # (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
 # rather than read across, because the engine image ships engine/ and contract/ and cannot see
 # portal/ at all, and a test that reaches out of the image is a test the image cannot run.
@@ -990,7 +990,7 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
 
 
 def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
-    """Brand-assets workflow E4. This tier shipped no icon link at all, so every entity page asked for
+    """Brand-assets workflow This tier shipped no icon link at all, so every entity page asked for
     /favicon.ico and got a 404 on every visit. FAILS IF a page kind loses either link, or if either
     href stops being a same-origin portal path (an absolute URL here would be an external fetch on
     2,655 documents, which is exactly what this tier forbids)."""
@@ -1257,7 +1257,7 @@ def test_every_json_ld_block_parses_and_the_entity_node_stays_first(built):
 
 # THE CONSTANT FOOTER, over BUILT pages: the emitted document's own structure and CSS, where the
 # portal half of this pin (portal/tests/test_footer_regions.py) reads _pages.py's source text.
-# AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, F5 and F6.
+# AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md, and
 _FLOW_BELOW = 560
 _FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 

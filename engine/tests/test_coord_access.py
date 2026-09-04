@@ -10,7 +10,7 @@ distinctive. Fixtures are never hand-typed catalogue rows (house rule) — they 
 The centrepiece is the LEAK-SWEEP: a full byte sweep of the emitted out/ tree (every file) for the TRUE
 values of a non-exact station, in every string variant + a numeric JSON parse with epsilon >= 1e-3. It is
 mutation-proven TWO ways (all-exact flip finds every value; a planted 3-dp derivative is caught by the
-epsilon). Warm-cache re-runs the sweep on a second build (cache hits, zero misses) to pin the D3 cache
+epsilon). Warm-cache re-runs the sweep on a second build (cache hits, zero misses) to pin the cache
 boundary. Requires the mt_metadata/mth5 build stack.
 """
 import json
@@ -36,7 +36,7 @@ import cache as cache_mod   # noqa: E402  (patch the dirty-checkout gate so the 
 
 @pytest.fixture
 def clean_salt(monkeypatch):
-    """Force the C18 cache's dirty-checkout gate to see a CLEAN tree so the cache actually FIRES (the
+    """Force the cache's dirty-checkout gate to see a CLEAN tree so the cache actually FIRES (the
     dev worktree is dirty during development; CI is clean). Patches the gate INPUT, not the gate — the
     real is_salt_degenerate logic still runs. Mirrors tests/test_build_cache.py's fixture exactly, so
     the warm-cache leak-sweep can exercise a real cache HIT regardless of the working-tree state."""
@@ -86,7 +86,7 @@ def _stage_survey(base, stations, *, declare_policy=True, extent=True, overrides
     """Write a survey package (survey.yaml + one EDI per station) into `base`. `stations` is a list of
     the EXACT/GEN/HID-style dicts. When declare_policy, the yaml gets access.coordinates (from the
     stations' policies unless coordinates_default is given) + per-station coordinate_overrides. Returns
-    the package dir. `slug`/`name` allow staging SEVERAL surveys under one --surveys root (the F2
+    the package dir. `slug`/`name` allow staging SEVERAL surveys under one --surveys root (the
     survey-granularity pin)."""
     src = SAMPLE_EDI.read_text(encoding="utf-8")
     d = base / slug
@@ -206,7 +206,7 @@ def _sweep_non_exact_true_values(out_dir):
     NOTE: this text/byte sweep is STRUCTURALLY BLIND to binary containers — an IEEE-754 double
     inside an HDF5 file never matches a string variant, and the text-token numeric parse cannot see
     it either. Served *.h5 files (tier-2 bundles under bundles/ AND tier-1 per-station files under
-    h5/) are therefore swept SEPARATELY and NUMERICALLY by _sweep_h5_for_non_exact (the F1 fix-round
+    h5/) are therefore swept SEPARATELY and NUMERICALLY by _sweep_h5_for_non_exact (fix-round
     leg); a leak-sweep over a build that enables any binary distribution emitter must run BOTH legs,
     over EVERY such emitter's tree."""
     hits = []
@@ -223,7 +223,7 @@ def _sweep_h5_for_non_exact(out_dir, *, epsilon=1e-3):
 
       * a non-exact station's true lat/lon/elev appears within epsilon, OR
       * a non-exact station is PRESENT in the container at all, because the per-station byte gate
-        withholds the whole contribution (we never rewrite custodian bytes, D3), so presence itself
+        withholds the whole contribution (we never rewrite custodian bytes), so presence itself
         is a gate bypass regardless of the values it carries.
 
     Both MTH5 tiers are in scope and the rglob is what makes that true: the tier-2 survey bundle
@@ -231,7 +231,7 @@ def _sweep_h5_for_non_exact(out_dir, *, epsilon=1e-3):
     container class from the same writer, so neither gets its own weaker check.
 
     Exists because the text sweep cannot see into binary containers. RED against the
-    pre-F1 build, where emit_survey_mth5 received the FULL station list and re-read the RAW source
+    build, where emit_survey_mth5 received the FULL station list and re-read the RAW source
     EDIs (TF(fn=...)), bypassing both the mask and the byte gate; RED again against a tier-1 producer
     handed the same unfiltered list, which is why the fixture build must enable both emitters."""
     import _mth5 as m5  # noqa: PLC0415  (the engine's own MTH5 reader — same TF->record logic)
@@ -328,7 +328,7 @@ def test_leak_sweep_mutation_planted_3dp_derivative_caught_by_epsilon(tmp_path):
 # =====================================================================================================
 
 def test_warm_cache_sweep_still_clean(tmp_path, clean_salt):
-    """The C18 cache stores the PRE-mask parse (TRUE coords). A warm rebuild HITS it. This pins the D3
+    """The cache stores the PRE-mask parse (TRUE coords). A warm rebuild HITS it. This pins the
     cache-boundary invariant: the mask applies AFTER every cache read and its output is never cached.
 
     Build twice IN-PROCESS against the SAME survey.yaml with --incremental (in-process + clean_salt so the
@@ -639,7 +639,7 @@ def test_coord_policy_marker_absent_for_all_exact_corpus(tmp_path):
 
 
 def test_coord_policy_marker_never_co_occurs_with_true_coords(tmp_path):
-    """LEAK PIN (marker/artifact layer - mirrors the D6 leak-sweep spirit). A generalised station is
+    """LEAK PIN (marker/artifact layer - mirrors the leak-sweep spirit). A generalised station is
     MARKED in coord_policy.json AND its catalogue coordinates are the 0.1° CELL — never the true 6-dp
     position; and the marker file itself carries only ausmt_id -> policy, no coordinate. FAILS IF a marked
     station's catalogue coords are its true position, or the marked station's true coords appear anywhere
@@ -665,7 +665,7 @@ def test_coord_policy_marker_never_co_occurs_with_true_coords(tmp_path):
 def test_station_json_carries_policy_for_non_exact_only(tmp_path):
     """Products/station.json carries coordinate_policy for a non-exact station and
     NOT for an exact one (an exact station.json gains no coordinate_policy key; the three promotion
-    markers are the separate D8 exception, pinned key-for-key in test_access_gate.py). FAILS IF the exact
+    markers are the separate exception, pinned key-for-key in test_access_gate.py). FAILS IF the exact
     station.json gains a coordinate_policy key, or a non-exact one lacks/mislabels it."""
     out, r = _build(tmp_path, [EXACT, GEN, HID])
     assert r.returncode == 0, r.stderr
@@ -729,7 +729,7 @@ def test_fail_closed_override_typo_drops_only_that_survey(tmp_path):
     the healthy survey builds and serves in full, rc=0.
 
     FAILS IF one survey's override typo aborts the WHOLE build (rc!=0 / no catalogue at all — the
-    pre-F2 behaviour, where CoordinatePolicyError propagated uncaught from the corpus mask seam), or
+    behaviour, where CoordinatePolicyError propagated uncaught from the corpus mask seam), or
     if the bad survey's stations/bytes appear anyway, or the drop is silent."""
     base = tmp_path / "surveys"
     base.mkdir(parents=True)
@@ -1050,8 +1050,8 @@ def test_unit_apply_mask_in_place_and_validates_override_ids():
 
 
 # =====================================================================================================
-# BASE-STATION-ID SURFACE PINS (base_ids.json - the boot artifact keyed by base id for the C43
-# stations-panel override fieldset; D2 requires override keys to be BASE ids)
+# BASE-STATION-ID SURFACE PINS (base_ids.json - the boot artifact keyed by base id
+# stations-panel override fieldset; requires override keys to be BASE ids)
 # =====================================================================================================
 
 # One physical station processed by two codes: SAME DATAID (SITE1), two files -> the engine dedups to

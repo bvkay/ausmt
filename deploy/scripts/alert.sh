@@ -307,7 +307,7 @@ check_disk() {
 #     * the file is missing (the reconcile timer is not running / never wrote one) — WARN-class only on
 #       a fresh install; here we treat absence as a fail because on a configured box the timer must run,
 #     * last_run is older than AUSMT_ALERT_RECONCILE_MAX_MIN (the timer stalled), OR
-#     * action == "failed" (a build/verify failure — the C40 fail-closed state), OR
+# * action == "failed" (a build/verify failure - the fail-closed state), OR
 #     * action == "untracked_blocked" (the reconcile agent REFUSED to rebuild because surveys-live has
 #       untracked survey dirs the build would serve; needs an operator, no self-heal).
 #   noop/rebuilt/sync_failed are all healthy timer outcomes (they exit 0) and do NOT fail here — a
@@ -443,7 +443,7 @@ check_backup() {
 }
 
 # --------------------------------------------------------------------------------------------------
-# Check e (C43 S2b-ii): PERSISTENT-PAUSE alarm (record D9.7).
+# Check e: PERSISTENT-PAUSE alarm (7).
 #   The curator can pause auto-rebuild (pause.flag; reconcile auto-expires it after 6 h). A single
 #   pause is fine. The threat is a SLOW RE-ARM — re-writing the flag once per expiry window keeps
 #   auto-rebuild dead forever while every INDIVIDUAL flag stays "fresh" (a single-flag age check would
@@ -528,7 +528,7 @@ PYEOF
 }
 
 # --------------------------------------------------------------------------------------------------
-# Check f (C43 S2b-ii, S5(b)): PERSISTENT ROLLBACK-PIN alarm.
+# Check f: PERSISTENT ROLLBACK-PIN alarm.
 #   A "serve this build" rollback writes rollback.pin, which reconcile respects INDEFINITELY (no
 #   expiry) — a curator who rolls back and forgets freezes the box on an old build silently. Give the
 #   pin the SAME persistent-freeze visibility as a pause: carry a continuous first_seen forward while
@@ -619,7 +619,7 @@ PYEOF
 #     previous ops-status.json forward, so a 4-hour hidden sync_failed reads
 #     as "failing for N ticks since T", not a silent single line.
 #   * retained-build inventory: each site-data/builds/<ts> dir's build.json (id/engine/source) +
-#     build_report.json (stations) + build_provenance.json `cache` block (the C18-A4 forensics:
+# build_report.json (stations) + build_provenance.json `cache` block (the cache forensics:
 #     salt_fp / write_errors / read_errors) + a serving marker (== current symlink target).
 #   * log tail: the newest site-data/logs/*.build.log, last 60 lines, copied into the file (the
 #     gateway has no site-data mount — this is how a shell-less curator reads build forensics).
@@ -827,7 +827,7 @@ def _fresh(sha_env, origin_env):
 freshness = {"code": _fresh("AUSMT_OPS_CODE_SHA", "AUSMT_OPS_CODE_ORIGIN"),
              "surveys_live": _fresh("AUSMT_OPS_SL_SHA", "AUSMT_OPS_SL_ORIGIN")}
 
-# ---- retained-build inventory + the C18-A4 cache forensics (build_provenance.json `cache`) ----
+# ---- retained-build inventory + the cache forensics (build_provenance.json `cache`) ----
 site_data = os.environ.get("AUSMT_OPS_SITE_DATA") or ""
 builds = []
 serving_dir = None
@@ -890,7 +890,7 @@ if site_data:
         except OSError:
             pass
 
-# ---- pause state (C43 S2b-ii, record D9.7): active + the continuous-span persistence verdict ----
+# ---- pause state (7): active + the continuous-span persistence verdict ----
 def _f(name):
     v = os.environ.get(name, "")
     return v if v else None
@@ -912,7 +912,7 @@ pin = {"active": os.environ.get("AUSMT_OPS_PIN_ACTIVE", "") == "1",
        "persistent": os.environ.get("AUSMT_OPS_PIN_PERSISTENT", "") == "1",
        "max_hours": int(os.environ.get("AUSMT_OPS_PIN_MAX_H") or 24)}
 
-# ---- pending privileged intents + the actions audit tail (C43 S2b-ii, record D8/D9). Read-only
+# ---- pending privileged intents + the actions audit tail. Read-only
 #      surfacing so the serve screen shows what is queued/in-flight and the recent action outcomes;
 #      the gateway has no other view of the host actions agent's work. ----
 state_dir = os.environ.get("AUSMT_OPS_STATE_DIR") or ""

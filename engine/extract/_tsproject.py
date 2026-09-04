@@ -21,7 +21,7 @@ class; the THREDDS rule), and they all rest on the first:
                    must not open a route.
 
 ts_access.json, the mtcat keys, and deploy/scripts/gen_ts_routes.py all render from these
-functions; the route table's membership IS route_rows()'s answer, which is what makes the R5
+functions; the route table's membership IS route_rows()'s answer, which is what makes the
 suppression one predicate instead of three opinions.
 """
 from __future__ import annotations

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Regenerate the C42 coordinate-access portal fixtures from the REAL engine.
+"""Regenerate the coordinate-access portal fixtures from the REAL engine.
 
 The portal coordinate-access test (tools/coord_access_test.js) loads engine-BUILT portal
-artifacts — never hand-typed catalogue rows (the C42 house rule, D6). This script stages a survey
+artifacts - never hand-typed catalogue rows (house rule). This script stages a survey
 with one exact + one generalised + one withheld station (distinctive coordinates) and runs the real
 extract.build_portal over it, then copies the portal-consumed artifacts into
 tests/fixtures/c42/. Requires the mt_metadata/mth5 build stack (same as engine/tests/test_coord_access.py).

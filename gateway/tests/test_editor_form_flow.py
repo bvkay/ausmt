@@ -482,8 +482,8 @@ def test_bad_orcid_renders_field_error_on_form(tmp_path):
 
 def test_bad_doi_renders_field_error_on_form(tmp_path):
     """A publication DOI without a '10.' prefix re-renders the form with a per-field error. FAILS IF a
-    non-DOI is accepted into a DOI field. (IDCONS D2 retired the identifiers.dataset_doi input; the
-    per-field DOI validation is now exercised through a still-modelled DOI field — publications[].doi.)"""
+    non-DOI is accepted into a DOI field. (retired the identifiers.dataset_doi input; the
+    per-field DOI validation is now exercised through a still-modelled DOI field - publications[].doi.)"""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),

@@ -1,4 +1,4 @@
-"""IDCONS D4 (identifier-consolidation): the portal renders a RESERVED identifier HONESTLY -
+"""The identifier-consolidation ): the portal renders a RESERVED identifier HONESTLY -
 plain text + a muted "(reserved, not yet active)" note, NEVER an anchor — at every metadata-DOI link
 surface, while `ok` / `unknown` render as links exactly as today.
 
@@ -105,7 +105,7 @@ def test_reserved_ts_pid_collection_renders_as_text(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_sweep_no_reserved_identifier_is_ever_an_anchor(tmp_path):
-    """IDCONS D4 SWEEP: the load-bearing honesty guard. A single survey carries a RESERVED
+    """ SWEEP: the load-bearing honesty guard. A single survey carries a RESERVED
     identifier in EVERY metadata-DOI slot at once — the flat dataset DOI (engine fallback), the survey
     collection PID (ts_pid), and a typed related_identifiers DOI row — plus a citation. Across ALL three
     rendered surfaces (station drawer, survey story, survey card), NO anchor's href may point at any
@@ -138,7 +138,7 @@ def test_sweep_no_reserved_identifier_is_ever_an_anchor(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_maturity_doi_star_honest_about_reserved(tmp_path):
-    """IDCONS D4 (task 3d): the 'DOI' maturity star must NOT light green off a DOI that only 404s at
+    """ (task 3d): the 'DOI' maturity star must NOT light green off a DOI that only 404s at
     doi.org. A survey whose ONLY dataset DOI is reserved shows the star hollow with the honest note
     'reserved (not yet active)'; an ok / unknown DOI lights it 'minted' as before. FAILS RED against the
     pre-fix model, which lit the star off any m.doi regardless of resolution."""
@@ -161,7 +161,7 @@ def test_maturity_doi_star_honest_about_reserved(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_maturity_ts_star_keys_off_derived_from_row(tmp_path):
-    """IDCONS D1 (task 3d): 'Time series: linked' now lights off a typed IsDerivedFrom relation (the new
+    """ (task 3d): 'Time series: linked' now lights off a typed IsDerivedFrom relation (the new
     home of the collection PID), not only the retired ts_pid / availability flag. A curator survey whose
     only time-series link is a typed IsDerivedFrom row (m.ts unset, no ts_pid) still reads 'linked'."""
     extra = {"related_identifiers": [

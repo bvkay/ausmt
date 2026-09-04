@@ -157,7 +157,7 @@ def coords_of(path: Path):
 _PHX_DATAID = re.compile(r"\bP\s*=\s*(\S+)\s+R\s*=\s*([^\s()]+)", re.I)
 _INFO_BLOCK = re.compile(r"^>\s*INFO\b[^\n]*\n(.*?)(?=^\s*>|\Z)", re.S | re.M)
 _REF_STATION = re.compile(r"REFERENCE\b.*?STATION\s+NAME:\s*(\S+)", re.S | re.I)
-# Conservative email match (C3/PII scrub): >INFO free text is uncontrolled and has carried real
+# Conservative email match (PII scrub): >INFO free text is uncontrolled and has carried real
 # operator emails (e.g. a curator's institutional address) straight into the PUBLIC, non-licence-gated
 # station.json processing.note. Redact here, at the single point the note is derived, so every caller
 # (build_portal, any future consumer) gets the scrubbed form for free. Original EDI bytes are untouched

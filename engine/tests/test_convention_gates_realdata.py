@@ -76,10 +76,10 @@ def test_no_other_usarray_station_fails():
 
 
 def test_ccmt_uniform_zrot_served_as_stored_v3a():
-    """FAILS IF: a ccmt-2017 station (served survey; survey-uniform ZROT=8, ROTATION=FIX — the V3-A
-    serve-as-stored case of frame POLICY v3) is ROTATED, or served without the declared angle
+    """FAILS IF: a ccmt-2017 station (served survey; survey-uniform ZROT=8, ROTATION=FIX - the
+    serve-as-stored case of frame) is ROTATED, or served without the declared angle
     recorded, or its quadrants break as-stored. The rule: the engine serves data as
-    stored and reports the frame — it does not de-rotate. (Under v2 this was the R3 record case; v3
+    stored and reports the frame - it does not de-rotate. (Under v2 this was the record case; v3
     records every uniform declaration regardless of magnitude, so the outcome is unchanged here.)"""
     f = _find(REALDATA / "ccmt-2017", "CC01.edi")
     # as-read pt_az (the source acquisition frame)
@@ -169,7 +169,7 @@ def test_auslamp_pax_diagnostic_derotation_matches_custodian_twin():
         assert ev["zrot"] and len(conv._uniq_eps(conv._mask_sentinels(ev["zrot"]))) > 1, \
             f"{sp.name}: specimen must carry per-period ZROT (PAX) for this pin to mean anything"
         # build the diagnostic per-period disposition BY HAND (the serve path would REFUSE this) —
-        # the same per-period theta_z the retired v2 R1 branch built: mask sentinels, zero-fill gaps.
+        # the same per-period theta_z the retired v2 branch built: mask sentinels, zero-fill gaps.
         zr = conv._mask_sentinels(ev["zrot"])
         if len(zr) != int(tf_s.period.size):
             pytest.skip(f"{sp.name}: ZROT length {len(zr)} != {int(tf_s.period.size)} periods — "

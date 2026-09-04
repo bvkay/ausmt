@@ -30,7 +30,7 @@ from gateway.tests.conftest import (
 
 def test_mint_key_shape_and_hash_is_sha256():
     """A minted key carries the ausmt_up_ prefix and hashes to the sha256 hex digest of its own bytes
-    (the only stored form). Fails if the prefix or the hash function drifts from the C10 token pattern."""
+    (the only stored form). Fails if the prefix or the hash function drifts token pattern."""
     key = uploader_keys.mint_key()
     assert key.startswith("ausmt_up_")
     assert uploader_keys.key_hash(key) == hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -268,7 +268,7 @@ def test_uploader_email_absent_from_public_status(tmp_path):
     run(_body())
 
 
-# ---- H2 (C43-S2a-HOTFIX): keys-page layout — full width, short datetimes, usable note editor ----
+# ---- keys-page layout - full width, short datetimes, usable note editor ----
 # Feedback: "use the full width of the page, to spread out the issued
 # keys table to make it easier to tell what is going on." The shipped page rendered inside the
 # shell's 960px .wrap: the note textarea was a few characters wide and the Created/Last-used ISO
@@ -281,7 +281,7 @@ def _nav():
 
 
 def test_short_utc_canonical_and_verbatim_fallback():
-    """PIN (display shortener contract, the S2a-5 build-id posture). db._utc_now's canonical
+    """PIN (display shortener contract, the build-id posture). db._utc_now's canonical
     '%Y-%m-%dT%H:%M:%SZ' shape renders as 'YYYY-MM-DD HH:MM' (date + minutes); ANY other shape is
     returned VERBATIM, never mangled. FAILS IF the canonical form stops shortening (the three-line
     wrap comes back) or a non-canonical value is truncated/emptied (audit data silently lost)."""
@@ -341,12 +341,12 @@ def test_wide_by_default_narrow_by_exception():
     """SCOPE PIN. The scope invariant is WIDE-BY-DEFAULT rather than per-page
     opt-in to WIDE-BY-DEFAULT: every shelled working page (via _shell) fills the viewport; the ONLY
     narrow survivors are the chrome-less _page users — the login page and the terminal confirm pages
-    (a centred form stays a centred form). The old H2 'queue must NOT be wide' assertion dies with this
+    (a centred form stays a centred form). The old 'queue must NOT be wide' assertion dies with this
     rule. FAILS IF a shelled working page reverts to the narrow measure, or a centred-form _page page
     silently goes wide."""
     from gateway.curatorpage import render_login, render_queue, render_uploader_created
     # Wide-by-default: the queue (a shelled working page) now fills the width — the exact assertion
-    # the superseded H2 pin forbade.
+    # the superseded pin forbade.
     queue = render_queue(curator_name="ben", rows=[], csrf_token="tok", nav=_nav())
     assert '<div class="wrap wide">' in queue, "a shelled working page must be wide by default"
     # Narrow survivors: the login page and the show-once uploader-key page are chrome-less _page

@@ -1,4 +1,4 @@
-# AusMT public front door — VPS stack (C47 public bridge).
+# AusMT public front door - VPS stack (public bridge).
 #
 # ONE service: a Caddy edge that terminates public TLS for the demo name and reverse-proxies the
 # reader to the box over the tailnet. It runs on a small Sydney VPS that has JOINED THE TAILNET under
@@ -54,7 +54,7 @@ services:
       # so it is part of the config: without this mount `caddy validate` and startup both FAIL on the
       # missing import. It is GENERATED and COMMITTED (deploy/scripts/gen_ts_routes.py) and reaches
       # the VPS the same way the Caddyfile does - `git pull` in this subtree, then the installer.
-      # Never hand-edit it: its membership is the R5 suppression, so an added line publishes a route.
+      # Never hand-edit it: its membership is the suppression, so an added line publishes a route.
       - ./ts-routes.map:/etc/caddy/ts-routes.map:ro
       # ACME certificate + key material and Caddy's own state — MUST persist across restarts so a
       # bounce does not re-request a certificate every time (Let's Encrypt rate limits).

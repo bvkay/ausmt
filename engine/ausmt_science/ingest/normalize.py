@@ -633,7 +633,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     # Behaviour is UNCHANGED for a file mt_metadata reads directly: read_with_fallback's first act is
     # the same TF.read(str(src)), and the retry it may attempt is parse-only (a normalised copy in a
     # TemporaryDirectory destroyed before the call returns; tf.fn points back at `src`), so the bytes
-    # this function writes, hashes or serves are unaffected -- see the D1 note in extract/_mtm.py.
+    # this function writes, hashes or serves are unaffected -- see the note in extract/_mtm.py.
     # NOT recorded here: build_portal's catalogue pass reads every source file first and already
     # records the per-station fallback into build_report (surveys.<slug>.source_parse_fallbacks), so
     # adding it to `conditioned` would double-report it and would put a READ-side workaround into a
@@ -659,7 +659,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     # ~1e32 — this is the community-standard convention (SPUD/EMTF/mtpy-v2 readers treat |v|>1e8 as
     # missing, exactly as AusMT's own _mtm._is_missing does for the portal tf.json). Do NOT "null" or
     # strip these fills here: that would make AusMT's served canonical form DIVERGE from what the
-    # reference tool produces (the whole point of D6 is to serve the standard form). The portal's
+    # reference tool produces (the whole point is to serve the standard form). The portal's
     # tf.json is a display derivative that nulls the fill; the canonical XML keeps it.
     tf.write(str(canonical_xml), file_type="emtfxml")
     _fix_enum_repr(canonical_xml)

@@ -1,9 +1,9 @@
-"""VPS front-door doctor (deploy/frontdoor/doctor.sh, ops-hardening O4 + O3 zombie kit).
+"""VPS front-door doctor (deploy/frontdoor/doctor.sh, ops-hardening + zombie kit).
 
 Black-box over `sh`. Every external command the doctor uses is overridable by an AUSMT_DOCTOR_* env var,
 so the test points each at a tiny stub and drives the real report/exit/hash-compare/zombie-grouping logic
 with no docker/tailscale/VPS. The load-bearing pins: the report is one labelled line per check, the exit
-is non-zero iff any check FAILs, the config check PASSES on a hash match and FAILS on a mismatch (the O1
+is non-zero iff any check FAILs, the config check PASSES on a hash match and FAILS on a mismatch (the
 stale-config trap), and the zombie kit NAMES the top leaker by parent PID.
 
 Skips on Windows / no POSIX sh (platform reason, same as the reconcile/preflight suites); RUNS with
@@ -490,7 +490,7 @@ def test_pathurl_leg_probes_the_pinned_slug_over_https(tmp_path):
 # --------------------------------------------------------------------------------------------------
 # Time-series hand-off routes (THREDDS workflow): the ts-routes leg. Three facts, one leg - the mounted
 # table hashes equal to the repo copy, an OPEN route 302s to the table's own NCI Location, and a route
-# the table does NOT name 404s. The last one is the R5 suppression, so it is a FAIL, not a WARN.
+# the table does NOT name 404s. The last one is the suppression, so it is a FAIL, not a WARN.
 # --------------------------------------------------------------------------------------------------
 def _work(tmp_path: Path, label: str) -> Path:
     """A fresh root per doctor run: _env builds its stub bindir once per directory."""
@@ -533,7 +533,7 @@ def test_ts_routes_leg_warns_on_a_survey_the_table_could_not_resolve(tmp_path):
 
 
 def test_ts_routes_leg_fails_on_a_stale_mounted_table(tmp_path):
-    """THE O1 TRAP, extended to the ACCESS DECISION. Check 2 hash-compares only the Caddyfile, so a
+    """THE TRAP, extended to the ACCESS DECISION. Check 2 hash-compares only the Caddyfile, so a
     route table that drifted on the VPS (an old copy, a hand-edit) would otherwise serve unnoticed -
     and a stale table is a stale suppression, not just stale config. FAILS IF a drifted table is
     reported green."""
@@ -558,7 +558,7 @@ def test_ts_routes_leg_fails_when_an_open_route_does_not_hand_off(tmp_path):
 
 
 def test_ts_routes_leg_fails_when_an_unlisted_route_resolves(tmp_path):
-    """THE R5 PIN. A path the table does not name must produce NO Location: the map's `default ""` is
+    """THE PIN. A path the table does not name must produce NO Location: the map's `default ""` is
     the suppression, so anything but a 404 there means a route resolved that no register published.
     FAILS IF the leg tolerates a 200, a 302 or a soft redirect on an unlisted path."""
     for code in ("302", "200"):

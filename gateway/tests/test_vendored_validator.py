@@ -1,6 +1,6 @@
 """The vendored validator is a PINNED contract copy.
 
-The F7 oracles resolve to the vendored copy (gateway/tests/fixtures/vendored_validation/
+The oracles resolve to the vendored copy (gateway/tests/fixtures/vendored_validation/
 validate_survey.py) on CI and fresh clones. This file guards that copy: its sha256 must equal the PIN,
 so an accidental hand-edit of the vendored copy INSIDE this monorepo fails loudly (the same
 generate-and-assert discipline contract/generate.py --check owns). Refresh from a newer sibling with
@@ -65,7 +65,7 @@ def test_validator_orcid_checksum_matches_shared_vectors():
     # The validator's orcid_checksum_ok is the THIRD copy of the ISO 7064
     # MOD 11-2 checksum. Drive it over every validator-scoped vector in the SHARED oracle file — the
     # same file gateway/tests/test_orcid.py and the portal jsdom test consume. FAILS IF the validator's
-    # copy diverges from the shared verdicts (the exact drift M2 closes). The validator's FORMAT
+    # copy diverges from the shared verdicts (the exact drift closes). The validator's FORMAT
     # contract differs (URL accepted, bare form rejected), so we only assert the vectors whose
     # `applies_to` includes "validator" — the canonical-hyphenated set all three impls share.
     vv = _load_vendored_validator()

@@ -61,7 +61,7 @@ class RunnerConfig:
     engine_module: str = "extract.build_portal"
     # Working directory for the preview subprocess (`python -m extract.build_portal`). Passed
     # EXPLICITLY so module resolution never rides on the runner inheriting compose's WORKDIR (the
-    # undocumented cwd contract F8/C37 removed). With `extract` now a real installed package the
+    # undocumented cwd contract removed). With `extract` now a real installed package the
     # spawn resolves regardless of cwd; this pin keeps the invocation self-describing rather than
     # env-topology-dependent. Default matches the engine image's WORKDIR (/app/engine).
     engine_dir: Path = Path("/app/engine")
@@ -76,7 +76,7 @@ class RunnerConfig:
     # Metadata-edit jobs: where THIS container sees the surveys-live checkout (compose mounts it
     # READ-ONLY at /srv/surveys — the same mount the validator ships in). Edit jobs carry a SLUG,
     # never a path (the gateway's mount path /srv/surveys-live differs from this container's), and
-    # the runner resolves the package from here — mirroring the C10 rule that the runner recomputes
+    # the runner resolves the package from here - mirroring the rule that the runner recomputes
     # paths from its own env and never trusts one handed to it in a job file.
     surveys_root: Path = Path("/srv/surveys")
 
@@ -544,7 +544,7 @@ def _validator_file(validator_path: str) -> Path:
 
 def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) -> list[str]:
     """The ONE canonical argv for invoking the surveys validator as a subprocess (code-health
-    review). Both the C10 submission runner (_run_validator above) and the C31 metadata-edit
+    review). Both the submission runner (_run_validator above) and the metadata-edit
     runner (edit._run_validator) go through this, so the invocation contract lives in exactly one
     place - no second, independently-assembled argv can drift and re-open the ship-blocker
     (the folder had been passed as the --json VALUE with no positional, argparse exited 2, every real
@@ -552,7 +552,7 @@ def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) ->
 
     Canonical shape (the runner's positional-first form): the package folder is the REQUIRED
     positional and `--json` names the OUTPUT report file. edit.py must not assemble the flags
-    --json-first (`--json <file> <folder>`); argparse accepts both, but a single form is the point of
+    -json-first (`--json <file> <folder>`); argparse accepts both, but a single form is the point of
     The positional-first order is the one the real-vendored-validator oracles pin. All args are
     stringified here so callers pass Paths and the whole subprocess contract is described in one line."""
     return [sys.executable, str(validator_file), str(target_dir), "--json", str(report_path)]
@@ -583,7 +583,7 @@ def poll_once(cfg: RunnerConfig) -> bool:
     Crash-recovery contract: a process_job crash PROPAGATES out of this function WITHOUT writing a
     done-file, leaving the running-file present for the gateway's dead-job sweep to re-queue - distinct
     from a handled failure, which already wrote a 'quarantined' done-file inside process_job. This is
-    the M4 contract that had no test: it is now pinned by test_runner.py."""
+    the contract that had no test: it is now pinned by test_runner.py."""
     from . import edit as edit_mod  # lazy: keeps this module importable without ruamel
 
     while True:
@@ -608,7 +608,7 @@ def run_forever(cfg: RunnerConfig, poll_interval_s: float = 2.0) -> None:  # pra
     """The runner's main loop. run_forever is a thin driver over poll_once: each pass drains
     edit jobs then processes at most one submission job; when a pass processed nothing pending, sleep
     before the next. The loop's ordering and crash-recovery contracts live in poll_once, which IS
-    unit-tested (test_runner.py) - the M4 correction: this loop is NOT covered by any compose e2e that
+    unit-tested (test_runner.py) - the correction: this loop is NOT covered by any compose e2e that
     boots the runner, so the coverage claim the old docstring made was false; the contracts are pinned
     at the poll_once seam instead. The single-threaded known limitation stands (report): an edit
     job arriving MID submission-job waits for it; the gateway's bounded poll surfaces a retryable

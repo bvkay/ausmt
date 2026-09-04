@@ -8,8 +8,7 @@ NEXT read sees the corpus advance. Every assertion is an INDEPENDENT OBSERVABLE 
 invocation-marker file, the request file's existence, the status JSON's action, the process exit
 code, the log file), never the script's own self-report.
 
-Each test names its failure criterion in the docstring (Invariant 10). The cases (design C40,
-brief note 6c):
+Each test names its failure criterion in the docstring (Invariant 10). The cases:
   noop         head == built, no request  -> shim NOT invoked, action=noop, exit 0
   drift        head != built              -> shim invoked, action=rebuilt, log written + pruned, exit 0
   request      head == built + request    -> shim invoked, request consumed, action=rebuilt, exit 0
@@ -194,7 +193,7 @@ def test_untracked_survey_dir_refuses_rebuild(tmp_path):
 def test_clean_survey_tree_still_rebuilds(tmp_path):
     """A surveys/ tree with ONLY tracked survey dirs (no untracked leftovers) + drift => the guard is
     transparent and the rebuild proceeds exactly as before. FAILS IF: the guard false-positives on a
-    clean tree and blocks a legitimate rebuild (a regression to the C40 reconcile behaviour)."""
+    clean tree and blocks a legitimate rebuild (a regression reconcile behaviour)."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     _commit_tracked_survey(tree)  # tracked only — nothing untracked under surveys/
     r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
@@ -539,7 +538,7 @@ def test_log_dir_uncreatable_fails_before_building(tmp_path):
 def test_lock_held_second_run_is_silent_noop(tmp_path):
     """A second reconcile run while the lock is held exits 0 WITHOUT touching the status file. FAILS
     IF: two runs both build (lock not honoured), or the second run rewrites/creates the status file.
-    (skipif: no flock on this Windows dev box — noted in the C40 report; the deploy host has flock.)"""
+    (skipif: no flock on this Windows dev box - noted report; the deploy host has flock.)"""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     lock = Path(tree["env"]["AUSMT_RECONCILE_LOCK"])
     # Hold the lock in a separate flock process for the duration of the second run.
@@ -576,7 +575,7 @@ def test_status_file_readable_by_gateway_uid(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Stage 2b-ii: PAUSE auto-rebuild + ROLLBACK PIN (record D8/D13). A fresh pause.flag suppresses the
+# Stage 2b-ii: PAUSE auto-rebuild + ROLLBACK PIN. A fresh pause.flag suppresses the
 # drift rebuild; a STALE flag (older than the expiry) is IGNORED (auto-expires); a rollback.pin holds
 # reconcile off an auto-revert until an explicit rebuild.request moves forward. RED-then-green pins:
 # each proves it can fail (the paused/pinned case does NOT rebuild; the expired/explicit case DOES).
@@ -584,7 +583,7 @@ def test_status_file_readable_by_gateway_uid(tmp_path):
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_fresh_pause_flag_suppresses_drift_rebuild(tmp_path):
-    """PAUSE PIN (record D8/D13). With a FRESH pause.flag and drift (no rebuild.request), reconcile does
+    """PAUSE PIN. With a FRESH pause.flag and drift (no rebuild.request), reconcile does
     NOT rebuild — action=paused, the make shim is NOT invoked, and the status exposes paused=true.
     FAILS IF a fresh pause still rebuilds on drift. Non-vacuous: the expiry test below (stale flag)
     DOES rebuild, so the flag — not a broken build path — is what suppresses it."""
@@ -602,7 +601,7 @@ def test_fresh_pause_flag_suppresses_drift_rebuild(tmp_path):
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_stale_pause_flag_is_expired_and_rebuilds(tmp_path):
-    """PAUSE-EXPIRY PIN (record D13). A pause.flag OLDER than the expiry window is IGNORED — reconcile
+    """PAUSE-EXPIRY PIN. A pause.flag OLDER than the expiry window is IGNORED - reconcile
     treats auto-rebuild as ACTIVE and rebuilds on drift. FAILS IF a stale pause flag still suppresses
     the rebuild (proven against a never-expire implementation). The flag's mtime is set 7 h old with a
     6 h expiry."""
@@ -624,7 +623,7 @@ def test_stale_pause_flag_is_expired_and_rebuilds(tmp_path):
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_rollback_pin_holds_reconcile_off_auto_revert(tmp_path):
-    """ROLLBACK-REPOINTS PIN (reconcile side, record D13). While a rollback.pin stands, reconcile must
+    """ROLLBACK-REPOINTS PIN (reconcile side). While a rollback.pin stands, reconcile must
     NOT auto-rebuild on drift (which would revert the manual rollback) — action=pinned, shim not run.
     FAILS IF a pinned rollback is silently reverted by the next tick."""
     tree = _make_tree(tmp_path, source_commit="aaaaaaa")     # served older build => drift vs HEAD
@@ -643,7 +642,7 @@ def test_rollback_pin_holds_reconcile_off_auto_revert(tmp_path):
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_explicit_rebuild_request_clears_rollback_pin(tmp_path):
     """A rollback.pin does NOT freeze serving forever: an explicit rebuild.request is a deliberate
-    MOVE-FORWARD that clears the pin and rebuilds (record D13). FAILS IF a rebuild.request is ignored
+    MOVE-FORWARD that clears the pin and rebuilds. FAILS IF a rebuild.request is ignored
     while pinned, or the pin survives the deliberate rebuild."""
     tree = _make_tree(tmp_path, source_commit="aaaaaaa")
     _advance_head(tree)
@@ -661,7 +660,7 @@ def test_explicit_rebuild_request_clears_rollback_pin(tmp_path):
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_force_full_rebuild_flag_sets_cache_refresh(tmp_path):
-    """FORCE-FULL PIN (record D8, C43 S2b-ii). A rebuild.request carrying `full: true` makes reconcile
+    """FORCE-FULL PIN. A rebuild.request carrying `full: true` makes reconcile
     run the build in cache-REFRESH mode (AUSMT_BUILD_CACHE_MODE=refresh in the make environment); a
     plain request (no flag) leaves it at the default (empty => Makefile rw). FAILS IF the full flag does
     not reach the build's cache mode, or a plain request forces refresh. Observed via a make shim that

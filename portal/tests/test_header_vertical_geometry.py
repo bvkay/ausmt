@@ -5,7 +5,7 @@ that thoroughly: the tab group's x, the zone widths and their flex bases, the ta
 the box model the width is measured in, and the font stack the labels are measured with. Not one of
 those pins can see the header get TALLER. So when the 30px identity mark landed, the identity block
 outgrew its zone, the tagline dropped onto a second line, and the generated pages' header went from
-57.00px to 82.47px at 1280px with every horizontal pin still green, the C9 four-surface parity proof
+57.00px to 82.47px at 1280px with every horizontal pin still green, the four-surface parity proof
 still green, and the framing classification still reporting a header-identity diff. A 45 per cent
 change in the height of every page's header passed the whole gate.
 

@@ -35,7 +35,7 @@ ROOT = HERE.parent
 SURVEYS = ROOT / "data"          # data/sample-survey: CC-BY-4.0, open => bytes are served
 SCHEMA = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
 sys.path.insert(0, str(ROOT / "extract"))
-# The C42 module's engine-produced coordinate fixtures (one EDI per station, distinctive positions) and
+# The module's engine-produced coordinate fixtures (one EDI per station, distinctive positions) and
 # its survey.yaml writer. Reused so the byte gate is exercised against the SAME fixture shape the
 # Coordinate-access workflow proves the gate on.
 from test_coord_access import EXACT, GEN, HID, _stage_survey, _sweep_h5_for_non_exact   # noqa: E402
@@ -139,7 +139,7 @@ def test_a_non_exact_station_is_byte_gated_out_of_tier_one(tmp_path):
     """An MTH5 carries the station's true latitude, longitude and elevation in its own metadata,
     so it rides the SAME per-station byte gate the EDI and the EMTF-XML ride. Only an `exact` station
     gets a file. FAILS IF a generalised or withheld station gets an h5, which would be the coordinate
-    leak the survey-bundle producer already had to be fixed for once (C42 F1)."""
+    leak the survey-bundle producer already had to be fixed for once."""
     base = tmp_path / "surveys"
     base.mkdir(parents=True)
     _stage_survey(base, [EXACT, GEN, HID], slug="gate-survey", name="Gate Survey")
@@ -150,7 +150,7 @@ def test_a_non_exact_station_is_byte_gated_out_of_tier_one(tmp_path):
     assert on_disk == [f"{EXACT['id']}.h5"], on_disk
     # And the true positions of the two gated stations appear nowhere in the h5 tree. Checked with the
     # Leak-sweep's OWN numeric HDF5 leg (the engine's mth5 reader, values compared as floats), not
-    # a byte-string search: a search for b"-33.555551" inside an HDF5 file is the check C42 documents
+    # a byte-string search: a search for b"-33.555551" inside an HDF5 file is the check documents
     # as structurally blind, because an IEEE-754 double has no decimal spelling in the container.
     hits = _sweep_h5_for_non_exact(out)
     assert not hits, "a byte-gated station's position reached a per-station MTH5:\n" + "\n".join(

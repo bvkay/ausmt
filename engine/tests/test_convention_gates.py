@@ -8,10 +8,10 @@ so a test cannot pass vacuously against an unrotated fixture; and one adversaria
 the round-trip assertion CAN fail (a wrong-signed de-rotation is caught), permanently — not just
 in a one-off red run (Invariant 10).
 
-POLICY v3: the engine NEVER rotates served data. A survey-uniform declared
-frame of ANY magnitude serves AS STORED with the angle recorded (V3-A); survey-inconsistent frames
-serve as-stored per station with a survey "mixed declared frames" note (V3-B); per-period frame
-mixing (PAX) is REFUSED at the gate (V3-C). The de-rotation math (Z' = R(-θ) Z R(-θ)^T) is retained
+the engine NEVER rotates served data. A survey-uniform declared
+frame of ANY magnitude serves AS STORED with the angle recorded; survey-inconsistent frames
+serve as-stored per station with a survey "mixed declared frames" note; per-period frame
+mixing (PAX) is REFUSED at the gate. The de-rotation math (Z' = R(θ) Z R(θ)^T) is retained
 DIAGNOSTIC-ONLY and pinned here (test_diagnostic_derotation_*) + against the AusLAMP-SA custodian
 twins (test_convention_gates_realdata.py) — see maintainer/C25-ConventionGates.md.
 """
@@ -146,7 +146,7 @@ def _write(tmp_path, name, text):
 
 
 # ---------------------------------------------------------------------------------------------
-# Gate 1 — POLICY v3: serve AS STORED (V3-A), refuse per-period (V3-C). The engine never rotates.
+# Gate 1 - serve AS STORED, refuse per-period. The engine never rotates.
 # ---------------------------------------------------------------------------------------------
 def test_uniform_zrot_served_as_stored_v3a(tmp_path):
     """FAILS IF: a survey-uniform declared frame (here +30°) is DE-ROTATED, mislabelled, or
@@ -222,7 +222,7 @@ def test_per_period_zrot_refused_v3c(tmp_path):
 
 def test_threshold_death_14_vs_16_serve_identically_as_stored(tmp_path):
     """Threshold-death pin. FAILS IF: any serve-path behaviour differs at 14° vs 16° — the old
-    v2 FRAME_KEEP_MAX_DEG=15 boundary (R3 record ≤15 vs R4 de-rotate >15) is GONE. Under v3 both
+    v2 FRAME_KEEP_MAX_DEG=15 boundary (record ≤15 vs de-rotate >15) is GONE. Under v3 both
     are survey-uniform declarations served AS STORED, each recording its own angle; neither is
     de-rotated. Also proves FRAME_KEEP_MAX_DEG does not exist as a constant."""
     assert not hasattr(conv, "FRAME_KEEP_MAX_DEG"), "the v2 15° threshold constant must be gone"
@@ -264,7 +264,7 @@ def test_diagnostic_derotation_math_roundtrip():
 def test_diagnostic_derotation_wrong_sign_is_caught():
     """Adversarial meta-pin (permanent red evidence) for the diagnostic math: FAILS IF a
     WRONG-SIGNED de-rotation could pass the round-trip above — i.e. proves that pin can fail. The
-    correct de-rotation of an as-stored Zr = R(θ) Z0 R(θ)^T applies R(-θ); the WRONG sign applies
+    correct de-rotation of an as-stored Zr = R(θ) R(θ)^T applies R(-θ); the WRONG sign applies
     R(+θ) (= R(-θ)ᵀ), yielding a 2θ over-rotation that must DIVERGE from the unrotated original."""
     text = VULCAN.read_text(encoding="latin-1")
     Z0 = _z_from_text(text)
@@ -311,7 +311,7 @@ def test_tipper_derotation_mapping():
 def test_conjugated_z_fails_with_convention_message(tmp_path):
     """FAILS IF: an e^{-iωt} (conjugated) station is served, or the failure message does not name
     the convention. Conjugation flips BOTH off-diagonals coherently out of quadrant (Zxy Q1->Q4,
-    Zyx Q3->Q2) — the exact hazard that would invert the C20 induction-arrow claim."""
+    Zyx Q3->Q2) - the exact hazard that would invert the induction-arrow claim."""
     text = VULCAN.read_text(encoding="latin-1")
     Z = _z_from_text(text)
     # PRECONDITION: the base really is e^{+iωt}
@@ -326,8 +326,8 @@ def test_conjugated_z_fails_with_convention_message(tmp_path):
 
 def test_axis_swapped_z_fails(tmp_path):
     """FAILS IF: an x/y axis-swapped station (Zxy<->Zyx, Zxx<->Zyy — the reflection Gate 1 cannot
-    see and a ±90° rotation does NOT produce) is served. Signature: arg Zxy lands in Q3, arg Zyx
-    in Q1 — the exact shape of the three real USArray negative controls."""
+    see and a ±90° rotation does NOT produce) is served. Signature: arg Zxy lands, arg Zyx
+ - the exact shape of the three real USArray negative controls."""
     text = VULCAN.read_text(encoding="latin-1")
     Z = _z_from_text(text)
     Zs = Z[:, ::-1, ::-1]                 # swap x/y axes: rows and columns
@@ -341,7 +341,7 @@ def test_single_component_distortion_warns_not_fails(tmp_path):
     shape — TAS105/MBN09/WG-14 class) is FAILED, or served with no honesty note."""
     text = VULCAN.read_text(encoding="latin-1")
     Z = _z_from_text(text)
-    Z[:, 1, 0] = np.conj(Z[:, 1, 0])      # flip Zyx alone: Q3 -> Q2; Zxy stays Q1
+    Z[:, 1, 0] = np.conj(Z[:, 1, 0])      # flip Zyx alone: -> Q2; Zxy stays
     parsed = _parse(tmp_path, "distort.edi", _z_to_text(text, Z))
     assert "skip" not in parsed, "single-component out-of-quadrant must be WARN, never FAIL"
     ck = parsed["frame"]["convention_check"]
@@ -381,7 +381,7 @@ def test_quadrant_constants_single_sourced():
 # ---------------------------------------------------------------------------------------------
 def test_clean_sample_station_is_untouched():
     """FAILS IF: the gates alter or annotate a clean station (sample-survey Vulcan_A1: uniform
-    ZROT=0, HX=0/HY=90, Q1/Q3 phases). The clean corpus is the false-positive budget: zero."""
+    ZROT=0, HX=0/HY=90, phases). The clean corpus is the false-positive budget: zero."""
     parsed = bp._parse_one_edi(VULCAN)
     assert "skip" not in parsed
     fr = parsed["frame"]
@@ -535,7 +535,7 @@ def test_process_edis_reports_gate_drops(tmp_path):
 
 
 # ---------------------------------------------------------------------------------------------
-# POLICY v3: V3-A serve-as-stored (any angle) + V3-B survey-inconsistency
+# serve-as-stored (any angle) + survey-inconsistency
 # ---------------------------------------------------------------------------------------------
 def test_small_uniform_angle_served_as_stored_v3a(tmp_path):
     """FAILS IF: a survey-uniform declared frame (here 8° - the ccmt-2017 class) is ROTATED,
@@ -580,7 +580,7 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
     assert solo["frame"]["derotated"] is False
     assert solo["frame"]["frame_served"] == "declared-azimuth"
     assert solo["frame"].get("survey_frame_note") is None   # no survey context standalone
-    # survey context: 8 vs 20 -> spread 12 > 5 -> V3-B mixed; BOTH still served AS STORED
+    # survey context: 8 vs 20 -> spread 12 > 5 -> mixed; BOTH still served AS STORED
     sdir = tmp_path / "survey"
     sdir.mkdir()
     (sdir / "A.edi").write_text(t8, encoding="latin-1")
@@ -616,11 +616,11 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
 # Declared-zero stations participate in the arm-B vote as angle 0.0
 # ---------------------------------------------------------------------------------------------
 def test_classify_survey_frame_declared_zero_participates_f1():
-    """FAILS IF: declared-zero (kind 'none') stations are excluded from the V3-B
+    """FAILS IF: declared-zero (kind 'none') stations are excluded-B
     spread vote or the note's min/max range. A served station always sits in SOME declared frame —
     zero serves under the declared-zero reference — so [0°, 20°] mixes frames exactly as [8°, 20°]
     does, and the stamped range must include the 0° members.
-    Historical red: pre-F1 code voted over kind=='uniform' only — [0°, 20°] got NO note and
+    Historical red: code voted over kind=='uniform' only - [0°, 20°] got NO note and
     [0°, 8°, 20°] understated the range as '8°…20°'."""
     z = ("none", 0.0)
     u = lambda a: ("uniform", float(a))  # noqa: E731
@@ -635,16 +635,16 @@ def test_classify_survey_frame_declared_zero_participates_f1():
     assert n4 and "8°…20°" in n4, f"[8, 20] unchanged: {n4!r}"
     assert conv.classify_survey_frame([z, z, z]) is None, "[0, 0, 0]: spread 0 — no note"
     assert conv.classify_survey_frame([z, u(4)]) is None, "spread 4 <= 5 — no note"
-    # per-period (V3-C) stations are refused, never served — they cannot mix a SERVED frame
+    # per-period stations are refused, never served - they cannot mix a SERVED frame
     assert conv.classify_survey_frame([("per-period", None), z]) is None
     assert conv.classify_survey_frame([]) is None
 
 
 def test_survey_zero_member_gets_mixed_frames_note_f1(tmp_path):
     """Integration. FAILS IF: a survey mixing a declared-zero station with a 20° one gets NO
-    mixed-frames note (the pre-F1 defect: zero members were invisible to the vote), or the note's
+    mixed-frames note (the defect: zero members were invisible to the vote), or the note's
     range omits the 0° member it is stamped on. Both stations still serve AS STORED.
-    Historical red: pre-F1 code emitted no note for [0°, 20°]."""
+    Historical red: code emitted no note for [0°, 20°]."""
     sdir = tmp_path / "survey"
     sdir.mkdir()
     (sdir / "A.edi").write_text(VULCAN.read_text(encoding="latin-1"), encoding="latin-1")  # ZROT=0
@@ -702,7 +702,7 @@ def test_divergent_tipper_frame_reported_f2(tmp_path):
     UNREPORTED. The doctrine: "if we know any details about the coordinate frame we report it" -
     the divergent tipper frame must land first-class in station.json
     (frame.tipper_declared_azimuth_deg) AND as a frame note (build_report/QA + the portal line).
-    Historical red: pre-F2 the -60° tipper frame lived only in frame.evidence.trot."""
+    Historical red: the -60° tipper frame lived only in frame.evidence.trot."""
     fx = _vulcan_with_tipper(0.0, -60.0)
     # PRECONDITION: the fixture really has a tipper and really declares TROT=-60 uniform
     p_raw = _write(tmp_path, "cased_raw.edi", fx)
@@ -730,7 +730,7 @@ def test_divergent_tipper_frame_reported_f2(tmp_path):
 def test_equal_tipper_frame_not_reported_f2(tmp_path):
     """Negative space. FAILS IF: an EQUAL tipper/impedance declaration (ZROT=TROT=-60) or a
     zero/zero one produces the divergence field or note — equal-or-absent TROT means no change, no
-    noise (mutation-proof for the F2 pin: the field appears ONLY on divergence)."""
+    noise (mutation-proof pin: the field appears ONLY on divergence)."""
     for name, zr, tr in (("eq60.edi", -60.0, -60.0), ("eq0.edi", 0.0, 0.0)):
         parsed = _parse(tmp_path, name, _vulcan_with_tipper(zr, tr))
         assert "skip" not in parsed, name

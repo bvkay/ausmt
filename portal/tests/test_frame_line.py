@@ -7,7 +7,7 @@ lazy loadStationFrameLine fetch/inject/stale-guard path.
 
 It FAILS if:
 - a non-zero declared angle does not render (or a zero/absent/null frame is not silent);
-- the V3-B "mixed declared frames" clause is missing when the survey carries the note;
+- the "mixed declared frames" clause is missing when the survey carries the note;
 - frameLineText emits markup for a hostile survey_frame_note (injection surface);
 - loadStationFrameLine does not inject via textContent, or a stale async write clobbers the drawer.
 

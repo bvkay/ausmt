@@ -52,7 +52,7 @@ def _resolve_validator_dir() -> Path:
             engine image's designed topology (engine/ only, no /app/gateway — see engine.Dockerfile);
             the vendored oracle lives in gateway/tests, a tree the image never ships, so there is
             nothing to drift. On every monorepo checkout <root>/gateway exists, so this arm is
-            UNREACHABLE there — fail-not-skip is preserved everywhere the F7 finding applied;
+            UNREACHABLE there - fail-not-skip is preserved everywhere the finding applied;
       (iv)  else (gateway tree present but the vendored fixture missing) -> FAIL: broken checkout."""
     import os
     sibling = _sibling_validator_dir()
@@ -81,7 +81,7 @@ def _empty_surveys(tmp_path):
 
 def test_unresolvable_validator_fails_closed(tmp_path, monkeypatch):
     """No --no-validate + validator can't be found => non-zero exit (fail CLOSED). This is the
-    behaviour the C8 contract changes; pre-fix, build_portal proceeded with only a stderr WARNING
+    behaviour the contract changes; pre-fix, build_portal proceeded with only a stderr WARNING
     and returned 0 (captured verbatim in the implementation report, not re-asserted here since the
     old behaviour is being replaced, not kept as a branch)."""
     monkeypatch.setattr(build_portal, "_load_validator", lambda: None)

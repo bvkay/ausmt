@@ -1,10 +1,10 @@
-"""Every survey-granularity drop is machine-visible, and verify.py refuses the build (D20's rule
+"""Every survey-granularity drop is machine-visible, and verify.py refuses the build (the drop rule
 extended to the whole class).
 
 Eight paths drop a survey with rc=0. Recording only the validator skip leaves verify.py's
 loud-skip gate passed a build that silently lost a survey to an unreadable survey.yaml, an invalid
 coordinate policy or station_ids block, a zero-station parse, or an unserialisable SMETA - exactly
-the swap D20 exists to prevent. build_report.json now carries `surveys_dropped` (present and empty
+the swap exists to prevent. build_report.json now carries `surveys_dropped` (present and empty
 on a clean build), fed by one recorder across discover_work and main's loop, and verify.py FAILs on
 any entry.
 """

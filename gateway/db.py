@@ -58,7 +58,7 @@ class UploaderKey:
     secret; the plaintext is shown once at creation and never stored. A revoked key keeps its row
     (audit trail); active == revoked_utc IS NULL.
 
-    `note` (schema v3, C43 D7): a free-text curator annotation (who the key is for, expiry intent).
+    `note` (schema v3): a free-text curator annotation (who the key is for, expiry intent).
     PII CONTAINMENT (D2.5): like every other column here it lives ONLY in this sqlite DB — it never
     enters a git-bound artifact (survey.yaml, a commit message, the publication ledger). A grep test
     pins its absence from the git-bound tree."""
@@ -110,7 +110,7 @@ class Submission:
 
 @dataclass(frozen=True)
 class CuratorTotp:
-    """One curator's TOTP enrolment (schema v4, C41 D2). `secret` is the ONLY copy of the base32 TOTP
+    """One curator's TOTP enrolment (schema v4). `secret` is the ONLY copy of the base32 TOTP
     secret (shown once at enrolment, never re-rendered). `enrolled_utc` is NULL while the enrolment is
     PENDING activation and stamped once a valid code has proved the authenticator; `active` therefore
     == enrolled_utc is not None, and ONLY an active enrolment satisfies the survey-deletion gate.
@@ -146,7 +146,7 @@ def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
     stored (the plaintext is shown once at creation, never retrievable), plus who/when it was created
     and — when applicable — who/when it was revoked. A revoked row is NEVER deleted (audit trail; the
     created_by/revoked_by columns ARE the audit record for this table, mirroring how the git history
-    is the audit record for C31 edits — no submissions-schema change, no separate audit table).
+    is the audit record edits - no submissions-schema change, no separate audit table).
     IF NOT EXISTS so a re-run on a partially-migrated DB is idempotent."""
     conn.execute(
         """
@@ -181,7 +181,7 @@ def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
 
     Additive-only, which is the migration invariant: a single CREATE TABLE IF NOT EXISTS, no existing column
     touched, no data migrated. IF NOT EXISTS makes a re-run on a partially-migrated DB idempotent
-    (mirrors v2's rationale). No unenrol/delete method exists by design (record D2, D12 boundary):
+    (mirrors v2's rationale). No unenrol/delete method exists by design (boundary):
     lost-authenticator recovery is a console action (delete the row on the box), the same class as
     bootstrap-key rotation."""
     conn.execute(
@@ -197,7 +197,7 @@ def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
-    """v3 (C43 D7): add a free-text `note` column to uploader_keys — a curator annotation (who the key
+    """v3: add a free-text `note` column to uploader_keys - a curator annotation (who the key
     is for, expiry intent). ADDITIVE-ONLY, the migration invariant: a single `ALTER TABLE ... ADD
     COLUMN note TEXT`, which SQLite applies without rewriting the table and which defaults every
     existing row's note to NULL (rendered as "—"). No existing column is touched, no data migrated.
@@ -443,8 +443,8 @@ class Database:
 
     def count_today(self, day_prefix: str) -> int:
         """Submissions created on the given UTC day (YYYY-MM-DD prefix) for the per-day cap. Not
-        per-key: C10 has a single submit key, so the daily cap is effectively global — the design's
-        per-key wording collapses to this until multi-key issuance (C11+)."""
+        per-key: the deployment has a single submit key, so the daily cap is effectively global - the design's
+        per-key wording collapses to this until multi-key issuance."""
         with self._lock:
             row = self._conn.execute(
                 "SELECT COUNT(*) AS n FROM submissions WHERE created_utc LIKE ?",
@@ -714,7 +714,7 @@ class Database:
                 row["allowance_remaining"] if "allowance_remaining" in keys else None),
         )
 
-    # ---- curator TOTP (schema v4 — destructive-op second factor, C41 D2) ------------------------
+    # ---- curator TOTP (schema v4 - destructive-op second factor) ------------------------
 
     def get_totp(self, curator_name: str) -> CuratorTotp | None:
         """The curator's TOTP row (active OR pending), else None. `None` == not enrolled at all; a
@@ -760,7 +760,7 @@ class Database:
         step (or none consumed yet). Returns True iff the step was consumed; False means a REPLAY (the
         step was already used or is older) OR the curator is not actively enrolled. The whole check-and-
         advance is one UPDATE under the lock, so two concurrent deletions cannot both consume the same
-        code — the replay guard is race-free at the DB layer (mirrors transition()'s lock-across-check-
+        code - the replay guard is race-free at the DB layer (mirrors transition()'s lock-across-check-
         then-write rationale)."""
         with self._lock, self._conn:
             cur = self._conn.execute(

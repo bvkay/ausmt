@@ -22,7 +22,7 @@ WHAT IT DOES, once a day:
     downloads is reported, because curl/wget/python-requests are the clients the published API examples
     hand people. The UA is read transiently and never stored;
   * counts portal VISITS as `/data/catalogue.json` fetches (one per SPA boot — the only
-    server-observable visit proxy, record D3);
+    server-observable visit proxy);
   * counts API-CONSUMER requests as fetches of the four DOCUMENTED machine-readable entry points the
     portal SPA never fetches for itself (`/data/products/manifest.json`, `/data/mtcat.json`,
     `/data/mtcat.schema.json`, `/data/stations.geojson`). This is a PATH-CLASS signal only: nothing new
@@ -40,7 +40,7 @@ WHAT IT DOES, once a day:
     or otherwise, is ever retained. Days folded before this existed carry no `networks` key at all
     (absent, not zero) and the screen renders them as unavailable;
   * resolves each request's MASKED client address (IPv4 /24, IPv6 /48 — already truncated at the
-    edge by Caddy, record D2) to a country via the db-ip "IP to Country Lite" CSV using a stdlib
+    edge by Caddy) to a country via the db-ip "IP to Country Lite" CSV using a stdlib
     bisect. A missing/unreadable CSV degrades every lookup to `unknown` — it never crashes;
   * for a request that resolves to AUSTRALIA, and ONLY when the compact AU state table is present,
     takes a second-level lookup to a STATE/TERRITORY code and counts it beneath the AU country row.
@@ -68,7 +68,7 @@ RETENTION (aggregates only -- the RAW log keeps its own untouched ~7-day Caddy r
     It is the answer to "the aggregates are all we keep, so keep enough of them": pure counts at day
     grain, with NO geography at any grain finer than the month. See the archive section below.
 
-WHAT IT NEVER WRITES (record D2/D6, the leak pin enforces it): an address (masked or not) and a
+WHAT IT NEVER WRITES (the leak pin enforces it): an address (masked or not) and a
 user-agent string never reach stats.json. Only aggregates leave the pipeline — counts + dailies.
 
 Config (env; every path derives from AUSMT_DATA_DIR, each overridable for tests):
@@ -102,7 +102,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 # The daily aggregation cadence, in minutes — stamped into stats.json as the staleness clock the
-# gateway reads (serve_state.ops_status_stale: stale past ~2 periods => ~2 days, record D4).
+# gateway reads (serve_state.ops_status_stale: stale past ~2 periods => ~2 days).
 TIMER_PERIOD_MIN = 1440
 
 # The stats.json schema version. v2 adds: per-survey volume, per-dataset volume, the station-file vs
@@ -124,7 +124,7 @@ SCHEMA_VERSION = 2
 DEFAULT_DAILY_KEEP_DAYS = 92
 
 # The served download families (path prefixes under /data/) and the visit proxy. `h5` was excluded here
-# for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer (record D1).
+# for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer.
 # The engine produces per-station MTH5 files there, so
 # the exclusion had to go with it. It is worth naming why the interlock matters: an excluded family
 # classifies as `ignore`, and an ignored path is absent from `unattributed` as well, so every
@@ -162,7 +162,7 @@ _HANDOFF_STATUS = 302
 # deploy/tests holds the two together, exactly as one holds the bulk flag to the portal's own token).
 # It is what by_destination is keyed on: the host of the access_url the build emits for a row. That
 # host's cardinality is 1 today, thredds.nci.org.au being the canonical route, which is precisely when
-# a missing breakdown is cheap to add and expensive to add retroactively (record D16).
+# a missing breakdown is cheap to add and expensive to add retroactively.
 _TS_ACCESS_PREFIX = "https://thredds.nci.org.au/thredds/fileServer/"
 
 # The licence sidecar build_portal writes beside every survey MTH5 (bundles/<slug>-tf.LICENSE.txt).
@@ -296,7 +296,7 @@ def _run_datetime() -> dt.datetime:
 class _RangeTable:
     """A sorted per-IP-version range table over a `start,end,VALUE` CSV. Construct via `load(path)`; an
     absent, unreadable, empty or malformed CSV yields an EMPTY table whose every lookup misses; the
-    aggregator still completes (record D6 country pin). Ranges are stored per IP-version as parallel
+    aggregator still completes (country pin). Ranges are stored per IP-version as parallel
     sorted lists (starts[] for the bisect, plus (start,end,value) records) so a lookup is one bisect +
     one bounds check. Comment rows (a leading '#') and short rows are skipped."""
 
@@ -418,7 +418,7 @@ class AuStates(_RangeTable):
 
 
 # --------------------------------------------------------------------------------------------------
-# Manifest reverse map: the download-URL -> dataset resolver (record D1 — manifest.json is the
+# Manifest reverse map: the download-URL -> dataset resolver (- manifest.json is the
 # authoritative reverse map). Keys are the manifest's portal-relative urls (e.g. 'edi/slug/A1.edi');
 # tier=nci rows carry ABSOLUTE urls that never match a /data path, so they self-exclude harmlessly.
 # --------------------------------------------------------------------------------------------------
@@ -1224,7 +1224,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                        by_state_detail, month, metric="api")
             geo_days_seen[date] = date[:7]
         elif kind == "handoff":
-            # THE HAND-OFF, and the join is the whole of it (record D4). The log line says WHICH route
+            # THE HAND-OFF, and the join is the whole of it. The log line says WHICH route
             # was asked for and nothing else that matters: its `size` is the redirect body and the
             # Location it sent is not logged at all. So the size and the destination host come from the
             # served, register-derived index, and a route that index does not publish is drift -- one
@@ -1361,7 +1361,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 geo_days_seen[date] = date[:7]
 
     # Distinct-network counts for the days folded in THIS run. Only the SIZE of each set is written --
-    # the masked addresses themselves never leave memory (record D2/D6). The month keeps the PEAK of
+    # the masked addresses themselves never leave memory. The month keeps the PEAK of
     # those counts, so the reach proxy survives the pruning of the daily rows it was derived from.
     for date, nets in networks_seen.items():
         row = daily_index.get(date)
@@ -1732,7 +1732,7 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
     The two globs are DISJOINT by construction (`access*.json` cannot match a name ending `.json.gz`),
     so no archive is read twice.
 
-    Tolerant, as the whole file is (record D6 retention pin): a missing dir, an unreadable file, or a
+    Tolerant, as the whole file is (retention pin): a missing dir, an unreadable file, or a
     truncated/non-gzip archive contributes no lines from THAT file and never raises.
 
     TOLERANT IS NOT SILENT, and the difference cost real days. On the box's own access.json

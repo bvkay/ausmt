@@ -1,5 +1,5 @@
 #!/bin/sh
-# AusMT box doctor (ops-hardening O4) — one-screen health of the box (the EliteDesk that builds and
+# AusMT box doctor (ops-hardening) - one-screen health of the box (the EliteDesk that builds and
 # serves the corpus). Invoked as `make doctor` (or `make doctor PROFILE=gateway`), or directly.
 #
 # Prints ONE labelled PASS / WARN / FAIL line per check and a final summary. Exits NON-ZERO if any check
@@ -264,7 +264,7 @@ check_ts_route_parity() {
 	# (deploy/frontdoor/ts-routes.map, committed) while the DATA lives here, so a withheld flip is
 	# suppressed only once the table is regenerated, committed and installed. Both renderings come from
 	# ONE projection, so their (station, level) key sets must be EQUAL: a route that resolves for a
-	# station the data does not publish is the R5 leak, and a published route that 404s is a broken
+	# station the data does not publish is the leak, and a published route that 404s is a broken
 	# hand-off. Compared against the SERVED artifact on the reader port rather than a file on disk:
 	# what is served is what the public gets.
 	code_dir="${AUSMT_CODE_DIR:-}"

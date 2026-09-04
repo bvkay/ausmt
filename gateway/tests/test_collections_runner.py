@@ -1,8 +1,8 @@
-"""Stage-3a collections read-job pins (record D5-A / D13, Invariant 10).
+"""Stage-3a collections read-job pins (Invariant 10).
 
 These exercise gateway.runner.edit.run_collections_job DIRECTLY (the same in-suite-reaches-the-runner
 pattern as test_edit_runner.py). Each pin states its failure criterion in one line; the parity,
-divergence and slug pins are mutation-provable (the red-then-green evidence is in the C43 Stage-3a
+divergence and slug pins are mutation-provable (the red-then-green evidence is Stage-3a
 report). The rollup/near-dup PARITY pins import the engine's own _group_collections /
 _near_duplicate_collection_ids and assert the runner AGREES with them for a real fixture tree — so the
 console can never disagree with the portal. Importing the engine pulls the mt_metadata extractor
@@ -86,14 +86,14 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
     _mk(sroot, "cap", name="Capricorn 2010",
         collection="collection:\n  id: capricorn\n  title: Capricorn\n  type: programme\n"
                    "  status: completed\n", n_edi=4)
-    # Edge (D5-B): an out-of-vocab status FIRST (wamt-a sorts first) then a VALID status LATER. The
+    # Edge: an out-of-vocab status FIRST (wamt-a sorts first) then a VALID status LATER. The
     # engine drops the invalid status inside the per-member fold, re-opening the slot, so the rollup
-    # lands on 'active' — the runner must agree (this reds the pre-F1 end-of-loop drop).
+    # lands on 'active' - the runner must agree (this reds the end-of-loop drop).
     _mk(sroot, "wamt-a", name="WA MT A",
         collection="collection:\n  id: wamt\n  title: WA MT\n  status: complete\n", n_edi=1)
     _mk(sroot, "wamt-b", name="WA MT B",
         collection="collection:\n  id: wamt\n  status: active\n", n_edi=1)
-    # Edge (D5-B): a falsy id (unquoted 0) is dropped by BOTH the engine (truthiness) and the runner
+    # Edge: a falsy id (unquoted 0) is dropped by BOTH the engine (truthiness) and the runner
     # — so it forms no collection on either side (same-input parity holds).
     _mk(sroot, "zero-id", name="Zero Id",
         collection="collection:\n  id: 0\n  title: Zero\n", n_edi=1)
@@ -108,7 +108,7 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
     engine_out, _ = group_collections(surveys_meta, [])
 
     runner_out = edit.run_collections_job(sroot)["collections"]
-    # SAME-INPUT parity (D5-B narrowing): the runner's rollup logic equals the engine's given the same
+    # SAME-INPUT parity (narrowing): the runner's rollup logic equals the engine's given the same
     # member set — the same collections, and every rolled-up field identical.
     assert set(runner_out) == set(engine_out), (set(runner_out), set(engine_out))
     assert "wamt" in runner_out and "auslamp" in runner_out
@@ -122,7 +122,7 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
                     "n_surveys"):
             assert _norm(engine_out[cid].get(fld)) == runner_out[cid].get(fld), \
                 f"{cid}.{fld}: engine={engine_out[cid].get(fld)!r} runner={runner_out[cid].get(fld)!r}"
-    # Explicit F1 assertion (make the edge visible even if the engine's own value ever shifts).
+    # Explicit assertion (make the edge visible even if the engine's own value ever shifts).
     assert runner_out["wamt"]["status"] == "active", runner_out["wamt"]["status"]
 
 
@@ -164,7 +164,7 @@ def test_near_duplicate_behavioural_case_fold(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# (D5-B) - out-of-vocab status drop happens INSIDE the per-member fold. FAILS IF an invalid status
+# - out-of-vocab status drop happens INSIDE the per-member fold. FAILS IF an invalid status
 # on the first member permanently nulls the field: an invalid-first + valid-later corpus must roll up
 # to the VALID status (the pre-fix end-of-loop drop yielded None here — red-proven vs the engine).
 # --------------------------------------------------------------------------------------------------
@@ -188,7 +188,7 @@ def test_out_of_vocab_status_with_no_valid_member_is_none(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# (D5-B) - membership predicate is the engine's truthiness. FAILS IF a falsy id (unquoted 0/False)
+# - membership predicate is the engine's truthiness. FAILS IF a falsy id (unquoted 0/False)
 # forms a collection: such a member must be dropped exactly as the engine drops it.
 # --------------------------------------------------------------------------------------------------
 def test_falsy_id_member_is_excluded(tmp_path):
@@ -201,7 +201,7 @@ def test_falsy_id_member_is_excluded(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# (D5-B) - malformed-YAML resilience (NEGATIVE CONTROL). FAILS IF one unparseable survey.yaml blanks
+# - malformed-YAML resilience (NEGATIVE CONTROL). FAILS IF one unparseable survey.yaml blanks
 # the WHOLE projection: a malformed member is dropped and the OTHER collections still project (mirrors
 # build_portal.py:810-817 dropping just the one bad package). Red-proven: catching only OSError before
 # let the ruamel YAMLError propagate to {ok:False} and the gateway's empty state.
@@ -230,7 +230,7 @@ def test_non_mapping_survey_yaml_is_dropped(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# (D5-B) - PUBLISHED-SOURCE behaviour (documents the intentional non-served semantics). A member
+# - PUBLISHED-SOURCE behaviour (documents the intentional non-served semantics). A member
 # carrying a collection.id but ZERO EDIs (a build-dropped-class survey) IS included in the console
 # rollup — the console reads the published survey.yaml, not the served post-gate build. FAILS IF the
 # runner silently drops a 0-station member (which would make it a served mirror, not the edit truth).

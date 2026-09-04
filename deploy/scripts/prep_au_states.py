@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the COMPACT Australian state table the usage-analytics fold bisects (record D4/D5).
+"""Prepare the COMPACT Australian state table the usage-analytics fold bisects.
 
 A hand-run, STDLIB-ONLY operator chore. It ingests the db-ip "IP to City Lite" CSV once (db-ip
 refreshes it monthly) and emits a small `start_ip,end_ip,state_code` table covering AUSTRALIA ONLY.

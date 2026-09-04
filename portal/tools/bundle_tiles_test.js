@@ -2,7 +2,7 @@
 // Portal bundle-tile driver. Boots the REAL portal modules in jsdom against a synthetic MANIFEST
 // and asserts surveyBundleTiles renders/gates the three per-survey bundle tiles correctly:
 //   * a served survey shows EDI-zip, EMTF-XML-zip and (flag-on) the TF MTH5 tile, the MTH5 labelled
-//     "transfer functions only" (never implying time series) — the C32 labelling requirement;
+// "transfer functions only" (never implying time series) - the labelling requirement;
 //   * a survey with no bundle rows (embargoed / withheld) renders the empty withheld state ("");
 //   * a hostile slug that reached a bundle url is HTML-escaped in the emitted markup (no raw < or ">
 //     and no live attribute break-out) — paths are built from the sanitized slug, and escAttr is the

@@ -19,7 +19,7 @@ token the engine's own PII scrub writes:
 
 NON-VACUOUS (Invariant 10): every expected value below was read OUT of those bytes, so an extractor
 that silently stopped matching fails here; and the build half asserts the facts reach the parse
-product, whose shape change is what the C18 cache tag bump covers.
+product, whose shape change is what the cache tag bump covers.
 """
 import json
 import shutil
@@ -221,13 +221,13 @@ def test_a_doi_is_normalised_to_the_bare_canonical_form():
 
 def test_the_parse_product_carries_the_run_facts():
     """The extractors run inside the cached per-EDI parse, so a warm rebuild emits the same runs a
-    cold one does. FAILS against the pre-A6 parse, whose product had no `run_facts` key."""
+    cold one does. FAILS against the parse, whose product had no `run_facts` key."""
     pytest.importorskip("mt_metadata")
     import build_portal as bp  # noqa: PLC0415
     edi = HERE / "fixtures" / "edi-info-json" / "LineNo__StationNo_11.edi"
     parsed = bp._parse_one_edi(edi)
     assert parsed["run_facts"]["run"]["sample_rate_hz"] == 24000.0
-    assert json.dumps(parsed["run_facts"])   # JSON-serialisable: it rides the C18 cache value
+    assert json.dumps(parsed["run_facts"])   # JSON-serialisable: it rides the cache value
 
 
 def test_the_extraction_confidence_classes_reach_the_build_report(tmp_path):
@@ -236,7 +236,7 @@ def test_the_extraction_confidence_classes_reach_the_build_report(tmp_path):
     needs a home, and build_report is the curation surface the presence rule already uses.
 
     FAILS against the pre-fix build, whose report carried no `run_extraction` at all: the class and
-    the dialect were computed for every value, cached inside the C18 parse product and then dropped,
+    the dialect were computed for every value, cached inside the parse product and then dropped,
     so nothing shipped could tell a structured_dialect value from a pattern_extracted one. This
     fixture is the case that makes it matter - EXAMPLE01's logger is read off a LEMIMT free-text
     line, which is the weakest class the extractors emit."""

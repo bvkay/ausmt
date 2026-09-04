@@ -40,7 +40,7 @@ def test_instrument_matches_shared_vectors():
 
 
 def test_vectors_cover_the_new_rendering_classes():
-    # Non-vacuity guard: the file must exercise the classes the C46 additions exist FOR. FAILS if any is
+    # Non-vacuity guard: the file must exercise the classes the additions exist FOR. FAILS if any is
     # missing — a file of only none/attribution vectors would be a hollow oracle.
     kinds = " ".join(v["kind"] for v in _load()["vectors"])
     for needed in ("none", "generic", "ga_derivative", "ga_attribution", "supersession", "changes",
@@ -77,6 +77,6 @@ def test_expected_strings_carry_the_distinctive_wording():
 
 def test_none_path_vector_is_byte_stable():
     # The frozen-pin spine: the none-of-the-new vector equals a fresh None-path render (no sources, no
-    # changes) — i.e. the pre-C46 instrument bytes. FAILS if the None-path ever shifts.
+    # changes) - i.e. the instrument bytes. FAILS if the None-path ever shifts.
     v = next(x for x in _load()["vectors"] if x["kind"] == "none")
     assert v["expected"] == lt.license_instrument_text(v["lic"], v["licensor"], v["year"])

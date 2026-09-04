@@ -1,5 +1,5 @@
 #!/bin/sh
-# AusMT public front door - single apply/install script (C47 public bridge). Runs ON THE VPS, from
+# AusMT public front door - single apply/install script (public bridge). Runs ON THE VPS, from
 # deploy/frontdoor/. It validates the shipped Caddyfile against a real Caddy (so a config slip fails
 # LOUDLY before anything serves), ensures the log directory the shipper reads exists, then brings the
 # one-service stack up. Idempotent: re-running it re-validates and re-applies compose (a no-op if
@@ -100,7 +100,7 @@ fi
 log "starting the front-door stack (docker compose up -d)"
 docker compose -f compose.yaml up -d
 
-# ----- reload the RUNNING edge so a Caddyfile change actually takes effect (ops-hardening O1) -------
+# ----- reload the RUNNING edge so a Caddyfile change actually takes effect (ops-hardening) -------
 # If the edge was already running, `up -d` may have left the old process serving the old config. Reload
 # it in place: `caddy reload` reads the admin address from the (unix-socket) admin block in the file and
 # hot-swaps the config with no downtime. If the reload FAILS for ANY reason (admin disabled, or the

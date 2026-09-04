@@ -6,13 +6,13 @@ function, per the frozen design record maintainer/C42-CoordinateAccess.md. The s
 pipeline-ordered by the caller: parse -> QC on TRUE coordinates -> apply_coordinate_policy in
 place -> ALL emission. No emitter reads a coordinate from anywhere but the post-mask station record.
 
-Fail-closed posture (consistent with the C25 gates' refuse-to-serve stance): an UNKNOWN enum value
+Fail-closed posture (consistent gates' refuse-to-serve stance): an UNKNOWN enum value
 or an override naming a station that does not exist is a survey-level build FAILURE (raised as
 CoordinatePolicyError), never a silent fallback to exact.
 
 Default stability: a survey with no `access.coordinates` field parses to ("exact", {}) and the mask
 is a no-op for every one of its stations, so the whole existing corpus builds byte-identically
-(the default-stability pin, D6).
+(the default-stability pin).
 """
 from __future__ import annotations
 
@@ -22,14 +22,14 @@ from pathlib import Path
 COORDINATE_POLICIES = ("exact", "generalised", "withheld")
 
 # Generalisation grid: 0.1deg (~11 km). ONE rounding function, engine-side only — the portal never
-# re-rounds; it renders the masked catalogue value verbatim (pinned, D6). 1 dp of a degree.
+# re-rounds; it renders the masked catalogue value verbatim (pinned). 1 dp of a degree.
 _GENERALISE_DP = 1
 
 
 class CoordinatePolicyError(ValueError):
     """A survey's access.coordinates policy is invalid: an unknown enum value, or an override id that
     names no station in the survey. Raised so the caller fails the survey-level build LOUDLY (never a
-    silent fallback to exact — the same refuse-to-serve posture as the C25 convention gates)."""
+    silent fallback to exact - the same refuse-to-serve posture as the convention gates)."""
 
 
 def round_generalised(v):
@@ -254,7 +254,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
 
       * withheld  -> lat / lon / elev_m null (the station keeps its row; alignment invariant).
       * generalised -> lat / lon rounded to 0.1deg via round_generalised; elev_m null (defensive
-        invariant per D2 — no served JSON carries elevation today, but any future emitter inherits the
+        invariant - no served JSON carries elevation today, but any future emitter inherits the
         mask).
 
     Also nulls the record's OTHER true-coordinate bearers (info_lat/info_lon and coord_candidates) for
@@ -302,7 +302,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
         else:  # generalised: lat/lon to the 0.1deg cell
             r["lat"] = round_generalised(r.get("lat"))
             r["lon"] = round_generalised(r.get("lon"))
-        # elevation nulled for BOTH non-exact classes (defensive invariant, D2).
+        # elevation nulled for BOTH non-exact classes (defensive invariant).
         r["elev_m"] = None
         # scrub the record's other true-coordinate bearers so no future emitter can resurrect them.
         r["info_lat"] = None
@@ -311,7 +311,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
         # processing_note is the raw >INFO free-text scraped from the EDI (station.json processing.note).
         # It carries the INFO block's LATITUDE/LONGITUDE/ELEVATION lines verbatim — a true-position leak
         # the artifact-agnostic leak-sweep caught. Coordinates hide in too many free-text corners to redact
-        # trustworthily (the same reasoning that byte-gates the EDI rather than rewriting it, D3), so the
+        # trustworthily (the same reasoning that byte-gates the EDI rather than rewriting it), so the
         # whole derived note is WITHHELD for a non-exact station. It is best-effort metadata, not data; the
         # curator still sees the full note in the package (surveys-live). remote_site (a station NAME, no
         # position) is kept.

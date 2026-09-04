@@ -549,22 +549,23 @@ CONTRACT_CITATION = Rule(
     re.compile(r"\bLANE-(?:CONTRACT|ADDENDUM)-[A-Z0-9-]+"), "contract file name")
 
 # WORK-ITEM TAGS. A tag is one or two capitals, one or two digits and an
-# optional letter, and it is lane vocabulary in four positions: at the head of a
-# comment, before a colon, inside parentheses, and beside the words a work item
-# is counted with. It is NOT a station or site id, a licence id, a projection, a
-# digest, a percentile or a heading level, which is what the exemptions are for.
+# optional letter, and it is lane vocabulary WHEREVER it stands in a comment. It
+# is NOT a station or site id, a licence id, a projection, a digest, a
+# percentile or a heading level, which is what the exemptions are for.
+# Position was the last scoping: a work item named mid-sentence, after a dash or
+# inside a list carries the same audit trail as one at the head of a comment, so
+# scoping to four positions left the rule reading only where it had already
+# looked.
 _TAG = r"[A-Z]{1,2}\d{1,2}[a-z]?"
 _TAGS = r"%s(?:\s*[/,]\s*%s)*" % (_TAG, _TAG)
-_WORK = r"Amendment|amendment|lanes?|round|wave|gate|follow-up|phase"
 
-TAG_PATTERN = re.compile(
-    r"(?:^|(?<=\n))[ \t]*(?P<head>%s)(?![\w]|\.\d)"
-    r"|(?<![\w#])(?P<colon>%s)(?![\w]|\.\d)\s*:"
-    r"|\(\s*(?P<paren>%s)(?![\w]|\.\d)\s*[,;)]"
-    r"|(?:%s)\s+(?P<after>%s)(?![\w]|\.\d)"
-    r"|(?<![\w#])(?P<before>%s)(?![\w]|\.\d)\s+(?:%s)\b"
-    % (_TAGS, _TAGS, _TAGS, _WORK, _TAGS, _TAGS, _WORK)
-)
+TAG_PATTERN = re.compile(r"(?<![\w#])(?P<any>%s)(?![\w]|\.\d)" % _TAGS)
+# A DATAID and a station id are DATA, and this is a repository about stations: two or more letters
+# and then digits (with an optional trailing letter or a second letter-digit pair) is the shape the
+# corpus publishes, e.g. ST01, MBI21, CP3B21, RD18. A work-item tag carries ONE leading letter and
+# a published id carries at least two digits, so the two shapes do not overlap; the two-digit floor
+# is what keeps a licence alias like CC0 with the entry that names its meaning instead.
+CORPUS_ID = re.compile(r"\A(?:[A-Z]{2,}\d{2,}[a-z]?|[A-Z]{2,}\d+[A-Z]+\d{2,}[a-z]?)\Z")
 
 # The false positives, one entry per MEANING: what the token names, the token
 # itself, and the words that must stand beside it for that meaning to be the one
@@ -584,14 +585,27 @@ TAG_NOT_A_TAG = (
      re.compile(r"illuminant|CIE|CIELAB|sRGB|white ?point|colou?r|\bLab\b", re.I)),
     # The bare noun is not enough: a clause label written L1 is naturally ABOUT levels, so the
     # word that would excuse it stands beside it by construction. The level must be named.
+    # The trailing run of a station id, as the cluster label renders it once the padding is dropped.
+    ("an unpadded station id", re.compile(r"^L\d{1,2}$"),
+     re.compile(r"unpadded|station ids?|\bCP\d|cluster", re.I)),
     ("a data level", re.compile(r"^L[0-3]$"),
      re.compile(r"\bdata levels?\b|\blevels?\s+[0-3]\b|\bL[0-3]\s+products?\b", re.I)),
     ("a release quarter", re.compile(r"^Q[1-4]$"),
      re.compile(r"Release |20\d\d-Q|quarter", re.I)),
+    # The impedance tensor's own quadrants, which the phase maths names constantly.
+    ("a complex-plane quadrant", re.compile(r"^Q[1-4]$"),
+     re.compile(r"quadrant|Zxy|Zyx|Zxx|Zyy|phase", re.I)),
+    # The rotation maths writes its matrices Z0 and T0; neither is a work item.
+    ("a rotation-matrix symbol", re.compile(r"^[ZT]0$"),
+     re.compile(r"rotation|rotate|matri|theta|\bR\(|tipper|impedance", re.I)),
+    # The other licence aliases count as context: a licence id standing in a list of licence ids is
+    # the licence sense, and the word "licence" itself is often a clause away.
     ("a public-domain dedication", re.compile(r"^CC0$"),
-     re.compile(r"licen[cs]|dedication|public domain|Creative Commons", re.I)),
-    ("a DATAID example", re.compile(r"^(?:ST|A)\d{2}$"),
-     re.compile(r"DATAID|data ?id|example", re.I)),
+     re.compile(r"licen[cs]|dedication|public domain|Creative Commons|CC-BY|ODbL|ODC-BY|SPDX", re.I)),
+    # Only the single-letter form needs an entry: the two-letter DATAIDs are already data under the
+    # corpus-id shape, and an entry that repeated them would excuse them twice.
+    ("a DATAID example", re.compile(r"^A\d{1,2}$"),
+     re.compile(r"DATAID|data ?id|station id|example|\.edi\b|\bEDI\b", re.I)),
     ("a message digest", re.compile(r"^MD5$"),
      re.compile(r"digest|checksum|hash|manifest|sha\d", re.I)),
     ("a percentile", re.compile(r"^P(?:50|95|99)$"),
@@ -601,8 +615,93 @@ TAG_NOT_A_TAG = (
 # with one space between. The test is on the TOKEN. A window wide enough to hold
 # a sentence excuses any token standing NEAR the word, and on a corpus about
 # stations and surveys those words stand beside everything.
-TAG_ID_NOUN = re.compile(r"(?:station|site|survey|run|channel|filter|fixture) \Z", re.I)
-_TAG_GROUPS = ("head", "colon", "paren", "after", "before")
+TAG_ID_NOUN = re.compile(
+    r"(?:station|site|survey|run|channel|filter|fixture|id)s?:?[ ]['\"`]?\Z", re.I)
+_TAG_GROUPS = ("any",)
+
+
+# THREE STRUCTURAL EXEMPTIONS, each for a place a tag SHAPE occurs that no reader would read as a
+# work item. They are structural rather than table entries because what excuses them is where the
+# token sits, not the words around it.
+# A file name: a published station's own bytes are named after it.
+FILE_NAME = re.compile(r"\A[A-Za-z0-9_.%\[\]-]*"
+                       r"\.(?:edi|h5|xml|json|zip|csv|txt|md|png|svg|ya?ml|nc)\b")
+# A character class inside a regex: "^[a-zA-Z0-9]*$" carries the shape and means nothing by it.
+IDENT_RUN = re.compile(r"[A-Za-z0-9_.-]")
+RANGE_IN_CLASS = re.compile(r"[A-Za-z0-9]-[A-Za-z0-9]|\\[dwsDWS]")
+# A path INTO this repository is a pointer a reader can follow, which is what the rule asks for, and
+# the file it names commonly carries a tag in its own name. Held by the pin that resolves them.
+REPO_PATH = re.compile(
+    r"\A[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+"
+    r"\.(?:py|js|md|html|css|ya?ml|json|toml|sh|txt|service|timer|cfg)\Z")
+
+
+def _in_character_class(text, start, stop):
+    head = text.rfind("\n", 0, start) + 1
+    tail = text.find("\n", stop)
+    tail = len(text) if tail < 0 else tail
+    before, after = text[head:start], text[stop:tail]
+    open_at = before.rfind("[")
+    close_at = after.find("]")
+    if open_at < 0 or close_at < 0:
+        return False
+    inner_before, inner_after = before[open_at:], after[:close_at]
+    if "]" in inner_before:
+        return False
+    inner = inner_before + text[start:stop] + inner_after
+    return bool(RANGE_IN_CLASS.search(inner)) and "," not in inner
+
+
+def _identifier_run(text, start, stop):
+    left, right = start, stop
+    while left > 0 and IDENT_RUN.match(text[left - 1]):
+        left -= 1
+    while right < len(text) and IDENT_RUN.match(text[right]):
+        right += 1
+    return text[left:right]
+
+
+PATH_RUN = re.compile(r"[A-Za-z0-9_./-]")
+
+
+def _inside_a_repo_path(text, start, stop):
+    """A token inside a path into this tree names a FILE, and a file in the repository is exactly
+    what a comment is allowed to point at."""
+    left, right = start, stop
+    while left > 0 and PATH_RUN.match(text[left - 1]):
+        left -= 1
+    while right < len(text) and PATH_RUN.match(text[right]):
+        right += 1
+    run = text[left:right].strip("./,;:")
+    return run != text[start:stop] and bool(REPO_PATH.match(run))
+
+
+QUOTE_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|'[^'\n]*'")
+
+
+def _inside_a_quoted_literal(text, start, stop):
+    """A token inside a quoted run that carries MORE than the token is part of a literal the code
+    emits or a file the corpus publishes, and the comment is quoting it, not naming a work item. A
+    bare quoted tag is still a tag: the run must carry something besides the token."""
+    head = text.rfind("\n", 0, start) + 1
+    tail = text.find("\n", stop)
+    tail = len(text) if tail < 0 else tail
+    line = text[head:tail]
+    a, b = start - head, stop - head
+    for match in QUOTE_RUN.finditer(line):
+        if match.start() < a and b < match.end():
+            inner = match.group(0)[1:-1].strip()
+            return inner != text[start:stop]
+    return False
+
+
+def _inside_a_corpus_id(text, start, stop):
+    """A token standing inside a longer identifier one of whose segments IS a published id is part
+    of that id: RD18-084-S1-b is one station's handle, not a work item called S1."""
+    run = _identifier_run(text, start, stop)
+    if run == text[start:stop]:
+        return False
+    return any(CORPUS_ID.match(seg) for seg in re.split(r"[-_.]", run))
 
 
 def work_item_tags(text):
@@ -612,12 +711,22 @@ def work_item_tags(text):
         group = next(name for name in _TAG_GROUPS if match.group(name))
         tag = match.group(group)
         start, stop = match.span(group)
+        if FILE_NAME.match(text[stop:stop + 8]):
+            continue
+        if _in_character_class(text, start, stop):
+            continue
+        if (_inside_a_corpus_id(text, start, stop) or _inside_a_repo_path(text, start, stop)
+                or _inside_a_quoted_literal(text, start, stop)):
+            continue
         window = text[max(0, start - WINDOW):stop + WINDOW]
         parts = [part.strip() for part in re.split(r"[/,]", tag)]
-        # A token joined by a hyphen to what stands before it is a COMPOUND label ("D-L1",
-        # "C35b-D5"), which is the shape a clause or a work item takes and never the shape of the
-        # id an exemption exists for. No entry on the table excuses one.
-        compound = start >= 2 and text[start - 1] == "-" and text[start - 2].isalnum()
+        # A token joined by a hyphen to a LETTER before it is a COMPOUND label ("D-L1", "C35b-D5"),
+        # which is the shape a clause or a work item takes and never the shape of the id an
+        # exemption exists for; no entry on the table excuses one. A digit before the hyphen is a
+        # different thing entirely (2026-Q3 is a release quarter), so the test is on the letter.
+        compound = start >= 2 and text[start - 1] == "-" and text[start - 2].isalpha()
+        if all(CORPUS_ID.match(part) for part in parts):
+            continue
         if not compound and all(any(token.match(part) and near.search(window)
                                     for _, token, near in TAG_NOT_A_TAG) for part in parts):
             continue

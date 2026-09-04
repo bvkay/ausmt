@@ -14,7 +14,7 @@ What this module pins, each RED-proven against the unchanged tree:
   * the class rules: title = project_name else name (never the directory name); abstract, subjects,
     creators, contributors, organisations, citation, acknowledgements, dates.issued and attribution
     VERBATIM when present; no engine-appended HostingInstitution row and no engine-authored
-    acknowledgement; funders per D6 (funding_doi -> award_uri); dates.coverage from the year
+    acknowledgement; funders (funding_doi -> award_uri); dates.coverage from the year
     range; rights {license raw, access normalised, embargo_until ISO}; extent from the curated
     geographic_extent only, WGS84 only, all-zero = placeholder, omitted under withheld coordinates
     ; identifiers[] from the identity_classification mapping (case_a represents[] / case_b
@@ -27,7 +27,7 @@ What this module pins, each RED-proven against the unchanged tree:
     one does, and no formats or distribution facts anywhere;
   * INFERRED-REVIEW and [CONFIRM] are YAML comments and never reach a document; the marked
     values emit as curated facts;
-  * the T25 hard stop (_validate_survey_metadata raises naming the survey when
+  * the hard stop (_validate_survey_metadata raises naming the survey when
     citation.preferred_identifier has no equal designated identifier), on both classifications;
   * the LOUD SKIP: a corpus with one survey the REAL validator FAILs still builds, its
     build_report.json lists the slug under surveys_skipped_validation, and scripts/verify.py FAILs
@@ -557,7 +557,7 @@ def test_d8_every_class_is_emitted_for_open_embargoed_and_metadata_only_alike(tm
 
 def test_t25_hard_stop_fails_the_build_naming_the_survey(tmp_path):
     """Reachable only without a validator (the validator FAILs an undesignated preferred_identifier at
-    the entry gates, D20); the emitter's own last line still refuses to publish."""
+    the entry gates); the emitter's own last line still refuses to publish."""
     pytest.importorskip("mt_metadata")
     surveys = tmp_path / "surveys"
     surveys.mkdir()
@@ -658,7 +658,7 @@ def test_designation_dedup_folds_scheme_case():
     """A case-mismatched scheme must not let the SAME identifier be emitted both as an identifier
     OF the dataset and as a relationship TO it - the dedup key must not compare schemes raw, or
     scheme 'doi' beside identifier_type 'DOI' published the dataset IsIdenticalTo itself (the exact
-    self-reference the D12 partition exists to prevent). The fold reuses the normalisation
+    self-reference the partition exists to prevent). The fold reuses the normalisation
     _sm_bare_identifier already applies for its own DOI test."""
     y = _full_yaml(identity_classification={
         "case": "case_a",

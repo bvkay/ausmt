@@ -1,7 +1,7 @@
 """An email address in a source EDI's raw >INFO block must never survive into the
 DERIVED, publicly-consumed processing_note (station.json processing.note is NOT licence-gated), and
 must be surfaced as a loud per-survey WARNING so a curator can look at the ORIGINAL upstream file
-(which this build never mutates -- D1). This is the build_portal.process_edis integration point;
+(which this build never mutates --). This is the build_portal.process_edis integration point;
 the regex-only unit coverage for proc_note itself lives in test_coords_of.py (stack-less workflow).
 """
 import re
@@ -35,7 +35,7 @@ def _with_email_in_info(tmp_path):
 
 
 def test_proc_note_email_redacted_in_build(tmp_path):
-    """Direct catalog-path check (coords_of/proc_note), matching the C3 contract wording."""
+    """Direct catalog-path check (coords_of/proc_note), matching the contract wording."""
     p = _with_email_in_info(tmp_path)
     raw = cat.ep.read_norm(p) if hasattr(cat, "ep") else p.read_text(encoding="latin-1")
     did = cat.grab(raw, "DATAID")

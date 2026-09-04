@@ -41,8 +41,8 @@
     },
 
     // ============================================================================================
-    // Log shipping (C47 deliverable 3): the BOX pulls the masked front-door access log over ssh
-    // (box -> VPS:22) so the C45 aggregator on the box can fold it. This is a SEPARATE grant whose
+    // Log shipping (deliverable 3): the BOX pulls the masked front-door access log over ssh
+    // (box -> VPS:22) so the aggregator on the box can fold it. This is a SEPARATE grant whose
     // src is the BOX, not tag:ausmt-frontdoor — so it does NOT widen the front-door tag's reach (the
     // tag still reaches only the reader port above). Pull, not push, precisely so the front-door tag
     // is never granted any inbound path to the box.

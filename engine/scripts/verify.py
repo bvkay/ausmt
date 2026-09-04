@@ -5,7 +5,7 @@
   2. a full build with mt_metadata (the sole extractor since the regex retirement)
   3. mtcat.json schema validation for the build, the manifest and build_report checks, the
      survey-metadata gate (every products/<slug>/survey-metadata.json validates with format checking,
-     the slug set equals mtcat's surveys[], and the build skipped no survey: D20) and the station gate
+     the slug set equals mtcat's surveys[], and the build skipped no survey:) and the station gate
      (every products/<slug>/<station>/station.json validates, holds the semantic layer beyond JSON
      Schema, and its ausmt_id set equals mtcat's stations[])
 
@@ -20,7 +20,7 @@ conda/pip ABI note):
 
 Exit code 0 only if every step passed.
 
---data-dir mode: validate an EXISTING build output dir (e.g. a deploy/Makefile rebuild-data run's
+-data-dir mode: validate an EXISTING build output dir (e.g. a deploy/Makefile rebuild-data run's
 just-produced builds/<timestamp>) in place, WITHOUT rebuilding or running pytest — the post-build gate
 `make rebuild-data` runs inside the build-runner container before the atomic `current` symlink swap.
 Mutually exclusive with the default self-building invocation (--surveys/--skip-tests are ignored, with
@@ -115,7 +115,7 @@ def _check_digest_consistency(data_dir: Path, surveys_root: Path):
     lines = []
     sidecar_path = data_dir / "products" / "survey_digests.json"
     if not sidecar_path.exists():
-        # A build predating C18b (no sidecar) cannot be consistency-checked; fail LOUD rather than
+        # A build predating (no sidecar) cannot be consistency-checked; fail LOUD rather than
         # silently pass — an armed gate (--surveys given) that finds no stamps to check is a real gap.
         lines.append(f"   consistency: FAIL — no digest-stamp sidecar at {sidecar_path} (build predates "
                      f"C18b, or products/ was not emitted); cannot verify product-vs-source freshness")
@@ -250,7 +250,7 @@ def _check_build_report(rep, man, jsonschema, rep_schema):
     """build_report.json presence + schema-validity + a CHEAP cross-count against the manifest.
 
     The correct cross-count is a SUBSET relation, not equality: the manifest lists only the SERVED
-    stations (bytes gated by the licence + C1 access gates), while build_report.stations_built counts
+    stations (bytes gated by the licence + access gates), while build_report.stations_built counts
     every station BUILT into the discovery surfaces. An embargoed / non-redistributable survey builds
     stations that are never served, so served <= built (never ==) in general. We assert exactly that —
     every DISTINCT served EDI station must also be counted in totals.stations_built — plus the report's
@@ -315,7 +315,7 @@ def _check_source_parse_failures(rep, allow_path: Path):
     corpus down with it -- so the verifier is where the decision belongs. Any refusal FAILs this run,
     naming the survey and the file, unless the curator has written `<slug>/<file>` into the allow
     file: a reviewed repository artifact, empty today, whose every line is a station the corpus has
-    deliberately given up on. Same posture as the D20 loud-skip gate one level up, where a survey the
+    deliberately given up on. Same posture as the loud-skip gate one level up, where a survey the
     validator FAILed stops the swap rather than quietly vanishing.
 
     Returns (ok, lines). A build predating the field cannot vouch for itself and FAILS, exactly as
@@ -439,7 +439,7 @@ def _check_survey_metadata(base_dir: Path, mtc, rep, jsonschema, sm_schema):
     """The survey-metadata gate (the second public contract), shared by --data-dir mode and the
     self-building path. Three independent checks, any of which FAILs the run:
 
-      1. D20, the LOUD skip: build_report.json's `surveys_skipped_validation` must be PRESENT and EMPTY.
+      1. The LOUD skip: build_report.json's `surveys_skipped_validation` must be PRESENT and EMPTY.
          A non-empty list means the build skipped a survey the validator FAILed; the rest of the corpus
          built and the build exited 0, but that survey is gone from EVERY public surface, so the swap
          must not happen (make rebuild-data reads this exit code). An absent key means a build that
@@ -524,7 +524,7 @@ def _check_station_metadata(base_dir: Path, mtc, jsonschema, st_schema):
     path. Two independent checks, either of which FAILs the run:
 
       1. every products/<slug>/<station>/station.json validates against
-         schema/ausmt-station.schema.json WITH FORMAT CHECKING (the run time_period date-times),
+         engine/schema/ausmt-station.schema.json WITH FORMAT CHECKING (the run time_period date-times),
          states the survey_id and station its directory names, and holds the SEMANTIC layer JSON
          Schema cannot state (extract/_stationcheck.py, the same one the build ran over the same
          documents: run reference integrity, unique run and resource ids, time_period ordering,
@@ -592,9 +592,9 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None,
     _check_mtcat_and_manifest), minus the build step itself. Returns True (PASS) / False (FAIL).
 
     When `surveys_root` is given (the Makefile's rebuild-data passes
-    --surveys), ALSO run the cache-INDEPENDENT digest-consistency gate: the served-product digest
+    -surveys), ALSO run the cache-INDEPENDENT digest-consistency gate: the served-product digest
     stamps vs the live survey.yaml sources. When it is None the gate SKIPS with a LOUD note (all
-    pre-C18b call sites keep their exact behaviour). The gate never reads the cache dir."""
+    call sites keep their exact behaviour). The gate never reads the cache dir."""
     if not data_dir.is_dir():
         print(f"ERROR: --data-dir {data_dir} is not an existing directory", file=sys.stderr)
         print("VERIFY:", "FAIL")
@@ -657,7 +657,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     # --surveys defaults to None so "absent" is distinguishable from an explicit ./data. The self-build
     # path falls back to ROOT/data below (unchanged default behaviour); --data-dir mode uses it to ARM
-    # the C18b digest-consistency gate (absent => the gate skips loudly).
+    # the digest-consistency gate (absent => the gate skips loudly).
     ap.add_argument("--surveys", default=None,
                     help="survey-package root (default in self-build mode: ./data). In --data-dir mode "
                          "this ARMS the C18b cache-staleness digest gate: the served-product digest "
@@ -686,7 +686,7 @@ def main(argv=None):
         if a.skip_tests:
             print("note: --data-dir ignores --skip-tests (different mode: validates an existing build "
                   "dir, does not rebuild or run pytest)", file=sys.stderr)
-        # --surveys is now MEANINGFUL in --data-dir mode (arms the C18b consistency gate); pass it through.
+        # --surveys is now MEANINGFUL in --data-dir mode (arms the consistency gate); pass it through.
         surveys_root = Path(a.surveys) if a.surveys is not None else None
         return 0 if _validate_data_dir(Path(a.data_dir), surveys_root,
                                        Path(a.allow_parse_failures),

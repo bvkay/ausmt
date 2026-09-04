@@ -101,7 +101,7 @@ def test_the_raw_timeseries_archive_is_named_by_link_not_in_passing():
     makes it an example, and the link makes it findable.
 
     THE SENTENCE IT QUALIFIES MERGED, and this pin follows it there. The section must not make the
-    hand-off claim twice, and the surviving telling is the one holding the THREDDS A7 wording
+    hand-off claim twice, and the surviving telling is the one holding the THREDDS wording
     verbatim. What is asserted is unchanged, the archive named as an example rather than as the
     usual case, and named by an anchor on its collection DOI."""
     what = _flat(_section("what"))
@@ -331,7 +331,7 @@ def test_the_documentation_section_is_two_pointers_and_no_list():
         assert retired not in flat, f"the retired topic bullet is back: {retired!r}"
 
 
-# ------------------------------------------- (j) the raw-time-series sentence (THREDDS A7)
+# ------------------------------------------- (j) the raw-time-series sentence (THREDDS)
 
 
 def test_section_one_states_the_hand_off_beside_the_no_hosting_claim():

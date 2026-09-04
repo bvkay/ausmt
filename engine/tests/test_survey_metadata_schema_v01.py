@@ -7,13 +7,13 @@ schema gate, the sibling of test_mtcat_schema_v20.py:
   1. the artifact's own shape: legal draft-07, the required set {schema, version, survey_id, title},
      every array property minItems 1 (the zero-empty posture is enforced by the schema, not only by
      the emitter), the versioned $id, the open top level;
-  2. four committed fixtures that must VALIDATE with format checking on: the suite's T20
+  2. four committed fixtures that must VALIDATE with format checking on: the suite's fixture T20
      document verbatim, a synthetic Case B release, a synthetic multi-activity survey and a synthetic
      no-identifier survey cited by source-provided text (the matrix rows the real corpus cannot
      instantiate today);
-  3. the RED proof: the T21-T23 rejections plus a mutation set, one mutation per constraint,
+  3. the RED proof: the schema rejections plus a mutation set, one mutation per constraint,
      each differing from a PASSING document by exactly the field under test;
-  4. the T25 reference check (citation.preferred_identifier designated in identifiers[]) and the
+  4. the reference check (citation.preferred_identifier designated in identifiers[]) and the
      zero-null / zero-empty scanner the emission and invariant suites reuse.
 
 STACK-FREE at module level: the schema gate runs on a machine with no ingest stack. Validation uses
@@ -138,7 +138,7 @@ def test_fixture_validates_with_format_checking_and_scans_clean(name):
 
 
 def test_t20_fixture_is_the_ratified_suite_document_verbatim():
-    """The committed T20 document is the suite's `svm` (run-fixture-suite.py T20); the
+    """The committed document is the suite's `svm` (fixture T20 of run-fixture-suite.py); the
     load-bearing values are pinned so a silent edit to the fixture is a visible one.
 
     THE ACKNOWLEDGEMENT IS PINNED BY ITS TEXT, not only by its type. The row is a CURATED
@@ -273,7 +273,7 @@ def test_the_mutation_set_differs_from_a_passing_document_by_exactly_the_field_u
 
 
 def test_a_withheld_embargoed_document_validates_with_the_same_schema():
-    """Policy transition keeps identity (T38c/T38d pattern): the same survey_id, an embargoed rights
+    """Policy transition keeps identity (pattern): the same survey_id, an embargoed rights
     block with a dated embargo, no extent, still a valid document."""
     doc = _base()
     doc["rights"] = {"license": "CC-BY-4.0", "access": "embargoed", "embargo_until": "2027-02-01"}
@@ -286,7 +286,7 @@ def test_a_withheld_embargoed_document_validates_with_the_same_schema():
 
 def test_reference_checks_actually_detect_violations():
     """Guard on the guards (the suite's Txxb pattern): the scanner must catch a planted null
-    and a planted empty container, and the T25 check must catch a preferred identifier that is not
+    and a planted empty container, and the check must catch a preferred identifier that is not
     designated in identifiers[]."""
     nulls, empties = scan_nulls_and_empties({"a": None, "b": [], "c": {"d": {}}, "e": [{"f": None}]})
     assert nulls == ["$.a", "$.e[0].f"] and empties == ["$.b", "$.c.d"]

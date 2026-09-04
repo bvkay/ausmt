@@ -1,9 +1,9 @@
 """Runner-side metadata-edit jobs. Runs INSIDE the gw-runner service - the ENGINE image,
 network-none — where ruamel.yaml + the real surveys validator live. NEVER in the gateway process
-(the C10 house rule that the gateway never parses survey content; pinned by the
+(house rule that the gateway never parses survey content; pinned by the
 source-assertion test AND the subprocess import-hygiene test).
 
-Transport is the C10 file-queue pattern, in its own namespace so the crash-only submission queue is
+Transport is the file-queue pattern, in its own namespace so the crash-only submission queue is
 untouched (adversarial review FIX 1 — the first implementation spawned `sys.executable -m ...` as a
 child of the GATEWAY container, whose image deliberately has no ruamel, so every real edit would
 have 500'd; tests passed only via an in-process seam):
@@ -15,12 +15,12 @@ have 500'd; tests passed only via an in-process seam):
 
 Job files carry a SLUG, never a path: the gateway mounts surveys-live at /srv/surveys-live while
 this runner mounts it read-only at /srv/surveys, so an absolute path would not translate across the
-containers. The runner resolves the package from its own AUSMT_SURVEYS_ROOT (mirroring the C10 rule
+containers. The runner resolves the package from its own AUSMT_SURVEYS_ROOT (mirroring the rule
 that the runner recomputes paths from its own env and never trusts one handed to it in a job file).
 
 Two job kinds:
   read  — load surveys/<slug>/survey.yaml, return the editable subset as JSON + current version.
-  merge - ruamel round-trip load, apply the field patch, enforce the C31 semver + no-op rules,
+  merge - ruamel round-trip load, apply the field patch, enforce the semver + no-op rules,
           append the release note, run the REAL validator on a scratch copy of the patched package
           (scratch lives under jobs/edit/scratch/, NEVER under the surveys tree — review FIX 2),
           and return new yaml bytes (base64) + a unified diff + the validator report + the sha256
@@ -57,7 +57,7 @@ except ModuleNotFoundError:  # pragma: no cover -- engine image always ships PyY
 
 logger = logging.getLogger("ausmt.gateway.runner.edit")
 
-# The edit-queue namespace under jobs/. DELIBERATELY disjoint from the C10 submission queue
+# The edit-queue namespace under jobs/. DELIBERATELY disjoint submission queue
 # (jobs/{pending,running,done}) so the gateway poll loop's done-ingest and dead-job sweep never see
 # an edit file and the crash-only submission semantics are untouched.
 EDIT_SUBDIR = "edit"
@@ -154,7 +154,7 @@ def process_edit_job(cfg, running_file: Path) -> None:
     """Execute one claimed edit job to a done-file. NEVER raises: a handled EditError becomes
     {ok:False, error:<curator-facing>}; an unexpected exception becomes a generic internal error
     (logged here, never leaked verbatim to the page). Edit jobs are request/response — the gateway
-    is polling for this result RIGHT NOW — so unlike the C10 submission jobs there is no crash-
+    is polling for this result RIGHT NOW - so unlike the submission jobs there is no crash-
     recovery requeue path; a missing result simply times out gateway-side and the curator retries.
 
     `cfg` is the RunnerConfig: surveys_root locates the package for the job's slug; validator_path
@@ -182,7 +182,7 @@ def _dispatch_edit(cfg, job: dict, scratch_dir: Path) -> dict:
     # runner's own mount, reads each `collection` block, and mutates nothing (history-job trust class).
     if job.get("kind") == "collections":
         return run_collections_job(Path(cfg.surveys_root))
-    # Stage 3b (record D5-A A6): the atomic collection batch. Whole-corpus too (it names its own
+    # Stage 3b (-A): the atomic collection batch. Whole-corpus too (it names its own
     # affected slugs in the operations list), so it dispatches here before the single-slug gate. The
     # runner is the ONLY place survey.yaml is parsed/patched/emitted; this computes each
     # affected member's patched bytes + validator report — the gateway commits them (publish.py).
@@ -318,7 +318,7 @@ def quote_ambiguous(value):
 def parse_semver(value) -> tuple[int, int, int] | None:
     """Parse a strict MAJOR.MINOR.PATCH into a comparable tuple, or None if it is not exactly three
     dot-separated non-negative integers. Deliberately strict (no pre-release/build metadata): the
-    survey-package convention is plain three-part semver (docs/reference/survey-yaml.md)."""
+    survey-package convention is plain three-part semver (docs/docs/reference/survey-yaml.md)."""
     if not isinstance(value, str):
         return None
     parts = value.strip().split(".")
@@ -334,7 +334,7 @@ def parse_semver(value) -> tuple[int, int, int] | None:
 
 def semver_greater(new: str, old: str) -> bool:
     """True iff `new` is a valid semver strictly greater than the valid semver `old`. A non-semver on
-    either side is False (the merge then refuses - C31 requires a semver-greater bump)."""
+    either side is False (the merge then refuses - requires a semver-greater bump)."""
     n, o = parse_semver(new), parse_semver(old)
     if n is None or o is None:
         return False
@@ -383,7 +383,7 @@ def apply_patch(data, patch: dict) -> list[str]:
     None (which re-emits as `null`). Assigned strings pass through quote_ambiguous (FIX 3) so a
     YAML-1.1-retypeable token is emitted quoted.
 
-    [FC-4] DIFF-MINIMAL MAP MERGE (C43 Stage 1): when the OLD value is a round-trip mapping and the
+    [FC-4] DIFF-MINIMAL MAP MERGE (Stage 1): when the OLD value is a round-trip mapping and the
     NEW value is a dict, the two are merged SURGICALLY into the existing node (_merge_map_into) —
     only the sub-keys whose leaf value actually changed are reassigned, so every UNCHANGED sub-key
     keeps its original comment, quoting, and position and produces NO diff line. The previous
@@ -392,7 +392,7 @@ def apply_patch(data, patch: dict) -> list[str]:
     makes the editor emit like the station-removal path already does: the removal only ever appends a
     release note, touching nothing it did not change. Scalars and LISTS still replace wholesale (a
     list has no stable per-element identity to merge against; a list edit re-emitting its own block is
-    acceptable and matches the pre-C43 contract)."""
+    acceptable and matches the contract)."""
     changed = []
     for key, new_val in patch.items():
         had = key in data
@@ -463,7 +463,7 @@ def _merge_map_into(node, new_map: dict) -> bool:
 
 
 def append_release_note(data, version: str, date: str, note: str) -> None:
-    """Set the top-level `version` and append a {version, date, note} entry to release_notes (C31
+    """Set the top-level `version` and append a {version, date, note} entry to release_notes (
  - every content edit records one). Creates the release_notes list if the survey had none.
     The entry's strings pass through quote_ambiguous too: the date is exactly the ISO shape PyYAML
     retypes to datetime.date, and the note is curator free text."""
@@ -485,7 +485,7 @@ def _run_validator(validator_path: str, package_root: Path) -> dict:
     is read from that file — the authoritative artefact. The report file lives beside the SCRATCH
     copy (never the live tree). Fail-closed: a non-JSON / crashing validator yields a synthetic FAIL
     item so the merge is treated as validator-FAIL."""
-    # Reuse the C10 runner's locator AND the ONE canonical argv builder,
+    # Reuse the runner's locator AND the ONE canonical argv builder,
     # so this edit-runner and the submission runner invoke the validator identically. This call site
     # must not assemble the flags --json-first (`--json <file> <folder>`); it goes through
     # validator_argv (positional-first) — the single form the real-vendored-validator oracles pin.
@@ -654,7 +654,7 @@ def _strip_inferred_review_comment(node, key) -> None:
 
 def run_read_job(package_root: Path) -> dict:
     """Handle a `read` edit-job: load the survey.yaml and return the editable subset + version. Also
-    returns `review_flags` (the contributor-credit model, extended in A2): the row indices the migrations
+    returns `review_flags` (the contributor-credit model, extended in): the row indices the migrations
     marked INFERRED-REVIEW on each of _CREDIT_LIST_KEYS (creators, contributors, organisations,
     acknowledgements), so the editor can chip them for curator adjudication."""
     survey_yaml = package_root / "survey.yaml"
@@ -679,7 +679,7 @@ def run_read_job(package_root: Path) -> dict:
 
 
 # ---- history (read-only git log) job -------------------------------------------------------------
-# The runner OWNS the git read for the History tab (record D4 — the gateway process issues NO git verb
+# The runner OWNS the git read for the History tab (- the gateway process issues NO git verb
 # for this beyond what already exists; the runner already mounts surveys-live read-only for the
 # validator). The ONLY git verb this job runs is the READ-ONLY `log` — a pin asserts the argv carries
 # no mutating verb. Ownership: surveys-live is operator-owned while the runner is uid 10002, so git
@@ -790,7 +790,7 @@ def _history_subcommand(argv: list[str]) -> str | None:
 
 
 # ---- collections (whole-corpus read-only projection) job ----------------------------------------
-# The C43 Stage-3a collections console (record D5-A) reads EVERY published survey.yaml's `collection`
+# The Stage-3a collections console (-A) reads EVERY published survey.yaml's `collection`
 # block and rolls them up EXACTLY as the engine's build_portal._group_collections does — the SAME
 # grouping the portal shows readers — plus the two honesty seams the build only prints to stderr
 # today: id near-duplicates and per-field divergence. The grouping/first-declarer/near-dup logic is
@@ -814,9 +814,9 @@ _COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_upda
 # editing the member survey.yaml files, not in the console.
 _COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS
                                       if f not in ("last_updated", "prose"))
-# Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality (D5-C
-# round 2, R1): the editor's no-op check compares str-form, the divergence detector buckets
-# str-form (R1 — else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
+# Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality (
+# round 2): the editor's no-op check compares str-form, the divergence detector buckets
+# str-form (- else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
 # Normalise then no-ops on: an un-clearable "Need attention"), and emission writes a round-trip-stable
 # decimal as a plain int.
 _COLLECTION_NUMERIC_FIELDS = frozenset({"start_year"})
@@ -912,12 +912,12 @@ def _near_duplicate_ids(ids: list) -> list:
 
 
 def run_collections_job(surveys_root: Path) -> dict:
-    """Handle a `collections` edit-job (record D5-A / Stage 3a): the whole-corpus read-only projection.
+    """Handle a `collections` edit-job (-A / Stage 3a): the whole-corpus read-only projection.
     Enumerate published surveys, read each `collection` block via the runner's YAML loader, group by
     exact `collection.id` with the engine's FIRST-DECLARER rollup, count stations per member from the
     EDI files (a directory listing — the list_stations discipline), and surface id near-duplicates +
     per-field divergence. Returns {ok, collections:{id:{...}}, near_duplicates:[[id,...],...]}. An empty
-    corpus (or a surveys tree with no collection blocks) returns {collections:{}, near_duplicates:[]}
+    corpus (or a surveys tree with no collection blocks) returns {collections:{}, near_duplicates:}
     — the clean 'no collections yet' state, never an error. READ-ONLY: reads only; mutates nothing."""
     rollup: dict = {}          # id -> first-declarer rollup field dict
     members_by_id: dict = {}   # id -> [member dict] (in slug order)
@@ -992,7 +992,7 @@ def run_collections_job(surveys_root: Path) -> dict:
 
 
 # ---- collection batch (atomic multi-survey collection-block write) job ---------------------------
-# Stage 3b (record D5-A A6). The gateway resolves the desired end-state (collection fields + the
+# Stage 3b (-A). The gateway resolves the desired end-state (collection fields + the
 # final member set) into a list of per-survey OPERATIONS and hands them here; the runner — the ONLY
 # YAML parser - applies each survey's `collection`-block patch, bumps its version (patch),
 # appends the ONE shared release note, and validates the patched package on a scratch copy. It returns
@@ -1018,7 +1018,7 @@ def _apply_collection_set(data, block: dict, today: str) -> bool:
     TYPE-TOLERANT (`str(_plain(cur)) == str(new)` => unchanged), and a numeric field (`start_year`) is
     written as a PLAIN scalar, NOT force-quoted — otherwise a member declaring int `start_year: 2003`,
     edited only on its title, has `2003` silently re-typed to `"2003"` (a spurious diff line +
-    a spurious commit on an untouched member, breaking the D13 diff-minimality / N-commits pins)."""
+    a spurious commit on an untouched member, breaking the diff-minimality / N-commits pins)."""
     coll = data.get("collection")
     created = False
     if not hasattr(coll, "get"):
@@ -1050,14 +1050,14 @@ def _coerce_collection_value(key: str, new_val):
     is an all-DECIMAL string is written as a PLAIN int (unquoted) — but ONLY when the int round-trips
     to the identical literal: int("0000") -> 0 would silently rewrite the curator's typed "0000", so a
     non-round-trip literal stays a quoted string. isdecimal, NOT isdigit — the executed "2003²" probe
-    is isdigit-True but int()-ValueError — plus a defensive try/except so NO input can raise out of the
+    is isdigit-True but int()-ValueError - plus a defensive try/except so NO input can raise out of the
     emission path (the gateway form and the publish gate both enforce ^[0-9]{4}$ upstream; this is the
     belt). Every other value rides quote_ambiguous (FIX 3) so a YAML-1.1-retypeable token is emitted
     quoted."""
     if key in _COLLECTION_NUMERIC_FIELDS and isinstance(new_val, str) and new_val.isdecimal():
         try:
             n = int(new_val)
-        except ValueError:  # pragma: no cover -- isdecimal makes this unreachable; belt per R2
+        except ValueError:  # pragma: no cover -- isdecimal makes this unreachable; belt
             return quote_ambiguous(new_val)
         if str(n) == new_val:
             return n
@@ -1088,7 +1088,7 @@ def _collection_effect(kind: str, old_cid: str | None, new_cid: str) -> str:
 
 def run_collection_batch_job(surveys_root: Path, *, operations: list, note: str, today: str,
                              validator_path: str, scratch_dir: Path) -> dict:
-    """Handle a `collection_batch` edit-job (record D5-A A6): apply the per-survey collection-block
+    """Handle a `collection_batch` edit-job (-A): apply the per-survey collection-block
     operations, returning each AFFECTED survey's patched bytes + unified diff + validator report +
     version bump. NO git, NO commit — the gateway's commit_collection_batch does the atomic write.
 

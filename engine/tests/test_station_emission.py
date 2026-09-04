@@ -19,7 +19,7 @@ What this module pins, all of it read off documents a REAL build wrote:
   * the NEW blocks carry no null and no empty container. This is scoped to runs[] and resources[] on
     purpose: the frozen keys carry legitimate nulls (remote_site, coordinate_qc, the frame rotation
     sources), so the survey-metadata document's corpus-wide rule cannot be imported here.
-  * the leak rejections T13, T14 and T28a-d, applied to BUILT withheld stubs rather than to a
+  * the leak rejections and, applied to BUILT withheld stubs rather than to a
     hand-written fixture, so what is proven closed is the document the corpus actually publishes.
   * No non-exact station's true position reaches any published free text. The per-station mask
     withholds a masked station's OWN note; nothing stops ANOTHER station's note naming it, and the
@@ -278,14 +278,14 @@ def test_built_withheld_stubs_reject_the_ratified_leaks(built_access, why, mutat
 # --------------------------------------------------------------- No masked position in a note
 
 def _coord_fixtures():
-    """The C42 coordinate fixtures and their leak-string generator, reused rather than restated."""
+    """The coordinate fixtures and their leak-string generator, reused rather than restated."""
     import test_coord_access as c42  # noqa: PLC0415
     return c42
 
 
 @pytest.fixture(scope="module")
 def built_masked(tmp_path_factory):
-    """One exact, one generalised and one withheld station in one survey, built by the C42 stager so
+    """One exact, one generalised and one withheld station in one survey, built stager so
     the positions are distinctive enough to attribute a hit to a policy class."""
     pytest.importorskip("mt_metadata")
     c42 = _coord_fixtures()

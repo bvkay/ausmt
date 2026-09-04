@@ -166,22 +166,22 @@ class BuildCache:
             self.degenerate, self.degenerate_reason = is_salt_degenerate(engine_commit, checkout_dir)
         # The stable, per-survey salt component is injected via key; the fixed part is precomputed.
         self._fixed_salt = "\x00".join([
-            # Cache-format version tag. v2 = self-verifying entries (digest-line + payload, A1b);
+            # Cache-format version tag. v2 = self-verifying entries (digest-line + payload);
             # v3 = the served-XML meta blob carries `survey_digest` (the digest
             # the entry was KEYED under), consumed by the digest-stamp sidecar + the verify.py
             # consistency gate; v4 = the parse product changed SHAPE - tf.json rows grew 10 -> 18
             # (rho/phase error columns + full complex tipper) and the placeholder-tipper mask now
-            # withholds filler tippers, so a pre-C20 cached parse would replay 10-wide/unmasked rows.
-            # Bumping the tag re-keys EVERY blob, so pre-C20 entries never resolve — a clean MISS,
+            # withholds filler tippers, so a cached parse would replay 10-wide/unmasked rows.
+            # Bumping the tag re-keys EVERY blob, so entries never resolve - a clean MISS,
             # counted as a miss, never a replay of a stale-shape parse. One full re-derive on the first
-            # build after C20 lands; then warm again. (The contract_digest below ALSO shifts on the
+            # build lands; then warm again. (The contract_digest below ALSO shifts on the
             # column append; the tag bump is the explicit, self-documenting belt-and-suspenders — same
-            # discipline as C18b.) Old-format entries age out via the prune.
-            # v5 (C46-W3a) = the served-XML CONTENT changed corpus-wide: the EMTF-XML Copyright block now
+            # discipline as) Old-format entries age out via the prune.
+            # v5 = the served-XML CONTENT changed corpus-wide: the EMTF-XML Copyright block now
             # carries the survey's real licence-derived release_status + conditions_of_use instead of
             # mt_metadata's default "Unrestricted Release"/"may be copied freely" boilerplate (a truth
             # fix in ausmt_science.ingest.normalize.condition_tf). That formatter change is not captured
-            # by the source-EDI sha, the survey.yaml digest, or the contract digest, so a warm pre-C46
+            # by the source-EDI sha, the survey.yaml digest, or the contract digest, so a warm
             # cache would REPLAY the boilerplate XML for an unchanged EDI on the same engine commit.
             # Bumping the tag forces one clean full re-derive so every served XML is the truthful form.
             # v6 (station promotion) = the parse product changed SHAPE again: the per-EDI parse now
@@ -196,7 +196,7 @@ class BuildCache:
         ])
         # Forensics: a short fingerprint of the FULL fixed salt (version tag + engine commit +
         # lib versions + contract digest). Two builds that should key identically expose identical
-        # fingerprints; a mid-process salt flip (the C18c-flake class: moving HEAD, transient
+        # fingerprints; a mid-process salt flip (the flake class: moving HEAD, transient
         # rev-parse failure, contract-file read failure) is attributable from the build report alone.
         self.salt_fp = hashlib.sha256(self._fixed_salt.encode("utf-8")).hexdigest()[:12]
         if self.enabled:
@@ -294,7 +294,7 @@ class BuildCache:
             tmp.write_bytes(hashlib.sha256(data).hexdigest().encode("ascii") + b"\n" + data)
             # Retry the rename - on Windows an AV/on-access scanner briefly holding the fresh tmp
             # (or the destination) raises a transient PermissionError, and a silently dropped entry
-            # is a spurious miss on the next build (one C18c-flake candidate). Three attempts with a
+            # is a spurious miss on the next build (one flake candidate). Three attempts with a
             # short backoff clears a scanner hold; a still-failing write counts in write_errors.
             last_err = None
             for attempt in range(3):

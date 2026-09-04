@@ -1,17 +1,17 @@
-"""Stage 2b-ii: privileged serve-state ACTIONS (gateway half - record D8/D9/D13).
+"""Stage 2b-ii: privileged serve-state ACTIONS (gateway half -).
 
 The gateway WRITES intent files the host actions agent executes (the host-side pins live in
 deploy/tests/test_actions_sh.py). This module pins the GATEWAY half against INDEPENDENT OBSERVABLES:
 the intent file that lands in the state dir (and its content), the pause.flag, the rendered confirm
 pages, the response status, and the TOTP replay-guard state — never the handler's self-report.
 
-The D13 Stage-2 set carried here (each refusal proven able to fail by its passing control):
+The Stage-2 set carried here (each refusal proven able to fail by its passing control):
   * session + CSRF gate on every action route;
   * single-flight (a pending intent of a kind is not double-written);
   * force-full sets the `full` flag on rebuild.request;
   * pause writes / resume removes pause.flag;
   * rollback TYPED-ID must match; a build not in the inventory / the serving build are refused;
-  * restore TYPED-ID must match; the C41 TOTP second factor (unenrolled / wrong / replayed refused;
+  * restore TYPED-ID must match; the TOTP second factor (unenrolled / wrong / replayed refused;
     a wrong typed id does NOT burn the code); a valid restore writes the intent AND consumes the code;
   * CSP-clean confirm pages (no inline JS/handlers under the strictPages script-src 'self').
 

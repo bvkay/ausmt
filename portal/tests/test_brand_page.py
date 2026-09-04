@@ -20,7 +20,7 @@ What these pins hold:
   * THE FULL PIXELATED ARTWORK IS OFFERED SEPARATELY, as the presentation hero graphic. The
     relationship doctrine is that the simplified dot mark is the identity and the full artwork is the
     hero image; the page has to keep those apart or the doctrine dies on first contact with a reader.
-  * PORTAL CHROME, and the C9 header geometry with it: this is a portal page, not an orphan.
+  * PORTAL CHROME, and the header geometry with it: this is a portal page, not an orphan.
 """
 import json
 import re
@@ -100,7 +100,7 @@ def test_the_palette_on_the_page_is_brand_jsons_palette():
 
 def test_the_clear_space_the_page_states_is_the_declared_one():
     """The page told readers a rule the shipped lockups do not follow: it said a quarter of the mark
-    height while PROPORTIONS declares 0.20, tightened during E2 and left stranded here. It was also
+    height while PROPORTIONS declares 0.20, tightened and left stranded here. It was also
     the only number on the page not held against brand.json, which is exactly the drifting second
     source of truth the palette pin exists to prevent.
 

@@ -1,4 +1,4 @@
-"""Stage-3a collections console - page/route pins (record D5-A / D13, Invariant 10).
+"""Stage-3a collections console - page/route pins (Invariant 10).
 
 Drive the two READ-ONLY routes through the in-process app (httpx ASGITransport) with the in-process
 edit seam (inproc_edit_runner — the runner's real job dispatch, no file queue, no yaml in the gateway
@@ -49,7 +49,7 @@ def _seed_corpus(surveys_live) -> None:
 
 
 def _assert_csp_clean(html: str) -> None:
-    """Record D13 CSP sweep: every <script> carries src= (inline blocks are dead under script-src
+    """Record CSP sweep: every <script> carries src= (inline blocks are dead under script-src
     'self'), NO on*= handler attributes, and the shared ui.js loads. Mirrors
     test_serve_reconcile.test_queue_page_is_pure_queue_and_csp_clean."""
     for m in re.finditer(r"<script\b[^>]*>", html):
@@ -166,7 +166,7 @@ def test_index_renders_cards_bands_and_table(tmp_path):
         async with app_client(tmp_path, edit_runner=inproc_edit_runner(surveys_live)) as (client, *_):
             await curator_login(client)
             html = (await client.get("/gateway/curator/collections")).text
-            # Summary cards (n_stations labelled as the PUBLISHED count — D5-B F4).
+            # Summary cards (n_stations labelled as the PUBLISHED count -).
             for label in ("Collections", "Member surveys", "Published stations", "Need attention"):
                 assert label in html, label
             # Published-source framing is stated (not a served-portal mirror).
@@ -180,7 +180,7 @@ def test_index_renders_cards_bands_and_table(tmp_path):
             assert "&middot; mixed" in html or "· mixed" in html
             # Membership-by-slug honesty line.
             assert "resolved by survey <b>slug</b>" in html
-            # Stage 3b: the 'New collection…' entry (record A5) and the actionable band remedies
+            # Stage 3b: the 'New collection…' entry and the actionable band remedies
             # (record E) now appear (the read-only 3a 'next stage' copy is superseded).
             assert "New collection" in html
             assert 'href="/gateway/curator/collections/new"' in html
@@ -190,7 +190,7 @@ def test_index_renders_cards_bands_and_table(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Detail = the Stage-3b EDITOR (record D5-A A3/A6, preview view 2): the fan-out edit form seeded with
+# Detail = the Stage-3b EDITOR (preview view 2): the fan-out edit form seeded with
 # the rollup values + ◆ divergence hints, the two-column membership manager (keep + a searchable add
 # picker), the required release note, and the preview POST target. FAILS IF an editor surface is
 # missing. (The read-only 3a assertions are superseded by this write-path stage.)

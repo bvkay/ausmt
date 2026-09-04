@@ -123,7 +123,7 @@ def test_every_chrome_surface_carries_one_nav_container_rule():
     """The nav CONTAINER rule, character-identical on EVERY surface wearing the chrome. FAILS IF
     the wrap modes (or the gap, or the display) drift apart: a nowrap container and a wrap
     container hand the same three min-width:112px tabs different row counts and different resolved
-    widths, which is exactly the 47.5px tab-group offset the C9 review measured between the SPA and
+    widths, which is exactly the 47.5px tab-group offset the review measured between the SPA and
     the pages at 1280px.
 
     It compares all five surfaces rather than the SPA-and-pages pair this pin started as, because

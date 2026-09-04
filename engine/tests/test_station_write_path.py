@@ -12,9 +12,9 @@ test_emtfxml_input.py, test_processing_lineage.py and gateway/tests/test_c43_sta
 deploy/Makefile makes the two coincide in deployment, so the served path is identical either way. Both
 trees keep their copy, and the two copies are the same bytes.
 
-SCOPE, stated because the asymmetry is deliberate: D7 promotes station.json alone. dimensionality.json
+SCOPE, stated because the asymmetry is deliberate: promotes station.json alone. dimensionality.json
 is served beside it but is not a contract, so it stays where it has always been written, under
---products. In deployment the two directories are the same one.
+-products. In deployment the two directories are the same one.
 """
 import json
 import subprocess

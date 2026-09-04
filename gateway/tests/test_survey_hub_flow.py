@@ -1,8 +1,8 @@
-"""Stage 1 survey-hub + nav-shell flow tests (record D13 verification pins), driven through the
+"""Stage 1 survey-hub + nav-shell flow tests (verification pins), driven through the
 real gateway HTTP surface with the in-process edit seam.
 
 Load-bearing pins here:
-  * CSP SWEEP (rendered): every C43 surface — the nav shell, the survey hub (both tabs), and the
+  * CSP SWEEP (rendered): every surface - the nav shell, the survey hub (both tabs), and the
     external JS routes — carries NO inline <script> and NO on*= handler (all dead under the
     strictPages CSP, script-src 'self'). Extends the source-level sweep in test_serve_reconcile.py
     with a RENDERED check over the new pages (the non-vacuous form: it inspects served bytes).
@@ -173,10 +173,10 @@ def _assert_csp_clean(name: str, html: str) -> None:
 
 
 # --------------------------------------------------------------------------------------------------
-# CSP SWEEP (rendered) — every C43 surface
+# CSP SWEEP (rendered) - every surface
 # --------------------------------------------------------------------------------------------------
 def test_c43_surfaces_are_csp_clean(tmp_path):
-    """RENDERED CSP sweep of every C43 Stage-1 surface: the surveys list (nav shell), the survey hub
+    """RENDERED CSP sweep of every Stage-1 surface: the surveys list (nav shell), the survey hub
     Overview tab, the hub Metadata tab, the queue (shell), the uploader keys page (shell), and the two
     new external JS routes (raw JS, not <script>-wrapped, session-gated). FAILS IF any surface ships an
     inline <script> or an on*= handler, or a JS route serves HTML-wrapped script."""
@@ -207,7 +207,7 @@ def test_c43_surfaces_are_csp_clean(tmp_path):
 
 
 def test_c43_js_routes_are_session_gated(tmp_path):
-    """The C43 external JS routes redirect an ANONYMOUS request to login (303) — same gate as the
+    """The external JS routes redirect an ANONYMOUS request to login (303) - same gate as the
     pages that reference them. FAILS IF a route serves ungated or 404s (the page would load with a
     broken chrome)."""
     async def _body():
@@ -222,11 +222,11 @@ def test_c43_js_routes_are_session_gated(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# NAV SHELL presence (S1-1)
+# NAV SHELL presence
 # --------------------------------------------------------------------------------------------------
 def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
     """Every session-gated curator page renders the left rail (the Stage-1 surfaces PLUS the Stage-3a
-    Collections entry, record D5-A) and the context bar's drift chip carrying the server-rendered
+    Collections entry,-A) and the context bar's drift chip carrying the server-rendered
     published HEAD + Request-rebuild button. FAILS IF a page loses the shell or the rail drops a
     surface."""
     async def _body():
@@ -246,10 +246,10 @@ def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
                 assert 'href="/gateway/curator/edit"' in r.text          # Surveys
                 assert 'href="/gateway/curator/queue"' in r.text          # Submission queue
                 assert 'href="/gateway/curator/uploaders"' in r.text      # Uploader keys
-                # Serve state: C43 S2b-i promoted the panel to a first-class screen, so the rail
+                # Serve state: promoted the panel to a first-class screen, so the rail
                 # now points at /gateway/curator/serve (was the queue's #serve-state anchor).
                 assert 'href="/gateway/curator/serve"' in r.text           # Serve state
-                # Collections joined the rail in Stage 3a (record D5-A) — present on every page (not
+                # Collections joined the rail in Stage 3a (-A) - present on every page (not
                 # the active item on these non-collections pages).
                 assert 'href="/gateway/curator/collections">Collections</a>' in r.text, \
                     f"{path}: Collections missing from the rail"
@@ -262,7 +262,7 @@ def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# SURVEY HUB (S1-2)
+# SURVEY HUB
 # --------------------------------------------------------------------------------------------------
 def test_survey_list_links_to_hub_not_edit_form(tmp_path):
     """The Surveys list rows link to the per-survey HUB (the task home), not straight to the edit
@@ -309,7 +309,7 @@ def test_surveys_list_is_a_table_filled_browser_side(tmp_path):
 
 def test_surveys_list_js_route_raw_and_session_gated(tmp_path):
     """The surveys-list.js route serves RAW JS (not <script>-wrapped) and is session-gated (anon =>
-    303 to login), like the other C43 external scripts. FAILS IF it 404s, serves HTML, or is
+    303 to login), like the other external scripts. FAILS IF it 404s, serves HTML, or is
     ungated."""
     async def _body():
         surveys_live = _hub_client(tmp_path)
@@ -328,7 +328,7 @@ def test_surveys_list_js_route_raw_and_session_gated(tmp_path):
 
 
 def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
-    """The Overview & QA tab renders the QA scaffold (browser-populated from /data). C43 Stage 2a: the
+    """The Overview & QA tab renders the QA scaffold (browser-populated from /data). Stage 2a: the
     Stations and History tab-strip entries are now REAL in-hub tabs (?tab=stations / ?tab=history),
     NOT the Stage-1 link-out/absence. FAILS IF the QA data-hook is missing, or the Stations/History
     tabs regress to the Stage-1 link-out / are absent."""
@@ -353,7 +353,7 @@ def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
 
 
 def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
-    """IDCONS D1 - the HUB Metadata tab (the sidebar editor the curator actually uses) renders
+    """the HUB Metadata tab (the sidebar editor the curator actually uses) renders
     the identifier surface as ONE consolidated 'Identifiers & PIDs' section, exactly like the full form.
     The sidebar/TOC shows a SINGLE entry (no standalone 'Related identifiers' section), the consolidated
     form carries BOTH the identifiers map widgets (project_raid) AND the typed related_identifiers list
@@ -395,7 +395,7 @@ def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
 
 
 def test_hub_consolidated_section_round_trips_both_groups(tmp_path):
-    """IDCONS D1 — a SINGLE post of the consolidated 'Identifiers & PIDs' hub section round-trips BOTH the
+    """a SINGLE post of the consolidated 'Identifiers & PIDs' hub section round-trips BOTH the
     identifiers MAP fields (project_raid) AND the related_identifiers LIST rows: build_section_patch
     iterates every widget section and assembles whichever widgets are present, so one form carrying both
     groups produces a patch touching both keys. FAILS IF the combined section post drops either group."""
@@ -481,8 +481,8 @@ def test_hub_enter_key_defaults_to_an_unnamed_save(tmp_path):
     """IMPLICIT-SUBMISSION PIN. A form's default button - the one Enter in a text field
     activates, is the FIRST submit button in tree order. With every section folded into ONE form, any
     NAMED submit anywhere on the tab would become that default and Enter in a text field would post an
-    extra field nobody asked for. (The retired legacy Convert action was exactly such a button; A2/D7
-    deleted it, and this guard stays because the hazard is structural.) An unnamed submit must come
+    extra field nobody asked for. (The retired legacy Convert action was exactly such a button; it was
+    deleted, and this guard stays because the hazard is structural.) An unnamed submit must come
     first, so Enter is a plain Save. FAILS IF the first submit inside the metadata form carries a name,
     or if the guard is missing / focusable."""
     async def _body():
@@ -547,7 +547,7 @@ def test_hub_per_section_submit_is_section_scoped(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# SIDEBARMERGE - M1/M2/M3 merged sidebar entries
+# SIDEBARMERGE - merged sidebar entries
 # --------------------------------------------------------------------------------------------------
 def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
     """SIDEBARMERGE IA PIN. The Metadata sidebar collapses to ONE entry per merged group in
@@ -627,7 +627,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
 
 
 def test_hub_core_fields_merge_round_trips_scalars_org_instruments(tmp_path):
-    """SIDEBARMERGE M3 COMBINED-POST PIN. ONE post of the merged Core fields form round-trips ALL THREE
+    """SIDEBARMERGE COMBINED-POST PIN. ONE post of the merged Core fields form round-trips ALL THREE
     constituents — a top-level scalar (project_name), the Organisation map (ror), and a fresh Instruments
     row — because build_section_patch assembles whichever widgets the one form carries. FAILS IF the
     combined post drops any constituent."""
@@ -658,7 +658,7 @@ def test_hub_core_fields_merge_round_trips_scalars_org_instruments(tmp_path):
 
 
 def test_hub_curated_homes_merge_round_trips_in_one_post(tmp_path):
-    """COMBINED-POST PIN, replacing the retired M2 Investigators pin. ONE post of the metadata form
+    """COMBINED-POST PIN, replacing the retired Investigators pin. ONE post of the metadata form
     round-trips the citation map (preferred text + the nested preferred-identifier pair), the
     identity_classification designation mapping, an organisations row with its role checkbox group and
     its primary-custodian radio, AND an acknowledgements row. FAILS IF any of the four new panels drops
@@ -703,7 +703,7 @@ def test_hub_curated_homes_merge_round_trips_in_one_post(tmp_path):
 
 
 def test_hub_identifiers_merge_round_trips_time_series(tmp_path):
-    """SIDEBARMERGE M1 COMBINED-POST PIN. ONE post of the Identifiers & PIDs form round-trips the
+    """SIDEBARMERGE COMBINED-POST PIN. ONE post of the Identifiers & PIDs form round-trips the
     identifiers map (project_raid), a related_identifiers row, AND the folded time_series levels — three
     sections in one submit. FAILS IF the folded time_series group drops out of the combined post."""
     async def _body():
@@ -779,7 +779,7 @@ def test_hub_merged_form_no_clobber_and_legacy_preserved(tmp_path):
 
 
 def test_hub_identifiers_edit_preserves_time_series_legacy_key(tmp_path):
-    """SIDEBARMERGE M1 LEGACY-BYTE PIN. Editing the identifiers project_raid through the merged
+    """SIDEBARMERGE LEGACY-BYTE PIN. Editing the identifiers project_raid through the merged
     Identifiers & PIDs form, while the folded time_series levels ride along UNCHANGED (o_time_series
     snapshot carries the retired collection_pid), preserves time_series byte-for-byte: the retired
     collection_pid never appears in the diff. FAILS IF folding time_series into the identifiers form

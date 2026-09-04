@@ -50,7 +50,7 @@ def available() -> bool:
 #   2. io/edi/metadata/information.py::read_info flips into its EMPOWER branch for any INFO line
 #      containing "empower" and "v". The Zonge JSON carries `"empower_version": "v1.54.2.5"`, so
 #      the branch fires on a file that is not in Empower's line-oriented format at all.
-#   3. _parse_empower_info splits on `:` and keeps the remainder verbatim (`value = parts[1].strip()`).
+# 3. _parse_empower_info splits on `:` and keeps the remainder verbatim (`value = parts[1].strip()`).
 #      Its cleanup handles bracketed units and degree symbols; NOTHING removes JSON's structural
 #      member separator. The value is the STRING '5,', _empower_translation_dict maps `declination`
 #      onto the typed field station.location.declination.value, and pydantic's float validator raises.
@@ -64,7 +64,7 @@ def available() -> bool:
 #
 # THE REMEDY IS PARSE-ONLY. The normalised copy lives in a TemporaryDirectory that is destroyed
 # before this function returns, is never returned to a caller, and never reaches the served tree or
-# the sha256 integrity gate (both of which take the ORIGINAL path). D1 stands: source EDI bytes are
+# the sha256 integrity gate (both of which take the ORIGINAL path). stands: source EDI bytes are
 # never edited, and what AusMT serves stays byte-identical to what the custodian released.
 INFO_JSON_DELIMITER_DEFECT = (
     "mt_metadata could not read the >INFO JSON block: a JSON scalar kept its trailing delimiter; "
@@ -348,7 +348,7 @@ DATAID_CHARSET_DEFECT = (
 # happened to finish on".
 #
 # Applied ON A TEMPORARY COPY, exactly like the >INFO delimiter repair: the copy keeps the head, the
-# info block, the measurement definitions and the chosen section alone. D1 stands: the served bytes
+# info block, the measurement definitions and the chosen section alone. stands: the served bytes
 # are the custodian's file.
 SECTION_OF_RECORD_RULE = "<DATAID>_avg, else the section named for the DATAID, else the first"
 
@@ -1090,10 +1090,10 @@ def components_from_tf(tf, notes=None):
                 comp[k + "I"][i] = float(zi.imag)
 
         # Placeholder-tipper honesty: an unphysical filler tipper (|T| flat at 1.0) is masked
-        # WHOLESALE — all four component series to null — so neither the tip magnitude nor the C20
+        # WHOLESALE - all four component series to null - so neither the tip magnitude nor the
         # tzx/tzy columns paint it as data. Composes with the per-element fill/zero masking above
         # (the detector reads the already-masked series). With a `notes` list the CALLER owns the
-        # emission (build_portal records the fact on the parse product so it rides the C18 cache and
+        # emission (build_portal records the fact on the parse product so it rides the cache and
         # build_report - a cache hit and a miss emit the same diagnostics); without one, the NOTICE
         # prints here as before.
         if _is_placeholder_tipper(comp["TXR"], comp["TXI"], comp["TYR"], comp["TYI"]):

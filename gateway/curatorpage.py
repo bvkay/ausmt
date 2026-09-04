@@ -1,7 +1,7 @@
 """Server-rendered curator pages. MIRRORS statuspage.py: stdlib string.Template, no
 framework, portal palette, minimal JS — and ZERO inline JS: the strictPages CSP (script-src 'self')
 blocks inline script blocks and on*-attribute handlers, so all behaviour rides two external
-same-origin scripts (CURATOR_UI_JS delegation for confirms/toggles; SERVE_PANEL_JS for the C40
+same-origin scripts (CURATOR_UI_JS delegation for confirms/toggles; SERVE_PANEL_JS
 panel). Every interpolated value is html.escaped — reports derive from submitted bytes and MUST NOT
 inject markup into the curator's browser.
 
@@ -774,7 +774,7 @@ CONTEXT_BAR_JS = """
 #
 # DATA HONESTY:
 #   * QA flags = the sum of counts over the survey.frame CONVENTION-WARN entries ("served with note"
-#     stations) — ONE definition (qaFlagCount) shared by the H2 card and the H1 tab chip.
+# stations) - ONE definition (qaFlagCount) shared card and the tab chip.
 #   * The Frame card headline derives from the frame notes' DE-ROTATION entries ONLY (convention/
 #     quadrant warns are QA flags, not frame state); the sub-line uses the record's own vocabulary
 #     ("declared-zero reference" — never "geomagnetic", which the engine deliberately never asserts).
@@ -1270,7 +1270,7 @@ SURVEY_HUB_JS = r"""
 """
 
 
-# The C43 Stage-2a Stations tab browser-side script. ALL data is fetched SAME-ORIGIN from the served
+# The Stage-2a Stations tab browser-side script. ALL data is fetched SAME-ORIGIN from the served
 # /data corpus (catalogue.json / sci.json / tf.json / surveys.json + build.json) — the serve-panel
 # pattern, ZERO new gateway privileges (the gateway has no site-data mount). The catalogue/sci/tf
 # arrays are INDEX-ALIGNED (station i is catalogue[i]/sci[i]/tf[i] — the engine appends them in one
@@ -1287,8 +1287,8 @@ SURVEY_HUB_JS = r"""
 # EXECUTABLE Node parity pin runs these very functions against phaseqc):
 #   tf.json t[4] = phs_yx_adj is stored with a +180 presentation shift (engine _edi_tf.norm_phase). The
 #   workbench SUBTRACTS 180 and re-wraps (FLOORED modulo — JS's truncated % diverges on negatives,
-#   diverges on negatives) to recover TRUE φyx, plotted on a FULL ±180 axis with the Q3 band shaded.
-#   φxy (t[3]) is stored true, plotted 0…90 with the Q1 band shaded. ENGINE-GATE ALIGNED (see
+# diverges on negatives) to recover TRUE φyx, plotted on a FULL ±180 axis band shaded.
+# φxy (t[3]) is stored true, plotted 0…90 band shaded. ENGINE-GATE ALIGNED (see
 #   _conventions.py Gate 2): a point draws RED only when outside its band by MORE than
 #   QUADRANT_SLACK_DEG (10°, cross-import-pinned equal to the engine constant); the verdict strip
 #   beneath each phase plot is the MEDIAN of classified points vs band+slack (yx median on the
@@ -2275,7 +2275,7 @@ STATIONS_JS = r"""
 """
 
 
-# The Surveys-list browser script (C43 FR2-1): fill the display name / version / licence / served
+# The Surveys-list browser script: fill the display name / version / licence / served
 # station-count columns from the served /data corpus SAME-ORIGIN (surveys.json + build_report.json —
 # the serve-panel pattern, ZERO new gateway privileges; the gateway has no site-data mount). surveys.json
 # is keyed by the display LABEL, so we join by each entry's own `slug` field (mirrors the Stations tab's
@@ -2357,7 +2357,7 @@ def short_utc(ts: str) -> str:
     """The display form of a stored UTC timestamp: the canonical db shape renders as
     ' 07:49' (date + minutes - operator resolution; the full ISO rides in the cell's
     title attribute at the call site). VERBATIM fallback: any other shape is returned unchanged,
-    never mangled or emptied — the S2a-5 build-id shortener posture (audit data is sacred)."""
+    never mangled or emptied - the build-id shortener posture (audit data is sacred)."""
     m = _UTC_TS_RE.match(ts or "")
     return f"{m.group(1)} {m.group(2)}" if m else (ts or "")
 
@@ -2383,7 +2383,7 @@ def _page(title: str, body: str) -> str:
     return _head(title) + '<div class="wrap">' + body + "</div>" + _TAIL
 
 
-# ---- C43 Stage 1 nav shell (S1-1) ----------------------------------------------------------------
+# ---- Stage 1 nav shell ----------------------------------------------------------------
 # The persistent left rail + context bar every curator working page renders. Server-rendered chrome
 # (string.Template, no framework, no templates dir — the house architecture); the ONLY browser-side
 # piece is the drift chip's served-build half, filled by an external context-bar script (the
@@ -2391,14 +2391,14 @@ def _page(title: str, body: str) -> str:
 # script-src 'self'). Published HEAD is server-rendered here from serve_state.read_published_head.
 
 # The rail sections and their entries, as (group, [(key, label, href)]). Collections joined the
-# Surveys group in Stage 3a (record D5-A) — the read-only projection at /gateway/curator/collections;
+# Surveys group in Stage 3a (-A) - the read-only projection at /gateway/curator/collections;
 # it sits beside Surveys because a collection is a programme grouping OF surveys.
 _RAIL = (
     ("Surveys", (("surveys", "Surveys", "/gateway/curator/edit"),
                  ("collections", "Collections", "/gateway/curator/collections"))),
     ("Intake", (("queue", "Submission queue", "/gateway/curator/queue"),
                 ("uploaders", "Uploader keys", "/gateway/curator/uploaders"))),
-    # Security sits under Operations beside Serve state (C41 T2): it is an operator-facing account
+    # Security sits under Operations beside Serve state: it is an operator-facing account
     # concern — enrolling the authenticator that gates the destructive workbench actions — not a
     # per-survey editing surface, so Operations is its home rather than Surveys/Intake.
     # Analytics sits under Operations beside Serve state: it is a read-only, operator/reporting
@@ -2561,7 +2561,7 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
     return _page("AusMT curator queue", body)
 
 
-# ---- C40 serve-state panel -------------------------------------------------------------------
+# ---- serve-state panel -------------------------------------------------------------------
 # The published-vs-served view + the zero-argument "request rebuild" button. Two data sources:
 #   SERVER-SIDE (passed in): surveys-live HEAD (via the publish git seam), the reconcile-status.json
 #     contents, and whether a rebuild.request is pending — all from mounts the gateway already has.
@@ -2576,7 +2576,7 @@ _ACTION_COLOUR = {
     "sync_failed": _PALETTE["bad"],
     # The ops-guards render gap: untracked_blocked is a REFUSED rebuild that
     # needs an operator — render it RED, not defaulted to muted, and surface its log_tail (the
-    # offending-dir list reconcile wrote as the detail). S2b-ii adds the pause/pinned states.
+    # offending-dir list reconcile wrote as the detail). adds the pause/pinned states.
     "untracked_blocked": _PALETTE["bad"],
     "paused": _PALETTE["warn"], "pinned": _PALETTE["warn"],
 }
@@ -2853,8 +2853,8 @@ SERVE_PANEL_JS = """
 """
 
 
-# ---- C43 S2b-i: serve-state screen + operations floor ------------------------------------------
-# The serve panel promoted to a first-class screen (record D8/D15): the existing published/served
+# ---- serve-state screen + operations floor ------------------------------------------
+# The serve panel promoted to a first-class screen: the existing published/served
 # blocks (render_serve_panel) + a loud reconcile SYNC strip + a four-card operations FLOOR + the
 # retained-builds and backup-snapshots tables + a build-detail view. Everything here is READ-ONLY —
 # NO privileged action is rendered (rollback/restore/update/backup/pause are Stage 2b-ii; omitted,
@@ -3016,7 +3016,7 @@ def _freshness_card(ops: dict) -> str:
 
 
 def _sync_strip(status, ops, ops_stale: bool) -> str:
-    """The reconcile SYNC state, surfaced LOUDLY (record D8/D15). Driven by the FRESH
+    """The reconcile SYNC state, surfaced LOUDLY. Driven by the FRESH
     reconcile-status.json `action` (NOT gated behind ops-status staleness — the incident was a
     sync_failed that hid for 4 h), enriched with the sync_failed streak from ops-status when it is
     fresh. A sync_failed is a first-class red band; a build `failed` is amber; noop/rebuilt are calm."""
@@ -3131,9 +3131,9 @@ def _backups_table(ops, ops_stale: bool, generated_at, *, actions: bool = False)
     return head + "".join(rows) + "</table>"
 
 
-# ---- C43 S2b-ii: privileged ACTION controls on the serve screen (record D8/D9) ----------------
-# The D8 buttons. All post to session+CSRF-gated routes that write an INTENT the host actions agent
-# executes (the gateway gains no shell — C40). Single-flight (D9.3): a pending intent of a kind
+# ---- privileged ACTION controls on the serve screen ----------------
+# The buttons. All post to session+CSRF-gated routes that write an INTENT the host actions agent
+# executes (the gateway gains no shell -). Single-flight (D9.3): a pending intent of a kind
 # disables its button and shows the pending state. The destructive/id-carrying ones (rollback,
 # restore) are their own confirmation PAGES (typed id; restore also a TOTP code). Everything here
 # rides the shared data-confirm delegation in CURATOR_UI_JS — NO inline handler (strictPages CSP).
@@ -3152,7 +3152,7 @@ def _act_form(route: str, label: str, csrf: str, *, cls: str = "b-accent", confi
 
 def _serve_actions_panel(*, csrf_token: str, pending_intents: dict, paused: bool,
                          rollback_pin: dict | None, audit_tail: list) -> str:
-    """The D8 actions box: Update / Snapshot / Force-full-rebuild / Pause-or-Resume, plus the pending
+    """The actions box: Update / Snapshot / Force-full-rebuild / Pause-or-Resume, plus the pending
     intents banner and the read-only audit tail. Per-build rollback + per-snapshot restore live on
     their rows (below) as links to their own confirm pages."""
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
@@ -3233,7 +3233,7 @@ def render_serve_page(*, published_head, published_available: bool, status, pend
                       csrf_token: str, ops, ops_stale: bool, nav: "NavContext",
                       pending_intents: dict | None = None, paused: bool = False,
                       rollback_pin: dict | None = None, audit_tail: list | None = None) -> str:
-    """The first-class serve-state screen (record D8/D15). The existing serve panel (published HEAD,
+    """The first-class serve-state screen. The existing serve panel (published HEAD,
     served build + currency, per-survey build report, last reconcile — render_serve_panel) plus the
     reconcile SYNC strip, the four-card operations FLOOR, and the retained-builds + backup-snapshots
     tables. Read-only: no privileged action control is rendered. `ops` is the parsed ops-status.json
@@ -3296,7 +3296,7 @@ def find_build(ops, build_ref: str):
 
 
 def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: "NavContext") -> str:
-    """Read-only forensics for one retained build (record D8/D15 B4): identity + the C18-A4 cache
+    """Read-only forensics for one retained build: identity + the cache
     counters (salt_fp / write_errors / read_errors, from build_provenance.json via ops-status.json) +
     the build log tail (the newest build log the box copied into the state dir). NO 'serve this build'
     action — rollback is Stage 2b-ii."""
@@ -3353,10 +3353,10 @@ def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: 
     return _shell("AusMT build detail", body, nav=nav)
 
 
-# ---- C45 usage-analytics screen (record D4/D5) -------------------------------------------------
+# ---- usage-analytics screen -------------------------------------------------
 # A READ-ONLY Operations page rendering the host aggregator's stats.json (downloads/visits/countries +
 # a daily series). SAME trust class as the ops floor: the facts come from stats.json read SERVER-side
-# (serve_state.read_stats — the ops-status.json seam, no new mount, C40 intact). ZERO JS: the daily
+# (serve_state.read_stats - the ops-status.json seam, no new mount, intact). ZERO JS: the daily
 # series is a SERVER-RENDERED inline SVG sparkline, so nothing here touches the strictPages CSP
 # (script-src 'self'). Fail-closed: a missing stats.json shows an honest empty state; a stale one (old
 # generated_at, the serve_state band) shows a prominent STALE banner — never a 500, never a silent
@@ -4205,7 +4205,7 @@ def _daily_sparkline(daily: list) -> str:
 
 
 def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str:
-    """The C45 usage-analytics screen (record D4/D5): summary cards, a top-datasets table, a country
+    """The usage-analytics screen: summary cards, a top-datasets table, a country
     table, and a server-rendered daily sparkline over the aggregator's stats.json. `stats` is the parsed
     stats.json (or None); `stats_stale` is True when it is missing OR older than ~2 timer periods (the
     serve_state band). Read-only, ZERO JS. A None stats renders the honest EMPTY state; a present-but-
@@ -4450,7 +4450,7 @@ def analytics_country_csv(stats) -> str:
                           "download_bytes", "geo_days"], out)
 
 
-# ---- C43 S2b-ii: rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------
+# ---- rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------
 
 def render_rollback_confirm(*, build_ref: str, build, serving: bool, csrf_token: str,
                             error: str = "", nav: "NavContext") -> str:
@@ -4505,8 +4505,8 @@ def render_rollback_confirm(*, build_ref: str, build, serving: bool, csrf_token:
 
 def render_restore_confirm(*, snapshot_ref: str, snapshot_exists: bool, csrf_token: str,
                            enrolled: bool, error: str = "", nav: "NavContext") -> str:
-    """The guarded DB-restore confirmation page (record D8, drill-first destructive op). Confirmation
-    requires typing the snapshot id AND a valid TOTP code (the C41 shared destructive-op second
+    """The guarded DB-restore confirmation page (drill-first destructive op). Confirmation
+    requires typing the snapshot id AND a valid TOTP code (shared destructive-op second
     factor). When the snapshot is not in the inventory, or the curator is not enrolled in the second
     factor, the form is replaced by the honest refusal (the host re-validates + the route re-gates
     regardless). The disclosure states exactly what a restore erases."""
@@ -4725,7 +4725,7 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
     return "".join(forms)
 
 
-# ---- C31 metadata editor ---------------------------------------------------------------------
+# ---- metadata editor ---------------------------------------------------------------------
 
 # The editable fields, grouped like the add-survey page. Top-level scalars render as an
 # input/textarea; the STRUCTURED sections (maps + lists) now render as per-section WIDGETS
@@ -4755,7 +4755,7 @@ _EDIT_JSON_ONLY = (
 )
 
 # The structured-section titles + document order (matches survey-yaml.md), shared by the single-form
-# edit page and the C43 survey-hub Metadata tab (which splits each into its own per-section form) so
+# edit page and the survey-hub Metadata tab (which splits each into its own per-section form) so
 # rendering order never drifts between them.
 # "Source datasets" (sources) is RETIRED from the editor - its acquisition fields are
 # now optional keys on a related_identifiers row, and the standalone sidebar entry + panel are gone. The
@@ -4798,7 +4798,7 @@ def _canon_json(value) -> str:
 
 
 def _suggest_bump(current: str, kind: str) -> str:
-    """Display-only bump suggestion for the form (patch is the C31 default). The AUTHORITATIVE
+    """Display-only bump suggestion for the form (patch is the default). The AUTHORITATIVE
     semver comparison + enforcement lives in the runner (gateway.runner.edit.semver_greater); this is
     a pure-stdlib suggestion so the page needs no yaml/runner import. A non-semver current version
     falls back to 1.0.x so the form always shows a valid suggestion."""
@@ -4876,7 +4876,7 @@ def _sub_value(section: str, subkey: str, fields: dict, submitted: dict | None):
 
 def _map_section_panel(section: str, title: str, fields: dict, submitted: dict | None,
                        err_map: dict, display_errs: dict | None = None) -> str:
-    """`display_errs` (C43-HUB H4): {subkey: message} DISPLAY-LAYER inline errors — the red input
+    """`display_errs`: {subkey: message} DISPLAY-LAYER inline errors - the red input
     + explanatory line under it (the mockup's citation-author-email example). Rendering only:
     the runner-side validator and the preview/confirm POST path are untouched (pinned)."""
     from . import editor_form
@@ -4957,7 +4957,7 @@ def _access_level_widget(name: str, value) -> str:
 
 
 def _coordinate_access_widget(name: str, value) -> str:
-    """The C42 survey-level coordinate-access policy <select>: exact / generalised / withheld, with a
+    """The survey-level coordinate-access policy <select>: exact / generalised / withheld, with a
     leading blank '(default: exact)' option. Mirrors _access_level_widget but — unlike level — an UNSET
     policy stays blank (submits ""), so the assembler never writes access.coordinates for a survey that
     never set it (the record's byte-unchanged promise; absent => exact). An out-of-vocab STORED value is
@@ -5011,7 +5011,7 @@ def _license_select_widget(name: str, label: str, value) -> str:
 
 
 def _license_scalar_widget(value) -> str:
-    """The top-level `license` <select> (f_license) — the C46 free-text-seam killer for the ONE
+    """The top-level `license` <select> (f_license) - the free-text-seam killer for the ONE
     package-level licence. Full contract vocab, current value selected; an out-of-vocab stored value is
     shown as its own option (never silently coerced). Required field, so no '(none)'; a leading blank
     appears only when nothing is stored yet. Assembled server-side in app._build_patch as before (the
@@ -5023,7 +5023,7 @@ def _license_scalar_widget(value) -> str:
 
 
 def _profile_select_widget(name: str, label: str, value) -> str:
-    """The C46 attribution-profile <select> (ga | generic) for a sources[].profile field. A leading
+    """The attribution-profile <select> (ga | generic) for a sources[].profile field. A leading
     blank leaves it unset (default: generic at render time). An out-of-vocab stored value is shown so
     the curator can correct it. Every value escaped."""
     from . import editor_form
@@ -5037,7 +5037,7 @@ def _profile_select_widget(name: str, label: str, value) -> str:
             f'<select name="{_esc(name)}">{"".join(opts)}</select></p>')
 
 
-# IDCONS D1 - plain-language display text for the relation <select>. The option VALUE stays
+# - plain-language display text for the relation <select>. The option VALUE stays
 # the exact DataCite vocab (RELATION_TYPES, POSTed byte-identically so the fail-closed validator sees the
 # same token); only the human-facing option TEXT is expanded so a geophysicist who never read the spec can
 # tell which relation to pick. Any vocab not mapped here falls back to its raw token.
@@ -5051,7 +5051,7 @@ _RELATION_DISPLAY = {
     "IsDocumentedBy": "Documented by (an activity or project record describes this dataset)",
 }
 
-# D-L1 - plain-language display text for the `identifies` <select>, in NCI Table 1 ORDER.
+# - plain-language display text for the `identifies` <select>, in NCI Table 1 ORDER.
 # The option VALUE stays the exact vocab token (POSTed byte-identically so the fail-closed validator sees
 # the same token); only the human-facing option TEXT is expanded so a geophysicist can pick the level.
 _IDENTIFIES_DISPLAY = {
@@ -5087,11 +5087,11 @@ _ROLE_DISPLAY = {
 def _typed_vocab_select_widget(name: str, label: str, value, options: tuple,
                                display_labels: dict | None = None) -> str:
     """: a FAIL-CLOSED <select> for a typed related-identifiers preset - relation (RELATION_TYPES)
-    or identifier_type (IDENTIFIER_TYPES). Same C46 vocab-select discipline as _profile_select_widget:
+    or identifier_type (IDENTIFIER_TYPES). Same vocab-select discipline as _profile_select_widget:
     a leading blank leaves it unset, and an out-of-vocab STORED value is shown as its own selected
     option so the curator sees and can correct it (never silently coerced, never crashes). Server-
     rendered, no JS (CSP unaffected). `options` is the ordered preset tuple from editor_form.
-    `display_labels` (IDCONS D1) maps a vocab value to human-facing option TEXT — the option VALUE is
+    `display_labels` maps a vocab value to human-facing option TEXT - the option VALUE is
     ALWAYS the raw vocab token, so the POST is byte-identical and the validator stays fail-closed."""
     cur = str(value) if value not in (None, "") else ""
     labels = display_labels or {}
@@ -5106,7 +5106,7 @@ def _typed_vocab_select_widget(name: str, label: str, value, options: tuple,
 
 
 def _bool_widget(name: str, label: str, value, submitted: dict | None) -> str:
-    """A single checkbox for a boolean sub-field (C46 attribution.changes_made). After a validation
+    """A single checkbox for a boolean sub-field (attribution.changes_made). After a validation
     error the CHECKED state comes from `submitted` (the name is present iff it was ticked) so an
     un-tick survives the round-trip; otherwise it reflects the stored value. No JS (CSP unaffected)."""
     if submitted is not None:
@@ -5388,7 +5388,7 @@ _REORDERABLE_SECTIONS = frozenset({"creators"})
 def _list_section_panel(section: str, title: str, fields: dict, submitted: dict | None,
                         err_map: dict, display_error: str | None = None,
                         review_indices: list | None = None, intro_html: str = "") -> str:
-    """`display_error` (C43-HUB H4): a DISPLAY-LAYER section-level error line (list rows have no
+    """`display_error`: a DISPLAY-LAYER section-level error line (list rows have no
     single offending input to redden, so the message renders under the heading). Rendering only —
     the server validator and POST path are untouched. `review_indices` (the contributor-credit model):
     the ORIGINAL row indices the migration marked INFERRED-REVIEW, chipped only on the first render (not
@@ -5931,7 +5931,7 @@ def _related_identifier_row_html(index, values: dict | None, *, spare: bool = Fa
 
 
 def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """IDCONS D1 group (b) + D-L - THIS DATASET ELSEWHERE: the single typed related_identifiers
+    """ group (b) + D-L - THIS DATASET ELSEWHERE: the single typed related_identifiers
     list, the ONLY place a dataset-level DOI/PID is edited. Each row leads with the `identifies` level
     <select>; the relation derives from it and is hidden (a legacy relation-only row still edits its
     relation). Acquisition fields sit behind a collapsed per-row disclosure. Field names are identical to
@@ -5986,7 +5986,7 @@ def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: di
 
 
 def _time_series_levels_group(fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """SIDEBARMERGE M1 group (d) — TIME SERIES LEVELS AVAILABLE, folded onto the Identifiers & PIDs page
+    """SIDEBARMERGE group (d) - TIME SERIES LEVELS AVAILABLE, folded onto the Identifiers & PIDs page
     from the retired standalone "Time series" sidebar entry. The one field group that remained there
     (time_series.levels_available checkboxes + its advanced-JSON escape hatch) moves here, placed after
     the related_identifiers list. The one-line hint distinguishes the two facts a curator confuses: the
@@ -6008,10 +6008,10 @@ def _time_series_levels_group(fields: dict, submitted: dict | None, err_map: dic
 
 
 def _identifiers_and_pids_inner(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """IDCONS D1 - the ONE consolidated "Identifiers & PIDs" editor content, three groups:
+    """the ONE consolidated "Identifiers & PIDs" editor content, three groups:
     (a) THIS SURVEY (read-only ausmt id + project RAiD), (b) THIS DATASET ELSEWHERE (the typed
     related_identifiers list — the sole dataset-PID editor), (c) INSTRUMENT (the survey/platform PID).
-    SIDEBARMERGE M1 folds a fourth group (d) TIME SERIES LEVELS AVAILABLE here from the retired
+    SIDEBARMERGE folds a fourth group (d) TIME SERIES LEVELS AVAILABLE here from the retired
     standalone "Time series" entry (see _time_series_levels_group).
     Replaces the old five-section identifier scatter. The retired flat inputs (dataset_doi, collection_pid,
     related_publication(+doi), project, per-row instrument pid) are GONE from the UI; their schema keys stay
@@ -6075,7 +6075,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     subset. Top-level scalars are inputs/textarea; the structured sections are per-section WIDGETS
     (labelled inputs, an access-level <select>, levels checkboxes, repeatable rows) with a collapsed
     advanced-JSON <details> override each; `care` is advanced-JSON only (nested shape). A version-bump
-    radio group (patch default) + a required release-note box carry the C31 discipline.
+    radio group (patch default) + a required release-note box carry the discipline.
     `field_errors` annotates the section(s) that failed validation; `submitted` re-prefills the
     widgets with the curator's typed values after such a failure so nothing is discarded."""
     from . import editor_form
@@ -6177,7 +6177,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     return _page(f"AusMT edit {slug}", body)
 
 
-# ---- C43 Stage 1: survey hub (S1-2) --------------------------------------------------------------
+# ---- Stage 1: survey hub --------------------------------------------------------------
 # One hub per survey, two tabs: Overview & QA (landing) and Metadata. A Stations entry in the tab
 # strip LINKS to the existing removal page (labelled). NO History tab (Stage 2). The Overview tab is
 # populated BROWSER-side from same-origin /data/build_report.json + /data/build.json filtered to this
@@ -6202,7 +6202,7 @@ _HUB_TAB_KEYS = frozenset(k for k, _ in _HUB_TABS)
 HUB_FORM_FIELD = "hub_form"
 
 
-# The Q3 citation-author email heuristic is DELETED. It read the two retired flat credit
+# The citation-author email heuristic is DELETED. It read the two retired flat credit
 # keys and nothing else, so with those keys migrated away corpus-wide and unreadable by the engine it
 # could only ever return None. Its three surfaces went with it: the Overview data-citation-email
 # scaffold attribute and its info row, the Metadata TOC issue chip, and the Metadata inline field
@@ -6212,7 +6212,7 @@ HUB_FORM_FIELD = "hub_form"
 
 
 def _hub_header(slug: str, *, fields: dict, version: str | None) -> str:
-    """The hub header (C43-HUB H1, every tab): the survey TITLE (survey.yaml name/project_name,
+    """The hub header (every tab): the survey TITLE (survey.yaml name/project_name,
     falling back to the slug when the read-job degraded) + a mono slug chip, then the mockup's
     orientation line — 'v<version> · <licence> · <access> · collection <id>' from the metadata
     read-job fields, each segment rendered ONLY when the survey carries the fact (never invented),
@@ -6242,7 +6242,7 @@ def _hub_header(slug: str, *, fields: dict, version: str | None) -> str:
 
 
 def _hub_tab_strip(slug: str, active: str) -> str:
-    """The hub tab strip (C43 Stage 2a; C43-HUB H1 adds the browser-populated Stations chip):
+    """The hub tab strip (Stage 2a; adds the browser-populated Stations chip):
     Overview & QA / Stations / Metadata / History, all in-hub tabs. The Stations entry carries a
     hidden chip slot ([data-stations-chip]) survey-hub.js fills with '<d> dropped · <f> flagged'
     from build_report — hidden at 0/0, so a healthy survey shows no chip. The strip carries the
@@ -6262,7 +6262,7 @@ def _hub_tab_strip(slug: str, active: str) -> str:
 
 
 def _hub_overview_body(slug: str) -> str:
-    """The Overview & QA tab body (C43-HUB H2 scaffold). Every value is populated BROWSER-side by
+    """The Overview & QA tab body (scaffold). Every value is populated BROWSER-side by
     survey-hub.js from /data/build_report.json filtered to THIS survey (data-survey-slug). The
     server renders only the scaffold + loading placeholders - it has no site-data mount, so it
     cannot read the served corpus (the serve-panel constraint). the data-citation-email
@@ -6342,7 +6342,7 @@ def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str
 
 
 def _coord_policy_form(slug: str, access: dict, csrf_token: str) -> str:
-    """The hidden form the Stations drill-down's Save-coordinate-policy button submits (C43 Stage-4).
+    """The hidden form the Stations drill-down's Save-coordinate-policy button submits (Stage-4).
     It carries EXACTLY the fields a per-section access submit carries (o_access round-trip anchor + the
     four modelled access scalars + bump + note + csrf), plus the empty s_access_coordinate_overrides
     the JS fills with the assembled {BASE_station_id: policy} map. Round-tripping the rest of the access
@@ -6372,7 +6372,7 @@ def _coord_policy_form(slug: str, access: dict, csrf_token: str) -> str:
 
 
 def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
-    """The History tab body (C43 S2a-2): a READ-ONLY table of the survey package's git log — version
+    """The History tab body: a READ-ONLY table of the survey package's git log - version
     tag/subject, release-note body, when, author. Fully SERVER-RENDERED (the runner already returned
     the parsed commits via the history read-job; no browser JS, so nothing to fetch and nothing to
     inline under the CSP). NO rename/retire actions — those are Stage 4. Every value is _esc'd (a
@@ -6407,7 +6407,7 @@ def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
 
 
 def _toc_state_hint(section: str, fields: dict) -> str:
-    """The TOC state hint (C43-HUB H4): render-time facts only: entry COUNTS for list sections, and
+    """The TOC state hint: render-time facts only: entry COUNTS for list sections, and
     the access level / collection id values. A section with nothing derivable gets no hint (never a
     placeholder). the citation-email issue chip is gone with the heuristic that produced it."""
     from . import editor_form
@@ -6529,7 +6529,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
 
     # HUB-SINGLE-SAVE: ONE commit tray for the WHOLE form (bump + required note + Save), pinned to the
     # bottom of the field column so it is reachable from any scroll position. One logical edit — however
-    # many sections it spans - is one bump, one release note, one diff, one confirm (the C31
+    # many sections it spans - is one bump, one release note, one diff, one confirm (the
     # discipline is unchanged; it does not fire once per section).
     patch_v, minor_v, major_v = (_suggest_bump(cur, k) for k in ("patch", "minor", "major"))
     tray = (
@@ -6609,7 +6609,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         # editing surface; History stays read-only), collapsed + visually separated.
         + _hub_danger_zone(slug)
         # doi-harvest.js (shared window.AusmtDoiHarvest for the publications "Look up DOI" button) +
-        # editor.js; survey-hub.js is included ONCE by render_survey_hub for every tab (C43-HUB: the
+        # editor.js; survey-hub.js is included ONCE by render_survey_hub for every tab (the
         # header counts + Stations chip need it hub-wide).
         + '<script src="/gateway/curator/doi-harvest.js" defer></script>'
         + '<script src="/gateway/curator/editor.js" defer></script>'
@@ -6617,7 +6617,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
 
 
 def _hub_danger_zone(slug: str) -> str:
-    """The Metadata tab's danger zone (C41 D2): a collapsed, visually-separated <details> whose only
+    """The Metadata tab's danger zone: a collapsed, visually-separated <details> whose only
     affordance is a link to the retirement confirmation page (which carries the typed-slug + note +
     TOTP gate). No form or destructive control here — a single click only OPENS the confirmation
     page. The link is inline-styled (the button classes rely on the `button{}` base rules an <a> does
@@ -6641,14 +6641,14 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
                       active_section: str | None = None, commits: list | None = None,
                       history_error: str = "", build_lag: dict | None = None,
                       review_flags: dict | None = None, error: str = "") -> str:
-    """The per-survey hub (C43 Stage 1 S1-2 + Stage 2a + the C43-HUB mockup styling). `tab`
+    """The per-survey hub (Stage 1 + Stage 2a + the mockup styling). `tab`
     selects Overview & QA (default) / Stations / Metadata / History. Rendered inside the nav shell
     under ONE mockup-shaped header for every tab — the survey title + slug chip + orientation line
     (_hub_header, from the metadata read-job `fields`/`version`; the header DEGRADES to the slug
     when the read-job failed on a non-metadata tab). The Overview + Stations tabs are browser-
     populated from the served /data corpus (the serve-panel pattern, zero new gateway privileges);
     the Metadata tab is the per-section editor; the History tab is server-rendered from the runner
-    history read-job (`commits`). `build_lag` (S2a-1 [FC-2]) carries the served-vs-published label
+    history read-job (`commits`). `build_lag` ([FC-2]) carries the served-vs-published label
     state the Stations JS renders when served ≠ published. survey-hub.js loads ONCE for every tab
     (header counts + Stations chip are hub-wide); it degrades to the server-rendered scaffold."""
     tab = tab if tab in _HUB_TAB_KEYS else "overview"
@@ -6722,7 +6722,7 @@ def render_edit_preview(*, slug: str, version: str, diff: str, validate_report: 
 
 def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
                      nav: "NavContext | None" = None) -> str:
-    """The Surveys list (C43 Stage 1 S1-1; C43 FR2-1 makes it a proper TABLE). Server-rendered from a
+    """The Surveys list (Stage 1; makes it a proper TABLE). Server-rendered from a
     DIRECTORY LISTING of surveys-live (never content parsing — the survey.yaml presence is a stat, not
     a load), so the server knows only the slugs. The richer columns — display name, version, licence,
     and served station count — are filled BROWSER-side by surveys-list.js from the served /data corpus
@@ -6764,7 +6764,7 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
     return _page("AusMT surveys", body)
 
 
-# ---- C43 Stage 3a collections console (record D5-A) -----------------------------------------------
+# ---- Stage 3a collections console (-A) -----------------------------------------------
 # Two READ-ONLY server-rendered views over the runner's collections projection: the index (summary
 # cards + list table + inconsistency bands) and the per-id detail (rollup facts + member/Declares
 # table + callouts). NO write controls in 3a — creation/edit/merge/normalise are Stage 3b. ZERO JS:
@@ -6773,8 +6773,8 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
 # here is a rollup keyed by exact collection.id. Membership is by SLUG (read live from surveys-live),
 # never the rollup's display labels (the labels-vs-slugs trap that broke the stations tab, hotfix #33).
 
-# The programme fields whose per-member divergence the console marks with a ◆ (record D5-A A4). Kept in
-# sync with the runner's _COLLECTION_DIVERGENCE_FIELDS. F2 (D5-C): `last_updated` is EXCLUDED — it is a
+# The programme fields whose per-member divergence the console marks with a ◆ (-A). Kept in
+# sync with the runner's _COLLECTION_DIVERGENCE_FIELDS: `last_updated` is EXCLUDED - it is a
 # gateway-managed per-member timestamp, not a curator-reconcilable programme field (a Normalise on it
 # has no form field to fix); it is never a divergence the console reports.
 _COLLECTION_FIELDS = ("title", "type", "status", "start_year", "description")
@@ -6841,10 +6841,10 @@ def _merge_link_html(group: list, collections: dict) -> str:
 
 def render_collections_index(*, collections: dict, near_duplicates: list,
                              nav: "NavContext") -> str:
-    """The collections index (record D5-A A1). Summary cards, the two inconsistency bands (id
+    """The collections index (-A). Summary cards, the two inconsistency bands (id
     near-duplicates + per-field divergence, each with its one-click remedy — record E: Merge /
     Normalise link into the editor with the canonical value pre-filled), the list table, and the
-    'New collection…' entry (record A5). An empty corpus renders a clean 'No collections yet' state,
+    'New collection…' entry. An empty corpus renders a clean 'No collections yet' state,
     never an error (matches the engine's collections.json == {})."""
     collections = collections or {}
     near_duplicates = near_duplicates or []
@@ -6955,7 +6955,7 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
     return _shell("AusMT collections", body, nav=nav)
 
 
-# Record D5-A collection type is validator-unenforced, so the console's select IS the guardrail
+# Record collection type is validator-unenforced, so the console's select IS the guardrail
 # and these tuples ARE that select's options. app.py imports them for its write-path gates rather than
 # restating them, so the gate can never refuse a value the console offers, or admit one it does not.
 # The vocabulary is docs/docs/developer/collection-ids.md; a value added here must be added
@@ -7043,7 +7043,7 @@ def _collection_form_fields(*, collection: dict, prefill_id: str | None, diverge
 
 
 def _membership_manager(*, members: list, candidates: list, cid: str, is_new: bool) -> str:
-    """The two-column membership manager (record A3): current members (each a keep checkbox, checked;
+    """The two-column membership manager: current members (each a keep checkbox, checked;
     unchecking stages a removal) beside a SEARCHABLE candidate picker (add checkboxes) over surveys NOT
     already in this collection, each showing `no collection` vs `in "<id>" -> moves`. The filter is the
     ONLY JS (external collections.js). `members` is the collection's current member list (by SLUG);
@@ -7193,7 +7193,7 @@ def render_collection_detail(*, cid: str, collection: dict, candidates: list, ne
 
 def render_collection_create(*, candidates: list, csrf_token: str, error: str = "",
                              nav: "NavContext") -> str:
-    """The create form (record A5): a collection with no members cannot exist, so this collects the
+    """The create form: a collection with no members cannot exist, so this collects the
     details AND an initial member set (≥1) — the same fan-out form + candidate picker as the editor,
     minus a current-members column. Preview POSTs to /collections/new/preview; the server refuses zero
     members (400). The ONLY JS is the candidate-picker filter."""
@@ -7318,7 +7318,7 @@ def render_collection_batch_preview(*, cid: str, is_new: bool, results: list, no
     return _shell(f"AusMT preview batch · {cid or 'new'}", body, nav=nav)
 
 
-# ---- C43 Stage 3b candidate-picker filter (the ONLY JS on the editor/create pages) ---------------
+# ---- Stage 3b candidate-picker filter (the ONLY JS on the editor/create pages) ---------------
 # Served by GET /gateway/curator/collections.js as an EXTERNAL same-origin script (the strictPages CSP
 # is script-src 'self' — inline blocks/on* are dead). Mirrors the shipped stations-filter pattern:
 # textContent read, className toggle only; NO innerHTML-with-data, no eval, no fetch. DOM-free logic
@@ -7492,9 +7492,9 @@ def render_removal_preview(*, slug: str, version: str, removed: list, station_co
     return _page(f"AusMT remove stations {slug}", body)
 
 
-# ---- survey retirement (C41 D2) — the danger-zone confirmation + terminal page --------------------
+# ---- survey retirement - the danger-zone confirmation + terminal page --------------------
 # Whole-survey removal: a git rm -r of the survey package, gated by a typed slug + a required release
-# note + a valid TOTP second factor. The confirmation page DISCLOSES exactly what the record D2 lists
+# note + a valid TOTP second factor. The confirmation page DISCLOSES exactly what the lists
 # (package contents + N stations, serving-until-rebuild, collections recompute, bookmark/DOI honesty,
 # the git-revert undo). No inline JS: the submit rides the shared CURATOR_UI_JS data-confirm.
 
@@ -7502,7 +7502,7 @@ def render_removal_preview(*, slug: str, version: str, removed: list, station_co
 def render_survey_retire_confirm(*, slug: str, station_count: int | None, csrf_token: str,
                                  enrolled: bool, is_last_survey: bool, error: str = "",
                                  nav: "NavContext | None" = None) -> str:
-    """The retirement confirmation page (C41 D2): the full disclosure + the typed-slug / release-note /
+    """The retirement confirmation page: the full disclosure + the typed-slug / release-note /
     TOTP-code form. When the last-survey guard fires (retiring would empty the corpus and break the
     build) or the curator is not enrolled in the second factor, the form is replaced by the honest
     refusal in its place — the disclosure still renders so the curator understands the action either
@@ -7579,7 +7579,7 @@ def render_survey_retire_confirm(*, slug: str, station_count: int | None, csrf_t
 
 def render_survey_retired(*, slug: str, curator: str) -> str:
     """The terminal page after a successful retirement: confirmation + the serve-until-rebuild reality +
-    the git-revert undo (record D2). A chrome-less _page like the station-removal terminal confirm."""
+    the git-revert undo. A chrome-less _page like the station-removal terminal confirm."""
     body = (
         f'<h1>Retired survey — {_esc(slug)}</h1>'
         '<p class="sub">The survey package was removed from surveys-live and pushed in one commit '
@@ -7609,15 +7609,15 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
                      nav: "NavContext | None" = None) -> str:
     """The uploader-key management page: a create form +
     the list of issued keys. The list shows name, email (curator-only PII, never on a public page),
-    created (by/when), last used, submission count, a free-text NOTE (D7 — sqlite only, never git), and
+    created (by/when), last used, submission count, a free-text NOTE (- sqlite only, never git), and
     status (active/revoked with when/by). A revoked row STAYS listed for the audit trail — there is no
     delete — and its note becomes read-only (audit context, not an editable field). The plaintext key
-    is NEVER shown here (displayed exactly once at creation). D7 deltas over the v2 page:
+    is NEVER shown here (displayed exactly once at creation). deltas over the v2 page:
       * per-key free-text note (who it's for / expiry intent), edited inline via a tiny POST form;
       * submission count per key from the audit trail (`submission_counts` name->count);
       * an explicit UNUSED-KEY NUDGE — an active key that has never been used is badged 'never used'
         so a stale key stands out at a glance;
-      * revoked keys retained as read-only audit rows (unchanged from v2, restated for D7);
+      * revoked keys retained as read-only audit rows (unchanged from v2, restated for);
       * a rotation-runbook link on the page.
     Every interpolated value is html.escaped (a note is curator free text — it MUST NOT inject markup)."""
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
@@ -7629,11 +7629,11 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
         '(revoke and create a new one if lost). The email is a curator-only contact for the uploader '
         'and never appears on any public page.</p>'
         f'{err}'
-        # The create form keeps a comfortable reading measure on the (wide, H2) page — a
+        # The create form keeps a comfortable reading measure on the (wide) page - a
         # name/email input stretched across the whole viewport helps nobody.
         '<form method="post" action="/gateway/curator/uploaders/create" style="max-width:40rem">'
         f'{csrf}'
-        # maxlength attrs = client courtesy; the SERVER caps are the gate (app._KEY_*_MAX_CHARS, F5).
+        # maxlength attrs = client courtesy; the SERVER caps are the gate (app._KEY_*_MAX_CHARS).
         '<p><label class="k">Name (required, unique)</label>'
         '<input type="text" name="name" placeholder="e.g. field-team-1" required autocomplete="off" '
         'maxlength="120"></p>'
@@ -7718,7 +7718,7 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
     return _page("AusMT uploader keys", body)
 
 
-# ---- C43 D6 quarantine view (read-only) ----------------------------------------------------------
+# ---- quarantine view (read-only) ----------------------------------------------------------
 # A read-only inspection surface for a QUARANTINED submission: the file listing under its extracted
 # package + the refusal reason (the terminal-transition reason). NO action forms — the review flow
 # (the curator approve/return/reject) is deliberately untouched; a quarantined submission is terminal and the
@@ -7813,14 +7813,14 @@ def render_uploader_created(*, curator_name: str, name: str, key: str) -> str:
     return _page("AusMT uploader key created", body)
 
 
-# ---- curator security: TOTP second factor (schema v4 — C41 D2) -----------------------------------
+# ---- curator security: TOTP second factor (schema v4 -) -----------------------------------
 # The Security page enrols the per-curator TOTP authenticator that gates the destructive workbench
 # actions (survey retirement first). Three states, no inline JS (every form is a plain POST):
 #   * none    — not enrolled; offer "Begin enrolment" (generates a secret).
 #   * pending — a secret was generated but not activated; the secret was shown ONCE and is not
 #               re-rendered on a reload, so offer "activate with a code" AND "begin again".
 #   * active  — enrolled; offer "rotate" (which requires a CURRENT code — a session alone must never
-#               rotate the secret, else the second factor collapses into the first, D2).
+# rotate the secret, else the second factor collapses into the first).
 # The secret + otpauth URI are rendered ONLY as the immediate response to begin/rotate (the show-once
 # view), never on a GET — the DB stores the secret but the page never re-displays it.
 
@@ -7844,7 +7844,7 @@ def _totp_code_form(csrf: str, *, action: str, label: str, button: str, button_c
 
 def _totp_secret_panel(secret: str, otpauth_uri: str, csrf: str) -> str:
     """The SHOW-ONCE view rendered as the direct response to enrol/rotate: the base32 secret + the
-    otpauth:// URI for manual authenticator entry (no QR image dependency, D2), then the activate form.
+    otpauth:// URI for manual authenticator entry (no QR image dependency), then the activate form.
     The secret is never rendered again — a reload of the security page shows the pending state without
     it."""
     return (
@@ -7868,7 +7868,7 @@ def _totp_secret_panel(secret: str, otpauth_uri: str, csrf: str) -> str:
 def render_security(*, curator_name: str, csrf_token: str, state: str, secret: str | None = None,
                     otpauth_uri: str | None = None, enrolled_utc: str | None = None,
                     error: str = "", nav: "NavContext | None" = None) -> str:
-    """The Security page (C41 T2): enrol / activate / rotate the per-curator TOTP second factor. `state`
+    """The Security page: enrol / activate / rotate the per-curator TOTP second factor. `state`
     is 'none' | 'pending' | 'active'. When `secret` is supplied (the immediate response to a begin or
     rotate) the show-once secret panel is rendered regardless of state; otherwise the page renders the
     stored state with NO secret. Every form is a plain POST (no inline JS — strictPages CSP)."""

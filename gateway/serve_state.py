@@ -1,7 +1,7 @@
-"""Serve-state helpers for the C40 curator serve-reconcile panel.
+"""Serve-state helpers curator serve-reconcile panel.
 
-The gap C40 closes: `PUBLISHED` means "committed to surveys-live and pushed", NOT "served" — the
-portal keeps serving the old build until a rebuild runs. C40 adds a host-side reconcile timer that
+The gap closes: `PUBLISHED` means "committed to surveys-live and pushed", NOT "served" - the
+portal keeps serving the old build until a rebuild runs. adds a host-side reconcile timer that
 rebuilds on drift, and this module is the GATEWAY half: the curator's front-door view of that state
 (published HEAD vs served build, last reconcile outcome, a pending-rebuild indicator) plus the
 zero-argument "request rebuild" button's write.
@@ -33,16 +33,16 @@ REQUEST_FILENAME = "rebuild.request"
 STATUS_FILENAME = "reconcile-status.json"
 # The ops floor's host-written state file. Written by the alert timer
 # (deploy/scripts/alert.sh) into the SAME state dir, read SERVER-side here (the reconcile-status.json
-# seam — no new mount, C40 intact). The gateway never writes it.
+# seam - no new mount, intact). The gateway never writes it.
 OPS_STATUS_FILENAME = "ops-status.json"
-# Usage analytics (record D4/D5). The host aggregator (deploy/scripts/aggregate_stats.py, a daily
+# Usage analytics. The host aggregator (deploy/scripts/aggregate_stats.py, a daily
 # timer) folds the Caddy access log into this cumulative stats.json in the SAME state dir; the Analytics
-# screen reads it SERVER-side (the ops-status.json seam — no new mount, no new privilege, C40 intact).
+# screen reads it SERVER-side (the ops-status.json seam - no new mount, no new privilege, intact).
 # The gateway NEVER writes it. It carries aggregates only — counts + dailies, never an address or a UA.
 STATS_FILENAME = "stats.json"
 
 # The privileged INTENT files the gateway WRITES and the host actions agent
-# (deploy/scripts/actions.sh) executes (record D8/D9). Fixed enum — these names MUST match the host
+# (deploy/scripts/actions.sh) executes. Fixed enum - these names MUST match the host
 # agent's allow-list exactly. The gateway only ASKS (writes an intent); the host validates + acts.
 # `rebuild.request` (above) stays existence-keyed for reconcile; these four ride the actions agent.
 INTENT_FILENAMES: dict[str, str] = {
@@ -115,7 +115,7 @@ def write_rebuild_request(state_dir: Path, *, requested_by: str, full: bool = Fa
 
 def write_intent(state_dir: Path, kind: str, *, requested_by: str,
                  extra: dict | None = None, single_flight: bool = True) -> Path:
-    """Write a privileged INTENT file for the host actions agent (record D8/D9). `kind` is one of
+    """Write a privileged INTENT file for the host actions agent. `kind` is one of
     INTENT_FILENAMES (update/backup/rollback/restore); `extra` carries the validated id for the
     parameterised kinds (rollback: {'build_id': ...}; restore: {'snapshot_id': ...}) — the HOST
     re-validates it against the real inventory (D9.2, gateway-side is UX only). The whole payload is
@@ -202,10 +202,10 @@ def read_rollback_pin(state_dir: Path) -> dict | None:
 def read_actions_audit_tail(state_dir: Path, *, n: int = 40) -> list[str]:
     """The last `n` lines of the host actions-audit.log (append-only, host-written 0644 so the gateway
     can read it). Read-only display of who/what/when/outcome for the privileged actions. Never raises;
-    an absent log => [].
+    an absent log => .
 
     Splits on '\\n' ONLY (never str.splitlines()): the host already scrubs control + unicode-separator
-    chars from the attacker-controlled fields (actions.sh _scrub, S4), but the gateway must not TRUST
+    chars from the attacker-controlled fields (actions.sh _scrub), but the gateway must not TRUST
     that a host file is clean - splitlines would treat a stray U+2028/U+2029/VT/FF as a line break
     and could fabricate whole tail entries from one crafted line. Splitting on the host's real
     separator (\\n) keeps a crafted line as ONE rendered entry (later _esc'd, so inert)."""
@@ -261,7 +261,7 @@ def read_ops_status(state_dir: Path) -> dict | None:
 
 
 def read_stats(state_dir: Path) -> dict | None:
-    """Return the parsed stats.json (the C45 usage-analytics aggregates), or None if it is absent (the
+    """Return the parsed stats.json (usage-analytics aggregates), or None if it is absent (the
     aggregator timer is not installed / has not run) or unreadable/malformed. Never raises — mirrors
     read_ops_status: a broken stats file must not 500 the Analytics screen; the caller treats None as
     'no analytics yet' and renders the empty state (never a partial/last-known-good crash)."""
@@ -277,7 +277,7 @@ def read_stats(state_dir: Path) -> dict | None:
 def ops_status_stale(status: dict | None, *, now_epoch: float | None = None,
                      default_period_min: float = 15.0, stale_periods: float = 2.0) -> bool:
     """True when ops-status.json is missing (status None), or older than ~`stale_periods` timer periods
-    — the ops floor then renders explicit STALE cards instead of last-known-good (record D8/D15). A
+    - the ops floor then renders explicit STALE cards instead of last-known-good. A
     missing OR unparseable `generated_at` is STALE (fail loud, never silently fresh). The timer period
     is read from the file's own `timer_period_min` (the writer stamps its cadence); a bad/absent value
     falls back to `default_period_min`. `now_epoch` is injectable so the staleness pin is deterministic.

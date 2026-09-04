@@ -2,7 +2,7 @@
 
 Asserts that the flag emits a per-survey canonical EMTF XML + derived EDI (round-trip verified by
 normalize) and a provenance.json stamped with the mt_metadata/mth5 versions, WITHOUT changing the
-portal products. The flag is additive: it writes the D6 canonical store alongside the products, it
+portal products. The flag is additive: it writes the canonical store alongside the products, it
 does not (yet) become their source. Requires the core mt_metadata/mth5 engine; importorskips
 otherwise; runs in the build CI job's suite.
 """

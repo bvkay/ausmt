@@ -184,7 +184,7 @@ def test_generator_membership_is_the_shared_projection_not_a_second_opinion(tmp_
 
 def test_generator_percent_encodes_the_route_like_the_published_access_url(tmp_path):
     """The map VALUE is the register's url_path encoded exactly as station.json's access_url is:
-    `C5 [REMOTE].zip` only answers 200 as `C5%20%5BREMOTE%5D.zip`. Held to the SAME encoded-route
+    ` [REMOTE].zip` only answers 200 as `C5%20%5BREMOTE%5D.zip`. Held to the SAME encoded-route
     rule _stationcheck applies to the published route, so a value this table admits is one that gate
     admits. FAILS IF a literal space or bracket reaches a Location, or the encoding drifts."""
     _out, text = _generate(tmp_path)
@@ -246,9 +246,9 @@ def test_generator_honours_a_per_station_coordinate_override_and_keeps_generatin
 
 
 def test_a_coordinate_override_covers_the_stations_variant_records_too(tmp_path):
-    """base_station_id strips an engine-appended `.<variant>` tag, so an override on `A1` masks
+    """base_station_id strips an engine-appended `.<variant>` tag, so an override on station `A1` masks
     `A1.b` as well. This reader has no variant field, so it matches the SHAPE instead - equal to the
-    key, or the key plus a dot - which is the conservative SUPERSET of what the build masks. A2 is
+    key, or the key plus a dot - which is the conservative SUPERSET of what the build masks. is
     the control: the mask is per station, not per survey."""
     surveys = tmp_path / "variant-surveys"
     d = surveys / "var-survey"
@@ -287,7 +287,7 @@ def test_an_unresolvable_survey_drops_its_own_routes_and_nothing_elses(tmp_path)
 
 
 def test_a_dropped_survey_is_recorded_in_the_committed_table(tmp_path):
-    """The drop is not silent. Membership IS the R5 decision, so a change to it belongs in a diff a
+    """The drop is not silent. Membership IS the decision, so a change to it belongs in a diff a
     human reads and in a `--check` that reds - which is why the record lives in the committed file
     and not only on stderr. And the reason names NO absolute path: this file is byte-compared, so a
     path from whichever checkout generated it would red the gate on every other one."""
@@ -527,7 +527,7 @@ def test_known_routes_redirect_302_to_the_one_canonical_archive_host():
 
 def test_unlisted_paths_404_and_nothing_in_the_section_proxies():
     """@ts_prefix 404s both slash forms of the namespace, and NEITHER handle proxies: the route is
-    TERMINAL at the front door, so no /go/ts/ request reaches the box and the C47 wall-2 allowlist is
+    TERMINAL at the front door, so no /go/ts/ request reaches the box and the wall-2 allowlist is
     untouched by construction. FAILS IF a slash form is dropped or a reverse_proxy appears."""
     section = _section(_fd_text())
     m = re.search(r"@ts_prefix path (.+)", section)
@@ -711,7 +711,7 @@ def test_runtime_mapped_route_302s_to_the_exact_encoded_nci_location(gated):
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_runtime_withheld_station_route_404s(gated, ungated):
-    """RUNTIME, R5. An embargoed survey's station has a verified register row and (correctly)
+    """RUNTIME. An embargoed survey's station has a verified register row and (correctly)
     projects has_time_series, so its /go/ts/ path is fully enumerable from mtcat.json - and it must
     404. SENSITIVITY CONTROL: the SAME path on the edge whose survey is open resolves 302, so the
     404 measures the access gate rather than a typo in the path."""
@@ -724,7 +724,7 @@ def test_runtime_withheld_station_route_404s(gated, ungated):
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_runtime_pending_and_retired_and_level2_routes_404(gated):
-    """RUNTIME, D9 and D19. A `review: pending` row is an adjudication-queue entry, a retired row is
+    """RUNTIME. A `review: pending` row is an adjudication-queue entry, a retired row is
     evidence of a resource that ceased to exist, and a level2 row is a transfer function - none is a
     published time series, so none resolves. SENSITIVITY CONTROL: the open row on the SAME edge
     resolves, so the edge is answering and the 404s are the gate."""

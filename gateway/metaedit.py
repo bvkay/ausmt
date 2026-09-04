@@ -1,7 +1,7 @@
 """Curator metadata-editor orchestration (gateway side). The gateway NEVER parses survey content
 (the house rule, pinned by the source-assertion test AND the subprocess
 import-hygiene test): every yaml load/merge/emit/diff/validate happens in the gw-runner — the ENGINE
-image, which is where ruamel lives — reached through the C10 file-queue pattern in its own
+image, which is where ruamel lives - reached through the file-queue pattern in its own
 jobs/edit/ namespace. This module only writes job JSON, polls for the result JSON, and reads it
 back; job files carry a SLUG and form values, never a filesystem path (the two containers mount
 surveys-live at different paths) and never PII.
@@ -144,14 +144,14 @@ def make_merge_job(slug: str, patch: dict, bump: str, note: str, today: str) -> 
 
 
 def make_history_job(slug: str) -> dict:
-    """A `history` edit-job (C43 D6/S2a-2): the runner returns the READ-ONLY git log of the survey's
-    package directory (version, release note, when, author). The runner OWNS the git read (record D4)
+    """A `history` edit-job (a history read-job): the runner returns the READ-ONLY git log of the survey's
+    package directory (version, release note, when, author). The runner OWNS the git read
     so the gateway process issues no git verb for this; job carries only the slug."""
     return {"kind": "history", "slug": slug}
 
 
 def make_collections_job() -> dict:
-    """A `collections` edit-job (C43 D5-A / Stage 3a): a WHOLE-CORPUS read-only projection. The runner
+    """A `collections` edit-job (/ Stage 3a): a WHOLE-CORPUS read-only projection. The runner
     reads EVERY published survey.yaml's `collection` block (the runner is the only place YAML is
     parsed -) and returns the rollup the portal shows readers (first-declarer programme
     fields) PLUS the two honesty seams the build only prints to stderr today: id near-duplicates and
@@ -161,7 +161,7 @@ def make_collections_job() -> dict:
 
 
 def make_collection_batch_job(operations: list, note: str, today: str) -> dict:
-    """A `collection_batch` edit-job (C43 Stage 3b / record D5-A A6): the runner applies each per-survey
+    """A `collection_batch` edit-job (Stage 3b /-A): the runner applies each per-survey
     collection-block operation, bumps each affected survey's version, appends the ONE shared release
     note, and validates each on a scratch copy — returning each affected survey's patched bytes +
     validator report (it does NOT commit; the gateway's publish.commit_collection_batch does the atomic

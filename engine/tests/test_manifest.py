@@ -92,7 +92,7 @@ def test_manifest_integrity_and_license_gate(tmp_path):
 
 def test_manifest_survey_h5_off_by_default(tmp_path):
     """Survey MTH5 is gated OFF by default: no --survey-h5 => no -tf.h5 artifact and no mth5 bundle
-    row. The per-survey EDI zip AND the C32 EMTF-XML zip are BOTH unconditional when served (only the
+    row. The per-survey EDI zip AND the EMTF-XML zip are BOTH unconditional when served (only the
     MTH5 is flag-gated)."""
     out, man = _build(tmp_path)               # no --survey-h5
     assert not list((out / "bundles").glob("*-tf.h5")), "no survey MTH5 should be produced without the flag"
@@ -103,7 +103,7 @@ def test_manifest_survey_h5_off_by_default(tmp_path):
 
 def test_xml_zip_contains_exactly_the_served_xml_set(tmp_path):
     """The per-survey EMTF-XML zip contains EXACTLY the survey's emitted canonical XMLs
-    (plus the C6 LICENSE.txt) — no more, no less. INDEPENDENT OBSERVABLE: the on-disk out/xml/<slug>/
+    (plus the LICENSE.txt) - no more, no less. INDEPENDENT OBSERVABLE: the on-disk out/xml/<slug>/
     set, compared against the zip's namelist. FAILS if the zip bundles a stale/foreign XML or misses a
     served one."""
     import zipfile

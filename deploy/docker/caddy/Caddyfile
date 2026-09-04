@@ -11,7 +11,7 @@
 #   - index.html      has an inline <script> (the Plausible-disabled no-op shim, lines ~12-18) AND
 #                      loads map tiles from basemaps.cartocdn.com (portal/src/map.js).
 #   - about.html       has NO inline script (only external config.js/version.js/corpus-stats.js) --
-#                      strict CSP. corpus-stats.js fetch()es the same-origin data tree (catalogue.json +
+# strict CSP. corpus-stats.js fetch()es the same-origin data tree (catalogue.json +
 #                      surveys.json) for the header's corpus totals, which default-src 'self' already
 #                      covers; it is an external file precisely BECAUSE script-src here has no
 #                      'unsafe-inline'.
@@ -143,7 +143,7 @@
 	}
 
 
-	# ---- Access log (C45 D2/D5 — usage analytics enablement, masked at the edge) -----------------
+	# ---- Access log (- usage analytics enablement, masked at the edge) -----------------
 	# Privacy-preserving HTTP access log: the CLIENT ADDRESS IS MASKED AT WRITE TIME (IPv4 -> /24,
 	# IPv6 -> /48) via Caddy's built-in ip_mask log filter, so a FULL IP never touches disk. This is
 	# the one honest change behind the amended portal privacy promise (portal/index.html). The log
@@ -245,7 +245,7 @@
 	# add-survey.html only: its APPLICATION code is one intentional inline <script> (the shim was
 	# extracted like index's) + OpenStreetMap tiles (NOT CartoDB — its own two Leaflet maps call
 	# tile.openstreetmap.org directly) + a live fetch to the ROR API (connect-src, since
-	# fetch/XHR destinations are not covered by img-src). Since C13 the page ALSO fetch()es
+	# fetch/XHR destinations are not covered by img-src). The page ALSO fetch()es
 	# /gateway/healthz and XHR-POSTs /gateway/submit — both SAME-ORIGIN relative paths already covered
 	# by the connect-src 'self' below, so no directive change is needed for the direct-upload flow.
 	# (publication DOI harvest): connect-src ALSO allows exactly TWO more hosts,
@@ -285,7 +285,7 @@
 		file_server
 	}
 
-	# Gateway (Stage 2, contract C10) — reverse-proxy the submission gateway under the SAME origin.
+	# Gateway (Stage 2, contract) - reverse-proxy the submission gateway under the SAME origin.
 	# Placed ABOVE the static-portal `root`/`file_server` below on purpose: `handle` is an ordered
 	# path router, and putting the more specific /gateway/* matcher first means portal static serving
 	# never shadows it.
@@ -343,8 +343,8 @@
 # mis-scoped: this listener has no route to it. Two independent allowlists of one subset: the front
 # door (wall 1) + this listener behind a port-scoped ACL (wall 2). See maintainer/C47-PublicBridge.md.
 #
-# NO `log` block here BY DESIGN: the C45 masked access log runs AT THE FRONT DOOR on the real public
-# client (C47 invariant c). Every request to this listener arrives from the VPS tailnet peer, so a log
+# NO `log` block here BY DESIGN: the masked access log runs AT THE FRONT DOOR on the real public
+# client (invariant c). Every request to this listener arrives from the VPS tailnet peer, so a log
 # here would record only the proxy address — useless for analytics and a needless second copy.
 #
 # The reader header/CSP/data/root directives are a deliberate near-duplicate of :8080 (NOT a snippet
@@ -436,7 +436,7 @@
 		X-Frame-Options DENY
 	}
 
-	# ---- WALL 2: the box-side INDEPENDENT allowlist of the SAME public subset (C47 invariant b) ------
+	# ---- WALL 2: the box-side INDEPENDENT allowlist of the SAME public subset (invariant b) ------
 	# This listener carries its OWN allowlist of the public submission subset — it does not depend on the
 	# front door being correctly scoped. The four PUBLIC gateway routes (method-scoped, identical to wall
 	# 1 in deploy/frontdoor/Caddyfile) proxy to the gateway container; EVERY OTHER /gateway path (both
@@ -497,7 +497,7 @@
 	# CSP mirrors :8080 exactly (strict everywhere except add-survey.html). add-survey.html is served by
 	# the file_server below; its matcher gives it the same relaxed policy :8080 uses so a public GET (via
 	# the front door) and a direct tailnet fetch both get the right policy. That relaxed policy includes
-	# the R3 two-host citation-harvest allowlist (api.crossref.org + api.datacite.org) in connect-src.
+	# the two-host citation-harvest allowlist (api.crossref.org + api.datacite.org) in connect-src.
 	@strictPages not path /add-survey.html
 	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
 

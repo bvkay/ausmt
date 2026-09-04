@@ -62,7 +62,7 @@ def _decode_secret(secret: str) -> bytes:
 
 
 def current_step(now: float | None = None, *, step_s: int = _STEP_S) -> int:
-    """The RFC 6238 time-step counter T = floor(unix_time / step_s) (T0 = 0). Integer, monotone
+    """The RFC 6238 time-step counter T = floor(unix_time / step_s) (= 0). Integer, monotone
     non-decreasing — the value the DB stores as last_used_step so a code can never be replayed within
     or across its validity window (a later deletion needs a step STRICTLY GREATER than the last used)."""
     unix = time.time() if now is None else now

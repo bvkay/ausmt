@@ -4,7 +4,7 @@
     surveys/<slug>/ts-index.yaml
         ts_index:
           SA104A:
-            - level: raw_packed              # one of the five D8 tokens
+            - level: raw_packed # one of the five tokens
               url_path: "my80/.../SA104A.zip"  # the archive's own string, stored VERBATIM
               filename: "SA104A.zip"
               bytes: 1042000000
@@ -131,7 +131,7 @@ def _row(path, sid, idx, row, taken) -> dict:
         raise TsIndexError(f"{label} is retired without `retired` and `retired_reason`; retirement "
                            f"is a dated curator act, not a deletion, and the row stays as evidence")
     # match_method is provenance, not a gate: a row stands or falls on `review`, and its severity
-    # is the surveys validator's WARNING (S1's FAIL list does not name it). Raising here
+    # is the surveys validator's WARNING (the validator's FAIL list does not name it). Raising here
     # hard-stopped builds on registers that passed surveys CI green. Carried through verbatim.
     url_path = _text(row.get("url_path"))
     if not url_path:

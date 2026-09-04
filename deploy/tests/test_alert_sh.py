@@ -324,7 +324,7 @@ def test_curl_failure_on_success_path_exits_nonzero(tmp_path):
 
 
 # ==================================================================================================
-# (e) C43 S2b-i: alert.sh ALSO writes ops-status.json for the curator ops floor (record D8/D15).
+# (e) alert.sh ALSO writes ops-status.json for the curator ops floor.
 # The producer half of the serve-state operations floor. Same shim/black-box posture — every
 # assertion reads the emitted ops-status.json (an independent on-disk observable), never the script's
 # Self-report. All run on the gateway-ci workflow (sh + python + git present); no skip-tripwire entry.
@@ -340,7 +340,7 @@ def _ops_doc(tree: dict) -> dict:
 def _add_retained_build(tree: dict, dir_name: str = "20260710T032000Z", *,
                         provenance_cache: dict | None = None, serving: bool = True) -> Path:
     """Materialise a site-data/builds/<dir_name>/ retained build the ops writer inventories:
-    build.json (identity) + build_report.json (stations) + build_provenance.json (the C18-A4 cache
+    build.json (identity) + build_report.json (stations) + build_provenance.json (the cache
     block) + a build log; optionally the `current` symlink (best-effort — no-op where symlinks are
     unprivileged, e.g. Windows, so the serving marker just does not match)."""
     site = tree["data"] / "site-data"
@@ -396,7 +396,7 @@ def test_ops_status_emitted_schema_valid_atomic_ping_unchanged(tmp_path):
 
 
 def test_ops_status_builds_carry_a4_cache_forensics_producer_truth(tmp_path):
-    """PRODUCER-TRUTH PIN. The C18-A4 cache forensics (salt_fp / write_errors / read_errors) are
+    """PRODUCER-TRUTH PIN. The cache forensics (salt_fp / write_errors / read_errors) are
     produced by engine.extract.cache.BuildCache.counters and land in build_provenance.json's
     TOP-LEVEL `cache` block - NOT in build.json or build_report.json (verified against
     build_portal.py). alert.sh must lift them from that exact file into ops-status.json builds[].cache.
@@ -467,7 +467,7 @@ def test_ops_status_written_when_alerting_unconfigured(tmp_path):
 
 
 def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
-    """INCIDENT-AS-TEST, producer side (record D15). A reconcile action=sync_failed that persists must
+    """INCIDENT-AS-TEST, producer side. A reconcile action=sync_failed that persists must
     be visible as a GROWING streak (count + a stable `since`), not a silent single line - the incident where a sync_failed hid for 4 h. FAILS IF: the streak does not accumulate
     across passes, or `since` is not carried forward from the first failing pass."""
     tree = _make_tree(tmp_path, reconcile_action="sync_failed")   # fresh last_run
@@ -484,7 +484,7 @@ def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# (f) C43 Stage 2b-ii: PERSISTENT-PAUSE alarm + pending-intent facts (record D9.7 / D8/D9). A single
+# (f) Stage 2b-ii: PERSISTENT-PAUSE alarm + pending-intent facts (7 /). A single
 # fresh pause is fine; a pause active or SLOW-RE-ARMED past the cumulative threshold (24 h) must fail a
 # check AND surface as an ops-floor fact — an authenticated attacker cannot silently keep serving
 # frozen. The pending privileged intents + the actions audit tail are surfaced read-only for the serve
@@ -536,7 +536,7 @@ def test_persistent_pause_alarms_and_fails(tmp_path):
 
 
 def test_pending_intents_and_audit_tail_surfaced(tmp_path):
-    """PENDING-INTENT FACTS (record D8/D9). ops-status.json surfaces the pending privileged intents and
+    """PENDING-INTENT FACTS. ops-status.json surfaces the pending privileged intents and
     the recent actions-audit.log tail so the serve screen can show what is queued/in-flight and the
     recent action outcomes. FAILS IF a pending intent or the audit tail is not surfaced."""
     tree = _make_tree(tmp_path)
@@ -593,7 +593,7 @@ def test_persistent_rollback_pin_alarms_and_fails(tmp_path):
 
 
 def test_fresh_pin_active_not_persistent(tmp_path):
-    """Non-vacuous control for S5(b): a freshly-set pin is active but NOT persistent (no fail ping)."""
+    """Non-vacuous control(b): a freshly-set pin is active but NOT persistent (no fail ping)."""
     tree = _make_tree(tmp_path)
     (tree["state"] / "rollback.pin").write_text(
         json.dumps({"pinned_build": "20260101T000000Z", "pinned_at": _now_iso()}), encoding="utf-8")

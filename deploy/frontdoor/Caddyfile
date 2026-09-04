@@ -1,4 +1,4 @@
-# AusMT public front door (C47 public bridge) — the VPS edge for the public demo name.
+# AusMT public front door (public bridge) - the VPS edge for the public demo name.
 #
 # TOPOLOGY (maintainer/C47-PublicBridge.md): internet -> THIS Caddy on a small Sydney VPS (public IP,
 # DNS A/AAAA at the registrar) -> over the tailnet (WireGuard) -> the box's dedicated READER-ONLY
@@ -22,7 +22,7 @@
 	# only — no personal hostname. Supplied from .env.
 	email {$AUSMT_ACME_EMAIL}
 
-	# Admin API on a UNIX SOCKET, not a TCP port (ops-hardening O1). The original rationale
+	# Admin API on a UNIX SOCKET, not a TCP port (ops-hardening). The original rationale
 	# for `admin off` was "a static edge needs no extra LISTENING PORT" — a unix socket honours that
 	# exactly: it opens NO network port (the socket lives in the container's own /run, not on the host,
 	# even under network_mode: host), so there is no new internet- or host-reachable surface. What it
@@ -61,15 +61,15 @@
 
 # The public site. A bare hostname address turns on Caddy's automatic HTTPS: it obtains + renews a
 # certificate for {$AUSMT_PUBLIC_NAME} over ACME and AUTOMATICALLY serves an HTTP->HTTPS redirect on
-# :80 for the same name (C47 invariant d). Do NOT add `auto_https off` — that would drop both the cert
+# :80 for the same name (invariant d). Do NOT add `auto_https off` - that would drop both the cert
 # and the redirect.
 {$AUSMT_PUBLIC_NAME} {
 	encode zstd gzip
 
-	# ---- C45 masked-at-edge access log — AT THE FRONT DOOR on public traffic (C47 invariant c) -----
+	# ---- masked-at-edge access log - AT THE FRONT DOOR on public traffic (invariant c) -----
 	# This is the analytics feed now: the public client is masked HERE (IPv4 -> /24, IPv6 -> /48) so a
-	# FULL IP never touches disk, with the SAME at-edge guarantees as the box's C45 block. The log is
-	# shipped over the tailnet to the box (ship-frontdoor-logs.sh) where the C45 aggregator folds it.
+	# FULL IP never touches disk, with the SAME at-edge guarantees as the box's block. The log is
+	# shipped over the tailnet to the box (ship-frontdoor-logs.sh) where the aggregator folds it.
 	# The filter masks the client-address fields AND deletes every header that can carry a full client
 	# address (X-Forwarded-For / X-Real-IP / Forwarded — even though we trust none, a caller can still
 	# SEND them and they must never land in the log) or a credential/PII (Cookie / Authorization /
@@ -120,7 +120,7 @@
 
 	# Baseline security headers + HSTS (public TLS is now in force, so tell browsers to stay on HTTPS).
 	# CSP is NOT set here — it rides through from the box reader listener's per-page policy via the
-	# reverse_proxy below, so the three pages keep their exact C45/portal CSPs.
+	# reverse_proxy below, so the three pages keep their exact portal CSPs.
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
@@ -154,7 +154,7 @@
 	# Wall 2 (the box reader listener, deploy/docker/caddy/Caddyfile :8081) is an INDEPENDENT allowlist
 	# of the SAME subset behind the port-scoped tailnet ACL: it proxies only these four gateway routes to
 	# the gateway container and serves add-survey.html itself, refusing every other /gateway path on its
-	# own (C47 invariant b). Two independent allowlists of one subset — a breach needs BOTH to widen.
+	# own (invariant b). Two independent allowlists of one subset - a breach needs BOTH to widen.
 	@public_add_survey {
 		method GET
 		path /add-survey.html /add-survey.html/
@@ -249,7 +249,7 @@
 	# LAZILY (the point of the note at :187), so this map may read the other map's output.
 	#
 	# TERMINAL AT THE FRONT DOOR: neither handle proxies, so no /go/ts/ request ever reaches the box and
-	# the C47 wall-2 allowlist (deploy/docker/caddy/Caddyfile) is untouched by construction. The map
+	# the wall-2 allowlist (deploy/docker/caddy/Caddyfile) is untouched by construction. The map
 	# file is mounted read-only by compose.yaml and validated with the config by install-frontdoor.sh
 	# (`caddy validate` FAILS on a missing import, which is the point: the table is part of the config).
 	# To withdraw every hand-off route: empty ts-routes.map and re-run the installer (RUNBOOK 10.1b).

@@ -4,7 +4,7 @@ The profile attributed ~68% of a cold
 build and ~99% of a warm rebuild to _write_tf_mth5. The pool parallelises exactly that seam: the
 tier-1 per-station fan-out (emit_station_mth5) and the tier-2 survey bundle (emit_survey_mth5),
 each task a self-contained _write_tf_mth5 call that re-reads its source EDI in the worker. The
-parse and XML seams, the C18 cache and every piece of manifest bookkeeping stay in the main
+parse and XML seams, the cache and every piece of manifest bookkeeping stay in the main
 process; _disambiguate has already finalised every station id before the first write is
 submitted, so worker scheduling can never reach an identity decision.
 

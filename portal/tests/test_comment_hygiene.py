@@ -551,22 +551,23 @@ CONTRACT_CITATION = Rule(
     re.compile(r"\bLANE-(?:CONTRACT|ADDENDUM)-[A-Z0-9-]+"), "contract file name")
 
 # WORK-ITEM TAGS. A tag is one or two capitals, one or two digits and an
-# optional letter, and it is lane vocabulary in four positions: at the head of a
-# comment, before a colon, inside parentheses, and beside the words a work item
-# is counted with. It is NOT a station or site id, a licence id, a projection, a
-# digest, a percentile or a heading level, which is what the exemptions are for.
+# optional letter, and it is lane vocabulary WHEREVER it stands in a comment. It
+# is NOT a station or site id, a licence id, a projection, a digest, a
+# percentile or a heading level, which is what the exemptions are for.
+# Position was the last scoping: a work item named mid-sentence, after a dash or
+# inside a list carries the same audit trail as one at the head of a comment, so
+# scoping to four positions left the rule reading only where it had already
+# looked.
 _TAG = r"[A-Z]{1,2}\d{1,2}[a-z]?"
 _TAGS = r"%s(?:\s*[/,]\s*%s)*" % (_TAG, _TAG)
-_WORK = r"Amendment|amendment|lanes?|round|wave|gate|follow-up|phase"
 
-TAG_PATTERN = re.compile(
-    r"(?:^|(?<=\n))[ \t]*(?P<head>%s)(?![\w]|\.\d)"
-    r"|(?<![\w#])(?P<colon>%s)(?![\w]|\.\d)\s*:"
-    r"|\(\s*(?P<paren>%s)(?![\w]|\.\d)\s*[,;)]"
-    r"|(?:%s)\s+(?P<after>%s)(?![\w]|\.\d)"
-    r"|(?<![\w#])(?P<before>%s)(?![\w]|\.\d)\s+(?:%s)\b"
-    % (_TAGS, _TAGS, _TAGS, _WORK, _TAGS, _TAGS, _WORK)
-)
+TAG_PATTERN = re.compile(r"(?<![\w#])(?P<any>%s)(?![\w]|\.\d)" % _TAGS)
+# A DATAID and a station id are DATA, and this is a repository about stations: two or more letters
+# and then digits (with an optional trailing letter or a second letter-digit pair) is the shape the
+# corpus publishes, e.g. ST01, MBI21, CP3B21, RD18. A work-item tag carries ONE leading letter and
+# a published id carries at least two digits, so the two shapes do not overlap; the two-digit floor
+# is what keeps a licence alias like CC0 with the entry that names its meaning instead.
+CORPUS_ID = re.compile(r"\A(?:[A-Z]{2,}\d{2,}[a-z]?|[A-Z]{2,}\d+[A-Z]+\d{2,}[a-z]?)\Z")
 
 # The false positives, one entry per MEANING: what the token names, the token
 # itself, and the words that must stand beside it for that meaning to be the one
@@ -586,14 +587,27 @@ TAG_NOT_A_TAG = (
      re.compile(r"illuminant|CIE|CIELAB|sRGB|white ?point|colou?r|\bLab\b", re.I)),
     # The bare noun is not enough: a clause label written L1 is naturally ABOUT levels, so the
     # word that would excuse it stands beside it by construction. The level must be named.
+    # The trailing run of a station id, as the cluster label renders it once the padding is dropped.
+    ("an unpadded station id", re.compile(r"^L\d{1,2}$"),
+     re.compile(r"unpadded|station ids?|\bCP\d|cluster", re.I)),
     ("a data level", re.compile(r"^L[0-3]$"),
      re.compile(r"\bdata levels?\b|\blevels?\s+[0-3]\b|\bL[0-3]\s+products?\b", re.I)),
     ("a release quarter", re.compile(r"^Q[1-4]$"),
      re.compile(r"Release |20\d\d-Q|quarter", re.I)),
+    # The impedance tensor's own quadrants, which the phase maths names constantly.
+    ("a complex-plane quadrant", re.compile(r"^Q[1-4]$"),
+     re.compile(r"quadrant|Zxy|Zyx|Zxx|Zyy|phase", re.I)),
+    # The rotation maths writes its matrices Z0 and T0; neither is a work item.
+    ("a rotation-matrix symbol", re.compile(r"^[ZT]0$"),
+     re.compile(r"rotation|rotate|matri|theta|\bR\(|tipper|impedance", re.I)),
+    # The other licence aliases count as context: a licence id standing in a list of licence ids is
+    # the licence sense, and the word "licence" itself is often a clause away.
     ("a public-domain dedication", re.compile(r"^CC0$"),
-     re.compile(r"licen[cs]|dedication|public domain|Creative Commons", re.I)),
-    ("a DATAID example", re.compile(r"^(?:ST|A)\d{2}$"),
-     re.compile(r"DATAID|data ?id|example", re.I)),
+     re.compile(r"licen[cs]|dedication|public domain|Creative Commons|CC-BY|ODbL|ODC-BY|SPDX", re.I)),
+    # Only the single-letter form needs an entry: the two-letter DATAIDs are already data under the
+    # corpus-id shape, and an entry that repeated them would excuse them twice.
+    ("a DATAID example", re.compile(r"^A\d{1,2}$"),
+     re.compile(r"DATAID|data ?id|station id|example|\.edi\b|\bEDI\b", re.I)),
     ("a message digest", re.compile(r"^MD5$"),
      re.compile(r"digest|checksum|hash|manifest|sha\d", re.I)),
     ("a percentile", re.compile(r"^P(?:50|95|99)$"),
@@ -603,8 +617,93 @@ TAG_NOT_A_TAG = (
 # with one space between. The test is on the TOKEN. A window wide enough to hold
 # a sentence excuses any token standing NEAR the word, and on a corpus about
 # stations and surveys those words stand beside everything.
-TAG_ID_NOUN = re.compile(r"(?:station|site|survey|run|channel|filter|fixture) \Z", re.I)
-_TAG_GROUPS = ("head", "colon", "paren", "after", "before")
+TAG_ID_NOUN = re.compile(
+    r"(?:station|site|survey|run|channel|filter|fixture|id)s?:?[ ]['\"`]?\Z", re.I)
+_TAG_GROUPS = ("any",)
+
+
+# THREE STRUCTURAL EXEMPTIONS, each for a place a tag SHAPE occurs that no reader would read as a
+# work item. They are structural rather than table entries because what excuses them is where the
+# token sits, not the words around it.
+# A file name: a published station's own bytes are named after it.
+FILE_NAME = re.compile(r"\A[A-Za-z0-9_.%\[\]-]*"
+                       r"\.(?:edi|h5|xml|json|zip|csv|txt|md|png|svg|ya?ml|nc)\b")
+# A character class inside a regex: "^[a-zA-Z0-9]*$" carries the shape and means nothing by it.
+IDENT_RUN = re.compile(r"[A-Za-z0-9_.-]")
+RANGE_IN_CLASS = re.compile(r"[A-Za-z0-9]-[A-Za-z0-9]|\\[dwsDWS]")
+# A path INTO this repository is a pointer a reader can follow, which is what the rule asks for, and
+# the file it names commonly carries a tag in its own name. Held by the pin that resolves them.
+REPO_PATH = re.compile(
+    r"\A[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+"
+    r"\.(?:py|js|md|html|css|ya?ml|json|toml|sh|txt|service|timer|cfg)\Z")
+
+
+def _in_character_class(text, start, stop):
+    head = text.rfind("\n", 0, start) + 1
+    tail = text.find("\n", stop)
+    tail = len(text) if tail < 0 else tail
+    before, after = text[head:start], text[stop:tail]
+    open_at = before.rfind("[")
+    close_at = after.find("]")
+    if open_at < 0 or close_at < 0:
+        return False
+    inner_before, inner_after = before[open_at:], after[:close_at]
+    if "]" in inner_before:
+        return False
+    inner = inner_before + text[start:stop] + inner_after
+    return bool(RANGE_IN_CLASS.search(inner)) and "," not in inner
+
+
+def _identifier_run(text, start, stop):
+    left, right = start, stop
+    while left > 0 and IDENT_RUN.match(text[left - 1]):
+        left -= 1
+    while right < len(text) and IDENT_RUN.match(text[right]):
+        right += 1
+    return text[left:right]
+
+
+PATH_RUN = re.compile(r"[A-Za-z0-9_./-]")
+
+
+def _inside_a_repo_path(text, start, stop):
+    """A token inside a path into this tree names a FILE, and a file in the repository is exactly
+    what a comment is allowed to point at."""
+    left, right = start, stop
+    while left > 0 and PATH_RUN.match(text[left - 1]):
+        left -= 1
+    while right < len(text) and PATH_RUN.match(text[right]):
+        right += 1
+    run = text[left:right].strip("./,;:")
+    return run != text[start:stop] and bool(REPO_PATH.match(run))
+
+
+QUOTE_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|'[^'\n]*'")
+
+
+def _inside_a_quoted_literal(text, start, stop):
+    """A token inside a quoted run that carries MORE than the token is part of a literal the code
+    emits or a file the corpus publishes, and the comment is quoting it, not naming a work item. A
+    bare quoted tag is still a tag: the run must carry something besides the token."""
+    head = text.rfind("\n", 0, start) + 1
+    tail = text.find("\n", stop)
+    tail = len(text) if tail < 0 else tail
+    line = text[head:tail]
+    a, b = start - head, stop - head
+    for match in QUOTE_RUN.finditer(line):
+        if match.start() < a and b < match.end():
+            inner = match.group(0)[1:-1].strip()
+            return inner != text[start:stop]
+    return False
+
+
+def _inside_a_corpus_id(text, start, stop):
+    """A token standing inside a longer identifier one of whose segments IS a published id is part
+    of that id: RD18-084-S1-b is one station's handle, not a work item called S1."""
+    run = _identifier_run(text, start, stop)
+    if run == text[start:stop]:
+        return False
+    return any(CORPUS_ID.match(seg) for seg in re.split(r"[-_.]", run))
 
 
 def work_item_tags(text):
@@ -614,12 +713,22 @@ def work_item_tags(text):
         group = next(name for name in _TAG_GROUPS if match.group(name))
         tag = match.group(group)
         start, stop = match.span(group)
+        if FILE_NAME.match(text[stop:stop + 8]):
+            continue
+        if _in_character_class(text, start, stop):
+            continue
+        if (_inside_a_corpus_id(text, start, stop) or _inside_a_repo_path(text, start, stop)
+                or _inside_a_quoted_literal(text, start, stop)):
+            continue
         window = text[max(0, start - WINDOW):stop + WINDOW]
         parts = [part.strip() for part in re.split(r"[/,]", tag)]
-        # A token joined by a hyphen to what stands before it is a COMPOUND label ("D-L1",
-        # "C35b-D5"), which is the shape a clause or a work item takes and never the shape of the
-        # id an exemption exists for. No entry on the table excuses one.
-        compound = start >= 2 and text[start - 1] == "-" and text[start - 2].isalnum()
+        # A token joined by a hyphen to a LETTER before it is a COMPOUND label ("D-L1", "C35b-D5"),
+        # which is the shape a clause or a work item takes and never the shape of the id an
+        # exemption exists for; no entry on the table excuses one. A digit before the hyphen is a
+        # different thing entirely (2026-Q3 is a release quarter), so the test is on the letter.
+        compound = start >= 2 and text[start - 1] == "-" and text[start - 2].isalpha()
+        if all(CORPUS_ID.match(part) for part in parts):
+            continue
         if not compound and all(any(token.match(part) and near.search(window)
                                     for _, token, near in TAG_NOT_A_TAG) for part in parts):
             continue
@@ -1030,6 +1139,39 @@ def commented_tree():
     return out
 
 
+REPO_PATH_IN_PROSE = re.compile(
+    r"(?<![\w/.-])((?:portal|engine|gateway|deploy|contract|docs|maintainer|schema|\.github)"
+    r"/[A-Za-z0-9_./-]*\.(?:py|js|md|html|css|ya?ml|json|toml|sh|txt|service|timer|cfg))"
+    r"(?![\w.-])")
+
+
+def test_every_repository_path_a_comment_names_exists():
+    """A comment may point at a file in this repository, and a tag inside such a path is excused
+    BECAUSE the path resolves. A path that does not resolve is the same dead reference the citation
+    rule removes, and it would also be excusing a tag for nothing."""
+    dangling, resolved = [], 0
+    for path in commented_tree():
+        if path.name == SELF or "vendored_validation" in path.parts:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for lineno, comment in comments(path, text):
+            for match in REPO_PATH_IN_PROSE.finditer(bare(comment)):
+                named = match.group(1)
+                if "*" in named or "<" in named or "..." in named:
+                    continue
+                if (ROOT / named).exists():
+                    resolved += 1
+                else:
+                    dangling.append("%s:%d: %s" % (path.relative_to(ROOT), lineno, named))
+    assert resolved, "no repository path resolved, so this test would pass over nothing"
+    assert not dangling, (
+        f"{len(dangling)} comment(s) point at a repository path that does not exist:\n"
+        + "\n".join(sorted(set(dangling))))
+
+
 def test_every_docs_pointer_names_a_page_that_exists():
     """A comment may point only at something a reader of this repository can open. A pointer that
     names a docs/ page resolves to a file under docs/docs; a dangling one is exactly the
@@ -1273,16 +1415,26 @@ def test_each_false_positive_names_its_meaning_and_is_caught_without_it(tmp_path
          "D65 reshaped the download panel."),
         ("L2: the data level a processed product is served at.",
          "L2 reshaped the download panel."),
+        ("The unpadded station ids render CP1L02 as L2 and CP1L05 as L15.",
+         "L15 reshaped the download panel."),
         ("Q3: Release 2026-Q3 is the snapshot a citation names.",
          "Q3 reshaped the download panel."),
         ("CC0: a public domain dedication is not a licence with conditions.",
          "CC0 reshaped the download panel."),
-        ("ST01: the DATAID the dialect note carries.",
-         "ST01 reshaped the download panel."),
+        ("A01: the DATAID the dialect note carries.",
+         "A01 reshaped the download panel."),
+        ("The fixture's DATAID is A1 and its file name is not.",
+         "A1 reshaped the download panel."),
         ("MD5: the digest the manifest carries beside the sha256.",
          "MD5 reshaped the download panel."),
         ("P95: the percentile the build budget is set against.",
          "P95 reshaped the download panel."),
+        ("The quadrant walk is Zxy Q1 -> Q4 and Zyx Q3 -> Q2.",
+         "Q1 reshaped the download panel."),
+        ("The rotation maths is Z0(i) = R(theta) Z(i) R(theta) transposed.",
+         "Z0 reshaped the download panel."),
+        ("stations: S01, S02 are the two the fixture serves.",
+         "S01, S02 reshaped the download panel."),
         ("station A1: the reference this survey record names.",
          "Amendment A1: the colour set is frozen."),
     ]
@@ -1307,6 +1459,65 @@ def test_each_false_positive_names_its_meaning_and_is_caught_without_it(tmp_path
         ok.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
         assert not offences([ok]), f"the tag rule flagged a false positive: {clean}"
         bad = tmp_path / f"bad{i}.js"
+        bad.write_text(f"// {work_item}\nvar a = 1;\n", encoding="utf-8")
+        hits = offences([bad])
+        assert hits and "work-item identifier" in hits[0], (
+            f"the same token in work-item position was excused: {work_item}"
+        )
+
+
+def test_a_tag_is_a_tag_wherever_it_stands(tmp_path):
+    """Position scoping was the last hole: a work item named mid-sentence, after a dash or inside a
+    list is the same audit trail as one at the head of a comment, and the shipped tier was only
+    clean because the sweep had already reached it."""
+    cases = [
+        "The panel was reshaped under C43 and the vocabulary froze with it.",
+        "The two seams were split by D5-C, R1 in the same pass.",
+        "Kept for A4 - the producer stayed disabled.",
+        "The queue drains in the order C18 set.",
+    ]
+    for i, line in enumerate(cases):
+        f = tmp_path / f"pos{i}.js"
+        f.write_text(f"// {line}\nvar a = 1;\n", encoding="utf-8")
+        hits = offences([f])
+        assert hits and "work-item identifier" in hits[0], (
+            f"a work-item tag standing outside the old four positions was missed: {line}"
+        )
+    # A corpus id is DATA: two or more letters and then digits is a DATAID or a station id, which is
+    # what this repository is about, and it is never a work item.
+    for clean in ("The record keys on ST01 and MBI21 alike.",
+                  "CP3B21 and RD18-053a are both real published ids.",
+                  "station A1 is the reference this record names.",
+                  "fixture G1 seeds the withheld arm."):
+        f = tmp_path / "cleanpos.js"
+        f.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
+        assert not offences([f]), f"the tag rule flagged a corpus id: {clean}"
+
+
+def test_the_three_structural_exemptions_and_what_they_do_not_excuse(tmp_path):
+    """A file name, a regex character class and a longer published id each carry the tag SHAPE in a
+    place no reader reads as a work item. Each is held by the same token in work-item position."""
+    cases = [
+        ('The leg names the manifest row ("h5/gamma/G1.h5"), not the data base.',
+         "G1 reshaped the download panel."),
+        ("Site.id is sanitised on write (^[a-zA-Z0-9]*$), so the id must be recovered.",
+         "Z0 reshaped the download panel."),
+        ('The published handle is "RD18-084-S1-b" and the file follows it.',
+         "S1 reshaped the download panel."),
+        ("The design it implements is maintainer/C18-BuildCacheDesign.md.",
+         "C18 reshaped the download panel."),
+        ("Site.project is ^[a-zA-Z0-9-_]*$, so a space is rejected on write.",
+         "Z0 reshaped the download panel."),
+        ('The corpus-total "C18 cache [...]" line is what the tests pin.',
+         '"C18" reshaped the download panel.'),
+        ("The corpus already ships `C5 [REMOTE].zip`, so the encoder must hold.",
+         "`C5` reshaped the download panel."),
+    ]
+    for i, (clean, work_item) in enumerate(cases):
+        ok = tmp_path / f"struct{i}.js"
+        ok.write_text(f"// {clean}\nvar a = 1;\n", encoding="utf-8")
+        assert not offences([ok]), f"the tag rule flagged a structural false positive: {clean}"
+        bad = tmp_path / f"structbad{i}.js"
         bad.write_text(f"// {work_item}\nvar a = 1;\n", encoding="utf-8")
         hits = offences([bad])
         assert hits and "work-item identifier" in hits[0], (
@@ -1503,7 +1714,7 @@ def test_the_approval_narrowing_targets_a_design_decision_not_the_workflow(tmp_p
 
 def test_a_pin_may_cite_the_contract_it_holds_and_code_may_not(tmp_path):
     cite = tmp_path / "cite.py"
-    cite.write_text("# Ranges take the spaced hyphen (LANE-ADDENDUM-HUB-FEEDBACK.md R1).\na = 1\n",
+    cite.write_text("# Ranges take the spaced hyphen (LANE-ADDENDUM-HUB-FEEDBACK.md).\na = 1\n",
                     encoding="utf-8")
     assert not offences([cite], cite_contract=True), "the lane rule flagged a contract citation in a pin"
     assert offences([cite]), "code carried a contract file name and the sweep allowed it"

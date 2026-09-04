@@ -69,7 +69,7 @@ Each assertion states its failure criterion:
     the portal and 274.66px left of it on the generated tier; the footer stood 48.75px on one tier
     and 46.02px on the other, with the text baseline 4.69px apart.
   * THE SIDE ZONES TAKE EQUAL ZERO BASIS - FAILS if either side zone stops declaring flex:1 1 0 with
-    min-width:0, or if the centre stops being content-sized. This is the C9 header lesson restated:
+    min-width:0, or if the centre stops being content-sized. This is the header lesson restated:
     zones that size to their content leave the centre centred in the LEFTOVER space, not on the
     page. With both sides growing from the same zero basis they are always the same width, so the
     centre is page-centred whatever the machine-readable link and the lockup happen to measure.

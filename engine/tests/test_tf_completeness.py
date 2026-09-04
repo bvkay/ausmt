@@ -9,7 +9,7 @@ These tests are each able to fail:
   * ERROR COLUMNS: a synthetic EDI with KNOWN Z + Z.VAR yields the documented propagation values,
     hand-computed in the test (rho.err = 0.4*T*|Z|*|dZ|; phs.err = deg(|dZ|/|Z|)).
   * TIPPER COMPONENTS: a real-dialect tipper matches the component dict, and source-masked periods are
-    null in ALL FOUR component columns (composes with the C19b fill/exact-zero mask).
+    null in ALL FOUR component columns (composes fill/exact-zero mask).
   * PLACEHOLDER: a flat-|T|=1.0 tipper is masked (all four series + tip_mag null) and a NOTICE names the
     station; a real (varying) tipper is untouched.
 """
@@ -63,7 +63,7 @@ def _normnum(x):
 
 
 def test_contract_grew_to_18_appended_only():
-    """FAILS IF: the tf contract is not exactly the 10 original columns followed by the 8 C20 columns
+    """FAILS IF: the tf contract is not exactly the 10 original columns followed by the 8 columns
     in the frozen order. Pins the APPEND (a reorder or a wrong new name fails)."""
     assert TF_COLUMNS[:10] == ["periods", "rho_xy", "rho_yx", "phs_xy", "phs_yx_adj",
                                "tip_mag", "pt_min", "pt_max", "pt_az", "pt_beta"], TF_COLUMNS
@@ -74,7 +74,7 @@ def test_contract_grew_to_18_appended_only():
 
 def test_old_slice_byte_identical_to_golden():
     """★ FAILS IF: t[0..9] of any checked-in fixture differs from the committed golden. The golden was
-    minted from the pre-C20 outputs; any change to an existing column (including tip_mag) is a STOP.
+    minted from the outputs; any change to an existing column (including tip_mag) is a STOP.
     Compares the JSON-normalised OLD slice only — the 8 new columns are deliberately excluded."""
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     assert set(golden) == set(_GOLDEN_FIXTURES), "golden station set drifted from the fixture set"
@@ -159,7 +159,7 @@ def test_tipper_components_match_component_dict_and_mask_fills():
 
 def test_placeholder_tipper_masked_with_notice(capsys):
     """★ FAILS IF: the real-corpus placeholder tipper (Phoenix EMpower |T| flat at 1.0) is NOT
-    masked, or no NOTICE names the station. This is the D2 honesty guard on a REAL file."""
+    masked, or no NOTICE names the station. This is the honesty guard on a REAL file."""
     per, comp = mtm.components(REAL / "phoenix_empower_A01.edi")
     # all four tipper series masked to null (dict collapses an all-None series to None)
     for k in ("TXR", "TXI", "TYR", "TYI"):
@@ -175,7 +175,7 @@ def test_placeholder_tipper_masked_with_notice(capsys):
 
 def test_real_varying_tipper_is_not_masked():
     """FAILS IF: a genuine (varying, off-unity) tipper is wrongly detected as a placeholder and masked.
-    Guards against the D2 detector over-firing. Exercises the predicate directly with a real-shaped
+    Guards detector over-firing. Exercises the predicate directly with a real-shaped
     varying series (no on-disk EDI needed)."""
     n = 6
     txr = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35]
@@ -196,7 +196,7 @@ def test_real_varying_tipper_is_not_masked():
 
 def test_placeholder_tipper_note_rides_the_report_channel(capsys):
     """The mask's NOTICE must not be a bare stderr print inside the parse layer, which is the one
-    honesty decision that never reached build_report.json, and under a C18 cache hit it did not
+    honesty decision that never reached build_report.json, and under a cache hit it did not
     fire at all (a hit and a miss must emit the same diagnostics). With a notes channel the caller
     owns emission: the fact rides the cached parse product and the report, and stderr stays quiet
     at the parse layer."""
@@ -207,7 +207,7 @@ def test_placeholder_tipper_note_rides_the_report_channel(capsys):
     assert "placeholder tipper" not in capsys.readouterr().err, (
         "with a notes channel the parse layer must not also print; the caller owns emission")
     # The wiring: both file-based parse arms hand the channel over, the record carries the flag
-    # (riding the C18 cache), and the per-survey report lists the station.
+    # (riding the cache), and the per-survey report lists the station.
     src = (Path(__file__).resolve().parent.parent / "extract" / "build_portal.py").read_text(encoding="utf-8")
     assert src.count("components_from_tf(tfobj, notes=") == 2, (
         "both parse arms must pass the notes channel")

@@ -1,6 +1,6 @@
 """Metadata-editor gateway-flow tests (-). Driven through the real HTTP surface
-(httpx in-process) with the C31 edit seam injected in-process (conftest.inproc_edit_runner) and the
-publish git seam faked (conftest.FakeGit) — the same injected-seam discipline as the C10 clamd and
+(httpx in-process) edit seam injected in-process (conftest.inproc_edit_runner) and the
+publish git seam faked (conftest.FakeGit) - the same injected-seam discipline as the clamd and
 Git tests. Proven-failing-first where a behaviour change is the deliverable.
 
 The load-bearing guarantees proved here: the hash pin (stale/tampered hash ⇒ 409, nothing
@@ -196,7 +196,7 @@ def test_validator_fail_shows_fail_and_confirm_409(tmp_path):
                                         "note": "x"}, follow_redirects=False)
             assert r.status_code == 409
             # No MUTATING git — the FAIL guard is upstream of any commit. (The preview render now
-            # reads surveys-live HEAD via `rev-parse --short HEAD` for the C43 drift chip, a benign
+            # reads surveys-live HEAD via `rev-parse --short HEAD` drift chip, a benign
             # read the queue page already does.) ALLOWLIST, not denylist: the FAIL path
             # may make ONLY the two benign READS `status` and `rev-parse`; assert every recorded verb
             # is one of those two. A denylist would silently pass a NEW mutating verb (worktree add,
@@ -403,12 +403,12 @@ def test_unknown_slug_404(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# the gateway package never gains a yaml/ruamel import (the C10 house rule, pinned)
+# the gateway package never gains a yaml/ruamel import (house rule, pinned)
 # --------------------------------------------------------------------------------------------------
 def test_gateway_package_has_no_yaml_import():
     # Scan every gateway/*.py EXCEPT gateway/runner/ (the runner runs in the engine image, where yaml
     # lives by design). A yaml/ruamel import appearing in the gateway PROCESS's modules would break
-    # the C10/C31 house rule that the gateway never parses survey content.
+    # the house rule that the gateway never parses survey content.
     # FAILS IF any gateway (non-runner) module imports yaml or ruamel.
     import gateway
     root = Path(gateway.__file__).parent

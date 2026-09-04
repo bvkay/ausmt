@@ -1,8 +1,8 @@
 """The curator approve commits to surveys-live. Publish is COMMIT-AND-PUSH ONLY: the
 gateway writes the approved submission into the surveys-live git history (the ledger) and pushes it.
-It does NOT build - which is what makes the C10 no-Docker-socket invariant hold cleanly (the
+It does NOT build - which is what makes the no-Docker-socket invariant hold cleanly (the
 gateway never invokes the build, never needs the socket). `PUBLISHED` therefore means "committed to
-surveys-live main and pushed", NOT yet served. Since C40 the HOST-side serve-reconcile agent closes
+surveys-live main and pushed", NOT yet served. Since the HOST-side serve-reconcile agent closes
 that gap automatically on its next tick (~15 min; deploy/scripts/reconcile.sh — still not the
 gateway, still no socket); manual `make rebuild-data` remains the fallback, and the UI copy says so.
 
@@ -20,7 +20,7 @@ before re-raising as a PublishError: an escaping error would leave the checkout 
 dirty, and the next pre-flight then refuses every publish for every curator until an operator steps in.
 
 git is a SUBPROCESS behind an INJECTED SEAM (a git-runner callable on the Gateway, defaulting to the
-real subprocess, overridable in tests — like the C10 scanner seam) so tests need no real git.
+real subprocess, overridable in tests - like the scanner seam) so tests need no real git.
 
 House rules enforced here: NO submitter email in the commit (PII stays in the DB; the commit records
 who CURATED, not private contact). Subprocess args are a LIST, never shell=True; cwd pinned to
@@ -225,7 +225,7 @@ def stage_and_commit(git_runner, package_dir: Path, surveys_live: Path, slug: st
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- F3 parity: ANY error below the PublishError layer (an
+    except Exception as exc:  # noqa: BLE001 -- parity: ANY error below the PublishError layer (an
         # OSError from copytree, a subprocess failure from the git runner) must still roll the WORKING
         # TREE back, never leave surveys-live on the submit/ branch with a half-copied package. Re-raised
         # AS a PublishError so the caller's fail-closed PUBLISH_FAILED path holds.
@@ -282,7 +282,7 @@ def commit_metadata_edit(git_runner, surveys_live: Path, slug: str, new_yaml: by
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- F3 parity: ANY error below the PublishError layer (an
+    except Exception as exc:  # noqa: BLE001 -- parity: ANY error below the PublishError layer (an
         # OSError from write_bytes, a subprocess failure from the git runner) must still roll the WORKING
         # TREE back. write_bytes truncates before it writes, so an escaping error leaves survey.yaml half
         # written and the checkout dirty. Re-raised AS a PublishError so the caller's 409 path holds.
@@ -372,7 +372,7 @@ def commit_station_removal(git_runner, surveys_live: Path, slug: str, new_yaml: 
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- F3 parity: ANY error below the PublishError layer (an
+    except Exception as exc:  # noqa: BLE001 -- parity: ANY error below the PublishError layer (an
         # OSError from write_bytes, a subprocess failure from the git runner) must still roll the WORKING
         # TREE back. The EDIs are git-rm'd BEFORE the yaml write, so an escaping error leaves surveys-live
         # on the stationrm/ branch with the station files already gone. Re-raised AS a PublishError so the
@@ -385,18 +385,18 @@ def commit_station_removal(git_runner, surveys_live: Path, slug: str, new_yaml: 
 
 def commit_survey_removal(git_runner, surveys_live: Path, slug: str, curator_name: str, note: str,
                           pre: PreState) -> str:
-    """Whole-survey retirement (C41 D2): `git rm -r` the ENTIRE survey package under
+    """Whole-survey retirement: `git rm -r` the ENTIRE survey package under
     surveys-live/surveys/<slug>/ in ONE commit inside the same rollback guard as the station-removal
     path, then ff-only merge + push. Returns the new commit sha.
 
-    This GENERALISES the station-removal machinery to survey scope (record D2 "Mechanics"): unlike a
+    This GENERALISES the station-removal machinery to survey scope ("Mechanics"): unlike a
     station removal there is NO survey.yaml to re-write and NO validator run (there is nothing left to
     validate) — the whole directory goes. Survey-scope DIFF-MINIMALITY: `git rm -r -- surveys/<slug>`
     touches exactly the slug's paths and nothing else. Fail-closed at every step: a failure anywhere
     (git-rm, commit-hook, non-ff merge, push rejection) rolls surveys-live back byte-for-byte to `pre`
     and re-raises, so a failed retirement leaves the publication ledger untouched.
 
-    The undo (record D2, load-bearing): because this publishes through git, `git revert <this commit>`
+    The undo (load-bearing): because this publishes through git, `git revert <this commit>`
     restores the package byte-identically — git IS the soft delete, so no tombstone state machine is
     needed. The commit records who curated and why (author fixed to the gateway identity, curator name
     + retire note in the body per the publish convention); NEVER a submitter email (there is none — a
@@ -432,7 +432,7 @@ def commit_survey_removal(git_runner, surveys_live: Path, slug: str, curator_nam
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
-    except Exception as exc:  # noqa: BLE001 -- F3 parity: this path writes nothing of its own, so its
+    except Exception as exc:  # noqa: BLE001 -- parity: this path writes nothing of its own, so its
         # non-PublishError comes from the git runner (real_git_runner raises subprocess.TimeoutExpired on
         # its 300 s bound, an OSError on exec). It must still roll the WORKING TREE back: the whole package
         # is git-rm'd first, so an escaping error leaves surveys-live on the retire/ branch with the survey
@@ -453,14 +453,14 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
     `changes` is the list of CHANGED surveys only, each a dict:
       {slug, new_yaml: bytes, expected_sha256, has_fail, effect}
 
-    ATOMICITY GATE (D13 pin 1, red-then-green) — VALIDATE-ALL-THEN-COMMIT-ALL. If ANY change carries
+    ATOMICITY GATE (pin 1, red-then-green) - VALIDATE-ALL-THEN-COMMIT-ALL. If ANY change carries
     `has_fail` True, this REFUSES before touching git: ZERO commits land, nothing is written. The gate
     runs first, so a partial batch (some members committed, then a failing one aborts) can never
     happen. (Proven RED against an interleaved commit-then-validate variant, which lands the passing
     members before hitting the failing one.)
 
     Each survey's own survey.yaml bytes are written and committed INDIVIDUALLY (`git add` scoped to that
-    one path), so each commit's diff touches ONLY that survey's file (diff-minimality, D13 pin 4). The
+    one path), so each commit's diff touches ONLY that survey's file (diff-minimality, pin 4). The
  TOCTOU hash pin holds PER survey: `expected_sha256` is what the curator saw in the preview; we
     re-hash the bytes about to be written and refuse the WHOLE batch on any mismatch (a stale preview or
     a concurrent edit). Fail-closed at EVERY step: a failure anywhere (stale-hash refusal, a write
@@ -472,7 +472,7 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
     if not changes:
         raise PublishError("guard", "empty collection batch — nothing to commit")
     # ATOMICITY GATE — checked BEFORE any git verb: a single member's validator FAIL blocks the lot with
-    # ZERO commits (all-then-commit-all). This is the load-bearing invariant D13 pin 1 proves.
+    # ZERO commits (all-then-commit-all). This is the load-bearing invariant pin 1 proves.
     failed = sorted(str(c.get("slug")) for c in changes if c.get("has_fail"))
     if failed:
         raise PublishError("validator",
@@ -507,7 +507,7 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
         _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
         for slug, new_yaml, dest_dir, effect in prepared:
             (dest_dir / "survey.yaml").write_bytes(new_yaml)
-            # `git add` scoped to THIS survey's file so the commit's diff is minimal (D13 pin 4).
+            # `git add` scoped to THIS survey's file so the commit's diff is minimal (pin 4).
             _git(git_runner, ["add", "--", f"surveys/{slug}/survey.yaml"], surveys_live, "git-add")
             subject = f"collection edit by curator:{curator_name}: {slug} ({effect} -> {cid})"
             body = (f"Curated-by: curator:{curator_name}\nSurvey: {slug}\n"

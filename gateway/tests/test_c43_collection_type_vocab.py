@@ -1,6 +1,6 @@
 """The collection type vocabulary, held equal as a SET across every carrier that states it.
 
-Record D5-A `type` is validator-unenforced, so the console's select IS the guardrail. That makes
+Record `type` is validator-unenforced, so the console's select IS the guardrail. That makes
 the vocabulary a contract with no schema behind it, and it is written out in seven places. Adding a
 value to the prose carriers alone left the two gateway tuples short, which is a hard 400 on the
 publish spec path and a select that renders (unset) for a value the corpus legitimately carries: the
@@ -122,7 +122,7 @@ def test_hub_lede_names_every_vocabulary_value_but_the_catch_all():
         assert re.search(rf"\b{value}\b", lede), f"the /collections hub lede does not name {value!r}: {lede!r}"
 
 
-# The vocabulary is CLOSED. test_c43_stage3b.py's F4 probe publishes ctype="campaign" and expects a
+# The vocabulary is CLOSED. test_c43_stage3b.py's probe publishes ctype="campaign" and expects a
 # refusal, so this keeps that negative pin non-vacuous: if "campaign" is ever added to the vocabulary, that probe
 # must move to another out-of-vocab value rather than quietly passing for the wrong reason.
 def test_campaign_stays_out_of_vocab():

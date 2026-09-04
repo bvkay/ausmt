@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TEST_JS = Path(__file__).resolve().parent / "collection_colours.test.js"
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
-# The three member counts contract C7 names: 8 is the last count the shared palette covers, 9 is the first
+# The three member counts contract names: 8 is the last count the shared palette covers, 9 is the first
 # that must fall through to the ramp, 14 is a real AusLAMP-scale collection. These are the SAME literals
 # collection_colours.test.js carries for the JS side; the two lists are the parity.
 EXPECTED = {

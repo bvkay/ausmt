@@ -17,11 +17,11 @@ GATE 1, rotation/frame guard. mt_metadata 1.0.9 RECORDS rotation but never compe
     rotation metadata. The raw-text evidence parse below is therefore load-bearing, not advisory.
 So the gate reads BOTH sources — the TF's _rotation_angle AND a cheap lexical parse of the source
 EDI (ZROT/TROT blocks, SPECTRA ROTSPEC attributes, HMEAS azimuths) — cross-checks them, and
-applies frame POLICY v3. The engine NEVER rotates served data - DETECTION stays, CORRECTION goes:
+applies frame. The engine NEVER rotates served data - DETECTION stays, CORRECTION goes:
   * Arm A - survey-uniform declared angle (ANY magnitude): serve AS STORED, record the angle
     (frame_served="declared-azimuth", declared_azimuth_deg) + a note. The archive respects
     acquisition frames; rotation joins byte-rewriting as a thing the archive does not do. (Absorbs
-    the old R3 record + R4 de-rotate — the arbitrary 15deg FRAME_KEEP_MAX_DEG threshold dies.)
+    the old record + de-rotate - the arbitrary 15deg FRAME_KEEP_MAX_DEG threshold dies.)
   * Arm B - station-uniform angles INCONSISTENT across one survey (spread beyond
     SURVEY_ANGLE_SPREAD_MAX_DEG): each station STILL serves as-stored with its own declared angle;
     the SURVEY gains a "mixed declared frames" note (classify_survey_frame; surfaced in
@@ -32,13 +32,13 @@ applies frame POLICY v3. The engine NEVER rotates served data - DETECTION stays,
     names the per-period rotation and the fix ("re-export in a single coherent frame").
   * rotation UNKNOWABLE (sentinel/missing angles at data-bearing periods, reader/text disagreement,
     ROTSPEC-vs-azimuth conflict, RHOROT declared rotated while the Z frame is undeclared) -> FAIL:
-    the station is skipped loudly (fail-closed, C8 posture) — never served in an unresolvable frame.
+    the station is skipped loudly (fail-closed, posture) - never served in an unresolvable frame.
   * no declaration at all, or azimuth metadata too inconsistent to be evidence (e.g. the harness
     Tasmania files' HX AZM=180/HY AZM=90 non-orthogonal placeholders) -> serve with the frame
     facts recorded; Gate 2 still checks the convention. Azimuths on the impedance branch are
     ACQUISITION metadata, not the stored-tensor frame — the >ZROT declaration wins when present
     (USArray: physical sensor azimuths ±19° with ZROT=0 = processed-to-zero, served as-is).
-The de-rotation MATH (Z0(i) = R(-θi) Z(i) R(-θi)^T, T0(i) = T(i) R(-θi)^T, R(β) = [[cosβ, sinβ],
+The de-rotation MATH (Z0(i) = R(θi) Z(i) R(θi)^T, T0(i) = T(i) R(θi)^T, R(β) = [[cosβ, sinβ],
 [-sinβ, cosβ]]) is RETAINED below for DIAGNOSTICS only — no serve-path caller invokes it (v3). It is
 pinned by the synthetic round-trips and the AusLAMP-SA custodian-twin proof for future diagnostic use.
 FRAME-LABEL HONESTY: the recorded reference is the file's DECLARED ZERO-AZIMUTH REFERENCE —
@@ -46,18 +46,18 @@ geographic north per the EDI convention, but de facto geomagnetic/acquisition no
 compass-referenced surveys without declination stamps. Field values say "declared-zero" /
 "declared-azimuth"; nothing here asserts absolute geographic where the file does not prove it.
 
-GATE 2 — sign-convention quadrant check. Under e^{+iωt} with x=north/y=east, arg(Zxy) lies in Q1
-(0..90°) and arg(Zyx) in Q3 (-180..-90°). Per station the gate takes the MEDIAN phase of each
+GATE 2 - sign-convention quadrant check. Under e^{+iωt} with x=north/y=east, arg(Zxy) lies
+(0..90°) and arg(Zyx) (180..-90°). Per station the gate takes the MEDIAN phase of each
 off-diagonal over the mid-band periods (central 60%, after masking absent/degenerate values) and:
   * BOTH medians coherently in wrong quadrants -> FAIL (a pure convention/frame flip: conjugation
-    = e^{-iωt}, or an x/y axis swap — the message names the signature). This is what makes the C20
+    = e^{-iωt}, or an x/y axis swap - the message names the signature). This is what makes the
     induction-arrow panel's "arrows point toward conductors" claim safe.
   * ONE median out of quadrant -> WARN as an honesty note, never a failure (3D effects/galvanic
     distortion legitimately do this — e.g. TAS105/TAS106, MBN09, WG-14 on the real corpus).
   * fewer than CONVENTION_MIN_PERIODS usable mid-band periods -> an explicit "insufficient data"
     note — degenerate/masked data must never manufacture a convention verdict.
 LIMIT (state it, don't discover it): Gate 2 is BLIND to ±90° frame rotations by construction — a
-±90° rotation maps Zxy'=-Zyx / Zyx'=-Zxy, which preserves the Q1/Q3 structure (verified survey-wide,
+±90° rotation maps Zxy'=-Zyx / Zyx'=-Zxy, which preserves the structure (verified survey-wide,
 n=7835 periods). Gate 2 checks the SIGN CONVENTION only; frames are Gate 1's job.
 
 All thresholds are single-sourced here; tests and build_portal import them — never re-declare.
@@ -84,12 +84,12 @@ ROT_FILL_MAX = 1e8           # missing-data sentinel threshold — same conventi
 # minimalize from the data coming in, but the de-rotated we should not do." So the engine NEVER
 # rotates served data — detection stays, correction goes:
 #   * Arm A - a survey-uniform declared angle (ANY magnitude) serves AS STORED, the angle recorded
-#            (absorbs the old R3 record + R4 de-rotate; the 15deg FRAME_KEEP_MAX_DEG threshold dies).
+# (absorbs the old record + de-rotate; the 15deg FRAME_KEEP_MAX_DEG threshold dies).
 #   * Arm B - survey-inconsistent per-station-uniform angles: each station serves AS STORED with its
 #            own angle recorded; the SURVEY gains a "mixed declared frames" note (no de-rotation).
 #   * Arm C - per-period rotation WITHIN a station (PAX class): REFUSE the station (a single served
 #            curve from period-varying frames is misleading-by-construction; absence is honester).
-# Only the survey-inconsistency threshold survives (it drives the V3-B note, not any rotation).
+# Only the survey-inconsistency threshold survives (it drives the note, not any rotation).
 SURVEY_ANGLE_SPREAD_MAX_DEG = 5.0  # Arm B: per-station uniform angles spreading more than this within
                                    # one survey -> the survey carries the mixed-declared-frames note
                                    # (each station is still served as-stored; nothing is de-rotated)
@@ -209,9 +209,9 @@ def _norm_angle(a: float) -> float:
 
 
 def declared_uniform_angle(ev: dict):
-    """(kind, theta) of a station's declared frame, for the SURVEY-scope V3-B mixed-frames scan.
+    """The kind, theta ) of a station's declared frame, for the SURVEY-scope mixed-frames scan.
     kind: 'none' (zero/undeclared), 'uniform' (one nonzero angle, theta normalised), or
-    'per-period' (V3-C class — refused at the gate, never enters the survey-uniformity vote).
+    'per-period' (class - refused at the gate, never enters the survey-uniformity vote).
     Mirrors frame_disposition's evidence hierarchy (ZROT wins on the impedance branch; azimuths
     only where nothing else declares; ROTSPEC/azimuths on spectra) WITHOUT a TF parse — this is
     the cheap lexical pre-scan process_edis runs before the per-station loop."""
@@ -295,12 +295,12 @@ def _angles_summary(u: list) -> str:
 
 def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                       n_periods: int) -> FrameDisposition:
-    """Decide pass/fail from the combined evidence under POLICY v3 (module docstring). The engine
+    """Decide pass/fail from the combined evidence under (module docstring). The engine
     NEVER rotates served data, so this returns only action="pass" (serve as-stored, the declared
-    frame recorded in facts) or action="fail" (refuse — per-period frame mixing V3-C, or an
-    unknowable frame). A survey-uniform declaration of ANY magnitude records and serves (V3-A/B);
-    per-period ZROT/TROT/ROTSPEC refuses (V3-C); every FAIL reason names the angles and the fix
-    (fail-closed, C8 posture)."""
+    frame recorded in facts) or action="fail" (refuse - per-period frame mixing, or an
+    unknowable frame). A survey-uniform declaration of ANY magnitude records and serves;
+    per-period ZROT/TROT/ROTSPEC refuses; every FAIL reason names the angles and the fix
+    (fail-closed, posture)."""
     facts: dict = {
         "evidence": {
             "branch": ev["branch"],
@@ -399,7 +399,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
         if nz:
             if len(u) > 1:
                 # Per-period ZROT places each period in a different frame - refuse. A single
-                # served curve from period-varying frames is misleading-by-construction (the old R1
+                # served curve from period-varying frames is misleading-by-construction (the old
                 # PAX de-rotation is retired; absence is honester).
                 return _fail(f"per-period ZROT ({_angles_summary(u)}) places each period in a "
                              f"DIFFERENT frame — a single served curve would mix frames "
@@ -434,7 +434,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                          f"(sign convention still checked)")
 
     # --- tipper frame: served as-stored like the impedance. A per-period TROT is the same
-    # per-period frame-mixing hazard as per-period ZROT (V3-C) — refuse it too. A uniform/zero TROT
+    # per-period frame-mixing hazard as per-period ZROT - refuse it too. A uniform/zero TROT
     # rides in facts["evidence"]["trot"] as a recorded fact; nothing is rotated. ----
     if has_tipper and ev["trot"] is not None:
         tr = _mask_sentinels(ev["trot"])
@@ -612,7 +612,7 @@ def convention_check(comp: Optional[dict]) -> dict:
         return s[m] if len(s) % 2 else 0.5 * (s[m - 1] + s[m])
 
     med_xy = _median([a for a, _ in mid])
-    # wrap-safe axis for yx: map to (-360, 0] so Q3 (with slack) is one contiguous window and a
+    # wrap-safe axis for yx: map to (-360, 0] so (with slack) is one contiguous window and a
     # legitimate median near ±180 cannot straddle the atan2 representation seam
     med_yx_mapped = _median([(b if b <= 0 else b - 360.0) for _, b in mid])
     xy_ok = -QUADRANT_SLACK_DEG <= med_xy <= 90.0 + QUADRANT_SLACK_DEG

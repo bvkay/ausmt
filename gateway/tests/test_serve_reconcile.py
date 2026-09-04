@@ -117,7 +117,7 @@ def test_rebuild_requires_csrf(tmp_path):
 
 def test_rebuild_success_writes_valid_request_and_redirects(tmp_path):
     """A valid session + CSRF writes a well-formed rebuild.request attributed to the curator and
-    redirects (303) to the SERVE-STATE screen's panel. C43 FR2-1
+    redirects (303) to the SERVE-STATE screen's panel.
     moved the serve panel off the queue page to /gateway/curator/serve, so the redirect follows it
     there — that is where the curator now sees the 'rebuild requested — pending' state. FAILS IF: the
     file is absent/malformed, the curator is not recorded, or the response is not a redirect to the
@@ -253,7 +253,7 @@ def test_published_head_via_git_seam_on_shell_and_serve(tmp_path):
     """The server-side published HEAD comes from the injected git seam (the publish flow's runner). It
     is surfaced on EVERY shelled page by the context-bar drift chip AND on the serve screen's panel;
     with a seam returning a known short sha the page shows it, with a failing seam it shows
-    'unavailable' and does NOT 500. (C43 FR2-1: the queue does not carry the panel, but the drift
+    'unavailable' and does NOT 500. (the queue does not carry the panel, but the drift
     chip carries the published HEAD hub-wide, so the queue page still reflects the seam.) FAILS IF: the
     git seam result is not reflected, or a git error 500s the page."""
     async def _body():
@@ -334,16 +334,16 @@ def test_no_page_renderer_emits_inline_handlers_or_scripts():
 
 
 def test_c43_external_js_constants_are_raw_and_referenced_externally():
-    """Stage-1 CSP coverage (record D13): the new nav-shell + survey-hub behaviours ship as
+    """Stage-1 CSP coverage: the new nav-shell + survey-hub behaviours ship as
     EXTERNAL route constants (script-src 'self' kills inline), and the pages that use them reference
-    them by external <script src=…>, never inline. FAILS IF a C43 JS constant is removed/renamed
+    them by external <script src=…>, never inline. FAILS IF a JS constant is removed/renamed
     (coverage silently narrows) or a page inlines its script instead of referencing the route. This
-    NAMES the C43 constants so their coverage cannot quietly vanish."""
+    NAMES the constants so their coverage cannot quietly vanish."""
     import re
     from pathlib import Path
 
     from gateway import curatorpage
-    # The new C43 external JS constants exist and are RAW JS (no <script> wrapper, no on*= handler).
+    # The new external JS constants exist and are RAW JS (no <script> wrapper, no on*= handler).
     for const_name in ("CONTEXT_BAR_JS", "SURVEY_HUB_JS"):
         js = getattr(curatorpage, const_name)
         assert isinstance(js, str) and js.strip(), f"{const_name} vanished or empty"

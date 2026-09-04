@@ -6,7 +6,7 @@ the whole corpus indexed as one page. Tier 3 keeps every published URL and serve
 the engine emits one static page per survey, station and collection into <out>/pages/, rendered
 ONLY from the already-served public documents (survey-metadata.json / station.json / the
 collections rollup), so a page can never disclose anything the gated products do not already
-publish - the C42 leak posture is inherited, not re-implemented, and test_coord_access's
+publish - the leak posture is inherited, not re-implemented, and test_coord_access's
 whole-tree sweep audits the pages like every other emitter.
 
 Emission rides --sitemap-base exactly as the sitemap does: same flag, same URL base, and the two
@@ -162,7 +162,7 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
     # The house convention for a self-check the build fails: ERROR lines on stderr, then return 2.
     # An operator running `make rebuild-data` gets a message rather than a traceback, and the
-    # Reconciliation now reads like every other gate in main (LANE-CONTRACT-PAGE-HIERARCHY.md B8,
+    # Reconciliation now reads like every other gate in main (LANE-CONTRACT-PAGE-HIERARCHY.md,
     # which flags the RuntimeError this test requires as the odd one out).
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
                             "--bundle-edi", "--no-validate",
@@ -393,8 +393,8 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert "Dipoles" not in page, "the dipole summary row is retired (the table carries dipoles)"
     assert "instrument PID" not in page, "the survey-level platform PID is retired"
     # The station table: the five default columns, sticky first column. The run and instrument
-    # columns moved to the station pages in LANE-CONTRACT-PAGE-HIERARCHY.md B5, which could only
-    # follow B4 giving those pages a Runs section; the move is followed fact by fact in
+    # columns moved to the station pages in LANE-CONTRACT-PAGE-HIERARCHY.md, which could only
+    # follow giving those pages a Runs section; the move is followed fact by fact in
     # test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations, and the station
     # page's own rendering is pinned by test_the_station_page_renders_the_runs_its_own_document
     # _publishes. Restated here rather than deleted, so the survey page's own truth stays asserted.
@@ -787,7 +787,7 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
 
 def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide():
     """Design brief 16, and a real collision. _TS_LEVELS gave BOTH level0 and raw_packed the badge
-    level 0, so a survey carrying both renders two panels badged L0 and a station cell reading
+    level 0, so a survey carrying both renders two panels badged and a station cell reading
     "L0 3.2 GB &#183; L0 41 KB" with nothing to tell the reader which was which. level1_netcdf, which
     ts_access.json emits and the SPA's own TS_LEVELS names, had no panel at all.
 
@@ -1205,7 +1205,7 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
     per-station sizes; levels the register does not carry render nothing at all.
 
     Level names and badges follow portal/src/state.js TS_LEVELS as of the download-cards commit
-    (LANE-CONTRACT-PAGE-HIERARCHY.md B3), so "Raw time series" is now "Packed raw", "MTH5 time
+    (LANE-CONTRACT-PAGE-HIERARCHY.md), so "Raw time series" is now "Packed raw", "MTH5 time
     series" is "Level 1 MTH5", and the L0 badge is not shared by two levels."""
     pages = _pages_module()
     docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
@@ -1330,7 +1330,7 @@ def test_the_collection_page_is_an_exploratory_layer(tmp_path):
 
     # member surveys as a compact list, and organisations with their RORs
     assert '<a href="/surveys/m0">Member 0</a>' in page
-    # Ranges read as a SPACED HYPHEN, not as the word "to" (LANE-ADDENDUM-HUB-FEEDBACK.md R1,
+    # Ranges read as a SPACED HYPHEN, not as the word "to" (LANE-ADDENDUM-HUB-FEEDBACK.md,
     # which names "5 to 100,000 s" -> "5 - 100,000 s" as its worked example). The no-dash-glyph
     # assertions elsewhere in this file are untouched: the ban is on en/em dashes, not on hyphens.
     assert "200 stations" in page and "LPMT" in page and "2013 - 2016" in page
@@ -1403,7 +1403,7 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     speak the portal's type palette, a sub-degree survey's minimap draws the ring only, and the
     collection page carries the member-coloured scatter with its legend.
 
-    Two swatch assertions moved with LANE-CONTRACT-PAGE-HIERARCHY.md B7 and are restated, not
+    Two swatch assertions moved with LANE-CONTRACT-PAGE-HIERARCHY.md and are restated, not
     dropped. BBMT is #3730B8, the value portal/src/state.js measured for LP/BB separability and
     deutan-safety, in place of the lightened #5B54D6. The locator ring is
     muted rather than coral, because coral is reserved for primary actions and active states; the
@@ -1574,7 +1574,7 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
     stn = pages.station_page(doc=docs[0], survey_slug="s", base="https://x.example")
     # No disjunction: the first arm ("5.0 - 100,000.0 s") is what the row printed BEFORE it took the
     # shared helper, so accepting it let the station page bypass _fmt_period and print the trailing
-    # zeros R2 retires while this test stayed green. One helper, one form, one assertion.
+    # zeros retires while this test stayed green. One helper, one form, one assertion.
     assert "5 - 100,000 s" in stn, \
         f"the station period row must use the shared helper and a spaced hyphen: " \
         f"{stn[stn.find('Period'):][:120]!r}"
