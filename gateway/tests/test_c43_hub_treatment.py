@@ -9,7 +9,7 @@ Load-bearing pins:
     Stations chip slot + the slug data attribute. The header DEGRADES to the slug when the
     read-job fails on a non-metadata tab (never a bounce, never a 500).
   * SCAFFOLD: the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at
-    JS-source level here (executable form in the parity file). the citation-author
+    JS-source level here (executable form in the parity file). The citation-author
     email heuristic and its three surfaces (the data-citation-email scaffold attribute, the TOC
     issue chip and the Metadata inline field error) are DELETED with the retired flat credit keys
     they read; the pins below assert their absence.

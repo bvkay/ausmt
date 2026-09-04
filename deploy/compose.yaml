@@ -83,8 +83,8 @@ services:
       # Read-write: the pipeline's own output tree. The image's ENTRYPOINT takes --out/--products
       # as CLI args (supplied via `docker compose run build-runner --surveys ... --out ...`) --
       # this mount just makes /out a stable, host-persisted target for whatever --out path the
-      # caller passes (conventionally /out/builds/<timestamp>, per the rebuild-data contract that
-      # Implements).
+      # caller passes (conventionally /out/builds/<timestamp>, per the rebuild-data contract
+      # deploy/Makefile's rebuild-data target implements).
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/site-data:/out:rw
     environment:
       # Matches the image's own baked-in default (ENV in engine.Dockerfile) -- repeated explicitly

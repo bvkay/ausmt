@@ -73,17 +73,17 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # test_validator_gate.py's oracle skips (exact reason below) when the gateway package
     # Tree itself is absent from the repo root - legitimately reachable ONLY in the engine-image workflows
     # (the engine image COPYs engine/ only, so /app/gateway never exists: deploy-images' in-image
-    # engine-full-tests run - the sole remaining engine-image pytest dropped the
-    # In-Dockerfile duplicate - pipes through THIS tripwire). INERT on every checkout workflow: a
+    # engine-full-tests run, the sole remaining engine-image pytest now that no in-Dockerfile
+    # duplicate stands beside it, pipes through THIS tripwire). INERT on every checkout workflow: a
     # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the oracle
     # (the resolver's arm iv), never skips.
     "engine image build: gateway tree not shipped",   # test_validator_gate.py, image builds only
     # test_mtcat_version_parity.py, the SAME designed-topology class as the entry above, for the
     # other tree the engine image does not ship. The MTCAT schema version has one source (the schema
     # title) and that module reads it back off every surface that restates it; four of those surfaces
-    # are portal files (portal.config.yaml, config.js, data/mtcat.json, tools/gen_config.py) plus
-    # and engine.Dockerfile COPYs contract/ + engine/ and exactly one portal
-    # File (the generated portal/src/contract.js), so in the image workflow those five do not exist. The
+    # are portal files (portal.config.yaml, config.js, data/mtcat.json, tools/gen_config.py), and
+    # engine.Dockerfile COPYs contract/ + engine/ and exactly one portal file (the generated
+    # portal/src/contract.js), so in the image workflow those four do not exist. The
     # three tests that read them skip with the exact reason below; the ENGINE-side statements (schema
     # title, contract parser, generated _contract constant, the real build's emitted portal block,
     # build_portal.py's own literal guard) keep ASSERTING in the image, so the release gate still

@@ -157,7 +157,7 @@ class BuildCache:
         # but attributable — a lock-induced spurious miss is not a cold miss).
         self.write_errors = 0
         self.read_errors = 0
-        # `disabled_reason` is a POLICY exclusion (e.g.: --raw builds, whose seed-meta
+        # `disabled_reason` is a POLICY exclusion (e.g. --raw builds, whose seed-meta
         # citations feed served XML but are not a key component) — behaviourally identical to a
         # degenerate salt: the cache is inert, no reads, no writes.
         if disabled_reason:

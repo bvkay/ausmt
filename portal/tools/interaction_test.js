@@ -3536,8 +3536,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "C7: the legend swatches must be the dots' own colours, got " + JSON.stringify(nineLegend));
   // ...and a member the PAGE leaves out must not shift the ramp here. _collection_scatter assigns colours
   // over `present` - the members that HAVE positioned stations - so a wholly coordinate-withheld member
-  // (is a live corpus state, and hasPosition already keeps such a station off every map surface) is
-  // not counted there. Counting it here gave the SPA a different n and moved every later member one step
+  // (a withheld position is a live corpus state, and hasPosition already keeps such a station off
+  // every map surface) is not counted there. Counting it here gave the SPA a different n and
+  // moved every later member one step
   // along the ramp, which is the divergence this pin exists to remove.
   const withheldMix = [
     { id: "P1", survey: "Sv A", lat: -30, lon: 136, type: "LPMT" },
