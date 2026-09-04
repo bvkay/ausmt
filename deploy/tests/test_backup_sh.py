@@ -210,7 +210,7 @@ def test_missing_data_dir_fails_loud(tmp_path):
 
 
 def test_no_sqlite3_refuses_hard_with_actionable_message(tmp_path):
-    """Sqlite3 absent WITH a gateway DB present => the script REFUSES (there is no fallback) and exits
+    """sqlite3 absent WITH a gateway DB present => the script REFUSES (there is no fallback) and exits
     non-zero with an ACTIONABLE message: the install-sqlite3 command, NOT any docker suggestion. FAILS
     IF: it silently `cp`s the live WAL DB (a potentially torn snapshot), exits 0, the message does not
     name the install fix, or it still mentions a docker/image fallback."""

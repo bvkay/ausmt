@@ -122,7 +122,7 @@ def _assert_h5_equal(a, b, rel):
 
 
 def _norm_manifest(out):
-    """Sha256 is normalised ONLY on mth5 rows, whose bytes legitimately carry HDF5 write clocks; the
+    """sha256 is normalised ONLY on mth5 rows, whose bytes legitimately carry HDF5 write clocks; the
     EDI, EMTF XML and both zip rows keep their digests compared, because those digests are the
     cross-build invariant the download reference publishes. Every size, h5 included, is a
     deterministic pin and stays compared.

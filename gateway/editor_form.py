@@ -160,7 +160,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("orcid", "ORCID (people)", "0000-0002-1825-0097", "orcid"),
         ("ror", "ROR id (organisations)", "https://ror.org/03yghzc09", "ror"),
     ],
-    # Organisations[] is the FULL role statement where the parties
+    # organisations[] is the FULL role statement where the parties
     # genuinely differ (industry-collected government releases make collector / custodian / publisher /
     # distributor different parties). The scalar organisation: block keeps its meaning (primary
     # custodial responsibility, the discovery projection). Two sub-fields are NOT plain scalars: roles
@@ -173,7 +173,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("roles", "What this organisation is", "", "org_roles"),
         ("primary_custodian", "Primary custodian", "", "primary_custodian"),
     ],
-    # Acknowledgements[] rows {text, type?, source?}. The wording is
+    # acknowledgements[] rows {text, type?, source?}. The wording is
     # the row's whole payload and is preserved VERBATIM; type is the contract's CANDIDATE vocabulary, so
     # the validator WARNs rather than blocks an unknown token and the editor mirrors that (a stored
     # out-of-vocab type must round-trip, not lock the curator out of the section).
@@ -458,7 +458,7 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
         if subkey == "level" and value not in ACCESS_LEVELS:
             raise SectionError(section, f"access level '{value}' is not one of "
                                         f"{', '.join(ACCESS_LEVELS)}")
-    # Sources[].licence is vocab-validated against the SAME contract vocab as the top-level
+    # sources[].licence is vocab-validated against the SAME contract vocab as the top-level
     # licence (killing the free-text seam), and profile against the attribution-profile vocab. The
     # <select> only offers vocab values, so a normal submit is always valid; this fail-closes a
     # hand-crafted out-of-vocab POST (the same fail-closed-at-the-form posture as access.coordinates).

@@ -274,7 +274,7 @@ def _header_shape(path):
 
 
 def test_header_parity_about_matches_index():
-    """Api-docs workflow. About's header must NOT differ from the SPA's in the two visible ways it could: its primary nav
+    """The api-docs pass. About's header must NOT differ from the SPA's in the two visible ways it could: its primary nav
     items carried none of index's ids, and its right zone was empty while index's carried a mono stats
     block. Both are now aligned, and this pins the alignment structurally (parsed DOM, so comments and
     raw-text coincidences cannot pass it).

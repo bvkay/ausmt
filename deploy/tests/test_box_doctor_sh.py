@@ -361,7 +361,7 @@ def test_ts_parity_warns_rather_than_fails_with_no_committed_table(tmp_path):
 # ---- section-5 review: legs that reported green over the failure they exist to catch -------------
 
 def test_gw_runner_not_running_fails_the_gateway_profile(tmp_path):
-    """Gw-runner has NO compose healthcheck by design, so 'is it running' is the ONLY observable, and
+    """gw-runner has NO compose healthcheck by design, so 'is it running' is the ONLY observable, and
     a crash-looping runner is the 'submissions stuck at SCANNED' incident. The doctor's own header
     always claimed it checked gw-runner under PROFILE=gateway; the loop only covered gateway+clamd,
     so the operator's final gate reported all-green over exactly that failure.

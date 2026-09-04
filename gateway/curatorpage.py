@@ -4915,7 +4915,7 @@ def _map_section_panel(section: str, title: str, fields: dict, submitted: dict |
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
                         f'{_text_input(name, val, placeholder, extra_hint=_ROR_HINT, css_class=bad)}'
                         f'{derr_html}</p>')
-        elif kind == "text_source":                 # Citation.text_source - fail-closed vocab
+        elif kind == "text_source":                 # citation.text_source - fail-closed vocab
             rows.append(_typed_vocab_select_widget(name, label, val,
                                                    editor_form.CITATION_TEXT_SOURCES,
                                                    display_labels=_TEXT_SOURCE_DISPLAY))
@@ -4927,7 +4927,7 @@ def _map_section_panel(section: str, title: str, fields: dict, submitted: dict |
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
                         f'{_text_input(name, val, placeholder, css_class=bad)}'
                         f'{derr_html}</p>')
-    # Citation.preferred_identifier is the NESTED {scheme, identifier} pair, rendered here so the
+    # citation.preferred_identifier is the NESTED {scheme, identifier} pair, rendered here so the
     # editor can WRITE it (resolved). additional[] has no widget and rides the snapshot verbatim.
     if section == "citation":
         sec_val = fields.get(section)
@@ -5292,10 +5292,10 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
     for subkey, label, placeholder, kind in subfields:
         name = f"l_{section}_{index}_{subkey}"
         val = (values or {}).get(subkey)
-        if kind == "license":                       # Sources[].licence - vocab <select>
+        if kind == "license":                       # sources[].licence - vocab <select>
             cells.append(_license_select_widget(name, label, val))
             continue
-        if kind == "profile":                       # Sources[].profile - ga|generic <select>
+        if kind == "profile":                       # sources[].profile - ga|generic <select>
             cells.append(_profile_select_widget(name, label, val))
             continue
         if kind == "relation":                      # related_identifiers[].relation - vocab <select>
@@ -5313,13 +5313,13 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.CONTRIBUTOR_ROLES,
                                                     display_labels=_ROLE_DISPLAY))
             continue
-        if kind == "org_roles":                     # Organisations[].roles - per-row checkbox group
+        if kind == "org_roles":                     # organisations[].roles - per-row checkbox group
             cells.append(_org_roles_widget(section, index, label, val, submitted))
             continue
-        if kind == "primary_custodian":             # Organisations[] - one radio across the rows
+        if kind == "primary_custodian":             # organisations[] - one radio across the rows
             cells.append(_primary_custodian_widget(section, index, val, submitted))
             continue
-        if kind == "ack_type":                      # Acknowledgements[].type - CANDIDATE vocab
+        if kind == "ack_type":                      # acknowledgements[].type - CANDIDATE vocab
             cells.append(_typed_vocab_select_widget(name, label, val,
                                                     editor_form.ACKNOWLEDGEMENT_TYPES,
                                                     display_labels=_ACK_TYPE_DISPLAY))

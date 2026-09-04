@@ -1,4 +1,4 @@
-"""Resources[] on the promoted station.json: what represents this station, and what merely contains it.
+"""resources[] on the promoted station.json: what represents this station, and what merely contains it.
 
 An open station's resources are the SERVED, ADDRESSABLE things - its transfer function as EDI,
 as canonical EMTF XML and as MTH5, plus the per-survey archives those files are bundled into. Each

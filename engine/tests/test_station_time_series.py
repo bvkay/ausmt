@@ -1,4 +1,4 @@
-"""Kind=time_series rows on station.json: the archive's bytes, described but never re-hosted.
+"""kind=time_series rows on station.json: the archive's bytes, described but never re-hosted.
 
 The engine projects the verified-resource register through the ONE internal model (`station_document`) as
 resource rows that carry a ROUTE and nothing local: `access_url` on the canonical NCI fileServer

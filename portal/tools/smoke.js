@@ -32,7 +32,7 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   "csvCellFn:v=>csvCell(v)," +
   "citeTxtProbe:()=>citeLine({au:AU_PROBE,yr:\"2019\",ti:\"T\",pb:\"P\"},\"10.1/x\")," +
   "bibProbe:()=>bibtex(\"k\",{au:AU_PROBE,ti:\"A & B\",yr:\"2019\",pb:\"P\"},\"10.1/x\")," +
-  // BuildIdText is a pure function of BUILDID (set by boot() from build.json) - exposing it
+  // buildIdText() is a pure function of BUILDID (set by boot() from build.json) - exposing it
   // lets a test assert the footer VALUE binding without a real DOM (getElementById stubs below return
   // a fresh throwaway object per call, so nothing written to el.textContent would be observable).
   // Two-phase boot: boot returns as soon as the FIRST-PAINT products (catalogue/surveys + the small

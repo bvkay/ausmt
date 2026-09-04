@@ -2936,7 +2936,7 @@ TS_REPOSITORY = "NCI"
 # level added to the crosswalk cannot be silently unroutable here; `format` is the domain token for
 # what the archive serves; `roles` are the axes.
 #
-# Level2 IS ABSENT BY DESIGN, not by omission: NCI's level_2 tree holds transfer
+# level2 IS ABSENT BY DESIGN, not by omission: NCI's level_2 tree holds transfer
 # functions, and projecting 1,197 of them as kind=time_series would assert a verified TIME SERIES for
 # 88 stations that have none. The token stays in the register's vocabulary for hand-curated rows;
 # nothing here routes it, and _stationcheck rejects one that reaches a document by another path.

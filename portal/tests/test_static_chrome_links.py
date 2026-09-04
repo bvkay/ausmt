@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = "https://ausmt.auscope.org.au"
 
 # page -> its canonical path, the URL a crawler must be told is the one true address for it.
-# Brand.html joined them in the brand-assets workflow: it is substantive, linked from About and
+# brand.html joined them in the brand-assets workflow: it is substantive, linked from About and
 # advertised in sitemap.xml, so it answers to the same chrome rules as the other three.
 _STATIC_PAGES = {
     "about.html": f"{BASE}/about.html",

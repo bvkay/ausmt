@@ -4162,7 +4162,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("drawer").classList.remove("open");
 
   // DISPLAY GRAMMAR: the workspace prints a period, a range and a licence the way the entity pages
-  // Do. The helpers' own parity with the engine's Python leaf is held by
+  // do. The helpers' own parity with the engine's Python leaf is held by
   // tests/display_grammar.test.js; THIS section pins that the rendered slots actually use them, which is
   // the half a pure-function test cannot see. Fixture values: Alpha is 2010-2012 with periods
   // 0.01 - 1000 s, so the pins below are exact strings, not patterns.

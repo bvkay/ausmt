@@ -21,7 +21,7 @@ from __future__ import annotations
 # mt_metadata's MTime zero. It reaches a Run.time_period whenever the source carries no window, and
 # it is a real timestamp in every other respect, which is why it needs naming.
 MTIME_EPOCH = "1980-01-01"
-# run.id where the source declares none: the station name with a trailing sequence letter.
+# Run.id where the source declares none: the station name with a trailing sequence letter.
 _SYNTHESISED_RUN_ID_SUFFIXES = "abcdefghijklmnopqrstuvwxyz"
 # The rr* channels are mt_metadata RUN DEFAULTS. Over the corpus EDIs the CHTYPE census carries
 # no RRHX at all, so DEFINEMEAS cannot be their source and no source declares them.
@@ -43,7 +43,7 @@ def asserted_run_id(value, station: str) -> bool:
 
 
 def asserted_sample_rate(value) -> bool:
-    """run.sample_rate defaults to 0.0 (undeclared). Only a positive rate is a source assertion -
+    """Run.sample_rate defaults to 0.0 (undeclared). Only a positive rate is a source assertion -
     the same rule the catalogue's sample_rates_hz rollup already applies."""
     try:
         return float(value) > 0
@@ -68,7 +68,7 @@ def asserted_instrument(obj) -> bool:
 
 
 def asserted_resistance(obj) -> bool:
-    """channel.contact_resistance defaults to 0.0 ohms on both bounds. A resistance of zero is not a
+    """Channel.contact_resistance defaults to 0.0 ohms on both bounds. A resistance of zero is not a
     measurement, so only a positive bound is asserted. Magnetic channels carry no such attribute."""
     if obj is None:
         return False

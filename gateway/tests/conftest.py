@@ -378,7 +378,7 @@ class FakeGit:
             # The leading `--` and any flags are skipped; the rest are repo-relative paths. `git rm
             # -r -- surveys/<slug>` retires a WHOLE survey (a DIRECTORY), so when `-r`/`-rf` is present a
             # directory target is removed recursively (rmtree) - modeled explicitly (strict-fake:
-            # Extending the fake to survey-scope removal is a deliberate act, with the real-git workflow in
+            # extending the fake to survey-scope removal is a deliberate act, with the real-git workflow in
             # test_publish_real_git.py as the reference for the true recursive-rm semantics).
             import shutil
             recursive = any(a.startswith("-") and "r" in a for a in args[1:] if a != "--")
@@ -393,7 +393,7 @@ class FakeGit:
         elif verb in ("add", "merge", "push", "branch"):
             # No modeled state change, but these ARE verbs the publish/edit sequence legitimately
             # drives, so they get an explicit rc=0 (the fake does not model push ARRIVAL — the real-git
-            # Workflow asserts the push reaches the bare origin; here `push` in fail_on is how a rejection
+            # workflow asserts the push reaches the bare origin; here `push` in fail_on is how a rejection
             # is simulated, handled above).
             pass
         else:

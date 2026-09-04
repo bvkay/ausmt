@@ -51,7 +51,7 @@ def test_backslash_rejected():
     # zipfile normalises '\\' -> '/' in its writer, reader, AND the ZipInfo constructor, so a
     # backslash cannot reach inspect() via a python-parsed archive - the guard is belt-and-braces
     # against a foreign zip tool whose bytes some other parser might surface un-normalised. Tested at
-    # Check_member's seam by setting .filename directly (bypassing the constructor's normalisation)
+    # check_member's seam by setting .filename directly (bypassing the constructor's normalisation)
     # to prove the branch fires on a literal backslash.
     # Proven failing: with the backslash branch removed, check_member() returned without
     # raising -> pytest.raises failed "DID NOT RAISE".

@@ -40,7 +40,7 @@ sys.path.insert(0, str(ROOT / "extract"))
 from _contract import CATALOGUE_COLUMNS   # noqa: E402  (the positional column map, never hand-counted)
 # The module's engine-produced coordinate fixtures: one EDI per station with distinctive, mutually
 # consistent HEAD/INFO/DEFINEMEAS positions, plus the survey.yaml writer that declares the access +
-# Coordinate policy. Reused rather than re-typed so the two workflows can never disagree about what a
+# coordinate policy. Reused rather than re-typed so the two workflows can never disagree about what a
 # generalised or withheld station looks like on the way in.
 from test_coord_access import EXACT, GEN, GEN_CELL, HID, _stage_survey   # noqa: E402
 

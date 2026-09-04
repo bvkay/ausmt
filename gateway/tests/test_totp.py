@@ -42,7 +42,7 @@ def test_rfc6238_appendix_b_sha1_vectors():
 
 
 def test_verify_accepts_the_rfc_vectors_via_now():
-    """Verify (which walks the ±window around now) accepts each RFC vector at its own timestamp and
+    """verify() (which walks the ±window around now) accepts each RFC vector at its own timestamp and
     returns the matching step. FAILS IF the end-to-end verify path disagrees with the raw code_at
     vectors (e.g. an off-by-one in the window centring)."""
     for unix_time, expected in _RFC_VECTORS:
@@ -109,14 +109,14 @@ def test_wrong_code_is_refused():
 
 
 def test_undecodable_secret_fails_closed():
-    """Verify against a corrupt (undecodable base32) secret returns None, never raises - a damaged
+    """verify() against a corrupt (undecodable base32) secret returns None, never raises - a damaged
     DB row must fail CLOSED (no deletion), not 500. FAILS IF a bad secret raises out of verify."""
     now = 1_700_000_000
     assert totp.verify("000000", "!!!not base32!!!", now) is None
 
 
 def test_empty_or_blank_secret_fails_closed():
-    """Verify against an empty or whitespace-only secret returns None. An empty base32 string
+    """verify() against an empty or whitespace-only secret returns None. An empty base32 string
     decodes to b'' - a VALID HMAC key - so without the empty-secret guard verify() would compute an
     empty-key code and MATCH it. This pin is MUTATION-PROOF: it feeds verify() the exact code an
     empty-key HMAC produces, so removing the guard in _decode_secret makes verify() return the matched

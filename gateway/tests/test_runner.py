@@ -259,7 +259,7 @@ def test_preview_end_to_end_real_engine(tmp_path):
     cfg = RunnerConfig(
         incoming_dir=tmp_path / "incoming", quarantine_dir=tmp_path / "quarantine",
         # Merge of c35b + (both semantics): the validator resolves via c35b's
-        # Require_validator_dir (sibling -> vendored -> FAIL, never a bare skip), and the engine
+        # require_validator_dir (sibling -> vendored -> FAIL, never a bare skip), and the engine
         # spawns's EXPLICIT cwd (cfg.engine_dir) instead of inheriting the process cwd -
         # the dev-box analogue of the image's WORKDIR /app/engine. No monkeypatch.chdir: with
         # `extract` a real installed package, resolution does not ride on the cwd at all.

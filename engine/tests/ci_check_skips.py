@@ -98,7 +98,7 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # image workflow that one test skips with the exact reason below. INERT on checkout workflows, where the
     # docs tree is always present and the pin asserts.
     "engine image build: docs tree not shipped",      # test_mtcat_version_parity.py docs pin, image builds only
-    # Test_convention_gates_realdata.py - the real-corpus convention-gate pins (the three
+    # test_convention_gates_realdata.py - the real-corpus convention-gate pins (the three
     # named USArray negative controls, the ccmt-2017 de-rotation acceptance, the AusLAMP-SA
     # custodian-twin proof) run only where the .audit/realdata harness exists (the dev box; the
     # corpus is not in the repo and not in any CI workflow). Same dev-box-only class as the

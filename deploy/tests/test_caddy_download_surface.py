@@ -26,7 +26,7 @@ _BOX_CADDY = _REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
 # bundles, the per-station MTH5 files under /h5, and the frozen release bundles.
 #
 # /h5/* carried the word "latent" here for as long as it had no producer. The tier-1 work
-# Rule made it a real served family, so the description is a live one now: an .h5 that
+# made it a real served family, so the description is a live one now: an .h5 that
 # rendered inline instead of downloading would be a browser handed a binary container.
 _REQUIRED_PATTERNS = ("/edi/*", "/xml/*", "/bundles/*", "/h5/*", "/releases/*/bundles/*")
 

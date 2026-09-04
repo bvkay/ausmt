@@ -547,7 +547,7 @@ _INFERRED_REVIEW_MARK = "INFERRED-REVIEW"
 # the curator saves an edit to them. (identifies-style inline markers on related_identifiers rows are NOT
 # surfaced here and are dropped naturally when that list is replaced; only these carry the parent-key
 # comment-above marker that survives a wholesale replace.)
-# Organisations[] joins them because the corpus-wide custodian seeding marks EVERY row it writes
+# organisations[] joins them because the corpus-wide custodian seeding marks EVERY row it writes
 # ("custodian seeded from the essential organisation; confirm roles"), and acknowledgements[] because the
 # public form may seed a marked row; without the entry the chip would never appear and the curator would
 # never be asked to confirm. Stripping is PER LIST SECTION, never per row: editing the list IS the

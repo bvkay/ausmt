@@ -1300,6 +1300,26 @@ WORDS_IN_LINE = re.compile(r"(?<=\S[ \t])([A-Z][a-z]+)")
 # What makes a token a NAME rather than an English word: a digit, a separator, or a dot
 # inside it.
 NAME_MARK = re.compile(r"_|\w\.\w")
+# Two shapes English does not write, so a capital on either is wrong without needing a second
+# spelling in the same file to prove it: a file name carrying its extension (a leading directory
+# allowed), and a dotted module.function or record path.
+FILE_NAME_HEAD = re.compile(
+    r"\A[A-Za-z][\w./-]*\.(?:py|js|mjs|sh|bash|yml|yaml|json|hujson|html|css|md|txt|toml|cfg|ini"
+    r"|service|timer|map|xml|edi|h5|zip|conf|example)\Z", re.I)
+MODULE_FUNCTION = re.compile(r"\A[A-Za-z][\w]*(?:\.[A-Za-z_][\w]*)+\Z")
+# A dotted head is also how a library spells a CLASS and its attribute, and there the capital is
+# the library's own: mt_metadata writes Run.id, Channel.contact_resistance, Provenance.create_time.
+# engine/tests/test_presence_rule.py proves each of these is a class in the installed library, so
+# the exemption is not a list of words somebody hoped were right.
+LIBRARY_CLASS_HEAD = ("Auxiliary", "Channel", "Citation", "Electric", "Information", "Magnetic",
+                      "Person", "Provenance", "Run", "Site", "Station", "Survey",
+                      "TransferFunction")
+POSSESSIVE = re.compile(r"(?:'s|s')\Z")
+# The head a SENTENCE capital produces and nothing else: one capital and then lower case. A name
+# whose own spelling carries the capital does not have that shape - LICENSE.md and MANIFEST.json
+# are upper case throughout, DataTypeEnum carries a second capital inside it, C.sha256 and
+# L.control.scale are one letter, D1.a carries a digit - so the rule stays quiet over all of them.
+SENTENCE_CAPITAL_HEAD = re.compile(r"\A[A-Z][a-z]+\Z")
 
 
 def names_written_inside_a_line(path, text):
@@ -1315,14 +1335,30 @@ def names_written_inside_a_line(path, text):
 def head_capital_of_a_name(comment, text):
     """The word a run opens on when it is a NAME wearing a capital it does not have: a sweep that
     cut the words in front of it capitalised what was left, and `station.json` became
-    `Station.json`, which names no file. A name is told by the characters it carries; the proof is
-    that the same file writes the lower-case spelling somewhere else."""
+    `Station.json`, which names no file. A name is told by the characters it carries. The proof a
+    capital is wrong is either the same file writing the lower-case spelling, or a shape English
+    does not write at all: a file name with its extension, or a dotted module.function. A library
+    CLASS and its attribute is that second shape written correctly, so the class heads are
+    exempt."""
     flat = flattened(bare(comment)).lstrip(BANNER)
-    word = flat.split(" ", 1)[0].strip("\"'`(,:;")
-    if not word[:1].isupper() or not NAME_MARK.search(word[1:]) or not word[1:].islower():
+    word = POSSESSIVE.sub("", flat.split(" ", 1)[0].strip("\"'`(,:;"))
+    if not word[:1].isupper():
+        return None
+    head = re.split(r"[^A-Za-z0-9]", word, 1)[0]
+    # A file name is read first, so a library class that shares its stem with a served file
+    # (Station.json) is still caught.
+    if FILE_NAME_HEAD.match(word) and SENTENCE_CAPITAL_HEAD.match(head):
+        return word
+    if head in LIBRARY_CLASS_HEAD:
         return None
     lowered = word[0].lower() + word[1:]
-    return word if lowered in text else None
+    if NAME_MARK.search(word[1:]) and word[1:].islower() and lowered in text:
+        return word
+    if not SENTENCE_CAPITAL_HEAD.match(head):
+        return None
+    if MODULE_FUNCTION.match(word):
+        return word
+    return None
 
 
 def capitals_mid_sentence(comment, symbols, names):

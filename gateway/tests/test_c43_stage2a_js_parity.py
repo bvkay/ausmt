@@ -91,7 +91,7 @@ def _sweep_vectors() -> list:
 
 
 # --------------------------------------------------------------------------------------------------
-# Wrap180 / trueYx / inQ1 / inQ3 parity (executable - Node vs phaseqc)
+# wrap180 / trueYx / inQ1 / inQ3 parity (executable - Node vs phaseqc)
 # --------------------------------------------------------------------------------------------------
 def test_js_wrap180_trueyx_quadrant_parity_sweep(tmp_path):
     """EXECUTABLE PARITY. The extracted STATIONS_JS wrap180/trueYx/inQ1/inQ3 must agree EXACTLY

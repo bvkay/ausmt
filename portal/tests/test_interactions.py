@@ -151,7 +151,7 @@ def test_portal_interactions(tmp_path):
     (data / "surveys.json").write_text(json.dumps(surveys))
     (data / "collections.json").write_text(json.dumps(collections))
     # build.json fixes the recently-added window's reference day so the strip is DETERMINISTIC: with
-    # Generated, only Beta falls inside the 30-day window; Alpha
+    # generated, only Beta falls inside the 30-day window; Alpha
     #  is outside it and undated Gamma/Delta are excluded outright.
     (data / "build.json").write_text(json.dumps({"build_id": "eng-src-2020", "engine_commit": "eng",
                                                  "source_commit": "src", "generated": "2020-01-15T00:00:00+00:00"}))

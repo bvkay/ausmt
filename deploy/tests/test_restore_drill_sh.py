@@ -212,7 +212,7 @@ def test_defaults_to_latest_symlink(tmp_path):
 # ---- section-5 review: the drill must LEAVE A RECORD, or nothing can alert on it -----------------
 
 def test_pass_writes_a_machine_readable_verdict_beside_the_snapshots(tmp_path):
-    """Alert.sh already reads backups/latest-drill.json and publishes it as the ops dashboard's
+    """alert.sh already reads backups/latest-drill.json and publishes it as the ops dashboard's
     'drill' field, but nothing ever wrote that file, so restorability read as permanently unproven
     while 'backup present and fresh' showed green. A PASS must record {verdict, at, snapshot}.
 

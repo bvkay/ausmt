@@ -253,7 +253,7 @@ function datasetDoiResolution(m){m=m||{};
   for(const r of (m.related_identifiers||[]))if(r&&r.identifier_type==="DOI")res.push(r.resolution);
   if(!res.length)return null;
   return res.some(x=>x!=="reserved")?"ok":"reserved";}
-// "The raw time series is linked" reads off a typed IsDerivedFrom relation (which carries the collection
+// "the raw time series is linked" reads off a typed IsDerivedFrom relation (which carries the collection
 // PID) OR the flat ts_pid (engine fallback) OR the pipeline availability flag.
 function tsLinked(m){m=m||{};
   return (m.related_identifiers||[]).some(r=>r&&r.relation==="IsDerivedFrom")||!!m.ts_pid||m.ts==="ok";}
@@ -628,7 +628,7 @@ function openStation(i,opts){
   if(!rehydrate)_rememberDrawerOpener();              // capture the invoking element before the rewrite
   _drawerSubject={kind:"station",i};                  // what rehydrateOpenDrawer re-renders when a gate settles
   const s=ST[i],t=tfRow(i)||[[]],m=SMETA[s.survey]||{},sc=sciRow(i);
-  // Sc[SC.dim] (dimensionality) is not surfaced in the drawer screening grid: it is inferable from the
+  // sc[SC.dim] (dimensionality) is not surfaced in the drawer screening grid: it is inferable from the
   // phase tensor + skew, which are shown (strike/|β|/3-D-periods line below). See docs: portal internals,
   // drawer.js.
   const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
