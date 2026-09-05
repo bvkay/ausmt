@@ -169,6 +169,12 @@ jobs:
       #                                       their time-series routes from ts_access.json, so this
       #                                       file asserts over a projection surface and the rule
       #                                       below requires it here
+      #   tests/test_sitemap_lastmod.py       the sitemap's two lastmod sources, over a fixture corpus
+      #                                       with a real git history: the later of a release note
+      #                                       and the record directory's commit date, the roll up to
+      #                                       the collection and the roots, and the silence where
+      #                                       there is no measurement. It runs the CLI end to end, so
+      #                                       it gates the build step as the page suites above do
       #   tests/test_epikit_section_of_record.py  which >=MTSECT section a multi-section EDI's
       #                                       transfer function comes from. It decides WHICH NUMBERS
       #                                       every product above carries for such a file, so it
@@ -190,7 +196,7 @@ jobs:
       #                                       behaviour guard that blanks docstrings cannot see a
       #                                       long flag that lost a hyphen. Reads only engine/ and
       #                                       contract/, both of which the image ships.
-      # (the 48 enumerated above, plus tests/test_ci_check_skips.py which gates the
+      # (the 49 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
@@ -267,6 +273,7 @@ jobs:
             tests/test_mini_yaml_parity.py \
             tests/test_index_pages.py \
             tests/test_entity_pages.py \
+            tests/test_sitemap_lastmod.py \
             tests/test_half_coordinate_guard.py \
             tests/test_coord_resolution_guard.py \
             tests/test_survey_drop_visibility.py \

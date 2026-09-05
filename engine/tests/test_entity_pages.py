@@ -107,20 +107,32 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
 
 
 def test_the_sitemap_advertises_the_hubs_and_the_static_pages(tmp_path):
-    """The sitemap is the crawler's map of the site, and until this change it carried only the root
-    and the entity pages: the two hub pages did not exist, and about/releases/add-survey were
-    substantive linked documents that no crawler was pointed at. FAILS IF any of the five is
-    missing, or if one of them carries a <lastmod> (none of them has an honest change signal, and
-    the lastmod contract is that the field is emitted only where it is true)."""
+    """The sitemap is the crawler's map of the site, and the two hub pages and the three linked
+    static documents are part of it. FAILS IF any of the five is missing.
+
+    The lastmod half splits the five. A HUB is a view over every record it lists, so it carries the
+    same maximum over the corpus the homepage does, and the two must agree exactly; a value on one
+    and not the other would be two claims about one rollup. The three STATIC pages ship with the
+    portal image rather than being built here, so this build knows nothing about when they last
+    changed and the field is emitted only where it is true."""
     surveys = _make_rich_survey(tmp_path)
     out = _build(surveys, tmp_path / "out")
     sitemap = (out / "sitemap.xml").read_text(encoding="utf-8").replace("\n", "")
-    for rel in ("surveys", "collections", "about.html", "releases.html", "add-survey.html"):
-        u = f"{BASE}/{rel}"
+
+    def _row(u):
         row = re.search(rf"<url><loc>{re.escape(u)}</loc>(.*?)</url>", sitemap)
         assert row, f"the sitemap must advertise {u}"
-        assert "<lastmod>" not in row.group(1), \
-            f"{u} has no honest change signal, so it must carry no lastmod"
+        return row.group(1)
+
+    root = _row(f"{BASE}/")
+    for rel in ("surveys", "collections"):
+        assert _row(f"{BASE}/{rel}") == root, (
+            f"{BASE}/{rel} is a view over the whole corpus and must carry the homepage's own "
+            f"lastmod, got {_row(f'{BASE}/{rel}')!r} against {root!r}")
+    for rel in ("about.html", "releases.html", "add-survey.html"):
+        assert "<lastmod>" not in _row(f"{BASE}/{rel}"), (
+            f"{BASE}/{rel} ships with the portal image; this build cannot date it, so it must "
+            "carry no lastmod")
     # brand.html is the one static page deliberately held out: it declares its own robots noindex,
     # and a sitemap entry for a page that refuses indexing spends crawl budget on nothing.
     assert f"{BASE}/brand.html" not in sitemap, \
@@ -1886,3 +1898,102 @@ def test_the_single_line_description_consumers_never_take_the_page_prose(tmp_pat
     assert ld["description"] == long_desc, \
         "the machine record carries the flat discovery description, not the page prose"
     assert "prose" not in json.dumps(ld), "the prose payload is page furniture, not catalogue data"
+
+
+# ---- collection members are items in their own right -------------------------------------------
+#
+# A search engine evaluates every nested Dataset node as an ITEM. The collection page's hasPart list
+# named each member survey by URL and nothing else, so each of those nodes was an item with no name
+# and no description, and a member with a licence and a custodian said neither. The fix is that a
+# member states the four values its own page publishes, read from ONE derivation so the two cannot
+# drift; these pins hold the equality against the emitted pages rather than against the derivation.
+_COLLECTION_MEMBERS = (
+    ("mem-one", "Member One", "The first member's own abstract, in its own words.",
+     "One Organisation", "CC-BY-4.0"),
+    ("mem-two", "Member Two", "The second member says something else entirely about itself.",
+     "Two Organisation", "CC0-1.0"),
+)
+
+
+def _member_corpus(tmp_path):
+    """Two surveys in one collection, differing in every field a member stub restates."""
+    surveys = tmp_path / "surveys"
+    for slug, name, blurb, org, lic in _COLLECTION_MEMBERS:
+        pkg = surveys / slug
+        edir = pkg / "transfer_functions" / "edi"
+        edir.mkdir(parents=True)
+        (pkg / "survey.yaml").write_text(
+            f"name: {name}\nslug: {slug}\ncountry: Australia\norganisation: {org}\n"
+            f"access: open\nlicense: {lic}\nabstract: {json.dumps(blurb)}\n"
+            "collection:\n  id: testcoll\n  title: AusLAMP Test\n", encoding="utf-8")
+        for src in SAMPLE_EDIS:
+            (edir / src.name).write_text(src.read_text(encoding="latin-1"), encoding="latin-1")
+    return surveys
+
+
+def _dataset_node(path):
+    """The Dataset node of one emitted page's JSON-LD."""
+    text = path.read_text(encoding="utf-8")
+    for block in re.findall(r'<script type="application/ld\+json">([\s\S]*?)</script>', text):
+        node = json.loads(block)
+        if node.get("@type") == "Dataset":
+            return node
+    raise AssertionError(f"{path.name} carries no Dataset node")
+
+
+def test_every_collection_member_restates_its_own_page_s_dataset(tmp_path):
+    """FAILS IF a hasPart member drops back to a bare URL, or states anything its own page does not.
+    An item with no name and no description is an invalid item, and one that names a different
+    licence or a different custodian than the page it points at is worse than none."""
+    out = _build(_member_corpus(tmp_path), tmp_path / "out")
+    pages_seen = 0
+    for cpage in sorted((out / "pages" / "collections").glob("*.html")):
+        if cpage.name == "index.html":
+            continue
+        pages_seen += 1
+        parts = _dataset_node(cpage)["hasPart"]
+        assert parts, f"{cpage.name}: a collection page must list its members"
+        for part in parts:
+            slug = part["url"].rsplit("/", 1)[1]
+            own = _dataset_node(out / "pages" / "surveys" / f"{slug}.html")
+            assert part["@id"] == part["url"] == own["url"], (
+                f"{slug}: the member node and the member page must be one thing, got "
+                f"{part.get('@id')!r} / {part['url']!r} / {own['url']!r}")
+            for key in ("name", "description", "license", "creator"):
+                assert part.get(key) == own.get(key), (
+                    f"{slug}: the member's {key} is {part.get(key)!r}, its own page says "
+                    f"{own.get(key)!r}")
+            assert part.get("name") and part.get("description"), \
+                f"{slug}: a nested Dataset with no name or no description is an invalid item"
+    assert pages_seen, "no collection page was emitted; the fixture or the glob has moved"
+
+
+def test_two_members_of_one_collection_are_told_apart(tmp_path):
+    """FAILS IF every member is handed the same values. A pin that compares a member against its own
+    page passes vacuously if the emitter writes one record's fields into all of them, so the two
+    members are built to differ in all four."""
+    out = _build(_member_corpus(tmp_path), tmp_path / "out")
+    parts = _dataset_node(out / "pages" / "collections" / "testcoll.html")["hasPart"]
+    assert len(parts) == len(_COLLECTION_MEMBERS), \
+        f"the collection must carry {len(_COLLECTION_MEMBERS)} members, got {len(parts)}"
+    for key in ("name", "description", "license", "creator"):
+        seen = [json.dumps(p.get(key), sort_keys=True) for p in parts]
+        assert len(set(seen)) == len(parts), \
+            f"the members must be told apart by their {key}, got {seen}"
+
+
+def test_a_record_that_declares_no_licence_or_custodian_states_neither():
+    """FAILS IF an empty field is emitted as an empty value. A Dataset that declares license "" or a
+    creator with no name is a worse item than one that declares nothing, and the survey page has
+    always omitted them; the member stub must omit them on the same rule."""
+    pages = _pages_module()
+    fields = pages.survey_dataset_fields(title="T", kind="magnetotelluric survey", blurb="",
+                                         smeta={})
+    assert set(fields) == {"name", "description"}, \
+        f"only the two mandatory fields may be emitted for a bare record, got {sorted(fields)}"
+    assert fields["description"] == "Magnetotelluric survey data: T.", fields["description"]
+    full = pages.survey_dataset_fields(title="T", kind="magnetotelluric survey", blurb="A blurb.",
+                                       smeta={"lic": "CC-BY-4.0", "org": "Org", "org_ror": "R"})
+    assert full["license"].startswith("http"), full["license"]
+    assert full["creator"] == {"@type": "Organization", "name": "Org", "sameAs": "R"}, full["creator"]
+    assert full["description"] == "A blurb."

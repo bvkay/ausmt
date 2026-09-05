@@ -824,12 +824,15 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f"<title>{_e(title)}</title>\n"
         f'<meta name="description" content="{_e(description)}">\n'
         f'<link rel="canonical" href="{_e(canonical)}">\n'
-        # ICON LINKS. Without them every entity page asks the server for /favicon.ico and gets a 404.
-        # Both are same-origin portal paths served beside these pages, and both must be ABSOLUTE,
-        # because a page served at /surveys/<slug> cannot resolve a relative vendor path. The favicon
-        # is transparent, so the one file serves a light and a dark browser chrome.
-        '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
-        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">\n'
+        # ICON LINKS. Three same-origin portal paths, absolute because a page served at
+        # /surveys/<slug> cannot resolve a relative vendor path, and root-anchored on /favicon.ico
+        # because a browser that reads no SVG icon link asks the site root for that name.
+        # The version query on each href is that file's own content hash, written here by
+        # portal/tools/gen_brand.py: /vendor/* carries a thirty day cache, so a regenerated icon under
+        # an unchanged URL is answered from that cache.
+        '<link rel="icon" href="/favicon.ico?v=9eada153" sizes="any">\n'
+        '<link rel="icon" href="/vendor/favicon.svg?v=62401780" type="image/svg+xml">\n'
+        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png?v=1daba2b5">\n'
         f"{og}"
         f"{ld}"
         f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n"
@@ -1020,6 +1023,54 @@ def _survey_kind(served_types) -> str:
     return "geomagnetic depth sounding survey" if gds else "magnetotelluric survey"
 
 
+def survey_served_types(station_docs, discovery=None):
+    """The band classes a survey actually serves, as a set.
+
+    The served station documents are the source; a survey whose documents withhold every position is
+    embargoed, and the public discovery rollup is what names its types instead. A discovery row that
+    discloses no position contributes nothing, exactly as it contributes no point. Shared with the
+    collection emitter, which needs the same answer to restate a member's own Dataset name."""
+    types = {((doc.get("data") or {}).get("type")) for doc in station_docs or []}
+    if not _station_points(station_docs or []) and discovery:
+        types |= {row.get("data_type") for row in (discovery.get("stations") or [])
+                  if row.get("latitude") is not None and row.get("longitude") is not None}
+    return {t for t in types if t}
+
+
+def survey_dataset_fields(*, title, kind, blurb, smeta):
+    """The name, description, licence and creator a survey's Dataset node states about itself.
+
+    ONE definition for two emitters. The survey page writes these into its own Dataset and the
+    collection page restates them in the hasPart member that names that survey, so a search engine
+    reading the collection's nested nodes sees the same four values the member page publishes; two
+    copies of the derivation would let the two drift, which is what a nested node with a missing
+    name looks like from the outside."""
+    kind_lead = kind[0].upper() + kind[1:]
+    out = {"name": f"{title} {kind}",
+           "description": (blurb or f"{kind_lead} data: {title}.").strip()}
+    lic = (smeta or {}).get("lic") or ""
+    if lic:
+        out["license"] = _LICENSE_URLS.get(lic, lic)
+    org = (smeta or {}).get("org") or ""
+    if org:
+        creator = {"@type": "Organization", "name": org}
+        if (smeta or {}).get("org_ror"):
+            creator["sameAs"] = smeta["org_ror"]
+        out["creator"] = creator
+    return out
+
+
+def survey_dataset_stub(*, slug, base, title, kind, blurb, smeta):
+    """One collection member, as a Dataset node a crawler can evaluate on its own.
+
+    A bare {"@type": "Dataset", "url": ...} is still an item to a search engine, and an item with no
+    name and no description is an invalid one; the stub carries an @id so the node and the member
+    page's own Dataset are one thing rather than two."""
+    url = f"{base}/surveys/{slug}"
+    return dict({"@type": "Dataset", "@id": url, "url": url},
+                **survey_dataset_fields(title=title, kind=kind, blurb=blurb, smeta=smeta))
+
+
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
                 base, extent=None, discovery=None, build=None, og_image=None) -> str:
     """`og_image` is the absolute URL of the card the EMITTER has already written for this survey,
@@ -1079,18 +1130,22 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
 
     # The band classes this survey actually serves, read once and spent on both the survey's kind
     # and the channels tile's fallback, so the two can never disagree about the same stations. Read
-    # after the discovery fallback, which is what fills the types for an embargoed survey.
-    served_types = {t for t in type_counts if t}
+    # from the shared derivation, which the collection emitter reads too when it restates this
+    # survey's own Dataset name in a member node.
+    served_types = survey_served_types(docs, discovery)
     # The kind is derived once and spent on every surface that names it: the crumb, the page title,
     # the meta-description fallback and the JSON-LD name must tell one story.
     kind = _survey_kind(served_types)
     kind_lead = kind[0].upper() + kind[1:]
-    desc = (blurb or f"{kind_lead} data: {title}.").strip()
+    # The four fields the collection page restates about this survey come from the shared derivation,
+    # so the member stub over there and this Dataset cannot say different things about one record.
+    fields = survey_dataset_fields(title=title, kind=kind, blurb=blurb, smeta=smeta)
+    desc = fields["description"]
     desc_meta = _meta_summary(desc)
 
     # ---- JSON-LD ----
     ld = {"@context": "https://schema.org", "@type": "Dataset",
-          "name": f"{title} {kind}",
+          "name": fields["name"],
           "description": desc, "url": url,
           "identifier": url,
           "isAccessibleForFree": True,
@@ -1098,13 +1153,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
           "measurementTechnique": "magnetotellurics",
           "variableMeasured": "magnetotelluric transfer function",
           "keywords": _survey_keywords(served_types, region, org, smeta.get("collection"))}
-    if org:
-        creator = {"@type": "Organization", "name": org}
-        if smeta.get("org_ror"):
-            creator["sameAs"] = smeta["org_ror"]
-        ld["creator"] = creator
-    if lic:
-        ld["license"] = _LICENSE_URLS.get(lic, lic)
+    if "creator" in fields:
+        ld["creator"] = fields["creator"]
+    if "license" in fields:
+        ld["license"] = fields["license"]
     if version:
         ld["version"] = str(version)
     if years:
@@ -1745,7 +1797,7 @@ def _prose_of(coll, key) -> str:
 
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
                     member_facts=None, level_counts=None, formats=None, build=None,
-                    og_image=None) -> str:
+                    og_image=None, member_datasets=None) -> str:
     """The collection page as an EXPLORATORY layer, not a catalogue record.
 
     `member_facts` ({slug: row}), `level_counts` ({level: n stations}) and `formats` are rollups the
@@ -1756,6 +1808,11 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     `og_image` is the absolute URL of the card the emitter has already written for this collection,
     or None for the portal's root card. A collection whose members disclose no position gets no card
     and therefore no URL: an empty coastline would read as a collection with no coverage.
+
+    `member_datasets` ({slug: the stub survey_dataset_stub built for that survey}) is the rollup that
+    lets each hasPart member state what it is. The emitter builds it from the same inputs the member
+    pages render from; a caller that supplies none gets the bare node, which names a URL and nothing
+    else.
     """
     title = (coll or {}).get("title") or cid
     desc = (coll or {}).get("description") or f"{title}: a collection of magnetotelluric surveys on AusMT."
@@ -1767,7 +1824,12 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
           "includedInDataCatalog": {"@type": "DataCatalog", "name": "AusMT", "url": base + "/"},
           "measurementTechnique": "magnetotellurics",
           "variableMeasured": "magnetotelluric transfer function",
-          "hasPart": [{"@type": "Dataset", "url": f"{base}/surveys/{s}"} for _lbl, s in member_slugs],
+          # A nested Dataset is an ITEM to a search engine, evaluated on its own terms, so a member
+          # that names only a URL is an invalid item with no name and no description. Each member
+          # restates the four values its own page publishes, read from the shared derivation.
+          "hasPart": [(member_datasets or {}).get(s)
+                      or {"@type": "Dataset", "url": f"{base}/surveys/{s}"}
+                      for _lbl, s in member_slugs],
           "keywords": _keywords(*[(m or {}).get("org") for m in member_smeta], title)}
     # licence / creators / temporal coverage roll up from the member surveys' own served records:
     # a single shared licence is stated; mixed licences state nothing (never overclaim).
@@ -2494,6 +2556,9 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
         raise ValueError("collection id 'index' collides with the collections index page")
     slug_by_label = {}
     index_rows = []
+    # {slug: the Dataset stub a collection page states for that member}, built in the survey loop
+    # below from the same title, kind and record the survey page renders from.
+    member_datasets: dict = {}
     docs_by_survey: dict = {}
     for doc in station_docs.values():
         docs_by_survey.setdefault(doc.get("survey_id"), []).append(doc)
@@ -2573,6 +2638,12 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                           "survey": disc_survey.get(slug)})
         (sdir / f"{slug}.html").write_text(htmlpage, encoding="utf-8")
         n += 1
+        member_datasets[slug] = survey_dataset_stub(
+            slug=slug, base=base,
+            title=((survey_docs.get(slug) or {}).get("title")) or label,
+            kind=_survey_kind(survey_served_types(
+                docs, {"stations": disc_stations.get(slug), "survey": disc_survey.get(slug)})),
+            blurb=smeta.get("blurb") or "", smeta=smeta)
         # The hub row for this survey, from the SAME rollups the catalogue publishes (the mtcat
         # survey row, with surveys.json filling the region the rollup does not carry). Positions
         # follow the survey page's own rule: the served station documents, falling back to the
@@ -2668,6 +2739,8 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                             member_facts={s: facts_by_slug[s] for _lbl, s in members
                                           if s in facts_by_slug},
                             level_counts=level_counts, og_image=coll_og,
+                            member_datasets={s: member_datasets[s] for _lbl, s in members
+                                             if s in member_datasets},
                             formats=sorted(member_formats), build=build),
             encoding="utf-8")
         n += 1

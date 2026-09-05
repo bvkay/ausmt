@@ -1446,6 +1446,11 @@
       "variant": "browser tab icon"
     },
     {
+      "path": "portal/favicon.ico",
+      "kind": "ico",
+      "variant": "root icon, multi-size"
+    },
+    {
       "path": "portal/vendor/brand/ausmt-icon-180.png",
       "kind": "png",
       "variant": "apple-touch-icon"

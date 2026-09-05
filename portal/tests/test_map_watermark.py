@@ -17,12 +17,12 @@ the alpha channel are all held, and portal/vendor/README.md carries the same fac
 
 THE STYLE GUIDE'S RULES, APPLIED AS NUMBERS (AuScope+Style+Guide.pdf, Identity | AuScope):
   * CLEAR SPACE. The guide asks for "'breathing space' around the logo i.e. at least the full height
-    of logo, on all sides". The mark is 32px tall, so its inset is 32px from the map's top and right
+    of logo, on all sides". The mark is 48px tall, so its inset is 48px from the map's top and right
     edges, which is one full logo height and not Leaflet's own 10px control inset. The guide is the
     stricter of the two and the contract says to honour it.
   * OPACITY AND TINTING. The guide sets no rule on either, so the mark renders at full opacity and
     in the committed colours. FAILS here if an opacity is introduced.
-  * MINIMUM SIZE. The guide states none, so the specified 28px to 32px band stands and the mark takes
+  * MINIMUM SIZE. The guide states none, so the specified 44px to 48px band stands and the mark takes
     the top of it, which is what a screenshot needs to stay legible after scaling.
 
 IT CANNOT INTERCEPT ANYTHING. pointer-events:none takes it out of hit testing entirely, which is
@@ -43,7 +43,7 @@ LEAFLET_CSS = ROOT / "vendor" / "leaflet.css"
 
 MARK_SRC = "/vendor/auscope-icon-colour.png"
 MARK_ASSET = ROOT / "vendor" / "auscope-icon-colour.png"
-MARK_IMG = f'<img class="mapmark" src="{MARK_SRC}" alt="AuScope" width="31" height="32">'
+MARK_IMG = f'<img class="mapmark" src="{MARK_SRC}" alt="AuScope" width="47" height="48">'
 
 # The committed bytes, from the AuScope brand kit's own file. Recorded here and in
 # portal/vendor/README.md, which the last pin holds equal to these four facts.
@@ -51,9 +51,9 @@ MARK_SHA256 = "edfe057070656636011977270e4d4ba60461937add2f36048626e161c81aa132"
 MARK_BYTES = 7392
 MARK_PIXELS = (281, 288)
 
-# The placement, as one literal. 32px is the mark's height AND its inset, which is the guide's clear
+# The placement, as one literal. 48px is the mark's height AND its inset, which is the guide's clear
 # space expressed as a number: one full logo height on the two sides that have an edge near it.
-PLACEMENT = ("position:absolute;top:32px;right:32px;height:32px;width:auto;"
+PLACEMENT = ("position:absolute;top:48px;right:48px;height:48px;width:auto;"
              "z-index:500;pointer-events:none")
 # The footer's own breakpoint. Below it the map is a phone-width strip and a corner mark costs more
 # map than it buys attribution, so it is not drawn at all rather than shrunk.
@@ -103,7 +103,7 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
     """The geometry, as one literal, and the reasons it is those numbers.
 
     FAILS IF the inset drops below one logo height (the guide's clear space), if the height leaves
-    the specified 28px to 32px band, if pointer-events:none goes (the mark can then swallow
+    the specified 44px to 48px band, if pointer-events:none goes (the mark can then swallow
     a click meant for the map), or if the narrow-width rule that hides it below 560px goes."""
     text = _text(INDEX)
     assert f".mapmark{{{PLACEMENT}}}" in text, (
@@ -120,7 +120,7 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
     # The clear space, read back off the rule rather than restated: the inset on each edge the mark
     # is near must be at least the mark's own height.
     height = int(re.search(r"height:(\d+)px", PLACEMENT).group(1))
-    assert 28 <= height <= 32, f"the mark's height must sit in the declared band, got {height}px"
+    assert 44 <= height <= 48, f"the mark's height must sit in the declared band, got {height}px"
     for edge in ("top", "right"):
         inset = int(re.search(edge + r":(\d+)px", PLACEMENT).group(1))
         assert inset >= height, (

@@ -210,14 +210,20 @@ function viewCollectionOnMap(cid){
 const sidebar=document.getElementById("filterPane"),resizer=document.getElementById("resizer");
 function sbLimits(){return {min:248,max:Math.max(300,Math.min(620,Math.round(window.innerWidth*0.5)))};}
 function setSidebar(px){const{min,max}=sbLimits();sidebar.style.width=Math.round(Math.max(min,Math.min(max,px)))+"px";}
+// The dragged width is kept beside the collapsed state; unstored, the stylesheet default applies.
+const SB_WIDTH_KEY="ausmt_sidebar_width";
+function storedSidebarWidth(){try{const v=parseInt(localStorage.getItem(SB_WIDTH_KEY)||"",10);return Number.isFinite(v)?v:null;}catch(e){return null;}}
+function rememberSidebarWidth(){try{localStorage.setItem(SB_WIDTH_KEY,String(parseInt(sidebar.style.width,10)));}catch(e){/* storage unavailable: the choice lasts this visit only */}}
+function cssSidebarWidth(){return parseInt(getComputedStyle(sidebar).width,10)||363;}
 (function(){let dragging=false;
   const onMove=e=>{if(!dragging)return;const x=(e.touches?e.touches[0].clientX:e.clientX)-sidebar.getBoundingClientRect().left;setSidebar(x);if(curView==="map")map.invalidateSize();};
-  const stop=()=>{dragging=false;resizer.classList.remove("drag");document.body.style.userSelect="";};
+  const stop=()=>{if(dragging)rememberSidebarWidth();dragging=false;resizer.classList.remove("drag");document.body.style.userSelect="";};
   const start=e=>{if(window.innerWidth<=760)return;dragging=true;resizer.classList.add("drag");document.body.style.userSelect="none";e.preventDefault();};
   resizer.addEventListener("mousedown",start);resizer.addEventListener("touchstart",start,{passive:false});
   window.addEventListener("mousemove",onMove);window.addEventListener("touchmove",onMove,{passive:false});
   window.addEventListener("mouseup",stop);window.addEventListener("touchend",stop);
-  window.addEventListener("resize",()=>{if(window.innerWidth>760)setSidebar(parseInt(sidebar.style.width||"363",10));});
+  window.addEventListener("resize",()=>{if(window.innerWidth>760)setSidebar(parseInt(sidebar.style.width,10)||cssSidebarWidth());});
+  const kept=storedSidebarWidth();if(kept!==null&&window.innerWidth>760)setSidebar(kept);
 })();
 
 // Collapse the filter rail to a ~36px icon strip. Class toggle only (CSS forces the

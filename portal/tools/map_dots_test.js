@@ -27,6 +27,7 @@ const SRC = path.join(path.resolve(__dirname, ".."), "src");
 const mapSrc = fs.readFileSync(path.join(SRC, "map.js"), "utf8");
 const WANT = [
   { kind: "const", names: ["DOT_R_FLOOR", "DOT_R_CEIL", "DOT_R_SLOPE", "DOT_R_Z0", "DOT_R_BASE",
+                           "DOT_R_Z4", "DOT_R_Z5", "DOT_W_Z4", "DOT_W_Z5", "DOT_W_Z6", "DOT_W_HIGH",
                            "MARKER_FILL_OPACITY", "MARKER_DIM_FILL", "MARKER_DIM_STROKE"] },
   { kind: "fn", names: ["radiusForZoom", "weightForZoom", "hasPosition", "dimStyleFor"] },
 ];
@@ -61,7 +62,7 @@ const code = buildCode(WANT[0].names, WANT[1].names);
 const ctx = { Math, console, Set, Map, Array, Object, Number, isFinite, JSON };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-vm.runInContext(code + "\nglobalThis.__api={DOT_R_FLOOR,DOT_R_CEIL,DOT_R_BASE," +
+vm.runInContext(code + "\nglobalThis.__api={DOT_R_FLOOR,DOT_R_CEIL,DOT_R_BASE,DOT_R_Z4,DOT_R_Z5,DOT_W_Z4,DOT_W_Z5,DOT_W_Z6,DOT_W_HIGH," +
   "radiusForZoom,weightForZoom,hasPosition,dimStyleFor};", ctx);
 const A = ctx.__api;
 
@@ -89,6 +90,12 @@ for (const z of [-5, 0, 4, 8, 22, 99]) {
 // The floor is REACHED (not a decorative clamp that never fires): far enough out, the ramp bottoms out.
 ok(A.radiusForZoom(-5) === A.DOT_R_FLOOR, "the floor must actually bind at far-out zoom");
 ok(A.radiusForZoom(99) === A.DOT_R_CEIL, "the ceiling must actually bind at close zoom");
+// ---- the low-zoom table: the national and regional views read as sites, not as a mass -------------
+ok(A.radiusForZoom(4) === 1.8 && A.radiusForZoom(5) === 2.4 && A.radiusForZoom(6) === 3.0,
+  "low-zoom radii must be 1.8 / 2.4 / 3.0 at z4 / z5 / z6, got " + [4, 5, 6].map(z => A.radiusForZoom(z)).join("/"));
+ok(A.weightForZoom(4) === 0 && A.weightForZoom(5) === 0.75 && A.weightForZoom(6) === 1.25 && A.weightForZoom(7) === 1.5,
+  "stroke weights must be 0 / 0.75 / 1.25 / 1.5 at z4 / z5 / z6 / z7, got " + [4, 5, 6, 7].map(z => A.weightForZoom(z)).join("/"));
+ok(A.weightForZoom(3) === 0 && A.weightForZoom(12) === 1.5, "the stroke table must clamp at both ends");
 // THE CHANGE ITSELF: no data type may render larger or smaller than any other, at any zoom. The retired
 // `type` argument's CALL FORM must be inert - a stray second argument is ignored, never honoured, so a
 // caller that was not updated cannot quietly resurrect the per-type split.
@@ -104,12 +111,12 @@ for (let z = 0; z <= 12; z++) {
 // because "they all match" would still pass if every dot had jumped to the retired 3.0 standard base.
 ok(A.DOT_R_BASE === 2.0,
   "the surviving curve must be the AusLAMP/LP one (base 2.0), got " + A.DOT_R_BASE);
-ok(A.radiusForZoom(4) === A.DOT_R_BASE,
-  "at national zoom every dot must sit at DOT_R_BASE, got " + A.radiusForZoom(4));
+ok(A.radiusForZoom(4) === A.DOT_R_Z4,
+  "at national zoom every dot must sit at DOT_R_Z4, got " + A.radiusForZoom(4));
 ok(A.radiusForZoom(4) >= A.DOT_R_FLOOR && A.radiusForZoom(4) <= 3.0,
   "at national zoom every dot must be small texture (~2-3px), got " + A.radiusForZoom(4));
-ok(A.weightForZoom(4) === 1.0 && A.weightForZoom(5) === 1.5,
-  "the stroke weight must still step at z5, got " + A.weightForZoom(4) + " / " + A.weightForZoom(5));
+ok(A.weightForZoom(4) < A.weightForZoom(5) && A.weightForZoom(5) < A.weightForZoom(6),
+  "the stroke weight must step up through z5 and z6, got " + [4, 5, 6].map(z => A.weightForZoom(z)).join(" / "));
 
 // ---- positioned stations only -------------------------------------------------------------------
 // A coordinate-withheld station carries null lat/lon and has no place on the map. Every map path

@@ -31,7 +31,10 @@ is the invariant that actually matters (a committed export must show exactly wha
 which does not go red when a PNG encoder or its zlib is upgraded under CI.
 """
 import argparse
+import hashlib
+import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -468,6 +471,42 @@ def png_mark(size):
     return im.resize((size, size), Image.LANCZOS) if ss > 1 else im
 
 
+# THE RASTER ICONS SIT ON A NAVY DISC. A search engine crops a favicon to a circle and puts its own white
+# disc behind a transparent one, which washes out the mark's pale end. So every raster icon is the mark on
+# the portal's deepest surface colour, inset to the inscribed circle, and lifted 20 percent in brightness
+# so the gradient still reads at 16 px. The SVG tab icon stays transparent: a browser tab does not crop.
+RASTER_ICON_BACKGROUND = "#11182D"
+RASTER_ICON_INSET = 0.78
+RASTER_ICON_BRIGHTNESS = 1.20
+
+
+def raster_icon(size):
+    """The mark on the navy disc at `size` pixels, the form every raster icon ships in."""
+    Image, _, _ = _pillow()
+    from PIL import ImageEnhance
+    tile = Image.new("RGBA", (size, size), RASTER_ICON_BACKGROUND)
+    mark = png_mark(max(1, round(size * RASTER_ICON_INSET)))
+    rgb = ImageEnhance.Brightness(mark.convert("RGB")).enhance(RASTER_ICON_BRIGHTNESS)
+    mark = Image.merge("RGBA", (*rgb.split(), mark.split()[3]))
+    tile.alpha_composite(mark, ((size - mark.width) // 2, (size - mark.height) // 2))
+    return tile
+
+
+def ico_bytes():
+    """The root /favicon.ico, as a multi-size icon a browser can pick a frame out of.
+
+    A browser that reads no SVG icon link asks the site root for this path by name and takes what it
+    finds, so the file has to exist and has to be the same lattice as every other export. Each entry
+    is rendered from that lattice AT ITS OWN SIZE, never resampled from a larger one, so the 16 px
+    frame carries the small-size radius band that keeps the silhouette solid in a tab. The entries
+    are PNG-compressed, which every browser since Windows Vista reads, and the render carries no
+    timestamp, so two runs write identical bytes."""
+    frames = [raster_icon(size) for size in ICO_SIZES]
+    buf = io.BytesIO()
+    frames[-1].save(buf, "ICO", sizes=[(s, s) for s in ICO_SIZES], append_images=frames[:-1])
+    return buf.getvalue()
+
+
 def png_logo(dark, extended, width=PNG_LOGO_WIDTH):
     Image, ImageDraw, ImageFont = _pillow()
     lay = lockup(extended)
@@ -561,6 +600,7 @@ _OUTPUT_INDEX = (
     ("portal/vendor/brand/ausmt-mark.png", "png", "standalone mark"),
     ("portal/vendor/brand/ausmt-mark-168.png", "png", "standalone mark, link-preview card corner"),
     ("portal/vendor/favicon.svg", "svg", "browser tab icon"),
+    ("portal/favicon.ico", "ico", "root icon, multi-size"),
     ("portal/vendor/brand/ausmt-icon-180.png", "png", "apple-touch-icon"),
     ("portal/vendor/brand/ausmt-icon-192.png", "png", "app icon"),
     ("portal/vendor/brand/ausmt-icon-512.png", "png", "app icon"),
@@ -569,14 +609,82 @@ _OUTPUT_INDEX = (
 # The app-icon sizes. 180 is the apple-touch-icon a home-screen shortcut uses; 192 and 512 are the
 # conventional pair a web manifest would name. No manifest ships here (architect default): an
 # installable PWA is its own decision, and these two exist so that decision costs no regeneration.
-APP_ICON_SIZES = (180, 192, 512)
+APPLE_TOUCH_ICON_PX = 180
+APP_ICON_SIZES = (APPLE_TOUCH_ICON_PX, 192, 512)
+
+# The frames the root /favicon.ico carries. 16 is the browser tab, 32 the retina tab and the bookmark
+# bar, 48 the desktop shortcut; a browser picks the frame it wants, so all three are rendered from the
+# lattice at their own size rather than resampled from one another.
+ICO_SIZES = (16, 32, 48)
+
+
+# THE ICON HREFS EVERY SURFACE LINKS, and the version query that keeps them fresh. /vendor/* is served
+# with a thirty day cache, so a regenerated icon under an unchanged URL is answered from that cache and
+# the old mark stays in the tab; the query is the hash of the icon's PICTURE (its decoded frames, or an
+# SVG's text), so the URL moves exactly when the mark does and never with a PNG encoder. The surfaces are the six shipped documents and the emitter that
+# writes the head of every generated page.
+ICON_VERSION_DIGITS = 8
+ICON_LINKED_SOURCES = ("portal/index.html", "portal/about.html", "portal/add-survey.html",
+                       "portal/brand.html", "portal/releases.html", "portal/404.html",
+                       "engine/extract/_pages.py")
+
+
+def icon_payloads():
+    """{href: the bytes this tool writes for the file that href names}.
+
+    Read from the FRESH render rather than from the checkout, so one run converges: an icon and the
+    hrefs that version it are stamped from the same bytes even when the committed icon is stale."""
+    buf = io.BytesIO()
+    raster_icon(APPLE_TOUCH_ICON_PX).save(buf, "PNG")
+    return {"/favicon.ico": ico_bytes(),
+            "/vendor/favicon.svg": svg_favicon().encode("utf-8"),
+            f"/vendor/brand/ausmt-icon-{APPLE_TOUCH_ICON_PX}.png": buf.getvalue()}
+
+
+def picture_digest(href, data):
+    """The content hash of what a browser DRAWS from `data`: an SVG's text, or a raster's decoded frames.
+
+    Hashing the encoded bytes would move every icon URL whenever a PNG encoder changed, which differs
+    between Python builds for the same picture and so cannot agree between a checkout and CI; the picture
+    is the same everywhere and moves exactly when the mark does."""
+    Image, _, _ = _pillow()
+    h = hashlib.sha256()
+    if href.endswith(".svg"):
+        h.update(data)
+        return h.hexdigest()[:ICON_VERSION_DIGITS]
+    with Image.open(io.BytesIO(data)) as im:
+        sizes = sorted(s[0] for s in im.info["sizes"]) if href.endswith(".ico") else [im.size[0]]
+        for size in sizes:
+            if href.endswith(".ico"):
+                im.size = (size, size)
+            h.update(f"{size}x{size}:".encode("ascii"))
+            h.update(im.convert("RGBA").tobytes())
+    return h.hexdigest()[:ICON_VERSION_DIGITS]
+
+
+def icon_versions():
+    """{href: the version query digits for that file}."""
+    return {href: picture_digest(href, data) for href, data in icon_payloads().items()}
+
+
+def stamped(text, versions=None):
+    """`text` with every icon href carrying the current content hash of the file it names.
+
+    Only the query is rewritten. The links themselves, their order and their form are the surface's own
+    and are held by portal/tests/test_favicon_and_app_icons.py, so this tool owns exactly the one thing
+    a person cannot keep correct by hand."""
+    for href, version in (versions or icon_versions()).items():
+        text = re.sub(r'(href="%s)(?:\?v=[0-9a-f]{%d})?"' % (re.escape(href), ICON_VERSION_DIGITS),
+                      r'\g<1>?v=%s"' % version, text)
+    return text
 
 
 def artefacts():
     """[(path, kind, payload)] for everything this tool owns.
 
     kind "bytes" compares byte for byte; kind "image" compares decoded pixels, size and mode, which is
-    the invariant that matters for a raster and which survives a PNG encoder upgrade under CI."""
+    the invariant that matters for a raster and which survives a PNG encoder upgrade under CI; kind
+    "ico" compares the frame sizes and each frame's decoded pixels, for the same reason."""
     items = [(BRAND_JSON, "bytes", (json.dumps(document(), indent=2, ensure_ascii=False) + "\n")
               .encode("utf-8"))]
     for dark in (True, False):
@@ -589,8 +697,14 @@ def artefacts():
     items.append((BRAND_DIR / f"ausmt-mark-{PNG_CARD_MARK_SIZE}.png", "image",
                   png_mark(PNG_CARD_MARK_SIZE)))
     items.append((ROOT / "vendor" / "favicon.svg", "bytes", svg_favicon().encode("utf-8")))
+    items.append((ROOT / "favicon.ico", "ico", ico_bytes()))
     for size in APP_ICON_SIZES:
-        items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", png_mark(size)))
+        items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", raster_icon(size)))
+    versions = icon_versions()
+    for rel in ICON_LINKED_SOURCES:
+        path = REPO / rel
+        items.append((path, "bytes",
+                      stamped(path.read_text(encoding="utf-8"), versions).encode("utf-8")))
     return items
 
 
@@ -611,6 +725,37 @@ def _image_matches(path, want):
             and have.tobytes() == want.convert("RGBA").tobytes())
 
 
+def _ico_matches(path, want):
+    """The frame sizes and every frame's decoded pixels, against the icon the generator would write.
+
+    Read frame by frame rather than byte for byte for the reason _image_matches gives: an ICO written
+    by a newer PNG encoder can carry different bytes for the same picture, and what a browser draws is
+    the picture."""
+    Image, _, _ = _pillow()
+    if not path.is_file():
+        return False
+    try:
+        with Image.open(path) as have, Image.open(io.BytesIO(want)) as fresh:
+            if have.format != "ICO" or have.info["sizes"] != fresh.info["sizes"]:
+                return False
+            for size in sorted(fresh.info["sizes"]):
+                have.size, fresh.size = size, size
+                if have.convert("RGBA").tobytes() != fresh.convert("RGBA").tobytes():
+                    return False
+    except OSError:
+        return False
+    return True
+
+
+def _matches(path, kind, want):
+    """True when the committed artefact is what the generator would write today."""
+    if kind == "bytes":
+        return path.is_file() and path.read_bytes() == want
+    if kind == "ico":
+        return _ico_matches(path, want)
+    return _image_matches(path, want)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="tools/gen_brand.py",
                                 description="Generate the AusMT brand artefacts from one declared truth.")
@@ -621,9 +766,7 @@ def main(argv=None):
     if a.check:
         stale = []
         for path, kind, want in items:
-            fresh = (path.read_bytes() if path.is_file() else None) == want if kind == "bytes" \
-                else _image_matches(path, want)
-            if not fresh:
+            if not _matches(path, kind, want):
                 stale.append(path)
         if stale:
             print("BRAND DRIFT: regenerate with `python3 portal/tools/gen_brand.py`. Stale: "
@@ -633,7 +776,7 @@ def main(argv=None):
         return 0
     for path, kind, data in items:
         path.parent.mkdir(parents=True, exist_ok=True)
-        if kind == "bytes":
+        if kind in ("bytes", "ico"):
             path.write_bytes(data)
         else:
             data.save(path, "PNG")
