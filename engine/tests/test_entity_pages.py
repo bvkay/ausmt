@@ -107,20 +107,32 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
 
 
 def test_the_sitemap_advertises_the_hubs_and_the_static_pages(tmp_path):
-    """The sitemap is the crawler's map of the site, and until this change it carried only the root
-    and the entity pages: the two hub pages did not exist, and about/releases/add-survey were
-    substantive linked documents that no crawler was pointed at. FAILS IF any of the five is
-    missing, or if one of them carries a <lastmod> (none of them has an honest change signal, and
-    the lastmod contract is that the field is emitted only where it is true)."""
+    """The sitemap is the crawler's map of the site, and the two hub pages and the three linked
+    static documents are part of it. FAILS IF any of the five is missing.
+
+    The lastmod half splits the five. A HUB is a view over every record it lists, so it carries the
+    same maximum over the corpus the homepage does, and the two must agree exactly; a value on one
+    and not the other would be two claims about one rollup. The three STATIC pages ship with the
+    portal image rather than being built here, so this build knows nothing about when they last
+    changed and the field is emitted only where it is true."""
     surveys = _make_rich_survey(tmp_path)
     out = _build(surveys, tmp_path / "out")
     sitemap = (out / "sitemap.xml").read_text(encoding="utf-8").replace("\n", "")
-    for rel in ("surveys", "collections", "about.html", "releases.html", "add-survey.html"):
-        u = f"{BASE}/{rel}"
+
+    def _row(u):
         row = re.search(rf"<url><loc>{re.escape(u)}</loc>(.*?)</url>", sitemap)
         assert row, f"the sitemap must advertise {u}"
-        assert "<lastmod>" not in row.group(1), \
-            f"{u} has no honest change signal, so it must carry no lastmod"
+        return row.group(1)
+
+    root = _row(f"{BASE}/")
+    for rel in ("surveys", "collections"):
+        assert _row(f"{BASE}/{rel}") == root, (
+            f"{BASE}/{rel} is a view over the whole corpus and must carry the homepage's own "
+            f"lastmod, got {_row(f'{BASE}/{rel}')!r} against {root!r}")
+    for rel in ("about.html", "releases.html", "add-survey.html"):
+        assert "<lastmod>" not in _row(f"{BASE}/{rel}"), (
+            f"{BASE}/{rel} ships with the portal image; this build cannot date it, so it must "
+            "carry no lastmod")
     # brand.html is the one static page deliberately held out: it declares its own robots noindex,
     # and a sitemap entry for a page that refuses indexing spends crawl budget on nothing.
     assert f"{BASE}/brand.html" not in sitemap, \

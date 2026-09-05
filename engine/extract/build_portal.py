@@ -3453,6 +3453,33 @@ def _git_commit_at(cwd):
     return got
 
 
+_GIT_DIR_DATE_MEMO: dict = {}   # str(dir) -> ISO date or None; both answers, one build one reading
+
+
+def _git_dir_lastmod(directory):
+    """ISO date of the last commit that touched `directory`, or None when there is no such fact.
+
+    None covers every case where a date would be a guess rather than a measurement: a directory that
+    is not inside a git work tree (a plain copy of the corpus, or a partial checkout), a directory
+    with no commit of its own, and a host with no git. Committer date, at day precision, which is what
+    `git log -1 --format=%cs -- surveys/<slug>` reports from the corpus root.
+
+    Memoised per directory INCLUDING the negative answer: one build reads a directory once, so a
+    repository that changed underneath a running build cannot give two URLs of one sitemap two
+    different answers about the same corpus."""
+    key = str(directory)
+    if key in _GIT_DIR_DATE_MEMO:
+        return _GIT_DIR_DATE_MEMO[key]
+    import subprocess as _sp
+    try:
+        got = _sp.check_output(["git", "log", "-1", "--format=%cs", "--", "."],
+                               cwd=key, stderr=_sp.DEVNULL).decode().strip() or None
+    except Exception:  # noqa: BLE001
+        got = None
+    _GIT_DIR_DATE_MEMO[key] = got
+    return got
+
+
 def _build_prov(extractor):
     """The provenance/reproducibility block emitted with every product (Egbert/Heinson/Kelbert: an
     output must trace to its inputs, software and parameters). Captures the pipeline + version +
@@ -6496,9 +6523,15 @@ def _main_build(argv=None):
         base = a.sitemap_base.rstrip("/") + "/"
         from xml.sax.saxutils import escape as _xesc
 
-        # <lastmod> only where it is ACCURATE: a survey's latest release-note date is a real
-        # content-change signal (Google trusts lastmod only when it is consistently honest, so a
-        # per-build timestamp that changes on identical content would be worse than none).
+        # <lastmod> only where it is ACCURATE, from the two sources that measure it. A survey's
+        # latest release-note date is a curated statement that the record changed; the last commit
+        # that touched its directory in the corpus checkout is the same fact observed from the other
+        # side, and almost no record carries a release note. A survey takes the LATER of the two: the
+        # note is the stronger statement, and a record whose note predates its last edit did change
+        # on the day of the edit. Neither source is ever guessed at (Google trusts lastmod only while
+        # it is consistently honest, so a per-build timestamp on identical content would be worse
+        # than none): a corpus that is not a git work tree and a directory with no commit both yield
+        # nothing, and the URL carries no lastmod at all.
         def _survey_lastmod(smeta_entry):
             dates = [str((rn or {}).get("date") or "")
                      for rn in (smeta_entry or {}).get("release_notes") or []]
@@ -6506,21 +6539,30 @@ def _main_build(argv=None):
                      if len(d) >= 10 and d[4] == "-" and d[7] == "-"
                      and d[:4].isdigit() and d[5:7].isdigit() and d[8:10].isdigit()]
             return max(dates)[:10] if dates else None
+
+        def _record_lastmod(slug, smeta_entry):
+            """The later of a survey's release-note date and its corpus directory's commit date."""
+            got = [d for d in (_survey_lastmod(smeta_entry),
+                               _git_dir_lastmod(Path(a.surveys) / slug) if a.surveys else None) if d]
+            return max(got) if got else None
         _lastmods = {}
         for lbl in surveys_meta:
             _sl = (surveys_meta.get(lbl) or {}).get("slug") or slugify(lbl)
-            _lastmods[f"{base}surveys/{_sl}"] = _survey_lastmod(surveys_meta.get(lbl))
+            _lastmods[f"{base}surveys/{_sl}"] = _record_lastmod(_sl, surveys_meta.get(lbl))
         for cid in coll_by_id:
-            _members = [_survey_lastmod(surveys_meta.get(lbl))
-                        for lbl in surveys_meta if _survey_coll.get(lbl) == cid]
+            _members = [_lastmods.get(
+                f"{base}surveys/{(surveys_meta.get(lbl) or {}).get('slug') or slugify(lbl)}")
+                for lbl in surveys_meta if _survey_coll.get(lbl) == cid]
             _members = [m for m in _members if m]
             _lastmods[f"{base}collections/{cid}"] = max(_members) if _members else None
         _all_dates = [d for d in _lastmods.values() if d]
         _lastmods[base] = max(_all_dates) if _all_dates else None
         locs = [base]
-        # The two HUB pages. They carry no <lastmod>: a hub changes whenever any member does, and
-        # a date derived from that would move on every build, which is exactly the signal Google
-        # learns to distrust.
+        # The two HUB pages take the same maximum the homepage does. Each is a view over every record
+        # it lists, so it changes when any of them does, and a date measured over the corpus moves
+        # only when the corpus moves.
+        _lastmods[f"{base}surveys"] = _lastmods[base]
+        _lastmods[f"{base}collections"] = _lastmods[base]
         locs += [f"{base}surveys", f"{base}collections"]
         # The AUTHORITATIVE slug (smeta_entry["slug"], the same one ausmt_id / product paths / the
         # portal router use), never a re-slugified display label: a declared slug that differs from
