@@ -2368,6 +2368,31 @@ def test_the_length_clause_carries_at_most_ten_enumerated_exceptions():
         assert head and why, entry
 
 
+def test_the_docs_page_the_pointers_name_carries_no_audit_trail():
+    """The page the shipped tier points at is PUBLISHED, and the prose on it is the prose the sweep
+    moved off the shipped bytes. Moving a paragraph does not launder it: the rule that governs a
+    comment governs the page the comment now points at. FAILS IF the page carries a
+    design-document citation, a ruling, a work item, a round of work or a date.
+
+    Scoped to THIS page because this is the page the pointers name; the rest of docs/ is prose
+    written for a reader rather than moved off a source surface."""
+    page = ROOT / "docs" / "docs" / "reference" / "portal-internals.md"
+    assert page.exists(), f"{page} is missing and every pointer on the shipped tier is dead"
+    text = page.read_text(encoding="utf-8")
+    said = []
+    for rule in RULES:
+        for match in rule.hits(text):
+            said.append("%s:%s: %s: %s"
+                        % (page.name, text.count("\n", 0, match.start()) + 1, rule.label,
+                           match.group(0)[:60]))
+    for match, tag in work_item_tags(text):
+        said.append("%s:%s: work-item identifier: %s"
+                    % (page.name, text.count("\n", 0, match.start()) + 1, tag))
+    assert not said, (
+        f"{len(said)} line(s) of the published page carry provenance rather than the reasoning:\n"
+        + "\n".join(sorted(set(said))))
+
+
 def test_the_docs_page_the_pointers_name_exists_and_carries_a_section_per_file():
     """A pointer to a page that does not carry the file's section is a dead pointer."""
     page = ROOT / "docs" / "docs" / "reference" / "portal-internals.md"

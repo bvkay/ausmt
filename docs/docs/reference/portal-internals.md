@@ -967,14 +967,14 @@ value is the signal) and vocab-guard `identifies`/`identifier_type` so a hand-cr
 is intentionally absent, the server derives it from `identifies`.
 ```
 
-#### ---------- contributor credit model (CONTRIBUTOR-CREDIT-SPEC)
+#### ---------- contributor credit model
 
 ```text
----------- contributor credit model (CONTRIBUTOR-CREDIT-SPEC). creators[] is the ORDERED "who
+---------- contributor credit model. creators[] is the ORDERED "who
 should be credited?" citation list; contributors[] is the typed who-did-what list. NAME_TYPES and
 CONTRIBUTOR_ROLES are kept byte-in-step with the surveys validator (validate_survey.NAME_TYPES /
 CONTRIBUTOR_ROLES_ORDERED) so the form only ever offers the fail-closed vocab the server accepts;
-CONTRIBUTOR_ROLES is the DataCite contributorType subset in ratified order (it feeds the role <select>
+CONTRIBUTOR_ROLES is the DataCite contributorType subset in declared order (it feeds the role <select>
 AND the emit-time vocab guard). CONTRIBUTOR_ROLE_DISPLAY is the human label per token (curator-facing;
 the DataCite tokens are jargon). ----------
 ```
@@ -1046,42 +1046,42 @@ Returns null when there is nothing to write.
 
 ```text
 ISO 7064 MOD 11-2 checksum over the 16 chars, mirrors gateway/orcid.py::is_valid_orcid EXACTLY
-(design §4). This is the STRICT check: a well-formed pattern with a WRONG check digit is rejected,
+. This is the STRICT check: a well-formed pattern with a WRONG check digit is rejected,
 so we fail fast client-side before an upload the gateway would 400. isOrcid() above (format only)
 is left untouched for the non-blocking format WARNING. `X` is allowed only in the final position.
 ```
 
-#### §1 gateway detection: PRESENT only if HTTP 200 AND the body parses as ...
+#### Gateway detection: PRESENT only if HTTP 200 AND the body parses as ...
 
 ```text
-§1 gateway detection: PRESENT only if HTTP 200 AND the body parses as JSON AND json.ok === true.
+Gateway detection: PRESENT only if HTTP 200 AND the body parses as JSON AND json.ok === true.
 Anything else (network error/timeout -> status 0 by convention here, non-200, HTML body that a
 200-ing SPA-fallback/404 page could return) is ABSENT. Strict by design, the anti-false-positive
-guard. Pure so §1's strictness is unit-tested without a DOM.
+guard. Pure so the detection rule's strictness is unit-tested without a DOM.
 ```
 
-#### §2 anchor guard: a 201 status_url is used verbatim as an href ONLY if ...
+#### Anchor guard: a 201 status_url is used verbatim as an href ONLY if ...
 
 ```text
-§2 anchor guard: a 201 status_url is used verbatim as an href ONLY if it is a same-origin relative
+Anchor guard: a 201 status_url is used verbatim as an href ONLY if it is a same-origin relative
 /gateway/status/<urlsafe-token> path. Rejects absolute URLs (http://…), protocol-relative (//…),
 javascript:, path traversal, and any tampered prefix. Token chars are the urlsafe base64 alphabet
 (A-Za-z0-9_-), matching secrets.token_urlsafe on the server.
 ```
 
-#### §2 message mapping: HTTP status (+ parsed JSON body or null) -> plain ...
+#### Message mapping: HTTP status (+ parsed JSON body or null) -> plain ...
 
 ```text
-§2 message mapping: HTTP status (+ parsed JSON body or null) -> plain human text (NO HTML; the page
+Message mapping: HTTP status (+ parsed JSON body or null) -> plain human text (NO HTML; the page
 escapes it through esc() at render time). Server `detail` for a 400 is passed through verbatim as
 text. Pure + exported so every code path is unit-tested.
 ```
 
-#### §3 wire contract form fields: submitter_name + submitter_email always ...
+#### Wire contract form fields: submitter_name + submitter_email always ...
 
 ```text
-§3 wire contract form fields: submitter_name + submitter_email always; submitter_orcid ONLY when
-non-empty (the field is OMITTED entirely when blank, per the gateway's ≤8-field parser + §4 PII
+Wire contract form fields: submitter_name + submitter_email always; submitter_orcid ONLY when
+non-empty (the field is OMITTED entirely when blank, per the gateway's ≤8-field parser + the PII rule
 note). Email/ORCID ride as multipart fields into sqlite only, never into the package.
 ```
 
@@ -1205,7 +1205,7 @@ seeded creators[]/contributors[] from them and deleted them corpus-wide, the eng
 and the curator editor models neither - so a form that still wrote them would be producing keys
 nobody can read or fix. "Who led this survey?" writes a ProjectLeader contributors row instead
 and the organisations[] block below carries the role statement.
-Contributor credit model (CONTRIBUTOR-CREDIT-SPEC): creators[] (ORDERED citation names, the
+Contributor credit model (the contributor-credit model): creators[] (ORDERED citation names, the
 "who should be credited?" question) then contributors[] (the typed who-did-what rows). A row is
 emitted only when it carries a name; absent -> absent (no empty list) so a bare survey stays lean, and
 DOM order is preserved as the citation order. name is QUOTED (free text: a bare "2020" / "No" /
@@ -1341,7 +1341,7 @@ any item we cannot name AND identify is dropped, so the UI never shows or stores
 DOI harvest core -- normalizeDoi, looksLikeDoi, parseCrossref, parseDatacite, formatCitation and
 harvestDoi now live in the SINGLE shared source src/doi_harvest.js (loaded in <head>; it attaches to
 window.AusmtDoiHarvest), reused verbatim by the curator metadata editor so the registry parsing can
-never drift between the two surfaces (CONTRIBUTOR-CREDIT-SPEC curator DOI harvest). Alias the shared
+never drift between the two surfaces (the contributor-credit model, curator DOI harvest). Alias the shared
 functions into this block's scope so every call site below (and the node module.exports) is unchanged.
 ```
 
@@ -1376,7 +1376,7 @@ an unreachable/absent catalogue simply yields no counts and the warning drops th
 #### Gateway state: set true ONLY by a passing same-origin healthz probe ...
 
 ```text
-Gateway state: set true ONLY by a passing same-origin healthz probe (design §1). Read by the
+Gateway state: set true ONLY by a passing same-origin healthz probe . Read by the
 shared package builder so SUBMISSION.md lists the direct-upload path first when a gateway is live.
 ```
 
@@ -1426,7 +1426,7 @@ at emit time (name is the signal), and the org toggle switches both name_type an
 ```text
 ----- Credit: contributors[] (who did what). Advanced tier: typed rows adding a name_type <select>
 and the fail-closed role <select> (the 8 DataCite tokens, CONTRIBUTOR_ROLES). The <select>s only ever
-offer the ratified vocab, so the form cannot author a value the server would block. Emitted as
+offer the declared vocab, so the form cannot author a value the server would block. Emitted as
 contributors[] {name, name_type, role, orcid?/ror?}. Starts empty (added on demand, like the PIs).
 ```
 
@@ -1434,7 +1434,7 @@ contributors[] {name, name_type, role, orcid?/ror?}. Starts empty (added on dema
 
 ```text
 ----- organisations[] rows ("Which organisations were involved, and how?"). A name plus an
-optional ROR plus a role checkbox group over ORG_ROLES_OFFERED (every ratified role except
+optional ROR plus a role checkbox group over ORG_ROLES_OFFERED (every declared role except
 hosting_institution, which is AusMT's own export-side role, never a contributor's claim). The
 checkboxes are the honest control: an organisation is often several things at once. The essential
 Organisation is NOT repeated here - organisationsEmit seeds it as the marked custodian row.
@@ -1444,7 +1444,7 @@ Organisation is NOT repeated here - organisationsEmit seeds it as the marked cus
 
 ```text
 ----- acknowledgements[] rows ("Is there wording you must include?"). The wording IS the row, so
-a textless row is dropped at emit time; the type <select> only offers the ratified candidate vocab.
+a textless row is dropped at emit time; the type <select> only offers the declared candidate vocab.
 ```
 
 #### ----- The citation question's "what does it point at?" <select>
@@ -1508,7 +1508,7 @@ and never writes an empty/undefined value (guards below).
 #### ----- access level: reveal the embargo date + access contact only for a ...
 
 ```text
------ access level: reveal the embargo date + access contact only for a non-open level (audit 5.2).
+----- access level: reveal the embargo date + access contact only for a non-open level .
 Same show/hide idiom as #gatewayBlock / #dmsChoice. The disclosure hint (#accessDisclosure) is always
 visible; this only toggles the input block, so a submitter who never touches a non-open level sees no
 extra fields, and buildSurveyYaml already null-guards on level==open regardless of any stale value.
@@ -1572,14 +1572,14 @@ says plainly that those files were accepted and where their stations are read. N
 "no stations" for a submission that is entirely EMTF XML or MTH5.
 ```
 
-#### ----- shared package builder (design §0.5: ONE builder feeds BOTH the ...
+#### ----- shared package builder (ONE builder feeds BOTH the ...
 
 ```text
------ shared package builder (design §0.5: ONE builder feeds BOTH the download and the direct-
+----- shared package builder (ONE builder feeds BOTH the download and the direct-
 upload paths, so the bytes are identical either way). Reads the submitter's DMS choice, gates on
 validation FAILs (returns null when blocked), and produces the byte-payload + metadata both
 callers need. It performs NO DOM writes and NO download/upload side effect, the caller decides
-what to do with the blob. Email/ORCID are NEVER written here (design §4): the package is PII-clean
+what to do with the blob. Email/ORCID are NEVER written here : the package is PII-clean
 whether it goes out as a public-PR attachment OR as a same-origin gateway upload.
 ```
 
@@ -1606,21 +1606,21 @@ claim. source_filename == the packaged name here, uniform provenance across ever
 #### SUBMISSION.md travels INSIDE the zip on BOTH transport paths (design ...
 
 ```text
-SUBMISSION.md travels INSIDE the zip on BOTH transport paths (design §2), so it must stay accurate
+SUBMISSION.md travels INSIDE the zip on BOTH transport paths , so it must stay accurate
 for both: the direct-upload path is listed as option 1 where a gateway is available, emailing the
 packaged zip to the operator as the fallback. It NEVER references email/ORCID as file CONTENT;
 the operator-email path is a submission INSTRUCTION, not a stored address. `gatewayAvailable` only
 reorders the guidance, the fallback is documented regardless, since the file may be read after the
 fact by someone on a different deploy.
-Plain-language meaning of each access level, restated in the package (audit 5.3) so the choice's
+Plain-language meaning of each access level, restated in the package  so the choice's
 consequence travels with the data. Truthful to build_portal.py: every level is publicly discoverable
 with exact coordinates; only 'open' serves data bytes; an embargo never auto-lifts.
 ```
 
-#### Submission paths, honest to the current infrastructure (audit 5.1): the ...
+#### Submission paths, honest to the current infrastructure : the ...
 
 ```text
-Submission paths, honest to the current infrastructure (audit 5.1): the gateway upload is the
+Submission paths, honest to the current infrastructure : the gateway upload is the
 primary path where detected; the fallback is emailing the packaged zip to the operator (the
 ausmt-surveys repo is private, so there is no public PR path). Numbering stays sequential in both
 branches. Contact email rides OUTSIDE this package (email body / gateway field), never in a file.
@@ -1639,9 +1639,9 @@ data/collections.json isn't reachable (opened as file://, or no collections publ
 
 ```text
 ----- Direct upload to the same-origin submission gateway ------------------------------------
-Detection (design §1): one healthz probe per page load, 5 s AbortController timeout, no polling.
+Detection : one healthz probe per page load, 5 s AbortController timeout, no polling.
 The submit UI stays hidden unless gatewayPresent(status, body) is strictly true (200 + JSON +
-ok===true). A failed/absent probe leaves the page byte-identical to the pre-C13 page, the
+ok===true). A failed/absent probe leaves the page byte-identical to the earlier page, the
 download-and-email path (Package submission .zip) remains primary. Same-origin literal /gateway/...
 only (no config knob, no new origin, CORS-free and covered by the existing connect-src 'self').
 ```
@@ -1664,10 +1664,10 @@ response, so it can never confirm whether an address is eligible (no account enu
 with a clear note until the gateway probe passes.
 ```
 
-#### Submit flow (design §2)
+#### Submit flow 
 
 ```text
-Submit flow (design §2). The submit key is RADIOACTIVE (§0.3): it lives only in the password
+Submit flow . The submit key is RADIOACTIVE : it lives only in the password
 input and, transiently, in the X-AusMT-Submit-Key request header. It is NEVER stored, never put
 in a URL, never in a track() payload, never echoed to the DOM, never written into the zip.
 ```
@@ -1683,14 +1683,14 @@ in a URL, never in a track() payload, never echoed to the DOM, never written int
 
 ```text
 5. POST via XMLHttpRequest (upload progress + Cancel). No client timeout (250 MB on slow links
-   is legitimate); Cancel is the escape hatch. multipart per §3: one file part + submitter
+   is legitimate); Cancel is the escape hatch. multipart per the wire contract: one file part + submitter
    fields; submitter_orcid is OMITTED entirely when empty (submitFormFields).
 ```
 
-#### §2 response rendering, EVERY server-derived string goes through esc()
+#### Response rendering, EVERY server-derived string goes through esc()
 
 ```text
-§2 response rendering, EVERY server-derived string goes through esc(). The status link is an
+Response rendering, EVERY server-derived string goes through esc(). The status link is an
 anchor ONLY when statusUrlSafe() accepts the server's status_url (else the id is shown, no link).
 ```
 
@@ -1993,7 +1993,7 @@ PII-free: no org name/ID sent
 
 offline/aborted, silent; manual entry still works
 
------ access level: reveal the embargo date + access contact only for a non-open level (audit 5.2). Same show/hide idiom as #gatewayBlock / #dmsChoice. See docs: portal internals, add-survey.html.
+----- access level: reveal the embargo date + access contact only for a non-open level . Same show/hide idiom as #gatewayBlock / #dmsChoice. See docs: portal internals, add-survey.html.
 
 Per-EDI rename preview: shows "originalname.edi → ROX000.edi" so the submitter sees the DATAID-based packaged name BEFORE uploading. See docs: portal internals, add-survey.html.
 
@@ -2360,7 +2360,7 @@ does. Pinned by the astral vector in the shared file.
 ```text
 AusMT DOI citation-harvest core - the SINGLE SOURCE shared by the public Add Survey form
 (add-survey.html) and the curator metadata editor (served by the gateway at
-/gateway/curator/doi-harvest.js). CONTRIBUTOR-CREDIT-SPEC (§6, curator DOI harvest): the curator
+/gateway/curator/doi-harvest.js). The contributor-credit model (curator DOI harvest): the curator
 publications rows reuse THIS code rather than duplicating it, so a fix to the registry parsing lands
 on both surfaces at once. Both consumers load it as a classic external script tag (it attaches to
 window.AusmtDoiHarvest); node tests require() it (module.exports). It is PURE of the DOM and, for
@@ -2651,7 +2651,7 @@ Dataset-maturity model. Five RECORD-STEWARDSHIP dimensions - how completely a re
 archived, licensed and reproducible, NOT its scientific quality (said in the block's subline). Stars =
 achieved count. PURE so the star count is unit-testable: flip m.doi / m.ts and the count changes.
 "not recorded" / "not available" phrasing per the honesty rules (never "pending").
-SPEC §5: the resolution state of the survey's dataset DOI, across BOTH the flat dataset_doi
+Identifier consolidation: the resolution state of the survey's dataset DOI, across BOTH the flat dataset_doi
 (engine fallback, m.doi_resolution) and the typed related_identifiers DOI rows. Returns "ok" when at
 least one DOI-typed identifier is live-or-uncached (ok / unknown / absent - anything not "reserved");
 "reserved" ONLY when a DOI-typed identifier exists and EVERY one is reserved (doi.org's own 404); null
@@ -3148,7 +3148,7 @@ click, the scrim, Escape, a view switch), so this is the single seam that has to
 This EDI isn't redistributable here. Its dataset DOI (m.doi), when the survey has one, is the
 TF source archive and is safe to open. There is NO honest substitute when no dataset DOI is
 recorded - TS_COLLECTION is the raw TIME-SERIES collection, not a transfer-function source archive,
-and silently opening it mislabels a different dataset as "the source archive" (the pre-C7 defect).
+and silently opening it mislabels a different dataset as "the source archive" (the earlier defect).
 ```
 
 #### SLIM survey card
@@ -3163,10 +3163,10 @@ NOT belong on the card; they render in the survey DETAIL (openSurvey) and the st
 card (it must never read as a card-level verdict) and stays in the detail + drawer with its framing.
 ```
 
-#### The RATIFIED display order for a person's role phrases when they hold ...
+#### The CANONICAL display order for a person's role phrases when they hold ...
 
 ```text
-The RATIFIED display order for a person's role phrases when they hold several (SPEC §3.1). Pinned
+The CANONICAL display order for a person's role phrases when they hold several . Pinned
 explicitly (not left to object-key order) so a grouped person's phrases read in ONE stable sequence
 regardless of the order their contributor rows were declared in. Keyed against CONTRIBUTOR_ROLE_LABELS.
 ```
@@ -3179,23 +3179,23 @@ ORCID icon-link. Shared by the grouped Contributors list. "" for a nameless row 
 so the caller drops it silently rather than printing an empty placeholder).
 ```
 
-#### Credit model (SPEC §3/§6): the survey's contributors[] as a COLLAPSED ...
+#### Credit model: the survey's contributors[] as a COLLAPSED ...
 
 ```text
-Credit model (SPEC §3/§6): the survey's contributors[] as a COLLAPSED <details> (styled like the
+Credit model: the survey's contributors[] as a COLLAPSED <details> (styled like the
 Persistent-identifiers rollup), GROUPED by person. The old surface printed one line per (person, role)
 row; a survey with 7 people across 15 role rows printed 15 lines. Now rows dedupe by ORCID (case /
 URL-form-insensitive) else by exact name + name_type, preserving first-appearance order, and each distinct
 person renders ONE line: the name (ORCID/ROR link as before) then their role phrases comma-joined in the
-RATIFIED role order. An unknown/absent role adds no phrase (never a raw token); a nameless row is dropped
+CANONICAL role order. An unknown/absent role adds no phrase (never a raw token); a nameless row is dropped
 silently and never counted. The summary counts the DISTINCT people/orgs. Returns "" (no section, no
 placeholder) when the list is absent or empty, matching sourcesListHtml/instrumentPidsHtml.
 ```
 
-#### Credit model (SPEC §2.1): the survey's ORDERED creators[], the ...
+#### Credit model: the survey's ORDERED creators[], the ...
 
 ```text
-Credit model (SPEC §2.1): the survey's ORDERED creators[], the attribution-author list. Order IS the
+Credit model: the survey's ORDERED creators[], the attribution-author list. Order IS the
 attribution order; a person carries the ORCID icon-link, an organisation's name links to its ROR. No role
 phrase (that is the contributors[] surface). Reads the pinned seam field verbatim; a creator row is the
 same {name, name_type, orcid, ror} shape as a contributor minus the role. "" for a nameless row.
@@ -3204,12 +3204,12 @@ same {name, name_type, orcid, ror} shape as a contributor minus the role. "" for
 #### ONE attribution box, never two
 
 ```text
-ONE attribution box, never two. The engine builds cite.au from creators[] (CONTRIBUTOR-CREDIT-SPEC
-§2.1, names joined "; "), so a second .attn box for the creator names would carry the SAME names
+ONE attribution box, never two. The engine builds cite.au from creators[] (the contributor-credit
+model, names joined "; "), so a second .attn box for the creator names would carry the SAME names
 twice. The single box renders the ONE attribution sentence with each creator name ORCID/ROR-linked IN
 PLACE (creatorRow), keeping the "; " separators and the "(year)" tail of the plain sentence.
-The links are substituted ONLY when the creators reconstruct the sentence's own name string (the §2.1
-guarantee: cite.au IS the "; "-joined creators). A verbatim custodian attribution.statement is never
+The links are substituted ONLY when the creators reconstruct the sentence's own name string (the
+credit model's guarantee: cite.au IS the "; "-joined creators). A verbatim custodian attribution.statement is never
 rewritten, and a survey whose recorded citation names someone else keeps that recorded string: in both
 cases the flat escaped sentence renders exactly as today, in the SAME single box. That keeps the drawer
 byte-identical in TEXT to exports.attributionLine (the CSV / citation-pack / Cite-tab attribution).
@@ -3243,23 +3243,23 @@ instrument WITHOUT a pid in that list prints just the (escaped) label. Returns "
 existing "Instrument model:" line above remains the sole instrument row (byte-identical old surveys).
 ```
 
-#### D-L1/D-L4 (SPEC §9): `identifies` states WHAT the identifier points at ...
+#### Identifiers by level: `identifies` states WHAT the identifier points at ...
 
 ```text
-D-L1/D-L4 (SPEC §9): `identifies` states WHAT the identifier points at, in NCI Table 1 data-level terms.
+Identifiers by level: `identifies` states WHAT the identifier points at, in NCI Table 1 data-level terms.
 When present it labels the row by LEVEL (e.g. "Raw time series", "Collection", "Entire dataset"),
 falling back to the DataCite relation label for a legacy row that carries no identifies. Table 1 order.
 ```
 
-#### §2a: a typed provenance identifier -> a link whose resolver host is ...
+#### The provenance-identifier rule: a typed provenance identifier -> a link whose resolver host is ...
 
 ```text
-§2a: a typed provenance identifier -> a link whose resolver host is chosen by identifier_type, ALWAYS
+The provenance-identifier rule: a typed provenance identifier -> a link whose resolver host is chosen by identifier_type, ALWAYS
 through the escUrl guard (a hostile identifier value can never become an executable/relative anchor - 
 same posture as pidLink/instrumentPidLink). DOI -> doi.org (unless already a URL); Handle ->
 hdl.handle.net; URL -> itself. ANY OTHER type (RAiD, an unknown, or none) -> escaped PLAIN TEXT with NO
 anchor: we will not invent a resolver for a type we do not model, and an unlinked value stays inert.
-§2a: the resolver URL for a typed identifier, chosen by identifier_type. DOI -> doi.org (unless already
+The provenance-identifier rule: the resolver URL for a typed identifier, chosen by identifier_type. DOI -> doi.org (unless already
 a URL); Handle -> hdl.handle.net; URL -> itself. ANY OTHER type (RAiD, unknown, none) -> null: we do not
 invent a resolver for a type we do not model. Shared by relatedIdLink (the block anchor) and the files
 tab (which needs the raw URL for a product tile's data-url). escUrl still guards at the anchor/attr edge.
@@ -3286,19 +3286,19 @@ same typed provenance the Files tab keys off, so an identifier-bearing survey sh
 instead of "not recorded". Pure (reads m only) so the derivation is unit-testable.
 ```
 
-#### §2a: the related-identifiers block - one line per typed relation ...
+#### The provenance-identifier rule: the related-identifiers block - one line per typed relation ...
 
 ```text
-§2a: the related-identifiers block - one line per typed relation (SMETA.related_identifiers, served by
+The provenance-identifier rule: the related-identifiers block - one line per typed relation (SMETA.related_identifiers, served by
 the engine mapper as always-a-list). The relation prints as a human label, the identifier as a
 type-linked value, the custodian (when present) in muted text. Empty list -> "" (the section simply
 does not render, mirroring instrumentPidsHtml). Non-mapping entries are skipped defensively.
 ```
 
-#### §2a: "a persistent dataset identifier exists in this survey's ...
+#### The provenance-identifier rule: "a persistent dataset identifier exists in this survey's ...
 
 ```text
-§2a: "a persistent dataset identifier exists in this survey's provenance chain" - the ratified reading
+The provenance-identifier rule: "a persistent dataset identifier exists in this survey's provenance chain" - the declared reading
 of the DOI maturity badge. TRUE when a minted dataset DOI is set OR any typed related_identifier is a
 DOI, so a curator survey (dataset_doi null, the DOI living in the typed provenance list) still lights
 the badge. Shared by BOTH badge sites (station format-availability + survey card) via this one predicate.
@@ -3513,7 +3513,7 @@ Section order - (1) title+description, (2) geographic footprint, (3) station cou
 period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
 (7) publications, (8) identifiers (the rollup), (9) release history. Content is unchanged from before -
 only the order. Acquisition/processing are carried inside the survey-summary table (sections 3/5 share
-That atomic block). Contributors (credit model, SPEC §3) do not trail
+That atomic block). Contributors (the credit model) do not trail
 below Downloads, they sit inside the ATTRIBUTION block directly beneath the attribution box.
 Downloads move up ahead of funding/publications/identifiers; release history moves last.
 ```
@@ -3718,7 +3718,7 @@ the union of the two files it replaces: EVERY station in scope appears (the arch
 rule), and stations with verified open files carry actionable levels[] rows (the fetch-list
 rule), including explicit gap rows where a route could not be built. source_doi is the survey's
 OWN dataset DOI or null with the reason - never the time-series collection DOI standing in for a
-TF source archive (the pre-C7 mislabel the EDI zip's gap file already refuses).
+TF source archive (the earlier mislabel the EDI zip's gap file already refuses).
 ```
 
 #### ---- the time-series HAND-OFF list ...
@@ -3840,7 +3840,7 @@ The human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI t
 pack SAYS SO explicitly - "[no DOI assigned]" - rather than silently omitting the field, because a
 reference pack should state the absence. The .bib/.ris twins simply OMIT their doi=/DO/UR
 fields (drawer.js apa/bibtex/ris already guard on a falsy doi, d2bc616); emitting placeholder text there
-would be ingested by reference managers as real bibliographic data - the pre-C22 defect, where
+would be ingested by reference managers as real bibliographic data - the earlier defect, where
 AUSMT_SELF.pb carried "(DOI to be minted per release via Zenodo)" into every no-DOI publisher field.
 ```
 
@@ -3922,7 +3922,7 @@ loop this replaces serialised ~300 round trips behind one another.
 ```text
 M.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
 when it is absent (TS_COLLECTION is the raw time-series collection, not a TF source archive, and
-citing it here would mislabel a different dataset as "the source archive", the pre-C7 defect); so
+citing it here would mislabel a different dataset as "the source archive", the earlier defect); so
 when no DOI is recorded we state the ACTUAL access reason (embargo vs licence) via withheldReason().
 ```
 
@@ -4319,10 +4319,10 @@ authoritative slug the engine wrote (no re-derivation). Absent collection / abse
 (graceful degrade). Rebuildable (not a boot-only const) so a test can repopulate COLL and re-run it.
 ```
 
-#### UX feedback round 1 (#2): corpus-wide year hints on the two Year range ...
+#### corpus-wide year hints on the two Year range ...
 
 ```text
-UX feedback round 1 (#2): corpus-wide year hints on the two Year range inputs - placeholder + min/max
+corpus-wide year hints on the two Year range inputs - placeholder + min/max
 attrs from the min year_start / max year_end across ALL of SMETA (not just ST, so an undated-in-CAT
 survey with declared dates still counts), plus the range appended to the section label, e.g.
 "Year range (2019-2022)". Values themselves stay EMPTY on load - deliberately NOT defaulted to the
@@ -4537,7 +4537,7 @@ builds predate it - BUILDID is null - so the placeholder must stay empty, not sh
 text). Split from the DOM write below so a test can assert the VALUE binding (BUILDID -> text)
 without needing a real DOM (mirrors buildState()'s station0/export0 value-binding pattern).
 
-UX feedback round 1 (#6): the emitter (build_identity() in engine/extract/build_portal.py) is
+the emitter (build_identity() in engine/extract/build_portal.py) is
 already fixed to never fold Python's None into build_id - an unresolved source_commit renders as
 the WORD "unknown" there, never "None". This function still must not display either literal word
 to a visitor: a build_id containing "None" (an older/foreign build predating that fix) or
@@ -4598,7 +4598,7 @@ runInit attaches the UI below, so the later start is invisible everywhere but th
 Map + layers + markers. Data-dependent work (markers, footprints) is in buildMarkers()/
 buildFootprints(), called by main after ST is built. No direct call into drawer/filters at
 load time; the only cross-module reference is the marker click -> openStation (one-way).
-UX feedback round 1: default to a fixed Australia extent on load (was an arbitrary centre/zoom pair
+default to a fixed Australia extent on load (was an arbitrary centre/zoom pair
 that didn't reliably frame the continent on typical viewport sizes). Bounds: [[south,west],[north,east]]
 chosen to cover the AU mainland + Tasmania with a small margin.
 buildMarkers() must NOT re-fit to the tight station-marker extent once data loads: no station sits
@@ -5223,14 +5223,14 @@ BY DESIGN, not by omission: the archive's level_2 tree holds transfer functions,
 not time series, so it opens no route, takes no button and gets no row here.
 ```
 
-#### UX feedback round 1: "Go to place" (+ its AU_PLACES quick-zoom list) ...
+#### "Go to place" (+ its AU_PLACES quick-zoom list) ...
 
 ```text
-UX feedback round 1: "Go to place" (+ its AU_PLACES quick-zoom list) was removed as redundant - 
-operator decision from the first live session; see index.html/filters.js for the rest of the removal.
-Pb is the HONEST plain "AusMT". The pre-C22 value - "AusMT (DOI to be minted per
+"Go to place" (+ its AU_PLACES quick-zoom list) was removed as redundant - 
+see index.html/filters.js for the rest of the removal.
+Pb is the HONEST plain "AusMT". The earlier value - "AusMT (DOI to be minted per
 release via Zenodo)" - leaked into EVERY no-DOI citation's publisher/PB field of the exported .bib/.ris
-Packs (hostile review: reference managers ingest that placeholder as real bibliographic
+Packs (reference managers ingest that placeholder as real bibliographic
 data). Absence of a DOI is expressed by OMISSION in .bib/.ris (drawer.js apa/bibtex/ris guard on a
 falsy doi, since d2bc616) and EXPLICITLY in CITATIONS.txt ("[no DOI assigned]", exports.js citeLine) - 
 never by placeholder text in a bibliographic field.
@@ -5305,10 +5305,10 @@ are printed verbatim too, because guessing one would be inventing metadata.
 The SPDX identifier itself stays untouched in exports, data slots and citation output.
 ```
 
-#### CVD amendment: the completeness ramp is a CVD-safe SEQUENTIAL ...
+#### CVD: the completeness ramp is a CVD-safe SEQUENTIAL ...
 
 ```text
-CVD amendment: the completeness ramp is a CVD-safe
+CVD: the completeness ramp is a CVD-safe
 SEQUENTIAL dark→light progression (viridis principle) - dark slate-blue #2A3B66 → olive #6E7F46 → pale
 warm yellow #F2E27E - because the old red→green endpoints measured dE76≈9.6 under a deuteranopia
 simulation (indistinguishable for red-green CVD readers). LIGHTNESS carries the signal (relative
@@ -5336,7 +5336,7 @@ nothing to open) render centred with no spotlight instead of crashing or silentl
 closes; ArrowRight/ArrowLeft navigate; all controls are real <button>s with aria-labels; nothing is
 persisted - the tour is stateless and re-runnable from either entry point on every visit.
 
-Round 2 (operator feedback): the tour now NAVIGATES - it spotlights the header view buttons and
+the tour now NAVIGATES - it spotlights the header view buttons and
 actually switches to the Surveys view, then returns to the map at the end, so a first-timer learns
 the app's two views by watching them happen. Enter actions (run when the tour ARRIVES at a step,
 forward or back) make that work in both directions: map-view steps force the map view back (so
