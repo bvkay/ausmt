@@ -942,8 +942,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     A.radiusForZoom(4, "LPMT") + " / " + A.radiusForZoom(4, "BBMT"));
   ok(A.radiusForZoom(4) === A.radiusForZoom(4, "BBMT"),
     "the retired `type` argument must be INERT: passing one may not change the radius");
-  ok(A.weightForZoom(4) === 1.0 && A.weightForZoom(0) === 1.0, "weightForZoom(z<=4) must be 1.0");
-  ok(A.weightForZoom(5) === 1.5 && A.weightForZoom(9) === 1.5, "weightForZoom(z>=5) must be 1.5");
+  ok(A.weightForZoom(4) === 0 && A.weightForZoom(0) === 0, "weightForZoom(z<=4) must be 0: no stroke at the national view");
+  ok(A.weightForZoom(5) === 0.75 && A.weightForZoom(6) === 1.25, "weightForZoom must step through 0.75 at z5 and 1.25 at z6");
+  ok(A.weightForZoom(7) === 1.5 && A.weightForZoom(9) === 1.5, "weightForZoom(z>=7) must be 1.5");
   for (let z = 0; z < 12; z++) {
     ok(A.radiusForZoom(z + 1) >= A.radiusForZoom(z), "radiusForZoom must be monotone non-decreasing at z=" + z);
     ok(A.weightForZoom(z + 1) >= A.weightForZoom(z), "weightForZoom must be monotone non-decreasing at z=" + z);

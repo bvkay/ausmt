@@ -122,20 +122,23 @@ function clearSurveyDim(){if(_dimFocusSurvey===null)return;_dimFocusSurvey=null;
 function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
 // Zoom-scaled marker geometry. See docs: portal internals, map.js.
 const DOT_R_FLOOR=1.8, DOT_R_CEIL=6.5, DOT_R_SLOPE=0.5, DOT_R_Z0=4;
-const DOT_R_BASE=2.0;          // at z4 (national): every site dot is ~2px, the AusLAMP LP texture size
-// PURE, and a function of ZOOM ALONE. A caller that passes a data type is harmless: the argument is
-// not read, so no call site can quietly resurrect a per-type split. See docs:
-// portal internals, map.js.
+const DOT_R_BASE=2.0;          // the slope's origin at z4; the table below overrides the low zooms
+// At the national view the AusLAMP grid pitch is about 6.5px, so a dot stays at 1.8px with no stroke.
+const DOT_R_Z4=1.8, DOT_R_Z5=2.4;
+const DOT_W_Z4=0, DOT_W_Z5=0.75, DOT_W_Z6=1.25, DOT_W_HIGH=1.5;
+// PURE, and a function of ZOOM ALONE: a data-type argument is never read, so no call site can
+// resurrect a per-type split. See docs: portal internals, map.js.
 function radiusForZoom(z){
-  return Math.min(DOT_R_CEIL,Math.max(DOT_R_FLOOR,DOT_R_BASE+DOT_R_SLOPE*((typeof z==="number"?z:DOT_R_Z0)-DOT_R_Z0)));}
-function weightForZoom(z){return z<=4?1.0:1.5;}
+  const zz=typeof z==="number"?z:DOT_R_Z0;
+  if(zz<=4)return DOT_R_Z4;
+  if(zz<=5)return DOT_R_Z5;
+  return Math.min(DOT_R_CEIL,Math.max(DOT_R_FLOOR,DOT_R_BASE+DOT_R_SLOPE*(zz-DOT_R_Z0)));}
+function weightForZoom(z){return z<=4?DOT_W_Z4:z<=5?DOT_W_Z5:z<=6?DOT_W_Z6:DOT_W_HIGH;}
 // current map zoom as a finite number - the headless smoke/interaction stubs' map.getZoom() returns a
 // Proxy (not a number), and even Number(proxy) throws ("cannot convert object to primitive"), so read it
 // defensively and default to 4 (national) when it isn't already a finite number.
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
-// One radius for every marker on the map, with no per-type split, so this stamps the same
-// zoom-derived size across the set. A zoom must not re-route: which stations are on the map is a FILTER answer, and
-// dots do not collapse, so a restyle-AND-re-route pass has nothing left to re-route.
+// One radius for every marker; a zoom never re-routes, because which stations show is a filter answer.
 function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z);
   ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
 // The home frame buildMarkers fits to, remembered module-level so the setView("map") 60ms corrector can
