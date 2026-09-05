@@ -76,6 +76,18 @@ def test_the_guided_tour_link_reaches_the_tour():
     assert 'href="/?tour=1"' in text, "the About tour link must reach /?tour=1 directly"
 
 
+def test_the_guided_tour_link_is_not_offered_to_a_crawler():
+    """FAILS IF About's tour link loses rel=nofollow. /?tour=1 and / are one document, and a crawler
+    that follows the query lists them as two URLs and reports the second for every fault it finds in
+    the first. The attribute changes nothing a reader does: the link still opens the tour."""
+    text = _text("about.html")
+    m = re.search(r'<a class="link" href="/\?tour=1"([^>]*)>', text)
+    assert m, "about.html must still carry the guided tour link"
+    assert 'rel="nofollow"' in m.group(1), (
+        "the tour link must carry rel=nofollow so the query variant is not crawled as a page, got "
+        f"<a class=\"link\" href=\"/?tour=1\"{m.group(1)}>")
+
+
 @pytest.mark.parametrize("name,url", sorted(_STATIC_PAGES.items()))
 def test_every_static_page_declares_its_canonical(name, url):
     """FAILS IF a static page ships without a canonical. All three are substantive, indexable and
