@@ -2,7 +2,7 @@
 FakeGit at the publish seam. Mirrors test_station_removal_flow.py's structure.
 
 The curator retires a whole survey from the Metadata tab's danger zone: a confirmation page discloses
-exactly what the lists, then the server gates the POST in order - session, CSRF, the
+exactly what the retirement removes, then the server gates the POST in order - session, CSRF, the
 last-survey guard, the TOTP second factor (enrolled? rate-limited? valid? not-replayed?), the typed
 slug, the required note — and only then git-rm -r's the package in one commit under PUBLISH_LOCK.
 
@@ -304,7 +304,7 @@ def test_retire_rate_limit_trips(tmp_path):
 # --------------------------------------------------------------------------------------------------
 def test_retire_last_survey_guard_refuses_nothing_staged(tmp_path):
     """With only ONE published survey, retiring it is refused (409) with nothing staged — an empty
-    corpus breaks the next rebuild, evidenced. FAILS IF the last survey can be retired."""
+    corpus breaks the next rebuild (evidenced). FAILS IF the last survey can be retired."""
     async def _body():
         surveys_live = _live_with_surveys(tmp_path, slugs=("only-survey-2026",))
         git = FakeGit()

@@ -203,9 +203,9 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
   applyTreeVisibility();   // Default = everything expanded; normalises caret glyphs on (re)build
 }
 
-// static control wiring (registrations only; functions resolved at event time)
-// The SINGLE data-type state
-// path. See docs: portal internals, filters.js.
+// The SINGLE data-type state path: both ends of the type filter reach it, the rail's own checkboxes
+// and the map legend's type rows, so one handler carries every flip. Guarded on typeof because
+// main.js loads after this file. See docs: portal internals, filters.js.
 document.getElementById("typeBoxes").addEventListener("change",()=>{
   if(typeof syncLegendTypes==="function")syncLegendTypes();
   refresh();});

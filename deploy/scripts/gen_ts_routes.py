@@ -189,7 +189,7 @@ def render(rows, unresolved=None) -> str:
     """The committed file: banner, one UNRESOLVED comment per dropped survey, one `"key" "value"`
     line per route. No date (a churning header fails --check on quiet days) and no host (it lives
     once, in the Caddyfile's redir target). The UNRESOLVED lines are in the FILE because membership
-    is the decision: a change belongs in a human-readable diff and a `--check` that reds."""
+    is the access decision: a change belongs in a human-readable diff and a `--check` that reds."""
     unresolved = unresolved or {}
     head = (f"# {BANNER}\n"
             f"# {len(rows)} route(s): open access + review:verified only; level2 never routes.\n")

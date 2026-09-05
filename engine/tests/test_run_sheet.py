@@ -96,7 +96,7 @@ def _row_dict(tmp_path):
 
 def test_a_sheet_only_station_qualifies_for_runs(tmp_path):
     """Vulcan-shaped: the EDI asserts nothing, the sheet asserts the acquisition. The merged
-    document qualifies and carries the whole curated record."""
+    document qualifies under the run gate and carries the whole curated record."""
     doc = rs.merge(None, _row_dict(tmp_path), "EXAMPLE01", [])
     assert "time_period" in doc["facts"] and "sensor" in doc["facts"]
     runs, _notes = bp.station_runs(doc, {"EXAMPLE01": ["EXAMPLE01-r01"]}, "EXAMPLE01", "Z")

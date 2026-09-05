@@ -101,7 +101,7 @@ on:
   # build job's own comment carries the full story, learned from PR #137).
   # What it bought is GIVEN BACK, on purpose: the `changes` job matches all FIVE image-input paths
   # (deploy, gateway, engine, portal, contract), not the trimmed deploy/gateway pair, so engine-only
-  # and portal-only PRs DO pay for a full build + e2e again. That is a real cost increase, taken over
+  # and portal-only PRs DO pay for a full build + e2e again. That is a real cost increase
   # for the two most common lane types, and it is the price of the check being honest. A required
   # gate that skips itself on exactly the PRs that change the engine is worse than no gate: it is a
   # green tick over an untested image. That reasoning (engine/portal PRs are already covered by

@@ -75,8 +75,8 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # (the engine image COPYs engine/ only, so /app/gateway never exists: deploy-images' in-image
     # engine-full-tests run, the sole remaining engine-image pytest now that no in-Dockerfile
     # duplicate stands beside it, pipes through THIS tripwire). INERT on every checkout workflow: a
-    # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the oracle
-    # (the resolver's arm iv), never skips.
+    # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the
+    # oracle, never skips.
     "engine image build: gateway tree not shipped",   # test_validator_gate.py, image builds only
     # test_mtcat_version_parity.py, the SAME designed-topology class as the entry above, for the
     # other tree the engine image does not ship. The MTCAT schema version has one source (the schema

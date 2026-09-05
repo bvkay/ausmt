@@ -125,8 +125,8 @@ DEFAULT_DAILY_KEEP_DAYS = 92
 
 # The served download families (path prefixes under /data/) and the visit proxy. `h5` was excluded here
 # for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer.
-# The engine produces per-station MTH5 files there, so
-# the exclusion had to go with it. It is worth naming why the interlock matters: an excluded family
+# The engine produces per-station MTH5 files there now, so the exclusion had to go. It is worth
+# naming why the interlock matters: an excluded family
 # classifies as `ignore`, and an ignored path is absent from `unattributed` as well, so every
 # station-h5 download would vanish from the analytics rather than surfacing as build/serve skew.
 # Silent absence, not undercounting. Pinned in deploy/tests/test_aggregate_stats.py.
@@ -809,10 +809,10 @@ def _empty_month(month: str) -> dict:
     only), so the screen can say which months carry partial detail instead of implying a real zero;
     `geo_days` counts the days that actually contributed a country, which is what makes the forward-only
     country seam MACHINE-visible rather than a matter of reading the prose beside the table;
-    `networks_peak` is the largest distinct-network count any of its folded days saw. Daily rows
-    alone expire with the 92-day window and can never reach a quarterly
-    report, which is exactly the horizon a funding report asks about. It accumulates as each day folds
-    and is never recomputed from a tail that is about to be pruned.
+    `networks_peak` is the largest distinct-network count any of its folded days saw. That figure on
+    daily rows alone expires with the 92-day window and can never reach a quarterly report, which is
+    exactly the horizon a funding report asks about. It accumulates as each day folds and is never
+    recomputed from a tail that is about to be pruned.
 
     `detail_days` counts the days folded with THIS fold's dimensions in place, and it exists because
     there are TWO forward-only seams in this file rather than one. `seeded_days` marks the first

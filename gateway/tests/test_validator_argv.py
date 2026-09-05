@@ -1,7 +1,7 @@
 """The ONE canonical validator argv is single-sourced.
 
 Both the submission runner (runner._run_validator) and the metadata-edit runner
-(edit._run_validator) invoke `validate_survey.py` as a subprocess. Before each assembled its own
+(edit._run_validator) invoke `validate_survey.py` as a subprocess. Each assembled its own
 argv — one positional-first, one --json-first — the exact class of seam whose argv bug quarantined
 every real submission. Both now route through runner.validator_argv().
 
@@ -54,7 +54,8 @@ def test_runner_and_edit_share_one_argv_builder():
 
 def test_neither_call_site_hand_builds_a_validator_argv():
     # Source-text pin: a future edit that reverts to an inline `[sys.executable, ..., "--json",
-    # ...]` argv at either call site - re-opening the drift closed - goes RED here. We assert the
+    # ...]` argv at either call site - re-opening the drift the shared helper closed - goes RED here. We assert the
+    # tell-tale inline-argv literal is absent from BOTH runner._run_validator and edit._run_validator. We assert the
     # tell-tale inline-argv literal is absent from BOTH runner._run_validator and edit._run_validator.
     for mod in (runner, edit):
         src = Path(mod.__file__).read_text(encoding="utf-8")

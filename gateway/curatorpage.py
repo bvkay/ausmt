@@ -1,7 +1,7 @@
 """Server-rendered curator pages. MIRRORS statuspage.py: stdlib string.Template, no
 framework, portal palette, minimal JS — and ZERO inline JS: the strictPages CSP (script-src 'self')
 blocks inline script blocks and on*-attribute handlers, so all behaviour rides two external
-same-origin scripts (CURATOR_UI_JS delegation for confirms/toggles; SERVE_PANEL_JS
+same-origin scripts (CURATOR_UI_JS delegation for confirms/toggles; SERVE_PANEL_JS for the serve
 panel). Every interpolated value is html.escaped — reports derive from submitted bytes and MUST NOT
 inject markup into the curator's browser.
 
@@ -2617,8 +2617,8 @@ def _reconcile_status_block(status: dict | None) -> str:
         lead = ("Last build did not serve — old data still live. Detail:" if hard
                 else "Auto-rebuild is being held. Detail:")
         if action == "failed" and status.get("oom_kill") is True:
-            # reconcile.sh found a kernel out-of-memory kill in the failed build's own window, and
-            # the operator's first read must name the cause, not "see log tail".
+            # reconcile.sh found a kernel out-of-memory kill in the failed build's own window: the
+            # operator's first read must name the cause, not "see log tail".
             lead = ("Last build was KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY (not a build error): "
                     "old data still live; the box needs more RAM or swap for this corpus. Detail:")
         tail = (f'<p class="sub" style="color:{colour};font-weight:600">{lead}</p>'
@@ -3847,7 +3847,7 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
                    lambda c: (f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("browser")))}'
                               f' / '
                               f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("scripted")))}')))
-        # The archive hand-offs. The row is omitted entirely when NO month shown carries
+        # The archive hand-offs (THREDDS). The row is omitted entirely when NO month shown carries
         # the class, exactly as the state table omits itself rather than render a column of refusals.
         + (_row("Time-series hand-offs", _measured(_handoffs),
                 note="requests, not completed transfers")
@@ -4584,7 +4584,7 @@ def _checklist_panel(cl: "checklist_mod.Checklist") -> str:
         warning = (f'<p style="color:{_PALETTE["bad"]};font-weight:600">'
                    'A blocking check FAILED — approve is refused until it is resolved.</p>')
     elif cl.has_acknowledgeable_blocking_fail:
-        # An acknowledgeable-only block. The curator approve is available via the acknowledgement
+        # An acknowledgeable-only block. Approval by the curator is available via the acknowledgement
         # checkbox (a deliberate curator decision), NOT hard-refused. The submitter's own email would
         # be unacknowledgeable and hit the branch above instead.
         warning = (f'<p style="color:{_PALETTE["warn"]};font-weight:600">'
@@ -4613,7 +4613,7 @@ def _preview_value(value) -> str:
     `str(the_list)`: `warnings` is the only key that ever holds one, and since the >INFO pre-flight
     it holds up to a dozen sentences the curator reads to decide whether to hold a package. Python's
     repr delivered them as a single unbroken run. Mirrors `statuspage._preview_value`, minus the
-    absolute-path strip, which this page deliberately does not apply (gates the PUBLIC
+    absolute-path strip, which this page deliberately does not apply (that strip gates the PUBLIC
     page; a curator is entitled to see the server path in a build message)."""
     if isinstance(value, list):
         return ("<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in value) + "</ul>") if value else ""
@@ -6245,7 +6245,7 @@ def _hub_header(slug: str, *, fields: dict, version: str | None) -> str:
 
 
 def _hub_tab_strip(slug: str, active: str) -> str:
-    """The hub tab strip (Stage 2a; adds the browser-populated Stations chip):
+    """The hub tab strip (Stage 2a), which carries the browser-populated Stations chip:
     Overview & QA / Stations / Metadata / History, all in-hub tabs. The Stations entry carries a
     hidden chip slot ([data-stations-chip]) survey-hub.js fills with '<d> dropped · <f> flagged'
     from build_report — hidden at 0/0, so a healthy survey shows no chip. The strip carries the
@@ -6845,8 +6845,8 @@ def _merge_link_html(group: list, collections: dict) -> str:
 
 def render_collections_index(*, collections: dict, near_duplicates: list,
                              nav: "NavContext") -> str:
-    """The collections index (-A). Summary cards, the two inconsistency bands (id
-    near-duplicates + per-field divergence, each with its one-click remedy — record E: Merge /
+    """The collections index. Summary cards, the two inconsistency bands (id
+    near-duplicates + per-field divergence, each with its one-click remedy - a Merge /
     Normalise link into the editor with the canonical value pre-filled), the list table, and the
     'New collection…' entry. An empty corpus renders a clean 'No collections yet' state,
     never an error (matches the engine's collections.json == {})."""
@@ -7498,7 +7498,7 @@ def render_removal_preview(*, slug: str, version: str, removed: list, station_co
 
 # ---- survey retirement - the danger-zone confirmation + terminal page --------------------
 # Whole-survey removal: a git rm -r of the survey package, gated by a typed slug + a required release
-# note + a valid TOTP second factor. The confirmation page DISCLOSES exactly what a retirement takes
+# note + a valid TOTP second factor. The confirmation page DISCLOSES exactly what a retirement removes and leaves behind
 # (package contents + N stations, serving-until-rebuild, collections recompute, bookmark/DOI honesty,
 # the git-revert undo). No inline JS: the submit rides the shared CURATOR_UI_JS data-confirm.
 

@@ -55,7 +55,7 @@ def test_feed_entries_uses_attribution_declared_date_when_no_release_notes():
                                "attribution": {"declared_date": "2026-07-25"}}}
     entries = bp.feed_entries(smeta)
     assert len(entries) == 1
-    assert entries[0]["date"] == "2026-07-25", entries   # the declared_date, NOT the coverage end
+    assert entries[0]["date"] == "2026-07-25", entries   # the declared_date, NOT the year-end fallback
 
 
 def test_feed_entries_declared_date_joins_release_note_candidate_set():

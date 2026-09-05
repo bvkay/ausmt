@@ -1,7 +1,7 @@
 #!/bin/sh
 # AusMT curator-workbench ACTIONS agent. POSIX sh, one pass, timer-
 # driven (deploy/systemd/ausmt-actions.timer fires it every ~2 min). It is the HOST-SIDE half of the
-# privileged-action split: the gateway (which has NO shell, NO docker socket, NO site-data mount, the
+# privileged-action split: the gateway (which has NO shell, NO docker socket, NO site-data mount: the
 # trust boundary) writes an INTENT FILE into the shared gateway state dir; THIS agent, running as
 # the operator uid that owns the code checkout and can drive `docker compose`, scans the state dir and
 # executes a FIXED RECIPE for each recognised intent. The gateway can only ASK; the host decides and

@@ -101,7 +101,7 @@ WORDMARK_INK = {"on_dark": "#FFFFFF", "on_light": "#11182D"}
 TAGLINE_INK = {"on_dark": "#C9D4E8", "on_light": "#646979"}
 
 # The colour of a dot is a pure function of its POSITION: t runs 0 at the western-most column to 1 at
-# the eastern-most, and the ramp is evaluated at t. Left cool, right warm, per the guidance.
+# Left cool, right warm.
 T_PRECISION = 6
 
 # SIZE-ADAPTIVE DOT RADIUS, as a ratio of the lattice pitch. The presentation ratio 0.44 is measured
@@ -375,8 +375,8 @@ def _svg_text(x, y, size, ink, spacing, body, advance=None):
     case the correction is imperceptible (the site stack is 141.7 units short over 39 gaps).
 
     The WORDMARK is deliberately left free. Its widest measured overrun is 113 units against 200
-    units of clear space, so it cannot clip, and forcing its advance would override the tracking the
-    was chosen by eye with whatever a viewer's font happens to need."""
+    units of clear space, so it cannot clip, and forcing its advance would override the tracking
+    chosen by eye with whatever a viewer's font happens to need."""
     sp = f' letter-spacing="{spacing}em"' if spacing is not None else ""
     adv = f' textLength="{_n(advance)}" lengthAdjust="spacing"' if advance is not None else ""
     return (f'  <text x="{_n(x)}" y="{_n(y)}" font-family="{WEB_FONT_STACK}" '

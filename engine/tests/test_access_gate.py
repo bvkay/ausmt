@@ -222,10 +222,9 @@ def test_embargoed_survey_smeta_badges_honestly(tmp_path):
     assert sv["access"] == "embargoed" and isinstance(sv["access"], str)
 
 
-# -------------------------------------------------------------------------- DISPLAY-PRODUCT gate
+# --------------------------------------------------------------------------- DISPLAY-PRODUCT gate
 # The access gate withholds the BYTES (manifest/edi/xml/bundles); this display-product gate extends
-# it to the DERIVED DISPLAY products
-# the portal PLOTS. For an embargoed dataset the response curves ARE the data — a portal that plots the
+# it to the DERIVED DISPLAY products the portal PLOTS. For an embargoed dataset the response curves ARE the data — a portal that plots the
 # thinned tf.json curves for an embargoed survey has published the data it withheld from download. So for
 # a non-served survey the tf.json series columns become EMPTY ARRAYS and the sci.json science-derived
 # fields are nulled; the CATALOGUE row (locations/band/nper/sha256) stays public (discovery is universal),
@@ -320,7 +319,7 @@ def test_withheld_build_passes_verify_data_dir(tmp_path):
     assert r.returncode == 0, f"verify.py --data-dir failed on the withheld build:\n{r.stdout}\n{r.stderr}"
 
 
-# -------------------------------------------------------------------------- --products SURFACE gate
+# --------------------------------------------------------------------------- --products SURFACE gate
 # The per-station --products tree (station.json + dimensionality.json) IS a distribution surface: the
 # deploy Makefile writes products/ INSIDE the served build dir (deploy/Makefile ~:89, --products
 # /out/$BUILD_REL/products), and the portal serves it at /data/products/. So it rides the SAME access

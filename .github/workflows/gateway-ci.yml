@@ -2,7 +2,7 @@ name: gateway-ci
 
 # The gateway (submission intake + antivirus + curator publish flow) is a first-class subsystem
 # that takes real community submissions, so a workflow must run its unit suite and ruff must not
-# exclude it. This job closes that hole: it runs the
+# exclude it. This job does both: it runs the
 # gateway unit suite and lints gateway/ on every gateway-touching push/PR, so a gateway source
 # change is TESTED before it can ship inside an unrelated deploy-triggered image rebuild.
 #

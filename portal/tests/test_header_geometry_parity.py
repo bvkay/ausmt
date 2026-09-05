@@ -243,7 +243,7 @@ def test_the_mark_the_two_headers_name_is_a_real_committed_asset():
 # symbol after the SPA and the 2,655 generated pages had switched, so a reader following the
 # header's own "Contribute a survey" link watched the site's identity change under them.
 #
-# NO PAGE IS EXEMPT. about.html was the last one, its identity slot held open while the rule is
+# NO PAGE IS EXEMPT. about.html was the last one, its identity slot held open while that header
 # on that header; the rule is that about wears the chrome every other surface wears. There is no
 # exemption list here any more, and the pages are discovered from the filesystem, so a page cannot
 # arrive with an identity of its own. 404.html is a bare error document with no header at all.
@@ -484,8 +484,9 @@ def test_every_chrome_surface_declares_the_headers_own_line_height():
 def test_every_chrome_surface_carries_the_same_zone_geometry():
     """The zone rules, character-identical on EVERY surface wearing the chrome, not just across the
     pair above. The pair covers the SPA and the generated pages, which is where the geometry is
-    specified; releases.html and about.html each carry their OWN copy of the chrome, and an
-    auto-basis side is what the zone rule replaces. An auto basis sizes each side zone from its own content,
+    specified; releases.html and about.html each carry their OWN copy of the chrome, and both kept
+    the auto-basis sides the zone rule replaced. An auto basis sizes each side zone from its own
+    content,
     so on those two pages the identity block set the width of its own zone and shoved the tab group
     out to x=525.63 and x=525.27 at 1280px, while the SPA, the generated pages and brand.html all
     sat at x=350.83. A reader following the header's own Releases or About link watched the nav jump

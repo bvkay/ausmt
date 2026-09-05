@@ -42,7 +42,7 @@ def test_no_shipped_portal_file_names_a_retired_credit_key(key):
 
 def test_the_form_emitter_carries_the_replacement_questions():
     """NON-VACUOUS guard for the pin above: the keys are absent because the questions were REWRITTEN
-    onto the homes, not because the whole credit surface was deleted."""
+    onto creators[]/contributors[], not because the whole credit surface was deleted."""
     html = (PORTAL / "add-survey.html").read_text(encoding="utf-8")
     for needle in ("Who should the citation name, in order?", "Who led this survey?", "Who did what?",
                    "Does this dataset already have a citation or DOI?",

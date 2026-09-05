@@ -124,7 +124,7 @@ def test_collections_block_is_above_the_tree_in_source():
 def test_nav_button_min_width_fits_collections_label_across_pages():
     """The equal-width header nav (nav button on index, nav a on about) must reserve
     min-width:112px so the widest label ("Collections", ~109.7px) is not clipped, mirrored across both
-    pages. FAILS if either page falls back below 112px. Non-vacuous: the pre-token was 92px, which
+    pages. FAILS if either page falls back below 112px. Non-vacuous: the old token was 92px, which
     this asserts against — a red-proof on the old CSS trips here."""
     idx = _rule(_style(_html()), "nav button")
     assert idx is not None, "index.html lost its `nav button{...}` rule"

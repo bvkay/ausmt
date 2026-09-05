@@ -141,7 +141,7 @@ def test_js_data_urls_absolute(tmp_path):
     """EXECUTABLE URL PIN. The extracted STATIONS_JS dataUrl/stationJsonUrl must produce the
     exact expected ABSOLUTE strings for a tricky slug/id (space, plus, hash - hash unencoded would
     truncate the URL at a fragment). ALSO asserts (source-level) that EVERY fetchJson target in the
-    JS is absolute (data/... or a variable built from these helpers). FAILS IF any fetch is
+    JS is absolute (/data/... or a variable built from these helpers). FAILS IF any fetch is
     page-relative - from /gateway/curator/survey/<slug> a relative 'data/...' resolves to
     /gateway/curator/survey/data/... → 404 → the whole Stations tab is dead (the shipped pre-fix
     state, shown red)."""
@@ -203,7 +203,7 @@ process.stdout.write(JSON.stringify(out));
         {"mode": "xy", "values": [10.0, 45.0, 95.0, -5.0, 200.0, None]},
         # xy: median beyond band+slack (coherent wrong quadrant).
         {"mode": "xy", "values": [-120.0, -130.0, -140.0]},
-        # yx: healthy cluster (stored values for true -135/-100/-170).
+        # yx: healthy third-quadrant cluster (stored values for true -135/-100/-170).
         {"mode": "yx", "values": [_stored_for_true_yx(t) for t in (-135.0, -100.0, -170.0)]},
         # yx: SEAM-STRADDLING cluster — true values -179, -178, +179 (stored 1.0, 2.0, -1.0). A naive
         # (-180,180] median would average across the seam; the engine's (-360,0] mapping keeps it sane.
@@ -238,8 +238,8 @@ process.stdout.write(JSON.stringify(out));
 # hand-built rows are banned here by design.
 #
 # Skip posture: the engine stack (mt_metadata) is absent in the stackless gateway CI workflow, so these
-# pins skip there with EXACTLY the module's one allow-listed tripwire reason (gateway-ci.yml --allow);
-# On the dev box (ausmt env) and the engine workflows they RUN. Node-absent boxes hit the file-level
+# pins skip there with EXACTLY the gateway workflow's one allow-listed tripwire reason (gateway-ci.yml --allow);
+# on the dev box (ausmt env) and the engine workflows they RUN. Node-absent boxes hit the file-level
 # pytestmark above, which is deliberately NOT allow-listed.
 # ==================================================================================================
 _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
@@ -308,7 +308,9 @@ def test_stations_filter_selects_engine_built_rows_by_slug(engine_corpus, tmp_pa
     Node with the catalogue the REAL ENGINE emitted, must return EXACTLY the stations the engine
     built for each slug — judged against the engine's own slug-keyed products/<slug>/ tree, an
     INDEPENDENT observable (the products tree is keyed by slug on disk; the catalogue rows carry
-    the label). FAILS IF the filter misses a station the engine built for the slug OR pulls a sibling survey's rows across the trailing-dot boundary
+    the label). FAILS IF the filter misses a station the engine built for the slug (the shipped
+    label-vs-slug compare matched nothing) OR pulls a sibling survey's rows across the trailing-dot
+    boundary
     (au.burra-2017. must not match au.burra-2017-18.*, and vice versa)."""
     js = curatorpage.STATIONS_JS
     cmap = re.search(r"var C = \{.*?\};", js, re.DOTALL)
@@ -396,8 +398,8 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
 # ==================================================================================================
 # Frame-declaration readability — SUPERSEDED presentation, same invariant.
 #
-# The split view presents station.json's `frame` block as typed fact rows (frameRows). The hub
-#  replaced that table with the mockup's single worded line -
+# The split view presented station.json's `frame` block as typed fact rows (frameRows). The hub
+# replaced that table with the mockup's single worded line -
 # frameWords(frame): 'declared-zero · no rotation declared' — with EVERY extra frame field kept in
 # the collapsed raw-JSON <details>. The invariant is unchanged: the words derive from VERBATIM
 # station.json values (frame_served / derotated / declared_azimuth_deg), never a recompute, and
@@ -486,7 +488,7 @@ process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(
     assert any(g == "declared-zero · no rotation declared" for g in got), got
     # Synthetic engine-shaped variants exercise the OTHER branches (values in the engine's own
     # field vocabulary; the real corpus is all-clean so cannot reach them). The third is the
-    # panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances),
+    # panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances);
     # tipper_declared_azimuth_deg is emitted by the engine ONLY when divergent, so its presence
     # must surface a 'tipper declared azimuth' part.
     variants = [{"frame_served": "declared-zero", "derotated": True,

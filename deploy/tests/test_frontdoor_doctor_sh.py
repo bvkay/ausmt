@@ -179,8 +179,8 @@ def test_report_all_pass_is_labelled_and_exits_zero(tmp_path):
 
 
 def test_config_hash_match_passes(tmp_path):
-    """Trap, green side: when the container's mounted Caddyfile hashes EQUAL to the repo file, the
-    config check PASSES. Proves the FAIL pin below is non-vacuous."""
+    """Stale-config trap, green side: when the container's mounted Caddyfile hashes EQUAL to the repo
+    file, the config check PASSES. Proves the FAIL pin below is non-vacuous."""
     cf = _caddyfile(tmp_path)
     env = _env(tmp_path, cf, FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest())
     r = _run(env, "report")
@@ -189,9 +189,9 @@ def test_config_hash_match_passes(tmp_path):
 
 
 def test_config_hash_mismatch_fails_and_exits_nonzero(tmp_path):
-    """Trap, red side: when the RUNNING container's Caddyfile hash DIFFERS from the repo file, the
-    config check must FAIL and the whole run must exit non-zero (so it can gate an alert). FAILS IF a
-    drifted running config is reported green."""
+    """Stale-config trap, red side: when the RUNNING container's Caddyfile hash DIFFERS from the repo
+    file, the config check must FAIL and the whole run must exit non-zero (so it can gate an alert).
+    FAILS IF a drifted running config is reported green."""
     cf = _caddyfile(tmp_path)
     env = _env(tmp_path, cf, FAKE_HASH="deadbeef" * 8)
     r = _run(env, "report")
@@ -533,7 +533,7 @@ def test_ts_routes_leg_warns_on_a_survey_the_table_could_not_resolve(tmp_path):
 
 
 def test_ts_routes_leg_fails_on_a_stale_mounted_table(tmp_path):
-    """THE TRAP, extended to the ACCESS DECISION. Check 2 hash-compares only the Caddyfile, so a
+    """THE STALE-CONFIG TRAP, extended to the ACCESS DECISION. Check 2 hash-compares only the Caddyfile, so a
     route table that drifted on the VPS (an old copy, a hand-edit) would otherwise serve unnoticed -
     and a stale table is a stale suppression, not just stale config. FAILS IF a drifted table is
     reported green."""

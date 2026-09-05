@@ -378,8 +378,8 @@ class Gateway:
                 continue
             sub = self.db.get(done.submission_id)
             if sub is None or sub.state != states.SCANNED:
-                # A done-file for an unknown or non-SCANNED submission cannot drive a transition
-                # - the state machine would reject it anyway; drop it explicitly.
+                # A done-file for an unknown or non-SCANNED submission cannot drive a transition:
+                # the state machine would reject it anyway; drop it explicitly.
                 logger.warning("done-file for non-SCANNED submission %s ignored", done.submission_id)
                 path.unlink(missing_ok=True)
                 continue

@@ -151,7 +151,7 @@ def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
 
 def test_about_links_the_brand_page():
     """FAILS IF About stops pointing at the brand page. It is the only navigation into it: the page
-    is deliberately not a sixth header item."""
+    is deliberately not a sixth header item (the header carries five)."""
     about = (ROOT / "about.html").read_text(encoding="utf-8")
     assert 'href="brand.html"' in about, "about.html must link the brand page"
     assert "Brand" in about, "the About link must name the brand page in words a reader can find"

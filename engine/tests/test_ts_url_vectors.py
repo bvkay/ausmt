@@ -59,7 +59,7 @@ def test_the_absolute_route_is_the_prefix_plus_the_encoded_path_and_nothing_else
 
 
 def test_every_encoded_vector_passes_the_gate_the_published_route_is_judged_by():
-    # The encoder writes what _stationcheck admits. If these two ever part company the workflow publishes
+    # The encoder writes what _stationcheck admits. If these two ever part company the build publishes
     # routes its own semantic layer would reject, which is a build failure disguised as a vector file.
     for v in _load()["vectors"]:
         assert stcheck._TS_ENCODED.match(v["encoded_path"]), v["name"]

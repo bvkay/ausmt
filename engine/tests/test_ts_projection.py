@@ -96,9 +96,9 @@ def test_the_resource_emitter_ASKS_the_projection_rather_than_restating_it(monke
     """ONE implementation, not two that happen to agree.
 
     The vocabulary pin above forbids the LEVEL SETS from diverging; it cannot see the other half,
-    which is the publication predicate itself. While the emitter restated `review == verified`, a
-    change to which review states publish had to be made in two places, and a workflow that made it in
-    one would still pass every vocabulary check in this file. So the emitter is driven here by
+    which is the publica
+    change to which review states publish had to be made in two places, and a change made in only
+    one of them would still pass every vocabulary check in this file. So the emitter is driven here by
     REPLACING the projection's answer: a row the projection declines emits nothing, however the
     register reads.
 

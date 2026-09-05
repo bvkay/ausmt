@@ -435,10 +435,11 @@ def test_dry_run_takes_no_action(tmp_path):
 
 
 def test_restore_mktemp_fail_restarts_gateway(tmp_path):
-    """RESTART-AFTER-FAILED-STAGE PIN. If staging the restore tmp FAILS after the gateway is stopped (disk or inode exhaustion, which
-    is realistic during a disaster restore), the gateway MUST still be restarted: the sole ops surface
-    is never left down. Forced by pointing the live DB at a path whose parent does not exist, so the
-    restore mktemp fails. FAILS IF no `up -d gateway` mark appears on that post-stop path."""
+    """RESTART-AFTER-FAILED-STAGE PIN. If staging the restore tmp FAILS after the gateway is stopped
+    (disk or inode exhaustion, realistic during a disaster restore), the gateway MUST still be
+    restarted: the sole ops surface is never left down. Forced by pointing the live DB at a path
+    whose parent does not exist, so the restore mktemp fails. FAILS IF no `up -d gateway` mark
+    appears on that post-stop path."""
     t = _make_tree(tmp_path, drill_rc=0)
     _snapshot_db(t["backups"], "20260303T000000Z")
     # AUSMT_ACTIONS_DB in a NON-EXISTENT dir -> mktemp "$DB.restore.XXXXXX" cannot create its tmp.

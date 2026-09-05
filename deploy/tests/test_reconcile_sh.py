@@ -561,7 +561,8 @@ def test_lock_held_second_run_is_silent_noop(tmp_path):
 def test_status_file_readable_by_gateway_uid(tmp_path):
     """The status file must be group/other-readable: its CONSUMER is the gateway container (uid
     10002) reading through the shared state dir, not the operator who wrote it. FAILS IF: the
-    symlink-safe mktemp write ships its 0600 default again."""
+    symlink-safe mktemp write ships its 0600 default again, so the file exists and the panel still
+    reports no reconcile status."""
     tree = _make_tree(tmp_path, source_commit="placeholder")
     head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
     (tree["site"] / "build.json").write_text(json.dumps(

@@ -57,7 +57,7 @@ def test_people_name_type_is_fail_closed():
     assert any(getattr(x, "section", "") == "people" for x in e1), e1
 
     # A bogus role checkbox contributes nothing (no error, no contributors entry) - the panel can only
-    # ever tick a role.
+    # ever tick a known role.
     bogus_role = {"l_people_0_name": "X", "l_people_0_name_type": "person",
                   "l_people_0_role_Wizard": "1", **_snap("creators", []), **_snap("contributors", [])}
     patch, errs = ef.build_section_patch(bogus_role)
@@ -427,8 +427,8 @@ def test_people_no_op_round_trip_is_a_runner_no_op(tmp_path):
 
 
 # ==================================================================================================
-# The legacy Convert flow and its _delete_keys directive are GONE
-#and the three curated homes plus the designation mapping round-trip end to end.
+# The legacy Convert flow and its _delete_keys directive are GONE,
+# and the three curated homes plus the designation mapping round-trip end to end.
 # ==================================================================================================
 
 def test_the_legacy_convert_surface_is_gone(tmp_path):

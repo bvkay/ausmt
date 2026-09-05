@@ -184,7 +184,7 @@ def test_coordinate_policy_key_parity_through_real_engine_parser():
         assert default == policy, (
             f"editor-assembled {assembled!r} parsed by the engine to {default!r}, not the intended "
             f"{policy!r} - a key/spelling mismatch would make the policy a silent no-op")
-        assert overrides == {}  # survey level only; no per-station overrides written here
+        assert overrides == {}  # survey-level only; no per-station overrides written here
 
 
 def test_coordinate_policy_unset_round_trips_to_omit():
@@ -974,7 +974,7 @@ def test_identifies_out_of_vocab_is_fail_closed():
         ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
                              "l_related_identifiers_0_identifies": "level9",
                              **_snap("related_identifiers", [])}, "related_identifiers")
-    # every level is accepted
+    # every allowed level is accepted
     for lvl in ef.IDENTIFIES_LEVELS:
         out = ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
                                    "l_related_identifiers_0_identifier_type": "DOI",

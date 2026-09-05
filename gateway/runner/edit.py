@@ -4,9 +4,9 @@ network-none — where ruamel.yaml + the real surveys validator live. NEVER in t
 source-assertion test AND the subprocess import-hygiene test).
 
 Transport is the file-queue pattern, in its own namespace so the crash-only submission queue is
-untouched. It must never be spawned as `sys.executable -m ...` from the GATEWAY container, whose
-image deliberately carries no ruamel: a real edit run there 500s, and only an in-process seam
-makes it look as though it worked:
+untouched. This module must never be spawned as `sys.executable -m ...` from the GATEWAY container,
+whose image deliberately carries no ruamel: a real edit run there 500s while only an in-process
+seam makes it look as though it worked. The queue is:
 
     jobs/edit/pending/<id>.json   gateway enqueues (tmp+rename, atomic)
     jobs/edit/running/<id>.json   this runner claims via os.replace (the rename IS the lock)
@@ -302,7 +302,7 @@ def quote_ambiguous(value):
     so ruamel emits them quoted. Emitted UNQUOTED, a patched `region: on` / `name: no` /
     `abstract: 12:34:56` is read back by PyYAML safe_load as True / False / 45296 while ruamel's
     own re-read keeps it a string, so the diff, the sha pin and the confirm re-run all agree and
-    no guard fires.
+    no guard fires; the portal would serve a bool/int the curator never wrote.
 
     KEYS pass through the same oracle as values. No non-str-key rejection path is
     added: the patch arrives via json.loads, whose object keys are ALWAYS str, so a non-str key is

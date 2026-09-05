@@ -246,7 +246,7 @@ def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
                 assert 'href="/gateway/curator/edit"' in r.text          # Surveys
                 assert 'href="/gateway/curator/queue"' in r.text          # Submission queue
                 assert 'href="/gateway/curator/uploaders"' in r.text      # Uploader keys
-                # Serve state: promoted the panel to a first-class screen, so the rail
+                # Serve state: the panel is a first-class screen of its own, so the rail
                 # now points at /gateway/curator/serve (was the queue's #serve-state anchor).
                 assert 'href="/gateway/curator/serve"' in r.text           # Serve state
                 # Collections joined the rail in Stage 3a - present on every page (not

@@ -267,7 +267,7 @@ def test_stated_schema_name_version_and_licence_track_their_single_sources():
     assert "metadata_license" in codes, (
         "the paragraph should name the field the licence is served in, so a reader can find it in the document")
     assert "covers the catalogue metadata only" in _flat(_about_contract()), (
-        "the metadata licence must be scoped explicitly: it is not the per-survey data licence, and a "
+        "the metadata licence must be scoped explicitly: it is NOT the per-survey data licence, and a "
         "harvester that conflates the two republishes restricted data under CC0")
 
 

@@ -44,7 +44,7 @@ PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 TYPES = ("LPMT", "BBMT", "AMT", "GDS")
 TOKEN_OF = {"LPMT": "--lpmt", "BBMT": "--bbmt", "AMT": "--amt", "GDS": "--gds"}
 
-# Stated floors. PAIR_FLOOR is the palette-wide invariant established and this module preserves (the
+# Stated floors. PAIR_FLOOR is the established palette-wide invariant this module preserves (the
 # binding pair is AMT/GDS at 21.1, untouched here). LP_BB_FLOOR is this module's own promise: the
 # reported pair must stay far clear of the general floor, not merely legal. LP_BB_DEUTAN_FLOOR is the
 # same promise under simulated deuteranopia, where the old pair collapsed to 15.3.

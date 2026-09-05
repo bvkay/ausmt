@@ -1,5 +1,5 @@
 """Metadata-editor gateway-flow tests. Driven through the real HTTP surface
-(httpx in-process) edit seam injected in-process (conftest.inproc_edit_runner) and the
+(httpx in-process) with the edit seam injected in-process (conftest.inproc_edit_runner) and the
 publish git seam faked (conftest.FakeGit) - the same injected-seam discipline as the clamd and
 git tests. Proven-failing-first where a behaviour change is the deliverable.
 
@@ -162,7 +162,7 @@ def test_access_level_flip_lands_in_yaml(tmp_path):
             assert r.status_code == 200
             after = (pkg / "survey.yaml").read_text(encoding="utf-8")
             assert "level: embargoed" in after
-            # FIX 3: the ISO date is double-quoted (a bare would be retyped to
+            # FIX 3: the ISO date is double-quoted (a bare `2027-01-01` would be retyped to
             # datetime.date by the PyYAML readers downstream).
             assert 'embargo_until: "2027-01-01"' in after
     run(_body())
@@ -196,7 +196,7 @@ def test_validator_fail_shows_fail_and_confirm_409(tmp_path):
                                         "note": "x"}, follow_redirects=False)
             assert r.status_code == 409
             # No MUTATING git — the FAIL guard is upstream of any commit. (The preview render now
-            # reads surveys-live HEAD via `rev-parse --short HEAD` drift chip, a benign
+            # reads surveys-live HEAD via `rev-parse --short HEAD` for the drift chip, a benign
             # read the queue page already does.) ALLOWLIST, not denylist: the FAIL path
             # may make ONLY the two benign READS `status` and `rev-parse`; assert every recorded verb
             # is one of those two. A denylist would silently pass a NEW mutating verb (worktree add,

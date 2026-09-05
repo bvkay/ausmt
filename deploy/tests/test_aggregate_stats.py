@@ -2245,8 +2245,9 @@ def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
 # can never count completed transfers: everything after the Location is between the browser and NCI,
 # and every published string says so.
 #
-# TWO things the log cannot tell us, and they are the whole of it. The `size` on a 302 line is the
-# REDIRECT BODY, not the file, and the Location header is never logged at all. So the bytes and the
+# TWO things the log cannot tell us, and they are the whole of the problem. The `size` on a 302 line
+# is the REDIRECT BODY, not the file, and the Location header is never logged at all. So the bytes
+# and the
 # destination host come from the register-derived `ts_access.json` the build serves, joined on the
 # route path exactly as a frozen release bundle joins on its filename (_release_bundle_row).
 #

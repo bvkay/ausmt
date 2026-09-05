@@ -192,7 +192,7 @@ def test_no_ack_checkbox_and_disabled_for_submitter_hit(tmp_path):
 
 
 def test_hostile_pii_filename_renders_inert(tmp_path):
-    # a hostile file name in the package (an XSS payload) is submitter-derived input and
+    # A hostile file name in the package (an XSS payload) is submitter-derived input and
     # must render INERT (escaped) in the detail page. Rendered at the page layer directly with a
     # crafted checklist because such a name (`<`, `>`) is not a legal file on Windows, yet IS a legal
     # zip member on the Linux gateway host — the escaping, not the filesystem, is the control under
@@ -256,7 +256,7 @@ def test_detail_full_width_two_column_layout():
 
 
 def test_public_status_identical_for_ack_vs_nonack(tmp_path):
-    # the PUBLIC status page output is byte-identical for an acknowledged vs a
+    # The PUBLIC status page output is byte-identical for an acknowledged vs a
     # non-acknowledged submission in the same state — acknowledgement is a CURATOR-only detail and must
     # not change the public page. Failure criterion: fails if the two public pages differ (beyond the
     # submission id / token, which we normalise out).

@@ -595,7 +595,7 @@ def test_analytics_monthly_csv_has_no_state_columns_without_state_data():
 # Counting-honesty workflow (screen half): say what each figure covers, and never render a figure that
 # was not measured.
 #
-# The aggregator half of this module changed what is counted (client classes, the within-day dedupe,
+# The aggregator half of this feature changed what is counted (client classes, the within-day dedupe,
 # 206, the served schema as an API path, API requests joining the geo count, release bundles). The
 # screen's job is to keep every caption true to that, and to stop presenting a seeded month's zeroes
 # as measurements -- the same omit-rather-than-fabricate rule the state table has always applied.
@@ -659,7 +659,7 @@ def test_the_partial_dimension_disclosures_name_countries_and_unattributed(tmp_p
     """DISCLOSURE PIN. Both honesty lines enumerate which dimensions are partial, and both omitted
     COUNTRIES and UNATTRIBUTED, which is why a month showing 'Countries: 1' beside a headline of 11
     reads as a bug rather than as the forward-only seam it is. Both lines must name every partial
-    dimension, INCLUDING the ones this module added, and each must attach them to the seam they actually
+    dimension, INCLUDING the ones the later counting work added, and each must attach them to the seam they actually
     belong to: the caveat's dated sentence covers the v1 hinge, and the dimensions that began at the
     later fold are named in their own sentence, which does NOT claim that date. FAILS IF either line
     omits countries or unattributed, if the new dimensions land undisclosed, or if the dated sentence
@@ -1035,8 +1035,8 @@ def test_the_survey_csv_tolerates_rows_written_before_the_country_list():
 
 
 # ==================================================================================================
-# The SECOND forward-only seam. `detail_since` is the v1 -> v2 hinge; the dimensions the counting
-# Workflow added (client split, within-day dedupe, API geography, per-survey countries, monthly network
+# `detail_since` is the v1 -> v2 hinge; the dimensions the counting
+# work added (client split, within-day dedupe, API geography, per-survey countries, monthly network
 # peak) began months after it. A month folded in between carries a real volume and a real format
 # split beside NONE of those, so the seeded-month degrade above never fires for it and every one of
 # those cells rendered a zero nobody measured. These pins hold the line at that second seam, on the

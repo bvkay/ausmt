@@ -195,7 +195,7 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
     (organisation.ror null -> a URL) and the emitted survey.yaml diff must touch ONLY that field's
     line(s) plus the managed version/release_notes — never the untouched sibling (organisation.name)
     and never its comment. FAILS IF editing one sub-field re-emits a sibling line or strips an
-    intra-section comment."""
+    intra-section comment (the wholesale-replace behaviour, proven RED)."""
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
     # A pure single-field edit: submit the WHOLE organisation section back with only `ror` changed
     # (name + legacy_code carried through unchanged, so nothing is deleted — the add/delete case is
@@ -236,7 +236,7 @@ def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
     was untouched - but the wholesale emitter ALSO never touched a sibling SECTION (it
     rebuilt only the edited section's node), so that assertion passed against every implementation
     that ever existed and could not fail (Invariant 10). The add+delete here goes through the exact
-    deletion loop whose failability was PROVEN by mutation (evidence fix-round report):
+    deletion loop whose failability was PROVEN by mutation (evidence in the fix-round report):
     pointing that loop at the ROOT document instead of the section node makes it delete top-level
     keys, which rewrites section B and reds this test. That mutation is evidence only, reverted, never
     committed. FAILS IF an add+delete in one section disturbs a sibling section's bytes."""
@@ -314,7 +314,7 @@ def test_added_subkey_with_ambiguous_value_is_quoted_no_sibling_moves(tmp_path):
 
 def test_deleting_subkey_removes_only_that_line_neighbours_byte_stable(tmp_path):
     """Deleting a sub-key (advanced-JSON: the section is submitted without `legacy_code`)
-    removes ONLY that key's line; its neighbours' comments stay byte-stable. Failable
+    removes ONLY that key's line; its neighbours' comments stay byte-stable. Failable via the same
     mutation (deletion loop iterating the root document rather than the section node) — which deletes
     the wrong nodes and rewrites neighbouring lines; proven RED in the fix-round report."""
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)

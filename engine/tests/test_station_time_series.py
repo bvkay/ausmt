@@ -423,8 +423,8 @@ def test_the_blessed_docs_section_promises_what_the_emitter_guarantees():
 
     The level-token leg is the same debt in the other enumerated fact. The section listed the four
     tokens as a closed set one paragraph above the one promising that new tokens may appear, and no
-    pin read the list at all: the pin asserts row shape and the mtcat identity join and never the
-    names. So the one enumerated fact on a surface blessed as third-party-stable could go stale in
+    pin read the list at all: the existing pin asserts row shape and the mtcat identity join and never
+    the names. So the one enumerated fact on a surface blessed as third-party-stable could go stale in
     silence the next time a level was added. The list is now read out of the emitter's own
     vocabulary rather than restated here, which is what makes the sentence self-maintaining.
 

@@ -1,4 +1,4 @@
-# AusMT front-door log-shipping timer (deliverable 3). Fires ausmt-frontdoor-logs.service once a
+# AusMT front-door log-shipping timer. Fires ausmt-frontdoor-logs.service once a
 # day at 03:25 UTC - AFTER the nightly backup (03:20) and BEFORE the fold (ausmt-stats, 03:35), so
 # each day's public logs are on the box before the aggregator reads them. Install:
 #   sudo cp deploy/frontdoor/ausmt-frontdoor-logs.{service,timer} /etc/systemd/system/

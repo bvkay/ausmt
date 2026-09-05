@@ -334,7 +334,7 @@ def test_slug_charset_validation():
 
 # --------------------------------------------------------------------------------------------------
 # Curator-acknowledgeable PII sweep.
-# Every behaviour change below is proven-failing-first against code (evidence in the report).
+# Every behaviour change below is proven-failing-first against the pre-fix code (evidence in the report).
 # --------------------------------------------------------------------------------------------------
 def test_generic_email_without_ack_refuses_approve_409(tmp_path):
     # a generic (non-submitter) email in the package, NO ack => approve 409 listing the PII
@@ -360,7 +360,8 @@ def test_generic_email_with_ack_publishes_and_audits(tmp_path):
     # Generic email + ack_pii=yes + note => publish proceeds; the PUBLISHING audit reason
     # carries the PII-ACK prefix with the file name and the curator note. Failure criterion: fails if
     # the submission does not reach PUBLISHED, or the audit reason lacks PII-ACK / the file name / the
-    # note. proven failing against code: there was no ack_pii path, so this curator approve 409'd and
+    # note. proven failing against the pre-fix code: there was no ack_pii path, so this curator
+    # approve 409'd and
     # the submission stayed VALIDATED.
     async def _body():
         git = FakeGit()
@@ -458,7 +459,7 @@ def test_ack_pii_exact_token_parsing(tmp_path):
     # ack_pii is an EXACT affirmative token, default DENY (mirrors confirm_overwrite). The
     # four affirmatives allow; "", "0", "false", "anything" deny. Failure criterion: fails if a
     # non-affirmative value lets the acknowledged curator approve proceed, or an affirmative is refused.
-    # proven failing against code: there was no ack path at all, so every affirmative 409'd.
+    # proven failing against the pre-fix code: there was no ack path at all, so every affirmative 409'd.
     async def _body():
         deny_values = ["", "0", "false", "anything", "YESa", " ", "2"]
         allow_values = ["1", "yes", "true", "on", "  YES ", "True", "On"]
@@ -517,8 +518,8 @@ def test_ack_address_never_echoed_and_report_capped(tmp_path):
 def test_retry_after_acknowledged_failure_needs_ack_again(tmp_path):
     # Acknowledgement is PER-ACTION. A retry from PUBLISH_FAILED re-evaluates and needs
     # ack_pii again — a retry WITHOUT ack on a still-acknowledgeable submission is a 409. Failure
-    # criterion: fails if the retry proceeds without a fresh ack. proven failing against
-    # code: retry did not consider PII acknowledgement at all (the block was absolute), so this path
+    # criterion: fails if the retry proceeds without a fresh ack. proven failing against the
+    # pre-fix code: retry did not consider PII acknowledgement at all (the block was absolute), so this path
     # did not exist.
     async def _body():
         # First publish is acknowledged but fails at push (rolled back to PUBLISH_FAILED). The generic

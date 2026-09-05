@@ -1,12 +1,13 @@
 """Public bridge - front-door + box-side two-walls pins + log-shipping pins.
 
 The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader -
-and the PUBLIC submission subset - to the box's dedicated public-subset listener over the tailnet. The Add Survey contribution flow is public (an MT user who clicks Add Survey
-must reach the page and lodge a survey); the curator/admin workbench stays refused. The load-bearing
-properties are public (privacy) and security properties, so — per the standing rule — each is proven
-with a RUNTIME pin against a REAL Caddy driving the SHIPPED directives (the PR #48 real-caddy harness
-pattern), not a config-syntax assertion alone. Where a property can be made to FAIL, a red-proof
-composes a deliberately mis-scoped config and asserts the pin catches it.
+and the PUBLIC submission subset - to the box's dedicated public-subset listener over the tailnet.
+The Add Survey contribution flow is public (an MT user who clicks Add Survey must reach the page and
+lodge a survey); the curator/admin workbench stays refused. The load-bearing properties are public
+(privacy) and security properties, so — per the standing rule — each is proven with a RUNTIME pin
+against a REAL Caddy driving the SHIPPED directives (the PR #48 real-caddy harness pattern), not a
+config-syntax assertion alone. Where a property can be made to FAIL, a red-proof composes a
+deliberately mis-scoped config and asserts the pin catches it.
 
 THE PUBLIC SUBSET (both walls are INDEPENDENT allowlists of exactly this set — read gateway/app.py):
   * GET  /add-survey.html (+ trailing slash) — the contribution page (served by the box reader).

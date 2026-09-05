@@ -51,7 +51,7 @@ import build_portal as bp  # noqa: E402
 # survey.yaml). Reused so the synthetic corpora are the SAME shape the coordinate-access tests build.
 from test_coord_access import _stage_survey  # noqa: E402
 
-# ---- the regression pin's recorded numbers (on the fixed engine, macOS, the pinned
+# ---- the regression pin's recorded numbers (measured on the fixed engine, macOS, the pinned
 # mt_metadata 1.0.9 / mth5 0.6.8 stack; a Linux glibc box measures lower absolute peaks) ----
 # corpora: A = 2 surveys x 10 stations (20), B = 20 surveys x 10 stations (200); same largest survey.
 # The 180-station delta halves the slope's noise against the 80-station delta first used (two runs of

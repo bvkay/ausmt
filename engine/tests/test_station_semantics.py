@@ -495,8 +495,8 @@ def test_verify_self_building_runs_the_station_gate(tmp_path):
     verify.py run that builds its own corpus must run the station gate too, or a developer's green
     run means less than the deployment gate's.
 
-    The self-building path passes no --products, so this is also where the unconditional served-root write earns its keep: without the
-    unconditional served-root write there would be no station.json for the gate to read.
+    The self-building path passes no --products, so this is also where the unconditional served-root
+    write earns its keep: without it there would be no station.json for the gate to read.
 
     AUSMT_VALIDATOR_PATH is pinned through the four-arm seam so the run is hermetic in
     every workflow: sibling checkout on the dev box, the vendored copy on a monorepo CI checkout, and

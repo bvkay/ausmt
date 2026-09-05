@@ -244,8 +244,7 @@ def access_serve_state(level, embargo_until, today=None) -> dict:
     """Whether a survey's ACCESS state permits byte distribution, plus curator-facing warnings.
 
     Returns {served, embargo_active, warnings}. served == access permits distribution (the licence gate is
-    applied SEPARATELY by the caller). Only access.level == 'open' with no active embargo serves. Decisions
-    (recorded contract):
+    applied SEPARATELY by the caller). Only access.level == 'open' with no active embargo serves. Decisions:
       (a) embargoed + UNPARSEABLE embargo_until  -> embargoed (FAIL CLOSED) + loud warning.
       (b) embargoed + NO embargo_until           -> embargoed INDEFINITELY + warning.
           embargoed + FUTURE date                -> embargoed (normal; no warning).
@@ -1335,9 +1334,9 @@ def survey_metadata_document(label, y: dict, smeta: dict, served: bool, coord_st
     authoritative slug and the normalised access state the byte gate used). Returns a plain-JSON dict
     in the schema's property order; the caller serialises with _jdump(doc, indent=1).
 
-    `served` is the survey's access_serve_state["served"], captured at the emit site. Under the no-new-withholding rule (no new
-    withholding: discovery is universal and this document carries no distribution facts) it gates NO
-    class - the argument is the policy-before-emission seam a per-class refinement for embargoed
+    `served` is the survey's access_serve_state["served"], captured at the emit site. Under the
+    no-new-withholding rule (discovery is universal and this document carries no distribution
+    facts) it gates NO class - the argument is the policy-before-emission seam a per-class refinement for embargoed
     surveys would plug into, never an invention of this emitter. `coord_state` is the aggregated
     post-mask coordinate state (exact / generalised / withheld): a withheld survey emits no extent.
 
@@ -2469,7 +2468,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         r["ausmt_id"] = f"au.{safe_component(slug)}.{r['id']}"
         r["comps"] = "".join(r.get("components") or [])
         r["frame"] = parsed.get("frame")               # frame facts -> station.json
-        # Arm B: a survey with inconsistent per-station declared frames carries the survey-level
+        # A survey with inconsistent per-station declared frames carries the survey-level
         # "mixed declared frames" note. Stamp it here (AFTER the context-free per-station parse, so
         # it never enters the cache) into BOTH the station's frame facts (-> station.json, so the
         # portal drawer can surface it) and its frame notes (-> build_report `frame` array + the
@@ -3635,7 +3634,7 @@ def build_identity(surveys_root) -> dict:
     exact engine + surveys commits that produced it. Deterministic
     aside from `generated` (an ISO UTC timestamp), so two builds of identical inputs differ only there.
 
-    engine_commit    short HEAD of THIS repo (ausmt/), via the same _git_commit_at helper _build_prov
+    engine_commit  : short HEAD of THIS repo (ausmt/), via the same _git_commit_at helper _build_prov
                      uses (HERE = engine/extract/). The engine image COPYs engine/ WITHOUT .git,
                      so git resolution ALWAYS yields None in a container build -- when that happens,
                      fall back to the AUSMT_ENGINE_COMMIT env var (baked in at image-build time by
@@ -3643,13 +3642,13 @@ def build_identity(surveys_root) -> dict:
                      result first, env var second, the literal string "unknown" last (a genuinely
                      unresolvable build identity, e.g. a bare pip install with no .git and no env var --
                      still a valid string, never Python's None).
-    source_commit    short HEAD of the ausmt-surveys checkout at `surveys_root`, when that directory
+    source_commit  : short HEAD of the ausmt-surveys checkout at `surveys_root`, when that directory
                      sits inside a git work tree; None for --raw builds or a non-git --surveys dir (a
                      plain directory copy, or CI's PR-diff checkout of just a subtree) -- graceful, not
                      a hard error, since building without a resolvable surveys commit is legitimate.
                      (No env fallback for this one -- there is exactly one source repo per deployment
                      and it is always bind-mounted with its .git intact; see engine.Dockerfile.)
-    build_id         "<engine_commit>-<source_commit>-<generated>" - plain concatenation, opaque to
+    build_id       : "<engine_commit>-<source_commit>-<generated>" - plain concatenation, opaque to
                      the portal (displayed verbatim, never parsed). source_commit's None (the
                      legitimate no-surveys-commit case) renders as "unknown" IN THE JOIN ONLY, never
                      the Python str(None) "None" -- the live footer showed the literal
@@ -4182,7 +4181,7 @@ def _release_mth5_metadata_classes() -> None:
     (get_all_fields_serializable's whole body is one `with _CACHE_LOCK`), so a clear from another
     thread cannot split a computation; but with THREAD workers one worker's release evicts what
     another is about to look up again, and the per-unit bound this gives is per process, not per
-    thread. Worker PROCESSES each own their memo and keep the bound; that module should use processes."""
+    thread. Worker PROCESSES each own their memo and keep the bound; that build should use processes."""
     try:
         from mt_metadata.base.pydantic_helpers import clear_field_caches  # noqa: PLC0415
     except Exception:  # noqa: BLE001  (a different mt_metadata layout: no memo to release)
@@ -6214,8 +6213,8 @@ def _main_build(argv=None):
     # {ausmt_id: {level token: {bytes, url_path}}}, beside coord_policy.json and for its stated
     # reason (:5368-5380): the drawer and the exports render from the boot-loaded catalogue, and
     # station.json is never fetched on navigation, so a per-level size and route cannot reach the
-    # portal any other way. That is why the route detail rides a boot artifact, and what makes the pointer file
-    # portal-generated.
+    # portal any other way. That is why the route detail rides a boot artifact, and why the pointer
+    # file is portal-generated.
     #
     # THE GUARANTEE IS MEMBERSHIP, NOT SHAPE, and the trade is deliberate: _ts_rows holds only
     # stations that passed the SAME access gate the hand-off rows did, captured at :5187 and never

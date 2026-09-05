@@ -8,7 +8,7 @@ so a test cannot pass vacuously against an unrotated fixture; and one adversaria
 the round-trip assertion CAN fail (a wrong-signed de-rotation is caught), permanently — not just
 in a one-off red run (Invariant 10).
 
-THE SERVE POLICY: the engine NEVER rotates served data. A survey-uniform declared
+THE SERVE POLICY (v3): the engine NEVER rotates served data. A survey-uniform declared
 frame of ANY magnitude serves AS STORED with the angle recorded; survey-inconsistent frames
 serve as-stored per station with a survey "mixed declared frames" note; per-period frame
 mixing (PAX) is REFUSED at the gate. The de-rotation math (Z' = R(-θ) Z R(-θ)^T) is retained
@@ -178,7 +178,7 @@ def test_uniform_zrot_served_as_stored_v3a(tmp_path):
 
 
 def test_olympic_dam_class_neg60_served_as_stored_v3a(tmp_path):
-    """Arm A pin (olympic-dam class: uniform ZROT −60, beyond any declination).
+    """Uniform-frame serve-as-stored pin (olympic-dam class: uniform ZROT −60, beyond any declination).
     FAILS IF: the −60° station is served de-rotated. Compares the served pt_az against the SAME
     fixture built at angle 0 (the de-rotated target): they must DIFFER in the rotated way (~60°),
     proving the served values are the SOURCE (as-stored) values, not the de-rotated ones. Both go
@@ -613,14 +613,14 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
 
 
 # ---------------------------------------------------------------------------------------------
-# Declared-zero stations participate in the arm-B vote as angle 0.0
+# Declared-zero stations participate in the mixed-frames spread vote as angle 0.0
 # ---------------------------------------------------------------------------------------------
 def test_classify_survey_frame_declared_zero_participates_f1():
     """FAILS IF: declared-zero (kind 'none') stations are excluded from the
     spread vote or the note's min/max range. A served station always sits in SOME declared frame —
     zero serves under the declared-zero reference — so [0°, 20°] mixes frames exactly as [8°, 20°]
     does, and the stamped range must include the 0° members.
-    Historical red: code voted over kind=='uniform' only - [0°, 20°] got NO note and
+    Historical red: the earlier code voted over kind=='uniform' only - [0°, 20°] got NO note and
     [0°, 8°, 20°] understated the range as '8°…20°'."""
     z = ("none", 0.0)
     u = lambda a: ("uniform", float(a))  # noqa: E731
@@ -644,7 +644,7 @@ def test_survey_zero_member_gets_mixed_frames_note_f1(tmp_path):
     """Integration. FAILS IF: a survey mixing a declared-zero station with a 20° one gets NO
     mixed-frames note (the defect: zero members were invisible to the vote), or the note's
     range omits the 0° member it is stamped on. Both stations still serve AS STORED.
-    Historical red: code emitted no note for [0°, 20°]."""
+    Historical red: the earlier code emitted no note for [0°, 20°]."""
     sdir = tmp_path / "survey"
     sdir.mkdir()
     (sdir / "A.edi").write_text(VULCAN.read_text(encoding="latin-1"), encoding="latin-1")  # ZROT=0
@@ -730,7 +730,7 @@ def test_divergent_tipper_frame_reported_f2(tmp_path):
 def test_equal_tipper_frame_not_reported_f2(tmp_path):
     """Negative space. FAILS IF: an EQUAL tipper/impedance declaration (ZROT=TROT=-60) or a
     zero/zero one produces the divergence field or note — equal-or-absent TROT means no change, no
-    noise (mutation-proof pin: the field appears ONLY on divergence)."""
+    noise (mutation proof for the divergence pin: the field appears ONLY on divergence)."""
     for name, zr, tr in (("eq60.edi", -60.0, -60.0), ("eq0.edi", 0.0, 0.0)):
         parsed = _parse(tmp_path, name, _vulcan_with_tipper(zr, tr))
         assert "skip" not in parsed, name

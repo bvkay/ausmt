@@ -212,7 +212,8 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine keeps reading
     # sources[], so nothing served changes.
     #
-    # The single typed list of provenance relations to identifiers AusMT does NOT own.
+    # related_identifiers is the single typed list of provenance relations to identifiers AusMT does
+    # NOT own.
     # The primary per-row control is `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
     # terms) — FIRST on the row and FAIL-CLOSED like relation/identifier_type. The DataCite `relation`
     # DERIVES from `identifies` server-side, so it is not a curator control on an identifies
@@ -297,7 +298,7 @@ LICENSE_REDISTRIBUTABLE = LICENSE_IDS[:13]
 SOURCE_PROFILES = ("ga", "generic")
 
 # The related-identifiers model: the two FROZEN, FAIL-CLOSED vocabularies the
-# typed relation adds. RELATION_TYPES is the curated DataCite subset as the editor presets;
+# RELATION_TYPES is the curated DataCite subset offered as the editor presets;
 # IDENTIFIER_TYPES is the small set AusMT records against. Both are BAKED copies — the gateway APP image
 # is content-blind (ships only gateway/, never the surveys validator — see gateway.Dockerfile), so a
 # runtime import of the sibling vocab is impossible; the copies are PINNED byte-for-byte to the surveys
@@ -1122,7 +1123,7 @@ def assemble_section(form: dict, section: str):
         value = _assemble_list(form, section)
     else:
         # A JSON-only section (JSON_SECTIONS) with a blank j_<section>: the panel's own copy says
-        # blank means unchanged, so it contributes nothing. Reachable since the care fix.
+        # blank means unchanged, so it contributes nothing. This branch is reachable, not dead.
         return _OMIT
 
     original = _original_snapshot(form, section)

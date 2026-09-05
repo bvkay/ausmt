@@ -46,7 +46,8 @@ for (const [value, shown] of [[5.33333, "5.3"], [0.005012, "0.005"], [9.6e-05, "
   eq(fmtPeriod(value), shown, "R1 worked example " + JSON.stringify(value));
 ok(fmtPeriod(9.6e-05).indexOf("e") < 0, "exponent notation must never reach a rendered slot");
 
-// TIE VECTORS. Not in the list, and the reason the JS twin cannot simply call toFixed:
+// "the list" has lost the noun that identified it. Name it from the section above:
+// TIE VECTORS. Not among the worked examples, and the reason the JS twin cannot simply call toFixed:
 // Python rounds an exact .5 tie to the EVEN neighbour and JS rounds it away from zero, so a 1.25 s
 // period printed "1.3" in the workspace beside "1.2" on the survey page. These are the values where
 // the two runtimes' default tie rules disagree, pinned as literals on both sides of the parity.

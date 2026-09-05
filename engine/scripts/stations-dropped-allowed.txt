@@ -30,6 +30,6 @@ capricorn-2010/CP2L08.edi
 # roxby-downs-2018: one station refused by the same sign-convention gate, in a third-party release
 # whose published ids come from a station_ids override. The build writes station "188" here, the
 # DATAID, because the gate refuses the station before the override applies; the id that package
-# will publish is RD18-188e. Named ahead of its merge so the corpus change needs no engine change
-# beside it.
+# would otherwise publish is RD18-188e. Named ahead of its merge so the corpus change needs no
+# engine change beside it.
 roxby-downs-2018/188_S__2.edi

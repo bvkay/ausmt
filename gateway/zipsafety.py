@@ -12,8 +12,9 @@ from __future__ import annotations
 import zipfile
 from dataclasses import dataclass
 
-# Design numeric limits. Kept as named constants because the test contract asserts the exact
-# boundary behaviour (a 2001-member zip rejects, a ratio-101 member rejects).
+# Numeric limits for the member, ratio and size guards. Kept as named constants because the test
+# contract asserts the exact boundary behaviour (a 2001-member zip rejects, a ratio-101 member
+# rejects).
 MAX_MEMBERS = 2000
 MAX_TOTAL_UNCOMPRESSED_FACTOR = 4      # declared uncompressed total <= 4 x max-upload
 RATIO_LIMIT = 100                      # per-member compression ratio cap (zip-bomb)

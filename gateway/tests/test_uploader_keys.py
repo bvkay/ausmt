@@ -339,7 +339,7 @@ def test_keys_page_wide_layout_short_datetimes_and_note_width():
 
 def test_wide_by_default_narrow_by_exception():
     """SCOPE PIN. The scope invariant is WIDE-BY-DEFAULT rather than per-page
-    opt-in to WIDE-BY-DEFAULT: every shelled working page (via _shell) fills the viewport; the ONLY
+    opt-in: every shelled working page (via _shell) fills the viewport; the ONLY
     narrow survivors are the chrome-less _page users — the login page and the terminal confirm pages
     (a centred form stays a centred form). The old 'queue must NOT be wide' assertion dies with this
     rule. FAILS IF a shelled working page reverts to the narrow measure, or a centred-form _page page

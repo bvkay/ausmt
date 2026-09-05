@@ -1,4 +1,4 @@
-"""Requested drawer copy removals - render pins (Invariant 10).
+"""Drawer copy removals - render pins (Invariant 10).
 
 Three placeholder/aggregate presentations were removed from portal/src/drawer.js:
   (1) the SURVEY-summary "Automated completeness/smoothness check" row (the qavg mean-of-per-station-Q

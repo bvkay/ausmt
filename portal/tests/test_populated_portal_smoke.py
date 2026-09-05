@@ -77,9 +77,9 @@ def test_populated_portal_value_binding(tmp_path):
     assert st["q"] == 4.2, st                          # sc[SC.q]
     assert st["dim"] == "2-D", st                      # sc[SC.dim]
 
-    # (b) exports.js CSV row - value-binds the EXPORT call site. DROPPED
-    # six columns from the station CSV (quality, quality_basis, remote_ref, dimensionality, software, file),
-    # leaving a lean identity/geometry/rights row of 19 columns. Column order per the exports.js header:
+    # (b) exports.js CSV row - value-binds the EXPORT call site. The station CSV DROPS six columns
+    # (quality, quality_basis, remote_ref, dimensionality, software, file), leaving a lean
+    # identity/geometry/rights row of 19 columns. Column order per the exports.js header:
     #   0 ausmt_id 1 station 2 country 3 organisation 4 survey 5 lat 6 lon 7 type 8 components 9 n_periods
     #   10 period_min_s 11 period_max_s 12 source_doi 13 timeseries_collection_doi 14 survey_version
     #   15 collection 16 license 17 license_url 18 attribution

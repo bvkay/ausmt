@@ -151,7 +151,8 @@ def test_the_contribute_card_states_the_formats_and_the_review():
     POLICY NOTE (reported, deliberately NOT resolved here): the card names three
     submission input formats. gateway-side, EMTF XML is curator-enabled per submission rather than
     universally accepted, so this wording is ahead of the validator. The wording is dictated;
-    the reconciliation (validator opens EMTF XML, or the card narrows) is a decision and this
+    "is a decision" predicates nothing. Say what the sentence was for - that this file does not settle it:
+    the reconciliation (validator opens EMTF XML, or the card narrows) is not settled here, and this
     pin will fail the day the card is narrowed, which is the point."""
     howto = _flat(_section("howto"))
     for retired in ("Package and submit your EDIs with guided validation",
@@ -343,7 +344,7 @@ def test_section_one_states_the_hand_off_beside_the_no_hosting_claim():
 
     THE SENTENCE HAS MOVED TWICE and the pin has followed it both times, which is the point of
     holding it by its section. It left the footer's popover for about.html's #build section under the
-    one-footer rule, and that section is now deleted, so the two claims are not build
+    one-footer rule, and that section is now deleted; the two claims are not build
     identity, so they land in section 1, which is where a reader asks what AusMT is. Same two claims,
     read from the section that carries them now.
 

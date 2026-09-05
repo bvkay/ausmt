@@ -28,8 +28,8 @@ Three groups of claim are pinned here.
 
       * the three bundle URL forms (-edi.zip / -xml.zip / -tf.h5) are the only three the engine emits
         (engine/schema/manifest.schema.json bundles.format enum: edi-zip, xml-zip, mth5);
-      * the per-station formats are edi, emtfxml and mth5 (files.format enum). Since the tier-1 workflow
-        `mth5` is in BOTH enums and means a different artifact in each, so the patterns must tell a
+      * the per-station formats are edi, emtfxml and mth5 (files.format enum). `mth5` is in BOTH
+        enums and means a different artifact in each, so the patterns must tell a
         reader to filter on the LIST (files[] vs bundles[]) before the format token;
       * artifact bytes are located through the manifest's url + sha256, never by templating a path from a
         station id (in the live corpus, station A1 of vulcan-2022 is served as
@@ -242,7 +242,7 @@ def _code_blocks(fragment):
 def test_docs_document_the_bundle_forms_with_a_worked_command():
     """The three bundle forms plus a worked command that actually pulls bytes.
 
-    REFERENCE-GRADE: the command once hard-coded https://ausmt.au. The docs are
+    The command once hard-coded https://ausmt.au. The docs are
     host-relative throughout, and the runnable examples take that root
     from a BASE variable. The pin moved with the convention; what it guards is unchanged, namely that
     the subsection carries a command a reader can run rather than only a path listing."""

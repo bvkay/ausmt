@@ -368,7 +368,7 @@ jobs:
             engine/site-data/
             engine/mth5_roundtrip.json
 
-      # NOTE: no gh-pages "Deploy portal data to Pages" step runs here; it was
+      # NOTE: the gh-pages "Deploy portal data to Pages" step that lived here was
       # REMOVED. It was vestigial first-CI wiring (predates the EliteDesk deployment), had NEVER
       # succeeded (no gh-pages branch was ever created; the read-only GITHUB_TOKEN 403'd the push,
       # reddening every engine-touching push to main), and publishing even sample data publicly

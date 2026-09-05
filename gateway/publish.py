@@ -474,7 +474,7 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
     if not changes:
         raise PublishError("guard", "empty collection batch — nothing to commit")
     # ATOMICITY GATE — checked BEFORE any git verb: a single member's validator FAIL blocks the lot with
-    # ZERO commits (all-then-commit-all). This is the load-bearing invariant pin 1 proves.
+    # This is the load-bearing invariant test_c43_stage3b.py proves.
     failed = sorted(str(c.get("slug")) for c in changes if c.get("has_fail"))
     if failed:
         raise PublishError("validator",
@@ -509,7 +509,8 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
         _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
         for slug, new_yaml, dest_dir, effect in prepared:
             (dest_dir / "survey.yaml").write_bytes(new_yaml)
-            # `git add` scoped to THIS survey's file so the commit's diff is minimal (pin 4).
+            # `git add` scoped to THIS survey's file so the commit's diff is minimal
+            # (test_publish_real_git.py).
             _git(git_runner, ["add", "--", f"surveys/{slug}/survey.yaml"], surveys_live, "git-add")
             subject = f"collection edit by curator:{curator_name}: {slug} ({effect} -> {cid})"
             body = (f"Curated-by: curator:{curator_name}\nSurvey: {slug}\n"

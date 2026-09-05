@@ -394,7 +394,7 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert "instrument PID" not in page, "the survey-level platform PID is retired"
     # The station table: the five default columns, sticky first column. The run and instrument
     # columns moved to the station pages in LANE-CONTRACT-PAGE-HIERARCHY.md, which could only
-    # follow giving those pages a Runs section; the move is followed fact by fact in
+    # follow the change that gave those pages a Runs section; the move is followed fact by fact in
     # test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations, and the station
     # page's own rendering is pinned by test_the_station_page_renders_the_runs_its_own_document
     # _publishes. Restated here rather than deleted, so the survey page's own truth stays asserted.
@@ -954,7 +954,7 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
 
 
 def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations(tmp_path):
-    """It can only run AFTER the station pages carry the detail.
+    """This test can only run AFTER the station pages carry the detail.
 
     The default table was 13 columns wide inside an 840px column, forced to scroll horizontally by
     an unconditional min-width of 1180px that a 5-column table also paid. The deployment and
@@ -1432,7 +1432,7 @@ def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
 
     Four separate debts. The BBMT swatch drifted from the value the portal measured for LP/BB
     separability and deutan-safety (portal/src/state.js), and the drift was TEST-LOCKED. The minimap
-    centroid ring was coral, which the brief reserves for primary actions and active states, not for
+    centroid ring was coral, which is reserved for primary actions and active states, not for
     decoration on a map. The stylesheet had no focus rule at all while the SPA has one. And several
     secondary labels sat at .72rem or below, under the 12px floor the SPA states for itself.
 
@@ -1573,8 +1573,8 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
     assert "\u2013" not in page and "\u2014" not in page, "no en/em dashes"
     stn = pages.station_page(doc=docs[0], survey_slug="s", base="https://x.example")
     # No disjunction: the first arm ("5.0 - 100,000.0 s") is what the row printed BEFORE it took the
-    # shared helper, so accepting it let the station page bypass _fmt_period and print the trailing
-    # zeros retires while this test stayed green. One helper, one form, one assertion.
+    # so accepting it let the station page bypass _fmt_period and print the trailing
+    # zeros the shared helper retires while this test stayed green. One helper, one form, one assertion.
     assert "5 - 100,000 s" in stn, \
         f"the station period row must use the shared helper and a spaced hyphen: " \
         f"{stn[stn.find('Period'):][:120]!r}"

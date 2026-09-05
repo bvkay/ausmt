@@ -34,7 +34,7 @@ let AUSLAMP_SET=new Set();
 // the OPTIONAL coord_policy.json (absent for an all-exact corpus => empty => no badges - graceful
 // degrade). See docs: portal internals, state.js.
 let COORD_POLICY={};
-// The hand-off index: ausmt_id -> {level token: {bytes, url_path}} for stations with a VERIFIED route into
+// The hand-off index: ausmt_id -> {level token: {bytes, url_path}} for stations with a VERIFIED, OPEN route into
 // the NCI archive, loaded at phase 2 from the OPTIONAL ts_access.json. See docs: portal internals,
 // state.js.
 let TSACC=null;
@@ -76,8 +76,9 @@ function _fixedHalfEven(v,d){
     const mag=((cut.charCodeAt(cut.length-1)-48)%2===0)?Number(cut):Number(cut)+Math.pow(10,-d);
     return (v<0?-mag:mag).toFixed(d);}
   return v.toFixed(d);}
-// A period in seconds as a READER sees it; the stored value never changes. Under 100: two significant
-// figures, trailing zeros stripped. See docs: portal internals, state.js.
+// A period in seconds as a READER sees it; the stored value never changes. Under 100 it is two
+// significant figures with trailing zeros stripped, at or above 100 a thousands-separated integer,
+// never an exponent. See docs: portal internals, state.js.
 function fmtPeriod(v){
   if(v===null||v===undefined||v==="")return "-";
   const n=Number(v);

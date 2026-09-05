@@ -12,7 +12,7 @@ Both feed the SAME downstream science (`_edi_tf.tf_from_components` /
 Agreement is the evidence that AusMT can ingest MTH5 without changing the products.
 
 Usage:
-    python -m extract.compare_mth5 --edis <dir-of-edis> [--out report.json] [--limit <N>]
+    python -m extract.compare_mth5 --edis <dir-of-edis> [--out report.json] [--limit N]
 """
 import argparse
 import json

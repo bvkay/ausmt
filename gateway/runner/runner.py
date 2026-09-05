@@ -60,8 +60,8 @@ class RunnerConfig:
     validator_path: str
     engine_module: str = "extract.build_portal"
     # Working directory for the preview subprocess (`python -m extract.build_portal`). Passed
-    # EXPLICITLY so module resolution never rides on the runner inheriting compose's WORKDIR (the
-    # undocumented cwd contract removed). With `extract` now a real installed package the
+    # EXPLICITLY so module resolution never rides on the runner inheriting compose's WORKDIR (that
+    # undocumented cwd contract is gone). With `extract` now a real installed package the
     # spawn resolves regardless of cwd; this pin keeps the invocation self-describing rather than
     # env-topology-dependent. Default matches the engine image's WORKDIR (/app/engine).
     engine_dir: Path = Path("/app/engine")

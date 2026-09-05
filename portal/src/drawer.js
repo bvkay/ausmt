@@ -628,9 +628,9 @@ function openStation(i,opts){
   if(!rehydrate)_rememberDrawerOpener();              // capture the invoking element before the rewrite
   _drawerSubject={kind:"station",i};                  // what rehydrateOpenDrawer re-renders when a gate settles
   const s=ST[i],t=tfRow(i)||[[]],m=SMETA[s.survey]||{},sc=sciRow(i);
-  // The sc[SC.dim] (dimensionality) value is not surfaced in the drawer screening grid: it is inferable from the
-  // phase tensor + skew, which are shown (strike/|β|/3-D-periods line below). See docs: portal internals,
-  // drawer.js.
+  // The sc[SC.dim] (dimensionality) value is not surfaced in the drawer screening grid: it is inferable
+  // from the phase tensor + skew, which are shown (strike/|β|/3-D-periods line below), so `dim` is
+  // deliberately not destructured on the line beneath. See docs: portal internals, drawer.js.
   const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
   if(!rehydrate)location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
   const azs=[],azPers=[];if(t[T.pt_az])t[T.pt_az].forEach((a,k)=>{if(a!=null&&t[T.pt_beta][k]!=null&&Math.abs(t[T.pt_beta][k])<5){azs.push(((a%180)+180)%180);const _pk=t[T.periods]&&t[T.periods][k];if(_pk!=null)azPers.push(_pk);}});

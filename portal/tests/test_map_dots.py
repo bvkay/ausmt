@@ -24,7 +24,8 @@ FAILS IF:
 - the map creates a Leaflet pane, or routes any layer into one;
 - a zoom re-routes layer membership again (badging was the only thing that made membership zoom-dependent);
 - the legend keys a map object that is not a data type;
-- the radius curve stops being monotone in zoom, breaches its floor/ceiling, or stops rendering EVERY data
+- the radius curve stops being monotone in zoom, breaches its floor/ceiling, or stops rendering EVERY
+  data
   type at the same size;
 - the drawer's own badges are collateral damage.
 """
@@ -138,7 +139,7 @@ def test_a_zoom_restyles_but_does_not_reroute():
 
 def test_the_legend_keys_only_data_types():
     """A legend states what the map draws. The badge swatch (and the .legcluster it was renamed from) key
-    objects that not exist, so both must be gone from the markup AND the stylesheet."""
+    objects that do not exist, so both must be gone from the markup AND the stylesheet."""
     main = MAIN_JS.read_text(encoding="utf-8")
     html = INDEX.read_text(encoding="utf-8")
     for gone in ("legbadge", "legcluster"):

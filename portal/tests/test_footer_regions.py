@@ -461,7 +461,7 @@ def _no_external_fetch(where, footer_html, sheet):
 
 def test_every_portal_page_carries_the_one_footer():
     """PARITY ACROSS THE PORTAL. Every HTML document the portal ships carries the same three
-    regions, in order, with the strings, the same targets and U+00B7 between them.
+    regions, in order, with the same strings, the same targets and U+00B7 between them.
 
     FAILS if a page carries fewer or more than three regions, if a region's string drifts, if the
     acknowledgement's one link moves, if the lockup is missing or retargeted, if a separator stops
@@ -693,7 +693,7 @@ _INK = {
 _ENGINE_INK = "background:#11182D"
 
 # The centre line's weight, as ONE declaration on the zone rather than a span around the sentence:
-# the rule is the whole line bold, the anchor included, and a single declaration is what lets
+# the whole line is bold, the anchor included, and a single declaration is what lets
 # these pins hold it as one fact. 700 is the sans family's bold, the weight the word names; the
 # header wordmark's 800 is a display weight for a 22px mark and would smear at 12.5px.
 _CENTRE_WEIGHT = "font-weight:700"
@@ -875,7 +875,7 @@ def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
 
 
 def test_the_centre_line_is_bold_on_every_surface():
-    """THE BOLD CENTRE, as ONE declaration on the zone. The rule is the whole acknowledgement
+    """THE BOLD CENTRE, as ONE declaration on the zone. The whole acknowledgement is
     bold, the anchor included; a span around part of the sentence would put the fact in the markup
     of six documents and the engine's emitter instead of in one rule per surface.
 

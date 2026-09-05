@@ -88,7 +88,7 @@ def test_rollup_parity_with_engine_group_collections(tmp_path):
                    "  status: completed\n", n_edi=4)
     # Edge: an out-of-vocab status FIRST (wamt-a sorts first) then a VALID status LATER. The
     # engine drops the invalid status inside the per-member fold, re-opening the slot, so the rollup
-    # lands on 'active' - the runner must agree (this reds the end-of-loop drop).
+    # lands on 'active' - the runner must agree (this reds the pre-fix end-of-loop drop).
     _mk(sroot, "wamt-a", name="WA MT A",
         collection="collection:\n  id: wamt\n  title: WA MT\n  status: complete\n", n_edi=1)
     _mk(sroot, "wamt-b", name="WA MT B",

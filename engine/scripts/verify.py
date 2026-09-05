@@ -24,8 +24,8 @@ Exit code 0 only if every step passed.
 just-produced builds/<timestamp>) in place, WITHOUT rebuilding or running pytest: the post-build gate
 `make rebuild-data` runs inside the build-runner container before the atomic `current` symlink swap.
 Mutually exclusive with the default self-building invocation (--surveys/--skip-tests are ignored, with
-a warning, if --data-dir is also given, because the two modes read from different places and both
-would silently discard whichever result lost):
+a warning, if --data-dir is also given, because the two modes read from different places and running
+both would silently discard whichever result lost):
 
     python scripts/verify.py --data-dir /out/builds/20260705T120000Z
 """
@@ -679,7 +679,7 @@ def main(argv=None):
                          "manifest.json integrity/schema) instead of running pytest + a fresh build. "
                          "For a post-build gate over an already-produced builds/<timestamp> dir (see "
                          "deploy/Makefile's rebuild-data). --skip-tests is ignored here; --surveys, if "
-                         "given, ARMS the consistency gate, which is NOT ignored.")
+                         "given, ARMS the consistency gate and is NOT ignored.")
     a = ap.parse_args(argv)
 
     if a.data_dir is not None:

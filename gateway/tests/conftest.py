@@ -428,7 +428,7 @@ async def app_client(tmp_path: Path, *, scanner=None, run_poll: bool = False,
     app = create_app(cfg=cfg, scanner=scanner, git_runner=git_runner, edit_runner=edit_runner,
                      mailer=mailer)
     gw = app.state.gw
-    # https base_url so the client's cookie jar retains the Secure session cookie (sets
+    # https base_url so the client's cookie jar retains the Secure session cookie (the app sets
     # Secure; over a plain-http base httpx drops it). The ASGI app is scheme-agnostic; in production
     # it is always behind Caddy/TLS, so Secure is correct and stays.
     transport = httpx.ASGITransport(app=app)

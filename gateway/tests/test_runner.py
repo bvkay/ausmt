@@ -406,7 +406,8 @@ def test_real_validator_accepts_emtfxml_as_a_standard_input(tmp_path):
 
 def _assert_engine_surveys_level(cmd) -> None:
     """Pin the --surveys DISCOVERY LEVEL inside every mocked engine invocation: the value must be a
-    directory whose CHILD dir carries survey.yaml. A fake that accepted any path
+    directory whose CHILD dir carries survey.yaml (package/<slug>/survey.yaml, the extraction
+    layout a submitted package actually carries). A fake that accepted any path
     could mask a level regression exactly the way the stdout-JSON fakes masked the validator argv."""
     surveys_val = Path(cmd[cmd.index("--surveys") + 1])
     assert surveys_val.is_dir(), f"--surveys is not a directory: {cmd}"

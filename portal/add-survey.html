@@ -629,7 +629,7 @@ function ediDataId(text){
   return raw||null;
 }
 // safeEdiComponent: sanitise a DATAID for use as a packaged filename component. MIRRORS the engine's
-// build_portal.safe_component EXACTLY (charset [A-Za-z0-9._-], neutralise '..', strip leading dots/ dashes,
+// build_portal.safe_component EXACTLY (charset [A-Za-z0-9._-], neutralise '..', strip leading dots/dashes,
 // never empty), NOT a new rule. See docs: portal internals, add-survey.html.
 function safeEdiComponent(s, fallback){
   s=String(s==null?"":s).trim().replace(/[^A-Za-z0-9._-]/g,"-");
@@ -814,7 +814,8 @@ function submitResultMessage(status, body){
   }
 }
 // Wire contract form fields: submitter_name + submitter_email always; submitter_orcid ONLY when
-// non-empty, because the gateway's parser takes at most 8 fields and a blank ORCID is PII with no use.
+// non-empty: the field is OMITTED entirely when blank, because the gateway's parser takes at most
+// 8 fields and an empty PII field buys nothing.
 // See docs: portal internals, add-survey.html.
 function submitFormFields(meta){
   const f={submitter_name:(meta&&meta.uploader_name)||"", submitter_email:(meta&&meta.uploader_email)||""};

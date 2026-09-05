@@ -278,7 +278,8 @@ win.open = (...args) => { opened.push(args); return null; };
 const clipboard = [];
 Object.defineProperty(win.navigator, "clipboard", {
   value: { writeText: t => { clipboard.push(String(t)); return Promise.resolve(); } }, configurable: true });
-// version and schema pinned so the config the page reads is deterministic rather than a moving
+// version and schema pinned so version.js produces a DETERMINISTIC ver-chip label the footer-chip
+// assertion can pin exactly, rather than a moving
 // default.
 win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", schema_version: "1.0" };
 
@@ -451,7 +452,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "restoreSciRows:()=>{if(window.__sciBackup){SCI=window.__sciBackup;window.__sciBackup=null;}}," +
   // The CVD ramp hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
   "qColor," +
-  // (map off-centre fix) hooks. The off-centre-on-load bug is a fitBounds computed at a
+  // Map off-centre-fix hooks. The off-centre-on-load bug is a fitBounds computed at a
   // degenerate (stale/0x0) container size; the fix invalidates size BEFORE the primary fit and adds a
   // one-shot corrector on the setView('map') timer. mapSizeDegenerate/mapRefitGate are the PURE decisions
   // (unit-tested on synthetic inputs, since jsdom has no layout engine); homeFitDegenerate/mapUserInteracted
@@ -1308,7 +1309,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "welcome heading copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeHeading").textContent));
   ok(doc.getElementById("introWelcomeText").textContent.trim() === "Explore Australia's national magnetotelluric data portal",
     "welcome body copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeText").textContent));
-  // NO "How AusMT works" panel (#introOverlay), no three tiles and no header item that opens them.
+  // The "How AusMT works" panel (#introOverlay), its three tiles and the header item that opened them
+  //   are all gone.
   // Nothing on the page may carry those ids or classes: an orphaned panel is dead markup a reader can
   // never reach, and a surviving tile id would mean the header button had gone without its panel.
   // Guarded from both ends, markup and styles.
@@ -1517,7 +1519,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // and neither #headerTour nor #howToUse exists. Both ids are pinned absent so neither can quietly
   // return.
   ok(!doc.getElementById("headerTour"), "#headerTour should have been removed from the header (item 2)");
-  ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel ");
+  ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel");
   ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
   // NO AuScope ORG-MARK IN THE SPA HEADER. The mark closed the right zone on every surface until
@@ -1685,7 +1687,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("drawer").classList.contains("open"), "Esc from the drawer step did not close the drawer it opened");
   ok(A.curView() === "map", "Esc from the drawer step did not restore the map view");
 
-  // the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
+  // The tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
   // (forward, back, close). The collapse set is real state (treeCollapsedKeys), not a proxy.
   const goToTreeStep = () => { doc.getElementById("welcomeTour").click();
@@ -1718,7 +1720,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.treeSetCollapsed("c:Australia", false); A.treeSetCollapsed("o:Australia||OrgX", false);   // cleanup
   ok(A.treeCollapsedKeys().length === 0, "cleanup: collapse set not empty after the tour block");
 
-  // the .selbox tour step's target lives in the rail's Select & export
+  // The .selbox tour step's target lives in the rail's Select & export
   // mode pane — hidden in the default Browse mode, where the step would degrade to the centred
   // no-spotlight card. Reaching the step must switch the rail to Select & export (jsdom has no layout,
   // so the load-bearing observable here is the MODE + the target pane's visibility — in a real browser
@@ -2108,7 +2110,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!/progress|complete|finished|%/i.test(snackEl.textContent),
     "the page claims no progress and no completion; the browser owns both, got " + JSON.stringify(snackEl.textContent));
   // POINTERS: the merged document - EVERY scope station appears; routable stations
-  // carry levels[]; the embargoed station appears WITHOUT levels (identity is public, routes are not).
+  // carry levels[]; the embargoed station D1 appears WITHOUT levels (identity is public, routes are not).
   clipboard.length = 0;
   doc.getElementById("dlSh").click();
   const _ptrTrack = trackCalls[trackCalls.length - 1];
@@ -2177,10 +2179,10 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const winSafe = s => String(s).replace(/[^A-Za-z0-9._\/-]/g, "_");  // mirrors exports.js winSafePath()
   const INJ = "$(touch pwned) `id` \";x;\" 'sq' [z].zip";             // every metacharacter the field can carry
   A.setTsAccess({
-    // ONE station whose level0 and level1_mth5 carry the SAME basename (the live SA295.h5 case).
+    // Station A1: ONE station whose level0 and level1_mth5 carry the SAME basename (the live SA295.h5 case).
     "au.alpha.A1": { level0: { bytes: 100, url_path: "arc/SA295.h5" },
                      level1_mth5: { bytes: 200, url_path: "arc/SA295.h5" } },
-    // A basename carrying live shell metacharacters (the corpus already ships `C5 [REMOTE].zip`).
+    // Station A2: a basename carrying live shell metacharacters (the corpus already ships `C5 [REMOTE].zip`).
     "au.alpha.A2": { raw_packed: { bytes: 300, url_path: "arc/" + INJ } },
   });
   A.setSelected(["A1", "A2"]);
@@ -2280,12 +2282,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // column of rows in a full-width container, which on a wide screen was a large sparse box of mostly
   // empty space sitting between the reader and the catalogue. The strip is one wrapping line:
   // "Recently added: Vulcan 2022 (interpunct) AusLAMP Queensland Phase 3". Pins moved with the markup per
-  // contract section 1, ("section N pins move with the markup"); the WINDOW LOGIC above is untouched
+  // contract section 1 ("section N pins move with the markup"); the WINDOW LOGIC above is untouched
   // and its pins are unchanged, which is the point - this commit may only change how the strip reads.
   ok(recentStrip.querySelector("h2") === null,
-    "the strip must not open with a block heading; the label is inline ");
+    "the strip must not open with a block heading; the label is inline");
   ok(recentStrip.querySelector("ul, li") === null,
-    "the strip must not render a vertical list; Option A is one wrapping line");
+    "the strip must not render a vertical list; the strip is one wrapping line");
   ok(/Recently added:/.test(recentStrip.textContent),
     "the inline label reads 'Recently added:', got " + JSON.stringify(recentStrip.textContent));
   ok(recentStrip.querySelectorAll("a").length === recents.length,
@@ -2296,7 +2298,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok((recentStrip.querySelector("a").getAttribute("title") || "").indexOf(recents[0].date) >= 0,
     "a strip link must carry its date, got title=" +
     JSON.stringify(recentStrip.querySelector("a").getAttribute("title")));
-  // POSITION (contract): the strip sits directly BELOW the discovery controls, so the controls are
+  // POSITION: the strip sits directly BELOW the discovery controls, so the controls are
   // the first thing on the view and the strip reads as a shortcut into the grid rather than a preamble.
   const _dc = doc.getElementById("discoveryControls");
   ok(_dc && _dc.nextElementSibling === recentStrip,
@@ -2339,7 +2341,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // The related-products TF tile must say "embargoed", not "EDI (via source archive)".
   ok(drawerEl.innerHTML.indexOf("EDI (via source archive)") < 0,
     "embargoed station must NOT offer the 'EDI (via source archive)' fallback tile");
-  // An OPEN survey's station still plots - the withholding is CONDITIONAL on access, not a blanket wipe.
+  // An OPEN survey's station A1 still plots - the withholding is CONDITIONAL on access, not a blanket wipe.
   drawerEl.classList.remove("open");
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drawerEl.classList.contains("open"), "#/station route did not open the open station's drawer");
@@ -3083,8 +3085,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // ===== THE SURVEYS AND COLLECTIONS VIEWS =======================================================
   // BB. THE WORKSPACE CARD. The card field set is reduced; the heavy blocks moved to the survey DETAIL.
   // Each pin states what it fails on. (Alpha's blurb was reset to null in section R.)
-  // (contract section 1: "Update the BB card-shape pins to the new field set"): the abstract block
-  // leaves the field set. What stays is what a reader SCANS - identity, where, how much, under what
+  // Under contract section 1 ("Update the BB card-shape pins to the new field set") the abstract
+  // block What stays is what a reader SCANS - identity, where, how much, under what
   // licence - plus BOTH actions: the no-buttons rule is a HUB rule, and this is the working view, where
   // Download is the whole point of the grid feeding the download builder.
   doc.getElementById("drawer").classList.remove("open");
@@ -3673,7 +3675,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(modNoTs.dims.find(d => d.key === "ts").note === "not available", "a missing time series reads 'not available'");
   ok(A.maturityModel({ lic: "Bananas", doi: "10.1/x", ts: "ok" }, ["", "", "", "BIRRP"]).dims.find(d => d.key === "licence").achieved === false,
     "an unrecognised licence must leave the 'Licence verified' dimension unachieved");
-  // The RENDERED Provenance tab carries the ITEMISED rows only: the aggregate
+  // The RENDERED Provenance tab carries the ITEMISED rows only. The aggregate
   // presentation was removed: the "Dataset maturity" heading, the five-star summary row and the
   // "Record-stewardship maturity ... Not a measure of scientific quality." explainer. The model above is
   // untouched (it still drives the per-row stars), so what is pinned here is the PRESENTATION.

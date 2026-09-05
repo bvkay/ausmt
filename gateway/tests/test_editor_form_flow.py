@@ -310,8 +310,8 @@ def test_empty_optional_sections_render_empty_widgets_with_placeholders(tmp_path
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             body = (await client.get("/gateway/curator/edit/demo-survey-2026")).text
-            # Absent sections still render their widgets (empty), with example placeholders:
-            # the flat dataset_doi input is RETIRED; the identifiers surface now renders project_raid +
+            # Absent sections still render their widgets (empty), with example placeholders.
+            # The flat dataset_doi input is RETIRED; the identifiers surface now renders project_raid +
             # the survey/platform instrument PID, and a dataset-level DOI is a typed related_identifiers row.
             assert 'name="s_identifiers_project_raid"' in body
             assert 'name="s_identifiers_instrument_pid"' in body

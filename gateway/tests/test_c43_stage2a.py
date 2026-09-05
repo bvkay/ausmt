@@ -81,7 +81,7 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
     it would read as OUT - the mis-classification this pin catches).
 
     NON-VACUOUS: for true φyx = −135°, stored t[4] = +45°. in_quadrant_yx(+45°) must be True (it
-    unwraps to −135° ∈). A naive `Q3_LO <= 45 <= Q3_HI` is False - so a no-unwrap implementation
+    unwraps to −135° ∈ Q3). A naive `Q3_LO <= 45 <= Q3_HI` is False - so a no-unwrap implementation
     fails this exact assertion."""
     for true_yx in (-135.0, -100.0, -170.0, -90.0, -180.0, -91.0):
         stored = phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG)  # == engine norm_phase
@@ -132,7 +132,7 @@ def test_classify_series_median_verdict():
     # xy: a coherently wrong series => median beyond band+slack => verdict OUT.
     xy_bad = phaseqc.classify_series([-120.0, -130.0, -140.0], mode="xy")
     assert xy_bad["median"] == -130.0 and xy_bad["median_in"] is False
-    # yx healthy third-quadrant cluster: median reported in (−180,180], verdict IN.
+    # yx healthy cluster in quadrant Q3: median reported in (−180,180], verdict IN.
     yx_stored = [round(phaseqc.wrap180(v + 180.0), 1) for v in (-135.0, -100.0, -170.0)]
     yx = phaseqc.classify_series(yx_stored, mode="yx")
     assert yx["median"] == -135.0 and yx["median_in"] is True and yx["any_out"] is False
@@ -285,7 +285,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert 'class="st-list"' in body, "the table container carries the grid-left .st-list class"
             assert 'class="st-facts"' in body, "the facts container carries the middle .st-facts class"
             assert 'class="st-plots"' in body, "the plots container carries the right .st-plots class"
-            # Scope: the hub's OTHER tabs are ALSO wide, which is wide-by-
+            # Scope: the hub's OTHER tabs are ALSO wide, and wide-by-
             # default supersedes the 'stations-only opt-in', so the overview tab (the old negative
             # control) is wide too.
             r2 = await client.get("/gateway/curator/survey/s2a-survey")
@@ -491,7 +491,7 @@ def test_history_tab_renders_real_git_log(tmp_path):
             # NO rename/retire ACTION in the History tab (Stage 4). Read-only: the History body carries
             # no <form> and no rename/retire action route. (The copy may mention "rename" descriptively
             # — the pin is on the absence of an ACTION, not the word.) Anchor: the tab body's own
-            # lead copy (replaced the per-tab h1 with the unified mockup header, so the old
+            # lead copy (the unified mockup header replaced the per-tab h1, so the old
             # 'history</h1>' anchor does not exist; the context-bar rebuild form sits ABOVE it).
             assert "Read-only audit trail" in r.text
             history_body = r.text.split("Read-only audit trail", 1)[-1]

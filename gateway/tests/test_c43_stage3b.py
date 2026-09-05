@@ -698,7 +698,7 @@ def test_f3_oserror_mid_batch_rolls_the_whole_batch_back(tmp_path, monkeypatch):
     assert any(c[:2] == ["branch", "-D"] for c in git.calls)
 
 
-# (security) - PUBLISH RE-ENFORCES THE GUARDRAILS UNDER THE LOCK on the untrusted client spec.
+# PUBLISH RE-ENFORCES THE GUARDRAILS UNDER THE LOCK on the untrusted client spec (security).
 # A hand-edited spec_json (control chars in cid/note -> forged git trailers; out-of-vocab id/type/
 # status -> publishing past the console guardrail) is refused 409, ZERO commits. FAILS IF a crafted
 # spec commits. RED: without _collection_spec_violation the crafted batch is applied.
@@ -735,7 +735,7 @@ def test_f4_publish_rejects_crafted_spec(tmp_path):
             csrf = csrf_for_session(client)
             for label, (cid, ops, note) in crafted.items():
                 # Correct expected_shas (compute what the runner would emit for these ops) so the TOCTOU
-                # drift guard PASSES, so only the spec gate remains to refuse the crafted batch.
+                # drift guard PASSES, leaving only the spec gate to refuse the crafted batch.
                 probe = edit_mod.run_collection_batch_job(
                     surveys_live, operations=ops, note=note, today=today, validator_path="",
                     scratch_dir=tmp_path / f"probe-{label}")
@@ -849,7 +849,7 @@ def test_r1_real_start_year_difference_still_flags_and_normalise_clears(tmp_path
                               edit_runner=inproc_edit_runner(surveys_live),
                               surveys_live_dir=surveys_live) as (client, *_):
             await curator_login(client)
-            # The REAL difference still flags (fix must not weaken real detection).
+            # The REAL difference still flags (the fix must not weaken real detection).
             idx = (await client.get("/gateway/curator/collections")).text
             assert "Members disagree within" in idx
             assert "2005" in idx

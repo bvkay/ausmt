@@ -1,6 +1,6 @@
-// AUTO-GENERATED from portal.config.yaml by tools/gen_config.py: edit the YAML and
-// regenerate, never this file. It is the browser-side reflection of the portal
-// configuration (branding, version, analytics). See docs: portal internals, config.js.
+// AUTO-GENERATED from portal.config.yaml by tools/gen_config.py: edit the YAML and regenerate this
+// file, never edit it by hand. It is the browser-side reflection of the portal configuration
+// (branding, version, analytics). See docs: portal internals, config.js.
 window.AUSMT_CONFIG = {
   "portal_id": "ausmt",
   "name": "Australian Magnetotelluric Data Portal",

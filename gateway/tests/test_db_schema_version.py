@@ -213,7 +213,7 @@ def test_v2_db_with_data_upgrades_to_v3_adding_note(tmp_path):
 
 
 def test_fresh_db_lands_at_v4_with_curator_totp(tmp_path):
-    """A fresh DB is stamped at SCHEMA_VERSION (>= 4) and carries the curator_totp table (its
+    """A fresh DB is stamped at SCHEMA_VERSION (>= 4) and carries the curator_totp table (the v4
     migration) with exactly its four columns. Fails if the v4 migration never ran on a fresh DB, or a
     schema change dropped/renamed a column."""
     path = tmp_path / "gateway.sqlite"

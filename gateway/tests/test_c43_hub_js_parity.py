@@ -776,9 +776,8 @@ process.stdout.write(JSON.stringify({
 def test_cluster_range_label_numeric_order(warn_report, tmp_path):
     """GATE PIN. The cluster range label orders NUMERICALLY on the trailing digit run: the
     PRODUCER-TRUTH CP1L items remapped to the panel's unpadded station ids (CP1L02→L2, CP1L03→L3,
-    CP1L04→L10, CP1L05→L15 - same items, only the id text changed) must render the unpadded
-    station ids 'L2 … L15', never the lexicographic 'L10 … L3'-class backwards label; the
-    zero-padded real corpus renders
+    CP1L04→L10, CP1L05→L15 - same items, only the id text changed) must render 'L2 … L15', never
+    the lexicographic 'L10 … L3'-class backwards label; the zero-padded real corpus renders
     unchanged ('CP1L02 … CP1L05'). FAILS IF the sort reverts to lexicographic (shown red) or the
     remap disturbs grouping/count."""
     driver = _hub_driver("""

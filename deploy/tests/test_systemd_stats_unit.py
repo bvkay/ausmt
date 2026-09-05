@@ -1,4 +1,4 @@
-"""Systemd units for the usage-analytics aggregator (deploy/systemd/ausmt-stats.{service,timer}).
+"""systemd units for the usage-analytics aggregator (deploy/systemd/ausmt-stats.{service,timer}).
 
 Config-level pins over the shipped unit files (the established oneshot+timer pattern):
 the service is a oneshot run as the OPERATOR uid via the __DEPLOY_DIR__/__ENV_FILE__ placeholder idiom

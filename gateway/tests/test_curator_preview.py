@@ -41,7 +41,7 @@ def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
 def test_no_unsandboxed_navigation_to_preview(tmp_path):
     # there must be NO anchor/link that top-level-navigates to the preview
     # (that would run submitter JS in the curator origin, escaping the frame). Failure criterion:
-    # Fails if the detail page contains an <a href> pointing at /preview/. proven failing:
+    # fails if the detail page contains an <a href> pointing at /preview/. proven failing:
     # the first pass had an "open preview in a new tab" link (a target=_blank same-origin nav).
     async def _body():
         async with app_client(tmp_path) as (client, _app, gw, cfg):
@@ -56,7 +56,7 @@ def test_no_unsandboxed_navigation_to_preview(tmp_path):
 
 
 def test_preview_authorized_by_id_not_session(tmp_path):
-    # Revised: the preview SUBTREE is authorized by the unguessable submission id in the
+    # The preview SUBTREE is authorized by the unguessable submission id in the
     # path, NOT the curator session — because the null-origin sandboxed iframe that embeds it cannot
     # send the cookie (a session gate would 401 the preview's own subresource fetches, so it would
     # never render). Failure criterion: fails if a VALID id does NOT serve the preview without a

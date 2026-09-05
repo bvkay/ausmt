@@ -2,9 +2,8 @@
 computed ENTIRELY from data already on disk (validate.json, preview-summary.json) plus the
 submission row. The gateway does NOT re-parse the package here — it reads the runner's reports.
 
-Each check yields PASS / WARN / FAIL / NA. A FAIL on a BLOCKING check refuses the curator approve
-SERVER-SIDE (the app returns 409 on the approve POST even if the button is hidden: absence is
-UX, the 409 is the guarantee). Non-blocking checks (DOI/PID) only ever WARN.
+Each check yields PASS / WARN / FAIL / NA. A FAIL on a BLOCKING check refuses the curator's approval SERVER-SIDE (the app returns 409 on the approve POST even if the button is hidden: the button being
+absent is UX, the 409 is the guarantee). Non-blocking checks (DOI/PID) only ever WARN.
 
 The single most important check is the PII grep: it looks for the submitter's own email (the needle
 comes from the DB, curator-only) plus a generic email pattern across the built preview product +
@@ -39,7 +38,7 @@ class Check:
     label: str
     status: str            # PASS / WARN / FAIL / NA
     detail: str
-    blocking: bool         # a FAIL here refuses the curator approve
+    blocking: bool         # a FAIL here refuses the curator's approval
     acknowledgeable: bool = False  # a curator may acknowledge PAST this blocking FAIL
 
 
@@ -56,7 +55,7 @@ class Checklist:
 
     @property
     def has_blocking_fail(self) -> bool:
-        """True if any BLOCKING check is FAIL, so the curator approve must be refused."""
+        """True if any BLOCKING check is FAIL, so the curator's approval must be refused."""
         return bool(self._blocking_fails())
 
     @property
@@ -185,7 +184,7 @@ def build(*, validate_report: dict | None, preview_summary: dict | None,
     items = _validator_items(validate_report)
     have_validate = validate_report is not None
 
-    # CI/validator green: a FAIL item blocks the curator approve.
+    # CI/validator green: a FAIL item blocks the curator's approval.
     fails = [i for i in items if _level(i) in ("FAIL", "ERROR")]
     if not have_validate:
         checks.append(Check("validator", "Validator green", NA,

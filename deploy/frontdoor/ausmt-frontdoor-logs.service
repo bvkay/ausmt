@@ -1,4 +1,4 @@
-# AusMT front-door log shipping (deliverable 3). A oneshot the ausmt-frontdoor-logs.timer fires
+# AusMT front-door log shipping. A oneshot the ausmt-frontdoor-logs.timer fires
 # once a day, a few minutes AHEAD of the stats fold (ausmt-stats.timer, 03:35 UTC): it runs
 # deploy/frontdoor/ship-frontdoor-logs.sh, which rsyncs the masked access-frontdoor*.json logs off the
 # VPS over the tailnet into $AUSMT_DATA_DIR/logs/caddy — the exact dir the aggregator globs. Same

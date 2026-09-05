@@ -469,7 +469,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
 
 
 # ---------------------------------------------------------------------------------------------
-# De-rotation is DIAGNOSTIC-ONLY under POLICY v3: the engine never rotates served data, and no
+# De-rotation is DIAGNOSTIC-ONLY under POLICY v3: the engine never rotates served data. No
 # serve-path caller invokes apply_derotation: frame_disposition returns only pass/fail
 # and never produces theta_z/theta_t. The math is RETAINED and kept pinned (the synthetic round-trips
 # + the AusLAMP-SA custodian-twin proof) so a future DIAGNOSTIC use — comparing an as-stored curve

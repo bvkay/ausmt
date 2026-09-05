@@ -146,7 +146,7 @@ def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
     stored (the plaintext is shown once at creation, never retrievable), plus who/when it was created
     and — when applicable — who/when it was revoked. A revoked row is NEVER deleted (audit trail; the
     created_by/revoked_by columns ARE the audit record for this table, mirroring how the git history
-    is the audit record edits - no submissions-schema change, no separate audit table).
+    is the audit record for survey edits - no submissions-schema change, no separate audit table).
     IF NOT EXISTS so a re-run on a partially-migrated DB is idempotent."""
     conn.execute(
         """

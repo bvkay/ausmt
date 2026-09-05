@@ -39,7 +39,7 @@ def test_js_base_station_id_resolver(tmp_path):
     station's OWN catalogue id when the id is absent from the map (a non-variant station is its own base;
     a variant-free corpus has no base_ids.json => empty map => every station its own base). FAILS IF a
     variant station is not collapsed to its engine-derived base, or a non-variant station is not keyed by
-    its own catalogue id (the two ways a fieldset could emit a key the engine's sibling gate forbids)."""
+    its own catalogue id (the two ways a fieldset could emit a key the engine's gate forbids)."""
     cases = [
         # variant station: present in the boot map -> its engine-derived base id.
         {"map": {"au.s.site1.lemigraph": "SITE1"}, "ausmtId": "au.s.site1.lemigraph", "catId": "SITE1.lemigraph"},

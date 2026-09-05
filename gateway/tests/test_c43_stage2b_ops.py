@@ -183,7 +183,7 @@ def test_freshness_card_both_repos_behind_amber_current_green(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Route: build detail renders the cache forensics (render side producer pin)
+# Route: build detail renders the cache forensics (render side of the producer pin)
 # --------------------------------------------------------------------------------------------------
 def test_build_detail_renders_a4_cache_counters(tmp_path):
     """BUILD-DETAIL RENDER PIN. The build-detail view must render the cache forensics
@@ -197,7 +197,7 @@ def test_build_detail_renders_a4_cache_counters(tmp_path):
             r = await client.get("/gateway/curator/serve/build/20260710T032000Z")
             assert r.status_code == 200
             html = r.text
-            assert "cafef00dbeef" in html, "the salt fingerprint must render"
+            assert "cafef00dbeef" in html, "the salt_fp must render"
             assert '<span class="fk">Write errors</span><span class="fv">2</span>' in html
             assert '<span class="fk">Read errors</span><span class="fv">3</span>' in html
             # unknown ref -> a 'no such build' page, never a 500 or a traversal.

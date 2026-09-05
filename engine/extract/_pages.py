@@ -681,7 +681,7 @@ def _site_header(active="", status="") -> str:
 
     Left is the AusMT identity and links the root. The centre carries the three filled application
     tabs with the CURRENT page's tab in the active state, and beside them the two smaller outlined
-    supporting controls: the three tabs are the application and About and Contribute are functions
+    supporting controls: the three tabs are the application, About and Contribute are functions
     around it, which is why the two groups look different. The right zone is the status slot, which is
     CONTEXTUAL (see the callers) while the shell around it is identical.
 

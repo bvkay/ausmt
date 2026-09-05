@@ -82,7 +82,7 @@ def test_js_key_construction_from_base_id_surface(tmp_path):
     its OWN catalogue id ('CP1L04.2'), NEVER the file stem ('ALPHA') and NEVER a dot-stripped guess
     ('CP1L04'); a plain station keys by its own id. Explicit-vs-inherit prefill comes from the current
     survey.yaml map. FAILS IF a fieldset key is a stem, a variant-suffixed id, or a dot-guess (the exact
-    / probe-e keys the engine's validate_overrides forbids)."""
+    probe-e keys the engine's validate_overrides forbids)."""
     tail = ("const c = buildOverrideControls(P.stations, P.baseMap, P.overrides);\n"
             "const out = {};\n"
             "for (const k in c) out[k] = { control: c[k].control, explicit: c[k].explicit, "
