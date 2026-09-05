@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AusMT - Australia's Magnetotelluric Data Portal</title>
+<title>AusMT - Australia's Magnetotelluric (MT) Data Portal</title>
 <!-- og:url and og:image must be ABSOLUTE: preview crawlers resolve nothing relative. The card is a
      static 1200x630 PNG in vendor/, regenerated alongside any rebrand. -->
 <meta name="description" content="Discover, explore and access magnetotelluric data from across Australia, with survey and station metadata, provenance and links to available datasets.">
@@ -74,6 +74,10 @@
   .hright{flex:1 1 0;min-width:0;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
   .brandmark{height:30px;width:30px;display:block;flex:none}
+  /* The page name is a heading for a crawler and a screen reader only, so it is taken out of flow
+     and clipped; the wrapper takes the mark's own flex behaviour so the identity block is unmoved. */
+  .brandh1{flex:none}
+  .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%)}
   .tagline{color:var(--muted);font-size:12.5px}
   nav{display:flex;gap:6px;flex-wrap:wrap}
   nav button{flex:1;min-width:112px;min-height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
@@ -552,7 +556,7 @@
   <div class="hzone hleft">
     <!-- The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on
          this site carries a second mark of any kind. See docs: portal internals, index.html. -->
-    <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
+    <h1 class="brandh1"><img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30"><span class="visually-hidden">AusMT - Australia's Magnetotelluric (MT) Data Portal</span></h1>
     <div class="wordmark">AusMT</div>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
   </div>

@@ -281,6 +281,43 @@ def test_every_static_chrome_page_carries_the_ausmt_mark():
     assert seen, "no chrome page was discovered; the glob or the header marker has moved"
 
 
+# THE ONE DECLARED DIFFERENCE between the homepage's identity block and every other surface's. The
+# map page is the only document on this site whose body names it in no heading of its own, so its
+# mark is wrapped in the page's h1 and the page name rides inside it in a clipped span. The wrapper
+# is markup and not geometry: it takes the mark's own flex behaviour, the mark literal above is
+# untouched inside it, and the block renders as it does everywhere else. Declared here rather than
+# left to be invisible, so a header that grows a SECOND heading fails a pin instead of passing three.
+HOMEPAGE_H1_OPEN = '<h1 class="brandh1">'
+
+
+def _header_markup(text):
+    """The <header> element's own markup, or "" for a document that carries none."""
+    if "<header" not in text:
+        return ""
+    return text.split("<header", 1)[1].split("</header>", 1)[0]
+
+
+def test_only_the_homepage_wraps_its_mark_in_a_heading():
+    """FAILS IF the homepage loses the wrapper, if the wrapper stops holding the mark itself, or if
+    any other header grows a heading. Every other document names itself in its own main content, and
+    a heading in one of their headers would give that document two top level names."""
+    index_header = _header_markup(INDEX.read_text(encoding="utf-8"))
+    assert HOMEPAGE_H1_OPEN + MARK_IMG in index_header, (
+        "the map page's identity mark must be wrapped in the page heading: "
+        f"{HOMEPAGE_H1_OPEN}{MARK_IMG}")
+    assert index_header.count("<h1") == 1, (
+        f"the map page's header carries exactly one heading, found {index_header.count('<h1')}")
+    for page in _chrome_pages():
+        if page.name == "index.html":
+            continue
+        assert "<h1" not in _header_markup(page.read_text(encoding="utf-8")), (
+            f"portal/{page.name}: this document names itself in its own body, so its header must "
+            "carry no heading")
+    assert "<h1" not in _header_markup(PAGES_PY.read_text(encoding="utf-8")), (
+        "engine/extract/_pages.py: the generated pages name themselves in their own body, so the "
+        "shared header must carry no heading")
+
+
 def test_no_header_stands_the_auscope_symbol_in_for_an_identity():
     """The rule that closed the carve-out, pinned as one. FAILS IF any page carries the AuScope
     symbol in its identity slot: the AusMT mark opens every header, and nothing stands in for it.
