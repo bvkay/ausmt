@@ -2,7 +2,8 @@
 computed ENTIRELY from data already on disk (validate.json, preview-summary.json) plus the
 submission row. The gateway does NOT re-parse the package here — it reads the runner's reports.
 
-Each check yields PASS / WARN / FAIL / NA. A FAIL on a BLOCKING check refuses the curator's approval SERVER-SIDE (the app returns 409 on the approve POST even if the button is hidden: the button being
+Each check yields PASS / WARN / FAIL / NA. A FAIL on a BLOCKING check refuses the curator's approval
+SERVER-SIDE (the app returns 409 on the approve POST even if the button is hidden: the button being
 absent is UX, the 409 is the guarantee). Non-blocking checks (DOI/PID) only ever WARN.
 
 The single most important check is the PII grep: it looks for the submitter's own email (the needle

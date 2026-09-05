@@ -238,7 +238,7 @@ process.stdout.write(JSON.stringify(out));
 # hand-built rows are banned here by design.
 #
 # Skip posture: the engine stack (mt_metadata) is absent in the stackless gateway CI workflow, so these
-# pins skip there with EXACTLY the gateway workflow's one allow-listed tripwire reason (gateway-ci.yml --allow);
+# pins skip there with EXACTLY the gateway CI's one allow-listed tripwire reason (gateway-ci.yml --allow);
 # on the dev box (ausmt env) and the engine workflows they RUN. Node-absent boxes hit the file-level
 # pytestmark above, which is deliberately NOT allow-listed.
 # ==================================================================================================
@@ -310,8 +310,7 @@ def test_stations_filter_selects_engine_built_rows_by_slug(engine_corpus, tmp_pa
     INDEPENDENT observable (the products tree is keyed by slug on disk; the catalogue rows carry
     the label). FAILS IF the filter misses a station the engine built for the slug (the shipped
     label-vs-slug compare matched nothing) OR pulls a sibling survey's rows across the trailing-dot
-    boundary
-    (au.burra-2017. must not match au.burra-2017-18.*, and vice versa)."""
+    boundary (au.burra-2017. must not match au.burra-2017-18.*, and vice versa)."""
     js = curatorpage.STATIONS_JS
     cmap = re.search(r"var C = \{.*?\};", js, re.DOTALL)
     assert cmap, "the catalogue column map (var C = {...}) not found in STATIONS_JS"
@@ -361,7 +360,8 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
     (build_portal.py discover_work), safe_component is idempotent, and the hub route 404s unless an
     on-disk <slug>/survey.yaml package exists — so no non-fixed-point slug is reachable. The literal
     every-validate_slug-legal-slug form of the gate is FALSE (a legal slug may contain '..', which
-    safe_component collapses to '-': 108 of 4920 legal probes transform); such a slug fails EMPTY (zero rows, the honest no-stations message), never WRONG (a sibling's rows).
+    safe_component collapses to '-': 108 of 4920 legal probes transform); such
+    a slug fails EMPTY (zero rows, the honest no-stations message), never WRONG (a sibling's rows).
     FAILS IF the engine's slug normalisation drifts so a produced slug is not a fixed point
     (the prefix join would then silently blank that survey's Stations tab), or a fixture-tree
     package declares a non-fixed-point slug."""

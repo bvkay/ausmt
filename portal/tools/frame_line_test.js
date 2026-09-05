@@ -1,10 +1,10 @@
 "use strict";
 // Portal frame-line driver (Invariant 10). Boots the REAL portal modules in jsdom and drives the
 // reader-facing frame line the station drawer shows when the engine served impedances AS STORED in
-// a declared acquisition frame (the engine never de-rotates under frame policy v3). It asserts: *
-// frameLineText() (PURE, DOM-free) renders the terse honest line for a non-zero declared angle,
-// stays SILENT for a zero/absent angle or a null frame, and appends the "mixes declared frames"
-// clause only when the survey carries the mixed-frames note;
+// a declared acquisition frame (the engine never de-rotates under frame policy v3). It asserts:
+//   * frameLineText() (PURE, DOM-free) renders the terse honest line for a non-zero declared angle,
+//     stays SILENT for a zero/absent angle or a null frame, and appends the "mixes declared frames"
+//     clause only when the survey carries the mixed-frames note;
 //   * frameLineText() NEVER emits markup (it interpolates only a validated number + fixed strings), so
 //     even a hostile survey_frame_note cannot inject a tag;
 //   * loadStationFrameLine() fetches the per-station station.json, injects the line via textContent,

@@ -57,7 +57,7 @@ const DCU = d => "https://api.datacite.org/dois/" + encodeURIComponent(d);
   ok(h1.ok && h1.source === "crossref" && h1.pub.title === "A Title", "harvestDoi: Crossref hit -> ok");
 
   const D2 = "10.25914/y";
-  const m2 = {}; m2[DCU(D2)] = DC;   // no Crossref record for this DOI -> a 'miss' that falls through to DataCite
+  const m2 = {}; m2[DCU(D2)] = DC;   // no Crossref record -> a 'miss' that falls through to DataCite
   const h2 = await H.harvestDoi(D2, stub(m2));
   ok(h2.ok && h2.source === "datacite", "harvestDoi: Crossref miss -> DataCite hit");
 

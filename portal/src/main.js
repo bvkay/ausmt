@@ -280,8 +280,8 @@ function showEmptyState(){
   }
   var sv=document.getElementById("surveysview");if(sv)sv.innerHTML=html;
 }
-// --- First-visit welcome popup ----------------------------------------------------------- The first-visit
-// surface is a small centred MODAL popup (#introWelcome). See docs: portal internals, main.js.
+// --- First-visit welcome popup -----------------------------------------------------------
+// The first-visit surface is a small centred MODAL popup (#introWelcome). See docs: portal internals, main.js.
 const INTRO_KEY="ausmt_intro_dismissed";
 function introSeen(){try{return localStorage.getItem(INTRO_KEY)==="1";}catch(e){return false;}}
 function markIntroSeen(){try{localStorage.setItem(INTRO_KEY,"1");}catch(e){/* storage unavailable (e.g. privacy mode) - just don't persist */}}

@@ -24,8 +24,7 @@ FAILS IF:
 - the map creates a Leaflet pane, or routes any layer into one;
 - a zoom re-routes layer membership again (badging was the only thing that made membership zoom-dependent);
 - the legend keys a map object that is not a data type;
-- the radius curve stops being monotone in zoom, breaches its floor/ceiling, or stops rendering EVERY
-  data
+- the radius curve stops being monotone in zoom, breaches its floor/ceiling, or stops rendering EVERY data
   type at the same size (size encodes zoom, colour encodes type);
 - the drawer's own badges are collateral damage.
 """

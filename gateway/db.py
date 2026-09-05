@@ -174,10 +174,10 @@ def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
     ONE row per curator (curator_name PK):
       * secret - the base32 TOTP secret (the ONLY copy; shown once at enrolment, never re-shown);
       * enrolled_utc - NULL while an enrolment is PENDING activation, stamped when a valid code proves
-      the authenticator works; `enrolled_utc IS NOT NULL` == the factor is ACTIVE and satisfies the
-      deletion gate (an unactivated row does NOT - fail-closed); * last_used_step - the highest RFC
-      6238 time-step already consumed, so a code can never be replayed within or across its window
-      (a deletion needs a step STRICTLY GREATER).
+                        the authenticator works; `enrolled_utc IS NOT NULL` == the factor is ACTIVE and
+                        satisfies the deletion gate (an unactivated row does NOT - fail-closed);
+      * last_used_step - the highest RFC 6238 time-step already consumed, so a code can never be
+                        replayed within or across its window (a deletion needs a step STRICTLY GREATER).
 
     Additive-only, which is the migration invariant: a single CREATE TABLE IF NOT EXISTS, no existing column
     touched, no data migrated. IF NOT EXISTS makes a re-run on a partially-migrated DB idempotent

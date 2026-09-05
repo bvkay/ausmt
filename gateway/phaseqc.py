@@ -65,9 +65,8 @@ def true_phi_yx(stored_phs_yx_adj: float | None) -> float | None:
 
 def _map_yx(true_yx: float) -> float:
     """The engine gate's wrap-safe yx axis: map a TRUE φyx from (−180, 180] to (−360, 0] so the Q3
-    phase band ± slack
-    is one contiguous window and a value/median near ±180 cannot straddle the representation seam
-    (mirrors _conventions.convention_check's `b if b <= 0 else b - 360.0`)."""
+    phase band ± slack is one contiguous window and a value/median near ±180 cannot straddle the
+    representation seam (mirrors _conventions.convention_check's `b if b <= 0 else b - 360.0`)."""
     return true_yx if true_yx <= 0 else true_yx - 360.0
 
 
@@ -82,9 +81,9 @@ def in_quadrant_xy(phs_xy: float | None) -> bool | None:
 
 def in_quadrant_yx(stored_phs_yx_adj: float | None) -> bool | None:
     """True iff the TRUE φyx (after unwrapping the +180 shift from the stored t[4]) is within
-    quadrant Q3 widened by the slack, judged on the seam-mapped (−360, 0] axis (−180−slack … −90+slack, the
-    engine gate's yx band; a true value of +175 maps to −185, within slack of the −180 edge). None =>
-    no flag. Reading the stored value directly is the bug the φyx-unwrap pin catches."""
+    quadrant Q3 widened by the slack, judged on the seam-mapped (−360, 0] axis (−180−slack … −90+slack,
+    the engine gate's yx band; a true value of +175 maps to −185, within slack of the −180 edge).
+    None => no flag. Reading the stored value directly is the bug the φyx-unwrap pin catches."""
     true_yx = true_phi_yx(stored_phs_yx_adj)
     if true_yx is None:
         return None

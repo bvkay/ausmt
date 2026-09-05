@@ -21,7 +21,7 @@ and GIS-shape pins second:
     build that dropped them here would quietly contradict the access record.
 
 These drive the REAL pipeline (subprocess build) over the engine-produced coordinate fixtures the
-coordinate-policy suite already stages, so no catalogue row is ever hand-typed (house rule). Requires the
+coordinate-policy suite stages, so no catalogue row is ever hand-typed (house rule). Requires the
 mt_metadata/mth5 build stack; skips cleanly otherwise.
 """
 import json

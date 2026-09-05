@@ -4152,16 +4152,16 @@ def _release_mth5_metadata_classes() -> None:
     add_transfer_function in the writers, each get_transfer_function in the round-trip gate).
 
     WHY. The build was not holding the corpus. On the pinned stack every mth5 0.6.8 group/dataset
-         instantiation calls add_attributes_to_metadata_class_pydantic, which builds a FRESH
-         pydantic model class via create_model (about 75 classes per served station across the
-         tier-1 file, the tier-2 bundle and the gate's reopen), and mt_metadata 1.0.9's to_dict then
-         memoises each class's field tree in the module-global, class-KEYED dict
-         mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE. A class-keyed memo of classes that
-         are never reused can never hit; it only pins every class, its ~300 KB json tree and its
-         pydantic-core validator/serializer for the life of the process. Profiled at 7.6 MiB per
-         served station, linear and unbounded, 78% of the peak footprint, all of it inside
-         _write_tf_mth5; parsing, the cache, the XML arm, the zips and the corpus-wide emissions are
-         flat.
+    instantiation calls add_attributes_to_metadata_class_pydantic, which builds a FRESH
+    pydantic model class via create_model (about 75 classes per served station across the
+    tier-1 file, the tier-2 bundle and the gate's reopen), and mt_metadata 1.0.9's to_dict then
+    memoises each class's field tree in the module-global, class-KEYED dict
+    mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE. A class-keyed memo of classes that
+    are never reused can never hit; it only pins every class, its ~300 KB json tree and its
+    pydantic-core validator/serializer for the life of the process. Profiled at 7.6 MiB per
+    served station, linear and unbounded, 78% of the peak footprint, all of it inside
+    _write_tf_mth5; parsing, the cache, the XML arm, the zips and the corpus-wide emissions are
+    flat.
 
     The library's own clear_field_caches() empties that memo; the classes then have no holder and the
     ordinary cyclic GC frees them. Cost: the next lookup of a STATIC class re-reads its tree from
@@ -6480,7 +6480,7 @@ def _main_build(argv=None):
     if a.sitemap_base:
         # Tier 3 rides the same flag as the sitemap: the pages ARE what the sitemap advertises, so
         # one flag governs both and a flagless build stays byte-identical to one built before these
-        #         pages existed. The
+        # pages existed. The
         # pages render ONLY from the served documents (survey-metadata / station.json /
         # collections), so the posture is inherited and the coord-access whole-tree sweep
         # audits pages/ like every other emitter. The reconciliation below is a hard error: a

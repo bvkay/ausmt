@@ -1,6 +1,5 @@
 """A curator Approve commits to surveys-live. Publish is COMMIT-AND-PUSH ONLY: the
-gateway writes the curator-approved package into the surveys-live git history (the ledger) and
-pushes it.
+gateway writes the curator-approved package into the surveys-live git history (the ledger) and pushes it.
 It does NOT build - which is what makes the no-Docker-socket invariant hold cleanly (the
 gateway never invokes the build, never needs the socket). `PUBLISHED` therefore means "committed to
 surveys-live main and pushed", NOT yet served. The HOST-side serve-reconcile agent closes

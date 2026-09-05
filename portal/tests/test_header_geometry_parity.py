@@ -485,8 +485,7 @@ def test_every_chrome_surface_carries_the_same_zone_geometry():
     """The zone rules, character-identical on EVERY surface wearing the chrome, not just across the
     pair above. The pair covers the SPA and the generated pages, which is where the geometry is
     specified; releases.html and about.html each carry their OWN copy of the chrome, and both kept
-    the auto-basis sides the zone rule replaced. An auto basis sizes each side zone from its own
-    content,
+    the auto-basis sides the zone rule replaced. An auto basis sizes each side zone from its own content,
     so on those two pages the identity block set the width of its own zone and shoved the tab group
     out to x=525.63 and x=525.27 at 1280px, while the SPA, the generated pages and brand.html all
     sat at x=350.83. A reader following the header's own Releases or About link watched the nav jump

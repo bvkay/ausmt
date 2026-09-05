@@ -79,7 +79,7 @@
     font-size:13px;line-height:1;padding:0 2px;cursor:pointer;transition:color .12s}
   .filelist .f button.rm:hover{color:var(--copper)}
   .filelist .rename{color:var(--copper)}                 /* See docs: portal internals, add-survey.html. */
-  .filelist .noid{color:var(--no)}                        /* See docs: portal internals, add-survey.html. */
+  .filelist .noid{color:var(--no)}
   .actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
   button.act{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:5px;
     padding:9px 16px;font-size:13.5px;cursor:pointer}
@@ -927,7 +927,7 @@ function buildSurveyYaml(m){
   L.push("slug: "+(m.slug||"REPLACE-ME"));
   L.push("project_name: "+q(m.name));
   L.push("name: "+q(m.name));                       // See docs: portal internals, add-survey.html.
-  L.push("version: "+q(m.version||"1.0.0"));         // See docs: portal internals, add-survey.html.
+  L.push("version: "+q(m.version||"1.0.0"));
   L.push("country: "+(m.country||"Australia"));
   if(m.region) L.push("region: "+q(m.region));   // See docs: portal internals, add-survey.html.
   L.push("organisation:");
@@ -992,7 +992,7 @@ function buildSurveyYaml(m){
       if(r.citation_note) L.push("  "+CITATION_ID_NOTE);
       L.push("  - identifier: "+q(r.identifier));
       if(r.identifies) L.push("    identifies: "+r.identifies);              // See docs: portal internals, add-survey.html.
-      if(r.identifier_type) L.push("    identifier_type: "+r.identifier_type); // See docs: portal internals, add-survey.html.
+      if(r.identifier_type) L.push("    identifier_type: "+r.identifier_type);
       if(r.custodian) L.push("    custodian: "+q(r.custodian));
     });
   } else { L.push("related_identifiers: []"); }
@@ -1093,11 +1093,11 @@ function buildSurveyYaml(m){
 async function sha256Hex(buf){ const h=await crypto.subtle.digest("SHA-256",buf);
   return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,"0")).join(""); }
 function tsUTC(){ return new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z"); } // See docs: portal internals, add-survey.html.
-function tsUTCDate(){ const t=tsUTC(); return t.slice(0,4)+"-"+t.slice(4,6)+"-"+t.slice(6,8); } // See docs: portal internals, add-survey.html.
+function tsUTCDate(){ const t=tsUTC(); return t.slice(0,4)+"-"+t.slice(4,6)+"-"+t.slice(6,8); }
 
 function rorOrgName(o){
   if(o && typeof o.name==="string" && o.name) return o.name;                          // See docs: portal internals, add-survey.html.
-  if(o && Array.isArray(o.names)){                                                     // See docs: portal internals, add-survey.html.
+  if(o && Array.isArray(o.names)){
     const pick=o.names.find(n=>(n.types||[]).includes("ror_display"))
             || o.names.find(n=>(n.types||[]).includes("label"))
             || o.names.find(n=>!(n.types||[]).includes("acronym"))
@@ -1108,7 +1108,7 @@ function rorOrgName(o){
 }
 function rorOrgCountry(o){
   if(o && o.country && o.country.country_name) return o.country.country_name;          // See docs: portal internals, add-survey.html.
-  if(o && Array.isArray(o.locations) && o.locations[0]){                               // See docs: portal internals, add-survey.html.
+  if(o && Array.isArray(o.locations) && o.locations[0]){
     const g=o.locations[0].geonames_details||{}; return g.country_name||g.name||"";
   }
   return "";
@@ -1116,8 +1116,8 @@ function rorOrgCountry(o){
 function rorOrgAcronym(o){
   if(o){
     if(Array.isArray(o.acronyms) && o.acronyms[0]) return o.acronyms[0];               // See docs: portal internals, add-survey.html.
-    if(Array.isArray(o.aliases) && o.aliases[0]) return o.aliases[0];                  // See docs: portal internals, add-survey.html.
-    if(Array.isArray(o.names)){ const a=o.names.find(n=>(n.types||[]).includes("acronym")); if(a && a.value) return a.value; } // See docs: portal internals, add-survey.html.
+    if(Array.isArray(o.aliases) && o.aliases[0]) return o.aliases[0];
+    if(Array.isArray(o.names)){ const a=o.names.find(n=>(n.types||[]).includes("acronym")); if(a && a.value) return a.value; }
   }
   return "";
 }
@@ -1336,13 +1336,13 @@ if(typeof document!=="undefined"&&document.getElementById){
       let res;
       if(PUB_CACHE.has(d)){ res=PUB_CACHE.get(d); }
       else { res=await harvestDoi(d, u=>fetch(u)); PUB_CACHE.set(d,res); }   // See docs: portal internals, add-survey.html.
-      if(mine!==token) return;   // See docs: portal internals, add-survey.html.
+      if(mine!==token) return;
       if(res.ok){
         f.author.value=res.pub.author||""; f.year.value=res.pub.year||"";
         f.title.value=res.pub.title||""; f.journal.value=res.pub.journal||"";
         doiInp.value=res.pub.doi||d; manualEl.style.display="none"; statusEl.style.display="none";
         setPreview(res.pub, res.source); track("PubDoiHarvested",{source:res.source});   // See docs: portal internals, add-survey.html.
-      } else {   // See docs: portal internals, add-survey.html.
+      } else {
         const pub=res.pub||{doi:d};
         if(!f.author.value.trim()&&pub.author) f.author.value=pub.author;
         if(!f.year.value.trim()&&pub.year) f.year.value=pub.year;
@@ -1391,7 +1391,7 @@ if(typeof document!=="undefined"&&document.getElementById){
       return {name:(r.querySelector(".cr-name").value||"").trim(),
         name_type:org?"organisation":"person",
         orcid:org?"":idv, ror:org?idv:""};    // See docs: portal internals, add-survey.html.
-    }).filter(c=>c.name);                       // See docs: portal internals, add-survey.html.
+    }).filter(c=>c.name);
   }
   $("addCreator").onclick=()=>$("creatorRows").appendChild(creatorRow());
   $("creatorRows").appendChild(creatorRow());   // See docs: portal internals, add-survey.html.
@@ -1952,7 +1952,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   })();
 
   let submitInFlight=null;   // See docs: portal internals, add-survey.html.
-  let submitBusy=false;      // See docs: portal internals, add-survey.html.
+  let submitBusy=false;
   function submitPanel(html, cls){ $("submitBody").innerHTML=html; $("submitBody").className="kv "+(cls||""); $("pSubmit").classList.add("show"); }
   function submitBlocked(msg){ submitPanel('<b class="submitbad">'+esc(msg)+"</b>"); }
   function setSubmitting(on){

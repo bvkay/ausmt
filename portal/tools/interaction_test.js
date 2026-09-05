@@ -949,8 +949,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.buildAuslampSet();   // restore the boot-built set for the rest of the run
 
   // A. buildTree made REAL checkboxes (the smoke stub never did): 2 countries, 4 orgs, 4 surveys.
-  // (The fixture adds Delta Survey / OrgW / station D1 - an embargoed survey, still fully
-  // discoverable.)
+  // (The fixture adds Delta Survey / OrgW / station D1 - an embargoed survey, still fully discoverable.)
   const countryBoxes = [...doc.querySelectorAll("#tree input[data-country]")].filter(b => !b.hasAttribute("value"));
   const orgBoxes = [...doc.querySelectorAll("#tree input[data-org]")].filter(b => !b.hasAttribute("value"));
   const surveyBoxes = [...doc.querySelectorAll("#tree input[value]")];
@@ -1307,8 +1306,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "welcome heading copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeHeading").textContent));
   ok(doc.getElementById("introWelcomeText").textContent.trim() === "Explore Australia's national magnetotelluric data portal",
     "welcome body copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeText").textContent));
-  // The "How AusMT works" panel (#introOverlay), its three tiles and the header item that opened them
-  //   are all gone.
+  // The "How AusMT works" panel (#introOverlay), its three tiles and the header item that opened them are all gone.
   // Nothing on the page may carry those ids or classes: an orphaned panel is dead markup a reader can
   // never reach, and a surviving tile id would mean the header button had gone without its panel.
   // Guarded from both ends, markup and styles.
@@ -2521,8 +2519,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // always-shown <div class="plot"> blocks. The empty-svg absence guard is preserved: an UNCOLLECTED panel
   // stays ABSENT (no empty box). This section RED-proves the swap: on the old <details> markup the
   // `div.plot[data-plot=...]` selectors below find nothing.
-  //   station A1 (tipper + pt): both blocks shown, as divs, with no <details>; sublines + the
-  //   expand affordance kept.
+  //   station A1 (tipper + pt): both blocks shown, as divs, with no <details>; sublines + expand affordance kept.
   //   station A2 (pt, no tipper): pt block shown, arrow block ABSENT (empty-svg guard, no empty box).
   //   station D1 (embargoed, neither collected): neither block renders.
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
@@ -3352,8 +3349,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(doc.querySelector("#cardGrid .scard [data-survey]").dataset.survey === "Beta Survey",
     "the surviving card must be Beta (2018-2019), the only survey inside the range");
   // (b) CLEAR FILTERS resets the promoted controls too. Before the promotion it reset only the chips and
-  //     the search box, so a year typed into the bar survived a "Clear filters" click and silently kept
-  //     filtering.
+  //     the search box, so a year typed into the bar survived a "Clear filters" click and silently kept filtering.
   doc.getElementById("clearFilters").click();
   ok(c6from.value === "" && doc.getElementById("yearTo").value === "",
     "Clear filters must reset the promoted year inputs, got " + JSON.stringify([c6from.value, doc.getElementById("yearTo").value]));

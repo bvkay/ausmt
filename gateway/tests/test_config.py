@@ -104,8 +104,7 @@ def test_in_range_knobs_start(tmp_path):
 
 
 def test_startup_guard_reports_the_key_first(tmp_path):
-    # The key guard is the fail-closed startup abort and must keep its own message: a config that is
-    # BOTH
+    # The key guard is the fail-closed abort and must keep its own message: a config that is BOTH
     # key-less and out of range still fails on the key, so the operator's first fix is the secret.
     cfg = make_config(tmp_path, submit_key="", max_inflight=0)
     with pytest.raises(SystemExit) as excinfo:

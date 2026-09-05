@@ -10,8 +10,7 @@ divergence — trim/case/substring/empty-query semantics — goes red.
 
 Node posture (stated for the gate): pure `node`, no npm/jsdom (matchRow is DOM-free). Local dev box:
 node present. Gateway CI: node preinstalled on GitHub-hosted runners. If node were ever absent the
-skip below is deliberately NOT on the gateway workflow's skip-tripwire allow-list, so that
-workflow fails LOUDLY rather
+skip below is deliberately NOT on the gateway workflow's skip-tripwire allow-list, so it fails LOUDLY rather
 than silently hollowing this pin out (the house posture).
 """
 from __future__ import annotations

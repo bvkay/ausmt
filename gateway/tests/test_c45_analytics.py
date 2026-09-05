@@ -659,7 +659,7 @@ def test_the_partial_dimension_disclosures_name_countries_and_unattributed(tmp_p
     """DISCLOSURE PIN. Both honesty lines enumerate which dimensions are partial, and both omitted
     COUNTRIES and UNATTRIBUTED, which is why a month showing 'Countries: 1' beside a headline of 11
     reads as a bug rather than as the forward-only seam it is. Both lines must name every partial
-    dimension, INCLUDING the ones the later counting work added, and each must attach them to the seam they actually
+    dimension, INCLUDING the ones the later work added, and each must attach them to the seam they actually
     belong to: the caveat's dated sentence covers the v1 hinge, and the dimensions that began at the
     later fold are named in their own sentence, which does NOT claim that date. FAILS IF either line
     omits countries or unattributed, if the new dimensions land undisclosed, or if the dated sentence

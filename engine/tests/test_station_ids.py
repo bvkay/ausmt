@@ -621,7 +621,8 @@ def test_the_pyyaml_refusal_never_asks_the_parser_it_gates(tmp_path, capsys, mon
     this test first pinned the refusal against the fallback's after-a-list blind spot, where a
     trailing comment on a key line (`data_types:   # select all that apply`) swallowed every later
     top-level key and the station_ids block VANISHED from the parse entirely, so a parse-based
-    gate asked the parser being gated, got None, and built the survey with no override at all. Engine 02e6fe5 (section-2 review) fixed that truncation at the source, so the same
+    gate asked the parser being gated, got None, and built the survey with no override
+    at all. Engine 02e6fe5 (section-2 review) fixed that truncation at the source, so the same
     fixture now PARSES - asserted below so a regression of that fix reds here too - and the refusal
     must fire anyway, because the gate reads the text. The surviving reason the block stays
     PyYAML-only is the UNDER-READ class the next test pins (legal unquoted filename keys the

@@ -212,8 +212,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine still
     # reads sources[], so nothing served changes yet.
     #
-    # related_identifiers is the single typed list of provenance relations to identifiers AusMT does
-    # NOT own.
+    # related_identifiers is the single typed list of provenance relations to identifiers AusMT does NOT own.
     # The primary per-row control is `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
     # terms) — FIRST on the row and FAIL-CLOSED like relation/identifier_type. The DataCite `relation`
     # DERIVES from `identifies` server-side, so it is not a curator control on an identifies

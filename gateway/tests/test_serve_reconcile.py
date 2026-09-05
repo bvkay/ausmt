@@ -401,8 +401,8 @@ def test_ui_js_route_serves_shared_behaviours(tmp_path):
     (Rebuild/Reject/Revoke confirms ride it) and the data-toggle-big click handler (the preview
     size toggle). Deliberately UNGATED: a session gate here 303s the login page's own
     script fetch into a nosniff console error on every login view; the content is a static
-    public-repo constant. FAILS IF: the route 404s (every confirm/toggle silently dies again), lacks either delegated
-    behaviour, or regains a gate that breaks the
+    public-repo constant. FAILS IF: the route 404s (every confirm/toggle silently dies again),
+    lacks either delegated behaviour, or regains a gate that breaks the
     login page."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):

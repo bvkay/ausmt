@@ -5218,7 +5218,8 @@ the default - so this is a per-type override, never a blanket flip. Measured, no
 ```text
 The time-series level vocabulary, [token, label, gloss], IN THE ORDER IT RENDERS.
 These tokens ARE ts_access.json's keys, so the chooser, the drawer rows and the hand-off pointer
-file all name a level the same way and none of them re-derives the list. `level2` is absent BY DESIGN, not by omission: the archive's level_2 tree holds transfer functions,
+file all name a level the same way and none of them re-derives the list. `level2` is absent BY
+DESIGN, not by omission: the archive's level_2 tree holds transfer functions,
 not time series, so it opens no route, takes no button and gets no row here.
 ```
 

@@ -1,6 +1,6 @@
 """Where the static pages' chrome actually points (findability workflow, index pages).
 
-The static portal pages (about, releases, add-survey, and brand since the brand-assets workflow) carry
+The static portal pages (about, releases, add-survey, and brand) carry
 the same header as index.html so the chrome reads identically across the site. Their LINKS did not
 follow: every primary nav item pointed at bare index.html, which meant
 
@@ -115,8 +115,7 @@ def test_the_spa_header_surveys_and_collections_are_real_links():
 
 
 def test_the_spa_keeps_its_in_app_surveys_and_collections_views_on_their_hash_routes():
-    """The other half of the hub-link change: making the header controls into links must not RETIRE
-    the in-app
+    """The other half: making the header controls into links must not RETIRE the in-app
     views. #/surveys and #/collections are published in the wild and still switch the SPA's own
     grid views, and the header does not wire a click handler onto controls that navigate away.
 
