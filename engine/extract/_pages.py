@@ -824,12 +824,15 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f"<title>{_e(title)}</title>\n"
         f'<meta name="description" content="{_e(description)}">\n'
         f'<link rel="canonical" href="{_e(canonical)}">\n'
-        # ICON LINKS. Without them every entity page asks the server for /favicon.ico and gets a 404.
-        # Both are same-origin portal paths served beside these pages, and both must be ABSOLUTE,
-        # because a page served at /surveys/<slug> cannot resolve a relative vendor path. The favicon
-        # is transparent, so the one file serves a light and a dark browser chrome.
-        '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
-        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">\n'
+        # ICON LINKS. Three same-origin portal paths, absolute because a page served at
+        # /surveys/<slug> cannot resolve a relative vendor path, and root-anchored on /favicon.ico
+        # because a browser that reads no SVG icon link asks the site root for that name.
+        # The version query on each href is that file's own content hash, written here by
+        # portal/tools/gen_brand.py: /vendor/* carries a thirty day cache, so a regenerated icon under
+        # an unchanged URL is answered from that cache.
+        '<link rel="icon" href="/favicon.ico?v=77b0cf2b" sizes="any">\n'
+        '<link rel="icon" href="/vendor/favicon.svg?v=62401780" type="image/svg+xml">\n'
+        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png?v=9a674f91">\n'
         f"{og}"
         f"{ld}"
         f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n"

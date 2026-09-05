@@ -16,9 +16,10 @@
      block, which the CSP allows here alone. NEVER write a literal script open tag inside a comment on
      this page: tests/add_survey_logic.test.js extracts inline blocks by regex and would treat it as
      real. -->
-<link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
-<!-- See docs: portal internals, add-survey.html. -->
-<link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">
+<!-- Each icon href's query is that file's content hash. -->
+<link rel="icon" href="/favicon.ico?v=77b0cf2b" sizes="any">
+<link rel="icon" href="/vendor/favicon.svg?v=62401780" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png?v=9a674f91">
 <link rel="canonical" href="https://ausmt.auscope.org.au/add-survey.html">
 <meta name="description" content="Files first. Drop your EDI, EMTF XML or MTH5 transfer functions, watch the stations land on the map, then fill the short required section below.">
 <meta property="og:type" content="website">

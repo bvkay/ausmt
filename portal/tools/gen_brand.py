@@ -31,8 +31,10 @@ is the invariant that actually matters (a committed export must show exactly wha
 which does not go red when a PNG encoder or its zlib is upgraded under CI.
 """
 import argparse
+import hashlib
 import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -586,12 +588,54 @@ _OUTPUT_INDEX = (
 # The app-icon sizes. 180 is the apple-touch-icon a home-screen shortcut uses; 192 and 512 are the
 # conventional pair a web manifest would name. No manifest ships here (architect default): an
 # installable PWA is its own decision, and these two exist so that decision costs no regeneration.
-APP_ICON_SIZES = (180, 192, 512)
+APPLE_TOUCH_ICON_PX = 180
+APP_ICON_SIZES = (APPLE_TOUCH_ICON_PX, 192, 512)
 
 # The frames the root /favicon.ico carries. 16 is the browser tab, 32 the retina tab and the bookmark
 # bar, 48 the desktop shortcut; a browser picks the frame it wants, so all three are rendered from the
 # lattice at their own size rather than resampled from one another.
 ICO_SIZES = (16, 32, 48)
+
+
+# THE ICON HREFS EVERY SURFACE LINKS, and the version query that keeps them fresh. /vendor/* is served
+# with a thirty day cache, so a regenerated icon under an unchanged URL is answered from that cache and
+# the old mark stays in the tab; the query is the file's own content hash, so the URL moves exactly when
+# the bytes do and never otherwise. The surfaces are the six shipped documents and the emitter that
+# writes the head of every generated page.
+ICON_VERSION_DIGITS = 8
+ICON_LINKED_SOURCES = ("portal/index.html", "portal/about.html", "portal/add-survey.html",
+                       "portal/brand.html", "portal/releases.html", "portal/404.html",
+                       "engine/extract/_pages.py")
+
+
+def icon_payloads():
+    """{href: the bytes this tool writes for the file that href names}.
+
+    Read from the FRESH render rather than from the checkout, so one run converges: an icon and the
+    hrefs that version it are stamped from the same bytes even when the committed icon is stale."""
+    buf = io.BytesIO()
+    png_mark(APPLE_TOUCH_ICON_PX).save(buf, "PNG")
+    return {"/favicon.ico": ico_bytes(),
+            "/vendor/favicon.svg": svg_favicon().encode("utf-8"),
+            f"/vendor/brand/ausmt-icon-{APPLE_TOUCH_ICON_PX}.png": buf.getvalue()}
+
+
+def icon_versions():
+    """{href: the version query digits for that file}."""
+    return {href: hashlib.sha256(data).hexdigest()[:ICON_VERSION_DIGITS]
+            for href, data in icon_payloads().items()}
+
+
+def stamped(text, versions=None):
+    """`text` with every icon href carrying the current content hash of the file it names.
+
+    Only the query is rewritten. The links themselves, their order and their form are the surface's own
+    and are held by portal/tests/test_favicon_and_app_icons.py, so this tool owns exactly the one thing
+    a person cannot keep correct by hand."""
+    for href, version in (versions or icon_versions()).items():
+        text = re.sub(r'(href="%s)(?:\?v=[0-9a-f]{%d})?"' % (re.escape(href), ICON_VERSION_DIGITS),
+                      r'\g<1>?v=%s"' % version, text)
+    return text
 
 
 def artefacts():
@@ -615,6 +659,11 @@ def artefacts():
     items.append((ROOT / "favicon.ico", "ico", ico_bytes()))
     for size in APP_ICON_SIZES:
         items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", png_mark(size)))
+    versions = icon_versions()
+    for rel in ICON_LINKED_SOURCES:
+        path = REPO / rel
+        items.append((path, "bytes",
+                      stamped(path.read_text(encoding="utf-8"), versions).encode("utf-8")))
     return items
 
 

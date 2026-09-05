@@ -21,6 +21,7 @@ dark browser chrome without a second variant.
 NO WEB MANIFEST this module (architect default): 192 and 512 are generated and served so a manifest can
 be added later, but an installable PWA is its own decision and its own rule.
 """
+import hashlib
 import json
 import re
 import subprocess
@@ -100,29 +101,103 @@ def test_every_app_icon_is_square_transparent_and_the_declared_size(name, size):
         assert im.getpixel((0, 0))[3] == 0, f"{name}: the corner must be transparent"
 
 
-@pytest.mark.parametrize("name", CHROME_PAGES)
-def test_every_chrome_page_links_the_favicon_and_the_apple_touch_icon(name):
-    """FAILS IF a static portal page loses either icon link. The favicon link already existed and
-    keeps its href (the file kept its name); the apple-touch-icon is new, and without it an iOS
-    home-screen shortcut renders a screenshot of the page instead of the mark."""
+# EVERY SURFACE LINKS THE SAME THREE ICONS, IN THE SAME FORM. The static tier and the emitted pages
+# state one block, root-absolute so a document served at /surveys/<slug> resolves it, and each href
+# carries the eight hex digits its own file's bytes hash to. The version query is what reaches a
+# returning visitor: /vendor/* is served with a thirty day cache, so a regenerated icon under an
+# unchanged URL is answered from that cache and the old mark stays in the tab.
+SHIPPED_PAGES = CHROME_PAGES + ("404.html",)
+ICON_FILES = {
+    "/favicon.ico": ROOT / "favicon.ico",
+    "/vendor/favicon.svg": ROOT / "vendor" / "favicon.svg",
+    "/vendor/brand/ausmt-icon-180.png": BRAND_DIR / "ausmt-icon-180.png",
+}
+
+
+def _version(href):
+    """The eight hex digits an icon href's version query must carry, from the file's own bytes."""
+    return hashlib.sha256(ICON_FILES[href].read_bytes()).hexdigest()[:8]
+
+
+def _icon_block(sep="\n"):
+    """The three icon links, in the declared order and form, at today's content hashes."""
+    return sep.join((
+        f'<link rel="icon" href="/favicon.ico?v={_version("/favicon.ico")}" sizes="any">',
+        f'<link rel="icon" href="/vendor/favicon.svg?v={_version("/vendor/favicon.svg")}"'
+        ' type="image/svg+xml">',
+        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png'
+        f'?v={_version("/vendor/brand/ausmt-icon-180.png")}">',
+    ))
+
+
+@pytest.mark.parametrize("name", SHIPPED_PAGES)
+def test_every_shipped_page_carries_the_versioned_icon_block(name):
+    """FAILS IF a page loses an icon link, keeps an unversioned href, carries a stale hash, or writes
+    the three in a different order or a relative form. 404.html is in scope with the rest: it is the
+    document a browser lands on for any unknown path, and a relative href there resolves against that
+    path rather than against the site root."""
     text = (ROOT / name).read_text(encoding="utf-8")
-    assert '<link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">' in text, \
-        f"{name}: the favicon link must stay as it is"
-    assert '<link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">' in text, \
-        f"{name}: an apple-touch-icon must point at the 180 px app icon"
+    assert _icon_block() in text, (
+        f"{name}: the head must carry the three icon links at their current content hashes:\n"
+        + _icon_block())
 
 
-def test_the_generated_pages_link_both_icons_same_origin():
-    """FAILS IF the static pages' shell stops emitting the icon links, or emits them anywhere but the
-    portal's own origin. Every entity page asked for /favicon.ico and got a 404 before this module; the
-    links are absolute because a page served at /surveys/<slug> cannot resolve a relative vendor path."""
+@pytest.mark.parametrize("name", SHIPPED_PAGES + ("_pages.py",))
+def test_no_surface_links_a_mask_icon(name):
+    """FAILS IF a pinned-tab mask icon appears anywhere. Safari's mask wants a single-colour SVG it
+    fills with the reader's accent, and the mark is a four colour lattice: shipping one would put a
+    flat silhouette of Australia in a pinned tab and call it the brand."""
+    text = (PAGES_PY if name == "_pages.py" else ROOT / name).read_text(encoding="utf-8")
+    assert "mask-icon" not in text, f"{name}: no surface may link a pinned-tab mask icon"
+
+
+def test_the_generated_pages_link_the_same_versioned_block_same_origin():
+    """FAILS IF the pages' shell stops emitting the block, emits it anywhere but the portal's own
+    origin, or drifts from the static tier's copy. The hrefs are absolute because a page served at
+    /surveys/<slug> cannot resolve a relative vendor path."""
     src = PAGES_PY.read_text(encoding="utf-8")
-    for tag in ('<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">',
-                '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">'):
+    for tag in _icon_block().split("\n"):
         assert tag in src, f"engine/extract/_pages.py must emit {tag}"
     hrefs = re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', src)
-    assert hrefs and all(h.startswith("/vendor/") for h in hrefs), \
-        f"the pages' icon links must be same-origin portal paths, got {hrefs}"
+    assert hrefs, "the pages' shell must emit icon links"
+    for href in hrefs:
+        assert href.startswith("/") and not href.startswith("//"), (
+            f"the pages' icon links must be same-origin portal paths, got {href}")
+        assert "://" not in href and not href.startswith("data:"), (
+            f"an icon href is same-origin only; {href} is not")
+
+
+def test_the_version_query_is_the_hash_of_the_file_it_names():
+    """FAILS IF a version query stops being the hash of the bytes actually served at that path. A
+    query that is any other token still busts a cache once and then lies: the next regeneration leaves
+    it unchanged and the stale icon comes back."""
+    for name in SHIPPED_PAGES + ("_pages.py",):
+        text = (PAGES_PY if name == "_pages.py" else ROOT / name).read_text(encoding="utf-8")
+        for href, ver in re.findall(
+                r'<link rel="(?:icon|apple-touch-icon)" href="([^"?]+)\?v=([^"]+)"', text):
+            assert href in ICON_FILES, f"{name}: {href} is not one of the three declared icons"
+            assert ver == _version(href), (
+                f"{name}: {href} carries v={ver}, but that file's bytes hash to {_version(href)}")
+
+
+def test_the_drift_gate_fails_on_a_stale_version_query():
+    """FAILS IF the generator does not own the version queries. A hash written by hand goes stale the
+    first time an icon is regenerated, and the whole point of the query is that it cannot."""
+    target = ROOT / "index.html"
+    original = target.read_bytes()
+    try:
+        target.write_text(
+            original.decode("utf-8").replace(
+                f'/favicon.ico?v={_version("/favicon.ico")}', "/favicon.ico?v=00000000"),
+            encoding="utf-8")
+        r = subprocess.run([sys.executable, str(TOOL), "--check"], capture_output=True,
+                           text=True, encoding="utf-8", cwd=str(REPO))
+        assert r.returncode == 1, \
+            f"the gate must fail on a stale version query, it returned {r.returncode}"
+        assert "index.html" in r.stdout + r.stderr, \
+            f"the gate must name the page that drifted:\n{r.stdout}\n{r.stderr}"
+    finally:
+        target.write_bytes(original)
 
 
 def test_no_web_manifest_was_smuggled_in():
