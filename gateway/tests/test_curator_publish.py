@@ -333,7 +333,7 @@ def test_slug_charset_validation():
 
 
 # --------------------------------------------------------------------------------------------------
-# Curator-acknowledgeable PII sweep (design maintainer/C11b-PiiAcknowledge.md).
+# Curator-acknowledgeable PII sweep.
 # Every behaviour change below is proven-failing-first against code (evidence in the report).
 # --------------------------------------------------------------------------------------------------
 def test_generic_email_without_ack_refuses_approve_409(tmp_path):

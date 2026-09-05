@@ -6531,8 +6531,8 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         sections.append((section, title, _json_only_panel(section, title, hint, fields, err_map)))
 
     # HUB-SINGLE-SAVE: ONE commit tray for the WHOLE form (bump + required note + Save), pinned to the
-    # bottom of the field column so it is reachable from any scroll position. One logical edit — however
-    # many sections it spans - is one bump, one release note, one diff, one confirm (the
+    # bottom of the field column so it is reachable from any scroll position. One logical edit, however
+    # many sections it spans, is one bump, one release note, one diff, one confirm (the
     # discipline is unchanged; it does not fire once per section).
     patch_v, minor_v, major_v = (_suggest_bump(cur, k) for k in ("patch", "minor", "major"))
     tray = (

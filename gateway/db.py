@@ -21,9 +21,8 @@ from pathlib import Path
 from . import states
 
 # ULID would need a dep; a 26-char Crockford-base32 of (48-bit time + 80-bit random) is ULID-shaped
-# and stdlib-only. The id is NOT a secret (the submission token is the secret); it is
-# sortable-ish by the
-# time prefix, which is all the design asks of it.
+# and stdlib-only. The id is NOT a secret (the submission token is the secret); it is sortable-ish
+# by the time prefix, which is all the design asks of it.
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
@@ -167,7 +166,7 @@ def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
-    """Per-curator TOTP secret for the destructive-op second factor. The
+    """Schema v4: per-curator TOTP secret for the destructive-op second factor. The
     DB is already the secrets/PII home (never git, WAL-safe backed up, restore-drilled), so the secret
     lives here beside the session store - a survey deletion needs a valid TOTP code in addition to the
     curator session.
@@ -182,7 +181,7 @@ def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
 
     Additive-only, which is the migration invariant: a single CREATE TABLE IF NOT EXISTS, no existing column
     touched, no data migrated. IF NOT EXISTS makes a re-run on a partially-migrated DB idempotent
-    (mirrors v2's rationale). No unenrol/delete method exists by design (boundary):
+    (mirrors v2's rationale). No unenrol/delete method exists by design:
     lost-authenticator recovery is a console action (delete the row on the box), the same class as
     bootstrap-key rotation."""
     conn.execute(
@@ -411,9 +410,9 @@ class Database:
         pinned by tests/test_upload.py.
 
         The rule is about CONTENT, not liveness. Matching only NON-TERMINAL rows would switch the
-        guard off the moment the first copy finished: once a submission
+        guard off the moment the first copy finished, so once a submission
         reached PUBLISHED (or QUARANTINED / REJECTED_AV / REJECTED / RETURNED) the identical bytes
-        were accepted again with a fresh 201, a fresh id, a fresh scan + validate + preview cycle
+        would be accepted again with a fresh 201, a fresh id, a fresh scan + validate + preview cycle
         and a second publishable copy of a package the archive already holds. Every terminal state
         makes a resubmit of the SAME bytes pointless or worse: already published, already refused,
         already found infected, or returned for a revision that identical bytes plainly are not.
