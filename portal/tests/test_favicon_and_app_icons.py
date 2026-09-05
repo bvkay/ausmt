@@ -328,11 +328,16 @@ def test_the_root_icon_is_declared_and_the_drift_gate_compares_it():
 
 
 def test_two_runs_of_the_generator_write_the_same_root_icon():
-    """FAILS IF the icon carries a timestamp or any other per-run byte. A regenerated icon that
-    differs on identical inputs makes every rebuild a spurious diff and defeats the drift gate it is
-    held by."""
+    """FAILS IF the icon carries a timestamp or any other per-run difference in what it draws. A
+    regenerated icon that differs on identical inputs makes every rebuild a spurious diff and defeats
+    the drift gate it is held by. Compared as the picture, frame by frame, never as encoded bytes: a
+    PNG encoder writes different bytes for the same picture under a different Python build."""
     ns = _tool_namespace()
-    assert ns["ico_bytes"]() == ns["ico_bytes"](), \
-        "two renders of the root icon must be byte-identical"
-    assert FAVICON_ICO.read_bytes() == ns["ico_bytes"](), \
-        "the committed root icon must be the bytes the generator writes today"
+
+    def picture(data):
+        return ns["picture_digest"]("/favicon.ico", data)
+
+    assert picture(ns["ico_bytes"]()) == picture(ns["ico_bytes"]()), \
+        "two renders of the root icon must draw the same frames"
+    assert picture(FAVICON_ICO.read_bytes()) == picture(ns["ico_bytes"]()), \
+        "the committed root icon must draw the frames the generator renders today"
