@@ -19,9 +19,8 @@ DETERMINISTICALLY (the test_convention_gates manipulation, reimplemented as pure
 Node dependency posture: pure `node`, no jsdom/npm (the extracted functions are DOM-free by
 design); node absence is deliberately NOT allow-listed (the workflow must red, not hollow out).
 Engine posture: the real engine stack (mt_metadata + the sample survey) is absent in the
-stackless gateway CI workflow - stackless gateway CI workflow - those pins skip there with EXACTLY
-the suite's one allow-listed and RUN on the dev box + the engine/build workflows (ubuntu). Nothing
-here is
+stackless gateway CI workflow - those pins skip there with EXACTLY the suite's one allow-listed
+tripwire reason and RUN on the dev box + the engine/build workflows (ubuntu). Nothing here is
 ubuntu-ONLY: every test that can run on this Windows dev box does.
 
 Failure criterion is in each test's docstring (Invariant 10).

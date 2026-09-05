@@ -244,8 +244,8 @@ def test_the_mark_the_two_headers_name_is_a_real_committed_asset():
 # header's own "Contribute a survey" link watched the site's identity change under them.
 #
 # NO PAGE IS EXEMPT. about.html was the last one, its identity slot held open while that header
-# on that header; the rule is that about wears the chrome every other surface wears. There is no
-# exemption list here any more, and the pages are discovered from the filesystem, so a page cannot
+# was still being settled; the rule is that about wears the chrome every other surface wears. There is
+# no exemption list here any more, and the pages are discovered from the filesystem, so a page cannot
 # arrive with an identity of its own. 404.html is a bare error document with no header at all.
 MARK_IMG = f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">'
 

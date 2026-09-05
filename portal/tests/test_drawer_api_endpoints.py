@@ -139,7 +139,7 @@ def test_drawer_api_section_lists_the_real_endpoints(tmp_path):
     for gone in ("/data/surveys.json", "/data/products/manifest.json"):
         assert gone not in html, (
             f"the drawer API section must not advertise {gone}: surveys.json is portal-internal with no "
-            f"contract, and the products/ twin of the manifest is retired; surface; "
+            f"contract, and the products/ twin of the manifest is retired; "
             f"rendered:\n{html[-2500:]}")
     # The depth pointer is the docs site's API reference, and it must
     # be the SAME url About links, so a reader is never sent to two different "for depth" pages. Read off

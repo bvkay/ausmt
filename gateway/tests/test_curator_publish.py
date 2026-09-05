@@ -396,7 +396,7 @@ def test_submitter_email_with_ack_still_409(tmp_path):
             sid = seed_validated(gw, cfg, email="owner@private.test", pii_in_preview=True)
             await curator_login(client)
             r = await _approve(client, sid, note="trying to force it", ack_pii="yes")
-            assert r.status_code == 409, "ack overrode a case-variant submitter hit; it must never override"
+            assert r.status_code == 409, "ack overrode a submitter-email hit; it must never override"
             assert gw.db.get(sid).state == states.VALIDATED
             assert git.calls == []
             # Mixed: submitter email AND a stranger's email in the same product => still 409 with ack.
@@ -412,7 +412,7 @@ def test_submitter_email_with_ack_still_409(tmp_path):
             sid3 = seed_validated(gw, cfg, slug="casesurvey", email="Owner@Private.Test",
                                   foreign_email_in_preview="owner@private.test")
             r3 = await _approve(client, sid3, note="trying the case-variant bypass", ack_pii="yes")
-            assert r3.status_code == 409, "ack overrode a submitter-email hit; it must never override"
+            assert r3.status_code == 409, "ack overrode a case-variant submitter hit; it must never override"
             assert gw.db.get(sid3).state == states.VALIDATED
             assert git.calls == []
     run(_body())
