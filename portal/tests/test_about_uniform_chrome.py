@@ -280,9 +280,7 @@ def test_header_parity_about_matches_index():
     raw-text coincidences cannot pass it).
 
     Failure criteria:
-      * NAV ID ORDER: FAILS if the ids of the elements inside <nav> are not exactly
-        "before the workflow about.html's nav items were bare" reads as one garbled noun phrase; a
-        workflow is not a point in time. Name the change instead: [navMap, navSurveys,
+      * NAV ID ORDER: FAILS if the ids of the elements inside <nav> are not exactly [navMap, navSurveys,
         navCollections], in that order, on BOTH pages. Non-vacuous: before this alignment landed,
         about.html's nav items were bare <a href="index.html"> with no ids at all, so About failed
         this.
@@ -290,7 +288,7 @@ def test_header_parity_about_matches_index():
         is static so its must be links. Ids + order + placement are the parity that matters.
       * CENTRE-ZONE ORDER: FAILS if the five primary items are not in the same order on both pages:
         Map, Surveys, Collections, About, Contribute. It is five, not six: "How to use AusMT" is cut
-        "How to use AusMT" from every header (the welcome tour and About cover it). The sixth slot is
+        from every header (the welcome tour and About cover it). The sixth slot is
         pinned SHUT below, so a header that grows a sixth centre item fails here rather than drifting
         back.
       * STATS BLOCK: FAILS if either page's right zone lacks a single .counts element. Non-vacuous: the

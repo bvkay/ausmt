@@ -376,7 +376,6 @@ def test_bbox_states_the_generalisation_caveat_and_its_contract_fields():
         assert value in frag, f"the prose must name the coordinates_state value {value}"
     # The docs name station.json's coordinate_policy, so an EMITTED record must actually carry it, and
     # only where the position is non-exact (an exact record gaining the key would tell a reader every
-    # A test module installs nothing; the portal suite is what runs without the engine stack:
     # position is qualified). Emitted documents rather than emitter source text: the portal suite
     # installs no engine stack, and a grep for a source literal survives no refactor of the emitter.
     def _emitted(station):
@@ -432,8 +431,7 @@ def test_no_fictional_api_paths_anywhere_in_the_portal_tree():
 
 
 def test_the_scan_actually_looks_at_the_files_that_used_to_carry_the_fiction():
-    """A test module changes no files. State what the scan must reach:
-    Guards the guard. The scan above passes trivially if its file walk collects nothing, so pin that
+    """Guards the guard. The scan above passes trivially if its file walk collects nothing, so pin that
     it reaches both files the change touched."""
     seen = {p.relative_to(ROOT).as_posix() for p in _shipped_portal_files()}
     for expected in ("src/drawer.js", "about.html", "index.html"):
