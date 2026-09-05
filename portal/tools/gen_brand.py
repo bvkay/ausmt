@@ -471,6 +471,27 @@ def png_mark(size):
     return im.resize((size, size), Image.LANCZOS) if ss > 1 else im
 
 
+# THE RASTER ICONS SIT ON A NAVY DISC. A search engine crops a favicon to a circle and puts its own white
+# disc behind a transparent one, which washes out the mark's pale end. So every raster icon is the mark on
+# the portal's deepest surface colour, inset to the inscribed circle, and lifted 20 percent in brightness
+# so the gradient still reads at 16 px. The SVG tab icon stays transparent: a browser tab does not crop.
+RASTER_ICON_BACKGROUND = "#11182D"
+RASTER_ICON_INSET = 0.78
+RASTER_ICON_BRIGHTNESS = 1.20
+
+
+def raster_icon(size):
+    """The mark on the navy disc at `size` pixels, the form every raster icon ships in."""
+    Image, _, _ = _pillow()
+    from PIL import ImageEnhance
+    tile = Image.new("RGBA", (size, size), RASTER_ICON_BACKGROUND)
+    mark = png_mark(max(1, round(size * RASTER_ICON_INSET)))
+    rgb = ImageEnhance.Brightness(mark.convert("RGB")).enhance(RASTER_ICON_BRIGHTNESS)
+    mark = Image.merge("RGBA", (*rgb.split(), mark.split()[3]))
+    tile.alpha_composite(mark, ((size - mark.width) // 2, (size - mark.height) // 2))
+    return tile
+
+
 def ico_bytes():
     """The root /favicon.ico, as a multi-size icon a browser can pick a frame out of.
 
@@ -480,7 +501,7 @@ def ico_bytes():
     frame carries the small-size radius band that keeps the silhouette solid in a tab. The entries
     are PNG-compressed, which every browser since Windows Vista reads, and the render carries no
     timestamp, so two runs write identical bytes."""
-    frames = [png_mark(size) for size in ICO_SIZES]
+    frames = [raster_icon(size) for size in ICO_SIZES]
     buf = io.BytesIO()
     frames[-1].save(buf, "ICO", sizes=[(s, s) for s in ICO_SIZES], append_images=frames[:-1])
     return buf.getvalue()
@@ -614,7 +635,7 @@ def icon_payloads():
     Read from the FRESH render rather than from the checkout, so one run converges: an icon and the
     hrefs that version it are stamped from the same bytes even when the committed icon is stale."""
     buf = io.BytesIO()
-    png_mark(APPLE_TOUCH_ICON_PX).save(buf, "PNG")
+    raster_icon(APPLE_TOUCH_ICON_PX).save(buf, "PNG")
     return {"/favicon.ico": ico_bytes(),
             "/vendor/favicon.svg": svg_favicon().encode("utf-8"),
             f"/vendor/brand/ausmt-icon-{APPLE_TOUCH_ICON_PX}.png": buf.getvalue()}
@@ -658,7 +679,7 @@ def artefacts():
     items.append((ROOT / "vendor" / "favicon.svg", "bytes", svg_favicon().encode("utf-8")))
     items.append((ROOT / "favicon.ico", "ico", ico_bytes()))
     for size in APP_ICON_SIZES:
-        items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", png_mark(size)))
+        items.append((BRAND_DIR / f"ausmt-icon-{size}.png", "image", raster_icon(size)))
     versions = icon_versions()
     for rel in ICON_LINKED_SOURCES:
         path = REPO / rel
