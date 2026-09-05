@@ -44,7 +44,7 @@ def _facts(name):
     return rf.run_facts((RUNFACTS / f"{name}.info").read_text(encoding="utf-8"))
 
 
-# ---- the run-facts gate ---------------------------------------------------------------------------
+# ---- the run-facts gate -------------------------------------------------------------------------
 
 def test_a_station_asserting_no_acquisition_fact_publishes_no_runs():
     """The Geotools survey header states nothing, so there is no run to publish and no id to look
@@ -111,7 +111,7 @@ def test_a_window_with_no_start_is_not_published_at_all():
     assert "time_period" not in runs[0]
 
 
-# --- Which channels ride the run ------------------------------------------------------------
+# ---- which channels ride the run ----------------------------------------------------------------
 
 def test_the_channel_list_is_corroborated_never_taken_from_definemeas():
     """The >INFO names four channels and the transfer function measured an impedance; DEFINEMEAS is

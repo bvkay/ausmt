@@ -301,7 +301,7 @@ def test_served_flag_withholds_no_class(monkeypatch):
     assert "formats" not in held_doc and "distribution" not in held_doc
 
 
-# --------------------------------------------------------------- Markers never leak
+# ---------------------------------------------------------------- markers never leak
 
 MARKED_YAML = """\
 slug: marked-survey
@@ -572,7 +572,7 @@ def test_t25_hard_stop_fails_the_build_naming_the_survey(tmp_path):
     assert "t25-survey" in r.stderr and "preferred_identifier" in r.stderr, r.stderr[-2000:]
 
 
-# --------------------------------------------------------------- The loud skip
+# ---------------------------------------------------------------- the loud skip
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
                               "(designed topology; vendored oracle lives in gateway/tests)")

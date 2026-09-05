@@ -283,12 +283,13 @@ def test_published_head_via_git_seam_on_shell_and_serve(tmp_path):
 # ---- CSP delivery + the queue-is-pure-queue invariant (strictPages blocks inline) ---------------
 
 def test_queue_page_is_pure_queue_and_csp_clean(tmp_path):
-    """CSP PIN. The queue page is PURELY the queue: no inline serve-state panel renders, it does NOT reference serve-state.js and
-    carries no serve-state panel id (that job moved to /gateway/curator/serve + the drift chip). It
-    still carries the shared UI script and stays CSP-clean: Caddy serves every /gateway/* page under
-    script-src 'self', so inline <script> blocks and inline on*= handlers are silently BLOCKED and any
-    inline JS is dead code that only fails in production. FAILS IF: the serve panel leaks back onto the
-    queue, or anyone re-inlines a script / adds an onclick-style attribute."""
+    """CSP PIN. The queue page is PURELY the queue: no inline serve-state panel renders, it does NOT
+    reference serve-state.js and carries no serve-state panel id (that job moved to
+    /gateway/curator/serve + the drift chip). It still carries the shared UI script and stays
+    CSP-clean: Caddy serves every /gateway/* page under script-src 'self', so inline <script> blocks
+    and inline on*= handlers are silently BLOCKED and any inline JS is dead code that only fails in
+    production. FAILS IF: the serve panel leaks back onto the queue, or anyone re-inlines a script /
+    adds an onclick-style attribute."""
     import re
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):

@@ -18,9 +18,12 @@ sys.path.insert(0, str(REPO / "extract"))
 sys.path.insert(0, str(REPO))
 import build_portal  # noqa: E402
 
-# The resolution rule: the
-# validator resolves via the FOUR-arm environment enumeration recorded in
+# The resolution rule: the validator resolves via the FOUR-arm environment enumeration recorded in
 # maintainer/C35b-GitTruthDesign.md. The validator is stdlib-only import plumbing here
+# (_load_validator imports the module, no mt_metadata), so the vendored copy resolves in the
+# stack-less engine workflow too. Every probe anchors off ONE root, _repo_root() - no second path
+# convention - and _repo_root() is the monkeypatch seam the falsifiability tests use. The validator
+# is stdlib-only import plumbing here
 # (_load_validator imports the module, no mt_metadata), so the vendored copy resolves in the
 # stack-less engine workflow too. Every probe anchors off ONE root, _repo_root() - no second path
 # convention - and _repo_root() is the monkeypatch seam the falsifiability tests use.

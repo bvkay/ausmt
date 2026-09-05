@@ -111,11 +111,12 @@ def base_station_id(station_id, variant=None):
 
 
 def station_policy(default, overrides, station_id, variant=None):
-    """The APPLICATION half of the one shared matcher: the effective policy for one station — its
-    per-station override if declared, else the survey default. Override keys are BASE station ids: the record's id is base-stripped via base_station_id before matching, so
-    privacy of a physical site covers ALL its processing variants. EXACT base match only — no
-    prefixes, no stems. validate_overrides() is the validation half, checking keys against the very
-    same base_station_id derivation, so a validated key can never be a silent no-op."""
+    """The APPLICATION half of the one shared matcher: the effective policy for one station - its
+    per-station override if declared, else the survey default. Override keys are BASE station ids:
+    the record's id is base-stripped via base_station_id before matching, so privacy of a physical
+    site covers ALL its processing variants. EXACT base match only - no prefixes, no stems.
+    validate_overrides() is the validation half, checking keys against the very same
+    base_station_id derivation, so a validated key can never be a silent no-op."""
     return (overrides or {}).get(base_station_id(station_id, variant), default)
 
 

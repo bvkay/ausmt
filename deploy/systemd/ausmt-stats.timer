@@ -4,7 +4,7 @@
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now ausmt-stats.timer
 #   systemctl list-timers ausmt-stats.timer          # confirm the next run
-#   sudo systemctl start ausmt-stats.service        # fold once NOW to test (writes stats.json in the state dir)
+#   sudo systemctl start ausmt-stats.service         # fold once NOW to test (writes stats.json in the state dir)
 # See deploy/README.md "Usage analytics" for placing/refreshing the db-ip CSV and reading the Analytics
 # screen.
 

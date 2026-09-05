@@ -35,8 +35,10 @@ ROOT = HERE.parent
 SURVEYS = ROOT / "data"          # data/sample-survey: CC-BY-4.0, open => bytes are served
 SCHEMA = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
 sys.path.insert(0, str(ROOT / "extract"))
-# The coordinate-access module's engine-produced coordinate fixtures (one EDI per station, distinctive positions) and
-# its survey.yaml writer. Reused so the byte gate is exercised against the SAME fixture shape the
+# The coordinate-access module's engine-produced coordinate fixtures (one EDI per station,
+# distinctive positions) and its survey.yaml writer. Reused so the byte gate is exercised against
+# the SAME fixture shape the coordinate-access workflow proves the gate on. Reused so the byte gate
+# is exercised against the SAME fixture shape the
 # coordinate-access workflow proves the gate on.
 from test_coord_access import EXACT, GEN, HID, _stage_survey, _sweep_h5_for_non_exact   # noqa: E402
 

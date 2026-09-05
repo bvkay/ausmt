@@ -72,7 +72,8 @@ def _make_tree(tmp_path: Path, *, git_entries_group_writable: bool,
 def _run_preflight(data_dir: Path) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["AUSMT_DATA_DIR"] = str(data_dir)
-    # The OWNER variable and its siblings are unset - the other sections FAIL harmlessly; we only read the .git-perm line.
+    # The OWNER variable and its siblings are unset - the other sections FAIL harmlessly; we only
+    # read the .git-perm line.
     return subprocess.run([_SH, str(_SCRIPT), "gateway"], capture_output=True, text=True, env=env)
 
 

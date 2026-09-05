@@ -6,7 +6,7 @@ panel). Every interpolated value is html.escaped — reports derive from submitt
 inject markup into the curator's browser.
 
 Two views: the queue (list of actionable submissions) and the detail view (report bundle, live
-checklist, submitter block - curator-only PII, - the sandboxed preview iframe, and the
+checklist, submitter block - curator-only PII - the sandboxed preview iframe, and the
 action forms, EACH carrying a CSRF hidden field). Plus a login form.
 
 Unlike the public status page, the detail view DOES render the submitter block (name/email/orcid) —
@@ -2383,7 +2383,7 @@ def _page(title: str, body: str) -> str:
     return _head(title) + '<div class="wrap">' + body + "</div>" + _TAIL
 
 
-# ---- Stage 1 nav shell ----------------------------------------------------------------
+# ---- Stage 1 nav shell ---------------------------------------------------------------------------
 # The persistent left rail + context bar every curator working page renders. Server-rendered chrome
 # (string.Template, no framework, no templates dir — the house architecture); the ONLY browser-side
 # piece is the drift chip's served-build half, filled by an external context-bar script (the
@@ -2561,7 +2561,7 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
     return _page("AusMT curator queue", body)
 
 
-# ---- Serve-state panel -------------------------------------------------------------------
+# ---- Serve-state panel -----------------------------------------------------------------------
 # The published-vs-served view + the zero-argument "request rebuild" button. Two data sources:
 #   SERVER-SIDE (passed in): surveys-live HEAD (via the publish git seam), the reconcile-status.json
 #     contents, and whether a rebuild.request is pending — all from mounts the gateway already has.
@@ -2854,7 +2854,7 @@ SERVE_PANEL_JS = """
 """
 
 
-# ---- Serve-state screen + operations floor ------------------------------------------
+# ---- Serve-state screen + operations floor -----------------------------------------------------
 # The serve panel promoted to a first-class screen: the existing published/served
 # blocks (render_serve_panel) + a loud reconcile SYNC strip + a four-card operations FLOOR + the
 # retained-builds and backup-snapshots tables + a build-detail view. Everything here is READ-ONLY —
@@ -3132,7 +3132,7 @@ def _backups_table(ops, ops_stale: bool, generated_at, *, actions: bool = False)
     return head + "".join(rows) + "</table>"
 
 
-# ---- Privileged ACTION controls on the serve screen ----------------
+# ---- Privileged ACTION controls on the serve screen -------------------------------------------
 # The buttons. All post to session+CSRF-gated routes that write an INTENT the host actions agent
 # executes (the gateway gains no shell). Single-flight: a pending intent of a kind
 # disables its button and shows the pending state. The destructive/id-carrying ones (rollback,
@@ -3354,7 +3354,7 @@ def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: 
     return _shell("AusMT build detail", body, nav=nav)
 
 
-# ---- Usage-analytics screen -------------------------------------------------
+# ---- Usage-analytics screen --------------------------------------------------------------------
 # A READ-ONLY Operations page rendering the host aggregator's stats.json (downloads/visits/countries +
 # a daily series). SAME trust class as the ops floor: the facts come from stats.json read SERVER-side
 # (serve_state.read_stats - the ops-status.json seam, no new mount). ZERO JS: the daily
@@ -4452,7 +4452,7 @@ def analytics_country_csv(stats) -> str:
                           "download_bytes", "geo_days"], out)
 
 
-# ---- Rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------
+# ---- Rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------------------
 
 def render_rollback_confirm(*, build_ref: str, build, serving: bool, csrf_token: str,
                             error: str = "", nav: "NavContext") -> str:
@@ -4727,7 +4727,7 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
     return "".join(forms)
 
 
-# ---- metadata editor ---------------------------------------------------------------------
+# ---- Metadata editor -------------------------------------------------------------------------
 
 # The editable fields, grouped like the add-survey page. Top-level scalars render as an
 # input/textarea; the STRUCTURED sections (maps + lists) now render as per-section WIDGETS
@@ -4816,7 +4816,7 @@ def _suggest_bump(current: str, kind: str) -> str:
     return f"{major}.{minor}.{patch + 1}"
 
 
-# ---- editor widget helpers --------------------------
+# ---- editor widget helpers ----------------------------------------------------------------------
 # Every value is _esc'd. NO inline JS / on*= handlers anywhere (the strictPages CSP kills them, and
 # two pin tests enforce it) — the repeatable-row add/remove behaviour rides EDITOR_UI_JS's delegated
 # data-attribute handlers, served external at /gateway/curator/editor.js, and DEGRADES without JS
@@ -5205,9 +5205,10 @@ _ACK_TYPE_DISPLAY = {
 
 
 def _org_roles_widget(section: str, index, label: str, value, submitted: dict | None) -> str:
-    """organisations[<i>].roles as a PER-ROW checkbox group (c_<section>_<i>_<role>) over the ORG_ROLES_ORDERED vocabulary. A list-valued sub-field has no scalar input, and the group is the
-    honest control: an organisation is often several things at once. Fail-closed by construction (only
-    tokens are offered; the assembler REFUSES any other token in the POST). After a validation
+    """organisations[<i>].roles as a PER-ROW checkbox group (c_<section>_<i>_<role>) over the
+    ORG_ROLES_ORDERED vocabulary. A list-valued sub-field has no scalar input, and the group is the
+    honest control: an organisation is often several things at once. Fail-closed by construction
+    (only tokens are offered; the assembler REFUSES any other token in the POST). After a validation
     error the ticks come from `submitted` so the curator's selection survives the round trip."""
     from . import editor_form
     prefix = f"c_{section}_{index}_"
@@ -5769,7 +5770,7 @@ def _people_rows_for_render(fields: dict, submitted: dict | None,
 
 
 def _people_typeahead_html() -> str:
-    """ REUSE DIRECTORY. An "Add person" typeahead whose directory is built CLIENT-SIDE from the
+    """REUSE DIRECTORY. An "Add person" typeahead whose directory is built CLIENT-SIDE from the
     same-origin /data/surveys.json (aggregate every creators+contributors entry corpus-wide, dedupe by
     ORCID else name, sort by frequency then name). Selecting an entry adds a prefilled row. Hidden by
     default; the enhancement reveals it only once the directory loads, so a failed/absent fetch leaves it
@@ -5879,7 +5880,7 @@ _ACQUISITION_ROW_FIELDS = (
 
 
 def _related_identifier_row_html(index, values: dict | None, *, spare: bool = False) -> str:
-    """D-L: one related_identifiers row. The `identifies` level <select> is FIRST; the DataCite
+    """One related_identifiers row. The `identifies` level <select> is FIRST; the DataCite
     relation is HIDDEN-OR-DERIVED - the relation control renders ONLY for a legacy row (an explicit relation
     but no identifies, backward compatible), because on an identifies row the relation derives server-side
     (editor_form._assemble_list) and is not curator-facing. The acquisition fields sit behind a COLLAPSED
@@ -5933,7 +5934,7 @@ def _related_identifier_row_html(index, values: dict | None, *, spare: bool = Fa
 
 
 def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """ group (b) + D-L - THIS DATASET ELSEWHERE: the single typed related_identifiers
+    """ Group (b) - THIS DATASET ELSEWHERE: the single typed related_identifiers
     list, the ONLY place a dataset-level DOI/PID is edited. Each row leads with the `identifies` level
     <select>; the relation derives from it and is hidden (a legacy relation-only row still edits its
     relation). Acquisition fields sit behind a collapsed per-row disclosure. Field names are identical to
@@ -6179,7 +6180,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     return _page(f"AusMT edit {slug}", body)
 
 
-# ---- Stage 1: survey hub --------------------------------------------------------------
+# ---- Stage 1: survey hub -------------------------------------------------------------------------
 # One hub per survey, two tabs: Overview & QA (landing) and Metadata. A Stations entry in the tab
 # strip LINKS to the existing removal page (labelled). NO History tab (Stage 2). The Overview tab is
 # populated BROWSER-side from same-origin /data/build_report.json + /data/build.json filtered to this
@@ -6192,8 +6193,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
 # curator actually touched, and untouched sections stay byte-for-byte alone.
 
 # Stations and History are REAL in-hub tabs (they first shipped as a link-out and nothing). The tab
-# ORDER is fixed: Overview & QA
-# (landing) / Stations / Metadata / History.
+# ORDER is fixed: Overview & QA (landing) / Stations / Metadata / History.
 _HUB_TABS = (("overview", "Overview & QA"), ("stations", "Stations"),
              ("metadata", "Metadata"), ("history", "History"))
 _HUB_TAB_KEYS = frozenset(k for k, _ in _HUB_TABS)
@@ -6433,15 +6433,16 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     """The Metadata tab body: a sticky section TOC + ONE form carrying EVERY section, with ONE commit
     tray (bump + required note + Preview) at its foot.
 
-    HUB-SINGLE-SAVE: one <form> PER section, each with its own tray, would make a curator cleaning up
-    four sections pay four merge jobs, four version bumps, four release notes, four diff previews and
-    four confirms. The sections are <section> blocks inside ONE form: a single Save assembles a combined patch across every section
-    (editor_form.build_section_patch already iterates EVERY widget section and assembles whichever
-    widgets + o_<section> snapshots the form carries — that is exactly what the merged Core fields /
-    Identifiers & PIDs forms already relied on, now taken to its conclusion), and the UNCHANGED
-    preview/confirm path gives ONE version bump, ONE release note, ONE diff, ONE content-hash confirm.
-    The no-clobber promise is preserved by the same machinery: a section whose widgets round-trip to
-    its o_<section> snapshot assembles to _OMIT and contributes nothing to the patch.
+    HUB-SINGLE-SAVE: one <form> PER section, each with its own tray, would make a curator cleaning
+    up four sections pay four merge jobs, four version bumps, four release notes, four diff previews
+    and four confirms. The sections are <section> blocks inside ONE form: a single Save assembles a
+    combined patch across every section (editor_form.build_section_patch already iterates EVERY
+    widget section and assembles whichever widgets + o_<section> snapshots the form carries — that
+    is exactly what the merged Core fields / Identifiers & PIDs forms already relied on, now taken
+    to its conclusion), and the UNCHANGED preview/confirm path gives ONE version bump, ONE release
+    note, ONE diff, ONE content-hash confirm. The no-clobber promise is preserved by the same
+    machinery: a section whose widgets round-trip to its o_<section> snapshot assembles to _OMIT and
+    contributes nothing to the patch.
 
     The TOC is now SCROLL NAVIGATION (plain anchor links to each section + a scroll-position
     highlight in survey-hub.js) instead of show-one-hide-the-rest.
@@ -7823,7 +7824,7 @@ def render_uploader_created(*, curator_name: str, name: str, key: str) -> str:
 #   * pending — a secret was generated but not activated; the secret was shown ONCE and is not
 #               re-rendered on a reload, so offer "activate with a code" AND "begin again".
 #   * active  — enrolled; offer "rotate" (which requires a CURRENT code — a session alone must never
-# rotate the secret, else the second factor collapses into the first).
+#               rotate the secret, else the second factor collapses into the first).
 # The secret + otpauth URI are rendered ONLY as the immediate response to begin/rotate (the show-once
 # view), never on a GET — the DB stores the secret but the page never re-displays it.
 

@@ -172,11 +172,11 @@ def _leave_untracked_survey(tree: dict, name: str = "test-2026") -> Path:
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_untracked_survey_dir_refuses_rebuild(tmp_path):
-    """Surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is NOT
-    invoked (no build), the status action is 'untracked_blocked' naming the offending dir, and the
-    script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway (the shim marker appears), or the refusal state does not
-    name the dir, or it exits 0
-    and hides the misconfiguration."""
+    """Surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is
+    NOT invoked (no build), the status action is 'untracked_blocked' naming the offending dir, and
+    the script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway (the shim marker
+    appears), or the refusal state does not name the dir, or it exits 0 and hides the
+    misconfiguration."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")  # built != HEAD => would otherwise rebuild
     _commit_tracked_survey(tree)
     _leave_untracked_survey(tree, "test-2026")
@@ -820,7 +820,7 @@ def test_sigterm_mid_build_records_failed_status(tmp_path):
     assert "TimeoutStartSec" in tail, "the detail must point at the likely cause (the unit's timeout)"
 
 
-# ---- kernel OOM kill named by name --------------------------------------------
+# ---- kernel OOM kill named by name ------------------------------------------------------------------
 # The engine build was OOM-killed by the kernel five nights running and every one reached the operator
 # as "rebuild FAILED, see log tail" while the cause sat in `journalctl -k`. A failed rebuild must ask
 # the kernel journal for ITS OWN build window and, when a kill is there, say so by name. Driven through

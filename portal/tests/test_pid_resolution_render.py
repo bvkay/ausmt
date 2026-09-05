@@ -105,7 +105,7 @@ def test_reserved_ts_pid_collection_renders_as_text(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_sweep_no_reserved_identifier_is_ever_an_anchor(tmp_path):
-    """ SWEEP: the load-bearing honesty guard. A single survey carries a RESERVED
+    """SWEEP: the load-bearing honesty guard. A single survey carries a RESERVED
     identifier in EVERY metadata-DOI slot at once — the flat dataset DOI (engine fallback), the survey
     collection PID (ts_pid), and a typed related_identifiers DOI row — plus a citation. Across ALL three
     rendered surfaces (station drawer, survey story, survey card), NO anchor's href may point at any

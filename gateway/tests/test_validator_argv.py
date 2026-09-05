@@ -25,8 +25,8 @@ from gateway.runner import edit, runner
 def test_validator_argv_canonical_shape():
     # FAILS IF the canonical argv shape changes: [python, <validator>, <folder positional>, --json,
     # <report file>]. This is the positional-first form argparse pins the `folder` positional to; the
-    #  ship-blocker was exactly a wrong order (folder consumed as the --json value, the
-    # required positional missing, argparse exit 2, every submission quarantined).
+    # ship-blocker was exactly a wrong order (folder consumed as the --json value, the required
+    # positional missing, argparse exit 2, every submission quarantined).
     vfile = Path("/srv/surveys/_validation/validate_survey.py")
     target = Path("/gw/quarantine/abc/package/demo-survey")
     report = Path("/gw/quarantine/abc/reports/validate.json")

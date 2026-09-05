@@ -475,7 +475,7 @@ ok(/schema_version: "0.3"/.test(yAttr), "a package carrying attribution declares
 ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false })),
    "no attribution block when the licence declaration is not made");
 
-// ==================== Slug collision and zip paths =====================================
+// ============================ Slug collision and zip paths ===============================
 
 // ---- Slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
 //      stationCountsByName counts catalogue.json rows (index 1 = survey name) per survey. The chip warns
@@ -560,7 +560,7 @@ const yLeadPlus = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming",
 ok(yLeadPlus.indexOf('- name: "Duan, Jingming"') < yLeadPlus.indexOf('- name: "Zonge Engineering"'),
    "the lead row is FIRST in contributors, ahead of the typed rows");
 
-// --- "Does this dataset already have a citation or DOI?" -> citation + ONE related row ----
+// ---- "Does this dataset already have a citation or DOI?" -> citation + ONE related row -------------
 const yCite = M.buildSurveyYaml({ ...base,
   citation_text: "GSSA (2016). AusLAMP South Australia. [Data set].",
   citation_identifier: "https://doi.org/10.25914/abc" });
@@ -675,7 +675,7 @@ ok([...vTextSrc.matchAll(/"([^"]+)"/g)].map(m => m[1]).indexOf(M.CITATION_TEXT_S
 ok(M.CITATION_TEXT_SOURCE_FORM === "source_provided",
    "a contributor's wording is ALWAYS source_provided (ausmt_generated is never a contributor value)");
 
-// --- DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). ----
+// ---- DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). --------
 ok(M.normalizeDoi("https://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an https://doi.org/ URL to the bare DOI");
 ok(M.normalizeDoi("http://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an http:// resolver URL");
 ok(M.normalizeDoi("https://dx.doi.org/10.5281/zenodo.1") === "10.5281/zenodo.1", "normalizeDoi folds a dx.doi.org URL");
@@ -696,7 +696,7 @@ ok(/wireDoiBlur\(wrap\.querySelector\("\.f-doi"\)\)/.test(html), "the funding DO
 ok(/wireConditionalDoiBlur\(wrap\.querySelector\("\.ri-identifier"\), wrap\.querySelector\("\.ri-type"\)\)/.test(html),
    "a related-identifier row normalises its identifier ONLY when the type is DOI (URL-typed rows untouched)");
 
-// --- The collection block is its own collapsed card (own <details>, exact heading), renumbered. ----
+// ---- The collection block is its own collapsed card (own <details>, exact heading), renumbered. --------
 ok(/<details class="tier" id="tierCollection">/.test(html), "the collection block is its own tier-style <details> card");
 ok(/<h2>4\. Was this survey part of a collection \/ program \(eg AusLAMP\)\?<\/h2>/.test(html),
    "the collection card carries the exact heading (numbered 4)");
@@ -709,7 +709,7 @@ const yColl = M.buildSurveyYaml({ ...base, collection_id: "auslamp", collection_
 ok(/collection:\s*\n\s*id: "auslamp"\s*\n\s*title: "AusLAMP"\s*\n\s*type: "programme"/.test(yColl),
    "collection emission is unchanged by the card move (id/title/type still emitted)");
 
-// --- The download-zip path is hidden on a live gateway (visibility wiring only; zip code intact). ----
+// ---- The download-zip path is hidden on a live gateway (visibility wiring only; zip code intact). --------
 ok(/const bp=\$\("btnPackage"\); if\(bp\) bp\.style\.display="none";/.test(html),
    "showGatewayUI hides the package .zip button when the gateway probe passes");
 ok(!/Package \.zip to email \(fallback path\)/.test(html), "the old rewording of the package button is gone (it is hidden, not reworded)");

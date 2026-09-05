@@ -1,4 +1,5 @@
-"""Unit tests for the structured metadata-editor form assembly (gateway/editor_form.py) - the "hostile JSON" fix that replaces the raw-JSON textareas with per-section widgets.
+"""Unit tests for the structured metadata-editor form assembly (gateway/editor_form.py) - the
+"hostile JSON" fix that replaces the raw-JSON textareas with per-section widgets.
 
 These are pure-function tests of the SERVER-SIDE half: the widget form fields <-> section dicts
 mapping, the advanced-JSON override precedence, per-field format validation, repeatable-row
@@ -263,7 +264,7 @@ def test_coordinate_overrides_key_parity_through_real_engine():
     assert default == "exact"
     assert overrides == overrides_in, (
         f"engine parsed overrides {overrides!r}, not the editor-assembled {overrides_in!r}: "
-        f"a key/spelling drift would make the per-station policy a silent no-op")
+        f"- a key/spelling drift would make the per-station policy a silent no-op")
     # every key validates against the REAL records (no raise) ...
     coordacc.validate_overrides(overrides, records)
     # ... and is EFFECTIVE: each key changes at least one record's resolved policy vs the bare default.
@@ -661,7 +662,7 @@ def test_build_section_patch_empty_form_is_empty_patch():
     assert patch == {} and errors == []
 
 
-# --- Attribution (map) + sources (list) capture --------------------------------------------
+# ---- Attribution (map) + sources (list) capture -------------------------------------------------
 
 # The GENERATED engine contract seam, loaded by path (engine-truth). _contract.py is a stdlib-only
 # generated constants file (no heavy stack), so it loads cleanly in the stack-less gateway test env.
@@ -818,7 +819,7 @@ def test_related_identifiers_acquisition_licence_and_profile_vocab_enforced():
                              **_snap("related_identifiers", [])}, "related_identifiers")
 
 
-# ----: related_identifiers (typed list) + identifiers.instrument_pid ----------------------
+# ---- related_identifiers (typed list) + identifiers.instrument_pid -------------------------------
 
 def test_related_identifiers_vocab_matches_vendored_validator():
     """PARITY PIN: the editor's baked RELATION_TYPES / IDENTIFIER_TYPES / identifies vocab equal the surveys
@@ -857,12 +858,13 @@ def _load_credit_validator():
 
 
 def test_credit_vocab_matches_surveys_validator():
-    """PARITY PIN (the contributor-credit model): the editor's baked NAME_TYPES / CONTRIBUTOR_ROLES equal the
-    surveys validator's FROZEN credit vocabularies, read from the arm conftest resolves. Skipped only when
-    that validator predates the credit vocab - a stale sibling checkout, since the vendored copy carries
-    it; that skip is deliberately NOT on gateway-ci's allow-list, so a CI run that lost the vocab reds the
-    workflow instead of passing quietly. Where it runs it FAILS IF the editor vocab drifts from the validator vocab - a mis-typed name_type/role would mis-classify an actor or publish a wrong provenance
-    claim, so the two must never disagree."""
+    """PARITY PIN (the contributor-credit model): the editor's baked NAME_TYPES / CONTRIBUTOR_ROLES
+    equal the surveys validator's FROZEN credit vocabularies, read from the arm conftest resolves.
+    Skipped only when that validator predates the credit vocab - a stale sibling checkout, since the
+    vendored copy carries it; that skip is deliberately NOT on gateway-ci's allow-list, so a CI run
+    that lost the vocab reds the workflow instead of passing quietly. Where it runs it FAILS IF the
+    editor vocab drifts from the validator vocab - a mis-typed name_type/role would mis-classify an
+    actor or publish a wrong provenance claim, so the two must never disagree."""
     vv = _load_credit_validator()
     if vv is None:
         pytest.skip(f"the resolved validator {require_validator_dir()} predates the credit vocab")
@@ -1416,7 +1418,7 @@ def test_gateway_carries_no_retired_credit_key_outside_tests():
     assert not offenders, f"retired credit keys still referenced: {offenders}"
 
 
-# ---- (section-3 review): the CARE panel must reach the patch ---------------------------------
+# ---- the CARE panel must reach the patch --------------------------------------------------------
 
 def test_care_json_edit_reaches_the_patch():
     """The CARE governance panel renders as j_care on both editing surfaces under 'leave blank to

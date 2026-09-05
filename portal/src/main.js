@@ -65,9 +65,9 @@ function applyYearRangeHints(){
   if(toEl){toEl.placeholder=dated?String(hi):"to";if(dated)toEl.min=lo,toEl.max=hi;}
   if(head)head.textContent="Year range"+(dated?` (${fmtRange(lo,hi)})`:"");   // suffix hidden when no survey is dated
 }
-// ---- "Recently added" ------------------------------------------------------------------------- LOCKSTEP
-// RULE (keep identical to the engine's _survey_latest_date at engine/extract/build_portal.py:467-489). See
-// docs: portal internals, main.js.
+// ---- "Recently added" -------------------------------------------------------------------------
+// LOCKSTEP RULE, identical to the engine's _survey_latest_date in engine/extract/build_portal.py.
+// See docs: portal internals, main.js.
 function surveyLatestDate(m){
   const cands=[];
   const rn=(m&&m.release_notes);

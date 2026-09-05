@@ -5,9 +5,9 @@
 // (no inline onclick): .close buttons, [data-act] card actions, [data-cite] citation copy, [data-prod]
 // product tiles. See docs: portal internals, drawer.js.
 const drawer=document.getElementById("drawer");
-// The drawer is a dialog. role + a base aria-label are set here (the #drawer element is declared as
-// plain markup in index.html, so the ARIA is stamped from JS); openStation/openSurvey refine the aria-label per subject.
-// See docs: portal internals, drawer.js.
+// The drawer is a dialog. role + a base aria-label are set here (the #drawer element is declared
+// as plain markup in index.html, so the ARIA is stamped from JS); openStation/openSurvey refine
+// the aria-label per subject. See docs: portal internals, drawer.js.
 if(drawer&&drawer.setAttribute){drawer.setAttribute("role","dialog");drawer.setAttribute("aria-label","Details");drawer.setAttribute("tabindex","-1");}
 // Focus management, mirroring plots.js's modal pattern - remember the invoking element on
 // open, move focus INTO the drawer (its close button, else the container), and RESTORE focus to the opener
@@ -653,7 +653,7 @@ function openStation(i,opts){
     if(_sp.length){_sp.sort((a,b)=>a-b);_phaseSplit=_sp[Math.floor(_sp.length/2)];}}
   const _inds=screeningIndicators({q:sc[SC.q],azR:_azR,azN:azs.length,beta:skew,betaThr:_bp.skew_3d_deg,phaseSplit:_phaseSplit,decades:dec});
   const keysafe=s.ausmt_id.replace(/[^a-z0-9]/g,"_");
-  // ---- Sticky header (identity + chips + primary actions) + tab strip -------------------
+  // ---- Sticky header (identity + chips + primary actions) + tab strip -------------------------------
   const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}${TYPE_INK[s.type]?";color:"+TYPE_INK[s.type]:""}">${esc(s.type)}</span>`;
   const collChip=(m.collection&&m.collection.id)?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"";
   // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if
@@ -1254,9 +1254,9 @@ function surveyBundleTiles(slug){
       `<span class="pdot" style="background:var(--ok)"></span><div>${esc(L[0])}<small>${esc(L[1])}${r.size?" · "+esc(fmtBytes(r.size)):""}</small></div></div>`;
   }).join("");
 }
-// ---- the survey DATA AT EVERY LEVEL tile grid --------------------------- The block is a DATA-LEVEL grid:
-// six fixed slots, always all six, rendered in the Downloads tile styling. See docs: portal internals,
-// drawer.js.
+// ---- the survey DATA AT EVERY LEVEL tile grid ---------------------------------------------------
+// The block is a DATA-LEVEL grid: six fixed slots, always all six, rendered in the Downloads tile
+// styling. See docs: portal internals, drawer.js.
 const REES_LEVELS_DOI="https://doi.org/10.1080/22020586.2019.12073015";
 // [identifies key, tile name, one-line description]. See docs: portal internals, drawer.js.
 const DATA_LEVEL_SLOTS=[

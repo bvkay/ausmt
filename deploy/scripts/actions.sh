@@ -26,9 +26,9 @@
 #     and re-checked here against the real snapshot list; a mismatch aborts (audited refused).
 #   * update.request and restore.request are flagged for the pre-NCI hostile re-audit (see README).
 #
-# THE UPDATE RECIPE IS THE ONE BOUNDED EXCEPTION to the no-privileged-action rule: `git pull
-# --ff-only` on the code checkout + `docker compose pull` + `up -d`, the standing refresh recipe, with
-# NOTHING parameterised from the intent. The recipe can only deploy what branch-
+# THE UPDATE RECIPE IS THE ONE BOUNDED EXCEPTION to the no-privileged-action rule:
+# `git pull --ff-only` on the code checkout + `docker compose pull` + `up -d`, the standing refresh
+# recipe, with NOTHING parameterised from the intent. The recipe can only deploy what branch-
 # protected main already built and published, i.e. the same bytes an operator deploys by hand. The
 # intent's CONTENT is read ONLY for the audit's `by=` field (the requesting curator) — never for a
 # command argument (the "update fixed-recipe" pin proves this by construction + a hostile-content pin).
@@ -228,9 +228,10 @@ record_ran() {
 
 # ---- the recipes --------------------------------------------------------------------------------
 
-# recipe_update: THE ONE BOUNDED EXCEPTION to the no-privileged-action rule. git pull --ff-only on the code checkout,
-# then compose pull + up -d. NOTHING here is derived from the intent — the command sequence is
-# constant (the "update fixed-recipe" pin asserts this by construction). Returns the recipe rc.
+# recipe_update: THE ONE BOUNDED EXCEPTION to the no-privileged-action rule. git pull --ff-only on
+# the code checkout, then compose pull + up -d. NOTHING here is derived from the intent - the command
+# sequence is constant (the "update fixed-recipe" pin asserts this by construction). Returns the
+# recipe rc.
 recipe_update() {
   [ -n "$CODE_DIR" ] || { printf 'actions: update needs AUSMT_CODE_DIR (the code checkout)\n' >&2; return 1; }
   [ -e "$CODE_DIR/.git" ] || { printf 'actions: update: %s is not a git checkout\n' "$CODE_DIR" >&2; return 1; }

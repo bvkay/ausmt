@@ -1,6 +1,7 @@
 """MTCAT 2.0: the schema DESCRIBES what the portal serves, and CONSTRAINS it.
 
-Successor to the retired v1.2 acceptance module. MTCAT 2.0 is a MAJOR version (correctness over compatibility while the ecosystem is nascent); its breaking list is small and
+Successor to the retired v1.2 acceptance module. MTCAT 2.0 is a MAJOR version (correctness over
+compatibility while the ecosystem is nascent); its breaking list is small and
 deliberate: null-as-undeclared removed (one defined null: the paired withheld station
 coordinates), the empty-array state for formats removed (minItems 1), sources[]/changes removed,
 and the top-level library-version keys removed. 2.0 also adds description, subjects[],
@@ -484,7 +485,8 @@ def test_policy_transition_open_to_embargoed_still_validates():
 
 
 def test_access_description_names_no_phantom_level():
-    """The schema is SERVED, so a wrong sentence in it is a published wrong claim. The 2.0 access description names the three well-known values and deliberately does NOT enum-pin
+    """The schema is SERVED, so a wrong sentence in it is a published wrong claim. The 2.0 access
+    description names the three well-known values and deliberately does NOT enum-pin
     (an unrecognised value means a withheld survey, not a broken document). Both halves survive
     from the 1.2 gate: the named values must equal the producer's ACCESS_LEVELS set-for-set, and
     NO description anywhere in the schema may name the phantom 'legacy' level."""

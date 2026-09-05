@@ -73,12 +73,12 @@ def test_quadrant_slack_matches_engine_gate():
 
 
 def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
-    """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits in the third quadrant (−180…−90) has a STORED t[4] near 0…90
-    (because engine _edi_tf stores phs_yx_adj = true + 180, re-wrapped). The workbench MUST subtract
-    the shift and classify the TRUE phase - so a station whose true phase sits in the third
-    quadrant classifies IN-quadrant. FAILS IF the
-    workbench reads the stored value as the true phase (then a stored 45° would look like the first
-    quadrant, and against the third it would read as OUT - the mis-classification this pin catches).
+    """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits in the third quadrant (−180…−90) has a
+    STORED t[4] near 0…90 (because engine _edi_tf stores phs_yx_adj = true + 180, re-wrapped). The
+    workbench MUST subtract the shift and classify the TRUE phase - so a station whose true phase
+    sits in the third quadrant classifies IN-quadrant. FAILS IF the workbench reads the stored value
+    as the true phase (then a stored 45° would look like the first quadrant, and against the third
+    it would read as OUT - the mis-classification this pin catches).
 
     NON-VACUOUS: for true φyx = −135°, stored t[4] = +45°. in_quadrant_yx(+45°) must be True (it
     unwraps to −135° ∈). A naive `Q3_LO <= 45 <= Q3_HI` is False - so a no-unwrap implementation
@@ -93,10 +93,11 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
 
 
 def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():
-    """The converse: a station whose TRUE φyx is beyond the third-quadrant band by MORE than the slack
-    (a genuinely wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (a stored −135
-    would then read as in-quadrant, hiding the real wrong-quadrant station) or the slack edge is wrong (−79.9 is 10.1°
-    outside the band => OUT; −80.0 is exactly at the slack edge => IN)."""
+    """The converse: a station whose TRUE φyx is beyond the third-quadrant band by MORE than the
+    slack (a genuinely wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (a
+    stored −135 would then read as in-quadrant, hiding the real wrong-quadrant station) or the slack
+    edge is wrong (−79.9 is 10.1° outside the band => OUT; −80.0 is exactly at the slack edge =>
+    IN)."""
     for true_yx in (45.0, 10.0, -45.0, -79.9):
         stored = round(phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
         assert phaseqc.in_quadrant_yx(stored) is False, (true_yx, stored)
@@ -168,13 +169,13 @@ def test_stations_js_mirrors_phaseqc_constants():
 
 
 def test_combined_phase_plot_supersedes_separate_plots_source():
-    """SOURCE PIN. The two separate
-    phase plots are SUPERSEDED by a single combined plot: STATIONS_JS carries the pure combinedPhasePlan
-    mapper + one phasePlot (the full ±180 axis, each band shaded by its owning component) +
-    phaseVerdictParts (BOTH components) + combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component
-    verdictStrip are GONE; and renderPlots stacks ρa, the combined phase plot (+ its verdict strip),
-    then tipper. FAILS IF a separate per-component phase plot returns, the mapper/verdict-parts
-    disappear, or the plot order drifts. (There were no pre-existing EXECUTABLE per-plot pins to rework
+    """SOURCE PIN. The two separate phase plots are SUPERSEDED by a single combined plot:
+    STATIONS_JS carries the pure combinedPhasePlan mapper + one phasePlot (the full ±180 axis, each
+    band shaded by its owning component) + phaseVerdictParts (BOTH components) +
+    combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component verdictStrip are
+    GONE; and renderPlots stacks ρa, the combined phase plot (+ its verdict strip), then tipper.
+    FAILS IF a separate per-component phase plot returns, the mapper/verdict-parts disappear, or the
+    plot order drifts. (There were no pre-existing EXECUTABLE per-plot pins to rework
     - the plots were covered only via classify() parity; the executable mapper pin lives in
     test_c43_hub_js_parity.py::test_combined_phase_plan_mapper_from_real_corpus.)"""
     js = curatorpage.STATIONS_JS

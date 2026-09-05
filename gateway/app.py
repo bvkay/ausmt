@@ -462,7 +462,7 @@ class Gateway:
             shutil.copy2(path, reports / "job-result.json")
         path.unlink(missing_ok=True)
 
-    # ---- curator auth + session --------------------------------------------------
+    # ---- curator auth + session --------------------------------------------------------------
 
     def _curator_keys(self) -> dict[str, str]:
         """Parse AUSMT_CURATOR_KEYS on every use. Raises curator_auth.CuratorConfigError (a 503 at
@@ -551,9 +551,9 @@ class Gateway:
                          "state": sub.state, "updated_utc": sub.updated_utc, "warn_count": warn_count})
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
         nav = self._nav_context(request, active="queue", crumb="<b>Submission queue</b>")
-        # The queue page is purely the queue. The
-        # serve-state panel moved to /gateway/curator/serve; the ever-present drift chip + that screen
-        # own the served-vs-published job, so a second copy here was redundant.
+        # The queue page is purely the queue. The serve-state panel moved to /gateway/curator/serve;
+        # the ever-present drift chip + that screen own the served-vs-published job, so a second copy
+        # here was redundant.
         return self._html(curatorpage.render_queue(curator_name=name, rows=rows, csrf_token=csrf,
                                                    nav=nav))
 
@@ -1221,7 +1221,7 @@ class Gateway:
         self.db.set_uploader_key_note(key_id, note=clean)
         return RedirectResponse("/gateway/curator/uploaders", status_code=303)
 
-    # ---- curator security: TOTP second factor (schema v4) -----------------------------
+    # ---- curator security: TOTP second factor (schema v4) ------------------------------------
 
     def _totp_state(self, curator_name: str) -> tuple[str, str | None]:
         """Map the stored TOTP row to a page state: ('none'|'pending'|'active', enrolled_utc)."""
@@ -1343,7 +1343,7 @@ class Gateway:
         self.db.begin_totp_enrolment(curator, secret)  # stages the new secret as pending (old retired)
         return self._security_page_with_secret(request, curator, secret)
 
-    # ---- metadata editor -----------------------------------------------------------------
+    # ---- metadata editor ---------------------------------------------------------------------
 
     def handle_edit_list(self, request: Request) -> Response:
         """List PUBLISHED surveys editable in v1: a directory listing of surveys-live -
@@ -1453,7 +1453,8 @@ class Gateway:
                                  status_code: int = 200) -> Response:
         """GET /gateway/curator/collections/{id} (Stage 3b). Render the collection
         EDITOR for ONE id: the fan-out edit form + the two-column membership manager over the candidate
-        list. An unknown id -> 404. `?id=<canonical>` pre-fills the id field (the Merge entry point). `error` re-renders after a refused preview (no-op / invalid id)."""
+        list. An unknown id -> 404. `?id=<canonical>` pre-fills the id field (the Merge entry point).
+        `error` re-renders after a refused preview (no-op / invalid id)."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
@@ -1503,7 +1504,7 @@ class Gateway:
         return (result.get("collections") or {}, result.get("near_duplicates") or [],
                 result.get("surveys") or [])
 
-    # ---- Stage 3b collections editor: the WRITE path -----------------------------
+    # ---- Stage 3b collections editor: the WRITE path ------------------------------------------
 
     def _build_collection_spec(self, form, *, is_new: bool):
         """Turn the editor/create form into the desired-end-state spec, or (None, error). The form IS
@@ -1972,7 +1973,7 @@ class Gateway:
         publish.commit_metadata_edit(self._git_runner, surveys_live, slug, new_yaml, expected_sha,
                                      curator, note, pre)
 
-    # ---- station (EDI) removal -----------------------------------------------------------
+    # ---- station (EDI) removal ---------------------------------------------------------------
 
     def handle_stations_list(self, request: Request, slug: str, error: str = "") -> Response:
         """List the survey's EDI files for removal (removal deliverable 1): the gateway enqueues a
@@ -2354,7 +2355,7 @@ class Gateway:
         patch.update(section_patch)
         return patch, []
 
-    # ---- preview sandbox ---------------------------------------------------------
+    # ---- preview sandbox ---------------------------------------------------------------------
 
     def handle_curator_preview(self, request: Request, submission_id: str, subpath: str) -> Response:
         # Authorized by the UNGUESSABLE submission id in the path, NOT the session.
@@ -2395,7 +2396,7 @@ class Gateway:
         }
         return Response(content=data, media_type=media_type, headers=headers)
 
-    # ---- Quarantine view (read-only) --------------------------------------------------
+    # ---- Quarantine view (read-only) ---------------------------------------------------------
 
     def handle_quarantine_list(self, request: Request) -> Response:
         """GET the quarantine list: every QUARANTINED submission with its refusal reason. Session-gated
@@ -2510,7 +2511,7 @@ class Gateway:
         }
         return Response(content=data, media_type="application/octet-stream", headers=headers)
 
-    # ---- curator actions ------------------------------------------------------
+    # ---- curator actions ---------------------------------------------------------------------
 
     async def handle_curator_action(self, request: Request, submission_id: str, action: str,
                                     csrf: str | None, note: str | None,
@@ -2697,7 +2698,7 @@ class Gateway:
         return JSONResponse({"detail": "unauthorized"}, status_code=401,
                             headers={"Cache-Control": "no-store"})
 
-    # ---- self-serve key issuance --------------------------------------------------------
+    # ---- self-serve key issuance -------------------------------------------------------------
 
     @staticmethod
     def _client_ip(request: Request) -> str:

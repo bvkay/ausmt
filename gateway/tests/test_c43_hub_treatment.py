@@ -1,6 +1,7 @@
-"""Server-side render pins - the survey hub's mockup styling, driven through the real gateway HTTP surface with the in-process edit
-seam. The EXECUTABLE JS pins (clusterWarnings & co, producer-truth build_report) live in
-test_c43_hub_js_parity.py; this file pins what the SERVER renders and the JS source invariants.
+"""Server-side render pins - the survey hub's mockup styling, driven through the real gateway HTTP
+surface with the in-process edit seam. The EXECUTABLE JS pins (clusterWarnings & co, producer-truth
+build_report) live in test_c43_hub_js_parity.py; this file pins what the SERVER renders and the JS
+source invariants.
 
 Load-bearing pins:
   * HEADER - every hub tab renders the mockup's header: survey title + mono slug chip +

@@ -7,12 +7,13 @@ mode so the WAL-safe path is exercised for real), a reconcile-status.json, and a
 files that land in the snapshot dir, the `latest` symlink target, the count of retained snapshots, the
 process exit code, the stderr message — never the script's own self-report.
 
-The snapshot's sqlite copy is driven through a real host `sqlite3` when one is on PATH; when it is not
-(and to keep the test hermetic + fast on any CI box) the tests point AUSMT_BACKUP_SQLITE at a tiny sh
-shim that does a plain `cp`. That is fine for these tests: they verify backup.sh's ORCHESTRATION
-(which files land where, symlink, prune, refusals, preflights), not sqlite's own .backup correctness
-(that is the restore-drill's integrity_check). The "no sqlite3" HARD REFUSAL is tested by pointing the
-override at a non-existent command: there is NO docker/Python fallback, so a missing sqlite3 with a DB present is a fatal error, not a fallback trigger.
+The snapshot's sqlite copy is driven through a real host `sqlite3` when one is on PATH; when it is
+not (and to keep the test hermetic + fast on any CI box) the tests point AUSMT_BACKUP_SQLITE at a
+tiny sh shim that does a plain `cp`. That is fine for these tests: they verify backup.sh's
+ORCHESTRATION (which files land where, symlink, prune, refusals, preflights), not sqlite's own
+.backup correctness (that is the restore-drill's integrity_check). The "no sqlite3" HARD REFUSAL is
+tested by pointing the override at a non-existent command: there is NO docker/Python fallback, so a
+missing sqlite3 with a DB present is a fatal error, not a fallback trigger.
 
 Two preflights are pinned here too: the WAL
 sidecar-permission gate (an unwritable -shm/-wal fails LOUD before any snapshot work) and the

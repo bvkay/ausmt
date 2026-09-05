@@ -129,7 +129,8 @@ def test_the_full_artwork_is_offered_separately_from_the_mark():
 
 
 def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
-    """FAILS IF brand.html is an orphan page. It carries the same three-zone header, the AusMT mark as its identity, and the standard footer."""
+    """FAILS IF brand.html is an orphan page. It carries the same three-zone header (with the zero
+    basis sides), the AusMT mark as its identity, and the standard footer."""
     text = _text()
     for zone, rule in ((".hleft", "flex:1 1 0"), (".hcenter", "flex:0 1 auto"), (".hright", "flex:1 1 0")):
         m = re.search(re.escape(zone) + r"\{([^}]*)\}", text)

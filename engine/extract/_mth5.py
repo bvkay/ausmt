@@ -47,8 +47,9 @@ def available() -> bool:
 
 def _release_metadata_classes() -> None:
     """Emit-and-release for every station-sized unit of MTH5 work here, the same bound
-    build_portal._release_mth5_metadata_classes gives the writers and the round-trip gate. On the pinned stack every mth5
-    0.6.8 group instantiation creates a fresh pydantic model class, and mt_metadata 1.0.9's to_dict
+    build_portal._release_mth5_metadata_classes gives the writers and the round-trip gate. On the
+    pinned stack every mth5 0.6.8 group instantiation creates a fresh pydantic model class, and
+    mt_metadata 1.0.9's to_dict memoises each class's field tree in the module-global, class-KEYED
     memoises each class's field tree in the module-global, class-KEYED
     mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE, so a reader that walks a survey's MTH5
     station by station (get_transfer_function per station) pins about a MiB per station for the life

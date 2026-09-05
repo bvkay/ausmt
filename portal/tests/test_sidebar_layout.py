@@ -49,7 +49,7 @@ def _aside_block(html):
     return m.group(1)
 
 
-# --- The tree flex-fills and scrolls internally -------------------------------------------------
+# ---- The tree flex-fills and scrolls internally -----------------------------------------------------
 
 def test_tree_flex_fills_and_scrolls_internally():
     body = _rule(_style(_html()), ".tree")
@@ -80,7 +80,7 @@ def test_browse_and_tree_flex_chain_has_min_height_zero():
         assert "min-height:0" in body, f"{sel} needs min-height:0 so the tree can scroll (no outer rail scroll); got: {body}"
 
 
-# --- The collapse control is anchored bottom-right ----------------------------------------------
+# ---- The collapse control is anchored bottom-right --------------------------------------------------
 
 def test_collapse_control_is_last_child_of_the_rail():
     # FAILS if #sidebarCollapse is not the LAST element in the rail (i.e. anchored below both mode panes).
@@ -106,7 +106,7 @@ def test_collapse_control_css_anchors_to_bottom():
         f".railcollapse must use margin-top:auto to anchor the control at the bottom of the rail; got: {body}"
 
 
-# --- The collections block sits above the tree (static source order) ----------------------------
+# ---- The collections block sits above the tree (static source order) --------------------------------
 
 def test_collections_block_is_above_the_tree_in_source():
     # Complements the runtime driver pin (interaction_test.js): statically, #collGroup must appear
@@ -119,7 +119,7 @@ def test_collections_block_is_above_the_tree_in_source():
     assert i_cg < i_ts, "#collGroup must appear before #treeSection (collections render above the tree)"
 
 
-# ---- Equal-width nav min-width token ----------------------------------------------------
+# ---- Equal-width nav min-width token ----------------------------------------------------------------
 
 def test_nav_button_min_width_fits_collections_label_across_pages():
     """The equal-width header nav (nav button on index, nav a on about) must reserve

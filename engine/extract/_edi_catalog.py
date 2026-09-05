@@ -160,8 +160,8 @@ _REF_STATION = re.compile(r"REFERENCE\b.*?STATION\s+NAME:\s*(\S+)", re.S | re.I)
 # Conservative email match (PII scrub): >INFO free text is uncontrolled and has carried real
 # operator emails (e.g. a curator's institutional address) straight into the PUBLIC, non-licence-gated
 # station.json processing.note. Redact here, at the single point the note is derived, so every caller
-# (build_portal, any future consumer) gets the scrubbed form for free. Original EDI bytes are untouched
-# - this only rewrites the returned string.
+# (build_portal, any future consumer) gets the scrubbed form for free. Original EDI bytes are
+# untouched; this only rewrites the returned string.
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 

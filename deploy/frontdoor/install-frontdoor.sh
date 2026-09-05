@@ -100,7 +100,7 @@ fi
 log "starting the front-door stack (docker compose up -d)"
 docker compose -f compose.yaml up -d
 
-# ----- reload the RUNNING edge so a Caddyfile change actually takes effect (ops-hardening) -------
+# ----- reload the RUNNING edge so a Caddyfile change actually takes effect (ops-hardening) ----------
 # If the edge was already running, `up -d` may have left the old process serving the old config. Reload
 # it in place: `caddy reload` reads the admin address from the (unix-socket) admin block in the file and
 # hot-swaps the config with no downtime. If the reload FAILS for ANY reason (admin disabled, or the

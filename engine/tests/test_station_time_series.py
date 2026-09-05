@@ -311,7 +311,7 @@ def test_a_coordinate_gated_station_gets_no_route(built_masked):
         assert _rows(docs[station]) == [], docs[station].get("resources")
 
 
-# --- ts_access.json, the route-detail boot artifact ------------------------------------------
+# ---- ts_access.json, the route-detail boot artifact -----------------------------------------------
 
 def _ts_access(out):
     """The emitted artifact, or None when the build wrote none (which is itself an assertion)."""

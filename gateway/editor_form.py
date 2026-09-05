@@ -932,7 +932,7 @@ def _row_indices(form: dict, section: str) -> list[int]:
     return sorted(idx)
 
 
-# ---- unified People & credit assembly (the contributor-credit model) ------------------------------
+# ---- unified People & credit assembly (the contributor-credit model) ----------------------------
 
 def normalize_orcid(value) -> str:
     """The merge-key form of an ORCID: lower-cased, with any URL wrapper (https://orcid.org/...) and

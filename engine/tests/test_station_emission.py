@@ -179,7 +179,7 @@ def test_every_record_opens_with_the_markers_and_survey_id_is_the_slug(built_acc
         assert doc["survey"] != doc["survey_id"], "the display title stays a separate, legacy surface"
 
 
-# --------------------------------------------------------------- One call, two surfaces
+# ---------------------------------------------------------------- one call, two surfaces
 
 def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
     """`diagnostics` gains the call, the method string and the caveat, from the SAME computation the
@@ -275,7 +275,7 @@ def test_built_withheld_stubs_reject_the_ratified_leaks(built_access, why, mutat
         assert stcheck.violations(leaked), f"{key}: the semantic layer accepted {why}"
 
 
-# --------------------------------------------------------------- No masked position in a note
+# ---------------------------------------------------------------- no masked position in a note
 
 def _coord_fixtures():
     """The coordinate fixtures and their leak-string generator, reused rather than restated."""
@@ -357,7 +357,7 @@ def test_the_masked_stations_still_publish_a_record(built_masked):
     assert by_station[c42.HID["id"]]["location"] == {"lat": None, "lon": None}
 
 
-# --------------------------------------------------------------- Archives are containment
+# ---------------------------------------------------------------- archives are containment
 
 def test_a_masked_station_advertises_no_archive_it_put_no_bytes_into(built_masked):
     """An `archive` row is a CONTAINMENT claim, and the byte gate decides containment per station: a

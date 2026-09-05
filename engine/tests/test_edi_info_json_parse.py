@@ -1,7 +1,7 @@
 """The >INFO JSON trailing-delimiter defect in mt_metadata 1.0.9, and the parse-only fallback.
 
-WHY THIS EXISTS. mt_metadata 1.0.9 cannot read 246 of them. The data is fine; the reader is wrong, and it
-is wrong in three composing steps:
+WHY THIS EXISTS. mt_metadata 1.0.9 cannot read 246 of them. The data is fine; the reader is wrong,
+and it is wrong in three composing steps:
 
   1. `io/tools.py::_validate_edi_lines` strips `"`, `'`, `[` and `]` from EVERY line of the file
      before any section parser runs, so the JSON object member `    "Declination": 5,` arrives at

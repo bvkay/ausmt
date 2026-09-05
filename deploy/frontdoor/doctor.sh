@@ -11,7 +11,7 @@
 #   2. the RUNNING edge config matches a FRESH RENDER of the repo Caddyfile (install-frontdoor.sh
 #      mounts Caddyfile.rendered, the repo template with the legacy redirect block templated in or
 #      out on AUSMT_LEGACY_REDIRECT_NAME; this check re-renders the same way and hash-compares the
-# container-mounted file against it, catching the stale-config trap: a template that changed
+#      container-mounted file against it, catching the stale-config trap: a template that changed
 #      on disk while the container kept an old rendering / an uncommitted hand-edit on the VPS)
 #   3. the box reader upstream is reachable over the tailnet (curl AUSMT_BOX_READER_UPSTREAM)
 #   4. the public TLS certificate is present and not near expiry
@@ -39,7 +39,7 @@
 #
 # SUBCOMMANDS:
 #   ./doctor.sh            run the full report (default)
-# ./doctor.sh zombies the zombie-diagnosis kit: count Z-state processes, GROUP them by parent
+#   ./doctor.sh zombies    the zombie-diagnosis kit: count Z-state processes, GROUP them by parent
 #                          so the leaking parent is NAMED, and print the likely fixes. Read-only.
 #
 # CONFIG (env; every external command + path is overridable so the checks are testable and portable):
@@ -372,11 +372,12 @@ check_pathurl_redirect() {
 check_ts_routes() {
 	# 4d, the TIME-SERIES HAND-OFF TABLE. Three facts, one leg, because they fail for one reason:
 	#   * the container-mounted ts-routes.map hashes EQUAL to the repo copy. Check 2 hash-compares
-	# only the rendered Caddyfile, so without this line the stale-config trap reaches the map
+	#     only the rendered Caddyfile, so without this line the stale-config trap reaches the map
 	#     unguarded - and a stale map is a stale ACCESS DECISION, not just stale config.
 	#   * an OPEN route 302s to the exact NCI Location the table names (probe + expectation both read
 	#     from the repo table, so the pin cannot rot when the corpus moves).
-	# * a route the table does NOT name 404s. That is the closed-world property: the map's `default ""` is the
+	#   * a route the table does NOT name 404s. That is the closed-world property: the map's `default ""`
+	#     is the suppression, so a path outside it must produce no Location at all.
 	#     suppression, so a path outside it must produce no Location at all.
 	#   * any survey the generator could not resolve is recorded in the table as `# UNRESOLVED`, and
 	#     its hand-offs are OFFLINE. Dropping one survey's routes is the safe direction (they 404),

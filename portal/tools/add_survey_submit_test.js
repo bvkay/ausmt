@@ -260,7 +260,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
 
   // --------------------------------------------------------------------------------------------------
   // 3. XSS REGRESSION: a hostile 400 `detail` and a hostile status_url must render as inert
-  // TEXT - no element injection. This assertion FAILS if someone removes the esc()/escAttr()/
+  //    TEXT - no element injection. This assertion FAILS if someone removes the esc()/escAttr()/
   //    statusUrlSafe() guards (non-vacuous).
   // (3a) hostile 400 detail.
   {
@@ -664,8 +664,8 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 8. Slug-collision awareness, zip-path visibility, the collection
-  // card, the credit questions' emission, DOI normalisation. Live-DOM behaviours the pure tests
+  // 8. Slug-collision awareness, zip-path visibility, the collection card, the credit questions'
+  //    emission, DOI normalisation. Live-DOM behaviours the pure tests
   //    (add_survey_logic.test.js) cannot cover.
   const JSON_OK_BODY = { status: 200, text: () => Promise.resolve('{"ok":true}') };
   // A fetch router: routes the gateway healthz probe, data/surveys.json, and data/catalogue.json. A null

@@ -178,8 +178,8 @@ def test_people_panel_contributors_save_is_accepted_by_the_runner(tmp_path):
 # ---- INFERRED-REVIEW detection + save-strips-the-marker adjudication -----------------------------
 
 # GROUND TRUTH (hermetic): the BYTE-EXACT output of the credit migration
-#  on a survey carrying legacy
-# principal_investigators (-> two person creators) + lead_investigator (-> one ProjectLeader contributor).
+# (_tools/migrate_credit.py) on a survey carrying legacy principal_investigators (-> two person
+# creators) + lead_investigator (-> one ProjectLeader contributor).
 # The INFERRED-REVIEW note rides its OWN comment line directly ABOVE each `- name:` row (comment-ABOVE) -
 # the format, because an inline comment after a quoted scalar tripped the vendored mini parser.
 # Reproduced literally here so the test carries NO sibling-repo dependency. Captured verbatim by running
@@ -290,11 +290,11 @@ def test_editing_creators_strips_the_comment_above_marker_but_leaves_contributor
 
 
 def test_people_panel_chips_carry_the_migration_flags_labelled_by_source(tmp_path):
-    """ CHIPS CARRY. The runner's review_flags (indices into the ORIGINAL creators[]/contributors[])
-    map onto the MERGED unified rows and each seeded row carries a 'needs review' chip labelled which
-    underlying list seeded it (Creators / Contributors). Drives the People panel with the read-job's own
-    flags for the comment-above fixture and asserts a chip on the two creator rows and the contributor
-    row - never on an unflagged row."""
+    """CHIPS CARRY. The runner's review_flags (indices into the ORIGINAL creators[]/contributors[])
+    map onto the MERGED unified rows and each seeded row carries a 'needs review' chip labelled
+    which underlying list seeded it (Creators / Contributors). Drives the People panel with the
+    read-job's own flags for the comment-above fixture and asserts a chip on the two creator rows
+    and the contributor row - never on an unflagged row."""
     from gateway import curatorpage as cp
     pkg = _merge_pkg(tmp_path, _SEEDED_YAML)
     res = edit.run_read_job(pkg)

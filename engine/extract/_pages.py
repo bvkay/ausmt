@@ -6,9 +6,9 @@ served at the path-URL contract's own shapes (/surveys/<slug>, /stations/<ausmt_
 Every page is rendered ONLY from the already-served public documents (surveys.json entries,
 survey-metadata.json, station.json, the collections rollup, the manifest's bundle rows and the
 time-series register), so a page can never disclose anything the gated products do not already
-publish, and the coord-access whole-tree sweep audits pages/ like every other emitter. All free text is HTML-escaped (curator-authored YAML is still a public
-serving surface), and the JSON-LD block escapes "</" so document text can never close the
-script element.
+publish, and the coord-access whole-tree sweep audits pages/ like every other emitter. All free
+text is HTML-escaped (curator-authored YAML is still a public serving surface), and the JSON-LD
+block escapes "</" so document text can never close the script element.
 
 Survey pages carry the full design of record: a "Cite this survey" disclosure (surname-plus-initial
 authors, source-led locator), location minimap on the shared schematic outline (_au_outline, the
@@ -949,11 +949,10 @@ _SELF_IDENTIFIES = ("entire",)
 def _citation_locator(smeta, access_url):
     """The locator slot of the formatted citation, SOURCE-LED and SCOPE-BOUND.
 
-    A citation identifies the dataset as persistently and specifically as the source allows.
-    Where the survey's own record carries a persistent identifier FOR ITSELF, that identifier is
-    the locator. The AusMT
-    page URL is used only where the record carries none, and then as the access route rather than as
-    a claim that the AusMT page is the object being cited.
+    A citation identifies the dataset as persistently and specifically as the source allows. Where
+    the survey's own record carries a persistent identifier FOR ITSELF, that identifier is the
+    locator. The AusMT page URL is used only where the record carries none, and then as the access
+    route rather than as a claim that the AusMT page is the object being cited.
 
     Two rows claiming the same self-identifying scope are not a tie to break. Row order in a curated
     YAML file is not a curation decision, so an ambiguous record promotes nothing and keeps the

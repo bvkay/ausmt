@@ -99,7 +99,7 @@ on:
   # accepts) while the build matrix expands and reports three green no-op ticks. A job-level skip
   # would collapse the matrix and the three required build names would never report at all (the
   # build job's own comment carries the full story, learned from PR #137).
-  # What the narrower path scoping bought is GIVEN BACK, on purpose: the `changes` job matches all FIVE image-input paths
+  # What it bought is GIVEN BACK, on purpose: the `changes` job matches all FIVE image-input paths
   # (deploy, gateway, engine, portal, contract), not the trimmed deploy/gateway pair, so engine-only
   # and portal-only PRs DO pay for a full build + e2e again. That is a real cost increase, taken over
   # for the two most common lane types, and it is the price of the check being honest. A required

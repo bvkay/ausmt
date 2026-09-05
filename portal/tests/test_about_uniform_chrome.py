@@ -468,8 +468,8 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 # measurements of THIS header's content at THIS font stack, and a change to the header's wording or
 # its nav will move the wrap points. Anything that changes the header's height must re-measure the
 # ladder. What this file CAN hold, and does, is that the offset is a variable rather than a constant,
-# that the ladder descends, and that it resolves to the measured header height at the two widths the
-# Workflow pins.
+# that the ladder descends, and that it resolves to the measured header height at the two widths
+# this module pins.
 ANCHOR_VAR = "--about-anchor-offset"
 
 # The measured header height at each pinned width, from the same run the ladder was built from.

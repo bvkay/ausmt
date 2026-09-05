@@ -661,8 +661,8 @@ PYEOF
   # Build/verify failed: the atomic swap left the OLD build serving. Report failed + the log tail so
   # the panel shows why WITHOUT the operator needing shell access; the request file is already
   # consumed, so there is no crash-loop. Exit 1 so `systemctl status`/monitoring flags it.
-  # FIRST ask the kernel journal whether the build was OOM-KILLED in its own window (six "rebuild
-  # FAILED, see log tail" reports have had a kernel kill two layers down as their cause).
+  # FIRST ask the kernel journal whether the build was OOM-KILLED in its own window (six
+  # "rebuild FAILED, see log tail" reports have had a kernel kill two layers down as their cause).
   # If it was, say so BY NAME, kernel lines first, then the log tail; and flag oom_kill in the status.
   # If the journal could NOT be read by this user (journalctl present, no access), say THAT: a plain
   # "failed" over an unread journal is exactly how the incident hid for a week.

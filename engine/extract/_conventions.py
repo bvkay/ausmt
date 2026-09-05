@@ -48,8 +48,9 @@ compass-referenced surveys without declination stamps. Field values say "declare
 "declared-azimuth"; nothing here asserts absolute geographic where the file does not prove it.
 
 GATE 2 - sign-convention quadrant check. Under e^{+iωt} with x=north/y=east, arg(Zxy) lies in the
-first quadrant (0..90°) and arg(Zyx) in the third quadrant (-180..-90°). Per station the gate takes the MEDIAN phase of each
-off-diagonal over the mid-band periods (central 60%, after masking absent/degenerate values) and:
+first quadrant (0..90°) and arg(Zyx) in the third quadrant (-180..-90°). Per station the gate takes
+the MEDIAN phase of each off-diagonal over the mid-band periods (central 60%, after masking
+absent/degenerate values) and:
   * BOTH medians coherently in wrong quadrants -> FAIL (a pure convention/frame flip: conjugation
     = e^{-iωt}, or an x/y axis swap - the message names the signature). This is what makes the
     induction-arrow panel's "arrows point toward conductors" claim safe.
@@ -434,7 +435,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                          f"orthogonal frame; served as-is under the declared-zero assumption "
                          f"(sign convention still checked)")
 
-    # --- tipper frame: served as-stored like the impedance. A per-period TROT is the same
+    # ---- tipper frame: served as-stored like the impedance. A per-period TROT is the same
     # per-period frame-mixing hazard as per-period ZROT - refuse it too. A uniform/zero TROT
     # rides in facts["evidence"]["trot"] as a recorded fact; nothing is rotated. ----
     if has_tipper and ev["trot"] is not None:

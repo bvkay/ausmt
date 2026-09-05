@@ -63,7 +63,8 @@ def _tracked_sh_modes(root: Path) -> dict[str, str]:
 
 
 def test_all_tracked_shell_scripts_are_executable():
-    """Every tracked *.sh in the repo is git mode 100755. FAILS IF any is 100644. This is the whole-repo sweep; the deploy-only assertion below is the belt."""
+    """Every tracked *.sh in the repo is git mode 100755. FAILS IF any is 100644. This is the
+    whole-repo sweep; the deploy-only assertion below is the belt."""
     root = _toplevel()
     modes = _tracked_sh_modes(root)
     assert modes, "expected at least one tracked *.sh file; git ls-files returned none"

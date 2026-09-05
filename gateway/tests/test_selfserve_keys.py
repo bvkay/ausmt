@@ -525,10 +525,10 @@ def test_smtp_pass_redacted_from_config_dump(tmp_path):
 # Integration seam: the PORTAL FORM posts JSON, not urlencoded
 # --------------------------------------------------------------------------------------------------
 def test_request_key_accepts_the_portal_forms_json_body(tmp_path):
-    """add-survey.html posts {"email": ...} as application/json. The original route read a
-    Form(...) parameter, silently saw "" from a JSON body, and every real browser request died at
-    the syntactic gate behind the neutral 202 - zero keys, zero log rows, zero mail. RED against that route shape: a JSON post must mint exactly like an
-    urlencoded one."""
+    """add-survey.html posts {"email": ...} as application/json. The original route read a Form(...)
+    parameter, silently saw "" from a JSON body, and every real browser request died at the
+    syntactic gate behind the neutral 202 - zero keys, zero log rows, zero mail. RED against that
+    route shape: a JSON post must mint exactly like an urlencoded one."""
     async def _body():
         mailer = FakeMailer()
         async with app_client(tmp_path, mailer=mailer) as (client, _app, gw, _cfg):

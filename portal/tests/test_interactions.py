@@ -58,11 +58,11 @@ def test_portal_interactions(tmp_path):
     # through COLS["tf"], so they self-follow the contract). The embargoed Delta station D1 gets the
     # WITHHELD shape the engine emits for a non-open survey — every series column an EMPTY ARRAY.
     #
-    # Two thinned periods. The first station carries a distinctive payload the driver asserts on:
+    # Two thinned periods. Station A1 carries a distinctive payload the driver asserts on:
     #   * tzx_re > 0 (with everything else 0) => REAL Parkinson north = -tzx_re < 0 => arrow points
-    # SOUTH (down) - the sign-mapping check;
-    # * rho + phase errors present => the error bars must render.
-    # The second has NO tipper and NO errors => the "no tipper" state (empty arrow panel), no bars.
+    #     SOUTH (down) - the sign-mapping check;
+    #   * rho + phase errors present => the error bars must render.
+    # Station A2 has NO tipper and NO errors => the "no tipper" state (empty arrow panel) + no bars.
     per2 = [0.01, 1000.0]
     zero2 = [None, None]
 

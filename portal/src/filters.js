@@ -271,9 +271,9 @@ function paintAvailSelect(){
     o.title=known?(empty?"Availability by level: "+TS_NONE_HINT:""):TS_PENDING_HINT;});
 }
 
-// ---- Availability > Time series: the per-level chooser ------------------------------------------ The
-// access posture, restated where the level filter reads it (passesCore) and where the Download rows price
-// it (exports.js paintDownloadRows). See docs: portal internals, filters.js.
+// ---- Availability > Time series: the per-level chooser -------------------------------------------
+// The access posture, restated where the level filter reads it (passesCore) and where the Download rows
+// price it (exports.js paintDownloadRows). See docs: portal internals, filters.js.
 const TS_PENDING_HINT="Time-series availability is still loading";
 const TS_NONE_HINT="this deployment publishes no download index";
 // The current DOWNLOAD SCOPE: the selection when one exists, else the filtered corpus - exactly what

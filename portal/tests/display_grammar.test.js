@@ -37,7 +37,7 @@ ok(typeof fmtPeriod === "function", "fmtPeriod loaded from state.js");
 ok(typeof fmtRange === "function", "fmtRange loaded from state.js");
 ok(typeof licHuman === "function", "licHuman loaded from state.js");
 
-// --- The period display helper, the worked examples VERBATIM -----------------------
+// ---- The period display helper, the worked examples VERBATIM -----------------------------------
 // The same seven pairs the engine suite asserts on _fmt_period. Under 100 a period reads to two
 // significant figures with trailing zeros stripped; at or above 100 it is a thousands-separated
 // integer; it is NEVER an exponent, whatever the magnitude.
@@ -60,7 +60,7 @@ eq(fmtPeriod(undefined), "-", "R1: an undefined period is a plain hyphen");
 eq(fmtPeriod("not a number"), "-", "R1: an unparseable period is a plain hyphen");
 eq(fmtPeriod(0), "0", "R1: zero prints as zero");
 
-// --- The range separator ------------------------------------------------------------------
+// ---- The range separator ----------------------------------------------------------------------
 // The revised rule: a numeric range in UI chrome reads as a SPACED HYPHEN-MINUS. Not an
 // en dash, not an em dash, not the word "to".
 eq(fmtRange(2016, 2021), "2016 - 2021", "R2: a year range takes the spaced hyphen");
@@ -68,7 +68,7 @@ eq(fmtRange(fmtPeriod(5), fmtPeriod(100000)), "5 - 100,000", "R2: a period range
 ok(fmtRange(1, 2).indexOf("\u2013") < 0 && fmtRange(1, 2).indexOf("\u2014") < 0,
    "the range separator carries no dash glyph");
 
-// --- The licence in human form ------------------------------------------------------------
+// ---- The licence in human form ----------------------------------------------------------------
 // The SPDX identifier is the machine's name for a licence; what a reader sees in chrome is the form
 // the licence is published under. The form is derived from the identifier's own grammar (prefix,
 // clause letters keeping their internal hyphens, version, jurisdiction port) over the identifiers

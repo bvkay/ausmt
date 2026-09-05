@@ -217,8 +217,8 @@ def _patch_uncompressed_size(raw: bytearray, name: bytes, fake: int, *, local: b
 
 def corrupt_deflate_zip() -> bytes:
     """A zip whose central directory is intact (passes zipsafety.inspect) but whose compressed data
-    for one DEFLATED member is corrupted, so decompression at extraction raises zlib.error/BadZipFile
- - NOT an OSError. This is the crafted zip that can crash the runner."""
+    for one DEFLATED member is corrupted, so decompression at extraction raises
+    zlib.error/BadZipFile - NOT an OSError. This is the crafted zip that once crashed the runner."""
     import struct
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -486,8 +486,7 @@ def seed_validated(gw, cfg, *, slug: str = "mysurvey", email: str = GOOD_EMAIL,
                    token: str | None = None) -> str:
     """Insert a submission and drive it directly to VALIDATED via the DB (bypassing the scan/job
     pipeline, which its own tests cover), materialising a package tree + reports on disk so the
-    checklist
-    and preview have something to read. Returns the submission id.
+    checklist and preview have something to read. Returns the submission id.
 
     fail_item -> writes a FAIL validator item so the blocking-FAIL guard fires.
     pii_in_preview -> writes the submitter's OWN email into the built preview product.

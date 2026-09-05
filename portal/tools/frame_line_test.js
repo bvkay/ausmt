@@ -1,10 +1,10 @@
 "use strict";
-// Portal frame-line driver (Invariant 10). Boots the REAL portal modules in jsdom and drives
-// the reader-facing frame line the station drawer shows when the engine served impedances AS STORED in
-// a declared acquisition frame (the engine never de-rotates under frame policy v3). It asserts:
-//   * frameLineText() (PURE, DOM-free) renders the terse honest line for a non-zero declared angle,
-// stays SILENT for a zero/absent angle or a null frame, and appends the "mixes declared
-//     frames" clause only when the survey carries the mixed-frames note;
+// Portal frame-line driver (Invariant 10). Boots the REAL portal modules in jsdom and drives the
+// reader-facing frame line the station drawer shows when the engine served impedances AS STORED in
+// a declared acquisition frame (the engine never de-rotates under frame policy v3). It asserts: *
+// frameLineText() (PURE, DOM-free) renders the terse honest line for a non-zero declared angle,
+// stays SILENT for a zero/absent angle or a null frame, and appends the "mixes declared frames"
+// clause only when the survey carries the mixed-frames note;
 //   * frameLineText() NEVER emits markup (it interpolates only a validated number + fixed strings), so
 //     even a hostile survey_frame_note cannot inject a tag;
 //   * loadStationFrameLine() fetches the per-station station.json, injects the line via textContent,
@@ -76,7 +76,7 @@ ok(A.line({}) === "", "a frame with no declared angle and no mixed note must pro
 ok(A.line(null) === "", "a null frame must produce NO line");
 ok(A.line({ frame_served: "declared-zero", declared_azimuth_deg: 0 }) === "", "declared-zero => no line");
 
-// --- frameLineText: divergent tipper frame (field present ONLY when divergent) ------------------
+// --- frameLineText: divergent tipper frame (field present ONLY when divergent) ---------------------
 const tipOnly = A.line({ declared_azimuth_deg: 0, tipper_declared_azimuth_deg: -60 });
 ok(/Tipper served in its own declared -60° frame/.test(tipOnly),
   "case d (TROT=-60, ZROT=0) must show the tipper frame line: " + tipOnly);
@@ -95,7 +95,7 @@ ok(!/Tipper/.test(A.line({ declared_azimuth_deg: 8 })),
 ok(!/Tipper/.test(A.line({ declared_azimuth_deg: 8, tipper_declared_azimuth_deg: "<img>" })),
   "a non-numeric tipper field must be ignored, never rendered");
 
-// --- frameLineText: mixed-frames note ---------------------------------------------------------
+// --- frameLineText: mixed-frames note --------------------------------------------------------------
 const MIX = "frame: mixed declared frames across stations: 8°…20° — each station is served in its own frame";
 const mixed0 = A.line({ declared_azimuth_deg: 0, survey_frame_note: MIX });
 ok(/mixes declared acquisition frames across stations/.test(mixed0),

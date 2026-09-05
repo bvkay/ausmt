@@ -591,8 +591,9 @@ def _marker_is_own_line(text: str) -> bool:
 
 def inferred_review_indices(seq, parent_comment=None) -> list[int]:
     """The 0-based indices of rows in a loaded creators[]/contributors[] CommentedSeq that carry an
-    INFERRED-REVIEW marker, tolerant of BOTH the migration's comment-ABOVE placement (the origin/main format) AND a hand-edited INLINE marker. Empty for a plain list, a non-sequence, or a list
-    with no markers.
+    INFERRED-REVIEW marker, tolerant of BOTH the migration's comment-ABOVE placement (the
+    origin/main format) AND a hand-edited INLINE marker. Empty for a plain list, a non-sequence,
+    or a list with no markers.
 
     `parent_comment` is the parent map's comment association for THIS list key (data.ca.items.get(key)):
     where ruamel parks row 0's comment-above marker; run_read_job passes it. Attribution per token:
@@ -1241,8 +1242,10 @@ def _validate_patched(package_root: Path, new_bytes: bytes, validator_path: str,
                       scratch_dir: Path) -> dict:
     """Copy the package into the per-job scratch dir, drop in the patched survey.yaml, and run the
     real validator on the copy so an EDI-referencing check still sees a complete package. The scratch
-    lives under jobs/edit/scratch/<job-id>/ - NEVER under the surveys tree. Per-job dir = no collision between concurrent previews (review FIX 5). Returns the
-    validator report; an unconfigured validator path yields an empty (non-failing) report so unit
+    lives under jobs/edit/scratch/<job-id>/ - NEVER under the surveys tree. Per-job dir = no
+    collision between concurrent previews (review FIX 5). Returns the validator report; an
+    unconfigured validator path yields an empty (non-failing) report so unit tests without a real
+    validator still exercise the merge path. an unconfigured validator path yields an empty (non-failing) report so unit
     tests without a real validator still exercise the merge path."""
     if not validator_path:
         return {"items": []}

@@ -120,7 +120,7 @@ ok(A.hasPosition({ lat: 0, lon: 0 }) === true, "a real (0,0) is a position, not 
 ok(A.hasPosition({ lat: NaN, lon: 140 }) === false, "a NaN coordinate must never reach the map");
 ok(A.hasPosition(null) === false, "a missing station must not crash the predicate");
 
-// ---- composition with the focus dim --------------------------------------------------------------
+// ---- composition with the focus dim -------------------------------------------------------------
 // Every map object is a station dot now, so the focus dim is one rule over one kind of thing, keyed on the
 // survey. Non-focused must be dimmer, and still VISIBLE (a dim that hides them takes the national
 // context off the map).

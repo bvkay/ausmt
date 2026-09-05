@@ -467,9 +467,10 @@ def test_ops_status_written_when_alerting_unconfigured(tmp_path):
 
 
 def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
-    """INCIDENT-AS-TEST, producer side. A reconcile action=sync_failed that persists must
-    be visible as a GROWING streak (count + a stable `since`), not a silent single line - the incident where a sync_failed hid for 4 h. FAILS IF: the streak does not accumulate
-    across passes, or `since` is not carried forward from the first failing pass."""
+    """INCIDENT-AS-TEST, producer side. A reconcile action=sync_failed that persists must be visible
+    as a GROWING streak (count + a stable `since`), not a silent single line - the incident where a
+    sync_failed hid for 4 h. FAILS IF: the streak does not accumulate across passes, or `since` is
+    not carried forward from the first failing pass."""
     tree = _make_tree(tmp_path, reconcile_action="sync_failed")   # fresh last_run
     _run(tree)
     d1 = _ops_doc(tree)

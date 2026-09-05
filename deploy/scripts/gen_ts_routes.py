@@ -46,7 +46,7 @@ SURVEYS_DEFAULT = ROOT.parent / "ausmt-surveys" / "surveys"
 # The engine seams this table must not have a second opinion about. Both are stdlib-only modules;
 # build_portal itself is NOT imported (it pulls mt_metadata/mth5, which a deploy tool must not need).
 sys.path.insert(0, str(ROOT / "engine" / "extract"))
-import _coordaccess as coordacc      # noqa: E402 (per-station coordinate gate)
+import _coordaccess as coordacc      # noqa: E402  (the per-station coordinate gate)
 import _stationcheck as stcheck      # noqa: E402  (the route prefix, the ENCODER, the encoded-route rule)
 import _tsindex as tsindex           # noqa: E402  (the register reader and its closed vocabularies)
 import _tsproject as tsproject       # noqa: E402  (THE projection: who gets a route)

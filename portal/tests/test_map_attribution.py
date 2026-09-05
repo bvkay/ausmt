@@ -1,9 +1,10 @@
 """The map's attribution: on the map, collapsed to one glyph, and following the layer that is drawn.
 
-The corner line comes off the map. What goes is the LINE and the "Leaflet" flag beside it, which is a courtesy to a library; what stays is the credit, because the basemap is OpenStreetMap
-data under ODbL and every tile source this site can draw asks for credit of its own. It is met by
-Leaflet's own attribution control, mounted with prefix:false and collapsed behind a small "(i)" that
-opens on hover, on focus and on click.
+The corner line comes off the map. What goes is the LINE and the "Leaflet" flag beside it, which is
+a courtesy to a library; what stays is the credit, because the basemap is OpenStreetMap data under
+ODbL and every tile source this site can draw asks for credit of its own. It is met by Leaflet's
+own attribution control, mounted with prefix:false and collapsed behind a small "(i)" that opens on
+hover, on focus and on click.
 
 WHY THE CONTROL AND NOT A LINE IN THE FOOTER. Two reasons stand behind that, and this module holds
 the second:

@@ -9,10 +9,10 @@
      lattice as the favicon, at 180px. -->
 <link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">
 <!-- The one true URL for this page. It is substantive, indexable, linked from the root and advertised
-in sitemap.xml, so it must say which address it is served at. -->
+     in sitemap.xml, so it must say which address it is served at. -->
 <link rel="canonical" href="https://ausmt.auscope.org.au/releases.html">
 <!-- The description is this page's own lede verbatim: cutting it to fit a result row would mean
-writing a sentence this page does not say. -->
+     writing a sentence this page does not say. -->
 <meta name="description" content="Quarterly citable snapshots of the AusMT corpus. Each release freezes one build's catalogue and its survey bundles at a fixed path, so a citation resolves to the same bytes years later even though the live portal keeps moving.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
@@ -138,7 +138,7 @@ writing a sentence this page does not say. -->
 <header>
   <div class="hzone hleft">
     <!-- The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on
-this site carries a second mark of any kind. Same markup and same rule on every surface. -->
+         this site carries a second mark of any kind. Same markup and same rule on every surface. -->
     <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
     <div class="wordmark">AusMT</div>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
@@ -146,21 +146,21 @@ this site carries a second mark of any kind. Same markup and same rule on every 
   <div class="hzone hcenter">
     <nav>
       <!-- Same three primary items, same ids and same order as index.html and about.html, so the header is
-comparable element-for-element (the header-parity pin). Links here because this page is static, and
-none is active. -->
+           comparable element-for-element (the header-parity pin). Links here because this page is static, and
+           none is active. -->
       <a id="navMap" href="/">Map</a>
       <a id="navSurveys" href="/surveys">Surveys</a>
       <a id="navCollections" href="/collections">Collections</a>
     </nav>
     <!-- FIVE header items: Map, Surveys, Collections, About, Contribute. The about.html#howto id
-survives, so an inbound deep link to that section still lands. -->
+         survives, so an inbound deep link to that section still lands. -->
     <a class="about" href="about.html">About</a>
     <a class="contribute" href="add-survey.html">Contribute a survey &rarr;</a>
   </div>
   <div class="hzone hright">
     <!-- The corpus-totals block about.html carries, from the same corpus-stats.js and the same served
-catalogue. It ships hidden and is revealed only once both documents resolve to a non-empty corpus,
-so an unpublished deployment shows nothing rather than a fabricated total. -->
+         catalogue. It ships hidden and is revealed only once both documents resolve to a non-empty corpus,
+         so an unpublished deployment shows nothing rather than a fabricated total. -->
     <div class="counts corpus" id="corpusCounts" hidden
          title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations &middot;
       <b id="corpusSurveys"></b> surveys</div>
@@ -173,20 +173,20 @@ so an unpublished deployment shows nothing rather than a fabricated total. -->
   later even though the live portal keeps moving.</p>
 
   <!-- Everything below is written by releases.js from the served release index, and nothing about any
-release is hard-coded here, so this page cannot claim a release that was never cut. -->
+       release is hard-coded here, so this page cannot claim a release that was never cut. -->
   <div class="state" id="relLoading">Reading the release index&hellip;</div>
 
   <div class="state" id="relEmpty" hidden>
     <span id="relEmptyMsg">No releases cut yet; releases are quarterly snapshots of the corpus.</span>
     <!-- The probe line names the document that came back empty or absent, from the URL releases.js
-actually requested: a missing index means either that no release has been cut or that the release
-tier is not published at this path, and the sentence above cannot tell them apart. -->
+         actually requested: a missing index means either that no release has been cut or that the release
+         tier is not published at this path, and the sentence above cannot tell them apart. -->
     <div class="probe" id="relEmptyProbe" hidden>Looked for <code id="relEmptyPath"></code>.</div>
   </div>
 
   <!-- Distinct from the empty state on purpose: "absent or empty index" is a fact about the corpus and
-"the index could not be read" is a fact about this request. Collapsing the two would let a routing
-problem be reported as "no releases have ever been cut". -->
+       "the index could not be read" is a fact about this request. Collapsing the two would let a routing
+       problem be reported as "no releases have ever been cut". -->
   <div class="state err" id="relError" hidden>The release index could not be read from this deployment,
     so this page cannot say which releases exist. Releases are quarterly snapshots of the corpus.
     <div class="probe" id="relErrorProbe" hidden>Tried <code id="relErrorPath"></code>.</div>

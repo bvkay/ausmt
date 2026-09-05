@@ -20,7 +20,8 @@
 [Unit]
 Description=AusMT usage-analytics aggregator (fold Caddy access log -> stats.json, daily)
 # __DEPLOY_DIR__ placeholder (resolved by the install sed exactly like ExecStart below) — NEVER a
-# literal <operator> path: a hardcoded file:///home/<operator>/… points at a path that never exists. The runbook is this repo's deploy/README.md ("Usage analytics").
+# literal <operator> path: a hardcoded file:///home/<operator>/… points at a path that never exists.
+# The runbook is this repo's deploy/README.md ("Usage analytics").
 Documentation=file://__DEPLOY_DIR__/README.md
 # Date bucketing (which UTC day a request falls in) wants a real, synced clock; only meaningful once
 # time is synced.

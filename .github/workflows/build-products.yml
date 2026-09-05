@@ -104,7 +104,7 @@ jobs:
       # in-image run is the trust-invariant one (it tests the artifact that ships), so THAT keeps
       # the full suite on every PR; THIS lane's per-PR run narrows to the subset that gates what
       # this workflow's own steps do and rely on (the product/equivalence/schema set):
-      #   tests/test_build_cache.py cache seams incl. the section-4.5 warm-vs-refresh
+      #   tests/test_build_cache.py           cache seams incl. the section-4.5 warm-vs-refresh
       #                                       byte-equivalence guard and the stale-cache refusal the
       #                                       "Build-cache smoke" step below leans on
       #   tests/test_ingest_normalize.py      canonical-ingest round-trip gate (named above)
@@ -180,7 +180,7 @@ jobs:
       #   tests/test_epikit_parse_failure_gate.py  the deploy gate over build_report's
       #                                       source_parse_failures, and the rule-8 pin that keeps
       #                                       this list honest for the whole test_epikit_* family
-      #   tests/test_comment_hygiene.py        the comment rule over engine/extract, engine/scripts and
+      #   tests/test_comment_hygiene.py       the comment rule over engine/extract, engine/scripts and
       #                                       this suite, plus the byte cap on the stylesheet
       #                                       _pages.py inlines into every emitted page. Reads only
       #                                       paths under engine/, so it runs unchanged in the image

@@ -72,8 +72,9 @@ def _run_preflight(data_dir: Path) -> subprocess.CompletedProcess:
     import os
     env = dict(os.environ)
     env["AUSMT_DATA_DIR"] = str(data_dir)
-    # The OWNER variable and its siblings are unset - the other sections FAIL harmlessly; we only read the untracked line. Portal
-    # profile (the default): the untracked check runs for BOTH profiles, so no need to pass "gateway".
+    # The OWNER variable and its siblings are unset - the other sections FAIL harmlessly; we only
+    # read the untracked line. Portal profile (the default): the untracked check runs for BOTH
+    # profiles, so no need to pass "gateway".
     return subprocess.run([_SH, str(_SCRIPT)], capture_output=True, text=True, env=env)
 
 

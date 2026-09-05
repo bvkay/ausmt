@@ -28,9 +28,9 @@ function save(n,t,m){const a=document.createElement("a");a.href=URL.createObject
 // as a stall. Every packaging path ends in a completion or nothing-to-package toast, which clears it.
 function toast(m,opts){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";clearTimeout(toast._h);
   toast._h=(opts&&opts.sticky)?null:setTimeout(()=>t.style.display="none",7000);}
-// ---- the hand-off snackbar ------------------------------------------ PROGRESS BELONGS TO THE BROWSER: a
-// hand-off is a 302, the bytes travel browser-to-archive, and CORS forbids fetching the payload in-page.
-// See docs: portal internals, exports.js.
+// ---- the hand-off snackbar ----------------------------------------------------------------------
+// PROGRESS BELONGS TO THE BROWSER: a hand-off is a 302, the bytes travel browser-to-archive, and CORS
+// forbids fetching the payload in-page. See docs: portal internals, exports.js.
 function snack(msg,note,action){
   const el=document.getElementById("snackbar");if(!el)return;
   el.textContent="";
@@ -469,8 +469,9 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-selection-edis-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);
   toast(`Zipped ${ok} EDI(s)`+(unavail.length?`; ${unavail.length} not redistributable (archive pointers included).`:"."));});
 
-// ---- selection exports for the two AusMT-derived formats ------------------ A reader who has drawn a box
-// around forty stations can take their EDIs in one click. See docs: portal internals, exports.js.
+// ---- selection exports for the two AusMT-derived formats -----------------------------------------
+// A reader who has drawn a box around forty stations can take their EDIs in one click. See docs: portal
+// internals, exports.js.
 var SEL_FORMATS={
   emtfxml:{label:"EMTF XML",folder:"ausmt_emtf_xml",stem:"ausmt-selection-emtf-xml-",
            note:"No EMTF XML is served for these selected stations."},

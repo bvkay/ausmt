@@ -119,8 +119,9 @@ def _dist_version(default="0.2.1"):
 def peak_rss_mib():
     """The build process's memory high-water mark in MiB, from resource.getrusage (a cheap kernel
     counter, no sampling): what build_report.json records as `peak_rss_mib` so every real build carries
-    its own peak and an operator can see the trend BEFORE the box runs out. ru_maxrss is KiB on Linux and bytes on macOS; both
-    are normalised here. None where the counter is unavailable (Windows), never a guess.
+    its own peak and an operator can see the trend BEFORE the box runs out. ru_maxrss is KiB on
+    Linux and bytes on macOS; both are normalised here. None where the counter is unavailable
+    (Windows), never a guess.
 
     SCOPE (for the survey-parallel build, which composes with this): RUSAGE_SELF is THIS process
     only, and RUSAGE_CHILDREN reports the largest single waited-for descendant, never the sum over
@@ -286,7 +287,7 @@ def access_serve_state(level, embargo_until, today=None) -> dict:
 
 
 # --- Display-product withholding: the derived DISPLAY data the portal plots for a station. When a
-# survey's ACCESS state is not served, the byte gate already withholds manifest/edi/xml/bundles; display-product withholding
+# survey's ACCESS state is not served, the byte gate already withholds manifest/edi/xml/bundles; this gate
 # additionally empties the derived display products at EMISSION so nothing is hidden only client-side — the
 # withheld content simply is not in the served tf.json/sci.json. Width + station alignment are preserved
 # (an empty [] per series / a nulled scalar per science field), so the positional contract and the build's
@@ -1071,9 +1072,12 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     return doc
 
 
-# --- survey-metadata.json: the SECOND public contract
-# (engine/schema/ausmt-survey-metadata.schema.json 0.1). One document per
-# survey at out/products/<survey_id>/survey-metadata.json (the served root, never the --products dir):
+# --- survey-metadata.json: the SECOND public contract (engine/schema/ausmt-survey-metadata.schema.json
+# 0.1). One document per survey at out/products/<survey_id>/survey-metadata.json (the served root,
+# never the --products dir): the canonical public metadata of one survey dataset/release, generated
+# from the RAW survey.yaml (a discovery side channel; SMETA and surveys.json are untouched). The
+# emitter never invents a curated fact: every class is verbatim from survey.yaml when present and
+# ABSENT otherwise (open-world; no nulls, no empty containers, no library defaults as assertions).
 # the canonical public metadata of one survey dataset/release, generated from the RAW survey.yaml
 # (a discovery side channel; SMETA and surveys.json are untouched). The emitter never invents a
 # curated fact: every class is verbatim from survey.yaml when present and ABSENT otherwise (open-world;
@@ -1225,7 +1229,8 @@ def _sm_rows(seq, required: tuple) -> list:
 
 def _sm_funders(y: dict) -> list:
     """funders[] (DataCite-aligned): organisation -> name, organisation_ror -> ror, grant_id ->
-    award_number, grant_title -> award_title, funding_doi -> award_uri (https://doi.org/<bare>). A name-only row is valid; a row without a funder name is not a funder. The legacy
+    award_number, grant_title -> award_title, funding_doi -> award_uri (https://doi.org/<bare>).
+    A name-only row is valid; a row without a funder name is not a funder. The legacy
     name/pid/id spellings _funders_of tolerates are read the same way."""
     out = []
     for f in (y.get("funding") or y.get("funders") or []):
@@ -1434,8 +1439,11 @@ def _org_of(y: dict):
     return org or "unknown", None
 
 
-# The back-compat 'who' facet that folded the two
-# retired flat credit keys into a served SMETA list is GONE, and with it the reader that built it. The
+# The back-compat 'who' facet that folded the two retired flat credit keys into a served SMETA list
+# is GONE, and with it the reader that built it. The corpus migration seeded creators[]/contributors[]
+# from those keys and deleted them, so nothing reads them anywhere in the engine; a survey that still
+# carries them (a pre-migration corpus) is simply ignored, never served. creators[]/contributors[] are
+# the credit surface (_creators_of/_contributors_of).
 # corpus migration seeded creators[]/contributors[] from those keys and deleted them, so nothing reads
 # them anywhere in the engine; a survey that still carries them (a pre-migration corpus) is simply
 # ignored, never served. creators[]/contributors[] are the credit surface (_creators_of/_contributors_of).
@@ -1580,9 +1588,10 @@ def _collection_of(y: dict):
 
 
 def _date_range_of(y: dict):
-    """The start and end years joined by an en dash, from a {start, end} dates map. str()-coerces each year so an unquoted YAML int
-    (e.g. start: 2009) or a present-but-null year cannot raise TypeError; a non-dict dates value
-    passes through unchanged (so an existing string date is byte-identical)."""
+    """The start and end years joined by an en dash, from a {start, end} dates map. str()-coerces
+    each year so an unquoted YAML int (e.g. start: 2009) or a present-but-null year cannot raise
+    TypeError; a non-dict dates value passes through unchanged (so an existing string date is
+    byte-identical)."""
     d = y.get("dates")
     if not isinstance(d, dict):
         return d
@@ -1877,8 +1886,9 @@ _STATION_IDS_KEY = _re.compile(r"(?m)^station_ids[ \t]*:")
 def _read_yaml(path: Path, raw: bytes | None = None):
     """Parse a survey.yaml. `raw`, when given, is the file's ALREADY-READ bytes and is parsed instead
     of re-reading the path — so a caller that also derives a content digest from those same bytes gets
-    parse+digest coherence from ONE read. YAML mandates a UTF family, so the bytes decode as UTF-8 (replace-on-error: a bad byte
-    degrades one field's text, never the parse+digest pairing)."""
+    parse+digest coherence from ONE read. YAML mandates a UTF family, so the bytes decode as
+    UTF-8 (replace-on-error: a bad byte degrades one field's text, never the parse+digest
+    pairing)."""
     text = raw.decode("utf-8", errors="replace") if raw is not None else None
     try:
         import yaml  # noqa: PLC0415
@@ -4147,16 +4157,17 @@ def _release_mth5_metadata_classes() -> None:
     """Emit-and-release for the MTH5 arm. Called after EVERY station-sized unit of MTH5 work (each
     add_transfer_function in the writers, each get_transfer_function in the round-trip gate).
 
-    WHY. The build was not holding the corpus. On the pinned stack every mth5 0.6.8
-    group/dataset instantiation calls add_attributes_to_metadata_class_pydantic, which builds a FRESH
-    pydantic model class via create_model (about 75 classes per served station across the tier-1
-    file, the tier-2 bundle and the gate's reopen), and mt_metadata 1.0.9's to_dict then memoises each
-    class's field tree in the module-global, class-KEYED dict
-    mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE. A class-keyed memo of classes that are never
-    reused can never hit; it only pins every class, its ~300 KB json tree and its pydantic-core
-    validator/serializer for the life of the process. Profiled at 7.6 MiB per served station, linear
-    and unbounded, 78% of the peak footprint, all of it inside _write_tf_mth5; parsing, the cache,
-    the XML arm, the zips and the corpus-wide emissions are flat.
+    WHY. The build was not holding the corpus. On the pinned stack every mth5 0.6.8 group/dataset
+         instantiation calls add_attributes_to_metadata_class_pydantic, which builds a FRESH
+         pydantic model class via create_model (about 75 classes per served station across the
+         tier-1 file, the tier-2 bundle and the gate's reopen), and mt_metadata 1.0.9's to_dict then
+         memoises each class's field tree in the module-global, class-KEYED dict
+         mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE. A class-keyed memo of classes that
+         are never reused can never hit; it only pins every class, its ~300 KB json tree and its
+         pydantic-core validator/serializer for the life of the process. Profiled at 7.6 MiB per
+         served station, linear and unbounded, 78% of the peak footprint, all of it inside
+         _write_tf_mth5; parsing, the cache, the XML arm, the zips and the corpus-wide emissions are
+         flat.
 
     The library's own clear_field_caches() empties that memo; the classes then have no holder and the
     ordinary cyclic GC frees them. Cost: the next lookup of a STATIC class re-reads its tree from
@@ -4355,10 +4366,10 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
 
 
 # ---- The MTH5 worker pool (the build-parallelism seam) -------------------------------------------
-# The profile attributed ~68% of a cold
-# build and ~99% of a warm rebuild to _write_tf_mth5, which is self-contained by construction: it
-# re-reads its source EDIs from disk, carries its own gate, owns a unique output path per
-# call and returns 0 instead of raising. The pool parallelises exactly that unit and NOTHING else:
+# A build profile attributed ~68% of a cold build and ~99% of a warm rebuild to _write_tf_mth5,
+# which is self-contained by construction: it re-reads its source EDIs from disk, carries its own
+# gate, owns a unique output path per call and returns 0 instead of raising. The pool parallelises
+# exactly that unit and NOTHING else:
 # parse, XML, the cache and all manifest bookkeeping stay in the main process, and every
 # station id is final (_disambiguate has run) before the first task is submitted, so worker
 # scheduling can never reach an identity or ordering decision. Workers are spawned, not forked
@@ -4661,10 +4672,11 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
 
 
 def load_flags(path) -> dict:
-    """Distribution feature flags from the portal.config.yaml `flags:` block (default OFF). The single
-    config seam, mirrored to the portal via tools/gen_config.py -> config.js. survey_h5_enabled gates the
-    tier-2 survey-aggregated MTH5 producer; station_h5_enabled gates the tier-1 per-station MTH5 producer; collection_download_enabled reserves the future collection-level bundle.
-    CLI --survey-h5 / --station-h5 / --collection-download OR on top.
+    """Distribution feature flags from the portal.config.yaml `flags:` block (default OFF). The
+    single config seam, mirrored to the portal via tools/gen_config.py -> config.js.
+    survey_h5_enabled gates the tier-2 survey-aggregated MTH5 producer; station_h5_enabled gates the
+    tier-1 per-station MTH5 producer; collection_download_enabled reserves the future
+    collection-level bundle. CLI --survey-h5 / --station-h5 / --collection-download OR on top.
 
     NOTE FOR ANYONE FLIPPING A FLAG HERE: this YAML lives under portal/ and the engine image does NOT
     copy it (deploy/docker/engine.Dockerfile takes contract/, engine/ and portal/src/contract.js only),

@@ -63,7 +63,7 @@ def _normnum(x):
 
 
 def test_contract_grew_to_18_appended_only():
-    """FAILS IF: the tf contract is not exactly the 10 original columns followed by the 8 columns
+    """FAILS IF: the tf contract is not exactly the 10 original columns followed by the 8 new columns
     in the frozen order. Pins the APPEND (a reorder or a wrong new name fails)."""
     assert TF_COLUMNS[:10] == ["periods", "rho_xy", "rho_yx", "phs_xy", "phs_yx_adj",
                                "tip_mag", "pt_min", "pt_max", "pt_az", "pt_beta"], TF_COLUMNS

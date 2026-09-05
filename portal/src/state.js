@@ -2,9 +2,9 @@
 // Shared mutable state (assigned during boot) + constants + small colour/format utils.
 // No survey metadata is hard-coded here; SMETA is loaded from data/surveys.json at boot.
 let CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID; /*__DATA_BINDING__*/
-// ---- two-phase boot: background hydration gates ------------------------------------------------ The boot
-// paints from the SMALL products (catalogue + surveys, plus the four small optionals). See docs: portal
-// internals, state.js.
+// ---- two-phase boot: background hydration gates ------------------------------------------------
+// The boot paints from the SMALL products (catalogue + surveys, plus the four small optionals). See
+// docs: portal internals, state.js.
 let TF_READY=Promise.resolve(),SCI_READY=Promise.resolve(),MANIFEST_READY=Promise.resolve();
 // ts_access.json rides phase 2 as well. The chooser it feeds is a facet most visitors
 // never open, so a phase-1 fetch would add a blocking boot request for it; the Availability controls
@@ -64,9 +64,9 @@ const TS_LEVELS=[
 const AUSMT_SELF={au:"AusMT contributors",yr:"2026",ti:"AusMT: curated station metadata, quality and provenance for Australian magnetotelluric transfer functions",ve:(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.version)||"",pb:"AusMT"};
 const NCI_CITE={au:"AuScope; NCI Australia",yr:"",ti:"NCI-AuScope Magnetotelluric Collection — packed raw, Level 1 and Level 2 time series",ve:"",pb:"NCI Australia"};
 
-// ---- display grammar: one period, one range and one licence, printed one way ------------------ These
-// three are JS TWINS of the engine's reference implementations (engine/extract/_pages.py: _fmt_period,
-// _range, _cc_human/_fmt_licence). See docs: portal internals, state.js.
+// ---- display grammar: one period, one range and one licence, printed one way ------------------
+// These three are JS TWINS of the engine's reference implementations (engine/extract/_pages.py:
+// _fmt_period, _range, _cc_human/_fmt_licence). See docs: portal internals, state.js.
 
 // Round `v` to `d` decimals the way Python's format does. See docs: portal internals, state.js.
 function _fixedHalfEven(v,d){
@@ -92,9 +92,9 @@ function fmtPeriod(v){
 // HYPHEN-MINUS rather than an en dash or the word "to". Curator prose is not chrome and keeps its
 // own glyph freedoms.
 function fmtRange(lo,hi){return lo+" - "+hi;}
-// ---- collection member colours: the same ramp the static collection pages lay ------------------ A
-// collection is drawn twice, as the static page's scatter and as the SPA's collScatter. See docs: portal
-// internals, state.js.
+// ---- collection member colours: the same ramp the static collection pages lay ------------------
+// A collection is drawn twice, as the static page's scatter and as the SPA's collScatter. See docs:
+// portal internals, state.js.
 const COLL_PAL=["#2E8FA3","#EF7256","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
 // Python's colorsys.hls_to_rgb, mirrored constant for constant: the ramp's hex values have to come out
 // byte-identical to the engine's, so this cannot be an approximation of the same idea.

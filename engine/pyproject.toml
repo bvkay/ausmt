@@ -17,11 +17,12 @@ classifiers = [
 # mt_metadata 1.0.9 / mth5 0.6.8 are tested on Python 3.12 (the pinned lock); the conditioning is
 # sensitive to the transitive scientific stack, so >=3.12 is the supported floor.
 requires-python = ">=3.12"
-# mt_metadata/mth5 (the USGS community library) is the SOLE EDI/MTH5 parser (see the extractor
-# note at the top of extract/build_portal.py), so it is a core dependency, not an optional extra. numpy backs the importable ausmt_science.* science modules. PyYAML parses the
-# scientific survey.yaml / portal.config.yaml — it had arrived only transitively via mt_metadata, so it
-# is now declared explicitly (the stdlib _mini_yaml stays as a fallback). These floors match the tested
-# majors; the exact, reproducible pins live in environments/requirements-mtmetadata-lock.txt (CI installs that).
+# mt_metadata/mth5 (the USGS community library) is the SOLE EDI/MTH5 parser (see the extractor note
+# at the top of extract/build_portal.py), so it is a core dependency, not an optional extra. numpy
+# backs the importable ausmt_science.* science modules. PyYAML parses the scientific survey.yaml /
+# portal.config.yaml — it had arrived only transitively via mt_metadata, so it is now declared
+# explicitly (the stdlib _mini_yaml stays as a fallback). These floors match the tested majors; the
+# exact, reproducible pins live in environments/requirements-mtmetadata-lock.txt (CI installs that).
 # ruamel.yaml backs the curator metadata editor's round-trip survey.yaml merge, which runs in the
 # gw-runner, which IS this engine image; the gateway process never imports it.
 dependencies = ["numpy>=1.24", "mt_metadata>=1.0", "mth5>=0.6", "PyYAML>=6", "ruamel.yaml>=0.18"]

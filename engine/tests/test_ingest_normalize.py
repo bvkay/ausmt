@@ -179,7 +179,7 @@ def test_normalize_still_rejects_genuine_impedance_drift(tmp_path, monkeypatch):
         normalize(STANDARD, tmp_path, survey_id="vulcan")
 
 
-# --- Canonical EMTF-XML must not FABRICATE metadata; conditioning must be persisted. ----------
+# --- Canonical EMTF-XML must not FABRICATE metadata; conditioning must be persisted. --------------
 def _read_back(res):
     """Re-read the written canonical XML and return its TF (fresh read, not the in-memory object)."""
     rt = TF()

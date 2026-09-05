@@ -463,7 +463,7 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
 
     Each survey's own survey.yaml bytes are written and committed INDIVIDUALLY (`git add` scoped to that
     one path), so each commit's diff touches ONLY that survey's file (diff-minimality, pin 4). The
- TOCTOU hash pin holds PER survey: `expected_sha256` is what the curator saw in the preview; we
+    TOCTOU hash pin holds PER survey: `expected_sha256` is what the curator saw in the preview; we
     re-hash the bytes about to be written and refuse the WHOLE batch on any mismatch (a stale preview or
     a concurrent edit). Fail-closed at EVERY step: a failure anywhere (stale-hash refusal, a write
     error, a commit-hook rejection, a non-ff merge, a push rejection) rolls surveys-live back byte-for-

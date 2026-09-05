@@ -11,7 +11,7 @@
 #   - index.html      has an inline <script> (the Plausible-disabled no-op shim, lines ~12-18) AND
 #                      loads map tiles from basemaps.cartocdn.com (portal/src/map.js).
 #   - about.html       has NO inline script (only external config.js/corpus-stats.js) --
-# strict CSP. corpus-stats.js fetch()es the same-origin data tree (catalogue.json +
+#                      strict CSP. corpus-stats.js fetch()es the same-origin data tree (catalogue.json +
 #                      surveys.json) for the header's corpus totals, which default-src 'self' already
 #                      covers; it is an external file precisely BECAUSE script-src here has no
 #                      'unsafe-inline'.
@@ -64,7 +64,7 @@
 :8080 {
 	encode zstd gzip
 
-	# ---- Cache policy (load analysis) --------------------------------------------------
+	# ---- Cache policy (load analysis) -------------------------------------------------------------
 	# Without an explicit Cache-Control, browsers fall back to heuristic freshness and a reload can
 	# serve EVERYTHING (index.html included) from local cache with zero revalidation: after a
 	# rebuild swap a returning visitor keeps stale data, and stale portal code, for hours. Policy:
@@ -143,7 +143,7 @@
 	}
 
 
-	# ---- Access log (usage analytics enablement, masked at the edge) -----------------
+	# ---- Access log (usage analytics enablement, masked at the edge) -----------------------------
 	# Privacy-preserving HTTP access log: the CLIENT ADDRESS IS MASKED AT WRITE TIME (IPv4 -> /24,
 	# IPv6 -> /48) via Caddy's built-in ip_mask log filter, so a FULL IP never touches disk. This is
 	# the one honest change behind the portal's privacy promise (portal/index.html). The log
@@ -436,7 +436,7 @@
 		X-Frame-Options DENY
 	}
 
-	# ---- WALL 2: the box-side INDEPENDENT allowlist of the SAME public subset (invariant b) ------
+	# ---- WALL 2: the box-side INDEPENDENT allowlist of the SAME public subset (invariant b) ----------
 	# This listener carries its OWN allowlist of the public submission subset — it does not depend on the
 	# front door being correctly scoped. The four PUBLIC gateway routes (method-scoped, identical to wall
 	# 1 in deploy/frontdoor/Caddyfile) proxy to the gateway container; EVERY OTHER /gateway path (both
