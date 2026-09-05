@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent   # portal/
+MAIN = ROOT / "src" / "main.js"
 INDEX = ROOT / "index.html"
 ABOUT = ROOT / "about.html"
 
@@ -138,3 +139,29 @@ def test_nav_button_min_width_fits_collections_label_across_pages():
     ab = _rule(_style(ABOUT.read_text(encoding="utf-8")), "nav a")
     assert ab is not None, "about.html lost its `nav a{...}` rule"
     assert "min-width:112px" in ab, f"about nav link must mirror min-width:112px; got: {ab}"
+
+
+def test_the_rail_reads_on_one_line_at_desktop_width():
+    """The tree's survey names are 12.5px system type: 281px wide at the 95th percentile and 310px at
+    the longest, and a survey row spends about 140px on indent, checkbox and count. 450px fits every
+    name and the widest organisation header on one line; 363px stays where the map needs the room."""
+    css = INDEX.read_text(encoding="utf-8")
+    assert "aside.filters{width:363px}" in css, "the 761px to 1279px default stays 363px"
+    assert "@media (min-width:1280px){aside.filters{width:450px}}" in css, \
+        "at 1280px and up the rail defaults to 450px so the tree reads on one line"
+    assert css.index("aside.filters{width:363px}") < css.index("@media (min-width:1280px){aside.filters{width:450px}}"), \
+        "the desktop rule must follow the base rule so it wins the cascade"
+
+
+def test_the_dragged_rail_width_is_remembered():
+    """A reader who resizes the rail keeps that width on the next visit, beside the collapsed state;
+    with nothing stored the stylesheet's breakpoint default applies, so the fallback must not be a
+    literal."""
+    js = MAIN.read_text(encoding="utf-8")
+    assert 'const SB_WIDTH_KEY="ausmt_sidebar_width";' in js
+    assert "function rememberSidebarWidth()" in js and "if(dragging)rememberSidebarWidth();" in js, \
+        "the width is stored when a drag ends"
+    assert "const kept=storedSidebarWidth();if(kept!==null&&window.innerWidth>760)setSidebar(kept);" in js, \
+        "a stored width is applied on load, clamped through setSidebar, and ignored on the phone layout"
+    assert 'sidebar.style.width||"363"' not in js, "the resize fallback must read the stylesheet, not a literal"
+    assert "cssSidebarWidth()" in js
