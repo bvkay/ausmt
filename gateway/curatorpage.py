@@ -1286,7 +1286,7 @@ SURVEY_HUB_JS = r"""
 # THE PHASE FACT (mirrors gateway/phaseqc.py — the authoritative, pinned server-side spec; the
 # EXECUTABLE Node parity pin runs these very functions against phaseqc):
 #   tf.json t[4] = phs_yx_adj is stored with a +180 presentation shift (engine _edi_tf.norm_phase). The
-#   workbench SUBTRACTS 180 and re-wraps (FLOORED modulo — JS's truncated % diverges on negatives)
+#   workbench SUBTRACTS 180 and re-wraps (FLOORED modulo - JS's truncated % diverges on negatives)
 #   to recover TRUE φyx, plots it on a FULL ±180 axis with the quadrant Q3 (−180…−90) band shaded.
 #   φxy (t[3]) is stored true, plotted 0…90 with the quadrant Q1 band shaded. ENGINE-GATE ALIGNED (see
 #   _conventions.py Gate 2): a point draws RED only when outside its band by MORE than

@@ -231,7 +231,7 @@ def test_embargoed_survey_smeta_badges_honestly(tmp_path):
 # fields are nulled; the CATALOGUE row (locations/band/nper/sha256) stays public (discovery is universal),
 # and the processing-metadata sci fields (rr/sw/alg) stay (metadata, not data). The --products tree is a
 # DISTRIBUTION surface too (deploy/Makefile writes products/ INSIDE the served build dir), so the
-# products gate withholds its derived science for a non-served survey — asserted by the products leak-sweep below.
+# products gate withholds its derived science for a non-served survey - asserted by the products leak-sweep below.
 
 def _tf_sci(out):
     """Load the emitted portal projections (tf.json, sci.json) from a build's out dir."""

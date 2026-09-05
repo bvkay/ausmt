@@ -628,7 +628,7 @@ class Gateway:
     def handle_analytics(self, request: Request) -> Response:
         """GET /gateway/curator/analytics: the usage-analytics screen. READ-ONLY:
         renders the host aggregator's stats.json (downloads/visits/countries + a daily series) read
-        SERVER-side (serve_state.read_stats — the ops-status.json seam; no new mount, no new
+        SERVER-side (serve_state.read_stats - the ops-status.json seam; no new mount, no new
         privilege). Fail-closed like the ops floor: a missing stats.json shows the honest empty state, a
         stale one (old generated_at, the serve_state staleness band — fail-closed both directions) shows
         a STALE banner; the page never 500s and never renders a stale file as live. ZERO JS (the daily
@@ -1772,7 +1772,7 @@ class Gateway:
         """Open the edit form for a published survey: the gateway enqueues a `read`
         edit-job on the jobs/edit/ queue, the gw-runner returns the editable subset as JSON, the
         gateway renders the seeded form. This handler is a sync `def` route, so the seam's bounded
-        blocking poll runs in Starlette's threadpool — never on the event loop.
+        blocking poll runs in Starlette's threadpool - never on the event loop.
         `field_errors` (a list of editor_form.SectionError) re-renders the per-section widget
         annotations after a failed preview; `submitted` (the raw form dict) re-prefills the widgets
         with the curator's typed values so a validation error never discards their work."""

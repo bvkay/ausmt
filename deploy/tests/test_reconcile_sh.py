@@ -18,7 +18,7 @@ Each test names its failure criterion in the docstring (Invariant 10). The cases
   lock-held    a concurrent run holds flock -> second run exits 0, status untouched  (needs flock)
 
 WINDOWS: there is no flock(1) here, so the lock-held case skipif's on its absence and is NOTED in the
-report; ALL other cases run on this machine — reconcile.sh runs bare
+report; ALL other cases run on this machine - reconcile.sh runs bare
 (without the lock) when flock is missing, which does not change any non-lock decision.
 """
 from __future__ import annotations

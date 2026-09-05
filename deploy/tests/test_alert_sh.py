@@ -275,7 +275,7 @@ def test_reconcile_action_failed_oom_kill_pings_fail_naming_the_kernel(tmp_path)
 def test_reconcile_action_untracked_blocked_pings_fail_naming_dir(tmp_path):
     """reconcile-status.json with action=untracked_blocked => a fail ping quoting the
     refusal AND naming the offending dir from log_tail, nonzero exit. This is the deploy-side loud
-    surface for the guard — the curator's dead-man monitor emails on it, like action=failed.
+    surface for the guard - the curator's dead-man monitor emails on it, like action=failed.
     FAILS IF: the refusal is treated as a healthy panel state (no fail ping), or the offending dir does
     not reach the alert body."""
     tree = _make_tree(tmp_path, reconcile_action="untracked_blocked")

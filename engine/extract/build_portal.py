@@ -5295,7 +5295,7 @@ def _main_build(argv=None):
     # (yaml_digest_current - the discovery-time single read) and, per served station, the digest
     # its served XML was KEYED/PRODUCED under (xml_digest_stamped). verify.py's --surveys consistency
     # gate compares BOTH against the LIVE survey.yaml, catching (a) a product served under a stale
-    # (pre-edit) digest and (b) a STRADDLED build whose yaml changed underneath it mid-build — the two
+    # (pre-edit) digest and (b) a STRADDLED build whose yaml changed underneath it mid-build - the two
     # faces of the poisoning this gate exists to catch. Cache-INDEPENDENT: built from the served products + the source
     # yaml, never from cache state.
     survey_digests_sidecar: dict = {}
