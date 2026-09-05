@@ -164,8 +164,8 @@ def test_normalisation_touches_only_the_info_block():
 def test_normalisation_is_a_noop_for_a_file_without_the_defect():
     """No trailing delimiters in >INFO => the bytes come back IDENTICAL. This is the property guard
     3 of the retry rests on (`if fixed == raw: raise`), so it is asserted as IDENTITY -- the earlier
-    idempotence form reduced to `raw == raw` on this fixture and stayed green even if
-    normalisation had started rewriting files that do not carry the defect."""
+    idempotence form reduces to `raw == raw` on this fixture and stays green even where
+    normalisation starts rewriting files that do not carry the defect."""
     m = _mtm()
     raw = NODECL.read_bytes()
     assert m.normalise_info_json_delimiters(raw) == raw, \

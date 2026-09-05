@@ -2218,7 +2218,7 @@ def _parse_one_edi(p):
     # LINEAGE: the program that WROTE the file and the program that PROCESSED the TF are two facts,
     # and `sw` is the second one. It must NOT fall back to the HEAD's PROGVERS, which would publish the
     # WRITER as the processor across most of the corpus ("Geotools 4.0.5.12583", "WINGLINK EDI
-    # 1.0.22", "MTpy") while the real processor sat unread in the >INFO free text. PROGVERS is now
+    # 1.0.22", "MTpy") while the real processor sits unread in the >INFO free text. PROGVERS is now
     # carried as file_written_by instead, and the processor is MINED from the note, with the
     # writer's identity passed in so a hit that merely echoes it is not mistaken for evidence.
     # The miner also returns the source LINE it matched; it is not carried into the product because
@@ -5327,7 +5327,7 @@ def _main_build(argv=None):
         # are cache-excluded anyway). The digest is CARRIED from discover_work, computed
         # there from the SAME bytes the survey meta was parsed from — never re-read here. A loop-time
         # re-read is exactly the incident window: an edit landing between discovery and
-        # this iteration keys PRE-edit products under the POST-edit digest, poisoning the
+        # this iteration would key PRE-edit products under the POST-edit digest, poisoning the
         # cache invisibly to the consistency gate (test_straddled_build_cannot_poison_the_cache pins it).
         # Snapshot the cumulative cache counters so this survey's PER-SURVEY delta can be
         # logged after its products are emitted (all of a survey's cache reads/writes happen within

@@ -90,7 +90,7 @@ class RunnerConfig:
         # both of these at 1, and fail_closed_startup SystemExits on a breach). The runner reads the
         # SAME two knobs, and an int() with no floor would let a zeroed AUSMT_JOB_TIMEOUT_S
         # (every job times out instantly -> everything quarantines) or AUSMT_MAX_UPLOAD_MB (a zero
-        # extraction byte-cap) through while the gateway rejected it - the runner crash-loops
+        # extraction byte-cap) through while the gateway rejects it - the runner crash-loops
         # honestly on a bad numeric knob instead.
         for _env_name, _value in (("AUSMT_JOB_TIMEOUT_S", job_timeout_s),
                                   ("AUSMT_MAX_UPLOAD_MB", max_upload_mb)):

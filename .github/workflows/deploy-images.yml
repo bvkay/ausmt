@@ -87,7 +87,7 @@ on:
   # itself). So the filtering has to move off the trigger and onto the
   # jobs. That is what the `changes` job below does. This was not theoretical: the trimmed trigger
   # meant deploy-images simply never started on most PRs, engine-full-tests never reported, and
-  # three consecutive release-gate failures can merge anyway when the gate that catches
+  # three consecutive release-gate failures merged anyway, because the gate that should have caught
   # them was not a gate at all.
   # The same leniency toward `skipped` is why ONE required check is not enough: see the
   # REQUIRE-THREE CONTRACT at the top of this file before changing anything here.

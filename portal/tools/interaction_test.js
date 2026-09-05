@@ -1080,8 +1080,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // The live Find dropdown is keyboard-operable. ArrowDown highlights the first
   // option as an active-descendant; Enter activates it on the SAME path as a click (opens the station);
-  // Esc clears the query. Non-vacuous: without that handler there is no keydown handler on #find, so no option ever
-  // got aria-selected, the input never carried aria-activedescendant, and Esc left the box untouched.
+  // Esc clears the query. Non-vacuous: with no keydown handler on #find, no option gets
+  // aria-selected, the input carries no aria-activedescendant, and Esc leaves the box untouched.
   find.value = "A1"; fire(find, "input");
   const kbFR = doc.getElementById("findResults");
   ok(kbFR.style.display === "block", "Find dropdown not open for the keyboard test");
@@ -3227,11 +3227,11 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   layoutSeg.querySelector('[data-layout="cards"]').click();
   ok(cardGridEl.className === "cardgrid" && cardGridEl.querySelectorAll(".scard").length === 4, "toggling back to Cards did not restore the card grid");
 
-  // FOUR ACROSS, AND THE GRID STOPS WHERE THE BAR STOPS. Two defects sit in one declaration.
-  // A 300px floor lets a wide screen pack in five and then six columns of cards too narrow to read; and
-  // an uncapped .cardgrid - .discovery and .collfeature-grid both cap at 1500px - runs the cards at
-  // 2560px a metre wider than the controls that filter them, so the bar does not read as belonging
-  // to the grid. A 352px floor under a 1500px cap yields exactly four columns at the cap
+  // FOUR ACROSS, AND THE GRID STOPS WHERE THE BAR STOPS. Two defects sat in one declaration.
+  // A 300px floor let a wide screen pack in five and then six columns of cards too narrow to read;
+  // and an uncapped .cardgrid - .discovery and .collfeature-grid both cap at 1500px - ran the cards
+  // at 2560px a metre wider than the controls that filter them, so the bar did not read as
+  // belonging to the grid. A 352px floor under a 1500px cap yields exactly four columns at the cap
   // (4*352 + 3*14 gap = 1450 <= 1500; a fifth would need 1816) and never more, at any width; the
   // floor sits low enough that a 1500px viewport (grid content 1460px after the view's 20px padding)
   // fits four as well, not just the capped ultrawide case. Four-across is the ceiling by rule: a

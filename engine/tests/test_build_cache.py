@@ -60,10 +60,10 @@ def clean_salt(monkeypatch):
     is dirty while it is edited; CI is clean). Patches the gate INPUT, not the gate: is_salt_degenerate
     still runs its real logic over engine_commit + this (clean) result.
 
-    ALSO pin the engine commit and clear the cache-relevant env vars. Re-resolving the commit
-    via a live `git rev-parse` inside every in-process build lets concurrent git
-    activity on the machine between a test's two builds
-    flip the salt and full-miss the 'warm' build, a nondeterministic counter failure that passes
+    ALSO pin the engine commit and clear the cache-relevant env vars. The commit must NOT be
+    re-resolved via a live `git rev-parse` inside every in-process build: concurrent git activity
+    on the machine between a test's two builds would then flip the salt and full-miss the 'warm'
+    build, a nondeterministic counter failure that passes
     on rerun. Pinned here so no cache test's counters can ever depend on ambient git or shell state;
     the salt tests below patch this NAME themselves when they need a moving commit."""
     monkeypatch.setattr(cache_mod, "_dirty_checkout", lambda cwd: False)

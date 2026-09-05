@@ -1160,7 +1160,7 @@ def test_the_survey_csv_blanks_the_country_cell_it_never_measured():
 
 def test_the_country_table_says_api_requests_joined_it_later(tmp_path):
     """GEO SCOPE SEAM PIN. The caption says the map counts downloads plus visits plus API requests,
-    and it does, NOW. The map is cumulative, and API requests are the newest counted class to carry
+    and it does, NOW. The map is cumulative, and API requests were for a time the one counted class with no
     geography at all, so on a box with days folded before that change the caption describes only the
     later part of its own map. The table must say so where it is true, and must not say it where it is
     not. FAILS IF the seam goes unstated, or if a box with no such history carries the note anyway."""
@@ -1220,7 +1220,7 @@ def _aged_out_seam_stats(**over) -> dict:
 
 
 def test_no_disclosure_points_at_a_note_that_is_not_on_the_page(tmp_path):
-    """DANGLING-CITATION PIN. Two disclosures tell the reader that "the note under the
+    """DANGLING-CITATION PIN. Two disclosures told the reader that "the note under the
     quarterly table names the months", but that note is built from the THREE months the quarterly
     table shows while the disclosures citing it fire off a scan of every retained month, which the
     aggregator never prunes. Once a second-seam month ages out of the three-month window the citation
@@ -1621,8 +1621,8 @@ def test_the_bulk_line_does_not_claim_the_export_produces_a_citation_pack(tmp_pa
 
 
 def test_the_screen_states_the_one_thing_the_portal_adds_to_the_log(tmp_path):
-    """DISCLOSURE PIN. The preamble says, truthfully, that nothing here is a beacon and nothing
-    new is collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
+    """DISCLOSURE PIN. The preamble states that nothing here is a beacon and nothing new is
+    collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
     the second half of that sentence is not true as written and must be restated rather than left
     standing. The restatement has to be specific: WHAT is added (a query flag), to WHAT (fetches that
     already happen), and what is NOT added (a request, an identity).

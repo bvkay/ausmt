@@ -26,7 +26,7 @@ RED-proven, per assertion, by mutating the pages: dropping `Sponsor` from the ro
 plausible-looking `level4` to the NCI levels, adding a phantom `legacy` access level, and pointing the
 About link at a versioned schema filename all fail here.
 
-RESOLVED: the schema's own description of `surveys[].access` must not claim AusMT emits
+RESOLVED: the schema's own description of `surveys[].access` once claimed AusMT emits
 "open, metadata_only, embargoed or legacy", and the same phantom fourth value survived in two older
 engine/portal comments. No such level has ever existed: ACCESS_LEVELS in the emitter (and in
 gateway/editor_form.py, and in the surveys validator) is the three-value tuple this module reads. All

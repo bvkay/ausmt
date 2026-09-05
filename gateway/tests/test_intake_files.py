@@ -107,7 +107,7 @@ def test_intake_and_build_state_identical_attribution(tmp_path):
     # Parity: the intake LICENSE.md and the build_portal bundle LICENSE.txt must state the SAME rights
     # for the same survey. Both call sites derive their (attribution, sources, changes) through the shared
     # _license_text.instrument_params_from_survey helper, so a survey carrying an attribution+sources block
-    # renders IDENTICAL instrument text on both paths. FAILS IF intake drops a param (the defect:
+    # renders IDENTICAL instrument text on both paths. FAILS IF intake drops a param (the pre-fix defect:
     # _license_md_body never passed attribution) — the source paragraph / supersession / changes clause
     # would then be missing from the intake rendering while the build reference carries them.
     import _license_text as lt  # noqa: PLC0415

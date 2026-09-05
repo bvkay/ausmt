@@ -59,9 +59,9 @@
   .usage{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--copper);
     border-radius:8px;padding:.9rem 1.1rem;margin:1.2rem 0 0;max-width:66ch}
 
-  /* min(360px,100%) rather than a bare 360px: a grid track's MINIMUM cannot shrink, so on a 375px phone
-     the 360px track plus main's 20px gutters resolves wider than the viewport and the page scrolls
-     sideways. */
+  /* min(360px,100%) rather than a bare 360px: a grid track's MINIMUM cannot shrink, so on a 375px
+     phone a bare 360px track plus main's 20px gutters would resolve 5px wider than the viewport and
+     scroll the page sideways. */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:1rem;margin:.9rem 0 0}
   .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .panel{margin:0;padding:22px 20px;display:flex;align-items:center;justify-content:center;min-height:130px}

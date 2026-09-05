@@ -1757,7 +1757,7 @@ def test_main_writes_the_archive_beside_stats_json_outside_the_served_tree(tmp_p
 def test_an_unwritable_archive_warns_and_still_lets_stats_json_land(tmp_path, monkeypatch, capsys):
     """ARCHIVE NEVER-RAISE PIN. The archive is a bonus record, not the fold. An archive path that
     cannot be written (a directory in its place, a read-only mount) must produce a loud note and leave
-    stats.json exactly as it stands. FAILS IF the run raises, returns non-zero, or costs the
+    stats.json exactly as the run found it. FAILS IF the run raises, returns non-zero, or costs the
     stats write."""
     data = tmp_path / "data"
     logdir = data / "logs" / "caddy"
@@ -2329,7 +2329,7 @@ def test_hand_off_bytes_and_destination_come_from_the_register_never_the_log():
 
 def test_an_unresolvable_hand_off_route_is_its_own_skew_bucket_and_never_dropped():
     """DRIFT PIN. The route table lives on the front door and the data on the box, so a 302 CAN
-    arrive for a route the served index does not publish. That is drift, and drift must be
+    arrive for a route the served index has stopped publishing. That is drift, and drift must be
     visible: the request counts, its bytes do not (nothing measured them), and it lands in the
     hand-off family's OWN unattributed bucket.
 

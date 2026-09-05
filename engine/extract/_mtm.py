@@ -269,7 +269,7 @@ def strip_impedance_blocks(raw: bytes) -> bytes:
 
     Operates on BYTES and never re-encodes. A block ends where mt_metadata's own section scan ends
     it -- at the next line whose stripped form starts with `>` -- so the region removed is exactly
-    the region the reader reads. Section banners (`>!****IMPEDANCES****!`) start with `>`
+    the region the reader would read. Section banners (`>!****IMPEDANCES****!`) start with `>`
     and are kept: they label nothing once the blocks are gone, but leaving them keeps the change set
     to the blocks themselves. Returns the ORIGINAL object when there is nothing to remove, which is
     what lets the caller refuse to retry a file that does not actually carry the shape."""

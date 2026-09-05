@@ -1756,8 +1756,7 @@ class Gateway:
         The hub's one metadata form posts a hidden HUB_FORM_FIELD marker; when it is present the
         curator goes back to the hub Metadata tab with the errors beside their owning sections and
         every typed value re-prefilled, instead of being bounced to the standalone full form (which
-        loses their place, which is harmless when a save is one section and actively bad when a save
-        spans ten). Without the marker (the standalone full form) the legacy re-render is
+        loses their place: harmless when a save is one section, actively bad when a save spans ten). Without the marker (the standalone full form) the legacy re-render is
         unchanged. The marker carries NO authority: it is not a token, gates nothing, and the CSRF +
         session checks have already run — it only selects a renderer."""
         if form.get(curatorpage.HUB_FORM_FIELD):

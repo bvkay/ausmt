@@ -779,7 +779,7 @@ def test_probe_e_stem_keyed_override_fails_loudly_not_silently_misapplied(tmp_pa
     the pre-emission point (survey dropped, the survey's REAL station ids listed so the custodian
     learns the correct handles), rc=0, and the healthy co-survey must serve.
 
-    RED against a build whose validation does not run: rc=0 with the sensitive station's TRUE coordinates
+    RED before the fix: rc=0 with the sensitive station's TRUE coordinates
     served on every surface (the sweep below found them) and the unrelated station silently masked.
     """
     base = tmp_path / "surveys"
@@ -863,7 +863,7 @@ def test_variant_pair_base_override_masks_all_variants(tmp_path):
     """VARIANT PIN: two processings of ONE physical station (same DATAID, deduped to
     SITE1.lemigraph / SITE1.ohmega by the engine's variant tagging). Privacy of the physical site
     covers ALL its variants: an override on the BASE id must mask BOTH records and byte-gate BOTH
-    files. RED against a build that lets the base key pass validation and then match NO record at
+    files. RED before the fix: the base key passed validation and then matched NO record at
     application (r['id'] carries the variant suffix), and the corpus backstop aborted the whole
     build (rc=1)."""
     vara = {"id": "SITE1", "file": "SITE1_LemiGraph.edi", "lat": -34.501234, "lon": 138.401234,
@@ -925,8 +925,8 @@ def test_mth5_input_survey_bad_override_dropped_before_bytes(tmp_path):
     """MTH5-INPUT PIN: override validation for an mth5-input survey runs at the point
     its station ids become known (after the h5 opens) and BEFORE any of that survey's bytes/products
     are emitted — a bad override drops that survey alone, loudly, rc=0, the co-survey serves.
-    RED against a build where mth5-input surveys skip discovery validation entirely and the
-    corpus backstop aborts the WHOLE build (rc=1). The mth5 fixture is ENGINE-PRODUCED: a first
+    RED before the fix: mth5-input surveys skipped discovery validation entirely and the corpus
+    backstop aborted the WHOLE build (rc=1). The mth5 fixture is ENGINE-PRODUCED: a first
     real build's --survey-h5 bundle is re-staged as an mth5-input package."""
     # build 1: produce a real TF MTH5 through the real pipeline
     out1, r1 = _build(tmp_path / "seed", [{**EXACT}], extra=("--survey-h5",), declare_policy=False)

@@ -1575,9 +1575,9 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_lead_orcid","leadOrcidOk");
 
-  // ----- DOI normalisation on blur. A contributor who pastes a full resolver URL
-  // (https://doi.org/10.x/y, dx.doi.org, http variants) into a DOI slot trips the live validator's
-  // "publication DOI looks malformed" warning. See docs: portal internals, add-survey.html.
+  // ----- DOI normalisation on blur. A pasted resolver URL (https://doi.org/10.x/y, dx.doi.org,
+  // http variants) would otherwise trip the live validator's malformed-DOI warning, so wireDoiBlur
+  // folds the field to the bare DOI on blur. See docs: portal internals, add-survey.html.
   function wireDoiBlur(input){ if(!input) return;
     input.addEventListener("blur",()=>{ const n=normalizeDoi(input.value); if(n!==input.value) input.value=n; }); }
   function wireConditionalDoiBlur(input, typeSelect){ if(!input) return;

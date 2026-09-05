@@ -892,7 +892,7 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
     comment above _channel_cells says it does not do. Latent on today's corpus only because
     _runfacts.unit_value returns None for empty source text and _Doc.channel drops a None, so the
     key is absent rather than default-filled; a document that carried the defaults through
-    renders the column, which is the failure this pin names.
+    would render the column, which is the failure this pin names.
 
     FAILS IF either unit_value half is dropped, if a defaults-only document grows sections, or if a
     channel column appears for a key whose every value renders empty."""

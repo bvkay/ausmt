@@ -675,7 +675,7 @@ def test_revoked_key_note_post_refused(tmp_path):
     id is refused 4xx and the stored note is UNCHANGED — the UI hiding the editor is not the
     enforcement; the route + the DB `AND revoked_utc IS NULL` guard are. FAILS IF the route accepts a
     note update on a revoked id (the shipped pre-fix behaviour, 'by-design' docstring overruled), or
-    the DB layer alone persists it."""
+    the DB layer alone would persist it."""
     async def _body():
         from gateway import uploader_keys as uploader_keys_mod
         async with app_client(tmp_path, git_runner=FakeGit()) as (client, _app, gw, cfg):

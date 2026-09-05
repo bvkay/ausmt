@@ -209,7 +209,7 @@ def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
 
 def test_a_withheld_record_gains_no_diagnostics_and_no_sidecar(built_access):
     """The asymmetry the fold could have collapsed: a withheld station has no dimensionality.json, and
-    folding the call in gives it one under another name, which is the collapse this pin refuses."""
+    folding the call in would give it one under another name, which is the collapse this pin refuses."""
     _, withheld = _split(built_access)
     for key, doc in withheld.items():
         assert "diagnostics" not in doc, f"{key}: the interpretation product must stay out of a stub"

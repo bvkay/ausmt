@@ -85,7 +85,7 @@ def test_parity_comment_after_quoted_scalar():
 
 def test_parity_quoted_mapping_keys():
     """Station-id override: a QUOTED mapping key must parse like PyYAML parses it.
-    Filenames with spaces/parentheses are only expressible quoted, and the fallback must not drop
+    Filenames with spaces/parentheses are only expressible quoted, and the fallback once dropped
     such keys entirely. The same alternation must NOT turn a quoted list-item SCALAR that contains a
     colon into a one-key map, so both shapes are pinned here against PyYAML."""
     import yaml

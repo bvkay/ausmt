@@ -586,7 +586,7 @@ def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_e
     # gate is pinned separately). A slow git-push shim makes the first-acquiring retire HOLD the lock
     # while the second queues, guaranteeing the interleave. Assert: exactly one 200 + one 409, the
     # surviving survey remains, and the corpus NEVER empties.
-    # HISTORICAL RED (HEAD, no inside-lock guard): BOTH retires succeed (statuses [200, 200])
+    # HISTORICAL RED (the pre-fix HEAD, no inside-lock guard): BOTH retires succeed (statuses [200, 200])
     # and list_published_slugs() == 0 (corpus emptied) - captured verbatim in the report.
     import time as _time
 

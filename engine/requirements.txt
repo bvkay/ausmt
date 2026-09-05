@@ -19,6 +19,6 @@
 numpy>=1.24
 mt_metadata>=1.0
 mth5>=0.6
-PyYAML>=6   # survey.yaml / portal.config.yaml parsing; a DIRECT dependency, never a transitive one. The stdlib _mini_yaml stays as a fallback.
+PyYAML>=6   # survey.yaml / portal.config.yaml parsing; declared directly rather than left to arrive via mt_metadata. The stdlib _mini_yaml stays as a fallback.
 ruamel.yaml>=0.18   # The curator metadata editor round-trips survey.yaml edits (comments + unknown keys preserved byte-for-byte). Runs in the gw-runner (this engine image) ONLY - NEVER the gateway, which never parses survey content.
 pillow>=10.1   # per-survey link-preview cards (pages/og/*.png). SOFT dependency: extract/_pages gates on importability and falls back to the root card, so a pillow-less environment still builds every page.

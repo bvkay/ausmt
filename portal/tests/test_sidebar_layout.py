@@ -5,7 +5,8 @@ STYLE + DOM-order assertions parsed from index.html. Each states its failure cri
 non-vacuous against a source that carries the exact thing it forbids:
 
   * tree flex-fill/scroll: the base .tree rule must flex-grow and scroll internally, with NO fixed
-    height and NO resize handle. In the old CSS it is `height:300px;max-height:60vh;resize:vertical` with no
+    height and NO resize handle. In the old CSS it was `height:300px;max-height:60vh;resize:vertical`
+    with no
     `flex:` — so this rule FAILS on the old CSS.
   * Flex chain: #browseMode and #treeSection must carry `min-height:0` (so the tree can shrink below
     its content and scroll instead of pushing the rail into an outer scrollbar). In the old CSS neither selector

@@ -427,7 +427,7 @@ def _emulate_real_validator(cmd, report: dict) -> None:
     than re-encoded by hand here — the observed cmd must be exactly what the shared helper would build
     for the same (validator_file, folder, report_file). So a change to the canonical argv moves the
     helper AND this expectation together, and a call site that DRIFTED from the helper reds this
-    assertion (it does not match the helper's output)."""
+    assertion (it would not match the helper's output)."""
     assert cmd[1].endswith("validate_survey.py"), f"unexpected validator argv: {cmd}"
     folder = Path(cmd[2])
     assert folder.is_dir(), f"folder positional missing or not a dir: {cmd}"
@@ -804,7 +804,7 @@ def test_done_file_atomic_no_partial(tmp_path):
 def test_atomic_write_json_serialises_dates(tmp_path):
     """Regression pin (RED pre-fix: `TypeError: Object of type date is not JSON serializable`). A
     survey.yaml with an unquoted ISO date (`embargo_until: 2027-02-01`) loads that field as a
-    datetime.date, which flows into an edit-job RESULT dict; a plain json.dump crashes the
+    datetime.date, which flows into an edit-job RESULT dict; a plain json.dump would crash the
     done-file write, crash-looping the runner and blocking every metadata read. The encoder ISO-formats
     date/datetime (nested too — the real embargo lives under result['fields']['access']) and the result
     round-trips as ISO strings."""

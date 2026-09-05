@@ -235,8 +235,8 @@ def _range(lo, hi) -> str:
 #
 # Derived rather than listed because a hand-kept map covering only the ids today's corpus declares
 # goes wrong silently: the instrument recognises fourteen CC ids, so the first third-party release
-# under a 3.0, -AU, NC or ND id prints "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on
-# the next, which is the inconsistency this rule exists to remove. The grammar is the deed's own:
+# under a 3.0, -AU, NC or ND id would print "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on the
+# next, which is the inconsistency this rule exists to remove. The grammar is the deed's own:
 # the prefix, the clause letters (which keep their internal hyphens: BY-NC-SA), the version, and a
 # jurisdiction port where one exists.
 #
@@ -1751,7 +1751,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     `member_facts` ({slug: row}), `level_counts` ({level: n stations}) and `formats` are rollups the
     emitter computes from the SAME served documents the member survey pages render from. All three
     are optional: a caller that supplies none gets the hero, the map and the member list, and the
-    sections those rollups fill are simply not written.
+    sections those rollups would fill are simply not written.
 
     `og_image` is the absolute URL of the card the emitter has already written for this collection,
     or None for the portal's root card. A collection whose members disclose no position gets no card

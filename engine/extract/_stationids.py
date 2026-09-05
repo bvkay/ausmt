@@ -102,7 +102,7 @@ _SAFE_ID = re.compile(r"\A[A-Za-z0-9._-]+\Z")
 # ...INTERSECTED with a length bound. safe_component has none, so a declared id of 300 legal
 # characters would pass validation and then reach the filesystem as this station's product
 # DIRECTORY name: ENAMETOOLONG, raised out of the per-survey emission, and the WHOLE corpus build
-# died with no catalogue.json written at all. A bound here turns that into an ordinary
+# would die with no catalogue.json written at all. A bound here turns that into an ordinary
 # survey-granularity StationIdError like every other charset violation. 96 is far beyond any real
 # station identifier (the RD18 scheme peaks at 13) and leaves ample room inside the
 # 255-byte filesystem component limit for the product suffixes appended to it.

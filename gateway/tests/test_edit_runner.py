@@ -144,7 +144,7 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 
 # --------------------------------------------------------------------------------------------------
 # Stage-1 diff-minimality pins. The editor submits WHOLE sections as plain
-# JSON dicts; the apply_patch replaced the section's CommentedMap wholesale, so editing ONE
+# JSON dicts; the pre-fix apply_patch replaced the section's CommentedMap wholesale, so editing ONE
 # sub-field re-emitted every sibling line and dropped intra-section comments. These pin the surgical
 # in-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter (a
 # single organisation.ror edit rewrote organisation.name and lost its trailing comment); see the
@@ -233,7 +233,7 @@ def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
     with no +/- diff line.
 
     The PREVIOUS form of this test submitted only a scalar change and asserted section B
-    was untouched - but the wholesale emitter ALSO never touched a sibling SECTION (it
+    was untouched - but the pre-fix wholesale emitter ALSO never touched a sibling SECTION (it
     rebuilt only the edited section's node), so that assertion passed against every implementation
     that ever existed and could not fail (Invariant 10). The add+delete here goes through the exact
     deletion loop whose failability was PROVEN by mutation (evidence in the fix-round report):
@@ -442,8 +442,8 @@ def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
     # Proven failing (pre-fix HEAD 4f4e999..a31fc8e): patched region "on" emitted as bare
     # `region: on` -> PyYAML safe_load read True (bool); name "no" -> False; abstract "12:34:56" ->
     # 45296 (YAML-1.1 sexagesimal int). ruamel's own re-read kept them strings, so the diff, the
-    # sha pin, and the confirm re-run all agree and NO guard fires, so the portal
-    # served a bool/int the curator never wrote. FAILS IF quote_ambiguous stops quoting the
+    # sha pin, and the confirm re-run all agree and NO guard fires, so the portal would serve
+    # a bool/int the curator never wrote. FAILS IF quote_ambiguous stops quoting the
     # YAML-1.1-retypeable tokens.
     import base64
 

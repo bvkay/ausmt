@@ -573,7 +573,7 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
     NOT gain the 'mixed declared frames' note. The rule: each station is served in its OWN
     declared frame (nothing de-rotated); the survey merely reports that it mixes frames — the note
     reaches build_report's frame array AND every member's station.json frame block (for the portal).
-    A policy that de-rotated the whole survey to zero would fail this."""
+    Historical red: v2 de-rotated the whole survey to zero."""
     t8, t20 = _vulcan_rotated(8.0), _vulcan_rotated(20.0)
     # PRECONDITION: standalone the 8-deg file already records its own frame (as-stored)
     solo = _parse(tmp_path, "solo8.edi", t8)

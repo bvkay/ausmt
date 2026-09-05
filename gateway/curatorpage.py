@@ -767,8 +767,8 @@ CONTEXT_BAR_JS = """
 #      terse diagnosis with the full gate text in a title attr; same-class prefix runs >=3 CLUSTERED
 #      onto one row), the refused-package note ONCE, and the conditioning summary table.
 #   3. METADATA tab — highlight the sticky TOC entry whose section is in view (#hub-toc /
-#      .hub-section). HUB-SINGLE-SAVE: it must NOT show one section and hide the rest, which is what
-#      forces a separate save per section; the TOC is plain scroll navigation over the one metadata
+#      .hub-section). HUB-SINGLE-SAVE: showing one section and hiding the rest is what forced a
+#      separate save per section; the TOC is now plain scroll navigation over the one metadata
 #      form. Without this script the anchors are ordinary in-page links and every
 #      section is stacked and fully functional (graceful — nothing here gates editing or saving).
 #
@@ -2643,8 +2643,8 @@ def render_serve_panel(*, published_head, published_available: bool, status: dic
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
     # The button posts to the zero-argument rebuild route. The accidental-click confirm rides the
     # shared data-confirm delegation in CURATOR_UI_JS — never an inline handler: the Caddyfile's
-    # strictPages CSP (script-src 'self') blocks inline handlers, so one here silently never runs
-    # and the form submits with no confirm. The server is idempotent regardless, so a blocked
+    # so one here silently never runs (the first-install symptom: the form submitted with no
+    # confirm). The server is idempotent regardless, so a blocked
     # confirm was never a safety hole, only a missing courtesy.
     button = (
         f'<form class="act" method="post" action="/gateway/curator/rebuild" '
@@ -4426,7 +4426,7 @@ def analytics_country_csv(stats) -> str:
     the only column that always carries a value: it is what the AU state figures reconcile against.
     The four detail columns are forward-only and younger, so a (month, country) folded before they
     existed exports FOUR EMPTY CELLS rather than four zeroes -- this file is what a report is built
-    from, and a fabricated zero here outlives the screen that says "not measured".
+    from, and a fabricated zero here outlives the screen that would say "not measured".
 
     `geo_days` is the coverage marker the monthly export already carries, repeated on every row
     because it is the number that makes the rest of the row readable: per-month country counts are
