@@ -1,4 +1,4 @@
-"""Drawer-polish lane (owner screenshot evidence, 2026-08-19): the survey data-level grid's links.
+"""Drawer-polish workflow: the survey data-level grid's links.
 
 The grid shipped with THREE anchor sites that no CSS rule ever coloured - the tile identifier links
 (.dl-id), the "Levels per Rees et al. 2019" citation link (.dl-cite) and the instruments platform-PID link
@@ -8,9 +8,9 @@ the same defect the `.meta td a` rule already fixed for the summary tables, and 
 
 WHAT EACH LAYER PROVES (the three are deliberately different failure modes, not three spellings of one):
 
-  * here, test_data_level_link_rules_reuse_the_established_treatment - the SHEET declares the treatment for
+  * here, test_data_level_link_rules_reuse_the_established_treatment - the SHEET declares the styling for
     all three containers, at the value the portal's established link rules already use (read out of the
-    sheet, never hard-coded here: the lane's instruction was reuse, not a new colour), with :visited stated
+    sheet, never hard-coded here: the module's instruction was reuse, not a new colour), with :visited stated
     explicitly. FAILS IF a rule is missing, if someone invents a second accent, or if :visited is left to
     the browser. Needs no Node - it reads index.html.
   * here, test_unrecorded_tile_state_text_stays_muted_not_link_coloured - the negative: an absent level's
@@ -21,7 +21,7 @@ WHAT EACH LAYER PROVES (the three are deliberately different failure modes, not 
     the rules' reach; a string pin here could not.
 
 Neither layer proves the RENDERED colour (jsdom resolves no custom properties and computes no cascade
-beyond selector matching) - that remains a browser-eye check, and the owner's screenshot is the report.
+beyond selector matching) - that remains a browser-eye check, and the screenshot is the report.
 """
 import re
 import shutil
@@ -90,22 +90,22 @@ def _colour_for(rules, selector):
 def test_data_level_link_rules_reuse_the_established_treatment():
     """Each of the grid's three link containers gets a descendant-anchor colour AND an explicit :visited
     colour, both equal to the value the portal's established link rules already carry. FAILS (RED before
-    this lane) IF any container has no colour rule - which is exactly how the DOI, citation and
+    this module) IF any container has no colour rule - which is exactly how the DOI, citation and
     platform-PID links shipped in the UA default - or IF a new accent is invented instead of reused."""
     rules = _rules(_stylesheet())
-    # The established treatment, READ OUT OF THE SHEET: the organisation ROR link in the drawer subline and
+    # The established styling, READ OUT OF THE SHEET: the organisation ROR link in the drawer subline and
     # the publication DOIs inside .surveymeta. If those two ever disagree, this pin says so before comparing.
     org = _colour_for(rules, ".dsub a.orglink")
     pubs = _colour_for(rules, ".surveymeta a")
     assert org and pubs, "the established link rules (.dsub a.orglink / .surveymeta a) are gone from index.html"
-    assert org == pubs, f"the two established link treatments disagree: {org!r} vs {pubs!r}"
+    assert org == pubs, f"the two link colours disagree: {org!r} vs {pubs!r}"
     for cls, what in LINK_CONTAINERS.items():
         got = _colour_for(rules, f"{cls} a")
         assert got, f"{what}: index.html declares no colour for '{cls} a' - the UA default ships"
-        assert got == org, f"{what}: '{cls} a' uses {got!r}, not the established treatment {org!r}"
+        assert got == org, f"{what}: '{cls} a' uses {got!r}, not the shared colour {org!r}"
         vis = _colour_for(rules, f"{cls} a:visited")
         assert vis, f"{what}: no ':visited' colour for '{cls} a' - a followed link may go browser-purple"
-        assert vis == org, f"{what}: '{cls} a:visited' uses {vis!r}, not the established treatment {org!r}"
+        assert vis == org, f"{what}: '{cls} a:visited' uses {vis!r}, not the shared colour {org!r}"
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")

@@ -1,6 +1,6 @@
 """The verified-resource register the build reads offline, and the flag that makes it read one.
 
-R1 puts the register in the survey packages: one row per (survey, product level, station), carrying
+The register lives in the survey packages: one row per (survey, product level, station), carrying
 the NCI `urlPath` verbatim, because that string cannot be rebuilt from a station id. Rule 14 keeps
 the READING offline: the crawler is an out-of-band tool, `--ts-index` names a ROOT of registers the
 build consumes as files, and the build itself never reaches the network, so cache.py's
@@ -54,7 +54,7 @@ def _load(tmp_path, rows_by_station, known=("EXAMPLE01", "EXAMPLE02")):
 
 
 def _build(surveys, out, *extra):
-    """--no-validate keeps this lane off the surveys validator: what is under test is the REGISTER
+    """--no-validate keeps this module off the surveys validator: what is under test is the REGISTER
     reader, and the package gate has its own suite."""
     return subprocess.run(
         [sys.executable, "-m", "extract.build_portal", "--surveys", str(surveys), "--out", str(out),
@@ -71,7 +71,7 @@ def _docs(out):
 
 @pytest.fixture(scope="module")
 def flagless(tmp_path_factory):
-    """FAILS against the pre-A1 build_portal only in its flagged sibling below; this arm is the
+    """FAILS against the earlier build_portal only in its flagged sibling below; this arm is the
     control it is measured against."""
     pytest.importorskip("mt_metadata")
     out = tmp_path_factory.mktemp("ts-index-flagless") / "data"
@@ -81,7 +81,7 @@ def flagless(tmp_path_factory):
 
 
 def test_the_flag_is_accepted_and_the_register_root_is_read_as_files(tmp_path):
-    """FAILS against the pre-A1 build_portal, which does not know --ts-index (argparse exits 2).
+    """FAILS against the earlier build_portal, which does not know --ts-index (argparse exits 2).
 
     Rule 14 in one assertion: the committed register names an archive host, the build completes, and
     nothing resolved anything - the register is an input file like survey.yaml."""
@@ -93,7 +93,7 @@ def test_the_flag_is_accepted_and_the_register_root_is_read_as_files(tmp_path):
 
 def test_a_flagless_build_carries_nothing_the_register_could_have_put_there(flagless):
     """The opt-in pin, over BUILT output: no register-derived row, and no remote route anywhere in
-    the served product tree. This holds for the whole lane, not only for the commit that adds it."""
+    the served product tree. This holds for the whole workflow, not only for the commit that adds it."""
     docs = _docs(flagless)
     assert docs, "non-vacuity: the flagless build wrote station documents"
     for key, doc in docs.items():
@@ -132,7 +132,7 @@ def test_a_well_formed_register_loads_with_its_unknown_row_keys_intact(tmp_path)
 ])
 def test_a_row_outside_the_closed_vocabulary_stops_the_load(tmp_path, field, value, expect):
     """The three vocabularies are the surveys validator's, restated in the engine because the build
-    must not depend on a sibling checkout. FAILS against the pre-A1 engine, which had no reader."""
+    must not depend on a sibling checkout. FAILS against the earlier engine, which had no reader."""
     with pytest.raises(tsindex.TsIndexError) as e:
         _load(tmp_path, {"EXAMPLE01": [{**GOOD, field: value}]})
     assert expect in str(e.value), str(e.value)
@@ -150,8 +150,8 @@ def test_a_malformed_match_method_is_a_curator_warning_and_not_a_build_stop(tmp_
 
     match_method is PROVENANCE and gates nothing: a row stands or falls on its `review` state, and a
     malformed method costs it only its place in the adjudication queue. The validator says WARNING
-    and the ratified FAIL list (S1) does not name the field, so an engine that raised here was
-    STRICTER THAN RATIFIED - a register that passed surveys CI green hard-stopped the ausmt build
+    and the FAIL list does not name the field, so an engine that raised here was STRICTER THAN THE
+    VALIDATOR: a register that passed surveys CI green hard-stopped the ausmt build
     (build_portal returns 2 on TsIndexError), which surfaces as a mystery red on a curator's PR.
     The value is carried through verbatim so nothing downstream loses the provenance it does have."""
     loaded = _load(tmp_path, {"EXAMPLE01": [{**GOOD, "match_method": method}]})
@@ -161,7 +161,7 @@ def test_a_malformed_match_method_is_a_curator_warning_and_not_a_build_stop(tmp_
 
 
 def test_a_retired_row_without_its_dated_reason_stops_the_load(tmp_path):
-    """D17: retirement is a dated curator act, not a deletion, and the row stays as evidence
+    """Retirement is a dated curator act, not a deletion, and the row stays as evidence
     recording when and why it was withdrawn."""
     with pytest.raises(tsindex.TsIndexError) as e:
         _load(tmp_path, {"EXAMPLE01": [{**GOOD, "review": "retired"}]})
@@ -191,7 +191,7 @@ def test_an_unknown_top_level_key_stops_the_load(tmp_path):
 
 
 def test_a_station_the_survey_does_not_publish_stops_the_load(tmp_path):
-    """The loud failure the lane contract names: the register states which remote file belongs to
+    """The loud failure the contract names: the register states which remote file belongs to
     which station, so a row nothing in the corpus matches would publish a route under an identifier
     this build never assigned."""
     with pytest.raises(tsindex.TsIndexError) as e:
@@ -211,7 +211,7 @@ def test_a_station_the_survey_does_not_publish_stops_the_BUILD(tmp_path):
 
 
 def test_the_vocabularies_are_the_ratified_tokens():
-    """D8's five level tokens, S1's three review states, R10's two match methods plus rule:<name>.
+    """The five level tokens, the three review states, and the two match methods plus rule:<name>.
     Restated in the engine, so pin the CONTENT: a silent widening here would let the build project a
     token the surveys validator refuses, and the register is the only record either reads. The two
     copies are reconciled when the vendored validator is resynced (deploy plan, section 7); until

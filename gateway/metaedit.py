@@ -1,15 +1,15 @@
-"""C31 curator metadata-editor orchestration (gateway side). The gateway NEVER parses survey content
-(C31 §0.1 / the C10 house rule, pinned by the §3.8 source-assertion test AND the subprocess
+"""Curator metadata-editor orchestration (gateway side). The gateway NEVER parses survey content
+(the house rule, pinned by the source-assertion test AND the subprocess
 import-hygiene test): every yaml load/merge/emit/diff/validate happens in the gw-runner — the ENGINE
-image, which is where ruamel lives — reached through the C10 file-queue pattern in its own
+image, which is where ruamel lives - reached through the file-queue pattern in its own
 jobs/edit/ namespace. This module only writes job JSON, polls for the result JSON, and reads it
 back; job files carry a SLUG and form values, never a filesystem path (the two containers mount
 surveys-live at different paths) and never PII.
 
-Adversarial-review FIX 1 (ship-blocker, 2026-07-06): the first implementation spawned
-`sys.executable -m gateway.runner.edit` as a CHILD OF THE GATEWAY CONTAINER — whose image
-deliberately has no ruamel — so every real curator edit would have 500'd in deployment (tests passed
-only via an in-process seam). The queue below is the adjudicated replacement: the gateway enqueues,
+The gateway must NOT spawn
+`sys.executable -m gateway.runner.edit` as a CHILD OF THE GATEWAY CONTAINER: that image
+deliberately has no ruamel, so every real curator edit 500s in deployment while an in-process test
+seam still passes. The queue below is what runs instead: the gateway enqueues,
 the gw-runner service (engine image, already polling /gw/jobs) processes, the gateway polls the
 result with a bounded timeout. The polling is BLOCKING by design and must never run on the event
 loop: the sync form route runs in Starlette's threadpool, and the async preview/confirm handlers
@@ -105,7 +105,7 @@ def default_edit_runner(job: dict, jobs_dir: Path, *, timeout_s: float = 120.0,
 
 def list_published_slugs(surveys_live: Path | None) -> list[str]:
     """The PUBLISHED surveys editable in v1: the immediate child directories of surveys-live/surveys/
-    that contain a survey.yaml (C31 §1.1 — a DIRECTORY LISTING, not content parsing; the survey.yaml
+    that contain a survey.yaml (a DIRECTORY LISTING, not content parsing; the survey.yaml
     presence check is a stat, not a load). Sorted so the order is deterministic across platforms
     (the CI OS-portability tripwire — an unsorted os.listdir differs Linux vs Windows)."""
     if surveys_live is None:
@@ -132,7 +132,7 @@ def make_read_job(slug: str) -> dict:
 def make_merge_job(slug: str, patch: dict, bump: str, note: str, today: str) -> dict:
     """A merge edit-job. `bump` is the chosen kind (patch/minor/major); the runner resolves it to a
     concrete version from the current survey.yaml and enforces semver-greater (all version logic is
-    runner-side, C31 §0.3). The dead explicit-version override was removed per review FIX 6."""
+    runner-side). The dead explicit-version override was removed per review FIX 6."""
     return {
         "kind": "merge",
         "slug": slug,
@@ -144,16 +144,16 @@ def make_merge_job(slug: str, patch: dict, bump: str, note: str, today: str) -> 
 
 
 def make_history_job(slug: str) -> dict:
-    """A `history` edit-job (C43 D6/S2a-2): the runner returns the READ-ONLY git log of the survey's
-    package directory (version, release note, when, author). The runner OWNS the git read (record D4)
+    """A `history` edit-job: the runner returns the READ-ONLY git log of the survey's
+    package directory (version, release note, when, author). The runner OWNS the git read
     so the gateway process issues no git verb for this; job carries only the slug."""
     return {"kind": "history", "slug": slug}
 
 
 def make_collections_job() -> dict:
-    """A `collections` edit-job (C43 D5-A / Stage 3a): a WHOLE-CORPUS read-only projection. The runner
+    """A `collections` edit-job (Stage 3a): a WHOLE-CORPUS read-only projection. The runner
     reads EVERY published survey.yaml's `collection` block (the runner is the only place YAML is
-    parsed — C31 §0.1) and returns the rollup the portal shows readers (first-declarer programme
+    parsed) and returns the rollup the portal shows readers (first-declarer programme
     fields) PLUS the two honesty seams the build only prints to stderr today: id near-duplicates and
     per-field divergence. Whole-corpus, so the job carries NO slug — the runner enumerates surveys-live
     from its own mount. READ-ONLY: same trust class as the history job (no git write, no mutation)."""
@@ -161,7 +161,7 @@ def make_collections_job() -> dict:
 
 
 def make_collection_batch_job(operations: list, note: str, today: str) -> dict:
-    """A `collection_batch` edit-job (C43 Stage 3b / record D5-A A6): the runner applies each per-survey
+    """A `collection_batch` edit-job: the runner applies each per-survey
     collection-block operation, bumps each affected survey's version, appends the ONE shared release
     note, and validates each on a scratch copy — returning each affected survey's patched bytes +
     validator report (it does NOT commit; the gateway's publish.commit_collection_batch does the atomic

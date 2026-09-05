@@ -7,7 +7,7 @@ background, keep the proportions and the clear space). That is the whole job of 
 
 What these pins hold:
 
-  * THE USAGE NOTE IS VERBATIM from the owner's brief. It is permission language: paraphrasing it is
+  * THE USAGE NOTE IS VERBATIM from the brief. It is permission language: paraphrasing it is
     quietly rewriting what people are allowed to do with the marks.
   * EVERY GENERATED VARIANT IS OFFERED, in both formats, and every link resolves to a file this
     portal actually ships. A brand page with a dead download is worse than no brand page.
@@ -20,7 +20,7 @@ What these pins hold:
   * THE FULL PIXELATED ARTWORK IS OFFERED SEPARATELY, as the presentation hero graphic. The
     relationship doctrine is that the simplified dot mark is the identity and the full artwork is the
     hero image; the page has to keep those apart or the doctrine dies on first contact with a reader.
-  * PORTAL CHROME, and the C9 header geometry with it: this is a portal page, not an orphan.
+  * PORTAL CHROME, and the header geometry with it: this is a portal page, not an orphan.
 """
 import json
 import re
@@ -47,7 +47,7 @@ def _text():
 
 def test_the_usage_note_is_the_owners_words_unaltered():
     """FAILS IF the usage note is paraphrased, trimmed or restyled into different words. It states
-    what people may do with the marks, so its wording is the owner's to set, not this page's."""
+    what people may do with the marks, so its wording is set elsewhere, not on this page."""
     flat = re.sub(r"\s+", " ", _text())
     assert USAGE_NOTE in flat, "the usage note must appear verbatim, exactly as the brief states it"
 
@@ -100,7 +100,7 @@ def test_the_palette_on_the_page_is_brand_jsons_palette():
 
 def test_the_clear_space_the_page_states_is_the_declared_one():
     """The page told readers a rule the shipped lockups do not follow: it said a quarter of the mark
-    height while PROPORTIONS declares 0.20, tightened during E2 and left stranded here. It was also
+    height while PROPORTIONS declares 0.20, tightened and left stranded here. It was also
     the only number on the page not held against brand.json, which is exactly the drifting second
     source of truth the palette pin exists to prevent.
 
@@ -130,7 +130,7 @@ def test_the_full_artwork_is_offered_separately_from_the_mark():
 
 def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
     """FAILS IF brand.html is an orphan page. It carries the same three-zone header (with the zero
-    basis sides C9 ruled), the AusMT mark as its identity, and the standard footer."""
+    basis sides), the AusMT mark as its identity, and the standard footer."""
     text = _text()
     for zone, rule in ((".hleft", "flex:1 1 0"), (".hcenter", "flex:0 1 auto"), (".hright", "flex:1 1 0")):
         m = re.search(re.escape(zone) + r"\{([^}]*)\}", text)
@@ -144,14 +144,14 @@ def test_the_page_wears_the_portal_chrome_and_the_c9_header_geometry():
         "a page the sitemap advertises must declare its canonical"
     # The site's ONE footer. Its strings, targets and geometry are held for all six documents at once
     # in tests/test_footer_regions.py; what is asserted here is that this page carries it at all,
-    # named by the region the one-footer ruling put in its right zone.
+    # named by the region the one-footer rule put in its right zone.
     assert "<footer>" in text and 'class="orglogo"' in text, \
         "brand.html must carry the standard footer, lockup and all"
 
 
 def test_about_links_the_brand_page():
     """FAILS IF About stops pointing at the brand page. It is the only navigation into it: the page
-    is deliberately not a sixth header item (the header is the five the owner ruled)."""
+    is deliberately not a sixth header item (the header carries five)."""
     about = (ROOT / "about.html").read_text(encoding="utf-8")
     assert 'href="brand.html"' in about, "about.html must link the brand page"
     assert "Brand" in about, "the About link must name the brand page in words a reader can find"
@@ -159,4 +159,4 @@ def test_about_links_the_brand_page():
         page = (ROOT / name).read_text(encoding="utf-8")
         header = page.split("</header>", 1)[0]
         assert 'href="brand.html"' not in header, \
-            f"{name}: the brand page is not a sixth header item; the header is the five ruled ones"
+            f"{name}: the brand page is not a sixth header item; the header carries five"

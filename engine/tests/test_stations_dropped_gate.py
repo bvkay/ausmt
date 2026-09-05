@@ -19,7 +19,7 @@ The entries are keyed on the FILE because that is the only identity a curator ca
 third-party release it is neither the file name nor the published id.
 
 The rule-8 pin at the end reads .github/workflows/build-products.yml, which the engine image does
-not ship; it skips there on the allow-listed image-topology reason and asserts on every checkout lane.
+not ship; it skips there on the allow-listed image-topology reason and asserts on every checkout workflow.
 """
 import json
 import re
@@ -120,8 +120,8 @@ def test_a_pass_states_how_many_stations_the_build_actually_dropped(clean_build,
 
 
 def test_verify_fails_naming_the_survey_and_the_file(clean_build, tmp_path):
-    """R6, the defect itself. FAILS IF the deploy gate blesses a build that dropped a station nobody
-    ruled on: that is what it does today, for every drop path the build has."""
+    """The defect itself. FAILS IF the deploy gate blesses a build that dropped a station nobody
+    decided on: that is what it does today, for every drop path the build has."""
     out, slug = _with_one_drop(clean_build, tmp_path)
     r = _verify(out)
     assert r.returncode != 0, r.stdout + r.stderr
@@ -198,7 +198,7 @@ def test_the_shipped_allow_file_names_every_row_the_corpus_drops():
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_this_file_is_in_the_pr_gate_subset():
     """Rule 8: the PR gate enumerates test files BY NAME, and this one carries the gate's assertions."""
     steps = re.split(r"\n(?=      - name: )", WORKFLOW.read_text(encoding="utf-8"))

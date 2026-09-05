@@ -1,11 +1,11 @@
-"""Async clamd INSTREAM client (design §1/§4/§5). Only the gateway talks to clamd — the runner has
+"""Async clamd INSTREAM client. Only the gateway talks to clamd - the runner has
 network_mode none, so all scanning happens before a job is queued and again (second sweep) after
 ingest, both from the gateway.
 
 INSTREAM protocol: send `zINSTREAM\\0`, then repeated 4-byte-BE-length-prefixed chunks, then a
 zero-length chunk to terminate; clamd replies `stream: OK\\0` or `stream: <sig> FOUND\\0`.
 
-Fail-closed contract (design §0/§2): a connection error, a truncated reply, or any reply that is
+Fail-closed contract: a connection error, a truncated reply, or any reply that is
 neither a clean OK nor a definite FOUND is reported as UNAVAILABLE (ScanError), NOT as clean. The
 caller holds the submission at RECEIVED on UNAVAILABLE and only advances on a definite OK.
 """
@@ -71,7 +71,7 @@ async def scan_bytes(host: str, port: int, data: bytes) -> ScanResult:
 
 
 async def scan_file(host: str, port: int, path) -> ScanResult:
-    # Files here are already size-capped by the upload guard (design §4.1), so reading the whole
+    # Files here are already size-capped by the upload guard, so reading the whole
     # capped zip to scan it is bounded; streaming from disk in chunks would not change the cap.
     data = await asyncio.to_thread(_read_bytes, path)
     return await scan_bytes(host, port, data)

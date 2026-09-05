@@ -1,7 +1,7 @@
-"""C43 Stage-3b F: EXECUTABLE JS<->Python parity pin for the candidate-picker filter (record A3, pin
-10). The standing lane rule (from the Stage-2a stations-JS lesson, record D14): browser JS gets
+"""Stage-3b: EXECUTABLE JS<->Python parity pin for the candidate-picker filter (pin
+10). The standing workflow rule (from the Stage-2a stations-JS lesson): browser JS gets
 EXECUTABLE test coverage from the start — string-only pins are banned, because a source-substring
-assertion cannot catch a SEMANTICS divergence (the S2a truncated-`%` bug shipped past exactly such a
+assertion cannot catch a SEMANTICS divergence (the truncated-`%` bug shipped past exactly such a
 pin).
 
 This EXTRACTS the DOM-free `matchRow(filterText, query)` from COLLECTIONS_JS, runs it in Node over a
@@ -10,7 +10,7 @@ divergence — trim/case/substring/empty-query semantics — goes red.
 
 Node posture (stated for the gate): pure `node`, no npm/jsdom (matchRow is DOM-free). Local dev box:
 node present. Gateway CI: node preinstalled on GitHub-hosted runners. If node were ever absent the
-skip below is deliberately NOT on the lane's skip-tripwire allow-list, so the lane fails LOUDLY rather
+skip below is deliberately NOT on the gateway workflow's skip-tripwire allow-list, so it fails LOUDLY rather
 than silently hollowing this pin out (the house posture).
 """
 from __future__ import annotations
@@ -27,8 +27,8 @@ NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(
     NODE is None,
-    reason="node not present — executable JS parity pin needs the node binary "
-           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must red the lane)")
+    reason="node not present - executable JS parity pin needs the node binary "
+           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must fail loudly)")
 
 
 def _extract_js_function(js: str, name: str) -> str:

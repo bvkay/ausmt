@@ -15,7 +15,7 @@ The failure mode is silent in the worst way: the config says the feature is on, 
 `config.js` says it is on, the engine's own default is off, the box quietly serves nothing, and no test
 anywhere is red. So the wiring is pinned here rather than reviewed.
 
-Two directions, because either alone can pass over a broken lane:
+Two directions, because either alone can pass over a broken workflow:
 
   * every producer flag named below must appear on the rebuild-data invocation, or the producer never
     runs in production;

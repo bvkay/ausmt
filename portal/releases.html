@@ -5,16 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Releases - AusMT</title>
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
-<!-- Home-screen shortcut icon (brand-assets lane E4). Without it iOS renders a screenshot of
-     the page instead of the mark. Same lattice as the favicon, rendered at 180px. -->
+<!-- Without an apple-touch-icon iOS renders a screenshot of the page instead of the mark. Same
+     lattice as the favicon, at 180px. -->
 <link rel="apple-touch-icon" href="vendor/brand/ausmt-icon-180.png">
-<!-- The one true URL for this page. It is substantive, indexable, linked from the root and
-     now advertised in sitemap.xml, so it must say which address it is served at (index.html
-     has carried its own canonical since the head-hygiene lane; these three had none). -->
+<!-- The one true URL for this page. It is substantive, indexable, linked from the root and advertised
+     in sitemap.xml, so it must say which address it is served at. -->
 <link rel="canonical" href="https://ausmt.auscope.org.au/releases.html">
-<!-- Search snippet and link preview, on the same rule as about.html: the description is this
-     page's own lede verbatim. It runs past what a result row displays, and is left whole anyway,
-     because cutting it would mean writing a sentence this page does not say. -->
+<!-- The description is this page's own lede verbatim: cutting it to fit a result row would mean
+     writing a sentence this page does not say. -->
 <meta name="description" content="Quarterly citable snapshots of the AusMT corpus. Each release freezes one build's catalogue and its survey bundles at a fixed path, so a citation resolves to the same bytes years later even though the live portal keeps moving.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
@@ -26,9 +24,8 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <style>
-  /* Treatment D+ palette, the same five surface/accent tokens declared verbatim on index.html,
-     about.html and add-survey.html (portal/tests/test_theme_tokens.py pins those three against each
-     other; test_releases_page.py pins this page against about.html for the same reason). */
+  /* The same five surface and accent tokens index.html, about.html and add-survey.html declare
+     verbatim; test_releases_page.py pins this page against about.html. */
   :root{
     --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
@@ -39,10 +36,8 @@
   *{box-sizing:border-box}
   [hidden]{display:none !important}
   body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6;min-height:100vh;display:flex;flex-direction:column}
-  /* Uniform chrome: the three-zone header below is the same one about.html carries (left = brand,
-     centre = nav + page links, right = the corpus-totals stats block), including the api-docs lane's
-     right-zone alignment, which is on origin/main as of a568b55 (PR #117). Copied rather than shared
-     because the portal ships as classic static pages with no template step; the header-parity pin in
+  /* Uniform chrome: the header below is about.html's, copied rather than shared because the portal
+     ships as classic static pages with no template step. The header-parity pin in
      tests/test_releases_page.py fails if the two ever drift apart. */
   header{display:flex;align-items:center;line-height:normal;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
@@ -82,17 +77,14 @@
   a.link{color:var(--copper)}
   code{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel-2);padding:1px 5px;border-radius:3px}
 
-  /* Page states. Exactly one of #relLoading / #relEmpty / #relError / #relList is visible at a time,
-     and releases.js is the only thing that switches them. #relLoading is the shipped-visible one, so a
-     reader whose fetch never resolves is told the page is still reading rather than being shown a
-     claim ("no releases") the page cannot yet support. */
+  /* Exactly one of #relLoading / #relEmpty / #relError / #relList is visible at a time, and releases.js
+     is the only thing that switches them. #relLoading ships visible, so a reader whose fetch never
+     resolves is told the page is still reading rather than shown a claim it cannot support. */
   .state{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;color:var(--muted);font-size:14.5px}
   .state b{color:var(--text)}
   .state.err{border-left:3px solid var(--part)}
   .state .probe{margin-top:8px;font-size:12.5px}
 
-  /* One release. The card is deliberately dense: a citing reader wants the tag, the date, what is in
-     it, what built it, how to cite it and where the bytes are, without leaving the page. */
   .rel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:0 0 18px}
   .rel-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin:0 0 10px}
   .rel-tag{font-size:20px;font-weight:800;letter-spacing:-.3px}
@@ -104,9 +96,8 @@
   .rel-ids span.k{display:inline-block;min-width:104px;color:var(--muted)}
   .rel-ids span.v{color:var(--text);background:var(--panel-2);padding:1px 6px;border-radius:3px;word-break:break-all}
 
-  /* Citation box. The reference line is built from the release's own fields; the identifier line under
-     it is either a resolvable DOI link or the plain-text pending marker, never a link that would 404
-     at a resolver. */
+  /* The reference line is built from the release's own fields; the identifier line under it is either a
+     resolvable DOI link or the plain-text pending marker, never a link that would 404 at a resolver. */
   .cite{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--copper);
     border-radius:6px;padding:12px 14px;margin:0 0 14px}
   .cite-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 6px}
@@ -129,22 +120,8 @@
   .size{color:var(--muted);white-space:nowrap}
   .detail-warn{font-size:13px;color:var(--part)}
 
-  /* One footer, three regions, the same here as on every other surface: the MTCAT
-     machine-readable link on the LEFT, the AuScope acknowledgement in the CENTRE, the
-     AuScope-NCRIS lockup on the RIGHT.
-
-     THE RULE SET BELOW IS index.html's, character for character with the four colour tokens this page shares. The zone geometry, the two
-     container states and the measured numbers behind them are stated there, once, and
-     tests/test_footer_regions.py holds all seven surfaces identical: an edit here that is not an
-     edit there fails.
-
-     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
-     it keeps its own box in flow, so the last line of the page is never hidden under it and the
-     page owes it no padding-bottom that would have to track the wrap state. A sticky box is never
-     pushed DOWN from where it sits in flow, so body is a viewport-tall column and main takes its
-     free space; remove either and a short page shows its footer halfway up. The ground is opaque
-     because content passes beneath it. Below 560px of viewport the footer is three rows and would
-     cover most of a phone screen, so it returns to ordinary flow there. */
+  /* One footer, three regions: the MTCAT link LEFT, the AuScope acknowledgement CENTRE, the AuScope-NCRIS
+     lockup RIGHT. See docs: portal internals, releases.html. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:var(--ink);z-index:3}
   footer a{color:var(--copper);text-decoration:none}
   .fleft{flex:1 1 0;min-width:0}
@@ -160,38 +137,30 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <!-- The AusMT mark, not an organisation mark: AusMT is the thing this header IDENTIFIES, so it
-         opens the header and no header on this site carries a second mark of any kind. The AuScope
-         relationship is stated in the footer and in About's Who enables AusMT, which is where a
-         reader asks it. Same file, same markup and same rule on every surface wearing this chrome. -->
+    <!-- The AusMT mark, not an organisation mark: AusMT is what this header IDENTIFIES, so no header on
+         this site carries a second mark of any kind. Same markup and same rule on every surface. -->
     <img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT" width="30" height="30">
     <div class="wordmark">AusMT</div>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
   </div>
   <div class="hzone hcenter">
     <nav>
-      <!-- Same three primary items, same ids and same order as index.html and about.html, so the
-           header is comparable element-for-element (the header-parity pin). They are links here
-           because this is a static page; on index they are <button>s that switch app views in place.
-           None is active: no map/surveys/collections view is the current page. Each points at its
-           own destination (index-pages lane): the SPA root, and the two prerendered index pages. -->
+      <!-- Same three primary items, same ids and same order as index.html and about.html, so the header is
+           comparable element-for-element (the header-parity pin). Links here because this page is static, and
+           none is active. -->
       <a id="navMap" href="/">Map</a>
       <a id="navSurveys" href="/surveys">Surveys</a>
       <a id="navCollections" href="/collections">Collections</a>
     </nav>
-    <!-- Docs wave, stage 2 (owner ruling): the header is FIVE items, namely Map, Surveys, Collections,
-         About, Contribute. The sixth, "How to use AusMT", is retired on every page. It used to cross to
-         about.html#howto from here. That in-body section survives under its own id, so an inbound deep
-         link still lands; only the header entry is gone. -->
+    <!-- FIVE header items: Map, Surveys, Collections, About, Contribute. The about.html#howto id
+         survives, so an inbound deep link to that section still lands. -->
     <a class="about" href="about.html">About</a>
     <a class="contribute" href="add-survey.html">Contribute a survey &rarr;</a>
   </div>
   <div class="hzone hright">
-    <!-- The corpus-totals block about.html carries, filled by the same corpus-stats.js from the same
-         served catalogue. It ships hidden and is revealed only once both documents resolve to a
-         non-empty corpus, so a file:// page or an unpublished deployment shows nothing at all rather
-         than a fabricated total. Index's live map-state ids (nVis/nSel/nTot) stay off this page: there
-         is no map, no filter and no selection here for them to describe. -->
+    <!-- The corpus-totals block about.html carries, from the same corpus-stats.js and the same served
+         catalogue. It ships hidden and is revealed only once both documents resolve to a non-empty corpus,
+         so an unpublished deployment shows nothing rather than a fabricated total. -->
     <div class="counts corpus" id="corpusCounts" hidden
          title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations &middot;
       <b id="corpusSurveys"></b> surveys</div>
@@ -203,24 +172,21 @@
   catalogue and its survey bundles at a fixed path, so a citation resolves to the same bytes years
   later even though the live portal keeps moving.</p>
 
-  <!-- The four page states. Everything below is written by releases.js from the served release index;
-       nothing about any release is hard-coded here, so this page cannot go stale or claim a release
-       that was never cut. #relLoading is the only one that ships visible. -->
+  <!-- Everything below is written by releases.js from the served release index, and nothing about any
+       release is hard-coded here, so this page cannot claim a release that was never cut. -->
   <div class="state" id="relLoading">Reading the release index&hellip;</div>
 
   <div class="state" id="relEmpty" hidden>
     <span id="relEmptyMsg">No releases cut yet; releases are quarterly snapshots of the corpus.</span>
-    <!-- The probe line names the exact document that came back empty or absent, filled in by
-         releases.js from the URL it actually requested. It exists because a missing index has two very
-         different causes: no release has been cut, or the release tier is not published at this path
-         on this deployment. The sentence above cannot tell them apart, so the page shows its working
-         rather than leaving a reader (or an operator) to guess which one they are looking at. -->
+    <!-- The probe line names the document that came back empty or absent, from the URL releases.js
+         actually requested: a missing index means either that no release has been cut or that the release
+         tier is not published at this path, and the sentence above cannot tell them apart. -->
     <div class="probe" id="relEmptyProbe" hidden>Looked for <code id="relEmptyPath"></code>.</div>
   </div>
 
-  <!-- Distinct from the empty state on purpose. "Absent or empty index" is a fact about the corpus;
-       "the index could not be read" is a fact about this request. Collapsing the two would let a
-       routing problem or an offline reader be reported as "no releases have ever been cut". -->
+  <!-- Distinct from the empty state on purpose: "absent or empty index" is a fact about the corpus and
+       "the index could not be read" is a fact about this request. Collapsing the two would let a routing
+       problem be reported as "no releases have ever been cut". -->
   <div class="state err" id="relError" hidden>The release index could not be read from this deployment,
     so this page cannot say which releases exist. Releases are quarterly snapshots of the corpus.
     <div class="probe" id="relErrorProbe" hidden>Tried <code id="relErrorPath"></code>.</div>
@@ -242,18 +208,16 @@
   <footer>
     <!-- LEFT. The machine-readable MTCAT link, the same document from every page. -->
     <div class="fzone fleft"><a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a></div>
-    <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. The URL text is the
-         one link in the line. The year is a literal, the mechanism every page uses. -->
+    <!-- CENTRE. Who enables AusMT, then the attribution and the licence note. See docs: portal internals,
+         releases.html. -->
     <div class="fzone fcenter">AusMT is enabled by AuScope &middot; <a href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer">www.auscope.org.au</a> &middot; &copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey</div>
-    <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. The
-         image is same-origin and vendored, so stating the relationship takes no runtime dependency
-         on the organisation's own host. -->
+    <!-- RIGHT. The parent organisation's full lockup, linked where the centre's URL text links. See docs:
+         portal internals, releases.html. -->
     <div class="fzone fright"><a class="orglogo" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer"><img src="/vendor/auscope-ncris-white.png" alt="AuScope and NCRIS" width="1919" height="325"></a></div>
   </footer>
 <script src="config.js"></script>
 <!-- Separate files, not inline blocks: the deployed CSP for every page except add-survey.html is
-     script-src 'self' with no 'unsafe-inline' (deploy/docker/caddy/Caddyfile, @strictPages), which a
-     new page picks up automatically because that matcher is a `not path /add-survey.html`. -->
+     script-src 'self' with no 'unsafe-inline' (deploy/docker/caddy/Caddyfile, @strictPages). -->
 <script src="corpus-stats.js"></script>
 <script src="releases.js"></script>
 </body>

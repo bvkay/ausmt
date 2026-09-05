@@ -1,20 +1,19 @@
-"""Survey metadata 0.1: the ratified schema DESCRIBES what the build serves, and CONSTRAINS it.
+"""Survey metadata 0.1: the schema DESCRIBES what the build serves, and CONSTRAINS it.
 
-The second public contract, data/products/<survey_id>/survey-metadata.json, ships with the ratified
-0.1-draft artifact AusMT_2026/schemas-draft/ausmt-survey-metadata.schema.json copied byte-for-byte to
+The second public contract, data/products/<survey_id>/survey-metadata.json, ships with the 0.1-draft schema copied byte-for-byte to
 engine/schema/ausmt-survey-metadata.schema.json (the MTCAT 2.0 core pattern). This module is the
 schema gate, the sibling of test_mtcat_schema_v20.py:
 
   1. the artifact's own shape: legal draft-07, the required set {schema, version, survey_id, title},
      every array property minItems 1 (the zero-empty posture is enforced by the schema, not only by
-     the emitter), the versioned $id (D3), the open top level;
-  2. four committed fixtures that must VALIDATE with format checking on: the ratified suite's T20
+     the emitter), the versioned $id, the open top level;
+  2. four committed fixtures that must VALIDATE with format checking on: the suite's fixture T20
      document verbatim, a synthetic Case B release, a synthetic multi-activity survey and a synthetic
      no-identifier survey cited by source-provided text (the matrix rows the real corpus cannot
      instantiate today);
-  3. the RED proof: the ratified T21-T23 rejections plus a mutation set, one mutation per constraint,
+  3. the RED proof: the schema rejections plus a mutation set, one mutation per constraint,
      each differing from a PASSING document by exactly the field under test;
-  4. the T25 reference check (citation.preferred_identifier designated in identifiers[]) and the
+  4. the reference check (citation.preferred_identifier designated in identifiers[]) and the
      zero-null / zero-empty scanner the emission and invariant suites reuse.
 
 STACK-FREE at module level: the schema gate runs on a machine with no ingest stack. Validation uses
@@ -82,7 +81,7 @@ def scan_nulls_and_empties(doc):
 
 
 def preferred_identifier_designated(doc):
-    """T25 reference check: when citation.preferred_identifier is present, an EQUAL {scheme, identifier}
+    """Reference check: when citation.preferred_identifier is present, an EQUAL {scheme, identifier}
     row exists in identifiers[] (the designated identifiers OF this dataset/release)."""
     pref = (doc.get("citation") or {}).get("preferred_identifier")
     if pref is None:
@@ -135,18 +134,18 @@ def test_fixture_validates_with_format_checking_and_scans_clean(name):
     nulls, empties = scan_nulls_and_empties(doc)
     assert not nulls and not empties, (nulls, empties)
     assert doc["schema"] == "ausmt-survey-metadata" and doc["version"] == SCHEMA_VERSION
-    assert preferred_identifier_designated(doc), f"{name}: T25 must hold on a committed fixture"
+    assert preferred_identifier_designated(doc), f"{name}: the preferred identifier must be designated on a committed fixture"
 
 
 def test_t20_fixture_is_the_ratified_suite_document_verbatim():
-    """The committed T20 document is the ratified suite's `svm` (run-fixture-suite.py T20); the
+    """The committed document is the suite's `svm` (fixture T20 of run-fixture-suite.py); the
     load-bearing values are pinned so a silent edit to the fixture is a visible one.
 
     THE ACKNOWLEDGEMENT IS PINNED BY ITS TEXT, not only by its type. The row is a CURATED
-    acknowledgement, the wording a survey.yaml supplied, and D10 of the survey-metadata contract is
+    acknowledgement, the wording a survey.yaml supplied, and the survey-metadata contract is
     that the engine authors none of its own
-    (engine/tests/test_survey_metadata_emission.py: "D10: no engine-authored row"). The engine's own
-    printed sentence happens to read the same today and is being changed on another lane; with only
+    (engine/tests/test_survey_metadata_emission.py: "no engine-authored row"). The engine's own
+    printed sentence happens to read the same today and is being changed on another workflow; with only
     the type asserted, an editor aligning the two wordings would rewrite this document and nothing
     would say the repo had stepped out of line with the external suite. The text is what makes
     "verbatim" in this test's name true."""
@@ -274,7 +273,7 @@ def test_the_mutation_set_differs_from_a_passing_document_by_exactly_the_field_u
 
 
 def test_a_withheld_embargoed_document_validates_with_the_same_schema():
-    """Policy transition keeps identity (T38c/T38d pattern): the same survey_id, an embargoed rights
+    """Policy transition keeps identity: the same survey_id, an embargoed rights
     block with a dated embargo, no extent, still a valid document."""
     doc = _base()
     doc["rights"] = {"license": "CC-BY-4.0", "access": "embargoed", "embargo_until": "2027-02-01"}
@@ -286,14 +285,14 @@ def test_a_withheld_embargoed_document_validates_with_the_same_schema():
 # ---------------------------------------------------------------- 4. the reference checks on the guards
 
 def test_reference_checks_actually_detect_violations():
-    """Guard on the guards (the ratified suite's Txxb pattern): the scanner must catch a planted null
-    and a planted empty container, and the T25 check must catch a preferred identifier that is not
+    """Guard on the guards (the suite's Txxb pattern): the scanner must catch a planted null
+    and a planted empty container, and the check must catch a preferred identifier that is not
     designated in identifiers[]."""
     nulls, empties = scan_nulls_and_empties({"a": None, "b": [], "c": {"d": {}}, "e": [{"f": None}]})
     assert nulls == ["$.a", "$.e[0].f"] and empties == ["$.b", "$.c.d"]
     doc = copy.deepcopy(_base())
     doc["citation"]["preferred_identifier"] = {"scheme": "DOI", "identifier": "10.99999/level1-collection"}
-    assert not preferred_identifier_designated(doc), "T25 must detect a preferred identifier not in identifiers[]"
+    assert not preferred_identifier_designated(doc), "a preferred identifier not in identifiers[] must be detected"
     doc["identifiers"] = []
     assert not preferred_identifier_designated(doc)
     doc.pop("citation")

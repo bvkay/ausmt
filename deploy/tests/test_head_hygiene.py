@@ -1,4 +1,4 @@
-"""Head/serving hygiene pins (findability audit 2026-08-28): the duplicate-content redirect, the
+"""Head/serving hygiene pins: the duplicate-content redirect, the
 HDF5 content type, and the branded 404.
 
   * /index.html served the same bytes as / with no canonical anywhere - the host's one
@@ -11,7 +11,7 @@ HDF5 content type, and the branded 404.
     preserved (file_server status 404), so crawl semantics are unchanged.
 
 BOTH reader listeners carry all three: :8081 is what the public reaches through the front door,
-:8080 is the tailnet-side twin, and the C47 discipline is that the two never drift.
+:8080 is the tailnet-side twin, and the discipline is that the two never drift.
 """
 from __future__ import annotations
 

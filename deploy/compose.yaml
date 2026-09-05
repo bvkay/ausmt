@@ -9,7 +9,7 @@
 #                    explanation; do NOT change this to a bare "8443:8080" published port.
 #   build-runner -- one-shot job image (profile "jobs", so a bare `docker compose up` never starts
 #                    it). Invoked as `docker compose --profile jobs run --rm build-runner <args>`
-#                    (rebuild-data in the Makefile is the S4-implemented wrapper around this; this
+#                    (rebuild-data in the Makefile is the wrapper around this; this
 #                    contract only stubs that target -- see deploy/Makefile). Mounts the
 #                    surveys-live checkout read-only (the engine only ever READS survey packages
 #                    and the validator) and the site-data tree read-write (its build output).
@@ -17,7 +17,8 @@
 # Env vars (see deploy/.env.example, loaded automatically by `docker compose` from a sibling .env):
 #   AUSMT_DATA_DIR  -- host root for persistent state (site-data + surveys-live), e.g. /srv/ausmt
 #   TAG             -- image tag to pull/run (defaults to latest)
-#   OWNER           -- GHCR namespace the images were pushed under (see deploy-images.yml)
+#   OWNER           -- the variable naming the GHCR namespace the images were pushed under
+#                      (see deploy-images.yml)
 
 services:
   portal:
@@ -25,7 +26,7 @@ services:
     restart: unless-stopped
     # init: tini reaps the healthcheck's exited children. Caddy runs as PID 1 and never
     # wait()s, so without this every 30-second wget probe leaves one Z-state process behind
-    # (measured on the VPS front door 2026-08-18: exactly one zombie per interval). Same
+    # (measured on the VPS front door: exactly one zombie per interval). Same
     # reasoning on the gateway and clamd services below; gw-runner has no healthcheck and
     # its loop reaps its own job children, so it needs nothing.
     init: true
@@ -46,7 +47,7 @@ services:
       # LOOPBACK ONLY. tailscale serve --bg https / http://127.0.0.1:8443 is what actually exposes
       # this beyond the box (see deploy/README.md) -- never widen this to 0.0.0.0 or a bare port.
       - "127.0.0.1:8443:8080"
-      # C47 public bridge — the dedicated READER-ONLY listener (:8081 in the Caddyfile), the box-side
+      # Public bridge - the dedicated READER-ONLY listener (:8081 in the Caddyfile), the box-side
       # "second wall". LOOPBACK ONLY, same reasoning as :8443. The box operator fronts THIS bind on the
       # tailnet with a port-scoped `tailscale serve --bg --tcp=8445 tcp://127.0.0.1:8445`, and the
       # tailnet ACL grants the VPS front-door tag reach to that tailnet port and nothing else — so the
@@ -67,7 +68,7 @@ services:
       # deploy/scripts/fetch-basemap.sh. Read-only: the portal only ever range-reads them. An
       # empty or absent host dir simply 404s, which the carto fallback provider tolerates.
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/basemap:/srv/basemap:ro
-      # C45 D5: the access-log volume. Caddy writes /var/log/caddy/access.json (masked-at-edge IPs,
+      # The access-log volume. Caddy writes /var/log/caddy/access.json (masked-at-edge IPs,
       # rotated, 7-day retention — see the Caddyfile `log` block). Host side under the data root so the
       # later analytics aggregator (a host-side timer) reads it; the portal only WRITES it. Create it
       # once: `mkdir -p $AUSMT_DATA_DIR/logs/caddy` (Caddy runs as root in-container, so it can write
@@ -83,25 +84,25 @@ services:
       # Read-write: the pipeline's own output tree. The image's ENTRYPOINT takes --out/--products
       # as CLI args (supplied via `docker compose run build-runner --surveys ... --out ...`) --
       # this mount just makes /out a stable, host-persisted target for whatever --out path the
-      # caller passes (conventionally /out/builds/<timestamp>, per the rebuild-data contract that
-      # S4 implements).
+      # caller passes (conventionally /out/builds/<timestamp>, per the rebuild-data contract
+      # deploy/Makefile's rebuild-data target implements).
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/site-data:/out:rw
     environment:
       # Matches the image's own baked-in default (ENV in engine.Dockerfile) -- repeated explicitly
       # here so the compose file is self-documenting and survives an image rebuild that changes
       # the default.
       AUSMT_VALIDATOR_PATH: /srv/surveys/_validation
-      # OPTIONAL TUNING: the C18 build-cache size cap (deploy/.env.example). Read by the ENGINE
+      # OPTIONAL TUNING: the build-cache size cap (deploy/.env.example). Read by the ENGINE
       # (engine/extract/cache.py) — build-runner is the engine-build service the cache actually
       # accelerates (the by-hand `rebuild-data`), so the knob lives here. ${VAR:-DEFAULT} matches the
       # code default (cache.py CACHE_MAX_MB_DEFAULT=2048); unset == today's behaviour. Never ${VAR:?}.
       AUSMT_CACHE_MAX_MB: ${AUSMT_CACHE_MAX_MB:-2048}   # build-cache size cap (MB), pruned oldest-first
 
   # ---------------------------------------------------------------------------------------------
-  # Gateway (Stage 2, contract C10) — submission gateway + antivirus + no-network runner. All three
+  # Gateway (Stage 2) - submission gateway + antivirus + no-network runner. All three
   # services live under the "gateway" profile so a bare `docker compose up` (the always-on portal)
   # never starts them; bring them up with `docker compose --profile gateway up -d`. Topology is the
-  # design's §1 table exactly. The host tree /srv/ausmt/gateway/{incoming,quarantine,jobs,state} is
+  # design's table exactly. The host tree /srv/ausmt/gateway/{incoming,quarantine,jobs,state} is
   # owned 10002:10002 (a NEW uid distinct from the engine's 10001, so a compromised gateway stack
   # cannot touch published site-data even via a uid collision) — see deploy/README.md for the
   # mkdir/chown runbook.
@@ -125,7 +126,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    # Immutable rootfs + a size-limited tmpfs (review #5). The multipart intake spools onto the
+    # Immutable rootfs + a size-limited tmpfs. The multipart intake spools onto the
     # MEASURED /gw/incoming volume (see gateway/upload.py) rather than /tmp, so the headroom check
     # actually covers where uploads land; read_only + a bounded tmpfs mean a spool that did reach /tmp
     # can never fill the container overlay. TMPDIR points at /tmp (the bounded tmpfs) so any stdlib
@@ -139,8 +140,8 @@ services:
       # published port exists only for `curl 127.0.0.1:8444` on the box. Same ufw/Docker-iptables
       # reasoning as the portal's 8443 bind: never widen this to 0.0.0.0 or a bare port (README).
       - "127.0.0.1:8444:8000"
-    # C11 publish flow needs read access to the QUARANTINE package tree (to stage it) — so quarantine
-    # is mounted read-WRITE here now (was ro in C10). Rationale: the publish step copies
+    # Publish flow needs read access to the QUARANTINE package tree (to stage it) - so quarantine
+    # is mounted read-WRITE here. Rationale: the publish step copies
     # quarantine/<id>/package into surveys-live; it reads quarantine, and the post-unpack sweep still
     # only reads. It does NOT need to write quarantine, but the runner (10002) and gateway (10002)
     # share the uid, and giving the gateway rw here keeps the topology simple without widening trust
@@ -148,17 +149,17 @@ services:
     # writable. If you prefer least-privilege, quarantine can stay ro AND the gateway still stages
     # (copytree only reads the source) — see README; kept ro below to honour that.
     environment:
-      # REQUIRED for the gateway, but the FAIL-CLOSED CHECK LIVES IN THE APP LAYER, not here (C33):
+      # REQUIRED for the gateway, but the FAIL-CLOSED CHECK LIVES IN THE APP LAYER, not here:
       # gateway/config.py::fail_closed_startup (called from create_app() before the port binds)
-      # aborts the process if AUSMT_SUBMIT_KEY is unset or < 16 chars (design §3). A compose-level
+      # aborts the process if AUSMT_SUBMIT_KEY is unset or < 16 chars. A compose-level
       # ${VAR:?...} guard here was WORSE than useless: it blocked EVERY compose command — even a
       # portal-only `docker compose config`/`make rebuild-data` that never touches the gateway —
-      # until this gateway var was set (the "variable whack-a-mole" the 2026-07-06 deploy hit). So
+      # until this gateway var was set (the "variable whack-a-mole" the deploy hit). So
       # this is a ${VAR:-} default (empty): base/portal compose resolves with only AUSMT_DATA_DIR +
-      # OWNER set, and if the gateway profile is actually brought up WITHOUT a valid key the app
+      # the OWNER variable set, and if the gateway profile is brought up WITHOUT a valid key the app
       # refuses to start (loud, early, at the layer that can check the >=16-char rule compose can't).
       AUSMT_SUBMIT_KEY: ${AUSMT_SUBMIT_KEY:-}
-      # C11 curator credentials (design §2). name:key pairs; curator routes 503 if unset/malformed
+      # Curator credentials. name:key pairs; curator routes 503 if unset/malformed
       # (fail closed). A SECRET — keep it out of git, never logged (redacted_items drops it). The
       # ${VAR:-} default (empty) means the SUBMIT half of the gateway still runs with curator config
       # absent; only the curator routes 503 until it is set.
@@ -171,7 +172,7 @@ services:
       # so an operator can override any of them in .env, and if unset each resolves to the SAME default
       # gateway/config.py::load_config already applies (so behaviour is byte-identical to leaving them
       # out). NEVER ${VAR:?} here: a compose-level guard on a gateway-only var would abort even a
-      # portal-only `docker compose config` (the 2026-07-06 whack-a-mole — see AUSMT_SUBMIT_KEY above).
+      # portal-only `docker compose config` (the whack-a-mole; see AUSMT_SUBMIT_KEY above).
       # These are consumed by the GATEWAY APP (gateway/config.py):
       AUSMT_CLAMD_HOST: ${AUSMT_CLAMD_HOST:-clamd}          # clamd hostname on the compose network
       AUSMT_CLAMD_PORT: ${AUSMT_CLAMD_PORT:-3310}           # clamd INSTREAM port
@@ -186,23 +187,22 @@ services:
       # SELF-SERVE KEY MAIL (deploy/.env.example "SELF-SERVE SUBMISSION KEYS" block) — forwarded as
       # ${VAR:-} (empty) like everything above: unset means gateway/config.py sees no SMTP config and
       # key issuance stays INERT (neutral 202, "issuance disabled" logged) — the app-layer fail-closed
-      # posture, so no compose-level guard. Real incident (2026-07-24): these were MISSING from this
+      # posture, so no compose-level guard. Real incident: these were MISSING from this
       # list, so the operator set them in .env, the container never saw them, and request-key silently
       # issued nothing — env forwarded here is the only bridge from .env to the app.
       AUSMT_SMTP_HOST: ${AUSMT_SMTP_HOST:-}                 # SMTP submission host (e.g. smtp-relay.brevo.com)
       AUSMT_SMTP_PORT: ${AUSMT_SMTP_PORT:-587}              # 465 implicit TLS; 587/25 STARTTLS
       AUSMT_SMTP_USER: ${AUSMT_SMTP_USER:-}                 # SMTP auth login
       AUSMT_SMTP_PASS: ${AUSMT_SMTP_PASS:-}                 # SECRET — redacted from the config dump
-      AUSMT_MAIL_FROM: ${AUSMT_MAIL_FROM:-}                 # From + Reply-To on issued-key email
+      AUSMT_MAIL_FROM: ${AUSMT_MAIL_FROM:-}                 # the From: header and Reply-To on issued-key email
       AUSMT_SUBMIT_PAGE_URL: ${AUSMT_SUBMIT_PAGE_URL:-}     # woven into the email; omit for no link line
       # SELF-SERVE KEY ISSUANCE CAPS + KEY SHAPE (deploy/.env.example "Daily issuance rate limits" block)
       # - the abuse-control knobs the request-key endpoint enforces: per-email / per-ip / global daily
       # issuance caps, plus the self-serve key expiry + submission allowance. Forwarded as ${VAR:-} like
       # the mail vars above: unset means config.py's _i() falls back to the SAME in-code default
-      # (3/20/200/14/5), so behaviour is byte-identical to leaving them out. Real incident (H1, deploy
-      # review section 5): config read these and .env.example advertised them, but they were MISSING from
-      # this block, so an operator clamping issuance during an abuse wave set values the container never
-      # saw - the exact 2026-07-24 mail-var class, recurring on the rate-limit knobs. NEVER ${VAR:?} here
+      # (3/20/200/14/5), so behaviour is byte-identical to leaving them out. They must stay listed HERE:
+      # config reads them and .env.example advertises them, so an operator clamping issuance during a
+      # burst of abuse would otherwise set values the container never saw. NEVER ${VAR:?} here
       # (a gateway-only guard would abort even a portal-only compose - see AUSMT_SUBMIT_KEY above).
       AUSMT_KEYREQ_PER_EMAIL_DAILY: ${AUSMT_KEYREQ_PER_EMAIL_DAILY:-}        # max keys issued to one email/day (default 3)
       AUSMT_KEYREQ_PER_IP_DAILY: ${AUSMT_KEYREQ_PER_IP_DAILY:-}              # max per connecting IP/day (default 20)
@@ -210,7 +210,7 @@ services:
       AUSMT_SELFSERVE_KEY_EXPIRY_DAYS: ${AUSMT_SELFSERVE_KEY_EXPIRY_DAYS:-}  # self-serve key lifetime, days (default 14)
       AUSMT_SELFSERVE_KEY_ALLOWANCE: ${AUSMT_SELFSERVE_KEY_ALLOWANCE:-}      # submissions before exhaustion (default 5)
       # git identity for the container's git invocations. The commit AUTHOR is set per-commit in code
-      # (AusMT Gateway <gateway@ausmt.local>, design §5.3); these HOME/config envs just give git a
+      # (AusMT Gateway <gateway@ausmt.local>); these HOME/config envs just give git a
       # writable config location on the read-only rootfs (pointed at the tmpfs) so it does not try to
       # read/write /root. The PUSH uses the operator's credential helper mounted read-only below.
       HOME: /tmp
@@ -218,18 +218,19 @@ services:
       TMPDIR: /tmp   # the bounded tmpfs above; keeps any stray stdlib tempfile off the rootfs
       # git >= 2.35.2 refuses to operate on a repo owned by a DIFFERENT uid ("detected dubious
       # ownership") — and surveys-live is deliberately operator-owned while the gateway runs as
-      # 10002 (the README ownership split). Declare the mount safe via git's env-config mechanism;
+      # 10002 (the README uid split). Declare the mount safe via git's env-config mechanism;
       # publish.scrubbed_env passes GIT_* through (it strips only AusMT secrets). Real incident:
-      # the FIRST live approve (Olympic Dam 2004, 2026-07-06) fail-closed exactly here at preflight.
-      # NOTE the operator must ALSO grant uid 10002 WRITE access for the stage/commit step — the
+      # the FIRST live curator approval (Olympic Dam 2004) fail-closed exactly here at preflight.
+      # NOTE the operator must ALSO grant uid 10002 WRITE access for the stage/commit step: the
       # README's shared-group setup (chgrp -R 10002 + chmod g+rwX + setgid dirs) or a dedicated
       # gateway-owned checkout; safe.directory only clears git's ownership refusal.
       GIT_CONFIG_COUNT: "2"
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: /srv/surveys-live
       # ...and tell git HOW to use the mounted credential file (the mount alone was never wired to
-      # a helper, so git had no username for the https remote — the second half of the first-approve
-      # incident). Harmless when only the placeholder is mounted: auth just fails closed as before.
+      # a helper, so git had no username for the https remote, the second half of the first
+      # curator-approval incident). Harmless when only the placeholder is mounted: auth fails
+      # closed.
       GIT_CONFIG_KEY_1: credential.helper
       GIT_CONFIG_VALUE_1: store --file=/srv/git-creds/credentials
     volumes:
@@ -241,10 +242,10 @@ services:
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/incoming:/gw/incoming:rw
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/jobs:/gw/jobs:rw
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/quarantine:/gw/quarantine:ro
-      # C11: the operator's surveys-live checkout, mounted READ-WRITE — this is the publish target the
-      # gateway stages into, commits, and pushes (design §5 v2). Demo publish is COMMIT-AND-PUSH ONLY:
+      # The operator's surveys-live checkout, mounted READ-WRITE - this is the publish target the
+      # gateway stages into, commits, and pushes (v2). Demo publish is COMMIT-AND-PUSH ONLY:
       # the gateway writes the git history here and NOTHING ELSE — it does NOT build, so it needs NO
-      # Docker socket (keeping the C10 §0 invariant intact). The operator runs `make rebuild-data` by
+      # Docker socket (keeping the invariant intact). The operator runs `make rebuild-data` by
       # hand afterward to actually serve it (see README "Curator publish + manual rebuild"). This is
       # the SAME checkout build-runner reads (there ro); site-data is untouched by the gateway.
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/surveys-live:/srv/surveys-live:rw
@@ -262,7 +263,7 @@ services:
       # PING/PONG), not merely started — a clamd that is up but still loading its database refuses
       # scans, and the gateway would then fail-close every submission to RECEIVED until it finishes.
       # (This is start-ordering only: if clamd dies LATER the gateway keeps running and holds
-      # submissions at RECEIVED, exactly the fail-closed behaviour in README §3.)
+      # submissions at RECEIVED, exactly the fail-closed behaviour in README.)
       clamd:
         condition: service_healthy
 
@@ -270,7 +271,7 @@ services:
     # Official ClamAV daemon. Compose-internal only (no published port) — reached from `gateway`
     # over the compose network at clamd:3310 (INSTREAM). The gw-runner has network_mode:none and
     # CANNOT reach it, by design: scanning is complete before any job is queued, and the second
-    # (post-unpack) sweep is done by the gateway, not the runner (design §1/§5).
+    # (post-unpack) sweep is done by the gateway, not the runner.
     image: clamav/clamav:stable
     profiles: ["gateway"]
     restart: unless-stopped
@@ -310,17 +311,17 @@ services:
     # The real detection for a dead/crash-looping runner is: (a) `restart: unless-stopped` makes a
     # crash-on-import runner visibly restart-loop in `docker compose ps` / `docker events`; (b) the
     # operator-facing symptom is "submissions stuck at SCANNED", the exact Troubleshooting row in
-    # README §4. A meaningful in-container check needs a global runner-heartbeat file (a small code
+    # README. A meaningful in-container check needs a global runner-heartbeat file (a small code
     # change in gateway/runner) — flagged for the architect, NOT faked here.
     # Override the engine image's baked ENTRYPOINT (the build pipeline) to run the runner loop
     # instead. gateway/ is NOT in the engine image, so it is bind-mounted read-only below and put on
     # PYTHONPATH; the runner invokes the in-image validator/engine as subprocesses.
-    user: "10002:10002"                 # design §1 — same NEW uid as the gateway, not the engine's 10001
-    network_mode: none                  # design §1/§0 — untrusted content is parsed with NO network
-    read_only: true                     # design §1 — immutable rootfs
+    user: "10002:10002"                 # same NEW uid as the gateway, not the engine's 10001
+    network_mode: none                  # untrusted content is parsed with NO network
+    read_only: true                     # immutable rootfs
     tmpfs:
       - /tmp                            # mt_metadata scratch (the only writable path it needs)
-    mem_limit: 4g                       # design §1 resource caps (hostile/huge EDI => killed at limits)
+    mem_limit: 4g                       # resource caps (hostile/huge EDI => killed at limits)
     cpus: 2
     pids_limit: 256
     entrypoint: ["python", "-m", "gateway.runner"]
@@ -329,7 +330,7 @@ services:
                                         # dir is /opt/gateway, so `import gateway` needs /opt on the path
                                         # (pointing at /opt/gateway itself made `python -m gateway.runner`
                                         # fail ModuleNotFoundError — the runner never ran in a real
-                                        # container until the first live submission, 2026-07-06).
+                                        # container until the first live submission).
       AUSMT_GW_DATA: /gw
       AUSMT_VALIDATOR_PATH: /srv/surveys/_validation
       # OPTIONAL TUNING forwarded to the RUNNER (gateway/runner/runner.py::RunnerConfig.from_env reads
@@ -342,7 +343,7 @@ services:
       AUSMT_JOB_TIMEOUT_S: ${AUSMT_JOB_TIMEOUT_S:-900}   # per-job wall-clock timeout in the runner loop
       HOME: /tmp                        # read-only rootfs + uid 10002 has no home, so HOME defaults to /
                                         # and every XDG path (~/.cache, ~/.config) hits Errno 30. Real
-                                        # incident (Olympic Dam 2004, 2026-07-06): mt_metadata's EDI
+                                        # incident (Olympic Dam 2004): mt_metadata's EDI
                                         # parse wants ~/.cache -> ALL 58 stations PARSE FAILed -> empty
                                         # build -> quarantine. Pointing HOME at the tmpfs gives the whole
                                         # XDG family a writable, throwaway landing zone.
@@ -351,13 +352,13 @@ services:
     volumes:
       # incoming READ-ONLY (the runner only reads the uploaded zip), quarantine rw (its extraction +
       # reports output), jobs rw (claim pending -> running, write done). NOTHING ELSE — no surveys-
-      # live, no site-data, no state (design §1: the runner sees only the quarantine tree + queue).
+      # live, no site-data, no state (the runner sees only the quarantine tree + queue).
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/incoming:/gw/incoming:ro
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/quarantine:/gw/quarantine:rw
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/jobs:/gw/jobs:rw
       # The gateway package (safe-extract + job protocol shared with the app), read-only. The engine
       # image ships the validator/engine but NOT gateway/, so it is supplied here at runtime. This is
-      # a ${VAR:-} default (empty), not a ${VAR:?} guard (C33): a compose-level guard here blocked
+      # a ${VAR:-} default (empty), not a ${VAR:?} guard: a compose-level guard here blocked
       # portal-only compose commands until this gateway-only var was set. FAIL-CLOSED LIVES IN THE
       # RUNTIME: if AUSMT_CODE_DIR is empty the source resolves to "/gateway" (host root), the mount
       # source does not exist / does not hold the gateway package, and gw-runner cannot import it —

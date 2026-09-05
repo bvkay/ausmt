@@ -1,6 +1,6 @@
 """What the static portal pages tell a search engine and a link-preview crawler about themselves.
 
-index.html has carried a full head since the head-hygiene lane. The other four had a title and a
+index.html has carried a full head since the head-hygiene workflow. The other four had a title and a
 canonical and nothing else: no description, so a result row for About showed whatever Google could
 scrape off the page, and no Open Graph tags at all, so a link to any of them previewed as a bare URL.
 
@@ -13,7 +13,7 @@ Two rules hold the descriptions honest, and both are pinned here rather than lef
 
 brand.html is the exception in the other direction: it is an asset shelf, reached from About by
 anyone who needs a logo file, and it declares itself unindexable. The engine holds the other half of
-that ruling by keeping it out of sitemap.xml (engine/tests/test_sitemap_pathurls.py).
+that rule by keeping it out of sitemap.xml (engine/tests/test_sitemap_pathurls.py).
 """
 import html
 import re
@@ -107,7 +107,7 @@ def test_the_root_page_names_the_site_and_not_only_its_publisher():
 
 def test_the_brand_page_keeps_itself_out_of_the_index():
     """FAILS IF brand.html loses its noindex, or if a robots.txt Disallow is added for it: blocking
-    the crawl would stop the crawler ever reading the noindex, which is the opposite of the ruling.
+    the crawl would stop the crawler ever reading the noindex, which is the opposite of the rule.
     Its canonical stays, because a page with no declared address is worse than an unindexed one."""
     text = _text("brand.html")
     assert '<meta name="robots" content="noindex">' in text, \

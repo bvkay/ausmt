@@ -2,8 +2,7 @@
 #   environments/environment-lock.yml             (conda, win-64 — `conda env create -f ...`)
 #   environments/requirements-mtmetadata-lock.txt (all-pip, Linux/CI — `pip install -r ...`)
 # Loose major pins here track the TESTED versions (see environments/README.md); bump deliberately.
-# (Previously pinned an older stack py3.11/numpy1.26 and referenced a non-existent conda-lock.yml —
-#  corrected 2026-06-16 to the tested py3.12/numpy2.4 stack that the ingest round-trip passes on.)
+# The stack here is py3.12/numpy2.4, which is what the ingest round-trip passes on.
 name: ausmt
 channels: [conda-forge]
 dependencies:

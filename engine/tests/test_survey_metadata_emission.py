@@ -2,8 +2,8 @@
 
 The second public contract: data/products/<survey_id>/survey-metadata.json, one per survey, the
 canonical public metadata of one survey dataset/release, generated from survey.yaml by
-build_portal.survey_metadata_document (the ratified design: AusMT_2026/AUSMT-SURVEY-METADATA-SCOPE.md,
-AUSMT-METADATA-INTERFACE-CONTRACT.md, the 0.1 schema; LANE-CONTRACT-SURVEY-METADATA decisions D1-D20).
+build_portal.survey_metadata_document, against engine/schema/ausmt-survey-metadata.schema.json
+0.1 (LANE-CONTRACT-SURVEY-METADATA).
 
 What this module pins, each RED-proven against the unchanged tree:
 
@@ -13,23 +13,23 @@ What this module pins, each RED-proven against the unchanged tree:
     emitted as assertions;
   * the class rules: title = project_name else name (never the directory name); abstract, subjects,
     creators, contributors, organisations, citation, acknowledgements, dates.issued and attribution
-    VERBATIM when present; no engine-appended HostingInstitution row (D9) and no engine-authored
-    acknowledgement (D10); funders per D6 (funding_doi -> award_uri); dates.coverage from the year
+    VERBATIM when present; no engine-appended HostingInstitution row and no engine-authored
+    acknowledgement; funders (funding_doi -> award_uri); dates.coverage from the year
     range; rights {license raw, access normalised, embargo_until ISO}; extent from the curated
-    geographic_extent only, WGS84 only, all-zero = placeholder, omitted under withheld coordinates
-    (D7); identifiers[] from the identity_classification mapping (case_a represents[] / case_b
+    geographic_extent only, WGS84 only, all-zero = placeholder, omitted under withheld
+    coordinates; identifiers[] from the identity_classification mapping (case_a represents[] / case_b
     own_identifiers[]) and every other related_identifiers row to relationships[] {identifier,
     identifier_type, relation} with the DOI resolver prefix stripped, case kept, exact duplicates
-    dropped (D12); activities[] from identifiers.project_raid only (D13); placeholders (None, "",
+    dropped; activities[] from identifiers.project_raid only; placeholders (None, "",
     TBD, TODO, the template's REPLACE sentinel) treated as absent; no nulls and no empty containers
     ever;
-  * D8: a non-served (embargoed / metadata_only) survey emits every curated class exactly as an open
+  * a non-served (embargoed / metadata_only) survey emits every curated class exactly as an open
     one does, and no formats or distribution facts anywhere;
-  * D11: INFERRED-REVIEW and [CONFIRM] are YAML comments and never reach a document; the marked
+  * INFERRED-REVIEW and [CONFIRM] are YAML comments and never reach a document; the marked
     values emit as curated facts;
-  * the T25 hard stop (_validate_survey_metadata raises naming the survey when
+  * the hard stop (_validate_survey_metadata raises naming the survey when
     citation.preferred_identifier has no equal designated identifier), on both classifications;
-  * D20, the LOUD SKIP: a corpus with one survey the REAL validator FAILs still builds, its
+  * the LOUD SKIP: a corpus with one survey the REAL validator FAILs still builds, its
     build_report.json lists the slug under surveys_skipped_validation, and scripts/verify.py FAILs
     on the non-empty list; verify.py also validates every products/*/survey-metadata.json and pins
     the slug set to mtcat's surveys[].survey_id.
@@ -166,7 +166,7 @@ def test_dates_coverage_from_the_year_range_and_issued_verbatim():
     assert only_start["dates"] == {"coverage": {"year_start": 2020}}
     unparseable = _doc(dict(MINIMAL, dates={"start": "n/a", "end": None}))
     assert "dates" not in unparseable
-    assert "dataset_version" not in _doc(_full_yaml(version="1.0.1")), "D5: no dataset_version home yet"
+    assert "dataset_version" not in _doc(_full_yaml(version="1.0.1")), "no dataset_version home yet"
 
 
 def test_curated_classes_ride_through_verbatim_with_no_engine_additions():
@@ -176,7 +176,7 @@ def test_curated_classes_ride_through_verbatim_with_no_engine_additions():
     assert doc["creators"] == [{"name": "A. Person", "name_type": "person", "orcid": "0000-0002-1825-0097"},
                                {"name": "Example Org", "name_type": "organisation"}]
     assert doc["contributors"] == [{"name": "B. Person", "name_type": "person", "role": "ProjectLeader"}], \
-        "D9: no HostingInstitution row is appended by the engine"
+        "no HostingInstitution row is appended by the engine"
     assert doc["organisations"] == [
         {"name": "Example Org", "ror": "https://ror.org/00892tw58", "roles": ["custodian", "publisher"],
          "primary_custodian": True},
@@ -187,7 +187,7 @@ def test_curated_classes_ride_through_verbatim_with_no_engine_additions():
         "additional": [{"identifier": {"scheme": "DOI", "identifier": "10.99999/ts-release"},
                         "reason": "repository_product"}]}
     assert doc["acknowledgements"] == [{"text": "Required wording, verbatim.", "type": "required_source",
-                                        "source": "Example Org"}], "D10: no engine-authored row"
+                                        "source": "Example Org"}], "no engine-authored row"
     assert doc["attribution"] == {"declared_by": "A. Curator", "declared_date": "2026-07-25",
                                   "changes_made": True,
                                   "changes_summary": "EMTF XML renditions are producer-derived."}
@@ -220,7 +220,7 @@ def test_extent_is_the_curated_wgs84_bbox_only():
     assert doc["extent"] == {"bbox": {"west": 136.97, "south": -30.22, "east": 137.07, "north": -30.10}}
     gda = _full_yaml(geographic_extent={"west": 136.97, "east": 137.07, "south": -30.22, "north": -30.10,
                                         "datum": "GDA2020"})
-    assert "extent" not in _doc(gda), "D7: only a WGS84 extent is emitted (GDA2020 needs an owner ruling)"
+    assert "extent" not in _doc(gda), "only a WGS84 extent is emitted; GDA2020 has no home yet"
     nodatum = _full_yaml(geographic_extent={"west": 136.97, "east": 137.07, "south": -30.22, "north": -30.10})
     assert "extent" not in _doc(nodatum), "no datum means no WGS84 assertion"
     zero = _full_yaml(geographic_extent={"west": 0, "east": 0, "south": 0, "north": 0, "datum": "WGS84"})
@@ -293,7 +293,7 @@ def test_placeholders_are_absent_and_nothing_is_null_or_empty():
 
 
 def test_served_flag_withholds_no_class(monkeypatch):
-    """D8: the emitter gates nothing class-wise on the serve state; the two documents are identical."""
+    """The emitter gates nothing class-wise on the serve state; the two documents are identical."""
     y = _full_yaml(access={"level": "embargoed", "embargo_until": "2027-02-01"})
     open_doc, held_doc = _doc(y, served=True), _doc(y, served=False)
     assert open_doc == held_doc
@@ -301,7 +301,7 @@ def test_served_flag_withholds_no_class(monkeypatch):
     assert "formats" not in held_doc and "distribution" not in held_doc
 
 
-# ---------------------------------------------------------------- D11: markers never leak
+# ---------------------------------------------------------------- Markers never leak
 
 MARKED_YAML = """\
 slug: marked-survey
@@ -338,7 +338,7 @@ def test_inferred_review_and_confirm_markers_never_reach_the_document(tmp_path):
     doc = _doc(y)
     text = bp._jdump(doc)
     assert "INFERRED-REVIEW" not in text and "[CONFIRM]" not in text
-    # D11: the marked values are curated facts and emit as such
+    # The marked values are curated facts and emit as such
     assert doc["subjects"] == [{"code": "370602", "scheme": "ANZSRC-FoR-2020"}]
     assert doc["creators"] == [{"name": "A. Person", "name_type": "person"}]
     assert doc["relationships"] == [{"identifier": "10.25914/bzd5-n780", "identifier_type": "DOI",
@@ -487,7 +487,7 @@ _RICH_CLASSES = ("abstract", "dates", "identifiers", "subjects", "creators", "co
 
 
 def test_defaults_build_emits_exactly_the_minimal_key_set_under_the_served_root(tmp_path):
-    """The presence rule on BUILT output, and D2: the document lands under out/products/<slug>/ (the
+    """The presence rule on BUILT output, and the document lands under out/products/<slug>/ (the
     served root) on every build, even with --products pointing elsewhere, and not under --products."""
     pytest.importorskip("mt_metadata")
     surveys = tmp_path / "surveys"
@@ -503,7 +503,7 @@ def test_defaults_build_emits_exactly_the_minimal_key_set_under_the_served_root(
     prov = json.loads((out / "build_provenance.json").read_text(encoding="utf-8"))
     assert doc["provenance"]["generator"] == f"{prov['pipeline']} {prov['pipeline_version']}"
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", doc["provenance"]["generated"])
-    assert not (prod / "min-survey" / "survey-metadata.json").exists(), "never under --products (D2)"
+    assert not (prod / "min-survey" / "survey-metadata.json").exists(), "never under --products"
     _clean(doc)
     # the schema routes: immutable versioned + latest, byte-identical to the in-tree artifact
     in_tree = (ROOT / "schema" / "ausmt-survey-metadata.schema.json").read_bytes()
@@ -521,7 +521,7 @@ def test_defaults_build_emits_exactly_the_minimal_key_set_under_the_served_root(
 
 
 def test_d8_every_class_is_emitted_for_open_embargoed_and_metadata_only_alike(tmp_path):
-    """D8: no new withholding. The 3-survey corpus (open + embargoed + metadata_only), each curating
+    """No new withholding. The 3-survey corpus (open + embargoed + metadata_only), each curating
     every class: documents for all three, every class present on all three, no formats or distribution
     key anywhere, and the slug set equals mtcat's surveys[].survey_id."""
     pytest.importorskip("mt_metadata")
@@ -540,7 +540,7 @@ def test_d8_every_class_is_emitted_for_open_embargoed_and_metadata_only_alike(tm
     docs = {slug: _read_doc(out, slug) for slug in corpus}
     for slug, doc in docs.items():
         for cls in _RICH_CLASSES:
-            assert cls in doc, f"{slug}: {cls} missing (D8: every curated class on every survey)"
+            assert cls in doc, f"{slug}: {cls} missing; every curated class rides on every survey"
         assert "formats" not in doc and "distribution" not in doc
         assert doc["identifiers"] == [{"scheme": "DOI", "identifier": f"10.99999/{slug}-level2"}]
         assert doc["relationships"] == [{"identifier": f"10.99999/{slug}-ts", "identifier_type": "DOI",
@@ -557,7 +557,7 @@ def test_d8_every_class_is_emitted_for_open_embargoed_and_metadata_only_alike(tm
 
 def test_t25_hard_stop_fails_the_build_naming_the_survey(tmp_path):
     """Reachable only without a validator (the validator FAILs an undesignated preferred_identifier at
-    the entry gates, D20); the emitter's own last line still refuses to publish."""
+    the entry gates); the emitter's own last line still refuses to publish."""
     pytest.importorskip("mt_metadata")
     surveys = tmp_path / "surveys"
     surveys.mkdir()
@@ -572,7 +572,7 @@ def test_t25_hard_stop_fails_the_build_naming_the_survey(tmp_path):
     assert "t25-survey" in r.stderr and "preferred_identifier" in r.stderr, r.stderr[-2000:]
 
 
-# ---------------------------------------------------------------- D20: the loud skip
+# ---------------------------------------------------------------- the loud skip
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
                               "(designed topology; vendored oracle lives in gateway/tests)")
@@ -580,7 +580,7 @@ IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
 
 def _resolve_validator_dir() -> Path:
     """The REAL survey validator (the sibling ausmt-surveys checkout), else the committed vendored
-    copy (the PINNED contract), else the designed engine-image skip (test_validator_gate.py D3.1)."""
+    copy (the PINNED contract), else the designed engine-image skip (test_validator_gate.py)."""
     sibling = REPO.parent / "ausmt-surveys" / "_validation"
     if (sibling / "validate_survey.py").is_file():
         return sibling
@@ -598,7 +598,7 @@ _BAD_ACCESS_YAML = _MIN_YAML.replace("slug: min-survey", "slug: bad-survey").rep
 
 
 def test_loud_skip_records_the_slug_and_verify_fails(tmp_path):
-    """D20: a survey the REAL validator FAILs is skipped by the build (exit 0, the rest builds), the
+    """A survey the REAL validator FAILs is skipped by the build (exit 0, the rest builds), the
     slug is recorded in build_report.json surveys_skipped_validation, and scripts/verify.py FAILs on
     the non-empty list so `make rebuild-data` never swaps a build that silently lost a survey."""
     pytest.importorskip("mt_metadata")
@@ -656,9 +656,9 @@ def test_verify_validates_every_document_and_pins_the_slug_set(tmp_path):
 
 def test_designation_dedup_folds_scheme_case():
     """A case-mismatched scheme must not let the SAME identifier be emitted both as an identifier
-    OF the dataset and as a relationship TO it - the dedup key used to compare schemes raw, so
+    OF the dataset and as a relationship TO it - the dedup key once compared schemes raw, so
     scheme 'doi' beside identifier_type 'DOI' published the dataset IsIdenticalTo itself (the exact
-    self-reference the D12 partition exists to prevent). The fold reuses the normalisation
+    self-reference the partition exists to prevent). The fold reuses the normalisation
     _sm_bare_identifier already applies for its own DOI test."""
     y = _full_yaml(identity_classification={
         "case": "case_a",

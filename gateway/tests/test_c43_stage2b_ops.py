@@ -1,4 +1,4 @@
-"""C43 S2b-i: serve-state screen + operations floor (gateway half — record D8/D15).
+"""Serve-state screen + operations floor, gateway half.
 
 The consumer side of the ops floor: the gateway reads ops-status.json SERVER-side (the
 reconcile-status.json seam — serve_state.read_ops_status) and renders the first-class serve screen +
@@ -119,7 +119,7 @@ def test_serve_page_missing_ops_is_stale_and_still_200(tmp_path):
 # Route: the sync_failed loud band (the incident, as a test) — driven by FRESH reconcile-status.json
 # --------------------------------------------------------------------------------------------------
 def test_sync_failed_renders_loud_band_incident_as_test(tmp_path):
-    """SYNC_FAILED SURFACING PIN (record D15 — the incident as a test). A reconcile-status.json with
+    """SYNC_FAILED SURFACING PIN (the incident as a test). A reconcile-status.json with
     action=sync_failed must render the LOUD sync band on the serve screen; a healthy noop must NOT.
     FAILS IF a sync_failed stays invisible (the 4-hour hidden failure) OR a noop renders the alarm."""
     async def _body():
@@ -183,10 +183,10 @@ def test_freshness_card_both_repos_behind_amber_current_green(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Route: build detail renders the C18-A4 cache forensics (render side of the B4 producer pin)
+# Route: build detail renders the cache forensics (render side of the producer pin)
 # --------------------------------------------------------------------------------------------------
 def test_build_detail_renders_a4_cache_counters(tmp_path):
-    """BUILD-DETAIL RENDER PIN (B4). The build-detail view must render the C18-A4 cache forensics
+    """BUILD-DETAIL RENDER PIN. The build-detail view must render the cache forensics
     (salt_fp / write_errors / read_errors) from the ops-status inventory, and 'no such build' for an
     unknown ref (no filesystem access, no traversal). FAILS IF a counter is dropped, the salt_fp is
     not shown, or an unknown ref is not handled."""
@@ -197,7 +197,7 @@ def test_build_detail_renders_a4_cache_counters(tmp_path):
             r = await client.get("/gateway/curator/serve/build/20260710T032000Z")
             assert r.status_code == 200
             html = r.text
-            assert "cafef00dbeef" in html, "the salt_fp (C18-A4) must render"
+            assert "cafef00dbeef" in html, "the salt_fp must render"
             assert '<span class="fk">Write errors</span><span class="fv">2</span>' in html
             assert '<span class="fk">Read errors</span><span class="fv">3</span>' in html
             # unknown ref -> a 'no such build' page, never a 500 or a traversal.
@@ -238,11 +238,11 @@ def test_serve_routes_require_session(tmp_path):
 
 def test_serve_screen_action_forms_are_allowlisted(tmp_path):
     """Stage 2b-ii ADDS the privileged actions (supersedes the 2b-i read-only pin). The serve screen
-    now renders the D8 buttons, but every <form> action MUST be in the closed allow-list of curator
+    now renders the buttons, but every <form> action MUST be in the closed allow-list of curator
     serve-action routes — no form may post to an unexpected route. This is the render-side guard that a
     stray/typo'd action route never ships. FAILS IF a form posts outside the allow-list."""
     allowed = {
-        "/gateway/curator/rebuild",                 # shipping C40 request-rebuild
+        "/gateway/curator/rebuild",                 # shipping request-rebuild
         "/gateway/curator/serve/update",
         "/gateway/curator/serve/snapshot",
         "/gateway/curator/serve/rebuild-full",
@@ -259,7 +259,7 @@ def test_serve_screen_action_forms_are_allowlisted(tmp_path):
             # Rollback/restore are LINKS to their own confirm pages (not inline forms on this screen).
             for action in actions:
                 assert action in allowed, f"a serve-screen form posts to a non-allowlisted route: {action!r}"
-            # The D8 action buttons are present (the actions surface actually shipped).
+            # The action buttons are present (the actions surface actually shipped).
             assert "/gateway/curator/serve/update" in actions, "the Update box action must render"
             assert "/gateway/curator/serve/snapshot" in actions, "the Snapshot action must render"
             assert ("/gateway/curator/serve/pause" in actions
@@ -286,7 +286,7 @@ def test_serve_screen_pause_and_resume_are_mutually_exclusive(tmp_path):
 
 
 def test_serve_page_and_build_detail_have_no_inline_js(tmp_path):
-    """CSP SWEEP (record D13) extended to the new serve screen + build detail: no inline <script>
+    """CSP SWEEP extended to the new serve screen + build detail: no inline <script>
     (every <script> carries src=), no on*= handlers — both are dead under the strictPages CSP
     (script-src 'self'). FAILS IF either new surface ships inline JS."""
     async def _body():
@@ -305,7 +305,7 @@ def test_serve_page_and_build_detail_have_no_inline_js(tmp_path):
 
 
 def test_freshness_chip_is_earned_never_defaulted():
-    """FRESHNESS-CHIP FAIL-CLOSED PIN (architect gate finding, 2026-07-11). 'current' must be
+    """FRESHNESS-CHIP FAIL-CLOSED PIN. 'current' must be
     EARNED — both repos carrying a comparable sha — never reached by fallthrough. With freshness
     data absent/unparseable (schema skew, broken checkout) the chip pills 'unknown', because a
     floor that cannot see the repos must never claim they are current (the incident class was a
@@ -326,7 +326,7 @@ def test_freshness_chip_is_earned_never_defaulted():
 
 
 def test_ops_status_stale_future_timestamp_is_stale():
-    """FUTURE-TIMESTAMP FAIL-CLOSED PIN (verifier finding, 2026-07-11). A generated_at in the
+    """FUTURE-TIMESTAMP FAIL-CLOSED PIN. A generated_at in the
     FUTURE (forward clock step on the box, then the timer dies) must be STALE — a negative age is
     doubt, not freshness; without this, the ops floor would render FRESH cards for the whole skew
     window, the exact silent-staleness the mechanism exists to prevent. FAILS IF a future-dated
@@ -347,7 +347,7 @@ def test_ops_status_stale_future_timestamp_is_stale():
 
 
 # --------------------------------------------------------------------------------------------------
-# C43 S2b-ii: the _ACTION_COLOUR render gap (incident-backed) + the new pause/pinned states.
+# The _ACTION_COLOUR render gap + the pause/pinned states.
 # --------------------------------------------------------------------------------------------------
 def test_untracked_blocked_renders_red_with_log_tail():
     """RENDER-GAP PIN (incident-backed). action=untracked_blocked is a REFUSED rebuild that needs an
@@ -376,7 +376,7 @@ def test_paused_and_pinned_states_render_their_detail():
 
 
 # --------------------------------------------------------------------------------------------------
-# Build memory on the ops floor (incident 2026-08-15: five kernel OOM kills at 13.7 GB, surfaced only as
+# Build memory on the ops floor (incident: five kernel OOM kills at 13.7 GB, surfaced only as
 # "rebuild FAILED"). Two pins: the failed-status block NAMES an OOM kill when reconcile flagged one, and
 # the build inventory shows each build's own high-water mark (build_report.json peak_rss_mib via
 # alert.sh) so the trend is visible before the box runs out.

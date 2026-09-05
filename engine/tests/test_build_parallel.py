@@ -1,10 +1,10 @@
 """Build parallelism (the MTH5 worker pool) -- serial==parallel product equivalence.
 
-The 2026-08-27 profile (AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md) attributed ~68% of a cold
+The profile attributed ~68% of a cold
 build and ~99% of a warm rebuild to _write_tf_mth5. The pool parallelises exactly that seam: the
 tier-1 per-station fan-out (emit_station_mth5) and the tier-2 survey bundle (emit_survey_mth5),
 each task a self-contained _write_tf_mth5 call that re-reads its source EDI in the worker. The
-parse and XML seams, the C18 cache and every piece of manifest bookkeeping stay in the main
+parse and XML seams, the cache and every piece of manifest bookkeeping stay in the main
 process; _disambiguate has already finalised every station id before the first write is
 submitted, so worker scheduling can never reach an identity decision.
 
@@ -20,7 +20,7 @@ places, all of them deliberate build records rather than leaks:
 
 plus the build.json / build_provenance.json / build_report.json build records (timings and wall
 stamps by design). The served EDI, the served EMTF XML and BOTH zips are byte-compared with no
-exemption: their published digests are cross-build invariants (C18 Amendment A5), so a
+exemption: their published digests are cross-build invariants, so a
 <CreateTime> or a zip-metadata leak fails here rather than being normalised away. The comparator
 normalises ONLY the places above and byte-compares everything else, default-deny: a file with no
 rule is byte-compared, so any NEW nondeterminism the pool introduced fails loudly instead of being
@@ -127,7 +127,7 @@ def _norm_manifest(out):
     cross-build invariant the download reference publishes. Every size, h5 included, is a
     deterministic pin and stays compared.
 
-    KNOWN LIMIT of the h5 size pin, adjudicated at corpus scale 2026-08-27: a MULTI-TF bundle's
+    KNOWN LIMIT of the h5 size pin, adjudicated at corpus scale: a MULTI-TF bundle's
     size can wiggle a few KB with the writing process's accumulated history (serial corpus main
     process vs anything with a shorter history), because channel_summary's hdf5_reference columns
     encode internal file addresses; every value column stays identical and fresh single-survey

@@ -1,4 +1,4 @@
-"""Path-URL contract, tier 1 (owner ruling 2026-08-18): the front door knows the three shapes.
+"""Path-URL contract, tier 1: the front door knows the three shapes.
 
 /surveys/<slug>, /stations/<ausmt_id> and /collections/<id> are the PUBLISHED URL contract for the
 portal's three entity kinds. Tier 1 maps each shape onto the SPA's hash route with a server-side
@@ -68,7 +68,7 @@ _SHAPES = (("surveys", "survey"), ("stations", "station"), ("collections", "coll
 
 # The BARE prefixes and what the front door does with each. /surveys and /collections now have
 # real index pages behind them (engine pages/<kind>/index.html, served by the box), so they pass
-# through to the reader like any other portal path. /stations has no index BY RULING: 2,625
+# through to the reader like any other portal path. /stations has no index BY RULE: 2,625
 # noindex station pages are deliberately unadvertised and there is nothing to list, so the bare
 # form keeps its 301 to the portal root.
 _BARE_REDIRECTED = ("stations",)

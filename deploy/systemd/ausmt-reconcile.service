@@ -1,4 +1,4 @@
-# AusMT serve-reconcile agent (C40). A oneshot unit the ausmt-reconcile.timer fires every ~15 min:
+# AusMT serve-reconcile agent. A oneshot unit the ausmt-reconcile.timer fires every ~15 min:
 # it syncs surveys-live, and rebuilds the served corpus when the published HEAD has moved ahead of
 # the served build (or a curator pressed "request rebuild"). See deploy/README.md "Serve reconcile
 # (automatic rebuild)" for the install runbook.
@@ -9,7 +9,7 @@
 #   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir   (e.g. /srv/ausmt/code/deploy)
 #   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /srv/ausmt/code/deploy/.env)
 # The script itself reads AUSMT_DATA_DIR + AUSMT_CODE_DIR from the EnvironmentFile (.env), so this
-# unit depends on NO shell profile (the 2026-07-08 "works interactively, fails from the timer" class
+# unit depends on NO shell profile (the "works interactively, fails from the timer" class
 # — the vars live in .env, loaded here, not in ~/.bashrc).
 
 [Unit]
@@ -32,9 +32,9 @@ WorkingDirectory=__DEPLOY_DIR__
 ExecStart=__DEPLOY_DIR__/scripts/reconcile.sh
 # Bound a wedged build, but leave real headroom over a COLD-CACHE rebuild of the whole corpus.
 # 3600 was set when "a rebuild takes minutes" was true. It is not any more: a measured cold rebuild of
-# 22 surveys / 1730 stations (bundled EDIs + per-survey and per-station MTH5) took ~93 MINUTES, and on
-# 2026-08-11 systemd killed the rebuild at exactly 60 minutes, once an hour, indefinitely — each
-# attempt abandoning a half-written builds/<ts>. The C18 cache colds on every image rebuild (its salt
+# 22 surveys / 1730 stations (bundled EDIs + per-survey and per-station MTH5) took ~93 MINUTES, and
+# a 3600 timeout has systemd killing the rebuild at exactly 60 minutes, once an hour, indefinitely,
+# each attempt abandoning a half-written builds/<ts>. The build cache colds on every image rebuild (its salt
 # is the baked engine commit), so the slow path is the NORMAL path after any deploy, not an outlier.
 # 4 h leaves room for corpus growth while still catching a genuinely stuck build.
 TimeoutStartSec=14400

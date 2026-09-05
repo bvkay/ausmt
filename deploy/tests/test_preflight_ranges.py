@@ -1,7 +1,7 @@
-"""Numeric-knob range enforcement at the TWO consumers of the Lane J floors (deploy review section 5).
+"""Numeric-knob range enforcement at the TWO consumers of the numeric floors (deploy review section 5).
 
 gateway/config.py::_RANGES pins 15 numeric knobs whose zero/out-of-range value breaks the gateway
-SILENTLY (a zeroed cap serves a wall of 413/429 while healthz stays green). Lane J enforced them at
+SILENTLY (a zeroed cap serves a wall of 413/429 while healthz stays green). They are enforced at
 gateway container start (fail_closed_startup). This suite pins the two gaps that review found:
 
   1. PREFLIGHT (deploy/scripts/preflight.sh) now range-checks the SAME _RANGES before `docker compose
@@ -13,7 +13,7 @@ gateway container start (fail_closed_startup). This suite pins the two gaps that
      interpreter (config.py is stdlib-only, so it imports fine).
 
   2. THE RUNNER (gateway/runner/runner.py::RunnerConfig.from_env) reads AUSMT_JOB_TIMEOUT_S and
-     AUSMT_MAX_UPLOAD_MB - the same knobs the gateway floors - but historically int()'d them with no
+     AUSMT_MAX_UPLOAD_MB - the same knobs the gateway floors - and once int()'d them with no
      floor, so a zero was accepted where the gateway rejects it. from_env now fails closed (SystemExit)
      on a sub-1 value, identically to the gateway.
 

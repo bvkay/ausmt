@@ -4,7 +4,7 @@
 SCOPE:377-380 asks for emitter-side validation beyond the schema, and this is that layer: referential
 integrity of a resource's run references, unique run and resource ids, time_period ordering, channel
 shape per component family, archive-row containment, withheld-branch rejection, DOI syntax, the
-zero-null rule over everything this lane adds, plus the 1.x pin that keeps `distribution.edi_path`
+zero-null rule over everything this module adds, plus the 1.x pin that keeps `distribution.edi_path`
 and the served EDI resource row stating one path (SCOPE:71-73).
 
 ONE implementation, two enforcement points: build_portal._validate_station_metadata runs it over the
@@ -32,8 +32,8 @@ _BARE_DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 # The electrode-circuit members. They attach to the electric measurement circuit and to nothing else.
 _ELECTRIC_ONLY = ("positive", "negative", "dipole_length_m", "contact_resistance")
 # {archive resource id: the rendition whose presence proves this station's bytes are IN that bundle}.
-# An `archive` row is a CONTAINMENT claim, and containment is decided per station, not per survey: the
-# C42 coordinate byte gate withholds a non-exact station's EDI and EMTF XML, so it is in neither zip
+# An `archive` row is a CONTAINMENT claim, and containment is decided per station, not per survey:
+# the coordinate byte gate withholds a non-exact station's EDI and EMTF XML, so it is in neither zip
 # its survey still publishes. The emitter reads the same map when it builds resources[], so the rule
 # is stated once and enforced at both ends.
 #
@@ -55,14 +55,14 @@ _TS_REQUIRED = ("access_url", "processing_level")
 # space or bracket means the route was assembled by concatenation instead of encoded, and only the
 # encoded form resolves (NVP_2019's `C5 [REMOTE].zip`), so the unencoded one is a dead download.
 _TS_ENCODED = re.compile(r"^(?:[A-Za-z0-9/_.~-]|%[0-9A-Fa-f]{2})+$")
-# D19 (ruled 2026-08-24), fail-CLOSED rather than merely unemitted: the archive's level_2 tree holds
+# Fail-CLOSED rather than merely unemitted: the archive's level_2 tree holds
 # TRANSFER FUNCTIONS, so a level2 row under this kind asserts a recorded time series for a station
 # that has none. The emitter routes no such row; this refuses one that arrives by any other path.
 _TS_EXCLUDED_LEVEL = "level2"
-# What this lane ADDS. Section 2's zero-null rule is scoped to it: the frozen keys carry eight
+# What this module ADDS. Section 2's zero-null rule is scoped to it: the frozen keys carry eight
 # legitimate nulls (remote_site, coordinate_qc, rotspec, the emeas azimuths, the two rotation sources,
 # convention_check.detail), so the survey-metadata document's corpus-wide rule cannot be imported.
-# The fold (D1) is an addition too, and the scan reaches INTO `diagnostics` for exactly its members:
+# The fold is an addition too, and the scan reaches INTO `diagnostics` for exactly its members:
 # an undetermined call is OMITTED here, never copied across as the sidecar's null.
 _NEW_BLOCKS = ("runs", "resources")
 _FOLDED_DIAGNOSTICS = ("classification", "skew_beta_median_deg", "pct_periods_3d", "method", "note")

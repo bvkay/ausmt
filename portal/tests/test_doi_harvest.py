@@ -1,5 +1,5 @@
 """Runs the shared DOI citation-harvest core node test (src/doi_harvest.js - the single source reused by
-the public Add Survey form and the curator metadata editor, CONTRIBUTOR-CREDIT-SPEC §6). Skips if Node is
+the public Add Survey form and the curator metadata editor, the contributor-credit model). Skips if Node is
 unavailable; CI installs Node (see .github/workflows/portal-ci.yml)."""
 import shutil
 import subprocess

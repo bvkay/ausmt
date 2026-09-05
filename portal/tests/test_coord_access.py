@@ -1,7 +1,7 @@
-"""C42 lane 3 — portal handles masked coordinates (Invariant 10).
+"""Portal handles masked coordinates (Invariant 10).
 
 The engine masks a custodian-withheld station to null lat/lon and a generalised station to a 0.1deg
-cell, AND (C42 Amendment A1) emits an explicit coordinate-policy marker for the non-exact stations on a
+cell, AND emits an explicit coordinate-policy marker for the non-exact stations on a
 boot-loaded artifact (coord_policy.json). This boots the REAL portal modules in jsdom
 (tools/coord_access_test.js) over ENGINE-BUILT fixtures (tests/fixtures/c42/, produced by
 tools/gen_c42_fixtures.py) and drives the null-coord + generalised-badge paths.
@@ -11,8 +11,8 @@ It FAILS if:
 - the withheld drawer throws, omits the "coordinates withheld (custodian policy)" line, prints
   null/undefined, or leaks a lat/lon-like decimal pair (the DOM-layer leak sweep);
 - a generalised station's drawer omits the "position generalised to ~0.1°" badge or leaks its true
-  6-dp coordinates (the A1 badge + DOM-layer leak pin);
-- a withheld station is spatially selected (bbox/polygon) or is no longer findable by text;
+  6-dp coordinates (badge + DOM-layer leak pin);
+- a withheld station is spatially selected (bbox/polygon) or is not findable by text;
 - the survey station count drops the withheld station.
 
 Skips when Node or the jsdom dev-dependency is absent (CI runs `npm ci` in portal/ first)."""

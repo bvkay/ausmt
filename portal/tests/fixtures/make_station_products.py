@@ -2,7 +2,7 @@
 """Regenerate portal/tests/fixtures/station-products/ by RUNNING the real emitter.
 
 The three documents under station-products/ are emitted output, not hand-written JSON: the portal
-lane installs no engine stack, so its tests cannot run the emitter and instead read a committed tree
+workflow installs no engine stack, so its tests cannot run the emitter and instead read a committed tree
 the emitter really wrote. That only works while the tree is refreshed whenever the emitter changes
 what it writes, and until this script existed there was no way to refresh it - the tree went two
 behaviour changes stale with nothing red to say so.
@@ -79,7 +79,7 @@ def stage(root: Path, slug: str, name: str, access_lines: list) -> None:
              "datum: WGS84 }"] + access_lines
     (root / slug / "survey.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
     # The run-id store, without which a station asserting an acquisition fact publishes no runs[]
-    # (D2: the id comes from the store and from nowhere else). The staged EDI states its logger, so
+    # (the id comes from the store and from nowhere else). The staged EDI states its logger, so
     # these rows are what make the fixture carry the block the portal pages describe.
     rows = "\n".join(f"  {sid}: [{sid}-r01]" for sid, *_ in STATIONS[slug])
     (root / slug / "run-ids.yaml").write_text(f"run_ids:\n{rows}\n", encoding="utf-8")
@@ -97,7 +97,7 @@ def main() -> int:
               ["access:", "  level: open", "  coordinates: exact",
                "  coordinate_overrides:", "    SPGENERAL: generalised"])
         # A date far enough out that the fixture does not expire; the schema requires a real one
-        # under an embargoed level (D6).
+        # under an embargoed level.
         embargo = (dt.date.today() + dt.timedelta(days=400)).isoformat()
         stage(surveys, "withheld-survey", "Station Products Withheld Survey",
               ["access:", "  level: embargoed", f"  embargo_until: {embargo}"])

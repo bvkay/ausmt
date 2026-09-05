@@ -17,7 +17,7 @@ import _ediparse as ep  # noqa: E402  (shared _norm / cached read_norm)
 
 NUM = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
 
-# Australian bounding box (w, e, s, n) — used to guard the AU-only state_of() facet so non-AU
+# Australian bounding box (w, e, s, n) - it guards the AU-only state_of() facet so non-AU
 # coordinates are not mislabelled as Australian states. Generous; matches the validator's box.
 AUS_BBOX = (108.0, 156.0, -45.0, -8.0)
 
@@ -53,8 +53,8 @@ def state_of(lat, lon):
     geography (border cases misclassify).
 
     SCOPE: this is now a minor helper. The catalogue's region facet (r[9]) comes from the
-    survey's `survey.yaml` `region`/`country`, NOT from this function. `state_of` is only used to
-    seed the AusLAMP **raw/bulk-mode** per-state survey split (`build_portal` `--raw`), where there
+    survey's `survey.yaml` `region`/`country`, NOT from this function. `state_of` seeds ONLY
+    the AusLAMP **raw/bulk-mode** per-state survey split (`build_portal` `--raw`), where there
     is no per-survey metadata to read. Non-AU coordinates return "" (the region guard).
 
     The dense threshold ladder below (especially the VIC/NSW split) is deliberately crude and its
@@ -157,17 +157,17 @@ def coords_of(path: Path):
 _PHX_DATAID = re.compile(r"\bP\s*=\s*(\S+)\s+R\s*=\s*([^\s()]+)", re.I)
 _INFO_BLOCK = re.compile(r"^>\s*INFO\b[^\n]*\n(.*?)(?=^\s*>|\Z)", re.S | re.M)
 _REF_STATION = re.compile(r"REFERENCE\b.*?STATION\s+NAME:\s*(\S+)", re.S | re.I)
-# Conservative email match (C3/PII scrub): >INFO free text is uncontrolled and has carried real
+# Conservative email match (PII scrub): >INFO free text is uncontrolled and has carried real
 # operator emails (e.g. a curator's institutional address) straight into the PUBLIC, non-licence-gated
 # station.json processing.note. Redact here, at the single point the note is derived, so every caller
-# (build_portal, any future consumer) gets the scrubbed form for free. Original EDI bytes are untouched
-# (D1) -- this only rewrites the returned string.
+# (build_portal, any future consumer) gets the scrubbed form for free. Original EDI bytes are
+# untouched; this only rewrites the returned string.
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 
 def parse_dataid(dataid):
     """Phoenix remote-reference DATAID 'P=<station> R=<remote> (H)' -> (station, remote_site).
-    Plain DATAIDs pass through unchanged (remote=None). So a compound id is no longer mangled and the
+    Plain DATAIDs pass through unchanged (remote=None), so a compound id is not mangled and the
     remote site is recovered. Best-effort, never raises."""
     if not dataid:
         return dataid, None
@@ -184,7 +184,7 @@ def proc_note(text, dataid=None):
     note = (m.group(1).strip() if m else "")
     if note:  # mojibake from reading a UTF-8 EDI as latin-1 (degree sign, ohm sign)
         note = note.replace("Â°", "°").replace("[â¦]", "[Ω]").replace("â¦", "Ω").replace("Â", "").strip()
-        note = _EMAIL.sub("[email removed]", note)  # PII scrub (C3): never let an operator email reach station.json
+        note = _EMAIL.sub("[email removed]", note)  # PII scrub: never let an operator email reach station.json
     remote = parse_dataid(dataid)[1] if dataid else None
     if not remote:
         r = _REF_STATION.search(text)
@@ -195,7 +195,7 @@ def proc_note(text, dataid=None):
 # --- LINEAGE: the file WRITER is not the transfer-function PROCESSOR --------------------------
 # The EDI HEAD's PROGNAME/PROGVERS names the program that SERIALISED the file. For most of the
 # corpus that is a database/plotting exporter (Geotools, WinGLink, MTpy) which did no processing at
-# all: measured 2026-08-14 over the GA AusLAMP holdings, 1743 files say `PROGVERS="WINGLINK EDI
+# all: over the GA AusLAMP holdings, 1743 files say `PROGVERS="WINGLINK EDI
 # 1.0.22"` and 337 say `PROGVERS="Geotools 4.0.5.12583"`, while the program that actually estimated
 # the transfer function is named ONLY in the >INFO free text ("Processing code: LEMIMT" on 296 of
 # those Geotools files; "processing.software.name = ['Birrp 5.0', ' 5.2']" on the MTpy-written

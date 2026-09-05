@@ -1,11 +1,11 @@
-"""C34/D1+D3 — the gw-runner generates LICENSE.md + README.md into a submitted package at intake
+"""The gw-runner generates LICENSE.md + README.md into a submitted package at intake
 (after safe-extract, before validation), fail-closed and non-destructive.
 
 Each test states its failure criterion and tests an independent observable (real bytes on disk, the
 REAL validator's report), never metadata self-consistency.
 
-The engine's stdlib-only _license_text leaf (D2) is imported here the way the runner reaches it in
-the stack-less lane: engine/extract on sys.path (the leaf pulls no heavy stack, so this needs no
+The engine's stdlib-only _license_text leaf is imported here the way the runner reaches it in
+the stack-less workflow: engine/extract on sys.path (the leaf pulls no heavy stack, so this needs no
 mt_metadata). The runner's own _generate_intake_files uses the SAME import path.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 
 # Make the engine's stdlib-only _license_text leaf importable (the runner's intake module reaches it
 # via `from extract._license_text import ...`, falling back to the bare sibling name — this insert
-# feeds that fallback in the local/gateway test lane where `extract` is not pip-installed).
+# feeds that fallback in the local/gateway test workflow where `extract` is not pip-installed).
 _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
 sys.path.insert(0, str(_ENGINE_DIR / "extract"))
 
@@ -52,7 +52,7 @@ def _make_package(root: Path, *, survey_yaml: str = _SURVEY_YAML, n_edi: int = 2
                   n_xml: int = 0) -> Path:
     """Build an extracted-package-shaped folder <root>/<slug>/ with survey.yaml, n_edi EDIs and n_xml
     EMTF XMLs, the layout safe_extract produces (package_dir/<slug>/...). EMTF XML is a first-class
-    submission input since the 2026-08-03 ruling, so a package may carry either folder or both."""
+    submission input, so a package may carry either folder or both."""
     pkg = root / "intake-survey-2026"
     (pkg / "transfer_functions" / "edi").mkdir(parents=True)
     (pkg / "survey.yaml").write_text(survey_yaml, encoding="utf-8")
@@ -73,7 +73,7 @@ def _make_package(root: Path, *, survey_yaml: str = _SURVEY_YAML, n_edi: int = 2
 
 
 # --------------------------------------------------------------------------------------------------
-# D3 — generation into a package that lacks the files.
+# Generation into a package that lacks the files.
 # --------------------------------------------------------------------------------------------------
 def test_generates_both_files_with_stamp(tmp_path):
     # FAILS IF either file is missing after generation, or either lacks the machine stamp on its first
@@ -90,7 +90,7 @@ def test_generates_both_files_with_stamp(tmp_path):
 
 
 def test_license_md_text_equals_engine_bundle_text(tmp_path):
-    # Single-source proof (D2): the rights body inside LICENSE.md is the ENGINE's own
+    # Single-source proof: the rights body inside LICENSE.md is the ENGINE's own
     # license_instrument_text output for the same id — so LICENSE.md and the bundle LICENSE.txt can
     # never carry divergent rights wording. FAILS IF intake stops delegating to _license_text.
     import _license_text as lt  # noqa: PLC0415
@@ -104,10 +104,10 @@ def test_license_md_text_equals_engine_bundle_text(tmp_path):
 
 
 def test_intake_and_build_state_identical_attribution(tmp_path):
-    # C46 parity: the intake LICENSE.md and the build_portal bundle LICENSE.txt must state the SAME rights
+    # Parity: the intake LICENSE.md and the build_portal bundle LICENSE.txt must state the SAME rights
     # for the same survey. Both call sites derive their (attribution, sources, changes) through the shared
     # _license_text.instrument_params_from_survey helper, so a survey carrying an attribution+sources block
-    # renders IDENTICAL instrument text on both paths. FAILS IF intake drops a param (the pre-C46 defect:
+    # renders IDENTICAL instrument text on both paths. FAILS IF intake drops a param (the pre-fix defect:
     # _license_md_body never passed attribution) — the source paragraph / supersession / changes clause
     # would then be missing from the intake rendering while the build reference carries them.
     import _license_text as lt  # noqa: PLC0415
@@ -145,7 +145,7 @@ def test_intake_and_build_state_identical_attribution(tmp_path):
     assert intake_rights == build_rights, (
         "intake LICENSE.md and build LICENSE.txt state DIVERGENT rights:\n"
         f"--- intake ---\n{intake_rights}\n--- build ---\n{build_rights}")
-    # Non-vacuity: the fixture must actually exercise the C46 additions, else the equality is hollow.
+    # Non-vacuity: the fixture must actually exercise the additions, else the equality is hollow.
     assert "Source datasets" in intake_rights
     assert "AusLAMP SA" in intake_rights and "Geoscience Australia" in intake_rights
     assert "The upstream dataset was obtained under CC-BY-3.0-AU" in intake_rights   # supersession
@@ -153,7 +153,7 @@ def test_intake_and_build_state_identical_attribution(tmp_path):
 
 
 def test_readme_carries_declared_metadata(tmp_path):
-    # README skeleton (D3): name, organisation, dates, station count, licence, abstract, citation —
+    # README skeleton: name, organisation, dates, station count, licence, abstract, citation - 
     # all from survey.yaml. FAILS IF a required field is dropped from the skeleton.
     pkg = _make_package(tmp_path, n_edi=2)
     intake.generate_intake_files(pkg, now_utc=_NOW)
@@ -171,8 +171,8 @@ def test_readme_carries_declared_metadata(tmp_path):
 def test_readme_station_count_covers_emtf_xml_submissions(tmp_path):
     # The README station count is what a curator reads to decide whether a submission arrived intact,
     # so it must count the transfer functions the engine will actually ingest. EMTF XML has been one
-    # of those since the 2026-08-03 ruling. FAILS IF an XML-only package is described as having no
-    # stations, or a mixed one counts only half of what it carries. RED against the pre-ruling
+    # of those since the rule. FAILS IF an XML-only package is described as having no
+    # stations, or a mixed one counts only half of what it carries. RED against the pre-rule
     # _station_count (edi/ alone): "Stations: 0" for the first, "Stations: 1" for the second.
     xml_only = _make_package(tmp_path / "x", n_edi=0, n_xml=3)
     intake.generate_intake_files(xml_only, now_utc=_NOW)
@@ -196,7 +196,7 @@ def test_readme_station_count_covers_emtf_xml_submissions(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# D3 — fail-closed on an unrecognised licence: NO LICENSE.md (the WARNING stands), README still made.
+# Fail-closed on an unrecognised licence: NO LICENSE.md (the WARNING stands), README still made.
 # --------------------------------------------------------------------------------------------------
 def test_unrecognised_license_generates_no_license_md(tmp_path):
     # FAILS IF a LICENSE.md is fabricated for a placeholder/typo licence. proven RED by weakening the
@@ -212,7 +212,7 @@ def test_unrecognised_license_generates_no_license_md(tmp_path):
 
 
 def test_typo_license_generates_no_license_md(tmp_path):
-    # The exact C6 typo hole, at intake: a single-char typo (letter O for zero) is NOT recognised.
+    # The exact typo hole, at intake: a single-char typo (letter O for zero) is NOT recognised.
     bad_yaml = _SURVEY_YAML.replace("license: CC-BY-4.0", "license: CC-BY-4.O")
     pkg = _make_package(tmp_path, survey_yaml=bad_yaml)
     written = intake.generate_intake_files(pkg, now_utc=_NOW)
@@ -231,7 +231,7 @@ def test_recognised_metadata_only_license_still_gets_license_md(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# D3 — never overwrite an existing file (byte-identity).
+# Never overwrite an existing file (byte-identity).
 # --------------------------------------------------------------------------------------------------
 def test_existing_files_are_never_overwritten(tmp_path):
     # FAILS IF generation clobbers a package's own LICENSE.md/README.md. proven RED by removing the
@@ -259,7 +259,7 @@ def test_one_existing_one_missing_only_generates_the_missing(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# D3 — PII: generated content contains no submitter contact details (independent-observable grep).
+# PII: generated content contains no submitter contact details (independent-observable grep).
 # --------------------------------------------------------------------------------------------------
 def test_generated_files_contain_no_pii(tmp_path):
     # The runner never sees the DB's submitter fields (a job carries only ids + paths), and intake
@@ -311,7 +311,7 @@ def _alias_bomb_yaml(levels: int = 5, fan: int = 10) -> str:
 
 
 def test_alias_bomb_survey_yaml_generates_a_bounded_readme(tmp_path):
-    """G3 amplification: intake runs BEFORE the validator, so every survey.yaml value it renders is
+    """Amplification: intake runs BEFORE the validator, so every survey.yaml value it renders is
     still attacker-supplied. A value that is not a scalar must read as no declared metadata (the
     module's fail-closed posture), never as str() of an expanded alias DAG, so the README written into
     the quarantine volume stays bounded no matter what the package declares.
@@ -379,7 +379,7 @@ def test_runner_generate_intake_files_never_raises(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------------
-# D1 — end-to-end through the REAL validator: the two structure WARNINGs flip to PASS in one run.
+# End-to-end through the REAL validator: the two structure WARNINGs flip to PASS in one run.
 # --------------------------------------------------------------------------------------------------
 def _run_real_validator(validator_dir: Path, package_root: Path, out_json: Path) -> dict:
     import json
@@ -397,9 +397,9 @@ def _structure_levels(report: dict, needle: str) -> list[str]:
 def test_real_validator_structure_warnings_flip_to_pass(tmp_path):
     # NO MOCKS: the REAL validate_survey.py (sibling or committed vendored). BEFORE generation the
     # validator WARNs 'LICENSE.md missing' + 'README.md missing'; AFTER generation both are PASS — in
-    # the same package the runner would hand it. This is the D1 property: the generated files are
+    # the same package the runner would hand it. This is the property: the generated files are
     # visible to the validator in the same run. FAILS IF generation stops running before validation,
-    # or the validator no longer sees the generated files.
+    # or the validator does not see the generated files.
     validator_dir = require_validator_dir()
     pkg = _make_package(tmp_path)
 

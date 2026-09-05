@@ -46,7 +46,7 @@ STATIONS = ("SA225.edi", "SA226.edi", "SA227.edi")
 
 def _multi_live(tmp_path, stations=STATIONS):
     """A surveys-live checkout with a multi-station survey. write_survey_live seeds the yaml + one
-    S01.edi; replace that edi/ with our named station set so the count is deterministic."""
+    station S01.edi; replace that edi/ with our named station set so the count is deterministic."""
     surveys_live = tmp_path / "surveys-live"
     pkg = write_survey_live(surveys_live, slug="multi-survey-2026", yaml_text=MULTI_YAML)
     edi = pkg / "transfer_functions" / "edi"

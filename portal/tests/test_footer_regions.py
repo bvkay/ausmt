@@ -5,7 +5,7 @@ The two surfaces had drifted into two different footers. The SPA carried the MTC
 run-on span holding the copyright, the licence note, Releases and the About-this-build control. The
 static pages carried a two-row grid with different wording again ("Machine-readable catalogue",
 "an AuScope service", "each download carries its licence") and a per-page-kind left link, so no two
-page kinds even agreed with each other. The owner's ruling is one footer: LEFT the machine-readable
+page kinds even agreed with each other. The rule is one footer: LEFT the machine-readable
 catalogue, CENTRE the AuScope acknowledgement with the attribution and the licence note, RIGHT the
 AuScope-NCRIS lockup. Releases and About this build leave the footer on every surface; about.html
 carries the running build's identity and the route to the releases page in its own body, which is
@@ -13,10 +13,10 @@ pinned in test_about_uniform_chrome.py.
 
 WHY THE ENGINE HALF LIVES HERE rather than in engine/tests, and why it reads _pages.py's SOURCE
 text: the same two reasons test_header_geometry_parity.py gives. portal-ci runs on portal/** AND on
-engine/extract/_pages.py, so an edit to either surface fires this lane, where the engine lane
+engine/extract/_pages.py, so an edit to either surface fires this module, where the engine workflow
 triggers on engine/** alone and cannot see an index.html edit; and _pages.py cannot simply be
 imported (it sibling-imports _au_outline and _stationcheck, which need the engine's own path set
-up). The engine lane holds its own half of this in engine/tests/test_index_pages.py, asserted
+up). The engine workflow holds its own half of this in engine/tests/test_index_pages.py, asserted
 against real rendered pages; this module is what stops the two surfaces diverging again.
 
 THE SEPARATOR IS U+00B7 on every surface, spelt here as an escape so a mis-decoded read of this
@@ -29,7 +29,7 @@ Each assertion states its failure criterion:
   * REGIONS - FAILS if either surface does not carry exactly three footer regions, or if a region
     holds something belonging to another (the licence note in with the acknowledgement's link, the
     lockup outside its own zone).
-  * STRINGS - FAILS if either surface's centre line drifts from the owner's wording, or if the
+  * STRINGS - FAILS if either surface's centre line drifts from the wording, or if the
     left link's label stops being the MTCAT one.
   * TARGETS - FAILS if the two surfaces stop agreeing on where a region's links point. The MTCAT
     document is one target expressed twice: the SPA is served from the portal root and writes it
@@ -37,11 +37,11 @@ Each assertion states its failure criterion:
     ROOT-RELATIVE form of both against each other rather than the raw strings.
   * THE ONE EXTERNAL TARGET - FAILS if a footer reaches any external host other than the single
     allow-listed AuScope navigation address, and FAILS in the other direction if a footer FETCHES
-    anything from an external host. See _EXTERNAL_NAV below: the ruling adds a navigation href, not
+    anything from an external host. See _EXTERNAL_NAV below: the rule adds a navigation href, not
     a runtime dependency, and the two are held apart rather than conflated.
   * THE LOCKUP IS A COMMITTED FILE - FAILS if portal/vendor/auscope-ncris-white.png is missing or
     has been resized, re-encoded or recoloured. A footer image is a promise about a file, and this
-    one is a third-party trademark asset that must ship as its owner published it.
+    one is a third-party trademark asset that must ship as its rights holder published it.
   * GEOMETRY - FAILS if any surface stops being a wrapping flex row or stops being a query
     container, if a side zone stops taking the equal zero basis, if the centre stops being
     content-sized or stops centring its text, if either state below one row goes and the
@@ -63,13 +63,13 @@ Each assertion states its failure criterion:
     portal/index.html's by a character, once the token layer is resolved to the colours it carries.
     The rule above held the box across the five token surfaces and could not reach 404.html or the
     generated tier, which write the same colours as literals; those two carried a rule set of their
-    own in rem units with no bottom padding, and that is what the owner saw as the footers sitting
+    own in rem units with no bottom padding, and that is what showed as the footers sitting
     differently and aligning differently between the Map, the hubs and About. Measured in Chrome
     before this pin, at 2560px the centre sentence's midpoint sat 245.55px left of the viewport's on
     the portal and 274.66px left of it on the generated tier; the footer stood 48.75px on one tier
     and 46.02px on the other, with the text baseline 4.69px apart.
   * THE SIDE ZONES TAKE EQUAL ZERO BASIS - FAILS if either side zone stops declaring flex:1 1 0 with
-    min-width:0, or if the centre stops being content-sized. This is the C9 header lesson restated:
+    min-width:0, or if the centre stops being content-sized. This is the header lesson restated:
     zones that size to their content leave the centre centred in the LEFTOVER space, not on the
     page. With both sides growing from the same zero basis they are always the same width, so the
     centre is page-centred whatever the machine-readable link and the lockup happen to measure.
@@ -89,7 +89,7 @@ verified either side of it. The acknowledgement lengthened the centre once when 
 copyright line and again when it went bold; anything that changes a region's content moves this
 number and it has to be re-measured.
 
-The ruling and every number this module holds it to: AusMT_2026/LANE-CONTRACT-FOOTER-AUSCOPE.md.
+The rule and every number this module holds it to: LANE-CONTRACT-FOOTER-AUSCOPE.md.
 """
 import hashlib
 import re
@@ -103,7 +103,7 @@ PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
 DOT = "·"
 
-# The owner's three regions, as the strings a reader sees. The centre and the right are asserted
+# The three regions, as the strings a reader sees. The centre and the right are asserted
 # character-for-character; the left's label is, and its target is asserted separately because the
 # two surfaces necessarily spell the same URL differently.
 CENTRE = (f"AusMT is enabled by AuScope {DOT} www.auscope.org.au {DOT} "
@@ -111,7 +111,7 @@ CENTRE = (f"AusMT is enabled by AuScope {DOT} www.auscope.org.au {DOT} "
 LEFT_LABEL = "Machine-readable record (MTCAT JSON)"
 MTCAT = "/data/mtcat.json"
 
-# THE ONE EXTERNAL TARGET. The ruling links the AuScope relationship from the footer, so the centre's
+# THE ONE EXTERNAL TARGET. The rule links the AuScope relationship from the footer, so the centre's
 # URL text and the lockup both navigate here. It is an exact allow-list of ONE address and it governs
 # NAVIGATION ONLY: _no_external_fetch below holds the other half, that no footer on any surface may
 # FETCH a resource (src, a stylesheet link, @import, url()) from a host that is not this site. A CDN
@@ -122,7 +122,7 @@ _EXTERNAL_NAV = ("https://www.auscope.org.au",)
 # NO FOOTER CARRIES A MAP CREDIT, on any surface. The basemap's attribution is a licence obligation
 # (OpenStreetMap data under ODbL, tiles rendered from Protomaps' build) and it is met where the map
 # is: in the map's own attribution control, collapsed behind an (i) in the corner. It cannot be met
-# in the footer, for two reasons the owner ruled on.
+# in the footer, for the two reasons below.
 #
 # ONE: the footer is the same box on seven surfaces, and a line only the SPA carries makes it a
 # different box there. Measured in Chrome with the credit in place, the SPA's footer stood 90.80px
@@ -156,7 +156,7 @@ LOGO_SHA256 = "595a564ece1151d94347331c1521381df987da437aa3080cff47a5280cf818f6"
 LOGO_BYTES = 35628
 LOGO_PIXELS = (1919, 325)
 
-# What the ruling took OUT of every footer. Held as a negative so the two controls cannot drift back
+# What the rule took OUT of every footer. Held as a negative so the two controls cannot drift back
 # in one page at a time: the popover's CSS is swept as well as its markup, because a rule left behind
 # is an invitation to re-add the element it styles.
 RETIRED = ("aboutbuild", "About this build", ">Releases<", "releases.html")
@@ -201,7 +201,7 @@ def _outside_queries(text):
 def _index_footer():
     """index.html's <footer> with HTML comments stripped, so prose inside it cannot satisfy a pin.
 
-    NOTHING ELSE IS STRIPPED. This footer used to have the SPA's basemap credit removed before any
+    NOTHING ELSE IS STRIPPED. This footer once had the SPA's basemap credit removed before any
     comparison, which is what let one surface carry a line the other six did not while every
     "identical everywhere" pin still passed. The credit is gone from every footer, so the readers
     compare what is there."""
@@ -267,7 +267,7 @@ def _engine_regions():
 
 
 def test_both_surfaces_carry_the_same_three_regions_with_the_owners_strings():
-    """REGIONS and STRINGS. Non-vacuous in both halves: run against the pre-ruling surfaces, both
+    """REGIONS and STRINGS. Non-vacuous in both halves: run against the pre-rule surfaces, both
     fail on the centre string (neither carried the AuScope acknowledgement) and both fail again on
     the right region, which held Releases and About this build rather than the lockup."""
     for where, regions in (("portal/index.html", _index_regions()),
@@ -321,7 +321,7 @@ def test_the_two_surfaces_agree_on_where_the_footer_points():
 
 def test_the_committed_lockup_is_the_brand_kit_file_unaltered():
     """THE LOCKUP IS A COMMITTED FILE. The footer promises an image on every page of both surfaces,
-    and that image is a third-party trademark asset: it ships as its owner published it or it is not
+    and that image is a third-party trademark asset: it ships as its rights holder published it or it is not
     the mark at all.
 
     FAILS if the file is missing, if its bytes change (a resize, a re-encode, a recolour, a
@@ -344,10 +344,10 @@ def test_the_committed_lockup_is_the_brand_kit_file_unaltered():
 # --------------------------------------------------------------- every page the portal ships
 #
 # The SPA was held against the engine above; these hold the five sibling documents against the SPA.
-# They were the drift the ruling did not reach: each carried its own footer, and the "About this
+# They were the drift the rule did not reach: each carried its own footer, and the "About this
 # build" the old footer pointed at landed on one of them.
 #
-# 404.html used to be the ONE difference, because About this build could only be a link there: Caddy
+# 404.html was once the ONE difference, because About this build could only be a link there: Caddy
 # rewrites any unmatched path to that document, so every link it carries is root-absolute, and it
 # loads no script and so could never fill a version chip. With Releases and About this build out of
 # the footer, that difference is gone and all six documents carry the identical three regions; the
@@ -431,7 +431,7 @@ def _root_relative(href, name):
 
     The single allow-listed external navigation address passes through unchanged, so a caller can
     compare it against _EXTERNAL_NAV; every OTHER external form is refused here, which is what keeps
-    this one ruling from becoming a general licence to point the footer off-site."""
+    this one rule from becoming a general licence to point the footer off-site."""
     if href in _EXTERNAL_NAV:
         return href
     if href.startswith("/"):
@@ -447,7 +447,7 @@ def _no_external_fetch(where, footer_html, sheet):
     address; nothing in it, or in the rules that style it, may FETCH from any host but this site.
 
     FAILS on an external src, an external stylesheet link, an @import or a url() naming a host. The
-    ruling introduced one anchor and no runtime dependency, and this is what keeps it that way."""
+    rule introduced one anchor and no runtime dependency, and this is what keeps it that way."""
     for src in re.findall(r'<img [^>]*src="([^"]+)"', footer_html):
         assert not src.startswith(("http://", "https://", "//", "data:")), (
             f"{where}: a footer image must be served from this site, got {src!r}")
@@ -461,7 +461,7 @@ def _no_external_fetch(where, footer_html, sheet):
 
 def test_every_portal_page_carries_the_one_footer():
     """PARITY ACROSS THE PORTAL. Every HTML document the portal ships carries the same three
-    regions, in order, with the owner's strings, the same targets and U+00B7 between them.
+    regions, in order, with the same strings, the same targets and U+00B7 between them.
 
     FAILS if a page carries fewer or more than three regions, if a region's string drifts, if the
     acknowledgement's one link moves, if the lockup is missing or retargeted, if a separator stops
@@ -494,7 +494,7 @@ def test_every_portal_page_carries_the_one_footer():
         assert _root_relative(link.group(1), name) == MTCAT, (
             f"{name}: the left link must resolve to {MTCAT}, got {link.group(1)!r}")
 
-        # CENTRE. The owner's acknowledgement line, carrying exactly one link: the AuScope address
+        # CENTRE. The acknowledgement line, carrying exactly one link: the AuScope address
         # under its own URL text. The rest is prose and stays prose.
         assert ctag == "div" and cattrs.get("class") == _ZONE_CLASSES["centre"], (
             f"{name}: the second region is the acknowledgement, got <{ctag} "
@@ -535,7 +535,7 @@ def test_no_footer_reaches_an_external_host_for_anything_it_fetches():
 
 
 def test_releases_and_about_this_build_have_left_every_footer():
-    """THE RETIRED CONTROLS STAY RETIRED. The ruling took both out of the footer on every surface;
+    """THE RETIRED CONTROLS STAY RETIRED. The rule took both out of the footer on every surface;
     about.html carries the running build's identity and the route to the releases page in its own
     body instead, which test_about_uniform_chrome.py pins.
 
@@ -693,16 +693,16 @@ _INK = {
 _ENGINE_INK = "background:#11182D"
 
 # The centre line's weight, as ONE declaration on the zone rather than a span around the sentence:
-# the owner ruled the whole line bold, the anchor included, and a single declaration is what lets
+# the whole line is bold, the anchor included, and a single declaration is what lets
 # these pins hold it as one fact. 700 is the sans family's bold, the weight the word names; the
 # header wordmark's 800 is a display weight for a 22px mark and would smear at 12.5px.
 _CENTRE_WEIGHT = "font-weight:700"
 
 # The lockup's rendered height, as ONE declaration in the master rule. The committed raster is
-# 1919x325, so the width follows from the height. The owner asked for it 10 percent taller: it stood
+# 1919x325, so the width follows from the height. The brief asked for it 10 percent taller: it stood
 # 28.00px (measured, matching the declaration) and now stands 30.80px, which carries the width from
 # 165.33px to 181.86px. The number is written exactly, not rounded: a rounded 31px is a different
-# ratio, and the ratio is what the owner ruled.
+# ratio, and the ratio is what the rule fixes.
 LOCKUP_HEIGHT = "height:30.8px"
 
 _FOOTER_RULE = r"(?m)^\s*footer\{([^}]*)\}"
@@ -712,7 +712,7 @@ _FLOW_RULE = f"@media (max-width:{_FLOW_BELOW}px){{footer{{position:static}}}}"
 #
 # THE OWN-ROW BREAKPOINT IS A MEASUREMENT, and it moved with the equal zero basis. Two side zones of
 # the same width need twice the WIDER one, not one of each, so the three regions want more footer
-# than they did: measured in Chrome with the ruled strings at the ruled weight, the widest surface's
+# than they did: measured in Chrome with the specified strings at the specified weight, the widest surface's
 # centre is 813.22px and its machine-readable link 285.98px, so one row needs
 # 813.22 + 2x285.98 + two 18px gaps + two 18px paddings = 1457.18px of footer. A container query
 # asks the CONTENT box, which is 36px narrower, so the rule fires at or below 1421px and the three
@@ -875,7 +875,7 @@ def test_every_surface_returns_the_footer_to_flow_below_the_measured_width():
 
 
 def test_the_centre_line_is_bold_on_every_surface():
-    """THE BOLD CENTRE, as ONE declaration on the zone. The owner ruled the whole acknowledgement
+    """THE BOLD CENTRE, as ONE declaration on the zone. The whole acknowledgement is
     bold, the anchor included; a span around part of the sentence would put the fact in the markup
     of six documents and the engine's emitter instead of in one rule per surface.
 
@@ -989,7 +989,7 @@ def test_every_surface_declares_the_one_footer_rule_set():
     same seven rules, character for character once the four colour tokens are resolved, plus the
     same two @container states and the same return-to-flow rule.
 
-    THIS IS THE PIN THE OWNER'S REVIEW ASKED FOR. The rule above could only see the five token
+    THIS IS THE PIN THE REVIEW ASKED FOR. The rule above could only see the five token
     surfaces, so 404.html and the generated tier kept a rule set of their own: rem units, a
     12.8px face, .7rem of top padding and NO bottom padding, and a 2.2rem margin above. That is
     what the Map, the hubs and About were being compared across when the footers were reported as
@@ -1067,11 +1067,11 @@ def test_the_centre_zone_holds_the_same_markup_on_every_surface():
     as &middot; on two and as a numeric reference by the engine.
 
     THE CENTRE ZONE AND NOT ALL THREE. The left zone's link carries class="apilink" and a title on
-    the six portal documents and neither on the generated tier, which predates this ruling and is
+    the six portal documents and neither on the generated tier, which predates this rule and is
     held as it stands by the two region pins above; the right zone's lockup src is necessarily
     written differently by a page served from the root and a page served from /surveys. Widening
-    this pin to those two would restate what they already hold and would fail on a difference the
-    owner has not ruled on.
+    this pin to those two would restate what they already hold and would fail on a difference that
+    has not been settled.
 
     FAILS if any surface adds, drops or reorders anything inside the acknowledgement: a second
     line, a span, a wrapper, a stray nbsp. Non-vacuous: at the tip before this pin, index.html's

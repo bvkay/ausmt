@@ -80,7 +80,7 @@ def test_a_real_value_is_asserted():
 
 
 def test_remote_reference_channels_are_run_defaults():
-    """D9: the rr* channels are mt_metadata RUN DEFAULTS, not acquired channels - the corpus CHTYPE
+    """The rr* channels are mt_metadata RUN DEFAULTS, not acquired channels - the corpus CHTYPE
     census carries no RRHX at all, so DEFINEMEAS cannot be their source."""
     assert presence.is_run_default_component("rrhx") is True
     assert presence.is_run_default_component("RRHY") is True
@@ -138,7 +138,7 @@ def _build(tmp_path):
 
 
 def test_build_report_carries_the_presence_rows_for_the_defaults_survey(tmp_path):
-    """FAILS against the pre-A5 build: build_report.json had no `presence` field at all, so the
+    """FAILS against the earlier build: build_report.json had no `presence` field at all, so the
     defaults the parse dropped were invisible to a curator."""
     rep, _r = _build(tmp_path)
     rows = rep["surveys"]["defaults-survey"]["presence"]
@@ -178,3 +178,57 @@ def test_the_rows_aggregate_by_distinct_note_across_stations(tmp_path):
     rows = [row for row in rep["surveys"]["example-survey"]["presence"] if "run.id" in row["note"]]
     assert len(rows) == 1, rows
     assert rows[0]["count"] == 2, rows[0]
+
+
+# The comment-hygiene pin exempts a dotted head that is a LIBRARY CLASS from its
+# "a name wearing a capital it does not have" rule, because mt_metadata's own spelling of
+# Run.id and Channel.contact_resistance carries that capital. An exemption list is a claim
+# about the library, so it is checked against the installed library rather than trusted.
+def _hygiene_pin():
+    import importlib.util
+    pin = Path(__file__).with_name("test_comment_hygiene.py")
+    spec = importlib.util.spec_from_file_location("_hygiene_pin", pin)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _resolve(name):
+    """The mt_metadata class of that name, or None. Walks the package because the classes the
+    engine names live in four different sub-packages."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import mt_metadata
+    for found in pkgutil.walk_packages(mt_metadata.__path__, "mt_metadata."):
+        try:
+            module = importlib.import_module(found.name)
+        except Exception:  # noqa: BLE001 - an optional sub-package must not fail the proof
+            continue
+        candidate = getattr(module, name, None)
+        if inspect.isclass(candidate):
+            return candidate
+    return None
+
+
+def test_every_exempted_class_head_is_a_real_mt_metadata_class():
+    """FAILS IF a name in the pin's exemption list is not a class in the installed library: an
+    exemption that names nothing is a hole in the capital rule with no library behind it."""
+    heads = _hygiene_pin().LIBRARY_CLASS_HEAD
+    assert heads, "the exemption list is empty, so this would prove nothing"
+    missing = [name for name in heads if _resolve(name) is None]
+    assert not missing, f"exempted as library classes but not classes in mt_metadata: {missing}"
+
+
+def test_the_fields_the_presence_rule_names_exist_on_those_classes():
+    """FAILS IF a field _presence.py names is not a field of the class the comment names: the
+    capital is only right while the library spells it that way. contact_resistance is declared on
+    the ELECTRIC channel rather than the base Channel, which is the channel the rule reads."""
+    for class_name, field in (("Run", "id"), ("Run", "sample_rate"),
+                              ("Channel", None), ("Electric", "contact_resistance")):
+        owner = _resolve(class_name)
+        assert owner is not None, f"mt_metadata has no class {class_name}"
+        if field is None:
+            continue
+        assert hasattr(owner(), field), f"{class_name} has no {field}"

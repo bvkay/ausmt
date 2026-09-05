@@ -1,5 +1,5 @@
 // Node test for the SHARED DOI citation-harvest core (src/doi_harvest.js) - the single source the public
-// Add Survey form AND the curator metadata editor both consume (CONTRIBUTOR-CREDIT-SPEC §6). Exercises the
+// Add Survey form AND the curator metadata editor both consume (the contributor-credit model). Exercises the
 // module directly: the export surface, the window-global attachment the curator page relies on, the
 // registry parsers, and harvestDoi's Crossref-then-DataCite fallback with a STUBBED fetch (never the
 // network). Run via tests/test_doi_harvest.py or:  node tests/doi_harvest.test.js
@@ -57,7 +57,7 @@ const DCU = d => "https://api.datacite.org/dois/" + encodeURIComponent(d);
   ok(h1.ok && h1.source === "crossref" && h1.pub.title === "A Title", "harvestDoi: Crossref hit -> ok");
 
   const D2 = "10.25914/y";
-  const m2 = {}; m2[DCU(D2)] = DC;   // CRU(D2) absent -> Crossref 'miss', falls through to DataCite
+  const m2 = {}; m2[DCU(D2)] = DC;   // no Crossref record -> a 'miss' that falls through to DataCite
   const h2 = await H.harvestDoi(D2, stub(m2));
   ok(h2.ok && h2.source === "datacite", "harvestDoi: Crossref miss -> DataCite hit");
 

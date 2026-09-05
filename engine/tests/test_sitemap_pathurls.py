@@ -1,4 +1,4 @@
-"""Path-URL contract (owner ruling 2026-08-18): the sitemap advertises the contract, and
+"""Path-URL contract: the sitemap advertises the contract, and
 collections join it.
 
 /surveys/<slug>, /stations/<ausmt_id> and /collections/<id> are the PUBLISHED URL contract; the
@@ -12,8 +12,8 @@ sitemap is where the contract is ADVERTISED, so it must emit the path form and n
   * station URLs are DELIBERATELY ABSENT: the station pages exist (the served URL contract)
     but are unadvertised and noindexed, so the sitemap cannot dilute the survey and collection
     pages that carry the ranking;
-  * per-collection URLs are ADDED as <base>/collections/<id> (the sitemap previously emitted no
-    collection links at all);
+  * per-collection URLs are ADDED as <base>/collections/<id> (the sitemap emitted no collection
+    links at all before this);
   * the hash-fragment forms leave the sitemap entirely: the path form is the published contract,
     and crawlers ignore fragments anyway;
   * the Atom feed entry <link> moves to the same path form.
@@ -102,7 +102,7 @@ def test_sitemap_advertises_surveys_and_collections_never_stations(tmp_path):
         f"station URLs must stay OUT of the sitemap (unadvertised-but-served posture): {locs}")
     assert not any("#/" in u for u in locs), (
         f"the hash-fragment forms must leave the sitemap (the path form is the contract): {locs}")
-    # The two HUB pages and the static portal pages joined the sitemap with the index-pages lane:
+    # The two HUB pages and the static portal pages joined the sitemap with the index-pages workflow:
     # they are served, canonical and indexable, and were advertised to no crawler at all.
     for extra in (f"{BASE}surveys", f"{BASE}collections",
                   f"{BASE}about.html", f"{BASE}releases.html", f"{BASE}add-survey.html"):
@@ -117,7 +117,7 @@ def test_sitemap_advertises_surveys_and_collections_never_stations(tmp_path):
     assert len(locs) == 1 + 2 + 2 + 1 + 3, locs
     # The emitted file's own comment describes TIER 3 honestly: every path form below is served as
     # a prerendered page at that exact URL. It said tier 1 (301s into the SPA, prerender still to
-    # come) until the index-pages lane rewrote it, and a comment that outlives its own behaviour is
+    # come) until the index-pages workflow rewrote it, and a comment that outlives its own behaviour is
     # exactly what this pin is here to stop, so the tier is asserted rather than left to drift.
     xml_text = (out / "sitemap.xml").read_text(encoding="utf-8")
     assert "path-URL contract" in xml_text, "the sitemap's comment must describe the contract"

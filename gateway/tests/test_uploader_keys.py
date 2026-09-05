@@ -1,6 +1,6 @@
-"""Uploader keys (schema v2, feat/uploader-key-management): DB-backed, curator-managed submit keys.
+"""Uploader keys (schema v2): DB-backed, curator-managed submit keys.
 
-The lane moves the single shared AUSMT_SUBMIT_KEY out of env-only into the gateway's SQLite so a
+The workflow moves the single shared AUSMT_SUBMIT_KEY out of env-only into the gateway's SQLite so a
 curator with no shell can issue and revoke keys through the authenticated UI. This file proves both
 halves against independent observables:
 
@@ -30,7 +30,7 @@ from gateway.tests.conftest import (
 
 def test_mint_key_shape_and_hash_is_sha256():
     """A minted key carries the ausmt_up_ prefix and hashes to the sha256 hex digest of its own bytes
-    (the only stored form). Fails if the prefix or the hash function drifts from the C10 token pattern."""
+    (the only stored form). Fails if the prefix or the hash function drifts from the token pattern."""
     key = uploader_keys.mint_key()
     assert key.startswith("ausmt_up_")
     assert uploader_keys.key_hash(key) == hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -268,8 +268,8 @@ def test_uploader_email_absent_from_public_status(tmp_path):
     run(_body())
 
 
-# ---- H2 (C43-S2a-HOTFIX): keys-page layout — full width, short datetimes, usable note editor ----
-# Owner feedback (live box, 2026-07-11): "use the full width of the page, to spread out the issued
+# ---- Keys-page layout - full width, short datetimes, usable note editor ----
+# Feedback: "use the full width of the page, to spread out the issued
 # keys table to make it easier to tell what is going on." The shipped page rendered inside the
 # shell's 960px .wrap: the note textarea was a few characters wide and the Created/Last-used ISO
 # datetimes wrapped over three lines.
@@ -281,7 +281,7 @@ def _nav():
 
 
 def test_short_utc_canonical_and_verbatim_fallback():
-    """H2 PIN (display shortener contract, the S2a-5 build-id posture). db._utc_now's canonical
+    """PIN (display shortener contract, the build-id posture). db._utc_now's canonical
     '%Y-%m-%dT%H:%M:%SZ' shape renders as 'YYYY-MM-DD HH:MM' (date + minutes); ANY other shape is
     returned VERBATIM, never mangled. FAILS IF the canonical form stops shortening (the three-line
     wrap comes back) or a non-canonical value is truncated/emptied (audit data silently lost)."""
@@ -295,7 +295,7 @@ def test_short_utc_canonical_and_verbatim_fallback():
 
 
 def test_keys_page_wide_layout_short_datetimes_and_note_width():
-    """H2 RENDER PIN. The rendered keys page carries (a) the wide-layout marker on its content wrap
+    """RENDER PIN. The rendered keys page carries (a) the wide-layout marker on its content wrap
     (the per-page variant — the shell's 960px measure is untouched elsewhere), (b) every stored
     datetime in the short 'YYYY-MM-DD HH:MM' form with the FULL ISO in a title attribute (hover
     keeps the audit precision; the cell stops wrapping over three lines), (c) a usable note editor
@@ -338,16 +338,15 @@ def test_keys_page_wide_layout_short_datetimes_and_note_width():
 
 
 def test_wide_by_default_narrow_by_exception():
-    """C43 FR2-1 SCOPE PIN (owner ruling, 2026-07-11: "all the curator pages should be like the
-    surveys-stations page — full width, intuitive"). The scope invariant FLIPPED from H2's per-page
-    opt-in to WIDE-BY-DEFAULT: every shelled working page (via _shell) fills the viewport; the ONLY
+    """SCOPE PIN. The scope invariant is WIDE-BY-DEFAULT rather than per-page
+    opt-in: every shelled working page (via _shell) fills the viewport; the ONLY
     narrow survivors are the chrome-less _page users — the login page and the terminal confirm pages
-    (a centred form stays a centred form). The old H2 'queue must NOT be wide' assertion dies with this
-    ruling. FAILS IF a shelled working page reverts to the narrow measure, or a centred-form _page page
+    (a centred form stays a centred form). The old 'queue must NOT be wide' assertion dies with this
+    rule. FAILS IF a shelled working page reverts to the narrow measure, or a centred-form _page page
     silently goes wide."""
     from gateway.curatorpage import render_login, render_queue, render_uploader_created
     # Wide-by-default: the queue (a shelled working page) now fills the width — the exact assertion
-    # the superseded H2 pin forbade.
+    # the superseded pin forbade.
     queue = render_queue(curator_name="ben", rows=[], csrf_token="tok", nav=_nav())
     assert '<div class="wrap wide">' in queue, "a shelled working page must be wide by default"
     # Narrow survivors: the login page and the show-once uploader-key page are chrome-less _page
@@ -360,7 +359,7 @@ def test_wide_by_default_narrow_by_exception():
 
 
 def test_keys_page_served_wide_end_to_end(tmp_path):
-    """H2 ROUTE PIN. The SERVED /gateway/curator/uploaders page (through the app + nav shell)
+    """ROUTE PIN. The SERVED /gateway/curator/uploaders page (through the app + nav shell)
     carries the wide marker — the renderer pin above can't catch an app-side regression that stops
     passing nav (falling back to the chrome-less _page). FAILS IF the served bytes lose the wide
     wrap."""

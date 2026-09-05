@@ -1,4 +1,4 @@
-"""C45 usage-analytics screen (gateway half — record D4/D5).
+"""Usage-analytics screen (gateway half).
 
 The consumer side of the aggregator: the gateway reads stats.json SERVER-side (serve_state.read_stats,
 the ops-status.json seam) and renders the READ-ONLY Analytics screen (Operations rail). These pins
@@ -163,7 +163,7 @@ def test_analytics_stale_staleness_is_fail_closed_both_directions():
 # CSP sweep: the Analytics route ships NO inline JS (server-rendered SVG only).
 # --------------------------------------------------------------------------------------------------
 def test_analytics_screen_has_no_inline_js(tmp_path):
-    """CSP SWEEP (record D13 extended). The Analytics screen must ship no inline <script> (every
+    """CSP SWEEP (extended). The Analytics screen must ship no inline <script> (every
     <script> carries src=) and no on*= handlers — both dead under the strictPages CSP (script-src
     'self'). The daily series is a server-rendered inline SVG with no scripting. FAILS IF the screen
     ships any inline JS (fresh OR empty state)."""
@@ -206,7 +206,7 @@ def test_human_bytes_scales():
 
 
 # ==================================================================================================
-# Funding-detail lane: the richer screen (per-survey volume, station/bundle split, API line, the
+# Funding-detail workflow: the richer screen (per-survey volume, station/bundle split, API line, the
 # quarterly view) + the CSV export, over BOTH aggregate schemas.
 # ==================================================================================================
 
@@ -433,7 +433,7 @@ def test_analytics_csv_neutralises_spreadsheet_formula_injection():
 
 def test_analytics_export_links_are_on_the_screen(tmp_path):
     """AFFORDANCE PIN. The screen must offer the 'download report data' links, else the export is
-    unreachable for the owner it exists for. FAILS IF either export link is missing."""
+    unreachable for the custodian it exists for. FAILS IF either export link is missing."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
@@ -446,7 +446,7 @@ def test_analytics_export_links_are_on_the_screen(tmp_path):
 
 
 # ==================================================================================================
-# Australian STATE lane: a breakdown BENEATH the AU country row, rendered only when the fold actually
+# Australian STATE workflow: a breakdown BENEATH the AU country row, rendered only when the fold actually
 # produced it. State is the finest grain by design (a /24-masked prefix does not place a request in a
 # city, and a city cell in a community this small is quasi-identifying) -- these pins hold that line.
 # ==================================================================================================
@@ -592,10 +592,10 @@ def test_analytics_monthly_csv_has_no_state_columns_without_state_data():
 
 
 # ==================================================================================================
-# Counting-honesty lane (screen half): say what each figure covers, and never render a figure that
+# Counting-honesty workflow (screen half): say what each figure covers, and never render a figure that
 # was not measured.
 #
-# The aggregator half of this lane changed what is counted (client classes, the within-day dedupe,
+# The aggregator half of this feature changed what is counted (client classes, the within-day dedupe,
 # 206, the served schema as an API path, API requests joining the geo count, release bundles). The
 # screen's job is to keep every caption true to that, and to stop presenting a seeded month's zeroes
 # as measurements -- the same omit-rather-than-fabricate rule the state table has always applied.
@@ -659,7 +659,7 @@ def test_the_partial_dimension_disclosures_name_countries_and_unattributed(tmp_p
     """DISCLOSURE PIN. Both honesty lines enumerate which dimensions are partial, and both omitted
     COUNTRIES and UNATTRIBUTED, which is why a month showing 'Countries: 1' beside a headline of 11
     reads as a bug rather than as the forward-only seam it is. Both lines must name every partial
-    dimension, INCLUDING the ones this lane added, and each must attach them to the seam they actually
+    dimension, INCLUDING the ones the later work added, and each must attach them to the seam they actually
     belong to: the caveat's dated sentence covers the v1 hinge, and the dimensions that began at the
     later fold are named in their own sentence, which does NOT claim that date. FAILS IF either line
     omits countries or unattributed, if the new dimensions land undisclosed, or if the dated sentence
@@ -693,7 +693,7 @@ def test_the_partial_dimension_disclosures_name_countries_and_unattributed(tmp_p
 def test_the_screen_names_every_machine_readable_entry_point(tmp_path):
     """API-SURFACE COPY PIN. The API line counts four documented entry points: the products manifest,
     the MTCAT document, the served JSON Schema every validator resolves from that document's own $id,
-    and (owner ruling 2026-08-02) the stations GeoJSON a GIS opens straight from the URL. The screen
+    and the stations GeoJSON a GIS opens straight from the URL. The screen
     states what the figure covers, so it must name all four or the number means something the reader
     cannot check. FAILS IF the preamble still claims two or three, or omits any of the paths."""
     async def _body():
@@ -918,7 +918,7 @@ def test_no_state_detail_map_leaves_the_table_exactly_as_it_was(tmp_path):
 
 def test_the_by_survey_table_reports_how_many_countries_reached_each_survey(tmp_path):
     """CUSTODIAN PROMISE PIN. "Your survey was downloaded N times from M countries" is the sentence
-    this screen exists to let the owner write, and M was nowhere in the pipeline. The by-survey table
+    this screen exists to let a survey custodian write, and M was nowhere in the pipeline. The by-survey table
     must carry the country COUNT per survey, and only the count: the list itself is a named survey
     beside a named country, which is a small cell in a community this size. FAILS IF the count is
     absent, if it counts 'unknown' as a country, or if the country list is rendered."""
@@ -1036,7 +1036,7 @@ def test_the_survey_csv_tolerates_rows_written_before_the_country_list():
 
 # ==================================================================================================
 # The SECOND forward-only seam. `detail_since` is the v1 -> v2 hinge; the dimensions the counting
-# lane added (client split, within-day dedupe, API geography, per-survey countries, monthly network
+# work added (client split, within-day dedupe, API geography, per-survey countries, monthly network
 # peak) began months after it. A month folded in between carries a real volume and a real format
 # split beside NONE of those, so the seeded-month degrade above never fires for it and every one of
 # those cells rendered a zero nobody measured. These pins hold the line at that second seam, on the
@@ -1044,7 +1044,7 @@ def test_the_survey_csv_tolerates_rows_written_before_the_country_list():
 # ==================================================================================================
 
 def test_a_month_folded_before_the_current_rules_says_not_measured_for_them(tmp_path):
-    """SECOND-SEAM PIN. The quarterly rows the counting lane added must read 'not measured' for a
+    """SECOND-SEAM PIN. The quarterly rows the counting workflow added must read 'not measured' for a
     month with no day folded under the current rules, exactly as the fully seeded month does for the
     older dimensions. Such a month is NOT seeded: it has a real volume, a real format split and a real
     top survey, so the existing degrade cannot cover it and the rows rendered '0' and '0 / 0' for
@@ -1160,7 +1160,7 @@ def test_the_survey_csv_blanks_the_country_cell_it_never_measured():
 
 def test_the_country_table_says_api_requests_joined_it_later(tmp_path):
     """GEO SCOPE SEAM PIN. The caption says the map counts downloads plus visits plus API requests,
-    and it does, NOW. The map is cumulative, and API requests used to be the one counted class with no
+    and it does, NOW. The map is cumulative, and API requests were for a time the one counted class with no
     geography at all, so on a box with days folded before that change the caption describes only the
     later part of its own map. The table must say so where it is true, and must not say it where it is
     not. FAILS IF the seam goes unstated, or if a box with no such history carries the note anyway."""
@@ -1220,11 +1220,11 @@ def _aged_out_seam_stats(**over) -> dict:
 
 
 def test_no_disclosure_points_at_a_note_that_is_not_on_the_page(tmp_path):
-    """DANGLING-CITATION PIN. Two disclosures used to tell the reader that "the note under the
+    """DANGLING-CITATION PIN. Two disclosures told the reader that "the note under the
     quarterly table names the months", but that note is built from the THREE months the quarterly
     table shows while the disclosures citing it fire off a scan of every retained month, which the
     aggregator never prunes. Once a second-seam month ages out of the three-month window the citation
-    points at a note the page no longer renders, and the reader is sent to nothing.
+    points at a note the page does not render, and the reader is sent to nothing.
 
     FAILS IF any text on the page cites the quarterly note while that note is absent. The fixture is
     exactly that shape and the assertions below prove it is not vacuous: the country-table seam note
@@ -1312,7 +1312,7 @@ def test_the_screen_reports_downloads_by_collection(tmp_path):
 
 
 # ==================================================================================================
-# COUNTRY-CLASS DETAIL and the PER-SURVEY KIND SPLIT (owner rulings 2026-08-01).
+# COUNTRY-CLASS DETAIL and the PER-SURVEY KIND SPLIT.
 #
 # The state table already answers "what did this place DO"; the country table above it answered only
 # "how many requests". These pins hold the same three properties there that they hold beneath the AU
@@ -1448,7 +1448,7 @@ def test_the_monthly_country_csv_has_one_row_per_month_and_country(tmp_path):
 def test_the_country_csv_leaves_an_unmeasured_cell_empty_rather_than_zero(tmp_path):
     """COUNTRY EXPORT HONESTY PIN. The detail is forward-only, so a (month, country) the fold counted
     before it existed has no download figure. This file is what a funding report is built from, and a
-    zero there outlives the screen that would have said 'not measured' -- every spreadsheet reads an
+    zero there outlives the screen that says 'not measured' -- every spreadsheet reads an
     empty cell as missing and a zero as measured. FAILS IF an unmeasured cell exports as 0, or if the
     combined request count is blanked along with it."""
     async def _body():
@@ -1551,7 +1551,7 @@ def test_the_survey_csv_carries_the_files_and_bundles_split(tmp_path):
 
 
 # ==================================================================================================
-# The BULK-EXPORT LABEL on the screen (owner ruling 2026-08-01).
+# The BULK-EXPORT LABEL on the screen.
 #
 # The portal marks its own multi-file export fetches with a query flag so the fold can tell a
 # drag-selected bulk export from a single station download. That is the FIRST thing this pipeline puts
@@ -1621,14 +1621,14 @@ def test_the_bulk_line_does_not_claim_the_export_produces_a_citation_pack(tmp_pa
 
 
 def test_the_screen_states_the_one_thing_the_portal_adds_to_the_log(tmp_path):
-    """DISCLOSURE PIN. The preamble used to say, truthfully, that nothing here is a beacon and nothing
-    new is collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
-    the second half of that sentence is no longer true as written and must be amended rather than left
-    standing. The amendment has to be specific: WHAT is added (a query flag), to WHAT (fetches that
+    """DISCLOSURE PIN. The preamble states that nothing here is a beacon and nothing new is
+    collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
+    the second half of that sentence is not true as written and must be restated rather than left
+    standing. The restatement has to be specific: WHAT is added (a query flag), to WHAT (fetches that
     already happen), and what is NOT added (a request, an identity).
 
     FAILS IF the screen still claims nothing new is collected, if the beacon claim is dropped along
-    with it (it is still true), or if the amendment is vague about what the flag is."""
+    with it (it is still true), or if the restatement is vague about what the flag is."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
@@ -1668,7 +1668,7 @@ def test_the_screen_names_the_day_the_selection_split_begins(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# TIME-SERIES HAND-OFFS (THREDDS A10, owner ruling R8). The front door 302s a reader into the NCI
+# TIME-SERIES HAND-OFFS. The front door 302s a reader into the NCI
 # THREDDS archive and AusMT hosts none of those bytes, so the figure is REQUESTS and the screen must
 # never let it read as completed transfers. The class is younger than every seam this screen already
 # marks, so a month that predates it carries no hand-off key at all and must read "not measured".

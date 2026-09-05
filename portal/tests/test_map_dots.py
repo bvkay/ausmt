@@ -1,4 +1,4 @@
-"""The map draws SITE LOCATIONS and nothing else (owner ruling, 2026-08-24).
+"""The map draws SITE LOCATIONS and nothing else.
 
 Two halves, because two different things need proving and only one of them is a runtime behaviour:
 
@@ -13,7 +13,7 @@ pure functions, so both run for real against the shipped src. What is NOT proven
 in this harness: that a rendered dot is clickable and lands where its coordinates say. Those are browser
 facts; the interaction driver asserts the call arguments and the architect clicks the rest.
 
-THE OVERLOADED NAME, stated so a future reader does not repeat the mistake this lane was warned about:
+THE OVERLOADED NAME, stated so a future reader does not repeat the mistake this module was warned about:
 `grep -c badge` over portal/src does NOT go to zero, and must not. The DRAWER's generalised-position badge
 is a coordinate-POLICY surface (test_coord_access.py owns it), the format-availability badges are a
 distribution surface, and the stewardship star is its own thing. Only the MAP's survey bubbles and their
@@ -21,11 +21,11 @@ leaders were removed. test_the_drawer_badges_are_untouched below is that boundar
 
 FAILS IF:
 - any markercluster or badge asset, constant, function or style survives in the shipped portal;
-- the map creates a Leaflet pane, or routes any layer into one (the 2026-08-19 outage shape);
+- the map creates a Leaflet pane, or routes any layer into one;
 - a zoom re-routes layer membership again (badging was the only thing that made membership zoom-dependent);
 - the legend keys a map object that is not a data type;
 - the radius curve stops being monotone in zoom, breaches its floor/ceiling, or stops rendering EVERY data
-  type at the same size (the per-type split was removed 2026-08-19: size encodes zoom, colour encodes type);
+  type at the same size (size encodes zoom, colour encodes type);
 - the drawer's own badges are collateral damage.
 """
 import re
@@ -88,7 +88,7 @@ def test_no_badge_constant_survives(name):
     """The thresholds are the seam the feature would grow back from: a surviving constant is a rule
     somebody can wire up again in one line. They go with the layer, not after it."""
     assert not re.search(rf"\b{name}\b\s*=", _map_src()), \
-        f"{name} must be gone: the per-survey badge layer was removed whole on 2026-08-24"
+        f"{name} must be gone: there is no per-survey badge layer"
 
 
 @pytest.mark.parametrize("name", ["badgeIcon", "badgeSizePx", "shouldBadgeSurvey", "partitionForDisplay",
@@ -105,13 +105,13 @@ def test_no_badge_function_survives(name):
 
 
 def test_the_map_builds_no_badge_layer_and_no_pane():
-    """The two Leaflet calls the feature needed, and the pane machinery that made the 2026-08-19 outage
+    """The two Leaflet calls the feature needed, and the pane machinery that made the outage
     possible. A pane is what puts a full-map-size canvas over the station canvas; the map creating none is
     what makes the retired pane guard safe to delete rather than merely unused."""
     code = _code(_map_src())
     assert "createPane" not in code, \
         "map.js must create no pane: a pane sits over the station canvas at z 400 and swallows the clicks " \
-        "the stations need (the production outage of 2026-08-19)"
+        "the stations need"
     assert "divIcon" not in code, "a divIcon is a badge; the map draws canvas circleMarkers only"
     assert "L.polyline" not in code, "L.polyline was the leader tail; nothing draws one now"
     assert "badgeLayer" not in code, "the badge layer group must be gone"
@@ -138,7 +138,7 @@ def test_a_zoom_restyles_but_does_not_reroute():
 
 def test_the_legend_keys_only_data_types():
     """A legend states what the map draws. The badge swatch (and the .legcluster it was renamed from) key
-    objects that no longer exist, so both must be gone from the markup AND the stylesheet."""
+    objects that do not exist, so both must be gone from the markup AND the stylesheet."""
     main = MAIN_JS.read_text(encoding="utf-8")
     html = INDEX.read_text(encoding="utf-8")
     for gone in ("legbadge", "legcluster"):
@@ -158,7 +158,7 @@ def test_the_drawer_badges_are_untouched():
     """THE OVERLOADED-NAME GUARD, and the reason this file does not sweep for the word `badge`.
 
     Three surfaces share the name and NONE of them is map furniture: the drawer's generalised-position
-    badge is coordinate POLICY (C42), the format-availability badges are a distribution claim, and both
+    badge is coordinate POLICY, the format-availability badges are a distribution claim, and both
     render through the same `.badge` CSS. A future tidy-up that greps `badge` to zero would delete a
     coordinate-policy disclosure and a served-format claim, which is why the boundary is a test."""
     html = INDEX.read_text(encoding="utf-8")
@@ -178,7 +178,7 @@ def test_radius_curve_is_named_not_inlined():
 
 
 def test_the_per_type_radius_split_is_gone():
-    """Uniform site dot size (owner, 2026-08-19). The per-type bases are REMOVED, not merely equalised: a
+    """Uniform site dot size. The per-type bases are REMOVED, not merely equalised: a
     surviving DOT_R_BASE_LP/DOT_R_BASE_STD pair is exactly the shape a future edit would re-diverge. FAILS
     IF either name comes back, or if radiusForZoom regains a second parameter."""
     src = _map_src()
@@ -195,7 +195,7 @@ def test_the_per_type_radius_split_is_gone():
 
 
 def test_station_markers_carry_their_own_click_and_never_bubble():
-    """The click-through class the 2026-08-19 outage belonged to. A station dot must open its station, and
+    """The click-through class the outage belonged to. A station dot must open its station, and
     must not ALSO read as a background click (which closes the drawer). COMMENT-STRIPPED, because the prose
     beside it explains the guarantee and would satisfy a raw scan with the option deleted."""
     code = _code(_map_src()).replace(" ", "")

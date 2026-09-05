@@ -1,4 +1,4 @@
-"""C45 usage-analytics aggregator pins (record D6 — the C45-impl lane).
+"""Usage-analytics aggregator pins.
 
 These prove the load-bearing aggregator behaviours against INDEPENDENT OBSERVABLES (the emitted
 stats.json bytes, the attribution over an ENGINE-TRUTH manifest, the bisect result over a fixture
@@ -23,7 +23,7 @@ _MANIFEST = _FIXTURES / "manifest.engine-truth.json"
 _DBIP = _FIXTURES / "dbip-country-lite.sample.csv"
 
 # PROVENANCE of manifest.engine-truth.json, recorded because it is SHARED test data that several pins
-# join against and it had silently drifted from the engine before the tier-1 lane regenerated it.
+# join against and it had silently drifted from the engine before the tier-1 workflow regenerated it.
 # It is the real build's own manifest, never hand-typed rows:
 #
 #   cd engine && python -m extract.build_portal --surveys data --out <tmp> \
@@ -38,11 +38,11 @@ _DBIP = _FIXTURES / "dbip-country-lite.sample.csv"
 #
 # What is NOT expected, and is what drift looks like: a field appearing or changing value across a
 # regeneration. Regenerating for tier 1 flipped `custodian` (null -> "AusMT CI") and `canon_license`
-# (null -> "CC-BY-4.0") on all seven pre-existing rows, which are C46-W3a manifest fields this fixture
+# (null -> "CC-BY-4.0") on all seven pre-existing rows, which are manifest fields this fixture
 # had never carried. If a regeneration moves anything other than the h5/xml/xml-zip digests, the
 # fixture was stale and the diff is a real engine change to read, not noise to accept.
 
-# IP-like tokens the leak sweep hunts (record D6 leak pin): any IPv4 dotted-quad, or an IPv6 token —
+# IP-like tokens the leak sweep hunts (leak pin): any IPv4 dotted-quad, or an IPv6 token -
 # one carrying a `::` (every masked /48 compresses to one) OR >=4 hextet groups (>=3 internal colons).
 # That discriminates a real address from a `HH:MM:SS` timestamp (2 colons, no `::`), so the sweep flags
 # a leaked address but not the file's own generated_at — a precise, non-vacuous hunt.
@@ -86,11 +86,11 @@ def _sweep_ip_or_ua(text: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------------------------------
-# Leak pin (record D6): stats.json carries NO address (masked or not) and NO UA string.
+# Leak pin: stats.json carries NO address (masked or not) and NO UA string.
 # --------------------------------------------------------------------------------------------------
 def test_leak_pin_stats_has_no_ip_or_ua_and_sweep_can_fail():
     """LEAK PIN. The emitted stats.json must contain no IPv4/IPv6 token and no user-agent string —
-    only aggregates leave the pipeline (record D2). FAILS IF a masked address or a UA fingerprint
+    only aggregates leave the pipeline. FAILS IF a masked address or a UA fingerprint
     survives into stats.json. NEGATIVE CONTROL (red-proven): the SAME sweep, run over a dict that DID
     store the address + UA, MUST report hits — a sweep that cannot fail would be vacuous."""
     manifest = json.loads(_MANIFEST.read_text(encoding="utf-8"))
@@ -121,7 +121,7 @@ def test_leak_pin_stats_has_no_ip_or_ua_and_sweep_can_fail():
 
 
 # --------------------------------------------------------------------------------------------------
-# Attribution pin (record D6): engine-truth manifest -> right survey/station/format; unknown ->
+# Attribution pin: engine-truth manifest -> right survey/station/format; unknown ->
 # unattributed, never dropped.
 # --------------------------------------------------------------------------------------------------
 def test_attribution_pin_over_engine_truth_manifest():
@@ -135,9 +135,9 @@ def test_attribution_pin_over_engine_truth_manifest():
     assert rmap, "the engine-truth manifest must yield a non-empty reverse map"
     geoip = AGG.GeoIP.load(_DBIP)
     lines = [
-        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5"),   # A1 edi
-        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.6"),   # A1 edi (2nd)
-        _line("/data/xml/sample-survey/A2.xml", "1.2.3.0"),               # A2 emtfxml
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5"),   # station A1 edi
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.6"),   # station A1 edi (2nd)
+        _line("/data/xml/sample-survey/A2.xml", "1.2.3.0"),               # station A2 emtfxml
         _line("/data/bundles/sample-survey-tf.h5", "198.51.100.0"),       # survey mth5 bundle
         _line("/data/edi/mystery-survey/ghost.edi", "8.8.8.0"),           # UNKNOWN -> unattributed
         _line("/data/catalogue.json?_=1", "203.0.113.5"),                 # visit (query stripped)
@@ -176,7 +176,7 @@ def test_attribution_negative_control_unknown_path_not_attributed():
 
 
 # --------------------------------------------------------------------------------------------------
-# Country pin (record D6): bisect resolves known ranges incl a masked /24; missing/stale CSV ->
+# Country pin: bisect resolves known ranges incl a masked /24; missing/stale CSV ->
 # unknown, aggregator still completes.
 # --------------------------------------------------------------------------------------------------
 def test_country_pin_bisect_resolves_known_ranges_including_masked():
@@ -199,7 +199,7 @@ def test_country_pin_bisect_resolves_known_ranges_including_masked():
 
 def test_country_missing_csv_degrades_to_unknown_and_still_folds(tmp_path):
     """COUNTRY DEGRADATION PIN. A missing OR malformed CSV must degrade every lookup to 'unknown' and
-    the aggregator must STILL complete a full fold (record D6). FAILS IF a missing/garbage CSV raises,
+    the aggregator must STILL complete a full fold. FAILS IF a missing/garbage CSV raises,
     or a lookup returns anything but 'unknown'."""
     # (a) missing file
     missing = AGG.GeoIP.load(tmp_path / "does-not-exist.csv")
@@ -218,7 +218,7 @@ def test_country_missing_csv_degrades_to_unknown_and_still_folds(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Retention / absent-log pin (record D6): the aggregator tolerates an absent (already-rotated) log.
+# Retention / absent-log pin: the aggregator tolerates an absent (already-rotated) log.
 # --------------------------------------------------------------------------------------------------
 def test_absent_log_is_tolerated(tmp_path):
     """RETENTION / ABSENT-LOG PIN. read_log_lines over a missing dir (logs already rotated away) yields
@@ -298,7 +298,7 @@ def test_a_compressed_log_is_not_also_read_as_a_plain_one(tmp_path):
 # --------------------------------------------------------------------------------------------------
 def test_reruns_never_double_count():
     """IDEMPOTENCY PIN. Re-folding the SAME lines (same run instant) over the produced stats must not
-    change any total — only complete days AFTER last_folded_date are folded (record D4). FAILS IF a
+    change any total - only complete days AFTER last_folded_date are folded. FAILS IF a
     re-run double-counts, i.e. the cumulative totals grow on a repeated fold."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
@@ -377,7 +377,7 @@ def test_main_never_raises_on_broken_env(monkeypatch, tmp_path):
 
 
 # ==================================================================================================
-# Funding-detail lane (schema 2): per-survey volume, format/kind split over time, the API-consumer
+# Funding-detail workflow (schema 2): per-survey volume, format/kind split over time, the API-consumer
 # path class, distinct masked networks, permanent monthly rollups, and the split retention window.
 # Every dimension below is derived from what the fold ALREADY reads (path + masked address + size);
 # nothing new is collected and no beacon exists.
@@ -540,7 +540,7 @@ def test_daily_window_keeps_92_days_and_drops_the_93rd():
     in rows rather than days, or is off by one."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
-    run = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)      # watermark 2026-07-11
+    run = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)      # watermark: the day before
     inside = (dt.date(2026, 7, 11) - dt.timedelta(days=91)).isoformat()   # exactly 92 days inclusive
     outside = (dt.date(2026, 7, 11) - dt.timedelta(days=92)).isoformat()  # one day too old
     lines = [_line("/data/catalogue.json", "203.0.113.5", date=outside),
@@ -561,7 +561,7 @@ def test_v1_stats_file_upgrades_in_place_without_losing_or_inventing_anything():
     absent from the daily tail is invented, or if a seeded month claims byte/format detail it lacks."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
-    run = dt.datetime(2026, 7, 11, 3, 30, tzinfo=dt.timezone.utc)   # folds 2026-07-10
+    run = dt.datetime(2026, 7, 11, 3, 30, tzinfo=dt.timezone.utc)   # folds the day before
     lines = [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-10", size=50)]
     stats = AGG.aggregate(_v1_stats(), lines, rmap, geoip, run)
 
@@ -621,9 +621,9 @@ def test_v2_fold_still_leaks_nothing():
 
 
 # ==================================================================================================
-# Australian STATE lane (schema 2, additive): a second-level breakdown BENEATH the AU country row.
+# Australian STATE workflow (schema 2, additive): a second-level breakdown BENEATH the AU country row.
 #
-# State, never city -- the ratified design decision. The address resolved here was already truncated
+# State, never city -- the design decision. The address resolved here was already truncated
 # at the edge (IPv4 /24, IPv6 /48): a /24 geolocates to a city unreliably (carrier and CGNAT pools
 # span a state from one prefix), and in a research community this small a city cell is
 # quasi-identifying ("3 downloads from Hobart" names a group). These pins fix state as the grain.
@@ -701,8 +701,8 @@ def test_a_prior_file_carrying_legacy_day_states_folds_and_is_left_to_age_out():
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
     states = AGG.AuStates.load(_AU_STATES_CSV)
-    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-01
-    run2 = dt.datetime(2026, 6, 4, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-03
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to the day before
+    run2 = dt.datetime(2026, 6, 4, 3, 30, tzinfo=dt.timezone.utc)   # folds up to the day before
 
     s1 = AGG.aggregate(None, [_line("/data/catalogue.json", _AU_NSW, date="2026-06-01")],
                        rmap, geoip, run1, au_states=states)
@@ -766,8 +766,8 @@ def test_state_data_is_forward_only_and_never_backfills_a_folded_day():
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
     states = AGG.AuStates.load(_AU_STATES_CSV)
-    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-01
-    run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)  # folds up to 2026-07-11
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to the day before
+    run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)  # folds up to the day before
 
     before = [_line("/data/catalogue.json", _AU_NSW, date="2026-06-01"),
               _line("/data/catalogue.json", _AU_NSW2, date="2026-06-01")]
@@ -841,7 +841,7 @@ def test_main_wires_the_state_table_through_the_env(tmp_path, monkeypatch):
 
 
 # ==================================================================================================
-# Counting-honesty lane: what the numbers actually mean.
+# Counting-honesty workflow: what the numbers actually mean.
 #
 # Five defects shared one root: the fold's admission rules were written for "a person in a browser"
 # and every other real client was either dropped or double counted.
@@ -1014,7 +1014,7 @@ def test_the_served_json_schema_is_an_api_path():
 
 
 def test_the_served_stations_geojson_is_an_api_path():
-    """GEOJSON-PATH PIN (owner ruling 2026-08-02). /data/stations.geojson is the corpus as a vector
+    """GEOJSON-PATH PIN. /data/stations.geojson is the corpus as a vector
     layer: a GIS user adds it as a layer straight from the URL, and the portal's own JavaScript never
     fetches it, so every hit is a third party reading the corpus programmatically. It is the fourth
     documented machine-readable entry point and must classify as `api`. FAILS IF the new document is
@@ -1273,7 +1273,7 @@ def test_each_month_records_how_many_days_carried_the_current_dimensions():
 
 
 def test_the_honesty_lane_still_leaks_nothing():
-    """LEAK PIN (counting-honesty lane). The new dimensions are a client class label, a status code, a
+    """LEAK PIN (counting-honesty workflow). The new dimensions are a client class label, a status code, a
     run-local dedupe set and a per-month day count: none of them may put an address or a user-agent
     into stats.json. The dedupe key in particular is built FROM the masked network and must stay in
     memory. FAILS IF any of it reaches the emitted file."""
@@ -1305,7 +1305,7 @@ def test_the_honesty_lane_still_leaks_nothing():
 # daily window, and the denominator that turns "12 surveys downloaded" into "12 of 40 served".
 #
 # All of it forward-only, all of it at the two grains that are kept, and none of it at day-by-state or
-# city grain: those exclusions are ratified and the pins above hold them.
+# city grain: those exclusions are required and the pins above hold them.
 # ==================================================================================================
 
 def test_state_rows_carry_downloads_visits_api_and_volume_beside_the_request_count():
@@ -1492,7 +1492,7 @@ def test_the_state_and_funding_detail_still_leaks_nothing():
 
 
 # ==================================================================================================
-# The APPEND-ONLY DAILY ARCHIVE lane (owner ruling 2026-07-30).
+# The APPEND-ONLY DAILY ARCHIVE workflow.
 #
 # The raw log rotates in a week and the daily rows roll off after 92 days, so the only permanent
 # record was the calendar month. Every question finer than a month became unanswerable RETROACTIVELY:
@@ -1500,7 +1500,7 @@ def test_the_state_and_funding_detail_still_leaks_nothing():
 # day at maximal NON-GEO granularity, appended beside stats.json, read by nothing and served by
 # nothing.
 #
-# The boundary these pins hold is the geographic one. The owner's ratified exclusion of day-by-state
+# The boundary these pins hold is the geographic one. The exclusion of day-by-state
 # data generalises: no country and no state below month grain, RENDERED OR ARCHIVED. A named country
 # on a named day is a smaller cell than a named state in a named month.
 # ==================================================================================================
@@ -1572,7 +1572,7 @@ def test_an_archive_line_is_sparse_and_an_active_day_matches_the_fold():
 def test_no_archive_line_ever_carries_a_country_or_a_state():
     """ARCHIVE GEO PIN. Geography stops at the MONTH, rendered or archived. The day rows here are the
     finest-grained record in the whole pipeline, and a named country on a named day is a smaller cell
-    than the named-state-in-a-named-month the owner already ruled out. FAILS IF any geographic key or
+    than the named-state-in-a-named-month the small-cell rule already excludes. FAILS IF any geographic key or
     value reaches an archive line, even though the very same fold is counting countries and states
     into stats.json beside it."""
     states = AGG.AuStates.load(_AU_STATES_CSV)
@@ -1602,7 +1602,7 @@ def test_no_archive_line_ever_carries_a_country_or_a_state():
 
 def test_the_daily_archive_leaks_no_address_and_no_user_agent():
     """LEAK PIN (daily archive). The archive is a SECOND file leaving the fold, kept forever, so the
-    record D2/D6 promise has to hold over it exactly as it holds over stats.json: no address, masked
+    promise has to hold over it exactly as it holds over stats.json: no address, masked
     or not, and no user-agent string. FAILS IF either survives into an archive line. Non-vacuous by
     the same negative control the stats.json sweep uses."""
     states = AGG.AuStates.load(_AU_STATES_CSV)
@@ -1678,7 +1678,7 @@ def test_the_collection_map_prefers_the_slug_over_the_title():
 
 
 def test_an_unreadable_log_file_is_named_and_counted_rather_than_swallowed(tmp_path, capsys):
-    """UNREADABLE-LOG PIN (verified incident, 2026-07-30). The box's access.json was root:root 0600;
+    """UNREADABLE-LOG PIN. The box's access.json was root:root 0600;
     every open raised, this reader swallowed it, and the fold ran for DAYS on the shipped front-door
     file alone while producing a complete-looking stats.json. Tolerant must not mean silent: a file
     the glob matched but could not open must be NAMED on stderr and counted, while the readable
@@ -1757,7 +1757,7 @@ def test_main_writes_the_archive_beside_stats_json_outside_the_served_tree(tmp_p
 def test_an_unwritable_archive_warns_and_still_lets_stats_json_land(tmp_path, monkeypatch, capsys):
     """ARCHIVE NEVER-RAISE PIN. The archive is a bonus record, not the fold. An archive path that
     cannot be written (a directory in its place, a read-only mount) must produce a loud note and leave
-    stats.json exactly as it would have been. FAILS IF the run raises, returns non-zero, or costs the
+    stats.json exactly as the run found it. FAILS IF the run raises, returns non-zero, or costs the
     stats write."""
     data = tmp_path / "data"
     logdir = data / "logs" / "caddy"
@@ -1789,14 +1789,14 @@ def test_nothing_in_the_gateway_reads_the_daily_archive():
     because nothing consumes it, so a reference to it from the serving stack is the change that must
     be caught here rather than in review. FAILS IF any gateway source names the archive file."""
     gateway = _REPO / "gateway"
-    assert gateway.is_dir(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    assert gateway.is_dir(), "this pin runs from a full checkout, never skipped"
     offenders = [str(p.relative_to(_REPO)) for p in sorted(gateway.rglob("*.py"))
                  if "daily_archive" in p.read_text(encoding="utf-8", errors="replace")]
     assert offenders == [], f"the gateway must not read the daily archive: {offenders}"
 
 
 # ==================================================================================================
-# COUNTRY-CLASS DETAIL and the PER-SURVEY KIND SPLIT (owner rulings 2026-08-01).
+# COUNTRY-CLASS DETAIL and the PER-SURVEY KIND SPLIT.
 #
 # The AU state table already answers "what did this place DO" -- downloads, visits, API requests and
 # bytes -- while the country table beside it answered only "how many requests". Every country now
@@ -1870,7 +1870,7 @@ def test_country_detail_is_forward_only_and_never_reaches_a_day_row():
     """COUNTRY DETAIL SEAM PIN. The detail map is a new dimension and obeys every rule its siblings do:
     it starts at the fold that first wrote it, no earlier month gains it, and it exists at the
     cumulative and month grains ONLY. A day-by-country cell is a smaller cell than the day-by-state one
-    already ruled out. FAILS IF an older file cannot be read, if an earlier month is backfilled, or if
+    already excluded. FAILS IF an older file cannot be read, if an earlier month is backfilled, or if
     a day row gains country detail."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
@@ -1953,7 +1953,7 @@ def test_a_survey_map_written_before_the_kind_split_reads_back_and_starts_accrui
 
 
 # ==================================================================================================
-# The BULK-EXPORT LABEL (owner ruling 2026-08-01).
+# The BULK-EXPORT LABEL.
 #
 # The portal's multi-file export marks its OWN file fetches with a query flag (sel=bulk), so the fold
 # can tell a drag-selected bulk export from a single station download. It is a label on a request that
@@ -2066,7 +2066,7 @@ def test_the_select_split_accumulates_across_folds_and_is_never_backfilled():
     every later run (which would walk the disclosed date forward forever)."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
-    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)    # folds up to 2026-06-01
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)    # folds up to the day before
     run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)
     run3 = dt.datetime(2026, 7, 14, 3, 30, tzinfo=dt.timezone.utc)
 
@@ -2126,15 +2126,15 @@ def test_the_archive_carries_the_select_split_and_the_event_count_and_still_no_g
 
 
 def test_the_aggregator_and_the_portal_agree_on_the_bulk_flag():
-    """CROSS-SUBSYSTEM PIN (mirror). The label is a constant shared by two subsystems whose CI lanes
+    """CROSS-SUBSYSTEM PIN (mirror). The label is a constant shared by two subsystems whose CI workflows
     never run each other's suites: portal/src/exports.js writes it, this file reads it. Edited on one
     side alone, the split degenerates SILENTLY -- the fold keeps working and every bulk export simply
-    counts as a single download. This lane (gateway-ci: deploy/** and gateway/**) holds the pin for an
+    counts as a single download. This module (gateway-ci: deploy/** and gateway/**) holds the pin for an
     aggregator-side edit; portal/tests/test_bulk_export_label.py holds it for a portal-side one.
 
     FAILS IF the two tokens drift, or if the portal stops declaring one at all."""
     exports_js = _REPO / "portal" / "src" / "exports.js"
-    assert exports_js.is_file(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    assert exports_js.is_file(), "this pin runs from a full checkout, never skipped"
     m = re.search(r"""SEL_BULK_FLAG\s*=\s*["']([^"']+)["']""", exports_js.read_text(encoding="utf-8"))
     assert m, "portal/src/exports.js must declare SEL_BULK_FLAG; the label has no other source"
     assert m.group(1) == AGG._SELECT_BULK_FLAG, (
@@ -2150,7 +2150,7 @@ def _selection_zip_formats() -> list[str]:
     declares them (portal/src/exports.js SEL_ZIP_BUTTONS). Every one of those buttons writes the bulk
     flag, so this list IS the set of flows the operator copy has to describe."""
     exports_js = _REPO / "portal" / "src" / "exports.js"
-    assert exports_js.is_file(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    assert exports_js.is_file(), "this pin runs from a full checkout, never skipped"
     block = re.search(r"SEL_ZIP_BUTTONS\s*=\s*\[(.*?)\];", exports_js.read_text(encoding="utf-8"), re.S)
     assert block, "portal/src/exports.js must declare SEL_ZIP_BUTTONS; the button set has no other source"
     # Each row is [buttonId, label, format, metaLineId] since the select-panel redesign added the
@@ -2197,7 +2197,7 @@ def test_the_bulk_export_copy_describes_every_flow_that_writes_the_flag():
 
 
 # --------------------------------------------------------------------------------------------------
-# Path-URL contract lane (owner ruling 2026-08-18): the tier-1 redirect hop stays OUT of the counts.
+# Path-URL contract workflow: the tier-1 redirect hop stays OUT of the counts.
 # --------------------------------------------------------------------------------------------------
 def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
     """PATH-URL ANALYTICS DECISION, pinned. The tier-1 301 hop (/surveys|/stations|/collections at
@@ -2238,14 +2238,14 @@ def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
 
 
 # ==================================================================================================
-# TIME-SERIES HAND-OFFS lane (THREDDS A10; owner ruling R8, records D4/D13/D16).
+# TIME-SERIES HAND-OFFS workflow.
 #
 # /go/ts/<survey>/<station>/<level> answers 302 with the ONE NCI THREDDS fileServer URL for that
 # file. AusMT hands the reader off and hosts none of those bytes, so this class counts REQUESTS and
 # can never count completed transfers: everything after the Location is between the browser and NCI,
 # and every published string says so.
 #
-# TWO things the log cannot tell us, and they are the whole of D4. The `size` on a 302 line is the
+# TWO things the log cannot tell us, and they are the whole of the problem. The `size` on a 302 line is the
 # REDIRECT BODY, not the file, and the Location header is never logged at all. So the bytes and the
 # destination host come from the register-derived `ts_access.json` the build serves, joined on the
 # route path exactly as a frozen release bundle joins on its filename (_release_bundle_row).
@@ -2254,7 +2254,7 @@ def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
 # grains and NOWHERE finer, for the same small-cell reason a named state on a named day is refused.
 # ==================================================================================================
 # A served ts_access.json in the shape build_portal emits: {ausmt_id: {level: {bytes, url_path}}}.
-# `C5 [REMOTE].zip` is the lane's real fixture -- a published url_path carrying a space and brackets,
+# `C5 [REMOTE].zip` is the module's real fixture -- a published url_path carrying a space and brackets,
 # which is why the emitted access_url is percent-encoded and why nothing here rebuilds one by hand.
 _TS_ACCESS = {
     "au.sample-survey.A1": {
@@ -2307,7 +2307,7 @@ def test_a_hand_off_route_is_its_own_class_admitted_at_302_alone():
 
 
 def test_hand_off_bytes_and_destination_come_from_the_register_never_the_log():
-    """D4 PIN, the whole reason this class needs a join at all. The log CANNOT say how big the file
+    """JOIN PIN, the whole reason this class needs a join at all. The log CANNOT say how big the file
     is (its `size` is the redirect body) and CANNOT say where it went (the Location header is never
     logged), so both come from the served, register-derived ts_access.json on the route key.
 
@@ -2328,7 +2328,7 @@ def test_hand_off_bytes_and_destination_come_from_the_register_never_the_log():
 
 def test_an_unresolvable_hand_off_route_is_its_own_skew_bucket_and_never_dropped():
     """DRIFT PIN. The route table lives on the front door and the data on the box, so a 302 CAN
-    arrive for a route the served index no longer publishes. That is drift, and drift must be
+    arrive for a route the served index has stopped publishing. That is drift, and drift must be
     visible: the request counts, its bytes do not (nothing measured them), and it lands in the
     hand-off family's OWN unattributed bucket.
 
@@ -2349,9 +2349,9 @@ def test_an_unresolvable_hand_off_route_is_its_own_skew_bucket_and_never_dropped
 
 
 def test_hand_offs_ride_every_grain_with_by_survey_by_level_and_by_destination():
-    """GRAIN PIN (D13/D16). by_survey and by_level ride EVERY grain the family has -- cumulative,
+    """GRAIN PIN. by_survey and by_level ride EVERY grain the family has -- cumulative,
     calendar month, day row and the permanent archive line -- and by_destination rides beside them
-    (D16: cardinality is one today, and that is exactly when a missing breakdown is cheap to add).
+    (cardinality is one today, and that is exactly when a missing breakdown is cheap to add).
     The archive additionally keeps the station-grain cell, the by_dataset of this family, because the
     92-day window is what otherwise loses "which station, on which day" forever.
 
@@ -2381,8 +2381,8 @@ def test_hand_offs_ride_every_grain_with_by_survey_by_level_and_by_destination()
 
 def test_a_hand_off_carries_a_country_at_month_grain_and_nowhere_finer():
     """GEO BOUNDARY PIN. The hand-off family takes a by-country figure at the cumulative and
-    calendar-month grains ONLY (D13). A named country on a named day is the finest cell this
-    pipeline could produce and the owner's ratified exclusion of day-by-state data covers it, so
+    calendar-month grains ONLY. A named country on a named day is the finest cell this
+    pipeline could produce and the exclusion of day-by-state data covers it, so
     neither the day row nor the permanent archive may carry one.
 
     FAILS IF a country reaches a day row or an archive line, or if the month grain stops carrying
@@ -2543,7 +2543,7 @@ def test_the_destination_host_is_the_one_the_engine_publishes():
 
 
 def test_the_hand_off_class_adds_no_client_side_measurement():
-    """PRIVACY-POSTURE PIN (R8, framing invariant). Measuring the hand-off adds NOTHING in the
+    """PRIVACY-POSTURE PIN (framing invariant). Measuring the hand-off adds NOTHING in the
     browser: the 302 is a request the reader was making anyway and the front door already logs it.
     So Plausible stays off, and the six existing track() call sites stay six -- a seventh would be a
     new client-side beacon, which is the one thing this measurement was designed not to need.

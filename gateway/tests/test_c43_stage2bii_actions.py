@@ -1,17 +1,17 @@
-"""C43 Stage 2b-ii: privileged serve-state ACTIONS (gateway half — record D8/D9/D13).
+"""Stage 2b-ii: privileged serve-state ACTIONS (gateway half).
 
 The gateway WRITES intent files the host actions agent executes (the host-side pins live in
 deploy/tests/test_actions_sh.py). This module pins the GATEWAY half against INDEPENDENT OBSERVABLES:
 the intent file that lands in the state dir (and its content), the pause.flag, the rendered confirm
 pages, the response status, and the TOTP replay-guard state — never the handler's self-report.
 
-The D13 Stage-2 set carried here (each refusal proven able to fail by its passing control):
+The Stage-2 set carried here (each refusal proven able to fail by its passing control):
   * session + CSRF gate on every action route;
   * single-flight (a pending intent of a kind is not double-written);
   * force-full sets the `full` flag on rebuild.request;
   * pause writes / resume removes pause.flag;
   * rollback TYPED-ID must match; a build not in the inventory / the serving build are refused;
-  * restore TYPED-ID must match; the C41 TOTP second factor (unenrolled / wrong / replayed refused;
+  * restore TYPED-ID must match; the TOTP second factor (unenrolled / wrong / replayed refused;
     a wrong typed id does NOT burn the code); a valid restore writes the intent AND consumes the code;
   * CSP-clean confirm pages (no inline JS/handlers under the strictPages script-src 'self').
 
@@ -118,7 +118,7 @@ def test_action_posts_require_csrf(tmp_path):
 # ---- simple intents: update / snapshot / force-full / pause / resume ----------------------------
 def test_update_writes_intent_and_is_single_flight(tmp_path):
     """POST update writes update.request once; a second POST while it is pending does NOT write a
-    second (single-flight, D9.3). FAILS IF a duplicate intent is written while one is pending."""
+    second (single-flight). FAILS IF a duplicate intent is written while one is pending."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
@@ -413,7 +413,7 @@ def test_write_intent_single_flight_raises(tmp_path):
 
 
 def test_audit_tail_reader_does_not_fabricate_lines_from_unicode_separators(tmp_path):
-    """S4 (gateway defence-in-depth). read_actions_audit_tail must split on '\n' ONLY, so a crafted
+    """DEFENCE-IN-DEPTH PIN. read_actions_audit_tail must split on '\n' ONLY, so a crafted
     line carrying a unicode line separator (U+2028) — even if one ever reached the host log — stays ONE
     entry, not two. FAILS IF splitlines()-style splitting fabricates an extra tail entry from one line."""
     state = tmp_path / "state"

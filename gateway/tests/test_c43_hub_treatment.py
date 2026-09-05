@@ -1,21 +1,21 @@
-"""C43-HUB server-side render pins — the survey hub's mockup treatment (contract C43-HUB,
-owner rulings 2026-07-11), driven through the real gateway HTTP surface with the in-process edit
-seam. The EXECUTABLE JS pins (clusterWarnings & co, producer-truth build_report) live in
-test_c43_hub_js_parity.py; this file pins what the SERVER renders and the JS source invariants.
+"""Server-side render pins - the survey hub's mockup styling, driven through the real gateway HTTP
+surface with the in-process edit seam. The EXECUTABLE JS pins (clusterWarnings & co, producer-truth
+build_report) live in test_c43_hub_js_parity.py; this file pins what the SERVER renders and the JS
+source invariants.
 
 Load-bearing pins:
-  * H1 HEADER — every hub tab renders the mockup's header: survey title + mono slug chip +
+  * HEADER - every hub tab renders the mockup's header: survey title + mono slug chip +
     orientation line (v<version> · <licence> · <access> · collection <id>) from the metadata
     read-job fields, with a hidden browser-filled counts span; the tab strip carries the hidden
     Stations chip slot + the slug data attribute. The header DEGRADES to the slug when the
     read-job fails on a non-metadata tab (never a bounce, never a 500).
-  * H2 SCAFFOLD: the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at
-    JS-source level here (executable form in the parity file). A2 (D19): the Q3 citation-author
+  * SCAFFOLD: the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at
+    JS-source level here (executable form in the parity file). The citation-author
     email heuristic and its three surfaces (the data-citation-email scaffold attribute, the TOC
     issue chip and the Metadata inline field error) are DELETED with the retired flat credit keys
     they read; the pins below assert their absence.
-  * SEVERITY CSS — .qa.fail/.qa.warn/.qa.info map to the dark palette's bad/warn/info hues
-    (red fail / amber warn / blue info — the mockup's severity semantics).
+  * SEVERITY CSS - .qa.fail/.qa.warn/.qa.info map to the dark palette's bad/warn/info hues
+    (red fail / amber warn / blue info - the mockup's severity semantics).
 
 Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
 """
@@ -30,7 +30,7 @@ from gateway.tests.conftest import (
 )
 
 # A survey carrying every orientation-line fact (version/licence/access/collection) + a display
-# title, so the H1 header has real fields to render. The citation author is a NAME (the email
+# title, so the header has real fields to render. The citation author is a NAME (the email
 # variant is a separate fixture below).
 HUB_YAML = """\
 schema_version: "0.2"
@@ -63,7 +63,7 @@ publications:
     title: "Earlier interpretation"
 """
 
-# A2 (D19): the H4 email-author variant is retired with the heuristic that read it. What replaces it
+# The email-author variant is retired with the heuristic that read it. What replaces it
 # as the "this survey carries curated MTCAT 2.0 homes" fixture is a survey that actually carries them,
 # so the new panels have real values to render.
 HUB_YAML_CURATED = HUB_YAML + """
@@ -88,10 +88,10 @@ def _live(tmp_path, yaml_text=HUB_YAML):
 
 
 # --------------------------------------------------------------------------------------------------
-# H1 — hub header + tab strip
+# Hub header + tab strip
 # --------------------------------------------------------------------------------------------------
 def test_hub_header_orientation_line_on_every_tab(tmp_path):
-    """H1 HEADER PIN. Every hub tab renders the mockup's header — the survey display TITLE (not the
+    """HEADER PIN. Every hub tab renders the mockup's header - the survey display TITLE (not the
     slug) + a mono slug chip + the orientation line 'v1.0.1 · CC-BY-4.0 · open · collection
     capricorn' (each fact from the metadata read-job fields, in the mockup's order) + the hidden
     counts span survey-hub.js fills from build_report. The tab strip carries data-survey-slug and
@@ -127,7 +127,7 @@ def test_hub_header_orientation_line_on_every_tab(tmp_path):
 
 
 def test_hub_header_never_invents_missing_facts(tmp_path):
-    """H1 NO-INVENTED-FACTS PIN. A survey carrying NO licence/access/collection renders an
+    """NO-INVENTED-FACTS PIN. A survey carrying NO licence/access/collection renders an
     orientation line with only the version — no empty separators, no defaulted 'open', no
     fabricated collection. FAILS IF a missing survey.yaml fact still produces a segment (the
     display layer must never assert what the record does not carry)."""
@@ -155,10 +155,10 @@ def test_hub_header_never_invents_missing_facts(tmp_path):
 
 
 def test_hub_header_degrades_when_read_job_fails(tmp_path):
-    """H1 DEGRADATION PIN. When the metadata read-job fails on a NON-metadata tab, the hub still
+    """DEGRADATION PIN. When the metadata read-job fails on a NON-metadata tab, the hub still
     renders (200): the title falls back to the slug, the orientation line carries no fact
     segments, and the tab's own content is unaffected. FAILS IF the failure bounces the curator
-    off the hub (the pre-C43-HUB metadata-only behaviour) or 500s."""
+    off the hub (the earlier metadata-only behaviour) or 500s."""
     async def _body():
         surveys_live = _live(tmp_path)
 
@@ -177,10 +177,10 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# H2 — overview scaffold + citation-email stamp (Q3 ruling)
+# Overview scaffold + citation-email stamp
 # --------------------------------------------------------------------------------------------------
 def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
-    """A2 (D19) SCAFFOLD PIN, inverted. The Q3 citation-author email heuristic read ONLY the two
+    """SCAFFOLD PIN, inverted. The citation-author email heuristic read ONLY the two
     retired flat credit keys, so with those migrated away it could never fire again; it and its
     scaffold attribute are deleted outright. FAILS IF the attribute or the helper comes back."""
     assert not hasattr(curatorpage, "citation_author_email")
@@ -199,13 +199,13 @@ def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# H2 — JS-source invariants (executable twins live in test_c43_hub_js_parity.py)
+# JS-source invariants (executable twins live in test_c43_hub_js_parity.py)
 # --------------------------------------------------------------------------------------------------
 def test_survey_hub_js_four_cards_and_no_build_id_card():
     """FOUR-CARDS SOURCE PIN incl. the build-id-card-ABSENT assertion. SURVEY_HUB_JS builds
     exactly the mockup's four cards (Serving / published, QA flags, Frame, Last build); the
     Stage-1 'Served build' build-id card is REMOVED (that fact lives in the drift chip + serve
-    screen), and /data/build.json is no longer fetched here at all. FAILS IF the build-id card
+    screen), and /data/build.json is not fetched here at all. FAILS IF the build-id card
     or its fetch returns, or a mockup card label disappears."""
     js = curatorpage.SURVEY_HUB_JS
     for label in ("'Serving / published'", "'QA flags'", "'Frame'", "'Last build'"):
@@ -220,7 +220,7 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
     ('qa ' + kind, with the terse text and the full diagnosis in a title attr) and the refusal
     boilerplate is a single REFUSED_NOTE constant appended once by the plan builder. Both the old
     string-matching metadata branch (/citation|author|email/…) and the server-stamped
-    data-citation-email info row that replaced it are now DELETED (A2/D19). FAILS IF either
+    data-citation-email info row that replaced it are now DELETED. FAILS IF either
     citation-author branch returns, the note constant multiplies, or the severity-row classes
     disappear."""
     js = curatorpage.SURVEY_HUB_JS
@@ -229,7 +229,7 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
     assert js.count("var REFUSED_NOTE") == 1
     assert js.count("REFUSED_NOTE") == 2, "REFUSED_NOTE: one declaration + ONE plan use (once-only)"
     assert "citation|author|email" not in js, "the dead warning-string matcher must stay deleted"
-    assert "data-citation-email" not in js, "the citation-email info row is retired (D19)"
+    assert "data-citation-email" not in js, "the citation-email info row stays out"
     assert "metaInfoText" not in js and "truncEmail" not in js
     # The CSP/XSS discipline extends to the rewritten constant.
     assert ".innerHTML" not in js and "<script" not in js.lower()
@@ -237,7 +237,7 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
 
 
 def test_station_panel_no_raw_json_outside_collapsed_details():
-    """GATE F1/F2 SOURCE PIN (2026-07-11 browser pass). The stations panel renders NO raw JSON
+    """GATE SOURCE PIN. The stations panel renders NO raw JSON
     outside a collapsed <details>: the ONLY <pre> in STATIONS_JS is the collapsed 'raw
     station.json' dump; the old visible 'Conditioning / QA notes' and 'Coordinate QC' pre blocks
     are gone; conditioning and coordinate QC render as ONE terse dl line each
@@ -245,7 +245,7 @@ def test_station_panel_no_raw_json_outside_collapsed_details():
     returns, the terse lines unwire, or the collapsed dump disappears."""
     js = curatorpage.STATIONS_JS
     assert js.count("el('pre')") == 1, (
-        "exactly ONE pre — the collapsed raw station.json dump — is allowed in the panel")
+        "exactly ONE pre - the collapsed raw station.json dump - is allowed in the panel")
     assert "el('summary', 'raw station.json')" in js
     assert "'Conditioning / QA notes'" not in js, "the visible conditioning JSON block must stay gone"
     assert "el('h2', 'Coordinate QC')" not in js, "the visible coordinate-QC JSON block must stay gone"
@@ -256,12 +256,12 @@ def test_station_panel_no_raw_json_outside_collapsed_details():
 
 
 # --------------------------------------------------------------------------------------------------
-# H4 — metadata TOC state hints + the inline citation-email field error (display-layer only)
+# Metadata TOC state hints + the inline citation-email field error (display-layer only)
 # --------------------------------------------------------------------------------------------------
 def test_metadata_toc_state_hints(tmp_path):
-    """H4 TOC-HINT PIN. The Metadata TOC entries carry render-time state hints: entry COUNTS on
+    """TOC-HINT PIN. The Metadata TOC entries carry render-time state hints: entry COUNTS on
     non-empty list sections (publications: 2, organisations: 1, acknowledgements: 1) and the access
-    level / collection id values. A2 (D19): there is no '1 issue' chip any more, because the only
+    level / collection id values. There is no '1 issue' chip, because the only
     thing that ever produced one was the deleted citation-email heuristic. FAILS IF a hint is
     invented for an empty section, a count drifts from the survey's own entries, or the retired
     issue chip returns."""
@@ -291,12 +291,12 @@ def test_metadata_toc_state_hints(tmp_path):
 
 
 def test_metadata_tab_renders_the_curated_home_panels(tmp_path):
-    """A2 PANEL PIN. The Metadata tab renders the three ratified curated homes plus the designation
+    """PANEL PIN. The Metadata tab renders the three curated homes plus the designation
     mapping, prefilled from the survey's own values: the organisations role checkbox group with the
     stored custodian ticked and its primary-custodian radio selected, the citation preferred-text and
     nested preferred-identifier inputs, the acknowledgement wording, and the identity_classification
     case select with both designation row groups. FAILS IF a curator cannot edit a key the public
-    form and the migration can write (the no-raw-JSON-escape rule, D2)."""
+    form and the migration can write (the no-raw-JSON-escape rule)."""
     async def _body():
         surveys_live = _live(tmp_path, yaml_text=HUB_YAML_CURATED)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -327,10 +327,10 @@ def test_metadata_tab_renders_the_curated_home_panels(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# H5 — history density polish (the mockup's merged 'When · by' column)
+# History density polish (the mockup's merged 'When · by' column)
 # --------------------------------------------------------------------------------------------------
 def test_history_when_by_merged_column(tmp_path):
-    """H5 DENSITY PIN. The History table merges When and Author into the mockup's single
+    """DENSITY PIN. The History table merges When and Author into the mockup's single
     'When · by' column ('<date> · <author>', values verbatim from the history read-job); the
     separate Author column is gone; behaviour (read-only real git log) is unchanged. FAILS IF
     the columns split again or the author drops out of the merged cell."""

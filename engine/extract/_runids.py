@@ -10,7 +10,7 @@ mints one, not even for a station whose source clearly describes an acquisition.
 
     surveys/<slug>/run-ids.yaml
         run_ids:
-          A1:  [A1_001]         # the source's own run id, copied verbatim by the curation tool
+          A1:  [A1_001]         # the source's own run id for this station id, copied verbatim
           A23: [A23-r01]        # a curated local id, minted from the published station id alone
 
 Shape failures are refused rather than half-applied: a store the build cannot read whole would give

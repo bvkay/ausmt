@@ -1,4 +1,4 @@
-"""Tier-3 entity landing pages (the discoverability lane).
+"""Tier-3 entity landing pages (the discoverability workflow).
 
 The path-URL contract published /surveys/<slug>, /stations/<ausmt_id> and /collections/<id> as the
 permanent URL shapes; tier 1 301'd them into the SPA's hash routes, which crawlers cannot see, so
@@ -6,13 +6,13 @@ the whole corpus indexed as one page. Tier 3 keeps every published URL and serve
 the engine emits one static page per survey, station and collection into <out>/pages/, rendered
 ONLY from the already-served public documents (survey-metadata.json / station.json / the
 collections rollup), so a page can never disclose anything the gated products do not already
-publish - the C42 leak posture is inherited, not re-implemented, and test_coord_access's
+publish - the leak posture is inherited, not re-implemented, and test_coord_access's
 whole-tree sweep audits the pages like every other emitter.
 
 Emission rides --sitemap-base exactly as the sitemap does: same flag, same URL base, and the two
 outputs must agree (every sitemap URL has a page; no orphan pages), so the sitemap can never
-advertise a 404. Without the flag no pages directory exists and the build is byte-identical to a
-pre-lane build.
+advertise a 404. Without the flag no pages directory exists and the build is byte-identical to an
+earlier build.
 """
 import json
 import re
@@ -68,7 +68,7 @@ def _build(surveys, out, *, sitemap=True, extra=()):
 
 def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     """FAILS IF pages are emitted without --sitemap-base (a flagless build must stay byte-identical
-    to a pre-lane build), a sitemap URL lacks a page (an advertised 404), a station URL appears in
+    to an earlier build), a sitemap URL lacks a page (an advertised 404), a station URL appears in
     the sitemap (station pages exist for the URL contract but are deliberately unadvertised: 2,625
     templated documents would read as thin content and dilute the pages that carry the ranking),
     or a station PAGE goes missing (the served /stations/<id> shape would 404)."""
@@ -107,7 +107,7 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
 
 
 def test_the_sitemap_advertises_the_hubs_and_the_static_pages(tmp_path):
-    """The sitemap is the crawler's map of the site, and until this lane it carried only the root
+    """The sitemap is the crawler's map of the site, and until this change it carried only the root
     and the entity pages: the two hub pages did not exist, and about/releases/add-survey were
     substantive linked documents that no crawler was pointed at. FAILS IF any of the five is
     missing, or if one of them carries a <lastmod> (none of them has an honest change signal, and
@@ -148,7 +148,7 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     the two, so an advertised 404 could leave the build silently. This drives a synthetic mismatch
     (the emitter writes every page, then one survey page is removed behind the build's back) and
     requires the build to REFUSE. FAILS IF the build completes with a sitemap URL that has no
-    page - on the pre-lane engine it completes with rc=0."""
+    page - on the earlier engine it completes with rc=0."""
     surveys = _make_survey(tmp_path)
     real = build_portal.pages.emit_pages
 
@@ -162,8 +162,8 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
     # The house convention for a self-check the build fails: ERROR lines on stderr, then return 2.
     # An operator running `make rebuild-data` gets a message rather than a traceback, and the
-    # reconciliation now reads like every other gate in main() (LANE-CONTRACT-PAGE-HIERARCHY.md B8,
-    # which flags the RuntimeError this test used to require as the odd one out).
+    # reconciliation now reads like every other gate in main() (LANE-CONTRACT-PAGE-HIERARCHY.md,
+    # which flags the RuntimeError this test once required as the odd one out).
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
                             "--bundle-edi", "--no-validate",
                             "--products", str(tmp_path / "out" / "products"),
@@ -247,7 +247,7 @@ def test_the_engine_image_layout_is_not_read_as_a_portal_checkout(tmp_path, monk
 
 def test_a_visible_portal_checkout_still_has_its_static_pages_reconciled(tmp_path, monkeypatch):
     """The other side of the same gate: where a REAL portal checkout IS visible (CI, a dev box,
-    the build-products lane), a sitemap URL for a static page the portal does not ship is still a
+    the build-products workflow), a sitemap URL for a static page the portal does not ship is still a
     hard error. FAILS IF the image-layout fix turns the static-page leg into a permanent no-op."""
     checkout = tmp_path / "checkout"
     (checkout / "portal").mkdir(parents=True)
@@ -377,13 +377,13 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert "Cite as:" in page and "Kay, B.; Heinson, G." in page, "cite box with initials"
     assert "Magnetotelluric survey &#183; South Australia &#183; Test Org" in page, \
         "the subtitle carries region and organisation"
-    # page nav replaces the CTA (owner ruling: no portal button)
+    # Page nav replaces the CTA: no portal button
     assert "All surveys" in page and "View all stations on the main map" in page
     assert "Open in the interactive portal" not in page
     # maps: the shared-outline minimap always; the footprint zoom for this compact extent
     assert 'aria-label="Survey location in Australia"' in page
     assert 'aria-label="Station grid detail"' in page
-    # stat tiles from the served documents and the ingested runs (owner rulings: a zero tipper
+    # stat tiles from the served documents and the ingested runs (rules: a zero tipper
     # count shows the channels-recorded tile instead; the sample rate is a tile; the dipole
     # summary is gone - the station table carries dipoles)
     assert "period coverage" in page
@@ -393,8 +393,8 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert "Dipoles" not in page, "the dipole summary row is retired (the table carries dipoles)"
     assert "instrument PID" not in page, "the survey-level platform PID is retired"
     # The station table: the five default columns, sticky first column. The run and instrument
-    # columns moved to the station pages in LANE-CONTRACT-PAGE-HIERARCHY.md B5, which could only
-    # follow B4 giving those pages a Runs section; the move is followed fact by fact in
+    # columns moved to the station pages in LANE-CONTRACT-PAGE-HIERARCHY.md, which could only
+    # follow the change that gave those pages a Runs section; the move is followed fact by fact in
     # test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations, and the station
     # page's own rendering is pinned by test_the_station_page_renders_the_runs_its_own_document
     # _publishes. Restated here rather than deleted, so the survey page's own truth stays asserted.
@@ -426,7 +426,7 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
         card = out / "pages" / "og" / "pages-r.png"
         assert card.is_file() and card.read_bytes()[:2] == b"\x89P", "referenced card must exist"
 
-    # NO dash glyphs and NO ticks anywhere on the page (owner rulings)
+    # NO dash glyphs and NO ticks anywhere on the page
     assert "–" not in page and "—" not in page, "no en/em dashes"
     assert "✓" not in page and "&#10003;" not in page, "no tick glyphs"
 
@@ -446,14 +446,14 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
 
 
 def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
-    """The page hierarchy (design brief 11 to 14 and 41), asserted as ORDER rather than as prose.
+    """The page hierarchy, asserted as ORDER rather than as prose.
 
-    The page used to read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
+    The page once read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
     stations: a citation box and an unlabelled abstract held the top of the document and the map was
     a 240px right rail, so the one thing a reader opens a survey to see arrived below the fold with
     no section it belonged to. FAILS IF the map stops leading the hero, if the lede is not the
     blurb's own first sentence, if a named section loses its heading or its anchor, if the sections
-    fall out of the brief's order, or if the machine-readable links drift back out of Identifiers
+    fall out of the order asserted here, or if the machine-readable links drift back out of Identifiers
     and provenance."""
     surveys = _make_rich_survey(tmp_path)
     out = _build(surveys, tmp_path / "out")
@@ -689,7 +689,7 @@ def test_an_undeclared_survey_infers_channels_only_from_the_components_it_serves
 
 
 def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
-    """Design brief 15 plus AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md.
+    """The citation is a disclosure and its locator is source-led.
 
     Two defects at once. The Cite-as box held primary visual space near the top of every survey
     page, and it put the AusMT page URL in the LOCATOR slot unconditionally, which cites the AusMT
@@ -786,8 +786,8 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
 
 
 def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide():
-    """Design brief 16, and a real collision. _TS_LEVELS gave BOTH level0 and raw_packed the badge
-    L0, so a survey carrying both rendered two panels badged L0 and a station cell reading
+    """A real collision. _TS_LEVELS gave BOTH level0 and raw_packed the data level 0 badge,
+    so a survey carrying both rendered two panels badged at data level 0 and a station cell reading
     "L0 3.2 GB &#183; L0 41 KB" with nothing to tell the reader which was which. level1_netcdf, which
     ts_access.json emits and the SPA's own TS_LEVELS names, had no panel at all.
 
@@ -813,7 +813,7 @@ def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide()
 
 
 def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_details(tmp_path):
-    """Design brief 16: the download section is an interface component, not a run of technical text.
+    """The download section is an interface component, not a run of technical text.
     Every product row gets its own action, and the complete SHA-256 stops competing with format and
     size for attention.
 
@@ -837,8 +837,8 @@ def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_det
 
 
 def test_the_station_page_renders_the_runs_its_own_document_publishes(tmp_path):
-    """Design brief 17's precondition. station_page printed five facts and never touched
-    doc["runs"], so every deployment window, dipole geometry, logger and coil PID a station record
+    """The precondition for simplifying the survey table. station_page printed five facts and never
+    touched doc["runs"], so every deployment window, dipole geometry, logger and coil PID a station record
     publishes existed on the SURVEY page's wide table and nowhere else. Simplifying that table
     before this lands would delete the metadata from served HTML.
 
@@ -891,8 +891,8 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
     in every cell: an empty column asserting a measurement the source never made, which is what the
     comment above _channel_cells says it does not do. Latent on today's corpus only because
     _runfacts.unit_value returns None for empty source text and _Doc.channel drops a None, so the
-    key is absent rather than default-filled; a document that carried the defaults through would
-    have rendered the column.
+    key is absent rather than default-filled; a document that carried the defaults through
+    would render the column, which is the failure this pin names.
 
     FAILS IF either unit_value half is dropped, if a defaults-only document grows sections, or if a
     channel column appears for a key whose every value renders empty."""
@@ -954,7 +954,7 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
 
 
 def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations(tmp_path):
-    """Design brief 17, and it can only run AFTER the station pages carry the detail (B4).
+    """This test can only run AFTER the station pages carry the detail.
 
     The default table was 13 columns wide inside an 840px column, forced to scroll horizontally by
     an unconditional min-width of 1180px that a 5-column table also paid. The deployment and
@@ -977,7 +977,7 @@ def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations
         f"a five-column table must not be forced into a horizontal scrollbar: .stbl{{{stbl}}}"
     assert "position:sticky" in page, "the station column still pins while the table scrolls"
 
-    # the move, followed fact by fact on the station whose survey row used to carry them
+    # the move, followed fact by fact on the station whose survey row once carried them
     run = doc["runs"][0]
     for key in ("start", "end"):
         assert str(run["time_period"][key])[:16].replace("T", " ") in stn
@@ -995,7 +995,7 @@ def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations
 
 
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
-    """The entity link graph, all of it at once. Before this lane a survey page had NO way back to
+    """The entity link graph, all of it at once. Before this change a survey page had NO way back to
     the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
     site-wide, including the 404 page's own recovery link), and nothing on any survey page named
     the collection it belongs to - so the graph ran collection -> surveys only and the collection
@@ -1055,7 +1055,7 @@ def test_the_embargoed_survey_page_says_so(tmp_path):
     out = _build(surveys, tmp_path / "out")
     page = (out / "pages" / "surveys" / "pages-e.html").read_text(encoding="utf-8")
     assert "under embargo" in page and "2027-02-01" in page
-    # The DISCOVERY layer still renders (owner ruling): the catalogue is discovery-universal, so
+    # The DISCOVERY layer still renders: the catalogue is discovery-universal, so
     # an embargoed survey's page shows its station locations and band even while the science
     # products are withheld.
     minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S)
@@ -1201,12 +1201,12 @@ def _pages_module():
 
 
 def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
-    """No placeholder panels (owner ruling): a survey with raw archives gets the packed-raw card and
+    """No placeholder panels: a survey with raw archives gets the packed-raw card and
     per-station sizes; levels the register does not carry render nothing at all.
 
     Level names and badges follow portal/src/state.js TS_LEVELS as of the download-cards commit
-    (LANE-CONTRACT-PAGE-HIERARCHY.md B3), so "Raw time series" is now "Packed raw", "MTH5 time
-    series" is "Level 1 MTH5", and the L0 badge is no longer shared by two levels."""
+    (LANE-CONTRACT-PAGE-HIERARCHY.md), so "Raw time series" is now "Packed raw", "MTH5 time
+    series" is "Level 1 MTH5", and the L0 badge is not shared by two levels."""
     pages = _pages_module()
     docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
              "location": {"lat": -30.0, "lon": 137.0},
@@ -1219,7 +1219,7 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                              base="https://x.example")
     assert "Packed raw" in page and "1 of 1 stations" in page
     assert "Raw 3.2 GB" in page, "the table cell states the level and the real size"
-    # The download panel used to send a reader standing on THIS survey's page to the bare map with
+    # The download panel once sent a reader standing on THIS survey's page to the bare map with
     # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
     assert '<a href="/#/survey/s">Build a download script</a>' in page, \
         "the download-script action must keep the survey context, not point at the bare map"
@@ -1277,7 +1277,7 @@ def _collection_call(pages, n_members=2, **over):
 
 
 def test_the_collection_page_is_an_exploratory_layer(tmp_path):
-    """Design brief 23 to 31. The static collection page was description, small map, two numbers,
+    """The static collection page was description, small map, two numbers,
     a portal link and a bare list of member links: a thin catalogue record, not somewhere a reader
     can understand a programme.
 
@@ -1330,7 +1330,7 @@ def test_the_collection_page_is_an_exploratory_layer(tmp_path):
 
     # member surveys as a compact list, and organisations with their RORs
     assert '<a href="/surveys/m0">Member 0</a>' in page
-    # Ranges read as a SPACED HYPHEN, not as the word "to" (LANE-ADDENDUM-HUB-FEEDBACK.md R1,
+    # Ranges read as a SPACED HYPHEN, not as the word "to" (LANE-ADDENDUM-HUB-FEEDBACK.md,
     # which names "5 to 100,000 s" -> "5 - 100,000 s" as its worked example). The no-dash-glyph
     # assertions elsewhere in this file are untouched: the ban is on en/em dashes, not on hyphens.
     assert "200 stations" in page and "LPMT" in page and "2013 - 2016" in page
@@ -1361,7 +1361,7 @@ def test_the_collection_page_is_an_exploratory_layer(tmp_path):
 
 def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
     """_COLL_PAL has eight entries and cycled, so AusLAMP's fourteen members used six colours twice
-    and the legend could not tell them apart. Design brief 45 also forbids encoding identity by
+    and the legend could not tell them apart. The palette rule also forbids encoding identity by
     colour alone, and the SPA's own scatter already carries per-dot titles while the static one did
     not. FAILS IF two members share a colour, or if a dot cannot name its survey."""
     pages = _pages_module()
@@ -1369,7 +1369,7 @@ def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
                             member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
                                            for i in range(14)},
                             member_facts=None, level_counts=None, formats=None)
-    # A member's colour is stated once, on the group carrying that member's dots; it used to be
+    # A member's colour is stated once, on the group carrying that member's dots; it was once
     # repeated on every circle. Either element answers this test, which is about fourteen members
     # getting fourteen distinct colours and not about where the attribute sits. The coast rings are
     # excluded by naming the two elements rather than by matching a bare fill, because a <path>
@@ -1399,13 +1399,13 @@ def test_bundle_labels_speak_the_manifest_vocabulary():
 
 
 def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
-    """The maps pass (owner rulings 2026-08-28): the footprint zoom carries a scale bar, dots
+    """The maps pass: the footprint zoom carries a scale bar, dots
     speak the portal's type palette, a sub-degree survey's minimap draws the ring only, and the
     collection page carries the member-coloured scatter with its legend.
 
-    Two swatch assertions moved with LANE-CONTRACT-PAGE-HIERARCHY.md B7 and are restated, not
+    Two swatch assertions moved with LANE-CONTRACT-PAGE-HIERARCHY.md and are restated, not
     dropped. BBMT is #3730B8, the value portal/src/state.js measured for LP/BB separability and
-    deutan-safety, in place of the lightened #5B54D6 this test used to lock in. The locator ring is
+    deutan-safety, in place of the lightened #5B54D6. The locator ring is
     muted rather than coral, because coral is reserved for primary actions and active states; the
     ring assertion still bites, on the new ink."""
     surveys = _make_rich_survey(tmp_path)
@@ -1428,11 +1428,11 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
 
 
 def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
-    """Design brief 3, 4 and 45, as measurable properties of the emitted CSS and SVG.
+    """Measurable properties of the emitted CSS and SVG.
 
     Four separate debts. The BBMT swatch drifted from the value the portal measured for LP/BB
     separability and deutan-safety (portal/src/state.js), and the drift was TEST-LOCKED. The minimap
-    centroid ring was coral, which the brief reserves for primary actions and active states, not for
+    centroid ring was coral, which is reserved for primary actions and active states, not for
     decoration on a map. The stylesheet had no focus rule at all while the SPA has one. And several
     secondary labels sat at .72rem or below, under the 12px floor the SPA states for itself.
 
@@ -1506,7 +1506,7 @@ def test_the_register_lookup_matches_the_documented_ausmt_id_prefix():
 
 
 def test_a_page_with_empty_slots_carries_no_stray_blank_lines():
-    """13 of the 27 served survey pages carried a blank line where an absent block would have been
+    """13 of the 27 served survey pages carried a blank line in the place of an absent block
     (the collection edge, the citation record, the publications list). Cosmetic, but a page emitter
     that leaves the shape of what it did not write is a page emitter that will one day leave the
     content too. FAILS IF a rendered body contains two consecutive newlines."""
@@ -1533,10 +1533,10 @@ def test_activity_scope_identifiers_render_as_project_links():
 
 
 # ==================================================================================================
-# B9 R1 to R3: how a period, a range and a licence PRINT (presentation only)
+# The display grammar: how a period, a range and a licence PRINT (presentation only)
 # ==================================================================================================
 def test_the_period_display_helper_holds_the_owners_worked_examples():
-    """The owner's worked examples, verbatim, as the specification of ONE shared display helper.
+    """The worked examples, verbatim, as the specification of ONE shared display helper.
 
     A period is a stored float and a printed string, and the two are not the same object. The stored
     value stays exactly as the served documents carry it; what a reader sees is rounded to two
@@ -1552,7 +1552,7 @@ def test_the_period_display_helper_holds_the_owners_worked_examples():
 
 
 def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
-    """The owner's revised range separator: the word "to" becomes a spaced hyphen-minus, and the
+    """The revised range separator: the word "to" becomes a spaced hyphen-minus, and the
     glyph ban is unchanged (no en dash, no em dash, no tick glyphs). Asserted on a REAL page across
     the three range slots a survey renders: acquisition years, the period-coverage tile and the
     station table's own period cell, plus the station page's period row."""
@@ -1574,7 +1574,7 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
     stn = pages.station_page(doc=docs[0], survey_slug="s", base="https://x.example")
     # No disjunction: the first arm ("5.0 - 100,000.0 s") is what the row printed BEFORE it took the
     # shared helper, so accepting it let the station page bypass _fmt_period and print the trailing
-    # zeros R2 retires while this test stayed green. One helper, one form, one assertion.
+    # zeros the shared helper retires while this test stayed green. One helper, one form, one assertion.
     assert "5 - 100,000 s" in stn, \
         f"the station period row must use the shared helper and a spaced hyphen: " \
         f"{stn[stn.find('Period'):][:120]!r}"
@@ -1582,10 +1582,10 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
 
 
 def test_the_licence_reads_in_human_form_in_chrome_and_keeps_its_identifier_in_json_ld():
-    """R3. The SPDX identifier is the machine's name for the licence and "CC BY 4.0" is the
+    """The SPDX identifier is the machine's name for the licence and "CC BY 4.0" is the
     reader's; the page owes the reader the second and the machine the first.
 
-    R3's second clause is "the same pattern for the other recognised CC ids", so the coverage owed
+    The licence rule's second clause is "the same pattern for the other recognised CC ids", so the coverage owed
     is the licence instrument's whole CC list, not the subset today's corpus happens to declare.
     The expected strings below are LITERAL, so this test states the reader's form itself rather
     than restating the emitter's derivation of it; the key-set assertion is what makes the coverage
@@ -1658,7 +1658,7 @@ def _prose_collection(pages, prose=_PROSE, **over):
 
 
 def test_collection_prose_renders_as_paragraphs_with_a_subheading(tmp_path):
-    """FAULT 1. The whole collection description used to be emitted as ONE escaped <p>, so every
+    """FAULT 1. The whole collection description was emitted as ONE escaped <p>, so every
     paragraph break and every section heading the author wrote was destroyed: about 450 words
     arrived as a single block.
 
@@ -1686,7 +1686,7 @@ def test_collection_prose_renders_as_paragraphs_with_a_subheading(tmp_path):
 
 
 def test_collection_prose_wraps_the_generated_member_cards(tmp_path):
-    """FAULT 3. The owner's marker '[Survey cards/list]' sits INSIDE Member surveys, so the prose
+    """FAULT 3. The marker '[Survey cards/list]' sits INSIDE Member surveys, so the prose
     wraps the generated roll-call rather than replacing it: what a member survey is comes BEFORE the
     cards, and the classification list comes AFTER them.
 
@@ -1725,8 +1725,8 @@ def test_collection_prose_wraps_the_generated_member_cards(tmp_path):
 
 
 def test_collection_prose_is_escaped_and_carries_no_markup(tmp_path):
-    """The prose is author-supplied text on a public serving surface. Only the one ratified
-    structural convention is interpreted; everything else is inert.
+    """The prose is author-supplied text on a public serving surface. Only the one structural
+    convention is interpreted; everything else is inert.
 
     FAILS IF any author-supplied character reaches the page as markup, in a paragraph OR in a
     subheading (the subheading path is the easy one to forget, because it builds its own element)."""

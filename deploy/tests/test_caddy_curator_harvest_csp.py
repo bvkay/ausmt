@@ -1,4 +1,4 @@
-"""CONTRIBUTOR-CREDIT-SPEC (§6 curator DOI harvest) - Caddyfile CSP config-assertion pin.
+"""The contributor-credit model (curator DOI harvest) - Caddyfile CSP config-assertion pin.
 
 The curator publications "Look up DOI" button runs the SAME client-side registry harvest the public Add
 Survey page uses, so the curator metadata editor + survey hub pages need the SAME two citation hosts in
@@ -49,7 +49,7 @@ def test_harvest_pages_allow_the_two_citation_registries():
 
 
 def test_harvest_pages_allow_the_orcid_and_ror_lookup_hosts():
-    """RED before the CONTRIBUTOR-CREDIT-SPEC §6 CSP change: the People & credit panel's per-row "Look
+    """RED before the contributor-credit model CSP change: the People & credit panel's per-row "Look
     up" fetches pub.orcid.org (ORCID -> name) and api.ror.org (ROR -> org name) CLIENT-SIDE, so both must
     be in the curator-harvest connect-src, else the lookup is blocked in prod (it then degrades to a quiet
     note - but the allow-list is the intended path). The four-host allowlist is exactly these registries."""

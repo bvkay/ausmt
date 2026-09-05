@@ -132,7 +132,7 @@ def test_remove_all_stations_is_refused(tmp_path):
 
 
 def test_remove_vanished_file_is_refused(tmp_path):
-    """A selected file that no longer exists on disk (stale form) is refused with a clear error —
+    """A selected file that does not exist on disk (stale form) is refused with a clear error,
     never a half-removal. FAILS IF a missing selection is silently ignored and the removal proceeds
     for the rest."""
     _write_multi(tmp_path / "surveys-live")

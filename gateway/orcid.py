@@ -1,4 +1,4 @@
-"""ORCID checksum — ISO 7064 MOD 11-2 over the 16 digits (design §4).
+"""ORCID checksum - ISO 7064 MOD 11-2 over the 16 digits.
 
 Reimplemented here, NOT imported from the validator: the gateway must not import validator code
 (house rule — the gateway never parses survey content, and the validator lives in the sibling

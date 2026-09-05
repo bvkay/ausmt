@@ -1,9 +1,9 @@
-"""IDCONS D4 (identifier-consolidation, SPEC §5.2) — the pid_status.json refresh tool.
+"""Identifier consolidation: the pid_status.json refresh tool.
 
 The tool is the ONLY network-touching piece; these tests keep the BUILD/CI offline by INJECTING a fake
 head function (never a real doi.org HEAD). They pin the alive-rule classifier, the DOI-shape helpers, the
-union sweep (typed related_identifiers DOIs + the still-readable flat dataset_doi / collection_pid — SPEC
-§8.2 A-C5), and the written cache shape build_portal consumes.
+union sweep (typed related_identifiers DOIs + the still-readable flat dataset_doi /
+collection_pid), and the written cache shape build_portal consumes.
 """
 import importlib.util
 import json
@@ -42,7 +42,7 @@ def test_is_doi_and_normalise():
 
 
 def test_doi_identifiers_of_union_of_typed_and_flat():
-    """SPEC §8.2 A-C5: sweep the UNION of DOI-typed related_identifiers rows AND the flat dataset_doi /
+    """Sweep the UNION of DOI-typed related_identifiers rows AND the flat dataset_doi /
     collection_pid, deduped by string. A non-DOI-typed row and a Handle flat value are excluded. FAILS IF
     a flat-only DOI is missed or a non-DOI is swept."""
     y = {"identifiers": {"dataset_doi": "10.25914/flat"},

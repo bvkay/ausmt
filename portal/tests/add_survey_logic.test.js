@@ -1,5 +1,5 @@
 // Node test for the pure logic embedded in add-survey.html. REWRITTEN for the "files first, five minutes,
-// enrich later" contribution redesign (2026-07-24): the tiered form, the NEW emission shape (identifiers-
+// enrich later" contribution redesign: the tiered form, the NEW emission shape (identifiers-
 // by-level related_identifiers + publications[] + identifiers.instrument_pid, with the RETIRED flat
 // identifier model deleted), and the SOFTENED location + DATAID gates. Self-contained (synthetic EDIs, no
 // external data). Run via tests/test_add_survey_logic.py or:  node tests/add_survey_logic.test.js
@@ -44,7 +44,7 @@ ok(pn.coord_flag == null, "agreeing DMS blocks not flagged as a conflict");
 const base = { name: "X", slug: "x", organisation: "O", country: "Australia", license: "CC-BY-4.0", access: "open",
                uploader_name: "n", uploader_email: "a@b.co", authority_to_submit: true, license_declaration: true };
 
-// ============================ SOFTENED station-location gate (owner ruling 2026-07-24) ============================
+// ============================ SOFTENED station-location gate ===============================================
 // The location-confirm checkbox BLOCKS ONLY when the DMS resolver actually found a HEAD/INFO conflict.
 // A survey whose stations carry NO conflict never blocks, regardless of the confirmation state.
 const flaggedEdis = [{ name: "WG-1.edi", parsed: p }];
@@ -67,7 +67,7 @@ ok(/region: "South Australia"/.test(y), "survey.yaml emits region");
 ok(!/coordinate_resolution:/.test(M.buildSurveyYaml({ ...base, data_types: ["BBMT"] })),
    "no coordinate_resolution when nothing was resolved");
 
-// ---- access block: embargo_until + contact (audit 5.2) ----
+// ---- access block: embargo_until + contact ----
 const yEmb = M.buildSurveyYaml({ ...base, access: "embargoed",
                                  embargo_until: "2027-02-01", access_contact: "custodian@agency.gov.au" });
 ok(/access:\s*\n\s*level: embargoed\s*\n\s*embargo_until: 2027-02-01/.test(yEmb),
@@ -108,7 +108,7 @@ ok(!/repository workflow<\/b> \(CI\)|authoritative in the AusMT repository/i.tes
    "the advisory box no longer claims authoritative validation lives in the repository CI workflow");
 ok(/authoritative/i.test(html.slice(html.indexOf('class="advisory"'), html.indexOf('class="advisory"') + 600)),
    "the advisory box still names an authoritative validation stage");
-// no em dashes in the redesigned copy (owner ruling: "No em dashes anywhere").
+// no em dashes in the redesigned copy (the rule: "No em dashes anywhere").
 const mainCopy = html.slice(html.indexOf("<main>"), html.indexOf("</main>"));
 ok(!/—/.test(mainCopy), "no em dash (U+2014) anywhere in the page's <main> copy");
 
@@ -131,7 +131,7 @@ for (const v of VEC.vectors)
      "safeEdiComponent shared-vector [" + v.kind + "]: " + JSON.stringify(v.input) + " -> " + JSON.stringify(v.expected));
 ok(M.packagedEdiName("ROX000") === "ROX000.edi", "packagedEdiName: <sanitized-DATAID>.edi");
 
-// ============================ SOFTENED DATAID gate (owner ruling 2026-07-24) ============================
+// ============================ SOFTENED DATAID gate ==================================================
 // deriveDataId: a missing DATAID auto-derives from the FILENAME (extension stripped, then sanitised).
 ok(M.deriveDataId("ROX000.edi") === "ROX000", "deriveDataId strips the .edi extension");
 ok(M.deriveDataId("Line1__Station7_1.edi") === "Line1__Station7_1", "deriveDataId keeps a safe filename stem");
@@ -141,7 +141,7 @@ ok(M.deriveDataId("A B.mth5") === "A-B", "deriveDataId strips .mth5 too");
 ok(M.effectiveDataId({ name: "whatever.edi", dataid: "ROX9" }) === "ROX9", "effectiveDataId: real DATAID wins");
 ok(M.effectiveDataId({ name: "no-id.edi", dataid: null }) === "no-id", "effectiveDataId: falls back to the filename stem");
 
-// ediNameGate: a MISSING DATAID no longer errors on its own (auto-derived); a distinct set is clean.
+// ediNameGate: a MISSING DATAID does not error on its own (auto-derived); a distinct set is clean.
 ok(M.ediNameGate([{ name: "a.edi", dataid: "ROX000" }, { name: "b.edi", dataid: "ROX001" }]).length === 0,
    "ediNameGate: distinct DATAIDs -> no error");
 ok(M.ediNameGate([{ name: "noid.edi", dataid: null }]).length === 0,
@@ -226,7 +226,7 @@ ok(/schema_version: "0.3"/.test(yPub), "a publications[] entry declares schema_v
 ok(/- doi: "10\.5/.test(M.buildSurveyYaml({ ...base, license_declaration: false, pub: "", pub_doi: "10.5281/zenodo.1" })),
    "a DOI-only publication emits a bare {doi} entry");
 
-// ============================ R3: DOI-first publications + citation harvest (H1/H2/H4) ============================
+// ============================ DOI-first publications + citation harvest ============================
 // The publications block is a repeatable list of rows whose PRIMARY input is one DOI. A valid-looking DOI is
 // harvested client-side (Crossref first, DataCite on a miss) into {author,year,title,journal,doi}; harvest
 // failure OR a thin record degrades to the manual fields prefilled with whatever partial data exists. The
@@ -344,7 +344,7 @@ async function r3HarvestTests() {
   ok(!hB.ok && hB.pub.doi === B, "harvestDoi row B (both hosts throw) degrades independently to manual, DOI kept");
 }
 
-// dates block (T1) emits only when a date is provided; year + ISO stay bare, free text is quoted.
+// dates block emits only when a date is provided; year + ISO stay bare, free text is quoted.
 ok(/dates: \{ start: 2020, end: 2021 \}/.test(M.buildSurveyYaml({ ...base, date_start: "2020", date_end: "2021" })),
    "dates block emits bare year scalars");
 ok(!/dates:/.test(M.buildSurveyYaml({ ...base })), "no dates block when neither date is filled");
@@ -397,7 +397,7 @@ ok(qM.length === 1 && qM[0].id === "https://ror.org/028g18b61" && qM[0].name ===
 ok(M.rorMatchesFromResponse({ items: [{ id: null, names: [] }] }).length === 0,
    "drops un-nameable / un-identifiable items (never shows 'undefined')");
 
-// ---- C3 (PII scrub): the packaged submission .zip must NOT embed submitter email/ORCID ----
+// ---- PII scrub: the packaged submission .zip must NOT embed submitter email/ORCID ----
 const pkgBlock = html.slice(html.indexOf("async function buildPackage"), html.indexOf('$("btnPackage").onclick'));
 ok(!/submitter:\{[^}]*email:\s*meta\.uploader_email/.test(pkgBlock), "MANIFEST submitter block does NOT write uploader_email");
 ok(!/submitter:\{[^}]*orcid:\s*meta\.uploader_orcid/.test(pkgBlock), "MANIFEST submitter block does NOT write uploader_orcid");
@@ -405,7 +405,7 @@ ok(/submitter:\{[^}]*name:\s*meta\.uploader_name/.test(pkgBlock), "MANIFEST subm
 ok(!/uploader_email/.test(pkgBlock), "the packager block does NOT reference uploader_email");
 ok(/m_up_email/.test(html), "the uploader email form field itself is still present (feeds Stage-2 gateway)");
 
-// ============================ C13 direct-upload pure logic (unchanged) ============================
+// ============================ Direct-upload pure logic (unchanged) ============================
 const ORCID_VECTORS = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "..", "gateway", "tests", "fixtures", "orcid_vectors.json"), "utf8"));
 for (const v of ORCID_VECTORS.vectors.filter(v => v.applies_to.includes("portal")))
@@ -431,10 +431,10 @@ ok(!("submitter_orcid" in ff1) && ff1.submitter_name === "Ada L" && ff1.submitte
 ok(M.submitFormFields({uploader_name: "A", uploader_email: "a@x.co", uploader_orcid: "0000-0002-1825-0097"}).submitter_orcid
    === "0000-0002-1825-0097", "submitFormFields: non-empty ORCID rides as a field");
 
-// ============================ connection targets (§5) + key-request stub ============================
+// ============================ connection targets + key-request stub ============================
 const conns = [...html.matchAll(/(?:fetch|\.open)\(\s*(?:"[^"]*",\s*)?"([^"]+)"/g)].map(m => m[1])
   .filter(u => !/^\$\{/.test(u));
-// same-origin, the ROR API, or the R3 citation-harvest registries (Crossref + DataCite). These three
+// same-origin, the ROR API, or the citation-harvest registries (Crossref + DataCite). These three
 // external hosts are the ONLY connect-src additions the add-survey CSP allows; a NEW origin fails here.
 const ALLOWED_CONN = u => /^\//.test(u) || /^https:\/\/api\.ror\.org\//.test(u)
   || /^https:\/\/api\.crossref\.org\//.test(u) || /^https:\/\/api\.datacite\.org\//.test(u);
@@ -475,9 +475,9 @@ ok(/schema_version: "0.3"/.test(yAttr), "a package carrying attribution declares
 ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false })),
    "no attribution block when the licence declaration is not made");
 
-// ============================ ROUND 2 (owner-ruled 2026-07-24) ============================
+// ============================ Slug collision and zip paths ===============================
 
-// ---- R1: slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
+// ---- Slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
 //      stationCountsByName counts catalogue.json rows (index 1 = survey name) per survey. The chip warns
 //      (never blocks) when a charset-valid slug matches a served slug.
 const SURVEYS_FIXTURE = { "Vulcan 2022": { slug: "vulcan-2022", org: "GA" },
@@ -506,10 +506,10 @@ ok(/matches the existing survey /.test(html) && /Continue if you are updating th
    "the collision warning copy informs (non-blocking), it does not wall");
 ok(/orcidok warn/.test(html), "the collision state uses a distinct 'warn' chip class (not the valid/invalid states)");
 
-// ============================ A3: the retired flat credit keys leave the public form ============
+// ============================ The retired flat credit keys leave the public form ============
 // LANE-CONTRACT-FORM-CREDIT: the form stops writing lead_investigator/principal_investigators (the
 // migration deleted them corpus-wide and no reader survives), and the credit questions are rewritten
-// in plain language onto the ratified homes.
+// in plain language onto their new homes.
 const yRetired = M.buildSurveyYaml({ ...base, pi: "Ada Lovelace", pi_orcid: "0000-0002-1825-0097",
   principal_investigators: [{ name: "Grace Hopper", orcid: "" }] });
 for (const retired of ["lead_investigator", "principal_investigators"]) {
@@ -526,14 +526,14 @@ ok(/Leave blank and AusMT cites the organisation and the year/.test(html.replace
 ok(!/or the lead \/ principal investigators above/.test(html.replace(/\s+/g, " ")),
    "the creators hint no longer points at the retired fields");
 
-// ---- tier 3 question set (the plain-language questions, in the ratified order) ----
+// ---- tier 3 question set (the plain-language questions, in the order the form asks them) ----
 const flat = html.replace(/\s+/g, " ");
 for (const q of ["Who should the citation name, in order?", "Who led this survey?", "Who did what?",
                  "Does this dataset already have a citation or DOI?",
                  "Which organisations were involved, and how?",
                  "Is there wording you must include?",
                  "When was this dataset published?"]) {
-  ok(flat.includes(q), "tier 3 asks the ratified question: " + q);
+  ok(flat.includes(q), "tier 3 asks the required question: " + q);
 }
 ok(flat.indexOf("Who should the citation name, in order?") < flat.indexOf("Who led this survey?")
    && flat.indexOf("Who led this survey?") < flat.indexOf("Who did what?"),
@@ -541,7 +541,7 @@ ok(flat.indexOf("Who should the citation name, in order?") < flat.indexOf("Who l
 ok(flat.indexOf("Who did what?") < flat.indexOf("5. I know my metadata"),
    "contributors (Who did what?) moved UP out of the advanced tier");
 
-// ---- "Who led this survey?" -> ONE ProjectLeader contributors row (D3) ----
+// ---- "Who led this survey?" -> ONE ProjectLeader contributors row ----
 const yLead = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming",
                                   lead_orcid: "0000-0002-1825-0097" });
 ok(/contributors:\s*\n\s*- name: "Duan, Jingming"\s*\n\s*name_type: person\s*\n\s*role: ProjectLeader\s*\n\s*orcid: "0000-0002-1825-0097"/.test(yLead),
@@ -560,14 +560,14 @@ const yLeadPlus = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming",
 ok(yLeadPlus.indexOf('- name: "Duan, Jingming"') < yLeadPlus.indexOf('- name: "Zonge Engineering"'),
    "the lead row is FIRST in contributors, ahead of the typed rows");
 
-// ---- "Does this dataset already have a citation or DOI?" -> citation + ONE related row (D9/D18) ----
+// ---- "Does this dataset already have a citation or DOI?" -> citation + ONE related row -------------
 const yCite = M.buildSurveyYaml({ ...base,
   citation_text: "GSSA (2016). AusLAMP South Australia. [Data set].",
   citation_identifier: "https://doi.org/10.25914/abc" });
 ok(/citation:\s*\n\s*preferred_text: "GSSA \(2016\)\. AusLAMP South Australia\. \[Data set\]\."\s*\n\s*text_source: source_provided/.test(yCite),
    "a filled citation question emits preferred_text (quoted verbatim) + a bare text_source");
 ok(!/^\s*preferred_identifier:/m.test(yCite),
-   "the form NEVER writes citation.preferred_identifier (D18: designation is curation)");
+   "the form NEVER writes citation.preferred_identifier (designation is curation)");
 ok(/citation\.preferred_identifier/.test(yCite),
    "...it names it only inside the curator note comment, which no parser ever sees");
 ok(/- identifier: "10\.25914\/abc"/.test(yCite),
@@ -584,7 +584,7 @@ ok(!/citation:/.test(yCiteUrl), "an identifier with NO wording emits no citation
 const yCiteTextOnly = M.buildSurveyYaml({ ...base, citation_text: "Some wording" });
 ok(/text_source: source_provided/.test(yCiteTextOnly), "text_source rides a non-empty preferred_text");
 ok(!/text_source/.test(M.buildSurveyYaml({ ...base })),
-   "text_source is NEVER emitted without a preferred_text (D17)");
+   "text_source is NEVER emitted without a preferred_text");
 const yCiteLevel = M.buildSurveyYaml({ ...base, citation_identifier: "10.25914/abc",
                                        citation_identifies: "entire" });
 ok(/identifies: entire/.test(yCiteLevel), "a chosen data level emits the bare vocab token");
@@ -593,7 +593,7 @@ const yCiteDedupe = M.buildSurveyYaml({ ...base, citation_identifier: "10.25914/
 ok((yCiteDedupe.match(/- identifier:/g) || []).length === 1,
    "the citation row is deduped against an existing 'This dataset elsewhere' row");
 
-// ---- "Which organisations were involved, and how?" -> organisations[] (+ the seeded custodian, D4) ----
+// ---- "Which organisations were involved, and how?" -> organisations[] (+ the seeded custodian) ----
 const yOrg = M.buildSurveyYaml({ ...base, organisation: "Geological Survey of South Australia",
                                  ror: "https://ror.org/04y8k6r48" });
 ok(/organisations:\s*\n\s*# INFERRED-REVIEW: custodian seeded from the essential organisation; confirm roles\s*\n\s*- name: "Geological Survey of South Australia"\s*\n\s*ror: "https:\/\/ror\.org\/04y8k6r48"\s*\n\s*roles:\s*\n\s*- custodian\s*\n\s*primary_custodian: true/.test(yOrg),
@@ -675,7 +675,7 @@ ok([...vTextSrc.matchAll(/"([^"]+)"/g)].map(m => m[1]).indexOf(M.CITATION_TEXT_S
 ok(M.CITATION_TEXT_SOURCE_FORM === "source_provided",
    "a contributor's wording is ALWAYS source_provided (ausmt_generated is never a contributor value)");
 
-// ---- R5: DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). ----
+// ---- DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). --------
 ok(M.normalizeDoi("https://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an https://doi.org/ URL to the bare DOI");
 ok(M.normalizeDoi("http://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an http:// resolver URL");
 ok(M.normalizeDoi("https://dx.doi.org/10.5281/zenodo.1") === "10.5281/zenodo.1", "normalizeDoi folds a dx.doi.org URL");
@@ -686,7 +686,7 @@ ok(M.normalizeDoi("10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi leaves
 ok(M.normalizeDoi("not a doi at all") === "not a doi at all", "normalizeDoi leaves a non-DOI string untouched");
 ok(M.normalizeDoi("https://example.org/paper") === "https://example.org/paper", "normalizeDoi leaves a NON-doi.org URL untouched (it is not a DOI resolver)");
 ok(M.normalizeDoi("") === "" && M.normalizeDoi(null) === "", "normalizeDoi handles empty / null");
-// wiring: R3 folded the single publication DOI into per-row publication rows whose .p-doi input normalises
+// wiring: the single publication DOI is folded into per-row publication rows whose .p-doi input normalises
 // on blur (via normalizeDoi directly); the funding DOI still uses wireDoiBlur; a related-identifier row
 // normalises ONLY when its type is DOI (a URL-typed row keeps its URL).
 ok(/class="p-doi"/.test(html) && /doiInp\.addEventListener\("blur"/.test(html),
@@ -696,10 +696,10 @@ ok(/wireDoiBlur\(wrap\.querySelector\("\.f-doi"\)\)/.test(html), "the funding DO
 ok(/wireConditionalDoiBlur\(wrap\.querySelector\("\.ri-identifier"\), wrap\.querySelector\("\.ri-type"\)\)/.test(html),
    "a related-identifier row normalises its identifier ONLY when the type is DOI (URL-typed rows untouched)");
 
-// ---- R3: the collection block is its own collapsed card (own <details>, exact heading), renumbered. ----
+// ---- The collection block is its own collapsed card (own <details>, exact heading), renumbered. --------
 ok(/<details class="tier" id="tierCollection">/.test(html), "the collection block is its own tier-style <details> card");
 ok(/<h2>4\. Was this survey part of a collection \/ program \(eg AusLAMP\)\?<\/h2>/.test(html),
-   "the collection card carries the exact owner-ruled heading (numbered 4)");
+   "the collection card carries the exact heading (numbered 4)");
 ok(/<h2>5\. I know my metadata<\/h2>/.test(html) && /<h2>6\. Check and package<\/h2>/.test(html),
    "the following sections are renumbered consistently (5. metadata, 6. check and package)");
 // the collection FIELDS (and the collections.json autofill IDs) are intact inside the new card, so emission is unchanged.
@@ -709,14 +709,14 @@ const yColl = M.buildSurveyYaml({ ...base, collection_id: "auslamp", collection_
 ok(/collection:\s*\n\s*id: "auslamp"\s*\n\s*title: "AusLAMP"\s*\n\s*type: "programme"/.test(yColl),
    "collection emission is unchanged by the card move (id/title/type still emitted)");
 
-// ---- R2: the download-zip path is hidden on a live gateway (visibility wiring only; zip code intact). ----
+// ---- The download-zip path is hidden on a live gateway (visibility wiring only; zip code intact). --------
 ok(/const bp=\$\("btnPackage"\); if\(bp\) bp\.style\.display="none";/.test(html),
    "showGatewayUI hides the package .zip button when the gateway probe passes");
 ok(!/Package \.zip to email \(fallback path\)/.test(html), "the old rewording of the package button is gone (it is hidden, not reworded)");
 ok(/async function buildPackage/.test(html) && /function buildSubmissionMd/.test(html),
-   "R2 is visibility-only: the zip packager code is kept intact");
+   "the change is visibility-only: the zip packager code is kept intact");
 
-// ============================ EMTF XML as a first-class input (owner ruling 2026-08-03) ============================
+// ============================ EMTF XML as a first-class input ==================================================
 // The page must ADMIT EMTF XML the way it admits EDI and MTH5: in the file picker's accept list, in the
 // drop-zone copy, in the kind classification, and in the validation gate. Pre-fix the accept list was
 // ".edi,.h5,.mth5", so a submitter literally could not select their .xml files.
@@ -753,7 +753,7 @@ ok(badXml.items.some(i => i.check === "emtfxml" && i.level === "FAIL" && /EM_TF/
    "a .xml that is not an EMTF transfer function is a blocking FAIL, not a silent pass");
 ok(badXml.counts.FAIL > 0, "the masquerading .xml blocks submission");
 
-// ============================ SLUG LENGTH CAP (the 2026-08-11 MTH5 truncation) ============================
+// ============================ SLUG LENGTH CAP (the MTH5 truncation) =======================================
 // A slug over 45 characters is truncated to slug[:45] as the MTH5 survey group name, and the round-trip
 // gate then withholds every station .h5 in the survey — observed live on a real 54-character slug.
 // SLUG_MAX caps the DERIVED value and blocks a hand-typed one. These tests fail if either half regresses.
@@ -792,7 +792,7 @@ ok(!!slugItem && /limit is 40/.test(slugItem.message), "the message names the li
 ok(!!slugItem && !/lowercase-hyphenated/.test(slugItem.message),
    "a too-long but charset-clean slug is NOT misreported as a charset problem");
 
-// R3 harvest tests are async (harvestDoi returns a Promise); run them, THEN report + exit.
+// Harvest tests are async (harvestDoi returns a Promise); run them, THEN report + exit.
 r3HarvestTests().then(() => {
   console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");
   process.exit(fail ? 1 : 0);

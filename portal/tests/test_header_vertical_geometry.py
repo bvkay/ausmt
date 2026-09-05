@@ -5,7 +5,7 @@ that thoroughly: the tab group's x, the zone widths and their flex bases, the ta
 the box model the width is measured in, and the font stack the labels are measured with. Not one of
 those pins can see the header get TALLER. So when the 30px identity mark landed, the identity block
 outgrew its zone, the tagline dropped onto a second line, and the generated pages' header went from
-57.00px to 82.47px at 1280px with every horizontal pin still green, the C9 four-surface parity proof
+57.00px to 82.47px at 1280px with every horizontal pin still green, the four-surface parity proof
 still green, and the framing classification still reporting a header-identity diff. A 45 per cent
 change in the height of every page's header passed the whole gate.
 
@@ -55,8 +55,8 @@ status slot carries a live counter, and at 375px that one 15px line renders inde
 as intended, not a drift: the chrome is shared, the contents of the contextual slot are not.
 
 NO CARVE-OUT. about.html carried the AuScope symbol as its identity mark, under a rule of its own,
-while the owner ruled on that header; this file used to read the mark's height from whichever of the
-two rules a surface happened to use. The ruling put the AusMT mark in that slot like everywhere
+while that header was still being settled; this file once read the mark's height from whichever of
+the two rules a surface happened to use. The rule put the AusMT mark in that slot like everywhere
 else, so there is one rule to read and every surface must carry it. The height is the only thing a
 mark contributes to the header's height, and every surface declares it as 30px.
 """

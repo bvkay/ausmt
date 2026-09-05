@@ -37,7 +37,7 @@ def available() -> bool:
 
 
 # ---------------------------------------------------------------------------------------------
-# mt_metadata 1.0.9 >INFO JSON trailing-delimiter defect (measured 2026-08-08, GSSA Western Gawler
+# mt_metadata 1.0.9 >INFO JSON trailing-delimiter defect (GSSA Western Gawler
 # 2023, a Zonge job: 246 of 312 EDIs unreadable). THE DATA IS FINE; THE READER IS WRONG, in three
 # composing steps, all in mt_metadata:
 #
@@ -64,8 +64,8 @@ def available() -> bool:
 #
 # THE REMEDY IS PARSE-ONLY. The normalised copy lives in a TemporaryDirectory that is destroyed
 # before this function returns, is never returned to a caller, and never reaches the served tree or
-# the sha256 integrity gate (both of which take the ORIGINAL path). D1 stands: source EDI bytes are
-# never edited, and what AusMT serves stays byte-identical to what the custodian released.
+# the sha256 integrity gate (both of which take the ORIGINAL path). The rule stands: source EDI
+# bytes are never edited, and what AusMT serves stays byte-identical to what the custodian released.
 INFO_JSON_DELIMITER_DEFECT = (
     "mt_metadata could not read the >INFO JSON block: a JSON scalar kept its trailing delimiter; "
     "reparsed from a normalised temporary copy (the source file is untouched and is what is served)"
@@ -269,7 +269,7 @@ def strip_impedance_blocks(raw: bytes) -> bytes:
 
     Operates on BYTES and never re-encodes. A block ends where mt_metadata's own section scan ends
     it -- at the next line whose stripped form starts with `>` -- so the region removed is exactly
-    the region the reader would have read. Section banners (`>!****IMPEDANCES****!`) start with `>`
+    the region the reader would read. Section banners (`>!****IMPEDANCES****!`) start with `>`
     and are kept: they label nothing once the blocks are gone, but leaving them keeps the change set
     to the blocks themselves. Returns the ORIGINAL object when there is nothing to remove, which is
     what lets the caller refuse to retry a file that does not actually carry the shape."""
@@ -348,8 +348,8 @@ DATAID_CHARSET_DEFECT = (
 # happened to finish on".
 #
 # Applied ON A TEMPORARY COPY, exactly like the >INFO delimiter repair: the copy keeps the head, the
-# info block, the measurement definitions and the chosen section alone. D1 stands: the served bytes
-# are the custodian's file.
+# info block, the measurement definitions and the chosen section alone. The rule stands: the
+# served bytes are the custodian's file.
 SECTION_OF_RECORD_RULE = "<DATAID>_avg, else the section named for the DATAID, else the first"
 
 _SECTID_RE = re.compile(rb"^\s*SECTID\s*=\s*(.*?)\s*$", re.IGNORECASE)
@@ -489,8 +489,8 @@ def normalise_dataid(dataid: str) -> str:
     """The DATAID rewritten into the reader's station-name charset: every character outside letters,
     digits and underscore becomes `_`. That is mt_metadata's own rewrite (it maps space, `-`, `.`
     and `+` the same way) extended to the characters it refuses instead of mapping, so a name it
-    already accepts comes back unchanged and one it refuses comes back in the form it would have
-    produced. The leading/trailing strip mirrors the validator's own first act."""
+    already accepts comes back unchanged and one it refuses comes back in the reader's own form.
+    The leading/trailing strip mirrors the validator's own first act."""
     return re.sub(r"[^A-Za-z0-9_]", "_", str(dataid).strip())
 
 
@@ -649,7 +649,7 @@ def _assert_section_of_record(p: Path, conditioned: bytes, sectid: str, tf) -> N
     BOUNDARY, stated: the frequency count cannot tell two sections of equal length apart, which every
     EPI-KIT realisation is. It catches a copy that lost or merged blocks, not a mis-selection; the
     NAME check is what proves the selection, and the per-value proof against a section's own ZXYR
-    block lives in the test suite and in the lane's build evidence, not in every build of every
+    block lives in the test suite and in the build evidence, not in every build of every
     file."""
     sections = _sections(conditioned.splitlines(keepends=True))
     if len(sections) != 1 or sections[0][0] != sectid:
@@ -750,7 +750,7 @@ def _reparse_without_frequency_ordering(p: Path, exc: BaseException):
     except Exception:  # noqa: BLE001
         raise exc from None
     shipped = getattr(EDI, "_assert_descending_frequency", None)
-    if shipped is None:      # the reader no longer carries the method: nothing to neutralise
+    if shipped is None:      # the reader carries no such method: nothing to neutralise
         raise exc from None
 
     def _order_only_when_there_is_an_order(self):
@@ -896,7 +896,7 @@ def explicit_sample_rates_from_tf(tf) -> list:
     EDI dialect the pinned mt_metadata actually parses a run rate from). MTCAT 2.0 rule: a rate is
     explicit ONLY when a run declares it > 0; mt_metadata's Run.sample_rate default is 0.0
     (undeclared) and is never emitted, and nothing here reads instrument models or period coverage
-    (never inferred - the ratified sample_rates_hz source rule). Returns a sorted deduped list of
+    (never inferred - the sample_rates_hz source rule). Returns a sorted deduped list of
     floats; [] when no run declares a rate, which the record builder maps to NO key at all."""
     rates = set()
     for run in (getattr(getattr(tf, "station_metadata", None), "runs", None) or []):
@@ -964,7 +964,7 @@ def parse_edi(path: Path) -> dict:
 # triggers on EMTF-XML-sourced TFs; an EDI read straight to components carries no values this large.)
 _FILL_MAX = 1e8
 
-# C20 placeholder-tipper detection. Some EDIs carry an UNPHYSICAL placeholder tipper — observed as
+# Placeholder-tipper detection. Some EDIs carry an UNPHYSICAL placeholder tipper - observed as
 # |T| identically 1.0 at every period, with one component ~1e-17 (a filler, not an estimate). These
 # named constants (siblings of _FILL_MAX; in the spirit of the _edi_science science constants) define
 # the detector: a tipper is a placeholder when it has at least PLACEHOLDER_TIPPER_MIN_PERIODS present
@@ -977,8 +977,8 @@ PLACEHOLDER_TIPPER_UNITY_TOL = 1e-3     # ||T| - 1.0| below this at every period
 
 
 def _is_placeholder_tipper(txr, txi, tyr, tyi) -> bool:
-    """True iff the four masked tipper component series describe an unphysical placeholder tipper
-    (C20): |T| flat AND pinned at 1.0 across at least PLACEHOLDER_TIPPER_MIN_PERIODS present periods.
+    """True iff the four masked tipper component series describe an unphysical placeholder tipper:
+    |T| flat AND pinned at 1.0 across at least PLACEHOLDER_TIPPER_MIN_PERIODS present periods.
     Present = all four components non-None at that period (the same joint-presence the tip magnitude
     needs). Returns False for any real (varying, or off-unity) tipper, and for a tipper with too few
     present periods to judge."""
@@ -997,7 +997,7 @@ def _is_placeholder_tipper(txr, txi, tyr, tyi) -> bool:
 
 def _is_missing(zi) -> bool:
     """True if a complex Z/T element is absent, NaN, a non-physical missing-data fill (~1e32), or
-    EXACT complex zero. The exact-zero arm is C19b (TAS120 incident, 2026-07-07): mt_metadata
+    EXACT complex zero. The exact-zero arm exists because mt_metadata
     converts an EDI's 1e32 fills to exact zeros on read, which passed the magnitude threshold and
     plotted as phase=0deg / rho=0 / tipper-dip data points at every source-masked period. A real
     estimated Z/T element is never exactly 0+0j to double precision; a SINGLE zero component
@@ -1062,7 +1062,7 @@ def components_from_tf(tf, notes=None):
                 comp["PHS" + mode][i] = math.degrees(math.atan2(zi.imag, zi.real))
                 e = earr[k]
                 if e is not None and e[i] is not None and not (isinstance(e[i], float) and math.isnan(e[i])):
-                    # Standard small-error LINEAR propagation from the impedance error |dZ| (C20):
+                    # Standard small-error LINEAR propagation from the impedance error |dZ|:
                     #   rho = 0.2*T*|Z|^2   -> drho  = 0.4*T*|Z|*|dZ|
                     #   phi = atan2(Im,Re)  -> dphi  = degrees(|dZ|/|Z|)
                     # |dZ| is the (real, non-negative) impedance-error magnitude mt_metadata carries
@@ -1089,11 +1089,11 @@ def components_from_tf(tf, notes=None):
                 comp[k + "R"][i] = float(zi.real)
                 comp[k + "I"][i] = float(zi.imag)
 
-        # C20 placeholder-tipper honesty: an unphysical filler tipper (|T| flat at 1.0) is masked
-        # WHOLESALE — all four component series to null — so neither the tip magnitude nor the C20
+        # Placeholder-tipper honesty: an unphysical filler tipper (|T| flat at 1.0) is masked
+        # WHOLESALE - all four component series to null - so neither the tip magnitude nor the
         # tzx/tzy columns paint it as data. Composes with the per-element fill/zero masking above
         # (the detector reads the already-masked series). With a `notes` list the CALLER owns the
-        # emission (build_portal records the fact on the parse product so it rides the C18 cache and
+        # emission (build_portal records the fact on the parse product so it rides the cache and
         # build_report - a cache hit and a miss emit the same diagnostics); without one, the NOTICE
         # prints here as before.
         if _is_placeholder_tipper(comp["TXR"], comp["TXI"], comp["TYR"], comp["TYI"]):
@@ -1118,7 +1118,7 @@ def components(path: Path):
 def proc_info_from_tf(tf, with_writer=False):
     """(software, algorithm, remote_reference[, file_written_by]) from an already-parsed TF object.
 
-    LINEAGE (2026-08-14): `software` is the program that PROCESSED the transfer function, which is
+    LINEAGE: `software` is the program that PROCESSED the transfer function, which is
     NOT the same fact as mt_metadata's `transfer_function.software`. That field is populated from
     the source file's own program stamp (an EDI HEAD's PROGNAME/PROGVERS), i.e. from whatever WROTE
     the file — for most of the corpus a database/plotting exporter that estimated nothing (see

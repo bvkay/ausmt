@@ -15,7 +15,7 @@ docker daemon. The disk case shims `df` via PATH.
 
 Each test names its failure criterion in the docstring (Invariant 10). No test skips on this stack —
 sh, python (this interpreter), and coreutils are all present on the CI runner and the dev box, so the
-whole file runs on the gateway-ci lane with no skip-tripwire allow-list entry needed.
+whole file runs on the gateway-ci workflow with no skip-tripwire allow-list entry needed.
 """
 from __future__ import annotations
 
@@ -214,7 +214,7 @@ def test_unhealthy_service_pings_fail(tmp_path):
 
 
 def test_crashlooping_gw_runner_pings_fail(tmp_path):
-    """The healthcheck-LESS gw-runner in State=restarting (the 2026-07-06 'stuck at SCANNED' crash-loop)
+    """The healthcheck-LESS gw-runner in State=restarting (the 'stuck at SCANNED' crash-loop)
     => a fail ping naming gw-runner, nonzero exit. This is the headline silent-stall mode; gw-runner has
     no Health, so it must be caught by STATE. FAILS IF: a restarting gw-runner is treated as healthy
     (no fail ping) or the body does not name it."""
@@ -252,10 +252,10 @@ def test_reconcile_action_failed_pings_fail(tmp_path):
 
 
 def test_reconcile_action_failed_oom_kill_pings_fail_naming_the_kernel(tmp_path):
-    """reconcile-status.json with action=failed AND oom_kill=true (reconcile.sh found a kernel
-    out-of-memory kill in the failed build's own window; incident 2026-08-15, five nights of
-    "rebuild FAILED" whose cause sat in `journalctl -k`) => the fail ping SAYS the build was KILLED BY
-    THE KERNEL FOR RUNNING OUT OF MEMORY, so the operator's first read names the cause. FAILS IF: the
+    """reconcile-status.json with action=failed AND oom_kill=true (reconcile.sh sets oom_kill from a
+    kernel out-of-memory kill inside the failed build's own window, which is visible only in
+    `journalctl -k`) => the fail ping SAYS the build was KILLED BY THE KERNEL FOR RUNNING OUT OF
+    MEMORY, so the operator's first read names the cause. FAILS IF: the
     ping is the generic 'action=failed' (the incident's silence), or an oom_kill=false status is dressed
     up as an OOM (a false alarm sends an operator shopping for RAM)."""
     tree = _make_tree(tmp_path, reconcile_action="failed")
@@ -275,10 +275,9 @@ def test_reconcile_action_failed_oom_kill_pings_fail_naming_the_kernel(tmp_path)
 
 
 def test_reconcile_action_untracked_blocked_pings_fail_naming_dir(tmp_path):
-    """reconcile-status.json with action=untracked_blocked (the reconcile agent REFUSED to rebuild
-    because surveys-live has untracked survey dirs — incident 2026-07-11) => a fail ping quoting the
+    """reconcile-status.json with action=untracked_blocked => a fail ping quoting the
     refusal AND naming the offending dir from log_tail, nonzero exit. This is the deploy-side loud
-    surface for the guard (#15) — the curator's dead-man monitor emails on it, like action=failed.
+    surface for the guard - the curator's dead-man monitor emails on it, like action=failed.
     FAILS IF: the refusal is treated as a healthy panel state (no fail ping), or the offending dir does
     not reach the alert body."""
     tree = _make_tree(tmp_path, reconcile_action="untracked_blocked")
@@ -327,10 +326,10 @@ def test_curl_failure_on_success_path_exits_nonzero(tmp_path):
 
 
 # ==================================================================================================
-# (e) C43 S2b-i: alert.sh ALSO writes ops-status.json for the curator ops floor (record D8/D15).
+# (e) alert.sh ALSO writes ops-status.json for the curator ops floor.
 # The producer half of the serve-state operations floor. Same shim/black-box posture — every
 # assertion reads the emitted ops-status.json (an independent on-disk observable), never the script's
-# self-report. All run on the gateway-ci lane (sh + python + git present); no skip-tripwire entry.
+# self-report. All run on the gateway-ci workflow (sh + python + git present); no skip-tripwire entry.
 # ==================================================================================================
 _OPS_TOP_KEYS = ("generated_at", "timer_period_min", "reconcile", "backups", "alerts", "box",
                  "freshness", "builds", "logs")
@@ -343,7 +342,7 @@ def _ops_doc(tree: dict) -> dict:
 def _add_retained_build(tree: dict, dir_name: str = "20260710T032000Z", *,
                         provenance_cache: dict | None = None, serving: bool = True) -> Path:
     """Materialise a site-data/builds/<dir_name>/ retained build the ops writer inventories:
-    build.json (identity) + build_report.json (stations) + build_provenance.json (the C18-A4 cache
+    build.json (identity) + build_report.json (stations) + build_provenance.json (the cache
     block) + a build log; optionally the `current` symlink (best-effort — no-op where symlinks are
     unprivileged, e.g. Windows, so the serving marker just does not match)."""
     site = tree["data"] / "site-data"
@@ -373,8 +372,8 @@ def _add_retained_build(tree: dict, dir_name: str = "20260710T032000Z", *,
 
 
 def test_ops_status_emitted_schema_valid_atomic_ping_unchanged(tmp_path):
-    """EMISSION PIN (B6). One alert.sh pass writes a schema-valid ops-status.json into the state dir
-    ATOMICALLY (no surviving .tmp), AND the dead-man ping behaviour is UNCHANGED — an all-OK run still
+    """EMISSION PIN. One alert.sh pass writes a schema-valid ops-status.json into the state dir
+    ATOMICALLY (no surviving .tmp), AND the dead-man ping behaviour is UNCHANGED - an all-OK run still
     sends EXACTLY ONE success beat to $URL (never /fail). FAILS IF: ops-status.json is absent, is not
     valid JSON, is missing any required top-level block, a .tmp orphan survives, OR the ping call
     count/target changed (the ping and the ops-write must stay independent)."""
@@ -399,9 +398,9 @@ def test_ops_status_emitted_schema_valid_atomic_ping_unchanged(tmp_path):
 
 
 def test_ops_status_builds_carry_a4_cache_forensics_producer_truth(tmp_path):
-    """PRODUCER-TRUTH PIN (B4). The C18-A4 cache forensics (salt_fp / write_errors / read_errors) are
+    """PRODUCER-TRUTH PIN. The cache forensics (salt_fp / write_errors / read_errors) are
     produced by engine.extract.cache.BuildCache.counters() and land in build_provenance.json's
-    TOP-LEVEL `cache` block — NOT in build.json or build_report.json (verified against
+    TOP-LEVEL `cache` block - NOT in build.json or build_report.json (verified against
     build_portal.py). alert.sh must lift them from that exact file into ops-status.json builds[].cache.
     Driven by the REAL cache producer (constructed here, not a hand-typed block), so a field rename in
     the engine reds this pin. FAILS IF: alert.sh reads the counters from the wrong file, drops one, or
@@ -409,7 +408,7 @@ def test_ops_status_builds_carry_a4_cache_forensics_producer_truth(tmp_path):
 
     Uses the real producer's counters() rather than a full engine sample-survey build (which would
     need mt_metadata + the allow-listed skip): the direct construction exercises the SAME producer
-    that writes build_provenance.json and runs on every lane, so the field contract is pinned without
+    that writes build_provenance.json and runs on every workflow, so the field contract is pinned without
     a stack dependency."""
     import sys as _sys
     eng = str(Path(__file__).resolve().parents[2] / "engine" / "extract")
@@ -438,8 +437,7 @@ def test_ops_status_builds_carry_a4_cache_forensics_producer_truth(tmp_path):
 
 def test_ops_status_builds_carry_peak_rss_from_build_report(tmp_path):
     """The ops floor's build inventory carries each retained build's memory high-water mark, lifted
-    from build_report.json's `peak_rss_mib` (the field the engine records so the trend is visible before
-    a box runs out; the 2026-08-15 OOM kills at 13.7 GB were the first sign). A pre-fix report without
+    from build_report.json's `peak_rss_mib`. A pre-fix report without
     the field yields null, never a crash or a fabricated number. FAILS IF: the value is dropped, read
     from the wrong file, or a missing field breaks the inventory."""
     tree = _make_tree(tmp_path)
@@ -471,10 +469,10 @@ def test_ops_status_written_when_alerting_unconfigured(tmp_path):
 
 
 def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
-    """INCIDENT-AS-TEST, producer side (record D15). A reconcile action=sync_failed that persists must
-    be visible as a GROWING streak (count + a stable `since`), not a silent single line — the
-    2026-07-11 incident where a sync_failed hid for 4 h. FAILS IF: the streak does not accumulate
-    across passes, or `since` is not carried forward from the first failing pass."""
+    """INCIDENT-AS-TEST, producer side. A reconcile action=sync_failed that persists must be visible
+    as a GROWING streak (count + a stable `since`), not a silent single line - the incident where a
+    sync_failed hid for 4 h. FAILS IF: the streak does not accumulate across passes, or `since` is
+    not carried forward from the first failing pass."""
     tree = _make_tree(tmp_path, reconcile_action="sync_failed")   # fresh last_run
     _run(tree)
     d1 = _ops_doc(tree)
@@ -489,7 +487,7 @@ def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# (f) C43 Stage 2b-ii: PERSISTENT-PAUSE alarm + pending-intent facts (record D9.7 / D8/D9). A single
+# (f) Stage 2b-ii: PERSISTENT-PAUSE alarm + pending-intent facts. A single
 # fresh pause is fine; a pause active or SLOW-RE-ARMED past the cumulative threshold (24 h) must fail a
 # check AND surface as an ops-floor fact — an authenticated attacker cannot silently keep serving
 # frozen. The pending privileged intents + the actions audit tail are surfaced read-only for the serve
@@ -518,7 +516,7 @@ def test_fresh_pause_is_active_not_persistent(tmp_path):
 
 
 def test_persistent_pause_alarms_and_fails(tmp_path):
-    """PERSISTENT-PAUSE PIN (record D9.7). A pause whose CONTINUOUS span (carried first_seen from the
+    """PERSISTENT-PAUSE PIN. A pause whose CONTINUOUS span (carried first_seen from the
     previous ops-status.json) exceeds the cumulative threshold flips ops-status.pause.persistent true
     AND fires the fail ping with a pause message — even though the CURRENT flag is freshly re-armed.
     FAILS IF a slow-drip re-armed pause stays invisible (the single-flag age check it defeats)."""
@@ -541,7 +539,7 @@ def test_persistent_pause_alarms_and_fails(tmp_path):
 
 
 def test_pending_intents_and_audit_tail_surfaced(tmp_path):
-    """PENDING-INTENT FACTS (record D8/D9). ops-status.json surfaces the pending privileged intents and
+    """PENDING-INTENT FACTS. ops-status.json surfaces the pending privileged intents and
     the recent actions-audit.log tail so the serve screen can show what is queued/in-flight and the
     recent action outcomes. FAILS IF a pending intent or the audit tail is not surfaced."""
     tree = _make_tree(tmp_path)
@@ -557,7 +555,7 @@ def test_pending_intents_and_audit_tail_surfaced(tmp_path):
 
 
 def test_expired_pause_flag_does_not_alarm(tmp_path):
-    """S5(a) PIN. An EXPIRED pause.flag (mtime older than the expiry reconcile honours) is IGNORED by
+    """PAUSE-EXPIRY PIN. An EXPIRED pause.flag (mtime older than the expiry reconcile honours) is IGNORED by
     reconcile — so it is NOT freezing serving and must NOT alarm, even if a stale ops-status shows a
     long prior span. FAILS IF an expired flag still trips the persistent-pause alarm (alarming on a
     non-freeze). Non-vacuous vs test_persistent_pause_alarms_and_fails (a FRESH re-armed flag DOES)."""
@@ -579,7 +577,7 @@ def test_expired_pause_flag_does_not_alarm(tmp_path):
 
 
 def test_persistent_rollback_pin_alarms_and_fails(tmp_path):
-    """S5(b) PIN. A rollback.pin held continuously past the threshold (carried first_seen) raises an
+    """ROLLBACK-FLOOR PIN. A rollback.pin held continuously past the threshold (carried first_seen) raises an
     ops-floor fact AND fires the fail ping — a pin freezes auto-rebuild with no expiry, so it needs the
     same visibility as a persistent pause. FAILS IF a long-standing pin stays silent."""
     tree = _make_tree(tmp_path)
@@ -598,7 +596,8 @@ def test_persistent_rollback_pin_alarms_and_fails(tmp_path):
 
 
 def test_fresh_pin_active_not_persistent(tmp_path):
-    """Non-vacuous control for S5(b): a freshly-set pin is active but NOT persistent (no fail ping)."""
+    """Non-vacuous control for the rollback-floor pin: a freshly-set pin is active but NOT
+    persistent (no fail ping)."""
     tree = _make_tree(tmp_path)
     (tree["state"] / "rollback.pin").write_text(
         json.dumps({"pinned_build": "20260101T000000Z", "pinned_at": _now_iso()}), encoding="utf-8")
@@ -639,7 +638,7 @@ def test_failed_restore_drill_verdict_fails_the_ping(tmp_path):
 
 def test_stale_restore_drill_verdict_fails_the_ping(tmp_path):
     """A verdict that was written once and then stopped being refreshed means the drill timer has
-    died: restorability is no longer proven, so it must fail rather than rest on an old pass."""
+    died: restorability is not proven, so it must fail rather than rest on an old pass."""
     tree = _make_tree(tmp_path)
     verdict = tree["backups"] / "latest-drill.json"
     old = datetime.datetime.now().timestamp() - 20 * 86400        # 20 days, past the 8-day default

@@ -26,7 +26,7 @@ LEMIMT SITE line's `S-<rate>Hz` band token, which records the MERGING OF DOWNSAM
 not the rate the station was acquired at, so publishing it as a run rate would state a processing
 parameter as a measurement.
 
-The result is a plain-JSON dict so it can ride the C18 parse cache beside the record it describes.
+The result is a plain-JSON dict so it can ride the parse cache beside the record it describes.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ INFERRED = "inferred"
 CONFIDENCE_CLASSES = (FORMAL_EDI_FIELD, STRUCTURED_DIALECT, PATTERN_EXTRACTED,
                       CURATOR_SUPPLIED, INFERRED)
 
-# The D2 fact vocabulary, shared with the surveys repo's run-id assignment tool so the store and the
+# The fact vocabulary, shared with the surveys repo's run-id assignment tool so the store and the
 # emitter qualify the same stations. A station asserting none of these gets no runs[] at all.
 FACTS = ("source_run_id", "sample_rate", "time_period", "data_logger", "serial", "sensor",
          "dipole_length", "contact_resistance")
@@ -60,7 +60,7 @@ _RESISTANCE_UNITS = {"ohm": 1.0, "ohms": 1.0, "kilo-ohm": 1e3, "kilo-ohms": 1e3,
                      "mega-ohm": 1e6, "mega-ohms": 1e6, "megaohm": 1e6, "megaohms": 1e6,
                      "mohm": 1e6, "mohms": 1e6}
 _RESISTANCE_RE = re.compile(r"^\s*([-+]?\d+(?:\.\d+)?)\s*([A-Za-z-]+)\s*$")
-# A source note that CONTRADICTS the channel list wins over any corroboration (D9). The corpus
+# A source note that CONTRADICTS the channel list wins over any corroboration. The corpus
 # fixture is the enriched header's own caveat: "HZ/RX/RY channel declarations are exporter template
 # artifacts". Components are read off the sentence, so a note naming other channels works unchanged.
 _TEMPLATE_ARTEFACT_RE = re.compile(
@@ -199,10 +199,10 @@ def _enriched_dotted(info: str, kv: dict, doc: _Doc):
             doc.fact("serial")
     for name in _text(kv.get("station.channels_recorded")).split(","):
         doc.named(name)
-    # ALLOW-LIST, not a deny-list: any dotted run.<x>.<y> key used to be promoted to a channel, so
-    # a structured non-channel path (run.acquired_by.author, run.time_period.start) fabricated a
-    # channel row in the citable station.json - and two of the old deny entries (id, sample_rate)
-    # could never match the trailing-dot pattern anyway. A new enrichment key can never become a
+    # ALLOW-LIST, not a deny-list: promoting any dotted run.<x>.<y> key to a channel lets a
+    # structured non-channel path (run.acquired_by.author, run.time_period.start) fabricate a
+    # channel row in the citable station.json, and a deny entry such as id or sample_rate cannot
+    # match the trailing-dot pattern anyway. A new enrichment key can never become a
     # channel unless the component families below learn it first.
     _CHANNELS = ("ex", "ey", "ez") + _MAGNETIC
     for key in kv:
@@ -224,7 +224,7 @@ def _enriched_dotted(info: str, kv: dict, doc: _Doc):
             doc.channel(component, "sensor", sensor, STRUCTURED_DIALECT, fact="sensor")
             if "serial_number" in sensor:
                 doc.fact("serial")
-    # D9 exclusion: a source assertion contradicting the channel list wins over any corroboration.
+    # Exclusion: a source assertion contradicting the channel list wins over any corroboration.
     for m in _TEMPLATE_ARTEFACT_RE.finditer(info):
         for token in re.split(r"[/,\s]+", m.group(1)):
             doc.excluded(token)
@@ -286,7 +286,7 @@ _EMPOWER_RATE = re.compile(r'"sampleRate"\s*:\s*(\d+(?:\.\d+)?)')
 
 
 def _empower_json(info: str, kv: dict, doc: _Doc):
-    """Phoenix EMpower writes one JSON record per acquisition into >INFO. D10: a SECOND top-level
+    """Phoenix EMpower writes one JSON record per acquisition into >INFO. A SECOND top-level
     record is the REMOTE STATION, never a second run. The highest declared sampleRate is the run's
     nominal rate; the lower ones are the decimation ladder riding the transfer-function product.
 
@@ -391,10 +391,10 @@ _FAMILIES = (_enriched_dotted, _mtpy_fieldnotes, _lemimt_site, _empower_json, _p
 
 
 def run_facts(info: str) -> dict:
-    """The acquisition facts one EDI's >INFO block asserts. `facts` is the D2 gate's input (empty =>
+    """The acquisition facts one EDI's >INFO block asserts. `facts` is the run gate's input (empty =>
     the station publishes no runs[] at all); `run` and `channels` carry the values themselves;
     `confidence` records the extraction class behind each; `named_components` and
-    `excluded_components` feed the D9 channel rule."""
+    `excluded_components` feed the channel rule."""
     text = _text(info)
     if not text:
         return _blank_document()

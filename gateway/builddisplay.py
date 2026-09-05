@@ -1,4 +1,4 @@
-"""Build-id DISPLAY shortener for the curator chrome (C43 S2a-5, owner feedback from the live box).
+"""Build-id DISPLAY shortener for the curator chrome.
 
 PURE FUNCTIONS, no I/O — the AUTHORITATIVE specification of how a build id is shortened for display,
 so the transform is unit-testable server-side (the sanctioned "test at the seam" option, same as

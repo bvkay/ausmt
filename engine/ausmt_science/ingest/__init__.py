@@ -1,14 +1,14 @@
 """ingest: standardise any input (EDI / EMTFXML / Z / J / MTH5) to one TF object.
 
 STATUS: the portal PRODUCTS (catalogue/tf/sci) are built by extract/build_portal.py via the
-mt_metadata extractor (`extract/_mtm.py`). This package backs the CANONICAL EMTF XML store (D6):
+mt_metadata extractor (`extract/_mtm.py`). This package backs the CANONICAL EMTF XML store:
 `normalize` is called by build_portal.emit_canonical_store under `--canonical-dir`. It is the
 intended single-choke-point ingest abstraction (numpy/mt_metadata-based) for the canonical/advanced
 layers; if you route the portal products through it too, add golden parity tests against the current
 extractor outputs first.
 
 Single choke point so every downstream module sees the same interface, regardless of source
-format. Prefer mt_metadata (USGS) — it round-trips EDI <-> EMTFXML <-> Z/J and shares the MTH5
+format. Prefer mt_metadata (USGS) - it round-trips EDI <-> EMTFXML <-> Z/J and shares the MTH5
 schema, so the TF catalogue and the time-series holdings speak the same language.
 """
 from __future__ import annotations

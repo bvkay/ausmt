@@ -1,15 +1,15 @@
-"""install-frontdoor.sh in-place reload logic (ops-hardening O1).
+"""install-frontdoor.sh in-place reload logic (ops-hardening).
 
 Black-box over `sh`: a copy of the real install script is run in a tmp dir with a fabricated
 .env/Caddyfile/compose.yaml and a PATH of stubs (docker, sudo) that record every docker invocation, so
 the test drives the actual reload/fallback control flow without a real Docker or VPS. The three cases
-the O1 design turns on:
+the design turns on:
   * already-running + reload OK  -> a `caddy reload` runs, NO restart;
   * already-running + reload FAILS -> a LOUD warning + a `compose restart frontdoor` fallback;
   * fresh (not running)          -> neither reload nor restart (up -d started it clean).
 
 Skips on Windows / a host with no POSIX sh (the same platform reason the reconcile/preflight suites use);
-on the gateway-ci ubuntu lane it RUNS with nothing skipped, so the skip tripwire needs no allow entry.
+on the gateway-ci ubuntu workflow it RUNS with nothing skipped, so the skip tripwire needs no allow entry.
 """
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def _run(work: Path, env: dict) -> subprocess.CompletedProcess:
 
 def test_running_edge_reloads_in_place_no_restart(tmp_path):
     """Already-running + reload OK: a `caddy reload` must run and there must be NO restart (the whole
-    point of O1 -- a graceful in-place reload, not a bounce). FAILS IF reload is skipped or a restart
+    point -- a graceful in-place reload, not a bounce). FAILS IF reload is skipped or a restart
     fires anyway."""
     work, env = _setup(tmp_path)
     env["STUB_RUNNING"] = "yes"
@@ -122,7 +122,7 @@ def test_fresh_install_neither_reloads_nor_restarts(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# The canonical-name lane: the installer TEMPLATES the legacy redirect block in or out ([A2]).
+# The canonical-name workflow: the installer TEMPLATES the legacy redirect block in or out.
 # These run the REAL script against the REAL repo Caddyfile (not the stub), because the property
 # under test is the render of the shipped template: legacy var unset -> Caddyfile.rendered carries
 # exactly ONE site block and no legacy reference (an empty `{$VAR}` site address would be a Caddy
@@ -147,7 +147,7 @@ _PLACEHOLDER_TOKEN = re.compile(r"\{[^{}\s]+\}")
 def _site_addresses(text: str) -> list[str]:
     """Depth-0 site-block addresses (the global options block, a bare '{', excluded). Depth counts
     braces with PLACEHOLDER tokens removed first: a directive line like `map {src} {dest} {` (the
-    path-url contract lane) carries balanced placeholder braces beside one structural opener, and
+    path-url contract workflow) carries balanced placeholder braces beside one structural opener, and
     counting raw braces would inflate the depth permanently and hide every later site address."""
     out, depth = [], 0
     for raw in text.splitlines():
@@ -157,7 +157,7 @@ def _site_addresses(text: str) -> list[str]:
         if depth == 0 and line.endswith("{") and line[:-1].strip():
             addr = line[:-1].strip()
             # A parenthesised address is a SNIPPET definition (e.g. `(box_upstream)`, the
-            # 2026-08-28 shared box transport), not a site block: it binds no listener.
+            # shared box transport), not a site block: it binds no listener.
             if not (addr.startswith("(") and addr.endswith(")")):
                 out.append(addr)
         structural = _PLACEHOLDER_TOKEN.sub("", line)
@@ -166,7 +166,7 @@ def _site_addresses(text: str) -> list[str]:
 
 
 def test_render_with_legacy_unset_strips_to_exactly_one_site_block(tmp_path):
-    """[A2] Legacy var UNSET: the installer must write Caddyfile.rendered with the marker range
+    """Legacy var UNSET: the installer must write Caddyfile.rendered with the marker range
     stripped: exactly the canonical site block, zero legacy references, and the validate call must
     mount the RENDERED file. FAILS IF the legacy block (or any reference to its var) survives, or
     validate still points at the tracked template."""
@@ -188,7 +188,7 @@ def test_render_with_legacy_unset_strips_to_exactly_one_site_block(tmp_path):
 
 
 def test_render_with_legacy_set_keeps_both_blocks_and_the_permanent_redir(tmp_path):
-    """[A2] Legacy var SET: the rendering must keep BOTH site blocks, canonical first, with the
+    """Legacy var SET: the rendering must keep BOTH site blocks, canonical first, with the
     legacy block still carrying its single permanent {uri}-preserving redir. FAILS IF the strip
     fires anyway, the order flips, or the redir softens."""
     work, env = _setup_real_caddyfile(tmp_path, legacy="ausmt.au")

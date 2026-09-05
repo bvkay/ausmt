@@ -1,7 +1,7 @@
 """A source file the reader could not open must not clear the deploy gate.
 
-build_report.json has recorded `source_parse_failures` since the GDS readers lane: which FILE the
-reader refused and what it said. Nothing read it. The Roxby Downs 2018 measurement (2026-09-03) is
+build_report.json has recorded `source_parse_failures` since the GDS readers workflow: which FILE the
+reader refused and what it said. Nothing read it. The Roxby Downs 2018 measurement is
 what that costs end to end: nine files refused, build exit 0, no SKIP line, the curator preview exit
 0, the package validator 0 FAIL, and nine transfer functions absent from a corpus nobody was told
 had lost them.
@@ -10,10 +10,10 @@ The split these tests pin. The BUILD still exits 0 on a parse failure, because o
 file must not take the whole corpus down with it. The VERIFIER is the gate: scripts/verify.py FAILs,
 naming the survey and the file, unless the curator has written that file into the allow file, a
 reviewed repository artifact that is EMPTY over the whole corpus. That is the same posture the
-survey-level D20 loud-skip gate already takes one level up.
+survey-level loud-skip gate already takes one level up.
 
 The rule-8 pin at the end reads .github/workflows/build-products.yml, which the engine image does
-not ship; it skips there on the allow-listed image-topology reason and asserts on every checkout lane.
+not ship; it skips there on the allow-listed image-topology reason and asserts on every checkout workflow.
 """
 import json
 import re
@@ -86,8 +86,8 @@ def test_the_build_still_exits_zero_and_records_the_refusal(tmp_path):
 
 
 def test_verify_fails_naming_the_file_the_reader_refused(tmp_path):
-    """R3, the defect itself. FAILS IF the deploy gate blesses a build that silently lost a station:
-    that is what it does today, and it is how nine Roxby stations would have reached a green swap."""
+    """The defect itself. FAILS IF the deploy gate blesses a build that silently lost a station:
+    that is what it does today, and it is how nine Roxby stations would reach a green swap."""
     surveys, broken = _survey_with_one_unreadable_file(tmp_path)
     out = tmp_path / "out"
     assert _build(surveys, out).returncode == 0
@@ -144,7 +144,7 @@ def test_the_shipped_allow_file_is_empty():
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_every_epikit_test_file_is_in_the_pr_gate_subset():
     """Rule 8, mechanised over the family rather than over the file added last: the PR gate enumerates
     test files BY NAME, so an EPI-KIT reader test that is not listed runs only on push to main, and

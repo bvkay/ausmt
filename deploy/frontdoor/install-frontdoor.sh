@@ -1,5 +1,5 @@
 #!/bin/sh
-# AusMT public front door - single apply/install script (C47 public bridge). Runs ON THE VPS, from
+# AusMT public front door - single apply/install script (public bridge). Runs ON THE VPS, from
 # deploy/frontdoor/. It validates the shipped Caddyfile against a real Caddy (so a config slip fails
 # LOUDLY before anything serves), ensures the log directory the shipper reads exists, then brings the
 # one-service stack up. Idempotent: re-running it re-validates and re-applies compose (a no-op if
@@ -88,8 +88,8 @@ docker run --rm \
 # ----- apply the stack ----------------------------------------------------------------------------
 # Was the edge ALREADY running before this apply? If so, a `compose up -d` that sees no image/compose
 # change will NOT recreate the container, so a container that keeps a bind-mounted Caddyfile would go on
-# serving the OLD config in memory (the 2026-07 stale-wall incident: the new Caddyfile validated, but the
-# running edge never picked it up). We capture that state BEFORE `up -d` so we know whether an explicit
+# serving the OLD config in memory (the stale-wall failure mode: the new Caddyfile validates, but the
+# running edge never picks it up). We capture that state BEFORE `up -d` so we know whether an explicit
 # reload is needed afterwards. `ps -q` prints the container id only when the service has a running
 # container; empty => not running (fresh install), so no reload is needed (up -d starts it clean).
 WAS_RUNNING=""
@@ -100,7 +100,7 @@ fi
 log "starting the front-door stack (docker compose up -d)"
 docker compose -f compose.yaml up -d
 
-# ----- reload the RUNNING edge so a Caddyfile change actually takes effect (ops-hardening O1) -------
+# ----- reload the RUNNING edge so a Caddyfile change actually takes effect (ops-hardening) ----------
 # If the edge was already running, `up -d` may have left the old process serving the old config. Reload
 # it in place: `caddy reload` reads the admin address from the (unix-socket) admin block in the file and
 # hot-swaps the config with no downtime. If the reload FAILS for ANY reason (admin disabled, or the
@@ -115,7 +115,7 @@ if [ -n "$WAS_RUNNING" ]; then
 	else
 		printf '\n' >&2
 		printf 'install-frontdoor: WARNING: caddy reload FAILED (admin disabled, or the container could\n' >&2
-		printf 'install-frontdoor: WARNING: not fork - see the O3 zombie kit in RUNBOOK.md). Falling back\n' >&2
+		printf 'install-frontdoor: WARNING: not fork - see the zombie kit in RUNBOOK.md). Falling back\n' >&2
 		printf 'install-frontdoor: WARNING: to a full restart so the new config still takes effect.\n' >&2
 		printf '\n' >&2
 		docker compose -f compose.yaml restart frontdoor \

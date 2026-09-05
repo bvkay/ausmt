@@ -2,7 +2,7 @@
 
 Asserts that the flag emits a per-survey canonical EMTF XML + derived EDI (round-trip verified by
 normalize) and a provenance.json stamped with the mt_metadata/mth5 versions, WITHOUT changing the
-portal products. The flag is additive: it writes the D6 canonical store alongside the products, it
+portal products. The flag is additive: it writes the canonical store alongside the products, it
 does not (yet) become their source. Requires the core mt_metadata/mth5 engine; importorskips
 otherwise; runs in the build CI job's suite.
 """
@@ -50,7 +50,7 @@ def test_canonical_store_is_additive(tmp_path):
 def test_canonical_store_same_dataid_no_overwrite(tmp_path):
     """Two EDIs in one survey sharing a DATAID (the same-site-two-codes case `_disambiguate` exists for)
     must produce TWO distinct canonical XML files, and `canonical_written` must equal the files on disk.
-    Regression guard for H1: emit_canonical_store keyed on the PRE-disambiguation DATAID, so both wrote
+    Regression guard: emit_canonical_store once keyed on the PRE-disambiguation DATAID, so both wrote
     the same <DATAID>.xml (one overwritten) while the count incremented twice."""
     import re as _re
     src_edis = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
@@ -78,7 +78,7 @@ def test_canonical_store_same_dataid_no_overwrite(tmp_path):
         f"canonical_written ({prov['canonical_written']}) != XML files on disk ({len(xmls)})"
 
 
-# --- C2: conditioning is persisted (provenance.json map + station.json) and the citation is HONEST ---
+# --- conditioning is persisted (provenance.json map + station.json) and the citation is HONEST ---
 SPECTRA = HERE / "real_dialects" / "phoenix_empower_A01.edi"
 
 
@@ -148,4 +148,4 @@ def test_served_and_canonical_xml_citation_is_the_org_not_ausmt(tmp_path):
     for xp in served + canon_xml:
         a = _authors(xp)
         assert a == "Geoscience Australia", f"{xp.name}: authors={a!r}"
-        assert a != "AusMT", f"{xp.name}: citation authors are the portal brand — fabricated"
+        assert a != "AusMT", f"{xp.name}: citation authors are the portal brand - fabricated"

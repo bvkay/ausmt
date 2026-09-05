@@ -1,4 +1,4 @@
-# AusMT usage-analytics aggregator (C45 D4/D5). A oneshot unit the ausmt-stats.timer fires once a day:
+# AusMT usage-analytics aggregator. A oneshot unit the ausmt-stats.timer fires once a day:
 # it runs deploy/scripts/aggregate_stats.py, which folds the Caddy access log (masked-at-edge IPs, from
 # the 2b-ii log block) into a cumulative stats.json in the gateway state dir. The workbench Analytics
 # screen reads that file. The aggregator is STDLIB-only (no maxminddb, no new dependency), never raises
@@ -13,15 +13,15 @@
 # NOTE: the production box keeps the checkout under the operator's HOME, not /srv/ausmt/code (that path
 # does not exist there); use YOUR real checkout path.
 # The script reads AUSMT_DATA_DIR from the EnvironmentFile (.env), so this unit depends on NO shell
-# profile (the 2026-07-08 "works interactively, fails from the timer" class — the vars live in .env,
+# profile (the "works interactively, fails from the timer" class: the vars live in .env,
 # loaded here, not in ~/.bashrc). If the db-ip CSV is missing every country resolves to "unknown" and the
 # run still completes (the aggregator degrades gracefully); see the runbook for placing/refreshing it.
 
 [Unit]
 Description=AusMT usage-analytics aggregator (fold Caddy access log -> stats.json, daily)
 # __DEPLOY_DIR__ placeholder (resolved by the install sed exactly like ExecStart below) — NEVER a
-# literal <operator> path (the 2026-07 backup-unit bug: a hardcoded file:///home/<operator>/… pointed at
-# a path that never existed). The runbook is this repo's deploy/README.md ("Usage analytics").
+# literal <operator> path: a hardcoded file:///home/<operator>/… points at a path that never exists.
+# The runbook is this repo's deploy/README.md ("Usage analytics").
 Documentation=file://__DEPLOY_DIR__/README.md
 # Date bucketing (which UTC day a request falls in) wants a real, synced clock; only meaningful once
 # time is synced.

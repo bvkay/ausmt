@@ -3,10 +3,10 @@ preserve the SCIENCE. For each fixture we derive the portal products (tf.json ro
 via the shared _edi_tf / _edi_science math) two ways and compare:
 
   A. from the ORIGINAL EDI (mt_metadata)                  — today's `--extractor mt_metadata` path
-  B. from the NORMALIZED canonical EMTF XML (mt_metadata)  — the Phase-1 D6 path
+  B. from the NORMALIZED canonical EMTF XML (mt_metadata) - the Phase-1 path
 
 If A == B, routing the build through the canonical store is science-preserving — the safety property
-that underwrote the regex retirement and that guards the Phase-1 D6 canonical store.
+that underwrote the regex retirement and that guards the Phase-1 canonical store.
 
 KNOWN, DOCUMENTED edge case (not a science issue): where a tipper is MISSING, the EDI carries a
 placeholder (tip_mag 1.0) while EMTF XML uses its large missing-data fill (~1e32). Neither is a real

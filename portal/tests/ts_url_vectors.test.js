@@ -63,7 +63,7 @@ ok(tsArchiveUrl(null) === VEC.prefix && tsArchiveUrl(undefined) === VEC.prefix,
 // THE LEVEL SEGMENT of /go/ts/<survey>/<station>/<level>, the other half of a hand-off address.
 // state.js DECLARES this vocabulary; the engine DERIVES it (_tsindex.LEVELS minus what never
 // projects) and the route table EMITS it. Nothing re-derived it here, so a sixth routable token
-// would have shipped in ts_access.json and routed at the front door while the chooser, the drawer
+// would ship in ts_access.json and route at the front door while the chooser, the drawer
 // action rows and the pointer file stayed silent about it - an under-claim with no red anywhere.
 const stateSrc = fs.readFileSync(path.join(SRC, "state.js"), "utf8");
 const sctx = { ...ctx };
@@ -75,7 +75,7 @@ ok(JSON.stringify(tokens) === JSON.stringify(VEC.routable_levels),
    "state.js TS_LEVELS must be the shared routable_levels, in render order: got "
    + JSON.stringify(tokens) + ", want " + JSON.stringify(VEC.routable_levels));
 ok(!tokens.includes("level2"),
-   "level2 is absent BY RULING (D19): the archive's level_2 tree holds transfer functions");
+   "level2 is absent BY DESIGN: the archive's level_2 tree holds transfer functions");
 
 console.log(fail ? ("FAILED " + fail) : "ALL PASSED");
 process.exit(fail ? 1 : 0);

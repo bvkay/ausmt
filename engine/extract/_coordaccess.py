@@ -1,35 +1,35 @@
-"""C42 coordinate-access policy: exact / generalised / withheld (the ENGINE mask seam).
+"""Coordinate-access policy: exact / generalised / withheld (the ENGINE mask seam).
 
 The custodian chooses whether a station's coordinates are served exact, generalised (rounded to
 0.1deg, ~11 km), or withheld (null). This module owns the ONE mask seam and its ONE rounding
-function, per the frozen design record maintainer/C42-CoordinateAccess.md (D2/D3). The seam is
+function, per the frozen design record maintainer/C42-CoordinateAccess.md. The seam is
 pipeline-ordered by the caller: parse -> QC on TRUE coordinates -> apply_coordinate_policy() in
 place -> ALL emission. No emitter reads a coordinate from anywhere but the post-mask station record.
 
-Fail-closed posture (consistent with the C25 gates' refuse-to-serve stance): an UNKNOWN enum value
+Fail-closed posture (consistent with the convention gates' refuse-to-serve stance): an UNKNOWN enum value
 or an override naming a station that does not exist is a survey-level build FAILURE (raised as
 CoordinatePolicyError), never a silent fallback to exact.
 
 Default stability: a survey with no `access.coordinates` field parses to ("exact", {}) and the mask
 is a no-op for every one of its stations, so the whole existing corpus builds byte-identically
-(the default-stability pin, D6).
+(the default-stability pin).
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-# The three policies, in the order the record lists them (D2). "exact" is the default.
+# The three policies, in the order the record lists them. "exact" is the default.
 COORDINATE_POLICIES = ("exact", "generalised", "withheld")
 
 # Generalisation grid: 0.1deg (~11 km). ONE rounding function, engine-side only — the portal never
-# re-rounds; it renders the masked catalogue value verbatim (pinned, D6). 1 dp of a degree.
+# re-rounds; it renders the masked catalogue value verbatim (pinned). 1 dp of a degree.
 _GENERALISE_DP = 1
 
 
 class CoordinatePolicyError(ValueError):
     """A survey's access.coordinates policy is invalid: an unknown enum value, or an override id that
     names no station in the survey. Raised so the caller fails the survey-level build LOUDLY (never a
-    silent fallback to exact — the same refuse-to-serve posture as the C25 convention gates)."""
+    silent fallback to exact - the same refuse-to-serve posture as the convention gates)."""
 
 
 def round_generalised(v):
@@ -59,7 +59,7 @@ def parse_coordinate_policy(access_block):
     Returns (default: str, overrides: dict[str, str]) with every value a member of
     COORDINATE_POLICIES. Raises CoordinatePolicyError on any unknown enum value (survey default OR an
     override value) — fail-closed, never coerced to exact. Override IDS are validated separately, via
-    validate_overrides (fix round 2: in the build loop at the point the REAL parsed station ids exist,
+    validate_overrides (in the build loop at the point the REAL parsed station ids exist,
     for both EDI and MTH5 inputs, before any of that survey's bytes are emitted), because the station
     ids are only known after parsing.
 
@@ -96,7 +96,7 @@ def parse_coordinate_policy(access_block):
 
 
 def base_station_id(station_id, variant=None):
-    """THE id half of the one shared matcher (fix round 2): the PHYSICAL station id an override keys
+    """THE id half of the one shared matcher: the PHYSICAL station id an override keys
     on — the record id with its engine-appended processing-variant tag stripped. build_portal's
     _disambiguate dedups DATAID collisions as `<base>.<variant>` AND stores the tag on the record
     (`r["variant"]`), so stripping uses that field — NEVER dot-guessing on the id string, because a
@@ -111,12 +111,12 @@ def base_station_id(station_id, variant=None):
 
 
 def station_policy(default, overrides, station_id, variant=None):
-    """The APPLICATION half of the one shared matcher: the effective policy for one station — its
-    per-station override if declared, else the survey default. Override keys are BASE station ids
-    (fix round 2 ruling): the record's id is base-stripped via base_station_id before matching, so
-    privacy of a physical site covers ALL its processing variants. EXACT base match only — no
-    prefixes, no stems. validate_overrides() is the validation half, checking keys against the very
-    same base_station_id derivation, so a validated key can never be a silent no-op."""
+    """The APPLICATION half of the one shared matcher: the effective policy for one station - its
+    per-station override if declared, else the survey default. Override keys are BASE station ids:
+    the record's id is base-stripped via base_station_id before matching, so privacy of a physical
+    site covers ALL its processing variants. EXACT base match only - no prefixes, no stems.
+    validate_overrides() is the validation half, checking keys against the very same
+    base_station_id derivation, so a validated key can never be a silent no-op."""
     return (overrides or {}).get(base_station_id(station_id, variant), default)
 
 
@@ -145,7 +145,7 @@ def station_policy_by_published_id(default, overrides, station_id):
 
 
 def validate_overrides(overrides, stations):
-    """THE VALIDATION half of the one shared matcher (fix round 2): every override key must be the
+    """THE VALIDATION half of the one shared matcher: every override key must be the
     BASE station id of at least one ACTUAL parsed station record in `stations` [(path, record), ...]
     — the same records, the same base_station_id derivation that station_policy applies with, so
     validation and application cannot diverge BY CONSTRUCTION (the probe-e class: a stem∪prefix
@@ -193,9 +193,9 @@ def validate_overrides(overrides, stations):
 
 def coordinates_served(policy) -> bool:
     """The per-station BYTE-GATE predicate: only an 'exact' station's source bytes (EDI + EMTF-XML +
-    derived EDI) may be served. A generalised or withheld station is byte-gated out entirely — its
+    derived EDI) may be served. A generalised or withheld station is byte-gated out entirely - its
     coordinates hide in too many EDI corners (HEAD, INFO free-text, DEFINEMEAS, comments) for
-    redaction to be trustworthy, so we withhold the file rather than rewrite custodian bytes (D3)."""
+    redaction to be trustworthy, so we withhold the file rather than rewrite custodian bytes."""
     return policy == "exact"
 
 
@@ -209,7 +209,7 @@ def fid(p, r):
 
 def _mask_qc_report(qc, policy_of):
     """Rewrite every coordinate-bearing qc_report field so a non-exact station carries no true-position
-    bits (D3). Two fields carry coordinates today:
+    bits. Two fields carry coordinates today:
 
       * outside_declared_extent[].lat/lon (qc_pass :1339) — the TRUE position of a station outside its
         survey's declared extent. For a non-exact station: generalised -> the 0.1deg cell; withheld ->
@@ -255,7 +255,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
 
       * withheld  -> lat / lon / elev_m null (the station keeps its row; alignment invariant).
       * generalised -> lat / lon rounded to 0.1deg via round_generalised(); elev_m null (defensive
-        invariant per D2 — no served JSON carries elevation today, but any future emitter inherits the
+        invariant - no served JSON carries elevation today, but any future emitter inherits the
         mask).
 
     Also nulls the record's OTHER true-coordinate bearers (info_lat/info_lon and coord_candidates) for
@@ -271,7 +271,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
 
     Returns the set of ausmt_ids that were masked (non-exact), for the caller's byte-gate/logging.
     """
-    # Fail-closed BACKSTOP (defence in depth, fix round 2): the SAME validate_overrides the build
+    # Fail-closed BACKSTOP (defence in depth): the SAME validate_overrides the build
     # loop already ran — on the SAME station records, at the point their ids became known and before
     # any bytes were emitted, for BOTH input kinds (EDI and MTH5 alike). Same function + same inputs
     # => this raise is UNREACHABLE on every input path of a full build, by construction (pinned:
@@ -292,7 +292,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
         if pol == "exact":
             continue
         masked_ausmt_ids.add(r.get("ausmt_id"))
-        # A1: stamp the RESOLVED policy on the (non-exact) record so the boot-loaded coord_policy.json
+        # Stamp the RESOLVED policy on the (non-exact) record so the boot-loaded coord_policy.json
         # marker and station.json can emit it WITHOUT re-deriving from coordinate values — the mask seam
         # already resolved it here (the record's rule: reuse, never re-derive). Exact records are left
         # unstamped, so an all-exact corpus keeps its zero-change default (no marker, no new key).
@@ -303,7 +303,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
         else:  # generalised: lat/lon to the 0.1deg cell
             r["lat"] = round_generalised(r.get("lat"))
             r["lon"] = round_generalised(r.get("lon"))
-        # elevation nulled for BOTH non-exact classes (defensive invariant, D2).
+        # elevation nulled for BOTH non-exact classes (defensive invariant).
         r["elev_m"] = None
         # scrub the record's other true-coordinate bearers so no future emitter can resurrect them.
         r["info_lat"] = None
@@ -312,7 +312,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
         # processing_note is the raw >INFO free-text scraped from the EDI (station.json processing.note).
         # It carries the INFO block's LATITUDE/LONGITUDE/ELEVATION lines verbatim — a true-position leak
         # the artifact-agnostic leak-sweep caught. Coordinates hide in too many free-text corners to redact
-        # trustworthily (the same reasoning that byte-gates the EDI rather than rewriting it, D3), so the
+        # trustworthily (the same reasoning that byte-gates the EDI rather than rewriting it), so the
         # whole derived note is WITHHELD for a non-exact station. It is best-effort metadata, not data; the
         # curator still sees the full note in the package (surveys-live). remote_site (a station NAME, no
         # position) is kept.

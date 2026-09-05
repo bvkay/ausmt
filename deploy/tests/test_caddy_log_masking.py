@@ -1,4 +1,4 @@
-"""C45 D2/D5: access-log masked-at-edge config pin + the portal promise-text consistency pin.
+"""Access-log masked-at-edge config pin + the portal promise-text consistency pin.
 
 The load-bearing privacy requirement is that the CLIENT ADDRESS IS MASKED AT WRITE TIME so a full IP
 never touches disk. The ideal proof is a LIVE Caddy writing a log line whose address field is
@@ -11,9 +11,9 @@ truncated (red-then-green vs an unfiltered block). This dev/CI harness has no `c
     whose log OUTPUT PATH alone is redirected to a writable dir, because validation provisions the
     file writer and the shipped container path (/var/log/caddy) is unwritable to an unprivileged
     user; a companion meta-pin proves the redirect did not turn the leg into a rubber stamp;
-  * the PROMISE-CONSISTENCY PIN checks the shipped portal/index.html text matches the logging
-    behaviour keywords (truncate/mask at the edge, no cookies) and no longer makes the now-false
-    absolute "no IPs stored" claim.
+  * the PROMISE-CONSISTENCY PIN checks the privacy paragraph in the shipped portal/about.html
+    matches the logging behaviour keywords (truncate/mask at the edge, no cookies) and does not
+    make the now-false absolute "no IPs stored" claim.
 
 The live masked-log-LINE leg (start caddy, hit it, assert the on-disk line is truncated) is UBUNTU/CI
 territory and is flagged for the wait-for-greens push block; the config assertion is the everywhere-
@@ -31,7 +31,9 @@ import pytest
 _REPO = Path(__file__).resolve().parents[2]
 _CADDYFILE = _REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
 _FRONTDOOR_CADDYFILE = _REPO / "deploy" / "frontdoor" / "Caddyfile"
-_INDEX = _REPO / "portal" / "index.html"
+# The privacy promise is VISIBLE COPY on About, not a comment in the SPA's <head>: a
+# commitment a reader cannot read is not a commitment. This pin follows it there.
+_PROMISE = _REPO / "portal" / "about.html"
 
 
 def _caddyfile_text() -> str:
@@ -59,7 +61,7 @@ def _log_block() -> str:
     """The text of the top-level `log { ... }` block (brace-matched). Fails the test if absent."""
     text = _caddyfile_text()
     m = re.search(r"\n\tlog \{", text)
-    assert m is not None, "the Caddyfile must declare a `log` block for access logging (C45 D5)"
+    assert m is not None, "the Caddyfile must declare a `log` block for access logging"
     start = m.start()
     # brace-match from the opening brace
     i = text.index("{", start)
@@ -75,7 +77,7 @@ def _log_block() -> str:
 
 
 def test_access_log_masks_client_address_at_edge():
-    """MASKED-AT-EDGE CONFIG PIN (C45 D2). The Caddyfile access log applies Caddy's ip_mask filter to
+    """MASKED-AT-EDGE CONFIG PIN. The Caddyfile access log applies Caddy's ip_mask filter to
     the client-address fields with the /24 (IPv4) + /48 (IPv6) masks, so a FULL IP never touches disk.
     FAILS IF the log block omits the mask on remote_ip/client_ip, or the mask widths are wrong
     (config-only in this harness; the caddy-validate leg + CI's live leg cover the runtime)."""
@@ -85,14 +87,14 @@ def test_access_log_masks_client_address_at_edge():
         "remote_ip must be ip_mask'd (a full peer IP must never be logged)"
     assert re.search(r"request>client_ip\s+ip_mask", block), \
         "client_ip must be ip_mask'd (the resolved client IP must never be logged in full)"
-    # The masks: IPv4 -> /24, IPv6 -> /48 (record D2).
+    # The masks: IPv4 -> /24, IPv6 -> /48.
     assert re.search(r"ipv4\s+24", block), "IPv4 must be masked to /24"
     assert re.search(r"ipv6\s+48", block), "IPv6 must be masked to /48"
     # No cookies / credentials logged (the promise: no cookies, no personal data).
     assert re.search(r"request>headers>Cookie\s+delete", block), "the Cookie header must be deleted"
     assert re.search(r"request>headers>Authorization\s+delete", block), \
         "the Authorization header must be deleted"
-    # S1: every header that can carry a FULL client address must be deleted — behind a proxy the real
+    # Every header that can carry a FULL client address must be deleted - behind a proxy the real
     # IP arrives unmasked in these, and the masked-at-edge promise would be false otherwise.
     for hdr in ("X-Forwarded-For", "X-Real-IP", "Forwarded", "Referer"):
         assert re.search(rf"request>headers>{re.escape(hdr)}\s+delete", block), \
@@ -108,7 +110,7 @@ def _status_redaction(block: str) -> tuple[str, str] | None:
 
 
 def test_status_token_redacted_from_uri_at_both_edges():
-    """STATUS-TOKEN REDACTION PIN (deploy review section 5, R28). GET /gateway/status/{token} carries a
+    """STATUS-TOKEN REDACTION PIN (deploy review section 5). GET /gateway/status/{token} carries a
     secrets.token_urlsafe(32) capability; the DB stores only its SHA-256 hash, but the masked access
     logs mask IPs and delete credential HEADERS while never touching request>uri - so the raw token
     landed in the log VERBATIM (retained 7 days, shipped to the box). BOTH log-writing edges must redact
@@ -132,7 +134,7 @@ def test_status_token_redacted_from_uri_at_both_edges():
 
 
 def test_trusted_proxies_configured_for_real_client_masking():
-    """S1 PIN. Caddy must trust the fronting proxy so `client_ip` is the REAL client (from the
+    """TRUSTED-PROXIES PIN. Caddy must trust the fronting proxy so `client_ip` is the REAL client (from the
     forwarded address) that ip_mask then masks — not the loopback proxy. The tailscale CGNAT range
     (100.64.0.0/10) must be trusted explicitly (it is NOT in private_ranges). FAILS IF trusted_proxies
     is absent or omits the CGNAT range (then the masked client_ip would be the proxy, and the true IP
@@ -148,12 +150,12 @@ def test_trusted_proxies_configured_for_real_client_masking():
 
 
 def test_access_log_has_rotation_and_7_day_retention():
-    """RETENTION PIN (C45 D2). The log rolls and is retained ~7 days (Caddy's roll options — no
+    """RETENTION PIN. The log rolls and is retained ~7 days (Caddy's roll options - no
     logrotate/cron). FAILS IF rotation/retention config is absent."""
     block = _log_block()
     assert "output file" in block, "the log must write to a file on the logs volume"
     assert re.search(r"roll_keep_for\s+168h", block), \
-        "retention must be 7 days (roll_keep_for 168h) — the raw log is a short debugging tail (D2)"
+        "retention must be 7 days (roll_keep_for 168h): the raw log is a short debugging tail"
     assert re.search(r"roll_keep\s+\d+", block), "a bounded roll_keep must cap the number of rolled files"
 
 
@@ -167,13 +169,13 @@ def test_logs_volume_is_mounted_on_portal():
 
 
 def test_portal_promise_matches_logging_behaviour():
-    """PROMISE-CONSISTENCY PIN (C45 D2/D6). The shipped portal/index.html privacy text matches the
+    """PROMISE-CONSISTENCY PIN. The privacy paragraph in portal/about.html section 4 matches the
     logging behaviour: it states IPs are TRUNCATED/MASKED at the edge, keeps only aggregate counts, and
-    no cookies — and it no longer makes the now-FALSE absolute 'no IPs stored' claim. FAILS IF the
+    no cookies, and it does not make the now-FALSE absolute 'no IPs stored' claim. FAILS IF the
     public promise and the implementation diverge (a public commitment must not lie)."""
-    text = _INDEX.read_text(encoding="utf-8").lower()
+    text = _PROMISE.read_text(encoding="utf-8").lower()
     assert "no ips stored" not in text, \
-        "the absolute 'no IPs stored' claim is now false (a masked log line lands) — it must be amended"
+        "the absolute 'no IPs stored' claim is now false (a masked log line lands) - it must be amended"
     assert "truncate" in text or "mask" in text, "the promise must state IPs are truncated/masked at the edge"
     assert "/24" in text, "the promise should state the /24 truncation (honest specificity)"
     assert "no cookies" in text, "the promise must state no cookies"
@@ -228,7 +230,7 @@ def _validate(path: Path) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.mark.skipif(shutil.which("caddy") is None,
-                    reason="no caddy binary on PATH — masking is config-asserted; caddy validate runs in CI")
+                    reason="no caddy binary on PATH - masking is config-asserted; caddy validate runs in CI")
 def test_caddyfile_validates_with_caddy(tmp_path):
     """LIVE-VALIDATE LEG. `caddy validate` accepts the Caddyfile (the log block + ip_mask filter +
     trusted_proxies parse under the shipped Caddy). FAILS IF any is syntactically invalid for the
@@ -279,9 +281,9 @@ def _extract_block(text: str, opener: str) -> str:
 
 
 @pytest.mark.skipif(shutil.which("caddy") is None,
-                    reason="no caddy binary — the masked-log-line pin is the ubuntu/CI leg (wait-for-greens)")
+                    reason="no caddy binary - the masked-log-line pin is the ubuntu/CI leg (wait-for-greens)")
 def test_real_caddy_masks_forwarded_client_ip_in_the_log():
-    """S1 HEADLINE — REAL-CADDY RUNTIME PIN (ubuntu/CI, wait-for-greens). A request carrying
+    """HEADLINE - REAL-CADDY RUNTIME PIN (ubuntu/CI, wait-for-greens). A request carrying
     `X-Forwarded-For: 203.0.113.7` through a running Caddy using the SHIPPED log filter + trusted_proxies
     writes a log line in which the full client IP appears NOWHERE — only the /24-masked form 203.0.113.0.
     FAILS IF 203.0.113.7 appears anywhere in the emitted JSON (fields OR headers). This is the property
@@ -299,7 +301,7 @@ def test_real_caddy_masks_forwarded_client_ip_in_the_log():
 
     text = _caddyfile_text()
     log_block = _extract_block(text, "\tlog")          # the shipped log {...}
-    # 2026-08-28 serve-path tuning split the servers options per listener (scoped blocks do not
+    # Serve-path tuning split the servers options per listener (scoped blocks do not
     # inherit, so each carries trusted_proxies). The reader listener (:8081) is the one behind the
     # front door, so its block is the shipped source of the trusted_proxies under test here.
     servers_block = _extract_block(text, "servers :8081")    # the shipped trusted_proxies {...}
@@ -361,7 +363,7 @@ def test_real_caddy_masks_forwarded_client_ip_in_the_log():
 @pytest.mark.skipif(shutil.which("caddy") is None,
                     reason="no caddy binary - the status-token redaction is config-asserted; live leg runs in CI")
 def test_real_caddy_redacts_status_token_in_the_log(tmp_path):
-    """R28 HEADLINE - REAL-CADDY RUNTIME PIN. A GET /gateway/status/<token> through a running Caddy using
+    """HEADLINE - REAL-CADDY RUNTIME PIN. A GET /gateway/status/<token> through a running Caddy using
     the SHIPPED log filter writes a log line in which the capability token appears NOWHERE - only the
     /gateway/status/REDACTED placeholder. A control request to /data/mtcat.json is logged UNCHANGED, so
     the redaction is scoped to the status path and does not maul other URIs. Proves the config assertion

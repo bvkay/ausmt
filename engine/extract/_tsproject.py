@@ -2,33 +2,32 @@
 
 Four questions, answered here and nowhere else. The last three part ways on purpose
 (INTERFACE-CONTRACT:126-132 evidence permanence; :150-153 route detail is its own assertion
-class; the THREDDS lane's D19), and they all rest on the first:
+class; the THREDDS rule), and they all rest on the first:
 
   projects()       does this ONE register row publish anything: `review: verified` and a level
-                   this lane routes. Asked by the three below AND by station.json's emitter, so
+                   this module routes. Asked by the three below AND by station.json's emitter, so
                    the publication rule is stated once rather than restated per surface.
   station_flag()   does a verified time-series resource EXIST for this station? Existence
-                   semantics: follows the register for EVERY station, withheld included (R13);
+                   semantics: follows the register for EVERY station, withheld included;
                    an embargo never flips it, an outage never flips it, and the only lawful way
                    down is curation - a row retired with its dated reason stops projecting, and
                    when it was the station's last verified row the flag goes with it.
   survey_counts()  the per-survey tally of true flags (spec: stable across access transitions,
                    never derivable by subtraction).
   route_rows()     the PUBLIC route detail: level token to {bytes, url_path}. Only for an OPEN
-                   station (the caller passes the same served/gated verdict the C1 gate
+                   station (the caller passes the same served/gated verdict the access gate
                    computed; policy before emission), only `review: verified`, and never
-                   level2 - a transfer-function copy in the archive is not a time series and
-                   must not open a route (D19).
+                   level2: a transfer-function copy in the archive is not a time series and
+                   must not open a route.
 
 ts_access.json, the mtcat keys, and deploy/scripts/gen_ts_routes.py all render from these
-functions; the route table's membership IS route_rows()'s answer, which is what makes the R5
+functions; the route table's membership IS route_rows()'s answer, which is what makes the
 suppression one predicate instead of three opinions.
 """
 from __future__ import annotations
 
 # level2 rows are register EVIDENCE (a curator may record one by hand) but never time-series
-# claims: not the flag, not a resource row, not a route, not a chooser token (D19, owner ruled
-# 2026-08-24).
+# claims: not the flag, not a resource row, not a route, not a chooser token.
 NEVER_PROJECTS = ("level2",)
 
 
@@ -61,7 +60,7 @@ def survey_counts(flags_by_survey) -> dict:
 def route_rows(rows, station_open) -> dict:
     """{level token: {bytes, url_path}} for the surfaces that publish ROUTE DETAIL. Empty for a
     non-open station however the register reads: suppression lives in resolution, and this
-    return value is the resolution (R5)."""
+    return value is the resolution."""
     if not station_open:
         return {}
     out = {}

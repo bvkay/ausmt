@@ -5,7 +5,7 @@
 #   sudo systemctl enable --now ausmt-drill.timer
 #   systemctl list-timers ausmt-drill.timer          # confirm the next run
 #   sudo systemctl start ausmt-drill.service         # run one drill NOW to seed the verdict file
-# Then check the ops floor: the "drill" field should show a recent pass. See deploy/README.md
+# Check the ops floor next: the "drill" field should show a recent pass. See deploy/README.md
 # "Backups & restore".
 
 [Unit]

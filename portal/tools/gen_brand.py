@@ -19,7 +19,7 @@ rendering of that file. --check regenerates everything and fails on any differen
 tools/gen_config.py runs over config.js, so a hand-edited asset cannot survive a pull request.
 
 SVG VERSUS PNG. The SVGs are real vector circles and text elements: they scale, they print, and their
-wordmark renders in the READER's own system UI stack, which is what the owner ruled for anything a
+wordmark renders in the READER's own system UI stack, which is the rule for anything a
 browser draws. The PNGs are for slide decks and documents, where a viewer's fonts are not available and
 the bytes must be identical everywhere; they are rendered from the SAME lattice with a bundled face,
 never by rasterising the SVGs (a converted SVG would bake in whatever fonts the converter happened to
@@ -60,11 +60,10 @@ from _au_outline import COAST, EXTENT  # noqa: E402  (sibling engine module, std
 # more. At 21 x 18 the silhouette keeps Cape York, the Gulf of Carpentaria notch, the Top End and the
 # Bight coast at 16 px, and Tasmania survives as three dots.
 #
-# The pitch was tuned against the HAND-SIMPLIFIED outline this file used to rasterise. On the derived
-# Natural Earth coastline it still holds - the mark gained a dot in the Kimberley, a deeper Gulf
-# notch and a third Tasmanian dot - but the lattice is now the coarser of the two inputs: the
+# The pitch holds on the derived Natural Earth coastline: the mark carries a dot in the Kimberley, a
+# deeper Gulf notch and a third Tasmanian dot. The lattice is the coarser of the two inputs: the
 # coastline resolves the Bight concavity and the taper of Cape York, and a 2 degree cell throws both
-# away. Changing the pitch is a BRAND decision for the owner, not a consequence of this lane.
+# away. Changing the pitch is a BRAND decision, not a consequence of this generator.
 GRID_COLS = 21
 GRID_ROWS = 18
 
@@ -102,7 +101,7 @@ WORDMARK_INK = {"on_dark": "#FFFFFF", "on_light": "#11182D"}
 TAGLINE_INK = {"on_dark": "#C9D4E8", "on_light": "#646979"}
 
 # The colour of a dot is a pure function of its POSITION: t runs 0 at the western-most column to 1 at
-# the eastern-most, and the ramp is evaluated at t. Left cool, right warm, per the owner's guidance.
+# the eastern-most, and the ramp is evaluated at t. Left cool, right warm.
 T_PRECISION = 6
 
 # SIZE-ADAPTIVE DOT RADIUS, as a ratio of the lattice pitch. The presentation ratio 0.44 is measured
@@ -131,7 +130,7 @@ MARK_PAD = 0.02
 # solid silhouette wherever it is drawn larger, which is what a favicon should do.
 SVG_NOMINAL_PX = {"mark": 32, "favicon": 16}
 
-# TYPOGRAPHY (owner ruling). The web and SVG wordmark render in the SITE's system UI stack, character
+# TYPOGRAPHY. The web and SVG wordmark render in the SITE's system UI stack, character
 # for character the same stack and weight as the portal header wordmark, so the logo and the header
 # agree in the viewer's own fonts. The bundled Inter Bold is a DETERMINISTIC RASTER SUBSTITUTE for the
 # PNG pipeline only: it is not the AusMT typeface, is never described as one, is never served, and is
@@ -376,8 +375,8 @@ def _svg_text(x, y, size, ink, spacing, body, advance=None):
     case the correction is imperceptible (the site stack is 141.7 units short over 39 gaps).
 
     The WORDMARK is deliberately left free. Its widest measured overrun is 113 units against 200
-    units of clear space, so it cannot clip, and forcing its advance would override the tracking the
-    owner chose by eye with whatever a viewer's font happens to need."""
+    units of clear space, so it cannot clip, and forcing its advance would override the tracking
+    chosen by eye with whatever a viewer's font happens to need."""
     sp = f' letter-spacing="{spacing}em"' if spacing is not None else ""
     adv = f' textLength="{_n(advance)}" lengthAdjust="spacing"' if advance is not None else ""
     return (f'  <text x="{_n(x)}" y="{_n(y)}" font-family="{WEB_FONT_STACK}" '
@@ -568,7 +567,7 @@ _OUTPUT_INDEX = (
 )
 
 # The app-icon sizes. 180 is the apple-touch-icon a home-screen shortcut uses; 192 and 512 are the
-# conventional pair a web manifest would name. No manifest ships this lane (architect default): an
+# conventional pair a web manifest would name. No manifest ships here (architect default): an
 # installable PWA is its own decision, and these two exist so that decision costs no regeneration.
 APP_ICON_SIZES = (180, 192, 512)
 

@@ -1,12 +1,12 @@
 """The MTCAT machine contract, as stated on the two surfaces that state it.
 
-MTCAT v1.2 typed every field AusMT already served and enum-pinned the ratified vocabularies, which turned
+MTCAT v1.2 typed every field AusMT already served and enum-pinned the vocabularies, which turned
 those vocabularies into BUILD GATES. Prose is exactly the wrong place for a vocabulary to live twice, so
 nothing here checks that the copy reads well; every assertion checks that a statement on a page is still
 TRUE of the artifact it describes:
 
   * the schema a page links must be the one the build actually copies beside the data (a documented path
-    nobody serves is the failure mode this whole lane exists to avoid);
+    nobody serves is the failure mode this whole workflow exists to avoid);
   * the version and the metadata licence About states must equal the values their single sources produce
     (the MTCAT_VERSION constant in contract/generate.py, which the schema's displayed title must match,
     and the emitter's metadata_license default), not values typed by hand;
@@ -15,7 +15,7 @@ TRUE of the artifact it describes:
     documented; an extra token would document one the build hard-fails on. Both are silent until someone
     writes an importer against the page, which is the whole point of publishing it.
 
-DOCS WAVE, STAGE 2. The four-bullet field guide used to live on about.html. About is now the two-minute
+The four-bullet field guide does not live on about.html. About is the two-minute
 front door, so the guide moved to docs/docs/reference/mtcat-schema.md under "Reading a served survey
 record", and the vocabulary pins moved with it. What About keeps is the machine-contract PARAGRAPH
 (<p id="machine-contract">), which names the schema, the version and the metadata licence and links the
@@ -26,7 +26,7 @@ RED-proven, per assertion, by mutating the pages: dropping `Sponsor` from the ro
 plausible-looking `level4` to the NCI levels, adding a phantom `legacy` access level, and pointing the
 About link at a versioned schema filename all fail here.
 
-RESOLVED (fix round): the schema's own description of `surveys[].access` used to claim AusMT emits
+RESOLVED: the schema's own description of `surveys[].access` once claimed AusMT emits
 "open, metadata_only, embargoed or legacy", and the same phantom fourth value survived in two older
 engine/portal comments. No such level has ever existed: ACCESS_LEVELS in the emitter (and in
 gateway/editor_form.py, and in the surveys validator) is the three-value tuple this module reads. All
@@ -72,8 +72,7 @@ def _guide() -> str:
     """The field guide section of the docs MTCAT schema reference, from its heading to the next rule."""
     raw = GUIDE.read_text(encoding="utf-8")
     assert GUIDE_HEADING in raw, (
-        f"{GUIDE} must carry the field guide under {GUIDE_HEADING!r}; it moved there from about.html in "
-        f"the documentation wave")
+        f"{GUIDE} must carry the field guide under {GUIDE_HEADING!r}")
     body = raw.split(GUIDE_HEADING, 1)[1]
     return body.split("\n---", 1)[0]
 
@@ -152,7 +151,7 @@ def _emitter_default(key: str) -> str:
 
     schema_version is deliberately NOT one of these any more, and asking for it here now fails: it is
     read from the schema (see _schema_version) because a literal default is exactly the defect this
-    lane kept re-finding. schema_url and metadata_license stay literals because neither is derived from
+    workflow kept re-finding. schema_url and metadata_license stay literals because neither is derived from
     anything, so a literal is where they honestly live."""
     m = re.search(rf'p\.get\(\s*"{re.escape(key)}"\s*,\s*"([^"]+)"\s*\)',
                   BUILDER.read_text(encoding="utf-8"))
@@ -173,9 +172,9 @@ def _schema_version() -> str:
 
 
 def _constant_schema_version() -> str:
-    """The MTCAT version as its SINGLE SOURCE declares it since the ratified 2.0 inversion: the
+    """The MTCAT version as its SINGLE SOURCE declares it since the 2.0 inversion: the
     MTCAT_VERSION constant in contract/generate.py, read raw from the source text (this suite is
-    deliberately import-light). portal.config.yaml no longer declares a schema_version key at all -
+    deliberately import-light). portal.config.yaml does not declare a schema_version key at all -
     config.js is GENERATED from this constant, and the engine parity suite pins that the key never
     returns."""
     src = (REPO / "contract" / "generate.py").read_text(encoding="utf-8")
@@ -187,7 +186,7 @@ def _constant_schema_version() -> str:
 # ---------------------------------------------------------------- About's surviving paragraph
 
 def test_about_keeps_the_machine_contract_paragraph_with_its_schema_link():
-    """The owner's stage-2 ruling: About keeps the quickstart plus the machine-contract line with its
+    """The stage-2 rule: About keeps the quickstart plus the machine-contract line with its
     schema link. FAILS if the paragraph is dropped, if it stops linking the served schema, or if it stops
     linking the catalogue document the schema describes."""
     para = _about_contract()
@@ -201,8 +200,8 @@ def test_about_keeps_the_machine_contract_paragraph_with_its_schema_link():
 
 
 def test_about_points_at_the_field_guide_it_no_longer_carries():
-    """The field guide moved to the docs site in the documentation wave. About must SEND readers there,
-    or the four vocabularies it used to explain become undiscoverable from the portal. FAILS if the
+    """The field guide lives on the docs site. About must SEND readers there,
+    or the four vocabularies become undiscoverable from the portal. FAILS if the
     pointer is missing."""
     para = _about_contract()
     assert "https://ausmt.readthedocs.io/en/latest/reference/mtcat-schema/" in para, (
@@ -211,7 +210,7 @@ def test_about_points_at_the_field_guide_it_no_longer_carries():
 
 
 def test_the_documented_schema_path_is_the_one_the_build_serves():
-    """The failure mode this lane exists to prevent: a documented path nobody serves. About links
+    """The failure mode this module exists to prevent: a documented path nobody serves. About links
     data/mtcat.schema.json, so (a) that file must exist in the repo and (b) the build must copy it to the
     served data directory under exactly that name."""
     assert SCHEMA.is_file(), f"{SCHEMA} does not exist, so the documented link resolves to nothing"

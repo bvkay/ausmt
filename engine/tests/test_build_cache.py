@@ -1,16 +1,16 @@
-"""C18 — the content-addressed incremental build cache (engine/extract/cache.py + its two seams).
+"""The content-addressed incremental build cache (engine/extract/cache.py + its two seams).
 
 Every test here is written to be ABLE TO FAIL (Invariant 10): each states its failure criterion and
 tests an INDEPENDENT observable, never cache-metadata self-consistency. The load-bearing ones:
 
   * ★ stale-cache refusal: mutate an impedance value in a source EDI -> the rebuild MUST serve the
     NEW value (fails if a byte-changed EDI is ever served from a stale entry).
-  * cache-entry integrity is the CACHE's own job (Amendment A1b): every entry embeds a sha256 of its
-    payload, verified on read — a bit-flipped entry is counted (`corrupt`), deleted and recomputed,
+  * cache-entry integrity is the CACHE's own job: every entry embeds a sha256 of its
+    payload, verified on read - a bit-flipped entry is counted (`corrupt`), deleted and recomputed,
     so the poison can never ship. verify.py guards POST-BUILD tampering of served files only: the
     manifest sha is computed FROM the served bytes, so a poison that flowed through the build would
-    verify self-consistently — the outer gate cannot see it (the review proved this; §4.2 as amended).
-  * raw-mode exclusion (Amendment A1a): --raw builds never touch the cache (seed-meta feeds served
+    verify self-consistently - the outer gate cannot see it.
+  * raw-mode exclusion: --raw builds never touch the cache (seed-meta feeds served
     citations but is not a key component).
   * salt invalidations (engine commit / library version / survey.yaml edit) each force misses.
   * degenerate-salt refusal: unknown engine commit / dirty checkout -> zero reads AND zero writes.
@@ -56,14 +56,14 @@ EXPECTED_WRITES = 3 * N_STATIONS
 
 @pytest.fixture
 def clean_salt(monkeypatch):
-    """Force the cache's dirty-checkout gate to see a CLEAN tree so the cache fires (the dev worktree
-    is dirty during development; CI is clean). Patches the gate INPUT, not the gate — is_salt_degenerate
+    """Force the cache's dirty-checkout gate to see a CLEAN tree so the cache fires (a dev worktree
+    is dirty while it is edited; CI is clean). Patches the gate INPUT, not the gate: is_salt_degenerate
     still runs its real logic over engine_commit + this (clean) result.
 
-    A4 (the C18c flake): ALSO pin the engine commit and clear the cache-relevant env vars. The commit
-    used to be re-resolved via a live `git rev-parse` inside every in-process build, so concurrent git
-    activity on the machine (2026-07-07: the force-push/merge-queue day) between a test's two builds
-    flipped the salt and full-missed the 'warm' build — a nondeterministic counter failure that passed
+    ALSO pin the engine commit and clear the cache-relevant env vars. The commit must NOT be
+    re-resolved via a live `git rev-parse` inside every in-process build: concurrent git activity
+    on the machine between a test's two builds would then flip the salt and full-miss the 'warm'
+    build, a nondeterministic counter failure that passes
     on rerun. Pinned here so no cache test's counters can ever depend on ambient git or shell state;
     the salt tests below patch this NAME themselves when they need a moving commit."""
     monkeypatch.setattr(cache_mod, "_dirty_checkout", lambda cwd: False)
@@ -106,10 +106,9 @@ def _digest(p: Path) -> str:
 
 
 def _forensics(cache_dir: Path, *outs: Path) -> str:
-    """Failure-time context for counter asserts (A4): every build's FULL counters block (salt_fp,
-    degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. The
-    2026-07-07 C18c failures were undiagnosable afterwards because none of this was captured; with
-    it, one glance discriminates the classes — degenerate/salt_fp drift -> salt instability;
+    """Failure-time context for counter asserts: every build's FULL counters block (salt_fp,
+    degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. Failures of this class were undiagnosable afterwards because none of this was captured; with
+    it, one glance discriminates the classes - degenerate/salt_fp drift -> salt instability;
     write_errors/read_errors -> environmental I/O; plain counter drift -> content. Evaluated only
     when an assert actually fails (Python's assert-message lazy evaluation)."""
     lines = ["--- forensics ---"]
@@ -149,15 +148,15 @@ def _xml_authors(xml_path: Path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Amendment A1a: --raw builds are EXCLUDED from caching entirely
+#--raw builds are EXCLUDED from caching entirely
 # --------------------------------------------------------------------------------------------------
 
 def test_raw_mode_build_never_touches_the_cache(tmp_path, clean_salt):
     """FAILS IF: a --raw --incremental build reads OR writes the cache, or a warm raw rebuild serves
     the PREVIOUS seed-meta's citation in the served XML. In raw mode survey metadata comes from
     --seed-meta JSON, which NO key component covers (survey_meta_digest is empty when there is no
-    survey.yaml) — so a seed edit would spuriously HIT and serve stale DOI/authors/title. Adjudicated
-    fix (Amendment A1a): raw mode is excluded from caching entirely — the cache is inert exactly like
+    survey.yaml) - so a seed edit would spuriously HIT and serve stale DOI/authors/title. Adjudicated
+    fix: raw mode is excluded from caching entirely - the cache is inert exactly like
     a degenerate salt (hits == misses == writes == 0), and the build derives everything fresh.
 
     Proven failing on pre-fix HEAD: the warm raw rebuild reported hits=6 misses=0 and the served XML
@@ -184,7 +183,7 @@ def test_raw_mode_build_never_touches_the_cache(tmp_path, clean_salt):
     assert _raw_build(out1) == 0
     c1 = _cache_counters(out1)
     assert c1["hits"] == 0 and c1["misses"] == 0 and c1["writes"] == 0, \
-        f"a --raw build touched the cache (must be inert, Amendment A1a): {c1}"
+        f"a --raw build touched the cache; it must be inert: {c1}"
     assert not any(p.is_file() for p in cache.rglob("*")), "--raw build persisted cache entries"
 
     # Edit the seed's citation source (the exact stale-citation vector the review proved), rebuild.
@@ -204,7 +203,7 @@ def test_raw_mode_build_never_touches_the_cache(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# ★ 1. Stale-cache refusal — THE contract test (design §4.1)
+# ★ 1. Stale-cache refusal - THE contract test
 # --------------------------------------------------------------------------------------------------
 
 def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
@@ -252,10 +251,10 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     assert _build(surveys, out2, cache) == 0
     counters = _cache_counters(out2)
 
-    # Exact counter arithmetic (deterministic, §4.6): the edited station misses parse + xml (2) and
+    # Exact counter arithmetic (deterministic): the edited station misses parse + xml (2) and
     # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each). On failure, dump
-    # both builds' full counters + the cache listing (A4 — the 2026-07-07 C18c failures left nothing
-    # to diagnose from; salt_fp/degenerate/write_errors in the dump now name the class directly).
+    # both builds' full counters + the cache listing (a bare counter mismatch leaves nothing to
+    # diagnose from; salt_fp/degenerate/write_errors in the dump name the class directly).
     assert counters["misses"] == 2, \
         f"the byte-changed EDI did not miss exactly (parse+xml): {counters}\n{_forensics(cache, out1, out2)}"
     assert counters["hits"] == 3 * (N_STATIONS - 1), \
@@ -316,7 +315,7 @@ def test_xml_cache_key_binds_disambiguated_station_id(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 2. verify.py catches POST-BUILD tampering of served files (the outer gate — §4.2 as amended by A1b)
+# 2. verify.py catches POST-BUILD tampering of served files (the outer gate)
 # --------------------------------------------------------------------------------------------------
 
 def test_verify_catches_post_build_tamper_of_served_files(tmp_path, clean_salt):
@@ -324,10 +323,10 @@ def test_verify_catches_post_build_tamper_of_served_files(tmp_path, clean_salt):
     AFTER the build wrote its manifest. This is the OUTER integrity gate: verify.py re-hashes served
     bytes against the manifest, so it catches post-build tampering of the delivered tree.
 
-    What it does NOT prove (Amendment A1b — the review's design-level correction): verify.py CANNOT
+    What it does NOT prove (the review's design-level correction): verify.py CANNOT
     catch a poisoned CACHE entry, because the manifest sha is computed FROM the served bytes, so a
     poison that flows through the build verifies self-consistently. Cache-entry integrity is the
-    CACHE's own checksum-on-read job — see the corrupt-entry tests below."""
+    CACHE's own checksum-on-read job - see the corrupt-entry tests below."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     assert _build(surveys, tmp_path / "out1", cache) == 0
@@ -354,7 +353,7 @@ def _verify_data_dir(data_dir: Path) -> int:
 
 
 def _verify_data_dir_surveys(data_dir: Path, surveys_root):
-    """C18b: invoke scripts/verify.py --data-dir with (or without) --surveys, returning
+    """Invoke scripts/verify.py --data-dir with (or without) --surveys, returning
     (returncode, combined_output) so a test can assert BOTH the exit code and the gate message.
     surveys_root=None omits --surveys (the loud-skip path)."""
     argv = [sys.executable, str(REPO / "scripts" / "verify.py"), "--data-dir", str(data_dir)]
@@ -366,7 +365,7 @@ def _verify_data_dir_surveys(data_dir: Path, surveys_root):
 
 
 # --------------------------------------------------------------------------------------------------
-# C18b (A3): the cache-INDEPENDENT digest-consistency gate — the 2026-07-07 incident replay
+# The cache-INDEPENDENT digest-consistency gate - the incident replay
 # --------------------------------------------------------------------------------------------------
 
 def _sidecar(out: Path) -> dict:
@@ -392,7 +391,7 @@ def test_c18b_gate_green_on_fresh_warm_build(tmp_path, clean_salt):
 
 def test_c18b_gate_skips_loudly_without_surveys_arg(tmp_path, clean_salt):
     """FAILS IF: verify.py --data-dir WITHOUT --surveys either runs the gate or drops the loud skip
-    note. The absent-arg path must preserve every pre-C18b behaviour (VERIFY still PASSes on a clean
+    note. The absent-arg path must preserve the behaviour it had before the gate existed (VERIFY still PASSes on a clean
     build) AND announce that the cache-staleness gate did NOT run."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     out = tmp_path / "out"
@@ -407,7 +406,7 @@ def test_c18b_gate_skips_loudly_without_surveys_arg(tmp_path, clean_salt):
 
 def test_c18b_incident_replay_doctored_sidecar_stamp_goes_red(tmp_path, clean_salt):
     """★ THE INCIDENT REPLAY (sidecar-doctoring form). FAILS IF: a served product stamped with a STALE
-    (pre-edit) survey.yaml digest — the 2026-07-07 build 20260707T002709Z shape — is NOT caught by the
+    (pre-edit) survey.yaml digest - the build 20260707T002709Z shape - is NOT caught by the
     armed gate. Build; then doctor ONE station's xml_digest_stamped to a fabricated OLD digest
     (simulating a served product that flowed from a stale cache entry) and confirm the gate goes RED
     with the exact incident message (slug, station count, both digests, the tar-before-clear forensics
@@ -500,7 +499,7 @@ def test_c18b_incident_replay_stale_cache_meta_forces_stale_stamp(tmp_path, clea
 def test_c18b_unstamped_cache_meta_reads_as_suspect_not_current(tmp_path, clean_salt):
     """★ FAILS IF: a valid v3 cache meta entry MISSING the survey_digest field is blessed with the
     CURRENT digest on a warm hit (gate stays green over an unstamped product). An entry without a
-    stamp must surface as SUSPECT at the gate — the incident this lane answers was itself a
+    stamp must surface as SUSPECT at the gate - the incident this module answers was itself a
     'theoretically unreachable' state, so the defensive fallback must fail closed, not open.
     Construction mirrors the stale-meta replay, but DELETES the field (re-signing the payload so the
     entry stays valid and HITS)."""
@@ -529,24 +528,24 @@ def test_c18b_unstamped_cache_meta_reads_as_suspect_not_current(tmp_path, clean_
 
     rc, txt = _verify_data_dir_surveys(warm, surveys)
     assert rc != 0, \
-        f"an UNSTAMPED cache entry was blessed with the current digest — fail-open fallback:\n{txt}"
+        f"an UNSTAMPED cache entry was blessed with the current digest - fail-open fallback:\n{txt}"
     assert f"consistency: FAIL {slug}" in txt, txt
 
 
 def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypatch):
-    """★ THE INCIDENT ROOT CAUSE (M1, Amendment A4). FAILS IF: a survey.yaml edit landing AFTER
+    """★ THE ROOT CAUSE (single-read coherence). FAILS IF: a survey.yaml edit landing AFTER
     discovery but BEFORE that survey's per-survey processing lets the straddled build write cache
     entries whose XML embeds the PRE-edit metadata KEYED under the POST-edit digest — so a
     subsequent clean warm build serves the pre-edit citation from cache. Independent observable:
     the citation INSIDE the served XML bytes vs the organisation in the on-disk survey.yaml —
     never counters, never stamp self-consistency (which is exactly what this poisoning defeats:
-    the poisoned entry's stamp EQUALS the live digest, so the C18b gate stayed green over it).
+    the poisoned entry's stamp EQUALS the live digest, so the consistency gate stays green over it).
 
     Proven failing on pre-fix HEAD: survey.yaml was read TWICE per build — metadata at
     discover_work, the cache-key digest at the per-survey loop top, a window spanning every
-    preceding survey's work (minutes on the production corpus, where the 2026-07-07 build
-    20260707T002709Z warm-served a stale Olympic Dam citation at hits=3017/misses=0). The fix
-    derives meta AND digest from ONE read in discovery — coherent by construction. The seam here
+    preceding survey's work (minutes on the production corpus, where build 20260707T002709Z
+    warm-served a stale Olympic Dam citation at hits=3017/misses=0). The fix derives meta AND digest
+    from ONE read in discovery, coherent by construction. The seam here
     (edit fired right after discover_work returns) is fix-agnostic, so this test still fails if a
     loop-time re-read is ever reintroduced."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)          # organisation: Test Org
@@ -571,7 +570,7 @@ def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypat
     # from PRE-edit bytes while the live yaml is post-edit (pre-fix HEAD was blind here — the
     # loop-time digest matched the post-edit yaml, blessing the poisoned products).
     rc, txt = _verify_data_dir_surveys(out1, surveys)
-    assert rc != 0, f"verify.py blessed a STRADDLED build (C18b blindness, incident shape):\n{txt}"
+    assert rc != 0, f"verify.py blessed a STRADDLED build (the cache-staleness blindness):\n{txt}"
 
     # A clean rebuild on the now-stable post-edit tree must serve the POST-edit citation. On
     # pre-fix HEAD every station HIT the poisoned entries and served 'Test Org' from cache.
@@ -588,11 +587,11 @@ def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypat
 def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
     """FAILS IF: a cache populated under a PRE-BUMP entry-format tag is read (hit) by the current
     build instead of MISSING cleanly. Each tag bump re-keys every blob, so a pre-bump entry's key
-    never resolves — a clean miss counted as a miss, never a replay of a stale-shape parse. C20 bumped
-    the tag v3 -> v4 (parse product grew 10 -> 18 columns + placeholder-tipper mask); this simulates a
+    never resolves - a clean miss counted as a miss, never a replay of a stale-shape parse. The tag
+    is bumped whenever the parse product's shape changes; this simulates a
     PRE-BUMP cache by monkeypatching the fixed-salt tag back to the PREVIOUS tag, populates, then builds
     normally (current tag) and asserts zero hits + a full re-derive. (Kept under its historical name; the
-    concrete tags move with each bump — C20 v3->v4, C46-W3a v4->v5 for the XML Copyright truth fix.)"""
+    concrete tags move with each bump - v3->v4, v4->v5 for the XML Copyright truth fix.)"""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
 
@@ -620,7 +619,7 @@ def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# Amendment A1b: self-verifying cache entries (checksum-on-read; corrupt => delete + recompute)
+# Self-verifying cache entries (checksum-on-read; corrupt => delete + recompute)
 # --------------------------------------------------------------------------------------------------
 
 def _flip_payload_byte(blob: Path):
@@ -637,7 +636,7 @@ def test_corrupt_cached_xml_payload_detected_and_recomputed(tmp_path, clean_salt
     """FAILS IF: a bit-flipped cached XML payload is SERVED (the poison ships) instead of being
     detected by the entry's own embedded checksum, counted in the `corrupt` counter, deleted, and
     recomputed from source. Every byte must equal the populating build's served XML: nothing a
-    recompute writes depends on the build clock (Amendment A5). Proven failing pre-fix: the flipped
+    recompute writes depends on the build clock. Proven failing pre-fix: the flipped
     bytes were served verbatim with hits=6 and no corrupt counter existed."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
@@ -700,7 +699,7 @@ def test_corrupt_cached_parse_json_detected_and_recomputed(tmp_path, clean_salt)
 
     for name in ("catalogue.json", "tf.json", "sci.json", "manifest.json"):
         assert _digest(o_warm / name) == _digest(o_pop / name), \
-            f"{name} differs from the populating build — corrupt parse rows shipped"
+            f"{name} differs from the populating build - corrupt parse rows shipped"
 
 
 def test_torn_entry_xml_without_meta_is_a_miss_not_a_phantom_hit(tmp_path, clean_salt):
@@ -735,12 +734,12 @@ def test_torn_entry_xml_without_meta_is_a_miss_not_a_phantom_hit(tmp_path, clean
 
 
 # --------------------------------------------------------------------------------------------------
-# A4: environment-induced I/O failures are survived AND attributable (the Windows AV/indexer class)
+# Environment-induced I/O failures are survived AND attributable (the Windows AV/indexer class)
 # --------------------------------------------------------------------------------------------------
 
 def test_transient_write_lock_is_retried_persistent_failure_is_counted(tmp_path, monkeypatch):
     """FAILS IF: (a) a TRANSIENT PermissionError from the atomic rename (a Windows AV/on-access
-    scanner briefly holding the fresh tmp — the other surviving C18c-flake candidate) permanently
+    scanner briefly holding the fresh tmp - the other surviving flake candidate) permanently
     drops the cache entry, i.e. the retry is gone and the silent spurious-future-miss returns; or
     (b) a PERSISTENT rename failure goes uncounted (write_errors) or raises into the build.
     Independent observable: the entry's readability through a FRESH BuildCache instance (on-disk
@@ -767,7 +766,7 @@ def test_transient_write_lock_is_retried_persistent_failure_is_counted(tmp_path,
         f"a single transient lock was not absorbed by the retry: {bc.counters()}"
     fresh = _bc(root=cache_root)
     assert fresh.get_bytes(k1, "xml") == b"payload-1", \
-        "transient lock dropped the entry (no retry) — the silent spurious-miss class is back"
+        "transient lock dropped the entry (no retry) - the silent spurious-miss class is back"
 
     state["fail"] = 10 ** 9                        # persistent: every attempt fails
     k2 = bc.key(edi_sha="s2", survey_digest="y", kind="xml")
@@ -783,7 +782,7 @@ def test_unreadable_entry_counts_read_error_absent_stays_plain_miss(tmp_path):
     """FAILS IF: a PRESENT-but-unreadable entry (lock/permissions — simulated with a directory at
     the entry path: an OSError that is NOT FileNotFoundError, on Windows and POSIX alike) is not
     distinguished from a cold miss via read_errors — or an ABSENT entry starts counting read_errors,
-    which would smear the deterministic §4.6 miss arithmetic on every clean run."""
+    which would smear the deterministic miss arithmetic on every clean run."""
     bc = _bc(root=tmp_path / "cache")
     k = bc.key(edi_sha="s1", survey_digest="y", kind="xml")
     assert bc.get_bytes(k, "xml") is None          # absent -> plain miss
@@ -798,7 +797,7 @@ def test_unreadable_entry_counts_read_error_absent_stays_plain_miss(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# C18b (A3): per-survey instrumentation — one stderr line per served survey; deltas sum to the total
+# Per-survey instrumentation - one stderr line per served survey; deltas sum to the total
 # --------------------------------------------------------------------------------------------------
 
 def test_per_survey_instrumentation_sums_to_corpus_total(tmp_path, clean_salt, capsys):
@@ -832,7 +831,7 @@ def test_per_survey_instrumentation_sums_to_corpus_total(tmp_path, clean_salt, c
     sum_w = sum(int(r[4]) for r in rows)
 
     m_total = re.search(r"C18 cache \[\w+\]: hits=(\d+) misses=(\d+) writes=(\d+)", both)
-    assert m_total, f"corpus-total C18 cache line missing (tests pin it):\n{both}"
+    assert m_total, f"corpus-total cache line missing (tests pin it):\n{both}"
     tot_h, tot_m, tot_w = (int(m_total.group(i)) for i in (1, 2, 3))
     assert (sum_h, sum_m, sum_w) == (tot_h, tot_m, tot_w), \
         f"per-survey deltas {(sum_h, sum_m, sum_w)} != corpus total {(tot_h, tot_m, tot_w)}"
@@ -847,7 +846,7 @@ def test_per_survey_instrumentation_sums_to_corpus_total(tmp_path, clean_salt, c
 
 
 # --------------------------------------------------------------------------------------------------
-# 3. Salt invalidations (design §4.3)
+# 3. Salt invalidations
 # --------------------------------------------------------------------------------------------------
 
 def test_salt_engine_commit_change_zero_hits(tmp_path, clean_salt, monkeypatch):
@@ -870,7 +869,7 @@ def test_salt_engine_commit_change_zero_hits(tmp_path, clean_salt, monkeypatch):
 
 def test_salt_library_version_change_zero_hits(tmp_path, clean_salt, monkeypatch):
     """FAILS IF: a simulated mt_metadata version bump still hits. A library upgrade invalidates every
-    cached XML + round-trip verdict (design §2.3)."""
+    cached XML + round-trip verdict."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     assert _build(surveys, tmp_path / "out1", cache) == 0
@@ -885,8 +884,8 @@ def test_salt_library_version_change_zero_hits(tmp_path, clean_salt, monkeypatch
 
 def test_salt_survey_yaml_edit_rederives_only_that_survey(tmp_path, clean_salt):
     """FAILS IF: editing one survey's survey.yaml either (a) fails to re-derive that survey, or (b)
-    busts OTHER surveys. The v1 salt is the WHOLE survey.yaml, so any edit re-derives just that survey
-    (design §2.5); a sibling survey with an untouched yaml + unchanged EDIs must still hit."""
+    busts OTHER surveys. The v1 salt is the WHOLE survey.yaml, so any edit re-derives just that
+    survey; a sibling survey with an untouched yaml + unchanged EDIs must still hit."""
     root = tmp_path / "surveys"
     _make_survey(tmp_path, SAMPLE_EDIS, name="Alpha", slug="alpha", subdir="surveys")
     _make_survey(tmp_path, SAMPLE_EDIS, name="Beta", slug="beta", subdir="surveys")
@@ -908,7 +907,7 @@ def test_salt_survey_yaml_edit_rederives_only_that_survey(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 4. Degenerate-salt refusal (design §4.4) — the real gate, no monkeypatch of the gate
+# 4. Degenerate-salt refusal - the real gate, no monkeypatch of the gate
 # --------------------------------------------------------------------------------------------------
 
 def test_degenerate_salt_unknown_commit_no_reads_or_writes(tmp_path, monkeypatch):
@@ -946,12 +945,12 @@ def test_degenerate_salt_dirty_checkout_no_reads_or_writes(tmp_path, monkeypatch
 
 
 # --------------------------------------------------------------------------------------------------
-# A4: salt stability across in-process builds (the C18c flake class) + its injection companions
+# Salt stability across in-process builds (the flake class) + its injection companions
 # --------------------------------------------------------------------------------------------------
 
 def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
     """FAILS IF: two back-to-back builds in ONE interpreter, over unchanged sources, construct caches
-    whose salt fingerprints differ or whose salt is degenerate — the C18c flake class (the engine
+    whose salt fingerprints differ or whose salt is degenerate - the flake class (the engine
     commit was re-resolved via a live per-build `git rev-parse`, so git activity or a transient
     rev-parse failure between a test's two builds flipped the key space and full-missed the warm
     build). Independent observable: salt_fp digests the ACTUAL key-derivation input of each
@@ -971,7 +970,7 @@ def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
 def test_salt_instability_is_observable_via_salt_fp(tmp_path, clean_salt, monkeypatch):
     """Injection companion (Invariant 10: proves the stability observable CAN fail). FAILS IF: an
     engine commit that CHANGES between two in-process builds does not surface as differing salt_fp
-    values plus a full-miss 'warm' build — the exact 2026-07-07 C18c mechanism, deterministic here."""
+    values plus a full-miss 'warm' build - the exact flake mechanism, deterministic here."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     monkeypatch.setattr(build_portal, "_git_commit_at",
@@ -983,12 +982,12 @@ def test_salt_instability_is_observable_via_salt_fp(tmp_path, clean_salt, monkey
     c1, c2 = _cache_counters(tmp_path / "b1"), _cache_counters(tmp_path / "b2")
     assert c1["salt_fp"] != c2["salt_fp"], "a changed engine commit must change the salt fingerprint"
     assert c2["hits"] == 0 and c2["misses"] == EXPECTED_COLD_MISSES, \
-        f"a flipped salt must full-miss the warm build (the C18c flake shape): {c2}"
+        f"a flipped salt must full-miss the warm build: {c2}"
 
 
 def test_git_commit_memoised_per_process_success_only(tmp_path, monkeypatch):
     """FAILS IF: (a) a successful engine-commit resolution is re-resolved by a later call in the same
-    process (the memo is gone — reopening the live per-build rev-parse the C18c flake rode), or (b) a
+    process (the memo is gone - reopening the live per-build rev-parse the flake rode), or (b) a
     FAILED resolution is memoised (a later build in the process would be permanently degenerate).
     Independent observable: real subprocess invocation count under the unpatched resolver."""
     import subprocess as sp
@@ -1008,14 +1007,14 @@ def test_git_commit_memoised_per_process_success_only(tmp_path, monkeypatch):
         assert calls["n"] == 1, "a memoised success was re-resolved (per-build rev-parse is back)"
         assert build_portal._git_commit_at(repo_b) is None          # failure -> None ...
         assert build_portal._git_commit_at(repo_b) is None          # ... and RETRIED (not memoised)
-        assert calls["n"] == 3, "a FAILED resolution was memoised — later builds stay degenerate"
+        assert calls["n"] == 3, "a FAILED resolution was memoised - later builds stay degenerate"
     finally:
         build_portal._GIT_COMMIT_MEMO.pop(repo_a, None)
         build_portal._GIT_COMMIT_MEMO.pop(repo_b, None)
 
 
 # --------------------------------------------------------------------------------------------------
-# 5. Equivalence (CI guard, design §4.5): warm build == the build that populated its cache
+# 5. Equivalence (CI guard): warm build == the build that populated its cache
 # --------------------------------------------------------------------------------------------------
 
 def test_warm_build_byte_identical_to_populating_build(tmp_path, clean_salt):
@@ -1068,12 +1067,12 @@ def test_warm_build_byte_identical_to_populating_build(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 6. Deterministic hit/miss/write counters (design §4.6) — no wall-clock
+# 6. Deterministic hit/miss/write counters - no wall-clock
 # --------------------------------------------------------------------------------------------------
 
 def test_no_change_rebuild_counters_are_deterministic(tmp_path, clean_salt):
     """FAILS IF: a no-change incremental rebuild does not hit EXACTLY the served-blob count with zero
-    misses and zero writes. Asserts the counters, never a timing (design §4.6 forbids wall-clock)."""
+    misses and zero writes. Asserts the counters, never a timing (wall-clock is forbidden)."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     # cold rw build: all miss, all write.
@@ -1083,8 +1082,8 @@ def test_no_change_rebuild_counters_are_deterministic(tmp_path, clean_salt):
     assert c_cold["misses"] == EXPECTED_COLD_MISSES, c_cold
     assert c_cold["writes"] == EXPECTED_WRITES, c_cold
 
-    # warm rw build: all hit, none miss, none write. Forensics on failure (A4): this pair of
-    # counter asserts is the other load-bearing shape the C18c flake class can fire.
+    # warm rw build: all hit, none miss, none write. Forensics on failure: this pair of
+    # counter asserts is the other load-bearing shape the flake class can fire.
     assert _build(surveys, tmp_path / "warm", cache) == 0
     c_warm = _cache_counters(tmp_path / "warm")
     assert c_warm["hits"] == EXPECTED_WARM_HITS, \
@@ -1118,13 +1117,13 @@ def test_refresh_mode_ignores_hits_but_repopulates(tmp_path, clean_salt):
 
 
 # --------------------------------------------------------------------------------------------------
-# 7. Lifecycle survival: prune + atomic swap (design §4.7)
+# 7. Lifecycle survival: prune + atomic swap
 # --------------------------------------------------------------------------------------------------
 
 def test_cache_survives_prune_and_swap_and_still_hits(tmp_path, clean_salt):
     """FAILS IF: the cache does not survive a simulated builds/ prune + `current` atomic swap and still
     hit on the next build. The cache is a sibling of builds/, so a prune of builds/<ts> + a swap of
-    `current` must leave it intact (design §3).
+    `current` must leave it intact.
 
     The swap is modelled with os.replace on a `current` POINTER FILE (the atomic primitive behind the
     Makefile's `mv -T`), not an actual symlink: symlink creation needs elevated privilege on Windows
@@ -1185,7 +1184,7 @@ def test_prune_size_cap_evicts_oldest_first(tmp_path, clean_salt, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------------
-# Unit-level: the key derivation binds every salt field (design §2)
+# Unit-level: the key derivation binds every salt field
 # --------------------------------------------------------------------------------------------------
 
 def _bc(**over):
@@ -1211,7 +1210,7 @@ def test_key_binds_edi_sha_survey_digest_and_kind(tmp_path):
 
 def test_key_binds_engine_commit_libs_and_contract(tmp_path):
     """FAILS IF: changing the engine commit, a library version, or the contract digest does not change
-    the derived key (the coarse salt fields, design §2.2-§2.4)."""
+    the derived key (the coarse salt fields)."""
     args = dict(edi_sha="s", survey_digest="y", kind="xml")
     base = _bc(root=tmp_path).key(**args)
     assert base != _bc(root=tmp_path, engine_commit="commitB").key(**args), "key ignores engine commit"

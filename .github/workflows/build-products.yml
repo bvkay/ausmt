@@ -3,18 +3,18 @@ name: build-products
 # Generates AusMT derived products offline from the engine/ subtree, then publishes them for the
 # portal. The portal never runs this stack itself.
 #
-# mt_metadata/mth5 is the SOLE parsing engine (the dependency-free regex extractor was retired
-# in 2026-06), so it is a core dependency, installed here from
+# mt_metadata/mth5 is the SOLE parsing engine, the dependency-free regex extractor having been
+# retired, so it is a core dependency, installed here from
 # the pinned lock on the tested Python (3.12). Tier-3 decomposition (the MTpy-v2 fork) is OPTIONAL
 # and installed separately; the build does NOT depend on it, so CI stays green without the fork.
 #
-# PATH-SCOPED (ADR-001 monorepo): only runs when the engine/ subtree (or this workflow) changes.
+# PATH-SCOPED: only runs when the engine/ subtree (or this workflow) changes.
 #
 # ...PLUS the handful of PORTAL files the engine's own tests read as SURFACES OF A SINGLE SOURCE. The
 # MTCAT schema version is declared once, in engine/schema/mtcat.schema.json's title, and
 # engine/tests/test_mtcat_version_parity.py asserts every surface that restates it still agrees:
-# portal.config.yaml, the generated config.js, the committed data/mtcat.json placeholder, gen_config's
-# default for a config omitting the key, and version.js's config-missing sentinel. Scoped to engine/**
+# portal.config.yaml, the generated config.js, the committed data/mtcat.json placeholder and
+# gen_config's default for a config omitting the key. Scoped to engine/**
 # alone that pin would only be a NEXT-PR backstop, which is exactly how four separate hardcoded
 # defaults accumulated in the first place: a PR editing portal.config.yaml touches no engine path, so
 # this lane never ran and the drift shipped. Listing the files the pin reads makes it a SAME-PR gate.
@@ -31,12 +31,11 @@ on:
       - "portal/config.js"
       - "portal/data/mtcat.json"
       - "portal/tools/gen_config.py"
-      - "portal/version.js"
       - ".github/workflows/build-products.yml"
-  # M8: also run on pull requests touching the engine subtree, so a fork/branch PR gets the full
-  # engine lane (build + tests + skip accounting) BEFORE merge — previously this workflow triggered
-  # only on push, so a PR that broke the engine showed zero checks here (portal-ci.yml and
-  # deploy-images.yml already run on pull_request; this brings build-products.yml into line).
+  # Also run on pull requests touching the engine subtree, so a fork/branch PR gets the full
+  # engine lane (build + tests + skip accounting) BEFORE merge. On the push trigger alone a PR
+  # that broke the engine shows zero checks here (portal-ci.yml and
+  # deploy-images.yml already run on pull_request; this keeps build-products.yml in line).
   pull_request:
     paths:
       - "engine/**"
@@ -45,11 +44,10 @@ on:
       - "portal/config.js"
       - "portal/data/mtcat.json"
       - "portal/tools/gen_config.py"
-      - "portal/version.js"
       - ".github/workflows/build-products.yml"
 
 concurrency:
-  # Keyed on the ref (M8): now that this runs on pull_request as well as push, a fixed group would
+  # Keyed on the ref: because this runs on pull_request as well as push, a fixed group would
   # make a PR run and a push-to-main run cancel each other. Per-ref grouping cancels only superseded
   # runs of the SAME branch/PR (matching gateway-ci.yml's pattern).
   group: build-products-${{ github.ref }}
@@ -60,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: engine   # the engine lives in engine/ since the ADR-001 monorepo merge
+        working-directory: engine   # the engine lives in engine/ since the monorepo merge
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -100,13 +98,13 @@ jobs:
         run: pip install "mtpy-v2 @ git+https://github.com/bvkay/mtpy-v2.git@${{ vars.DECOMP_COMMIT }}"
 
       # THE PER-PR RUN IS A GATE SUBSET; THE FULL HOST-ENV SUITE RUNS ON PUSH AND DISPATCH.
-      # (ci/engine-suite-speed, 2026-08-18.) Measured per-job Actions timings showed PR CI's ~37 min
+      # Measured per-job Actions timings showed PR CI's ~37 min
       # wall-clock was ONE ~650-test suite run twice, single-threaded: 36.1 min HERE on the host
       # runner and 34.3 min inside the shipped image (deploy-images.yml's engine-full-tests). The
       # in-image run is the trust-invariant one (it tests the artifact that ships), so THAT keeps
       # the full suite on every PR; THIS lane's per-PR run narrows to the subset that gates what
       # this workflow's own steps do and rely on (the product/equivalence/schema set):
-      #   tests/test_build_cache.py           C18 cache seams incl. the section-4.5 warm-vs-refresh
+      #   tests/test_build_cache.py           cache seams incl. the section-4.5 warm-vs-refresh
       #                                       byte-equivalence guard and the stale-cache refusal the
       #                                       "Build-cache smoke" step below leans on
       #   tests/test_ingest_normalize.py      canonical-ingest round-trip gate (named above)
@@ -118,30 +116,30 @@ jobs:
       #   tests/test_mtcat.py                 mtcat.json product emission against the schema
       #   tests/test_mtcat_schema_v20.py      the schema that constrains the served catalogue
       #   tests/test_mtcat20_emission.py      the 2.0 emitter semantics (migrate_12_to_20 at source)
-      #   tests/test_mtcat20_invariants.py    the ratified invariant suite (schema, scans, rollups)
+      #   tests/test_mtcat20_invariants.py    the invariant suite (schema, scans, rollups)
       #   tests/test_mtcat_version_parity.py  the same-PR portal-surface pin: the reason this
-      #                                       workflow watches the five portal paths at all
+      #                                       workflow watches the four portal paths at all
       #   tests/test_survey_metadata_version_parity.py  the survey-metadata version single-source pin
       #   tests/test_survey_metadata_schema_v01.py      the 0.1 schema that constrains survey-metadata.json
-      #   tests/test_survey_metadata_emission.py        the survey-metadata emitter semantics, the T25 stop
-      #                                       and the D20 loud skip
+      #   tests/test_survey_metadata_emission.py        the survey-metadata emitter semantics, the hard stop
+      #                                       and the loud skip on a dropped survey
       #   tests/test_survey_metadata_invariants.py      the survey-metadata invariant suite (built output:
       #                                       identity chain, projection chains, scans, schema routes)
-      #   tests/test_station_write_path.py    D7: station.json at the served root, with or without --products
+      #   tests/test_station_write_path.py    station.json at the served root, with or without --products
       #   tests/test_station_version_parity.py  the station version single-source pin
       #   tests/test_station_schema_v01.py    the 0.1 schema that constrains the promoted station.json
       #   tests/test_presence_rule.py         no mt_metadata default is ever emitted as a source assertion
       #   tests/test_run_facts.py             the six >INFO dialect extractors for acquisition facts
-      #   tests/test_station_runs.py          runs[] emission: the D2 gate, the D9 channel rule
+      #   tests/test_station_runs.py          runs[] emission: the run gate, the channel rule
       #   tests/test_ts_index_register.py     the offline verified-resource register: the opt-in flag,
       #                                       the closed vocabularies, the unmatched-station stop
       #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
       #   tests/test_station_time_series.py   kind=time_series rows from the register: the route, the
-      #                                       vocabularies, the D19 exclusion, the access gate and
+      #                                       vocabularies, the level2 exclusion, the access gate and
       #                                       the ts_access.json boot artifact it renders beside them
       #   tests/test_ts_projection.py         the ONE projection: existence follows the register,
       #                                       route detail follows the gate, level2 opens nothing
-      #   tests/test_access_gate.py           the C1 access gate over BUILT output, INCLUDING the
+      #   tests/test_access_gate.py           the access gate over BUILT output, INCLUDING the
       #                                       root-level leak sweep: no NCI path, filename or size for
       #                                       a withheld, request-only or pending station reaches
       #                                       ts_access.json, mtcat.json or the pointer file
@@ -182,7 +180,17 @@ jobs:
       #   tests/test_epikit_parse_failure_gate.py  the deploy gate over build_report's
       #                                       source_parse_failures, and the rule-8 pin that keeps
       #                                       this list honest for the whole test_epikit_* family
-      # (the 46 enumerated above, plus tests/test_ci_check_skips.py which gates the
+      #   tests/test_comment_hygiene.py       the comment rule over engine/extract, engine/scripts and
+      #                                       this suite, plus the byte cap on the stylesheet
+      #                                       _pages.py inlines into every emitted page. Reads only
+      #                                       paths under engine/, so it runs unchanged in the image
+      #                                       lanes where portal/, docs/ and .github/ are not shipped.
+      #   tests/test_cli_help_identity.py      the operator text of every argparse module here: a
+      #                                       docstring IS the interface a --help prints, so the
+      #                                       behaviour guard that blanks docstrings cannot see a
+      #                                       long flag that lost a hyphen. Reads only engine/ and
+      #                                       contract/, both of which the image ships.
+      # (the 48 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
@@ -200,7 +208,7 @@ jobs:
       # already carries both triggers), so main coverage costs no new trigger surface.
       #
       # -n 4 on both forms: pytest-xdist from requirements-dev.txt (installed above, constrained by
-      # the lock). ubuntu-latest exposes 4 vCPUs and the suite is CPU-bound (dev box, 2026-08-18:
+      # the lock). ubuntu-latest exposes 4 vCPUs and the suite is CPU-bound (dev box:
       # 656 tests, 673s serial vs 185s under -n 4, a 3.6x speedup). Parallel safety was proven on
       # the dev box first: identical per-test outcomes serial and under -n 4, zero xdist-only
       # failures, zero xdist_group serial pins (the one defect found was a nondeterministic
@@ -208,7 +216,7 @@ jobs:
       # format was proven to survive xdist against ci_check_skips.py (green and red legs) at the
       # pinned pytest 8.2.0 + pytest-xdist 3.8.0.
       #
-      # -rs surfaces every skip reason (M5): ~20 files importorskip mt_metadata/mth5, so if the pinned
+      # -rs surfaces every skip reason: ~20 files importorskip mt_metadata/mth5, so if the pinned
       # lock ever silently stopped installing that stack the release gate would go green over a
       # hollowed-out suite. The tripwire fails on any skip not on tests/ci_check_skips.py's
       # allow-list. In THIS lane the mt_metadata/mth5 stack IS installed (the lock above) and there is
@@ -269,14 +277,16 @@ jobs:
             tests/test_parse_failure_accounting.py \
             tests/test_reference_coordinate_sign.py \
             tests/test_stations_dropped_gate.py \
+            tests/test_comment_hygiene.py \
+            tests/test_cli_help_identity.py \
             tests/test_ci_check_skips.py \
             | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out
 
       # Full suite. With mt_metadata present the canonical-ingest / parity / canonical-store /
       # mth5-roundtrip gates RUN (they importorskip only when the stack is absent), so this single
-      # job covers what the old separate extractor-parity job did. C18: this suite also carries
-      # the build-cache tests (tests/test_build_cache.py), INCLUDING the §4.5 warm-vs-refresh
+      # job covers extractor parity as well. This suite also carries
+      # the build-cache tests (tests/test_build_cache.py), INCLUDING the warm-vs-refresh
       # byte-equivalence guard and the ★ stale-cache refusal — so a cache change that altered output
       # bytes fails CI here.
       - name: Tests, full suite (push and dispatch; with skip accounting)
@@ -286,12 +296,12 @@ jobs:
           pytest -q -rs -n 4 tests | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out
 
-      # C18: exercise the incremental cache end-to-end in CI while the checkout is still CLEAN (this
+      # Exercise the incremental cache end-to-end in CI while the checkout is still CLEAN (this
       # step runs BEFORE the product build below, which writes site-data/ into the tree and would make
       # git status non-empty -> a degenerate salt that self-disables the cache). A full --cache-mode
       # refresh build POPULATES a scratch cache; a warm rw build must then HIT it with zero misses.
       # The build succeeds either way; the byte-EQUIVALENCE between refresh and warm is asserted by
-      # the §4.5 equivalence test inside the Tests step above (BOTH its forms run
+      # the equivalence test inside the Tests step above (BOTH its forms run
       # tests/test_build_cache.py: the PR subset carries it by name, the full suite by inclusion).
       # This scratch cache is throwaway and is
       # NOT the published products (those come from the non-incremental build step below).
@@ -309,23 +319,23 @@ jobs:
           PY
 
       # --no-validate: this checkout has no ausmt-surveys sibling (private repo, no token for a
-      # cross-repo checkout here), so the validator can never resolve -- and since C8 that is now a
+      # cross-repo checkout here), so the validator can never resolve -- and that is now a
       # hard error, not a warning. This is fine: `data/` is the trusted in-repo sample, not real
       # submissions. The real gate runs in ausmt-surveys CI (validate.yml + tests.yml) and again at
       # ingest; this build step only proves the pipeline itself still runs end-to-end.
       #
-      # C18: the CI-PUBLISHED products are built NON-incremental (no --incremental flag) — CI products
-      # are never cache-derived (design §5). The build cache only ever accelerates the production
+      # The CI-PUBLISHED products are built NON-incremental (no --incremental flag) - CI products
+      # are never cache-derived. The build cache only ever accelerates the production
       # deploy/Makefile rebuild-data; here we prove the full cold pipeline still runs end-to-end.
       - name: Build products (single canonical pipeline; fails on empty output)
         run: |
           python -m extract.build_portal \
             --surveys data --out site-data --products products --bundle-edi --no-validate
 
-      # CI guard (C3, PII scrub): derived JSON/XML must never carry an email address (station.json
+      # CI guard, PII scrub: derived JSON/XML must never carry an email address (station.json
       # processing.note is the known vector -- proc_note() redacts it, this is the belt-and-braces
       # net for anything else that scrapes free text). Excludes edi/** -- those are the served
-      # ORIGINAL .edi bytes, the custodian's published record, never mutated (D1) and out of scope
+      # ORIGINAL .edi bytes, the custodian's published record, never mutated and out of scope
       # here. Fails loudly and prints offenders rather than silently passing a dirty build.
       #
       # BOTH trees the build step above writes are scanned. The guard grepped --out alone, which left
@@ -358,11 +368,11 @@ jobs:
             engine/site-data/
             engine/mth5_roundtrip.json
 
-      # NOTE (2026-07-06): the gh-pages "Deploy portal data to Pages" step that lived here was
+      # NOTE: the gh-pages "Deploy portal data to Pages" step that lived here was
       # REMOVED. It was vestigial first-CI wiring (predates the EliteDesk deployment), had NEVER
       # succeeded (no gh-pages branch was ever created; the read-only GITHUB_TOKEN 403'd the push,
       # reddening every engine-touching push to main), and publishing even sample data publicly
-      # should be a deliberate owner decision (hostile-review item O-4: public read mirror), not a
+      # should be a deliberate decision (a public read mirror), not a
       # CI side effect. If a Pages data mirror is ever wanted, design it against the REAL corpus
       # (surveys-live) with explicit `permissions: contents: write` scoped to that job — do not
       # resurrect this step as-was.

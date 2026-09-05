@@ -3,15 +3,15 @@
 The portal's multi-file export marks its own file requests with a query flag so the server-log
 aggregator can tell a drag-selected bulk export from a single station download. That flag is a
 CROSS-SUBSYSTEM CONSTANT: portal/src/exports.js writes it and deploy/scripts/aggregate_stats.py reads
-it, and the two lanes of CI never run each other's suites. Change the token on one side and the split
+it, and the two CI workflows never run each other's suites. Change the token on one side and the split
 degenerates silently -- every bulk export starts counting as single, forever, with nothing red.
 
-So the token is pinned HERE, in the portal lane (which gates portal/** and docs/docs/**), and mirrored
-in deploy/tests (which gates deploy/** and gateway/**). Whichever side is edited, its own lane fails.
+The token is pinned HERE, in the portal workflow (which gates portal/** and docs/docs/**), and mirrored
+in deploy/tests (which gates deploy/** and gateway/**). Whichever side is edited, its own suite fails.
 
 The disclosure is pinned in the same module for the same reason: the flag is the ONE thing the portal
 deliberately puts into the access log, the public analytics page is where that is disclosed, and
-docs/docs/** triggers this lane. A change that adds a label without disclosing it, or removes the
+docs/docs/** triggers this workflow. A change that adds a label without disclosing it, or removes the
 disclosure while the label stays, fails here.
 
 Pure stdlib + a regex over committed sources. No Node, no network, no skip.
@@ -46,7 +46,7 @@ def test_the_portal_and_the_aggregator_agree_on_the_flag():
     """CROSS-SUBSYSTEM PIN. The producer and the consumer of the label must name the same token. FAILS
     IF either side is edited alone, which is a silent failure everywhere else: the fold keeps working,
     every export simply reclassifies as a single download and nothing goes red."""
-    assert AGGREGATOR.is_file(), "this pin runs from a full checkout (portal-ci lane), never skipped"
+    assert AGGREGATOR.is_file(), "this pin runs from a full checkout, never skipped"
     js, py = _js_flag(), _py_flag()
     assert js == py, (f"portal/src/exports.js writes {js!r} and deploy/scripts/aggregate_stats.py "
                       f"reads {py!r}; a bulk export would be counted as a single download")
@@ -72,7 +72,7 @@ def test_the_public_analytics_page_discloses_the_label():
     reading out of it, and the public analytics page is where that is disclosed. It must name the flag
     exactly, and it must state what is NOT added: no extra request, nothing about who is asking. FAILS
     IF the label ships undisclosed, or if the disclosure is vague about what the flag is."""
-    assert DISCLOSURE.is_file(), "this pin runs from a full checkout (portal-ci lane), never skipped"
+    assert DISCLOSURE.is_file(), "this pin runs from a full checkout, never skipped"
     text = DISCLOSURE.read_text(encoding="utf-8")
     assert f"`{_js_flag()}`" in text, "the disclosure must name the flag it is disclosing"
     assert "No separate request is made for the label" in text, \

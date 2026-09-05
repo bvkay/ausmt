@@ -1,30 +1,29 @@
 #!/usr/bin/env python3
-"""C18 — content-addressed build cache for per-station products.
+"""Content-addressed build cache for per-station products.
 
 A full portal build re-parses every EDI through mt_metadata and re-runs normalize()'s served-XML
 round-trip for every served station, even when a one-line survey.yaml edit changed nothing about
 those stations. This module is a content-addressed cache of the two expensive per-station products
 so an incremental rebuild skips the parse and the round-trip for unchanged stations.
 
-Design: maintainer/C18-BuildCacheDesign.md (FROZEN, as amended by Amendment A1). The invariants
-this module upholds:
+Design: maintainer/C18-BuildCacheDesign.md. The invariants this module upholds:
 
   * The cache may only ever change build SPEED, never output bytes. `scripts/verify.py` stays full,
     byte-re-hashing and cache-blind; a warm build is byte-identical to the build that populated its
     cache, and so is an INDEPENDENT full build of the same inputs (proven by test; the served XML's
     CreateTime is pinned to the date its source declares, so no served artifact carries a build
-    clock; Amendment A1c is superseded on that point).
+    clock).
   * The key is derived from the SOURCE EDI content sha + a coarse engine-commit salt + library
     versions + the positional/schema contract + the whole survey.yaml digest. A byte-changed EDI,
     an engine commit, a library upgrade, a contract change, or ANY survey.yaml edit all miss.
   * A DEGENERATE salt (unknown engine commit, or a dirty checkout where a git checkout exists)
-    silently DISABLES the cache for that build — no reads, no writes. A degenerate/ambiguous salt
+    silently DISABLES the cache for that build - no reads, no writes. A degenerate/ambiguous salt
     must never key a cache. --raw builds are a POLICY exclusion with the same inert behaviour
-    (Amendment A1a: --seed-meta feeds served citations but is not a key component).
-  * Entries are SELF-VERIFYING (Amendment A1b): each file is `<sha256-hex-of-payload>\n<payload>`,
+    (--seed-meta feeds served citations but is not a key component).
+  * Entries are SELF-VERIFYING: each file is `<sha256-hex-of-payload>\n<payload>`,
     written temp-then-atomic-rename. Every read re-hashes the payload; a mismatch (disk corruption,
     tampering) DELETES the entry, counts in the `corrupt` counter, tallies as a MISS, and the
-    caller recomputes — a poisoned VALUE can never ship. This is the cache's own job: the
+    caller recomputes - a poisoned VALUE can never ship. This is the cache's own job: the
     content-addressed KEY derives from inputs, while verify.py's manifest check (whose shas are
     computed FROM the served bytes) cannot see a poisoned value that flowed through the build; it
     guards post-build tampering of the served tree only.
@@ -43,8 +42,8 @@ import sys
 import time
 from pathlib import Path
 
-# Prune policy defaults — operator-tunable, single-sourced here. Adjudicated v1 policy
-# (Amendment A1d): mtime-age window + size cap, oldest-first. The design's "20 builds" window is
+# Prune policy defaults - operator-tunable, single-sourced here. Adjudicated v1 policy:
+# an mtime-age window + a size cap, oldest-first. The design's "20 builds" window is
 # NOT implemented (the cache keeps no per-build ledger); age is the operator-meaningful bound.
 CACHE_MAX_MB_DEFAULT = 2048          # AUSMT_CACHE_MAX_MB overrides (size cap, oldest-first eviction)
 PRUNE_MAX_AGE_DAYS = 90              # drop entries untouched for this many days
@@ -71,7 +70,7 @@ def _dirty_checkout(cwd: Path) -> bool | None:
 
 
 def is_salt_degenerate(engine_commit, checkout_dir: Path | None) -> tuple[bool, str]:
-    """Integrity gate (design §2.2): is the cache salt degenerate, so incremental must be DISABLED
+    """Integrity gate: is the cache salt degenerate, so incremental must be DISABLED
     for this build (treated as full — no reads, no writes)?
 
     Degenerate iff EITHER:
@@ -96,7 +95,7 @@ def is_salt_degenerate(engine_commit, checkout_dir: Path | None) -> tuple[bool, 
 
 
 def contract_schema_digest(engine_root: Path) -> str:
-    """sha256 over the positional-column contract + the product schema versions (design §2.4). A
+    """sha256 over the positional-column contract + the product schema versions. A
     column append (contract/columns.json) or an mtcat/manifest schema-version bump changes cached
     row shapes / cached XML validity, so it must invalidate the cache. Missing files degrade to an
     empty-string component rather than crashing — a build without a resolvable contract simply has a
@@ -119,12 +118,11 @@ def contract_schema_digest(engine_root: Path) -> str:
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
 
 
-# NOTE (Amendment A4): the per-survey yaml digest (design §2.5) is no longer derived here. It is
-# computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from —
+# NOTE: the per-survey yaml digest is not derived here. It is
+# computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from,
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
-# metadata does not match (the 2026-07-07 poisoned-cache incident). The path-taking helper that
-# lived here was deliberately DELETED, not deprecated: any reappearance of a read-the-yaml-again
-# digest call site is the incident's window reopening.
+# metadata does not match. The path-taking helper that stood here was deliberately DELETED, not
+# deprecated: any reappearance of a read-the-yaml-again digest call site reopens that window.
 
 
 class BuildCache:
@@ -146,18 +144,18 @@ class BuildCache:
         self.lib_versions = dict(lib_versions or {})
         self.contract_digest = contract_digest or ""
         self.max_mb = int(max_mb) if max_mb is not None else _env_max_mb()
-        # Counters (design §4.6): deterministic build-report evidence, NOT wall-clock timing.
+        # Counters: deterministic build-report evidence, NOT wall-clock timing.
         self.hits = 0
         self.misses = 0
         self.writes = 0
-        self.corrupt = 0   # A1b: entries whose embedded payload checksum failed on read (deleted+recomputed)
-        # A4 forensics: environment-induced I/O failures, distinct from content-addressed misses.
+        self.corrupt = 0   # Entries whose embedded payload checksum failed on read (deleted+recomputed)
+        # Forensics: environment-induced I/O failures, distinct from content-addressed misses.
         # write_errors = puts dropped after the rename retries were exhausted (AV/indexer lock class);
-        # read_errors  = present-but-unreadable entries (counted as misses for the §4.6 arithmetic,
+        # read_errors  = present-but-unreadable entries (counted as misses for the arithmetic,
         # but attributable — a lock-induced spurious miss is not a cold miss).
         self.write_errors = 0
         self.read_errors = 0
-        # `disabled_reason` is a POLICY exclusion (e.g. Amendment A1a: --raw builds, whose seed-meta
+        # `disabled_reason` is a POLICY exclusion (e.g. --raw builds, whose seed-meta
         # citations feed served XML but are not a key component) — behaviourally identical to a
         # degenerate salt: the cache is inert, no reads, no writes.
         if disabled_reason:
@@ -166,22 +164,22 @@ class BuildCache:
             self.degenerate, self.degenerate_reason = is_salt_degenerate(engine_commit, checkout_dir)
         # The stable, per-survey salt component is injected via key(); the fixed part is precomputed.
         self._fixed_salt = "\x00".join([
-            # Cache-format version tag. v2 = self-verifying entries (digest-line + payload, A1b);
-            # v3 (C18b, Amendment A3) = the served-XML meta blob carries `survey_digest` (the digest
+            # Cache-format version tag. v2 = self-verifying entries (digest-line + payload);
+            # v3 = the served-XML meta blob carries `survey_digest` (the digest
             # the entry was KEYED under), consumed by the digest-stamp sidecar + the verify.py
-            # consistency gate; v4 (C20) = the parse product changed SHAPE — tf.json rows grew 10 -> 18
+            # consistency gate; v4 = the parse product changed SHAPE - tf.json rows grew 10 -> 18
             # (rho/phase error columns + full complex tipper) and the placeholder-tipper mask now
-            # withholds filler tippers, so a pre-C20 cached parse would replay 10-wide/unmasked rows.
-            # Bumping the tag re-keys EVERY blob, so pre-C20 entries never resolve — a clean MISS,
+            # withholds filler tippers, so a pre-v4 cached parse would replay 10-wide/unmasked rows.
+            # Bumping the tag re-keys EVERY blob, so pre-v4 entries never resolve - a clean MISS,
             # counted as a miss, never a replay of a stale-shape parse. One full re-derive on the first
-            # build after C20 lands; then warm again. (The contract_digest below ALSO shifts on the
-            # column append; the tag bump is the explicit, self-documenting belt-and-suspenders — same
-            # discipline as C18b.) Old-format entries age out via the prune.
-            # v5 (C46-W3a) = the served-XML CONTENT changed corpus-wide: the EMTF-XML Copyright block now
+            # build after this lands; then warm again. (The contract_digest below ALSO shifts on the
+            # column append; the tag bump is the explicit, self-documenting belt-and-suspenders.)
+            # Old-format entries age out via the prune.
+            # v5 = the served-XML CONTENT changed corpus-wide: the EMTF-XML Copyright block now
             # carries the survey's real licence-derived release_status + conditions_of_use instead of
             # mt_metadata's default "Unrestricted Release"/"may be copied freely" boilerplate (a truth
             # fix in ausmt_science.ingest.normalize.condition_tf). That formatter change is not captured
-            # by the source-EDI sha, the survey.yaml digest, or the contract digest, so a warm pre-C46
+            # by the source-EDI sha, the survey.yaml digest, or the contract digest, so a warm pre-v5
             # cache would REPLAY the boilerplate XML for an unchanged EDI on the same engine commit.
             # Bumping the tag forces one clean full re-derive so every served XML is the truthful form.
             # v6 (station promotion) = the parse product changed SHAPE again: the per-EDI parse now
@@ -190,13 +188,13 @@ class BuildCache:
             # with no runs at all. Same clean-MISS discipline as v4/v5: one full re-derive on the
             # first build after this lands, then warm again.
             "ausmt-c47-cache-v6",
-            str(engine_commit),                                      # coarse engine-commit salt (§2.2)
-            json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions (§2.3)
-            self.contract_digest,                                    # columns + schema digest (§2.4)
+            str(engine_commit),                                      # coarse engine-commit salt
+            json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions
+            self.contract_digest,                                    # columns + schema digest
         ])
-        # A4 forensics: a short fingerprint of the FULL fixed salt (version tag + engine commit +
+        # Forensics: a short fingerprint of the FULL fixed salt (version tag + engine commit +
         # lib versions + contract digest). Two builds that should key identically expose identical
-        # fingerprints; a mid-process salt flip (the C18c-flake class: moving HEAD, transient
+        # fingerprints; a mid-process salt flip (the flake class: moving HEAD, transient
         # rev-parse failure, contract-file read failure) is attributable from the build report alone.
         self.salt_fp = hashlib.sha256(self._fixed_salt.encode("utf-8")).hexdigest()[:12]
         if self.enabled:
@@ -211,7 +209,7 @@ class BuildCache:
     def key(self, *, edi_sha: str, survey_digest: str, kind: str) -> str:
         """Derive the content-addressed key for one station product. `kind` namespaces the two
         distinct products (parse rows vs served XML) so they never collide on one key. The key binds
-        EVERY salt field (§2): source EDI sha + engine commit + lib versions + contract + this
+        EVERY salt field: source EDI sha + engine commit + lib versions + contract + this
         survey's whole-yaml digest."""
         material = "\x00".join([self._fixed_salt, str(edi_sha), str(survey_digest or ""), str(kind)])
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
@@ -222,9 +220,9 @@ class BuildCache:
     def get_bytes(self, key: str, ext: str) -> bytes | None:
         """Read a cached blob's PAYLOAD, or None on miss / disabled / refresh-mode / integrity
         failure. Increments hits on a verified read, misses otherwise. `refresh` mode forces a miss
-        (ignore hits and rewrite) — the forced-full-rebuild escape hatch that still repopulates.
+        (ignore hits and rewrite): the forced-full-rebuild escape hatch that still repopulates.
 
-        A1b integrity: the entry is `<sha256-hex>\\n<payload>`; the payload is RE-HASHED on every
+        Integrity: the entry is `<sha256-hex>\\n<payload>`; the payload is RE-HASHED on every
         read. A malformed entry or a digest mismatch (bit rot, tampering) is deleted, counted in
         `corrupt`, tallied as a MISS, and None returned so the caller recomputes — fail-safe."""
         if not self.enabled or self.mode == "refresh":
@@ -237,8 +235,8 @@ class BuildCache:
             self.misses += 1
             return None
         except OSError:
-            # A4: a PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is not a
-            # normal cold miss. Still tallied as a miss (the §4.6 arithmetic and the recompute path
+            # A PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is not a
+            # normal cold miss. Still tallied as a miss (the arithmetic and the recompute path
             # are unchanged) but counted in read_errors so a lock-induced spurious miss is
             # attributable from the build report instead of masquerading as content drift.
             self.read_errors += 1
@@ -273,15 +271,15 @@ class BuildCache:
 
     def revoke_hit(self) -> None:
         """Correct the tally when a PAIRED read turns out unusable after this cache already counted
-        a hit — the torn-pair case at the served-XML seam: the xml blob hit but its meta sibling
+        a hit - the torn-pair case at the served-XML seam: the xml blob hit but its meta sibling
         missed, so the pair produced nothing and the station recomputes. The sibling's own get
-        already tallied its miss; this only revokes the phantom hit (Amendment A1b/c — mirrors
+        already tallied its miss; this only revokes the phantom hit (mirrors
         get_json's internal corrupt-payload discipline)."""
         self.hits -= 1
 
     def put_bytes(self, key: str, ext: str, data: bytes) -> None:
-        """Write a blob to the cache as a SELF-VERIFYING entry (`<sha256-hex-of-payload>\\n<payload>`,
-        A1b), temp-then-atomic-rename (design §2). No-op when disabled or in read-only (`ro`) mode.
+        """Write a blob to the cache as a SELF-VERIFYING entry (`<sha256-hex-of-payload>\\n<payload>`),
+        temp-then-atomic-rename. No-op when disabled or in read-only (`ro`) mode.
         os.replace is atomic within a filesystem on both POSIX and Windows, so a concurrent or
         interrupted build never observes a half-written entry."""
         if not self.enabled or self.mode == "ro":
@@ -292,9 +290,9 @@ class BuildCache:
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.parent / f".{key}.{ext}.{os.getpid()}.{time.time_ns()}.tmp"
             tmp.write_bytes(hashlib.sha256(data).hexdigest().encode("ascii") + b"\n" + data)
-            # A4: retry the rename — on Windows an AV/on-access scanner briefly holding the fresh tmp
+            # Retry the rename - on Windows an AV/on-access scanner briefly holding the fresh tmp
             # (or the destination) raises a transient PermissionError, and a silently dropped entry
-            # is a spurious miss on the next build (one C18c-flake candidate). Three attempts with a
+            # is a spurious miss on the next build (one flake candidate). Three attempts with a
             # short backoff clears a scanner hold; a still-failing write counts in write_errors.
             last_err = None
             for attempt in range(3):
@@ -329,20 +327,20 @@ class BuildCache:
             pass
 
     def counters(self) -> dict:
-        """The deterministic hit/miss/write/corrupt tally for the build log + report (design §4.6).
-        salt_fp (A4) fingerprints the fixed salt so cross-build key-space drift is observable."""
+        """The deterministic hit/miss/write/corrupt tally for the build log + report.
+        salt_fp fingerprints the fixed salt so cross-build key-space drift is observable."""
         return {"enabled": self.enabled, "mode": self.mode, "hits": self.hits,
                 "misses": self.misses, "writes": self.writes, "corrupt": self.corrupt,
                 "write_errors": self.write_errors, "read_errors": self.read_errors,
                 "degenerate": self.degenerate, "reason": self.degenerate_reason,
                 "salt_fp": self.salt_fp}
 
-    # ---- lifecycle: prune at the end of a successful build (design §3) --------------------------
+    # ---- lifecycle: prune at the end of a successful build ---------------------------------------
 
     def prune(self) -> dict:
         """Drop entries untouched for PRUNE_MAX_AGE_DAYS, then enforce the size cap oldest-first.
         Runs at the end of a successful build. A prune failure must never fail the build; returns a
-        small summary. Adjudicated v1 policy (Amendment A1d): mtime-age + size cap ONLY — the
+        small summary. Adjudicated v1 policy: mtime-age + size cap ONLY - the
         design's original "20 builds" window is not implemented (the cache keeps no per-build
         ledger); age is the operator-meaningful bound, the size cap the hard ceiling."""
         if not self.enabled or self.mode == "ro" or not self.root.exists():

@@ -1,7 +1,7 @@
-"""A3 (LANE-CONTRACT-FORM-CREDIT) GREP PIN: no retired flat credit key is written, read or named
+"""GREP PIN (LANE-CONTRACT-FORM-CREDIT): no retired flat credit key is written, read or named
 anywhere in the shipped portal.
 
-lead_investigator and principal_investigators were retired by the ratified contributor-credit model:
+lead_investigator and principal_investigators were retired by the contributor-credit model:
 the corpus migration seeded creators[]/contributors[] from them and DELETED them, the engine reads
 neither, and the curator editor models neither. A public form that still emitted them would produce
 keys nobody downstream can read or fix, so the whole surface has to go at once - inputs, readers,
@@ -42,7 +42,7 @@ def test_no_shipped_portal_file_names_a_retired_credit_key(key):
 
 def test_the_form_emitter_carries_the_replacement_questions():
     """NON-VACUOUS guard for the pin above: the keys are absent because the questions were REWRITTEN
-    onto the ratified homes, not because the whole credit surface was deleted."""
+    onto creators[]/contributors[], not because the whole credit surface was deleted."""
     html = (PORTAL / "add-survey.html").read_text(encoding="utf-8")
     for needle in ("Who should the citation name, in order?", "Who led this survey?", "Who did what?",
                    "Does this dataset already have a citation or DOI?",

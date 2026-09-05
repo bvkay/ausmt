@@ -1,11 +1,11 @@
-"""D-L3 (identifiers-by-level, SPEC §9.3): the "Source datasets" (sources) section is RETIRED from the
+"""The "Source datasets" (sources) section is RETIRED from the
 editor UI. Its acquisition fields (title / licence-as-obtained / retrieved / attribution statement /
 attribution profile) are now OPTIONAL keys on a related_identifiers row (identifies: entire); the standalone
 sources widget is GONE.
 
-The schema key stays READABLE — the engine keeps reading sources[] until the ausmt follow-up (§9.3 note) —
+The schema key stays READABLE - the engine keeps reading sources[] until the ausmt follow-up -
 so a survey that still carries a sources[] list must not have it silently dropped the next time a curator
-saves an unrelated change. Because sources is no longer a widget section, build_section_patch never
+saves an unrelated change. Because sources is not a widget section, build_section_patch never
 assembles it, so it is never entered into ANY patch and apply_patch touches nothing: byte-preserved on disk.
 
 This mirrors test_editor_retired_identifiers_roundtrip.py. The two unit assertions are RED before the fix

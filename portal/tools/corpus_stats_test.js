@@ -1,5 +1,5 @@
 "use strict";
-// api-docs lane: behavioural driver for the About header's corpus-totals block. Loads the REAL
+// Behavioural driver for the About header's corpus-totals block. Loads the REAL
 // about.html into jsdom, runs the REAL corpus-stats.js against a stubbed fetch, and asserts the three
 // outcomes the block must have. Mirrors tools/bundle_tiles_test.js (same jsdom + vm idiom).
 //

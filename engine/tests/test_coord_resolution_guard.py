@@ -37,7 +37,7 @@ def test_usable_info_candidate_swaps_and_stamps():
 def test_qc_file_identity_is_single_sourced():
     """The fid rule that binds the qc de-leak to the coordinate mask exists ONCE, in _coordaccess
     (the module whose doctrine is that validation and application share one derivation). qc_pass
-    used to re-derive it with a divergent fallback (str(p) vs None), so a record with no `file`
+    once re-derived it with a divergent fallback (str(p) vs None), so a record with no `file`
     key and a non-Path p had its 3-dp true-position derivative survive the mask."""
     import inspect
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "extract"))

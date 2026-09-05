@@ -1,14 +1,14 @@
-"""M6 (code-health review §6): pin the build_portal argv surface the surveys-repo consumer relies on.
+"""Pin the build_portal argv surface the surveys-repo consumer relies on.
 
 ausmt-surveys/_validation/contribute.py builds the engine preview by spawning
 `python -m extract.build_portal` with a HAND-BUILT argv. Nothing on the engine side notices when a
 build_portal flag that consumer depends on is renamed/removed — engine changes cannot trigger the
-surveys tests (the cross-repo triggering gap M6 names). This test pins the PROVIDER side: every flag
+surveys tests (the cross-repo triggering gap). This test pins the PROVIDER side: every flag
 contribute.py passes must still exist in build_portal's CLI.
 
 CI has no ausmt-surveys sibling (private repo, no token — see build-products.yml), so the flag list is
 VENDORED here (committed, from a read of contribute.py) rather than read at runtime — the same
-unconditional-contract discipline C35b/D3 used for the validator. When the sibling IS present (dev
+unconditional-contract discipline used for the validator. When the sibling IS present (dev
 box), an extra assertion re-derives the flags from contribute.py's live source and checks the vendored
 list still matches, so the two cannot silently diverge without this test noticing on the next dev run.
 """
@@ -19,8 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# The flags contribute.py passes to `python -m extract.build_portal` (contribute.py:148-151, read
-# 2026-07-07). VENDORED because CI has no surveys sibling; kept honest by
+# The flags contribute.py passes to `python -m extract.build_portal` (contribute.py:148-151).
+# VENDORED because CI has no surveys sibling; kept honest by
 # test_vendored_flags_match_live_contribute below whenever the sibling is present.
 CONTRIBUTE_BUILD_PORTAL_FLAGS = ("--surveys", "--out", "--extractor", "--no-validate")
 
@@ -32,7 +32,7 @@ _SIBLING_CONTRIBUTE = _ENGINE_DIR.parents[1] / "ausmt-surveys" / "_validation" /
 def _build_portal_help() -> str:
     """The real build_portal CLI surface via `-m extract.build_portal --help` (exit 0, all flags
     printed). Exercises the ACTUAL parser contribute.py invokes — no build_portal refactor needed, and
-    no clash with any lane editing build_portal's argparse (this reads whatever surface exists)."""
+    no clash with any concurrent change to build_portal's argparse (this reads whatever surface exists)."""
     proc = subprocess.run(
         [sys.executable, "-m", "extract.build_portal", "--help"],
         cwd=str(_ENGINE_DIR), capture_output=True, text=True)
@@ -42,14 +42,14 @@ def _build_portal_help() -> str:
 
 def test_build_portal_still_offers_every_flag_contribute_uses():
     # FAILS IF build_portal renames/removes any flag the surveys consumer passes — the cross-repo
-    # break M6 pins. Proven non-vacuous: renaming build_portal's `--extractor` (or dropping it from the
+    # break this test pins. Proven non-vacuous: renaming build_portal's `--extractor` (or dropping it from the
     # vendored list's target) makes the flag absent from --help and reds this test.
     help_text = _build_portal_help()
     present = set(re.findall(r"--[A-Za-z][A-Za-z0-9-]*", help_text))
     missing = [f for f in CONTRIBUTE_BUILD_PORTAL_FLAGS if f not in present]
     assert not missing, (
         f"build_portal no longer offers flags the surveys contribute.py depends on: {missing}. "
-        "Either restore the flag or coordinate a contribute.py change in ausmt-surveys (M6).")
+        "Either restore the flag or coordinate a contribute.py change in ausmt-surveys.")
 
 
 def test_vendored_flags_match_live_contribute():
@@ -64,8 +64,8 @@ def test_vendored_flags_match_live_contribute():
     # Isolate the `[sys.executable, "-m", "extract.build_portal", ...]` list literal and read the
     # "--flag" string tokens inside it (values like str(...) are ignored — we only pin flag NAMES).
     m = re.search(r'"-m",\s*"extract\.build_portal"(.*?)\]', src, re.DOTALL)
-    assert m, "could not locate contribute.py's extract.build_portal argv list — its shape changed"
+    assert m, "could not locate contribute.py's extract.build_portal argv list - its shape changed"
     live_flags = tuple(dict.fromkeys(re.findall(r'"(--[A-Za-z][A-Za-z0-9-]*)"', m.group(1))))
     assert live_flags == CONTRIBUTE_BUILD_PORTAL_FLAGS, (
         f"contribute.py's build_portal flags {live_flags} drifted from the vendored pin "
-        f"{CONTRIBUTE_BUILD_PORTAL_FLAGS} — update CONTRIBUTE_BUILD_PORTAL_FLAGS (M6).")
+        f"{CONTRIBUTE_BUILD_PORTAL_FLAGS} - update CONTRIBUTE_BUILD_PORTAL_FLAGS.")

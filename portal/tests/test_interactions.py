@@ -40,11 +40,11 @@ def test_portal_interactions(tmp_path):
     # 2 countries (Australia: OrgX+OrgY+OrgW, New Zealand: OrgZ); OrgX owns 2 stations so the org toggle
     # drops >1. edi_available mix (Alpha+Gamma=1, Beta+Delta=0) drives the "downloadable here only" filter
     # test; distinct year_start/year_end per survey (Gamma+Delta undated) drive the year-range filter +
-    # recently-added tests. C1b: Delta Survey is EMBARGOED (access!=open) with no embargo_until — its
+    # recently-added tests. Delta Survey is EMBARGOED (access!=open) with no embargo_until - its
     # station D1 drives the drawer access-panel test (no plots; verbatim embargo copy). Its curves are
     # withheld at the ENGINE (empty tf series); the fixture mirrors that so the driver sees what ships.
     stations = [
-        # R4: A1 carries a site_name that DIFFERS from its (sanitised) displayed id, so the drawer's
+        # Station A1 carries a site_name that DIFFERS from its (sanitised) displayed id, so the drawer's
         # Station summary renders the "site name" row for it (the SA28_2B -> SA282B case).
         {"id": "A1", "survey": "Alpha Survey", "lat": -30.0, "lon": 136.0, "ausmt_id": "au.alpha.A1", "edi_available": 1, "site_name": "A_1"},
         {"id": "A2", "survey": "Alpha Survey", "lat": -31.0, "lon": 137.0, "ausmt_id": "au.alpha.A2", "edi_available": 1},
@@ -54,15 +54,15 @@ def test_portal_interactions(tmp_path):
     ]
     cat = [_row(COLS["catalogue"], {**base_cat, **s}) for s in stations]
     sci = [_row(COLS["sci"], base_sci) for _ in stations]
-    # C20: 18 arrays in TF_COLUMNS order for the OPEN stations (rows are built BY NAME then projected
+    # 18 arrays in TF_COLUMNS order for the OPEN stations (rows are built BY NAME then projected
     # through COLS["tf"], so they self-follow the contract). The embargoed Delta station D1 gets the
     # WITHHELD shape the engine emits for a non-open survey — every series column an EMPTY ARRAY.
     #
-    # Two thinned periods. A1 carries a distinctive C20 payload the driver asserts on:
+    # Two thinned periods. Station A1 carries a distinctive payload the driver asserts on:
     #   * tzx_re > 0 (with everything else 0) => REAL Parkinson north = -tzx_re < 0 => arrow points
-    #     SOUTH (down) — the D3 sign-mapping check;
-    #   * rho + phase errors present => the D4 error bars must render.
-    # A2 has NO tipper and NO errors => the "no tipper" state (empty arrow panel) + no error bars.
+    #     SOUTH (down) - the sign-mapping check;
+    #   * rho + phase errors present => the error bars must render.
+    # Station A2 has NO tipper and NO errors => the "no tipper" state (empty arrow panel) + no error bars.
     per2 = [0.01, 1000.0]
     zero2 = [None, None]
 
@@ -88,7 +88,7 @@ def test_portal_interactions(tmp_path):
     tf = []
     for s in stations:
         if s["survey"] == "Delta Survey":
-            tf.append([[] for _ in COLS["tf"]])          # C1b: withheld display curves (all series empty)
+            tf.append([[] for _ in COLS["tf"]])          # Withheld display curves (all series empty)
         elif s["id"] == "A1":
             tf.append(open_tf(with_tipper=True, with_errors=True))    # arrow panel + error bars
         else:
@@ -100,11 +100,11 @@ def test_portal_interactions(tmp_path):
         # each renders as a real <a href> (or, for the hostile value, a NON-executable href).
         "Alpha Survey": {"slug": "alpha", "org": "OrgX", "country": "Australia",
                          "year_start": 2010, "year_end": 2012,
-                         # R4: Alpha is a member of the AusLAMP collection (mirrors the engine's
+                         # Alpha is a member of the AusLAMP collection (mirrors the engine's
                          # SMETA.collection from survey.yaml), so its station drawer renders the
                          # "collection" summary row; Beta/Gamma/Delta stay collection-less (row omitted).
                          "collection": {"id": "auslamp", "title": "AusLAMP"},
-                         # C22: Alpha is the WITH-DOI citation fixture — driver section T asserts its
+                         # Alpha is the WITH-DOI citation fixture - driver section T asserts its
                          # real DOI survives in both .bib and .ris, and that its CITATIONS.txt line
                          # carries the DOI URL with NO "[no DOI assigned]" note. Beta stays the
                          # no-cite/no-DOI survey (section T's no-DOI leg pins that absence).
@@ -126,13 +126,13 @@ def test_portal_interactions(tmp_path):
                         "year_start": 2018, "year_end": 2019},
         "Gamma Survey": {"slug": "gamma", "org": "OrgZ", "country": "New Zealand",
                          "year_start": None, "year_end": None},
-        # C1b: an embargoed survey with NO embargo_until — the drawer must render the no-date verbatim
+        # An embargoed survey with NO embargo_until - the drawer must render the no-date verbatim
         # embargo panel in place of the four plots. Undated so it stays out of year/recently-added counts.
         "Delta Survey": {"slug": "delta", "org": "OrgW", "country": "Australia",
                          "year_start": None, "year_end": None,
                          "access": "embargoed", "embargo_until": None},
     }
-    # A LONG (>240 char) description so the cleanup-wave collections redesign is proven to render the FULL
+    # A LONG (>240 char) description so the collections card is proven to render the FULL
     # abstract with NO 240-char truncation / "Show more" (the old feature card cut it).
     auslamp_desc = ("The Australian Lithospheric Architecture Magnetotelluric Project (AusLAMP) is a "
                     "national long-period magnetotelluric array acquired on a nominal half-degree grid to "
@@ -150,9 +150,9 @@ def test_portal_interactions(tmp_path):
     (data / "tf.json").write_text(json.dumps(tf))
     (data / "surveys.json").write_text(json.dumps(surveys))
     (data / "collections.json").write_text(json.dumps(collections))
-    # build.json fixes the recently-added window's reference day so the strip is DETERMINISTIC: with
-    # generated 2020-01-15, only Beta (latest 2019-12-31) falls inside the 30-day window; Alpha
-    # (2012-05-01) is outside it and undated Gamma/Delta are excluded outright.
+    # build.json fixes the recently-added window's reference day so the strip is DETERMINISTIC:
+    # with generated `2020-01-15`, only Beta (latest `2019-12-31`) falls inside the 30-day window;
+    # Alpha (`2012-05-01`) is outside it and undated Gamma/Delta are excluded outright.
     (data / "build.json").write_text(json.dumps({"build_id": "eng-src-2020", "engine_commit": "eng",
                                                  "source_commit": "src", "generated": "2020-01-15T00:00:00+00:00"}))
 

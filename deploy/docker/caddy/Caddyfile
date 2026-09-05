@@ -10,7 +10,7 @@
 # deploy/docker/portal.Dockerfile for the grep this depends on staying true):
 #   - index.html      has an inline <script> (the Plausible-disabled no-op shim, lines ~12-18) AND
 #                      loads map tiles from basemaps.cartocdn.com (portal/src/map.js).
-#   - about.html       has NO inline script (only external config.js/version.js/corpus-stats.js) --
+#   - about.html       has NO inline script (only external config.js/corpus-stats.js) --
 #                      strict CSP. corpus-stats.js fetch()es the same-origin data tree (catalogue.json +
 #                      surveys.json) for the header's corpus totals, which default-src 'self' already
 #                      covers; it is an external file precisely BECAUSE script-src here has no
@@ -39,14 +39,14 @@
 	# Disable the admin API — not needed for a static file vhost, avoids an extra listening port.
 	admin off
 
-	# C45 D2 (S1): trust the fronting proxy so Caddy derives `client_ip` from the forwarded address —
+	# Trust the fronting proxy so Caddy derives `client_ip` from the forwarded address -
 	# then the ip_mask log filter below masks the REAL client, not the loopback proxy. tailscale-serve
 	# fronts this from the CGNAT range 100.64.0.0/10 over loopback; `private_ranges` covers RFC1918 +
 	# loopback + link-local, and we add the tailscale CGNAT range explicitly (it is NOT in
 	# private_ranges). Without this, `client_ip` would be the proxy and the true client IP would only
 	# survive UNMASKED in X-Forwarded-For — which is why the log filter ALSO deletes every
 	# address-bearing header (see the `log` block). Both halves are required to keep the promise true.
-	# SCOPED per listener (2026-08-28 serve-path tuning): scoped `servers` blocks do NOT inherit
+	# SCOPED per listener (serve-path tuning): scoped `servers` blocks do NOT inherit
 	# from an unscoped one, so trusted_proxies is stated in BOTH; :8081 additionally accepts h2c.
 	# The front door dials the reader with h2c through tailscale serve's raw --tcp=8445 tunnel
 	# (RUNBOOK), which un-serialises the browser's parallel streams (the measured cold-load
@@ -64,7 +64,7 @@
 :8080 {
 	encode zstd gzip
 
-	# ---- Cache policy (2026-08-28 load analysis) --------------------------------------------------
+	# ---- Cache policy (load analysis) -------------------------------------------------------------
 	# Without an explicit Cache-Control, browsers fall back to heuristic freshness and a reload can
 	# serve EVERYTHING (index.html included) from local cache with zero revalidation: after a
 	# rebuild swap a returning visitor keeps stale data, and stale portal code, for hours. Policy:
@@ -98,8 +98,8 @@
 	# ---- URL canonicalisation for the published entity shapes ------------------------------------
 	# Nothing on the site emits a trailing-slash entity URL, but readers, mail clients, CMSs and
 	# reference managers add one habitually - and @entityPage below is $-anchored, so every one of
-	# those variants used to miss it, miss /data/*, miss the portal root and land on 404.html. They
-	# 301 to the published slash-free form instead. The front door passes the slash form through
+	# those variants would otherwise miss it, miss /data/*, miss the portal root and land on 404.html.
+	# They 301 to the published slash-free form instead. The front door passes the slash form through
 	# byte-for-byte (its own pin), which is precisely why the canonicalisation lives HERE: one hop,
 	# at the layer that knows the shapes. The index aliases (/surveys/, /surveys/index and its .html
 	# twin) fold onto the bare form for the same reason the root alias does: one URL per document.
@@ -143,16 +143,16 @@
 	}
 
 
-	# ---- Access log (C45 D2/D5 — usage analytics enablement, masked at the edge) -----------------
+	# ---- Access log (usage analytics enablement, masked at the edge) -----------------------------
 	# Privacy-preserving HTTP access log: the CLIENT ADDRESS IS MASKED AT WRITE TIME (IPv4 -> /24,
 	# IPv6 -> /48) via Caddy's built-in ip_mask log filter, so a FULL IP never touches disk. This is
-	# the one honest change behind the amended portal privacy promise (portal/index.html). The log
-	# feeds the LATER analytics aggregator lane (C45-impl) — downloads by dataset/format + visit
+	# the one honest change behind the portal's privacy promise (portal/index.html). The log
+	# feeds the analytics aggregator: downloads by dataset/format + visit
 	# counts + country (from the masked /24, later); the aggregator reads only ts/method/uri/status/
 	# size/masked-address/UA and discards the raw lines after folding them (7-day retention here).
 	#
 	# The filter encoder wraps the JSON encoder: it MASKS request>remote_ip + request>client_ip AND
-	# DELETES every header that can carry a full client address or a credential (S1) — Caddy's JSON
+	# DELETES every header that can carry a full client address or a credential - Caddy's JSON
 	# encoder logs the WHOLE request>headers map by default, so behind a proxy the true client IP
 	# arrives UNMASKED in X-Forwarded-For / X-Real-IP / Forwarded; those, plus Referer (can carry PII)
 	# and Cookie / Authorization / Set-Cookie (session tokens / credentials) are all deleted. What
@@ -186,7 +186,7 @@
 					ipv4 24
 					ipv6 48
 				}
-				# R28: redact the /gateway/status/<token> capability from the logged URI. The token is a
+				# Redact the /gateway/status/<token> capability from the logged URI. The token is a
 				# secrets.token_urlsafe(32) bearer whose DB form is SHA-256 hashed; un-redacted it lands in
 				# this access log verbatim (7-day retention, shipped to the box), a weaker link than the
 				# hashed DB and against this filter's own "a full IP never touches disk" posture. The regexp
@@ -219,8 +219,8 @@
 	}
 
 	# Strict CSP for EVERY page except add-survey.html and the curator credit-editor pages (below).
-	# index.html qualifies since 2026-07-05: its only inline script (the Plausible no-op shim) was
-	# extracted to src/analytics-shim.js - do not re-add an inline block to index.html without revisiting
+	# index.html qualifies because it carries no inline script: the analytics no-op shim lives in
+	# src/analytics-shim.js - do not add an inline block to index.html without revisiting
 	# this. The three CSP matchers below are MUTUALLY EXCLUSIVE (exactly one applies to any request), so
 	# Caddy's specificity ordering can never matter.
 	@strictPages {
@@ -229,7 +229,7 @@
 	}
 	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
 
-	# CONTRIBUTOR-CREDIT-SPEC (§6): the curator metadata editor + survey hub. IDENTICAL to strictPages
+	# The contributor-credit model: the curator metadata editor + survey hub. IDENTICAL to strictPages
 	# EXCEPT connect-src ALSO allows exactly FOUR read-only registries: the SAME two citation registries
 	# the public Add Survey page uses - https://api.crossref.org and https://api.datacite.org - for the
 	# publications "Look up DOI" harvest (the shared window.AusmtDoiHarvest core), PLUS https://pub.orcid.org
@@ -245,10 +245,10 @@
 	# add-survey.html only: its APPLICATION code is one intentional inline <script> (the shim was
 	# extracted like index's) + OpenStreetMap tiles (NOT CartoDB — its own two Leaflet maps call
 	# tile.openstreetmap.org directly) + a live fetch() to the ROR API (connect-src, since
-	# fetch/XHR destinations are not covered by img-src). Since C13 the page ALSO fetch()es
+	# fetch/XHR destinations are not covered by img-src). The page ALSO fetch()es
 	# /gateway/healthz and XHR-POSTs /gateway/submit — both SAME-ORIGIN relative paths already covered
 	# by the connect-src 'self' below, so no directive change is needed for the direct-upload flow.
-	# R3 (publication DOI harvest): connect-src ALSO allows exactly TWO more hosts,
+	# Publication DOI harvest: connect-src ALSO allows exactly TWO more hosts,
 	# https://api.crossref.org and https://api.datacite.org — the citation-metadata registries the
 	# DOI-first publications block harvests from (Crossref for journal papers, DataCite for dataset
 	# DOIs). Deliberate two-host allowlist; no other directive is touched, and the page degrades
@@ -270,8 +270,8 @@
 		# derived EMTF-XML (browsers would inline-render XML), the per-station MTH5 files under
 		# /h5 and the packaged bundles. Everything else under /data (catalogue.json etc) is
 		# fetched by the portal's own JS and must stay inline-servable. /h5/* was a latent matcher
-		# with no producer until the tier-1 lane (owner ruling 2026-08-02) created one; it is a
-		# real served family now, and deploy/scripts/aggregate_stats.py counts it as one.
+		# until the tier-1 producer landed. It is a
+		# real served family, and deploy/scripts/aggregate_stats.py counts it as one.
 		# NOTE the patterns are written against the path AFTER handle_path stripped /data. That is why
 		# a frozen release bundle needs its own /releases/*/bundles/* pattern: it arrives here as
 		# /releases/<tag>/bundles/<file>, so the bare /bundles/* pattern never matched it and the
@@ -285,7 +285,7 @@
 		file_server
 	}
 
-	# Gateway (Stage 2, contract C10) — reverse-proxy the submission gateway under the SAME origin.
+	# Gateway (Stage 2) - reverse-proxy the submission gateway under the SAME origin.
 	# Placed ABOVE the static-portal `root`/`file_server` below on purpose: `handle` is an ordered
 	# path router, and putting the more specific /gateway/* matcher first means portal static serving
 	# never shadows it.
@@ -301,7 +301,7 @@
 	# gateway is reached from the portal's own origin, so its fetch()/form POSTs are covered by the
 	# existing `default-src 'self'` / `connect-src 'self'` already in force on every page — there is
 	# no new host to allow-list. And because it is same-origin, no CORS is involved at all: the
-	# gateway sets no CORS headers and needs none (design §1). The status page it serves is a
+	# gateway sets no CORS headers and needs none. The status page it serves is a
 	# standalone server-rendered HTML document (its own inline style, no external assets), so it does
 	# not depend on either per-page CSP above. DO NOT add a CSP override for /gateway/* here — the
 	# strictPages default already applies to it and is correct.
@@ -328,14 +328,14 @@
 }
 
 # =================================================================================================
-# C47 public bridge — dedicated PUBLIC-SUBSET listener (the box-side "second wall").
+# Public bridge - dedicated PUBLIC-SUBSET listener (the box-side "second wall").
 # =================================================================================================
 # The VPS public front door (deploy/frontdoor/) reverse-proxies PUBLIC internet traffic to THIS
 # listener over the tailnet — never to :8080. :8080 serves the reader AND the WHOLE /gateway/* surface
 # (reader + submission + the entire curator workbench) on ONE port; the tailnet ACL fence is
 # port-granular, so if the public edge could reach :8080 a mis-scoped front-door config might route to
 # a curator/admin surface. This listener is an INDEPENDENT allowlist of the SAME public subset as wall
-# 1 (owner ruling 2026-07-24: the Add Survey contribution flow is public, the workbench stays walled):
+# 1 (the Add Survey contribution flow is public, the workbench stays walled):
 # it serves the reader (portal static + /data) and the Add Survey page, and proxies ONLY the four
 # public gateway routes (submit, request-key, healthz, status) to the gateway container — every OTHER
 # /gateway path is refused here on its own. So the ACL — which grants the front-door tag reach to THIS
@@ -343,13 +343,13 @@
 # mis-scoped: this listener has no route to it. Two independent allowlists of one subset: the front
 # door (wall 1) + this listener behind a port-scoped ACL (wall 2). See maintainer/C47-PublicBridge.md.
 #
-# NO `log` block here BY DESIGN: the C45 masked access log runs AT THE FRONT DOOR on the real public
-# client (C47 invariant c). Every request to this listener arrives from the VPS tailnet peer, so a log
+# NO `log` block here BY DESIGN: the masked access log runs AT THE FRONT DOOR on the real public
+# client (invariant c). Every request to this listener arrives from the VPS tailnet peer, so a log
 # here would record only the proxy address — useless for analytics and a needless second copy.
 #
 # The reader header/CSP/data/root directives are a deliberate near-duplicate of :8080 (NOT a snippet
-# import): the :8080 block is security-proven and is not refactored by this lane; any drift between the
-# two is caught by the C47 reader-listener config pin (deploy/tests/test_frontdoor_bridge.py). The
+# import): the :8080 block is security-proven and must not be refactored here; any drift between the
+# two is caught by the reader-listener config pin (deploy/tests/test_frontdoor_bridge.py). The
 # gateway passthrough below is DELIBERATELY NARROWER than :8080's blanket `handle /gateway/*` — only
 # the four public routes traverse, never the workbench.
 :8081 {
@@ -384,8 +384,8 @@
 	# ---- URL canonicalisation for the published entity shapes ------------------------------------
 	# Nothing on the site emits a trailing-slash entity URL, but readers, mail clients, CMSs and
 	# reference managers add one habitually - and @entityPage below is $-anchored, so every one of
-	# those variants used to miss it, miss /data/*, miss the portal root and land on 404.html. They
-	# 301 to the published slash-free form instead. The front door passes the slash form through
+	# those variants would otherwise miss it, miss /data/*, miss the portal root and land on 404.html.
+	# They 301 to the published slash-free form instead. The front door passes the slash form through
 	# byte-for-byte (its own pin), which is precisely why the canonicalisation lives HERE: one hop,
 	# at the layer that knows the shapes. The index aliases (/surveys/, /surveys/index and its .html
 	# twin) fold onto the bare form for the same reason the root alias does: one URL per document.
@@ -436,7 +436,7 @@
 		X-Frame-Options DENY
 	}
 
-	# ---- WALL 2: the box-side INDEPENDENT allowlist of the SAME public subset (C47 invariant b) ------
+	# ---- WALL 2: the box-side INDEPENDENT allowlist of the SAME public subset (invariant b) ----------
 	# This listener carries its OWN allowlist of the public submission subset — it does not depend on the
 	# front door being correctly scoped. The four PUBLIC gateway routes (method-scoped, identical to wall
 	# 1 in deploy/frontdoor/Caddyfile) proxy to the gateway container; EVERY OTHER /gateway path (both
@@ -480,7 +480,7 @@
 
 	# Deny-by-default: every OTHER /gateway path (both slash forms) is an explicit 404, and so is any
 	# NON-GET /add-survey.html. GET /add-survey.html is NOT listed — it falls through to the file_server
-	# below (the page is now public, owner ruling 2026-07-24). Listed AFTER the allow handles so the
+	# below (the page is public). Listed AFTER the allow handles so the
 	# public subset wins.
 	@nonpublic_gateway path /gateway /gateway/*
 	handle @nonpublic_gateway {
@@ -497,7 +497,7 @@
 	# CSP mirrors :8080 exactly (strict everywhere except add-survey.html). add-survey.html is served by
 	# the file_server below; its matcher gives it the same relaxed policy :8080 uses so a public GET (via
 	# the front door) and a direct tailnet fetch both get the right policy. That relaxed policy includes
-	# the R3 two-host citation-harvest allowlist (api.crossref.org + api.datacite.org) in connect-src.
+	# the two-host citation-harvest allowlist (api.crossref.org + api.datacite.org) in connect-src.
 	@strictPages not path /add-survey.html
 	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
 

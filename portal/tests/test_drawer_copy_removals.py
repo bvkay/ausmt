@@ -1,12 +1,12 @@
-"""Owner-requested drawer copy removals — render pins (Invariant 10).
+"""Drawer copy removals - render pins (Invariant 10).
 
 Three placeholder/aggregate presentations were removed from portal/src/drawer.js:
   (1) the SURVEY-summary "Automated completeness/smoothness check" row (the qavg mean-of-per-station-Q
-      aggregate) — a not-a-verdict number the owner did not want at the survey-level 10-second view;
+      aggregate) - a not-a-verdict number the brief did not want at the survey-level 10-second view;
   (2) the STATION-drawer Tier-3 "Advanced analysis · Tier 3, generated offline" placeholder block
       (McNeice-Jones / Groom-Bailey decomposition ... "planned AusMT pipeline products ... Not computed
       in the browser.") — a not-yet-produced-products stub.
-  (3) the STATION-drawer dataset-maturity AGGREGATE (owner ruling 2026-08-02): the "Dataset maturity"
+  (3) the STATION-drawer dataset-maturity AGGREGATE: the "Dataset maturity"
       block heading, the five-star summary row and the "Record-stewardship maturity ... Not a measure
       of scientific quality." explainer. This removes the SUMMARY, not the information: the five
       itemised rows (Curated archive / Reproducible / Licence verified / DOI / Time series) survive
@@ -103,14 +103,14 @@ def test_drawer_copy_removals(tmp_path):
     assert "processing software" in survey, "survey 'processing software' row missing"
     assert "tipper availability" in survey, "survey 'tipper availability' row missing"
     assert "Related products" in station, "station 'Related products' section missing"
-    # OWNER HIDE (2026-07-22): the screening SURFACE is hidden pending design review — the Screening tab +
+    # HIDDEN: the screening SURFACE is hidden pending design review - the Screening tab +
     # its panel body (the "Screening indicators" section AND the per-station "Automated completeness/smoothness
     # check" line it carried) are reversibly commented out in drawer.js. These now assert ABSENCE (flipped from
     # the prior presence pins). Restore both assertions to `in`/`== 1` when the screening surface is re-enabled.
     assert "Screening indicators" not in station, \
-        "station still renders the (owner-hidden) 'Screening indicators' section"
+        "station still renders the hidden 'Screening indicators' section"
     assert station.count("Automated completeness/smoothness check") == 0, \
-        "station still renders the (owner-hidden) per-station completeness/smoothness line"
+        "station still renders the hidden per-station completeness/smoothness line"
 
     # (d) dataset-maturity AGGREGATE removed: heading, star summary row, explainer sentence.
     assert "Dataset maturity" not in station, \

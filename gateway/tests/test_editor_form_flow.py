@@ -1,4 +1,4 @@
-"""End-to-end tests for the STRUCTURED metadata-editor form (the 2026-07-08 "hostile JSON" rework),
+"""End-to-end tests for the STRUCTURED metadata-editor form (the "hostile JSON" rework),
 driven through the real gateway HTTP surface with the in-process edit seam.
 
 The load-bearing test here is the ROUND-TRIP: render the edit form from a real, richly-populated
@@ -27,7 +27,7 @@ from gateway.tests.conftest import (
 # a map with a null (organisation.ror), repeatable publications (dict form) / funding / instruments,
 # a full identifiers map, time_series with a levels list, access, processing, collection, and a care
 # block (advanced-JSON-only section). An unknown key + a comment prove the round-trip fidelity is
-# unbroken by the widget rework. A2: it ALSO keeps the two RETIRED flat credit keys on disk, which
+# unbroken by the widget rework. It ALSO keeps the two RETIRED flat credit keys on disk, which
 # the editor now models with nothing - so this fixture doubles as the pre-migration-corpus tolerance
 # proof (they must round-trip byte-clean through every unchanged submit).
 RICH_SURVEY = """\
@@ -192,7 +192,7 @@ def test_unchanged_form_submit_produces_no_diff(tmp_path):
             assert r.status_code == 200
             # A true no-op: the runner refuses with "no changes" (nothing reassembled to a diff).
             assert "no changes" in r.text.lower(), (
-                "an unchanged structured-form submit must be a no-op — a diff here means a section "
+                "an unchanged structured-form submit must be a no-op - a diff here means a section "
                 "widget did not round-trip")
     run(_body())
 
@@ -245,7 +245,7 @@ def _added_removed_lines(diff_html: str) -> str:
 def test_form_renders_widgets_not_json_textareas(tmp_path):
     """A populated survey renders structured widgets (named s_/l_/c_ inputs, an access <select>) and
     NOT the old raw-JSON textareas (j_organisation etc. as the PRIMARY input). FAILS IF the sections
-    revert to bare JSON textareas — the whole point of the 2026-07-08 rework."""
+    revert to bare JSON textareas - the whole point of the rework."""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -257,10 +257,10 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             assert 'name="s_organisation_name"' in body
             assert 'name="s_organisation_ror"' in body
             assert 'name="s_access_level"' in body and "<select" in body
-            assert 'name="s_access_coordinates"' in body  # C42 coordinate-access <select>
+            assert 'name="s_access_coordinates"' in body  # Coordinate-access <select>
             assert 'name="s_access_embargo_until"' in body and 'type="date"' in body
             assert 'name="c_time_series_levels_available_raw_packed"' in body  # checkbox
-            # CONTRIBUTOR-CREDIT-SPEC (§6): the unified People & credit panel replaces the four
+            # The contributor-credit model: the unified People & credit panel replaces the four
             # investigator/creator/contributor panels. Its widgets (a spare row, the name_type select,
             # the Cited-author checkbox, a role checkbox) are present.
             assert 'data-editor-rows="people"' in body
@@ -271,13 +271,13 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             # The retired panels are GONE.
             assert 'name="s_lead_investigator_orcid"' not in body
             assert 'name="l_principal_investigators_0_name"' not in body
-            # A2 (D7): so is the legacy Convert notice and its named submit. A pre-migration survey
+            # So is the legacy Convert notice and its named submit. A pre-migration survey
             # that still carries the retired keys shows NOTHING about them: they are unmodelled keys,
             # byte-preserved through every save and read by nothing.
             assert "Legacy field" not in body
             assert "people_convert" not in body
             assert "Ada Lovelace" not in body and "Grace Hopper" not in body
-            # A2: the ratified curated homes have their own controls.
+            # The curated homes have their own controls.
             assert 'name="l_organisations_0_name"' in body
             assert 'name="c_organisations_0_custodian"' in body
             assert 'name="c_organisations_primary"' in body
@@ -310,8 +310,8 @@ def test_empty_optional_sections_render_empty_widgets_with_placeholders(tmp_path
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             body = (await client.get("/gateway/curator/edit/demo-survey-2026")).text
-            # Absent sections still render their widgets (empty), with example placeholders. IDCONS D2:
-            # the flat dataset_doi input is RETIRED; the identifiers surface now renders project_raid +
+            # Absent sections still render their widgets (empty), with example placeholders.
+            # The flat dataset_doi input is RETIRED; the identifiers surface now renders project_raid +
             # the survey/platform instrument PID, and a dataset-level DOI is a typed related_identifiers row.
             assert 'name="s_identifiers_project_raid"' in body
             assert 'name="s_identifiers_instrument_pid"' in body
@@ -328,10 +328,10 @@ def test_empty_optional_sections_render_empty_widgets_with_placeholders(tmp_path
 
 
 def test_identifiers_and_pids_consolidated_page(tmp_path):
-    """IDCONS D1 (SPEC §2): the identifier surface renders as ONE consolidated 'Identifiers & PIDs' panel
+    """The identifier surface renders as ONE consolidated 'Identifiers & PIDs' panel
     with three groups (This survey / This dataset elsewhere / Instrument), the typed related_identifiers
     list folded in (group b, the sole dataset-PID editor), a read-only ausmt id, and the per-identifier
-    resolution chip (D5). The old standalone 'Related identifiers' panel is GONE (folded in). FAILS IF the
+    resolution chip. No standalone 'Related identifiers' panel renders (it is folded in). FAILS IF the
     five-section scatter returns or the typed list is duplicated."""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
@@ -348,7 +348,7 @@ def test_identifiers_and_pids_consolidated_page(tmp_path):
             # The typed list is the sole dataset-PID editor, folded in (no standalone panel):
             assert 'name="l_related_identifiers_0_identifier"' in body
             assert ">Related identifiers</h2>" not in body
-            # The per-identifier resolution status chip + check button (D5):
+            # The per-identifier resolution status chip + check button:
             assert "data-pid-check" in body and "data-pid-chip" in body
             # The read-only ausmt id shows the slug for orientation:
             assert 'value="rich-survey-2026" readonly' in body
@@ -358,7 +358,7 @@ def test_identifiers_and_pids_consolidated_page(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# D-L (identifiers by data level, SPEC §9): the editor identifies-first surface + Source datasets retired
+# D-L (identifiers by data level): the editor identifies-first surface + Source datasets retired
 # --------------------------------------------------------------------------------------------------
 # A survey carrying BOTH an identifies-tagged related_identifiers row and a LEGACY relation-only row (no
 # identifies), plus a sources[] list the engine still reads (must be byte-preserved on disk).
@@ -391,7 +391,7 @@ def _dl_client(tmp_path):
 
 
 def test_identifies_first_relation_hidden_and_sources_retired(tmp_path):
-    """D-L (SPEC §9): the related_identifiers row leads with the 'What does this identifier point at?'
+    """D-L: the related_identifiers row leads with the 'What does this identifier point at?'
     level <select> (identifies FIRST); on an identifies row the DataCite relation control is HIDDEN (it
     derives), while a LEGACY relation-only row still renders its relation <select>. The acquisition fields
     sit behind a collapsed disclosure. The 'Source datasets' section/sidebar entry is GONE. FAILS IF the
@@ -482,8 +482,8 @@ def test_bad_orcid_renders_field_error_on_form(tmp_path):
 
 def test_bad_doi_renders_field_error_on_form(tmp_path):
     """A publication DOI without a '10.' prefix re-renders the form with a per-field error. FAILS IF a
-    non-DOI is accepted into a DOI field. (IDCONS D2 retired the identifiers.dataset_doi input; the
-    per-field DOI validation is now exercised through a still-modelled DOI field — publications[].doi.)"""
+    non-DOI is accepted into a DOI field. (The identifiers.dataset_doi input is retired; the
+    per-field DOI validation is now exercised through a still-modelled DOI field - publications[].doi.)"""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -618,7 +618,7 @@ def test_editor_js_route_and_no_inline_js(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# C42 coordinate-access <select>: render pin + end-to-end diff-minimality
+# Coordinate-access <select>: render pin + end-to-end diff-minimality
 # --------------------------------------------------------------------------------------------------
 def test_coordinate_widget_renders_options_with_current_value_selected():
     """RENDER PIN: the coordinate-access <select> offers the allowed options with the stored value

@@ -8,13 +8,12 @@
 #   grep -n "http" portal/index.html portal/about.html portal/add-survey.html portal/brand.html \
 #                  portal/releases.html portal/404.html
 # results, and why each is fine to serve behind the CSP in deploy/docker/caddy/Caddyfile:
-#   - The one `<script src="https://YOUR-PLAUSIBLE-HOST/...">` line (index.html + add-survey.html)
-#     sits INSIDE an HTML comment (<!-- ... -->) — analytics is off by default and there is no live
-#     external <script> tag actually parsed by the browser. If an operator later uncomments it to
+#   - No page carries an external analytics <script> tag: analytics is off and the shim in
+#     src/analytics-shim.js is a no-op. If an operator adds one to
 #     self-host Plausible, script-src in the Caddyfile will need a matching addition then.
 #   - ROR/RAiD placeholder text in <input placeholder="https://ror.org/…"> etc — not a resource
 #     load, just placeholder text.
-#   - add-survey.html's real live external calls: `fetch("https://api.ror.org/...")`, the R3
+#   - add-survey.html's real live external calls: `fetch("https://api.ror.org/...")`, the
 #     publication-DOI harvest `fetch("https://api.crossref.org/...")` / `fetch("https://api.datacite.org/...")`,
 #     and two `L.tileLayer("https://{s}.tile.openstreetmap.org/...")` calls — all allow-listed
 #     explicitly in the Caddyfile's per-page CSP (connect-src for the fetches / img-src for the tiles
@@ -25,14 +24,14 @@
 #     the third one on each of the five pages above; it is withdrawn from every header on the site,
 #     so what is left is two on every one of the six pages: the acknowledgement's URL text and the
 #     AuScope-NCRIS lockup, both in the footer. about.html carries a THIRD, the "Learn more about
-#     AuScope" link in its Who enables AusMT section. That makes 404.html no longer the exception it
-#     was: it still has no header, and now no page's header has an anchor. All of them are
+#     AuScope" link in its Who enables AusMT section. 404.html is not an exception: it has no
+#     header, and no page's header has an anchor. All of them are
 #     NAVIGATION links, not resource loads: CSP does not govern <a href> targets. The images those
 #     pages fetch are vendored and served from 'self' under img-src: the AusMT identity mark
 #     (vendor/brand/ausmt-mark.svg), on the five chrome pages and not on 404.html, and the
 #     AuScope-NCRIS lockup (vendor/auscope-ncris-white.png), which about.html names twice, once in
 #     its body and once in its footer, and every other page including 404.html once.
-#     vendor/auscope-icon-white.png is no longer fetched by any page here. The file still ships: the
+#     vendor/auscope-icon-white.png is fetched by no page here. The file still ships: the
 #     generated collection pages draw it on their member-footprint panels, the docs site's sidebar
 #     copy is made from it and tools/gen_social_card.py composites it.
 #   - the auscope.org.au METADATA, which loads nothing: the JSON-LD publisher URL and the WebSite

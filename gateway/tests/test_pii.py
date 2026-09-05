@@ -1,4 +1,4 @@
-"""PII containment (design §0/§8, house rule). The submitter email fixture must appear NOWHERE in
+"""PII containment (house rule). The submitter email fixture must appear NOWHERE in
 the gw/ tree, the job files, or the rendered status HTML — only inside the SQLite DB file.
 
 This is the load-bearing privacy test: it greps real bytes on disk (an independent observable), not
@@ -74,7 +74,7 @@ def test_pii_only_in_sqlite_after_full_flow(tmp_path):
 
 
 def test_pii_absent_from_pending_job(tmp_path):
-    # The pending job file is written before any scan; assert it is PII-free on its own (design §5).
+    # The pending job file is written before any scan; assert it is PII-free on its own.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, _gw, cfg):
             await submit_zip(client, good_package_zip(), name=UNIQUE_NAME, email=UNIQUE_EMAIL)

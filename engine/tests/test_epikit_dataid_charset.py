@@ -6,7 +6,7 @@ survives that rewrite and raises, and io/edi/metadata/header.py::read_header cal
 OUTSIDE the try/except that guards the assignment, so the read stops before anything else is
 attempted. The file is well formed; the reader's identifier policy is what refuses it.
 
-Measured on the GSSA/BHP Roxby Downs 2018 release (2026-09-03): nine of the 764 served files carry
+Measured on the GSSA/BHP Roxby Downs 2018 release: nine of the 764 served files carry
 such a DATAID, the build prints PARSE FAIL for each, emits no SKIP, exits 0, and publishes 755
 stations. Nine transfer functions with declared ids, coordinates and run ids never reach the
 catalogue at all. The four space-only unsafe DATAIDs in the same release ("222 ", "222 error",
@@ -69,8 +69,8 @@ def test_the_reader_accepts_these_dataids_so_nothing_touches_them(dataid):
 
 
 def test_normalisation_replaces_only_the_characters_the_reader_refuses():
-    """Each offending character becomes '_', and the result is what mt_metadata's own rewrite would
-    have produced had it not raised: the space/hyphen/stop/plus class it already maps, extended to
+    """Each offending character becomes '_', and the result is what mt_metadata's own rewrite
+    produces where it does not raise: the space/hyphen/stop/plus class it already maps, extended to
     the class it refuses. Nothing else moves."""
     assert mtm.normalise_dataid("53(RR)") == "53_RR_"
     assert mtm.normalise_dataid("500/4759") == "500_4759"
@@ -83,7 +83,7 @@ def test_normalisation_replaces_only_the_characters_the_reader_refuses():
 # --------------------------------------------------------------------------------------------
 
 def test_the_refused_file_reads_and_says_so():
-    """R2. FAILS IF the read raises, which is what it does today for all nine of the release's files."""
+    """FAILS IF the read raises, which is what it does today for all nine of the release's files."""
     tf, reason, facts = mtm.read_with_parse_facts(CHARSET)
     assert tf.has_impedance(), "the parse returned no impedance"
     assert facts["dataid_normalised"] == {"original": "53(RR)", "read_as": "53_RR_"}
@@ -91,7 +91,7 @@ def test_the_refused_file_reads_and_says_so():
 
 
 def test_the_source_file_is_never_edited(tmp_path):
-    """D1, for this fallback too: the conditioning is on a temporary copy destroyed inside the read."""
+    """For this fallback too: the conditioning is on a temporary copy destroyed inside the read."""
     work = tmp_path / CHARSET.name
     shutil.copy2(CHARSET, work)
     before = work.read_bytes()
@@ -166,7 +166,7 @@ def test_the_served_bytes_stay_the_custodian_s_file(tmp_path):
 
 
 def test_the_station_record_carries_the_section_of_record(tmp_path):
-    """R1's provenance travelling into the published product: the fixture carries the averaged
+    """Provenance travelling into the published product: the fixture carries the averaged
     solution and one realisation, and station.json says which one the numbers came from."""
     surveys = _survey(tmp_path, "53(RR).edi", "RD18-053a")
     out = tmp_path / "out"
@@ -178,12 +178,12 @@ def test_the_station_record_carries_the_section_of_record(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------
-# the pre-flight vocabulary: AusMT rescues this class, so it is no longer terminal
+# the pre-flight vocabulary: AusMT rescues this class, so it is not terminal
 # --------------------------------------------------------------------------------------------
 
 def test_preflight_calls_a_refused_dataid_needs_repair_not_will_not_read():
     """The pre-flight tells a curator what a delivery will do BEFORE a build runs, so its verdict has
-    to move with the reader. Until R2 this class was WILL_NOT_READ, which was true then and is a lie
+    to move with the reader. Until this fallback landed, this class was WILL_NOT_READ, which was true then and is a lie
     now: AusMT reads the file by conditioning a temporary copy."""
     finding = pf.preflight_file(CHARSET)
     assert finding["outcome"] == pf.NEEDS_REPAIR, finding

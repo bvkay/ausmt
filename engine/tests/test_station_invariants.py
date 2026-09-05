@@ -12,7 +12,7 @@ Three layers:
      minus portal.generated_at; every station.json dict-equal minus provenance.generated, which is the
      only per-build field a same-commit rebuild may move; the schema served at both routes byte-identical
      to the in-tree artifact and across builds; no manifest row names the record.
-  2. THE IDENTITY CHAIN (T33): mtcat.json's stations[].station_id set equals the set of published
+  2. THE IDENTITY CHAIN: mtcat.json's stations[].station_id set equals the set of published
      ausmt_id values, every ausmt_id is unique, and each record's survey_id joins BOTH the mtcat survey
      row and the survey-metadata.json document beside it. Proven non-vacuous against planted violations.
   3. THE CONSUMER PINS: drawer.js reads exactly two members out of station.json and fetches it at the
@@ -25,8 +25,8 @@ Three layers:
      framing invariant 1 forbids. An xfail so the disagreement ships pinned instead of unwritten.
 
 Plus the corpus arm (dev box): when AUSMT_STATION_DATA names a full-corpus build output dir, the same
-identity and scan checks run over the REAL corpus documents. No CI lane has a corpus, so it skips
-there (allow-listed in ci_check_skips.py); it is the lane's full-corpus proof harness.
+identity and scan checks run over the REAL corpus documents. No CI workflow has a corpus, so it skips
+there (allow-listed in ci_check_skips.py); it is the module's full-corpus proof harness.
 """
 import copy
 import json
@@ -61,7 +61,7 @@ corpus_arm = pytest.mark.skipif(
 # ---------------------------------------------------------------- reference chain implementations
 
 def identity_chain_violations(out: Path) -> list:
-    """T33 over a built tree: the station join in both directions, id uniqueness, and the survey_id
+    """Over a built tree: the station join in both directions, id uniqueness, and the survey_id
     chain into mtcat's survey rows and the survey-metadata document beside each record."""
     docs = _docs(out)
     mtcat = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
@@ -235,7 +235,7 @@ def _published_run_rates(out: Path) -> dict:
 
 
 def test_projection_1_the_flag_follows_the_register_and_rows_imply_it(built):
-    """SCOPE:308-310 as amended at D14: the mtcat flag follows the REGISTER (existence), and a
+    """SCOPE:308-310: the mtcat flag follows the REGISTER (existence), and a
     served kind=time_series resource IMPLIES the flag - never the reverse, because a withheld or
     embargoed station keeps its flag while serving no row. Fixture oracle, independent of the
     code under test: EXAMPLE01 has live register rows, EXAMPLE02 only pending/retired ones, and
@@ -254,7 +254,7 @@ def test_projection_1_the_flag_follows_the_register_and_rows_imply_it(built):
 
 
 def test_projection_2_a_withheld_stub_keeps_the_flag_and_none_of_the_detail(access_arm):
-    """SCOPE:310-311 with R13 live: the flag FOLLOWS THE REGISTER for a withheld station - the
+    """SCOPE:310-311 with the register live: the flag FOLLOWS THE REGISTER for a withheld station - the
     register on this arm carries live rows for EXAMPLE01, so its flag is TRUE - while the stub
     stays closed-world and carries no resources, no route, no url_path. Existence survives
     withholding; detail does not. The two assertion classes exist for that asymmetry."""
@@ -262,7 +262,7 @@ def test_projection_2_a_withheld_stub_keeps_the_flag_and_none_of_the_detail(acce
     withheld = {d["ausmt_id"]: d for d in _docs(access_arm).values() if d.get("withheld")}
     assert withheld, "non-vacuity: this arm emits withheld stubs"
     flagged = [aid for aid in withheld if stations[aid].get("has_time_series") is True]
-    assert flagged, "non-vacuity: the register flags at least one withheld station (R13)"
+    assert flagged, "non-vacuity: the register flags at least one withheld station"
     for aid, doc in withheld.items():
         assert "resources" not in doc, f"{aid}: the withheld stub is closed-world"
         assert "url_path" not in json.dumps(doc), f"{aid}: no route detail on a withheld record"
@@ -283,14 +283,14 @@ def test_projection_3_the_verified_count_does_not_move_across_an_embargo(access_
 
 
 @pytest.mark.xfail(strict=True, reason=(
-    "SCOPE:313-314 is not satisfied by this corpus and the lane does not route A6 run rates into the "
+    "SCOPE:313-314 is not satisfied by this corpus and the run rates are not routed into the "
     "rollup (doing so would move mtcat.json, which framing invariant 1 forbids). Contract section 8 "
     "named the expected failure shape as published rates being a strict SUBSET of the rollup; "
     "MEASURED over the full corpus it is the opposite, a strict SUPERSET of an empty set: "
     "sample_rates_hz is absent on all 27 surveys in surveys.json and mtcat.json while 494 station "
     "records publish a run rate (newer-volcanic-province-2019 49 at 1000, vulcan-2022 100 at 10/50, "
-    "western-gawler 78 at 10/1000, western-gawler-2023 267 at 24000). Owner ruling required: either "
-    "the rollup gains the run rates in a lane that may move mtcat.json, or SCOPE:313-314 is amended "
+    "western-gawler 78 at 10/1000, western-gawler-2023 267 at 24000). A decision is required: either "
+    "the rollup gains the run rates in a change that may move mtcat.json, or SCOPE:313-314 is amended "
     "to name the two as independent statements. The fixture arm reproduces it."))
 def test_projection_4_the_survey_rate_rollup_equals_the_published_run_rates(built):
     """SCOPE:313-314: survey sample_rates_hz equals the canonicalised union of published run rates."""
@@ -308,7 +308,7 @@ _DRAWER_FN = re.compile(r"function loadStationFrameLine\(s\)\{[\s\S]*?\n\}\n")
 
 @pytest.mark.skipif(not DRAWER_JS.is_file(),
                     reason="engine image build: portal tree not shipped "
-                           "(designed topology; the drawer surface is pinned from checkout lanes)")
+                           "(designed topology; the drawer surface is pinned from the checkout workflows)")
 def test_the_portal_drawer_reads_exactly_two_members_at_the_contract_path():
     """The drawer is UNTOUCHED by the promotion, and this is what keeps it that way in both directions:
     it reads `doc.frame` and `doc.processing.file_written_by` and nothing else, from the served route
@@ -334,7 +334,7 @@ def test_the_built_records_carry_both_members_the_drawer_reads(built):
 
 
 # The two station-named test files that are NOT part of the promoted contract's family: the survey.yaml
-# station-id override and the stations GeoJSON emitter. Both predate the lane and neither gates this
+# station-id override and the stations GeoJSON emitter. Both predate the workflow and neither gates this
 # contract. Naming them is what lets the glob below catch a NEW contract test file that goes unlisted.
 _NOT_CONTRACT_FAMILY = {"test_station_ids.py", "test_stations_geojson.py"}
 
@@ -349,9 +349,9 @@ def _workflow_step(name_fragment: str) -> str:
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_the_ci_pii_guard_greps_every_tree_the_build_writes():
-    """D11's second half. The build step writes TWO trees, `--out` and `--products`, and the guard
+    """The mask rule's second half. The build step writes TWO trees, `--out` and `--products`, and the guard
     grepped only the first, so every station.json and dimensionality.json in the curator tree went
     unscanned for the free-text vector the guard exists to catch. The trees are read out of the build
     step's own arguments so this pin cannot drift from what CI actually produces."""
@@ -368,7 +368,7 @@ def test_the_ci_pii_guard_greps_every_tree_the_build_writes():
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_every_station_contract_test_file_is_in_the_pr_gate_subset():
     """Rule 12, mechanised: the PR gate enumerates test files BY NAME, so a station test file that is
     not listed runs only on push to main. Checked over the whole family rather than the file added
@@ -381,7 +381,7 @@ def test_every_station_contract_test_file_is_in_the_pr_gate_subset():
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_every_time_series_projection_test_file_is_in_the_pr_gate_subset():
     """Rule 12 again, for the family a filename glob cannot describe.
 

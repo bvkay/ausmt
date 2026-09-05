@@ -7,16 +7,15 @@ mode so the WAL-safe path is exercised for real), a reconcile-status.json, and a
 files that land in the snapshot dir, the `latest` symlink target, the count of retained snapshots, the
 process exit code, the stderr message — never the script's own self-report.
 
-The snapshot's sqlite copy is driven through a real host `sqlite3` when one is on PATH; when it is not
-(and to keep the test hermetic + fast on any CI box) the tests point AUSMT_BACKUP_SQLITE at a tiny sh
-shim that does a plain `cp`. That is fine for these tests: they verify backup.sh's ORCHESTRATION
-(which files land where, symlink, prune, refusals, preflights), not sqlite's own .backup correctness
-(that is the restore-drill's integrity_check). The "no sqlite3" HARD REFUSAL is tested by pointing the
-override at a non-existent command: there is NO docker/Python fallback (removed 2026-07-10 — it could
-not open a live WAL DB through a read-only mount and could not write the operator-0700 staging dir as
-the container uid), so a missing sqlite3 with a DB present is a fatal error, not a fallback trigger.
+The snapshot's sqlite copy is driven through a real host `sqlite3` when one is on PATH; when it is
+not (and to keep the test hermetic + fast on any CI box) the tests point AUSMT_BACKUP_SQLITE at a
+tiny sh shim that does a plain `cp`. That is fine for these tests: they verify backup.sh's
+ORCHESTRATION (which files land where, symlink, prune, refusals, preflights), not sqlite's own
+.backup correctness (that is the restore-drill's integrity_check). The "no sqlite3" HARD REFUSAL is
+tested by pointing the override at a non-existent command: there is NO docker/Python fallback, so a
+missing sqlite3 with a DB present is a fatal error, not a fallback trigger.
 
-Two preflights (added after the 2026-07-10 first-real-run incident) are pinned here too: the WAL
+Two preflights are pinned here too: the WAL
 sidecar-permission gate (an unwritable -shm/-wal fails LOUD before any snapshot work) and the
 backups-dir gate (a non-existent backups dir under an unwritable parent fails with the exact
 `install -d` fix before the snapshot, rather than after — the /srv-root-owned trap).
@@ -215,7 +214,7 @@ def test_no_sqlite3_refuses_hard_with_actionable_message(tmp_path):
     """sqlite3 absent WITH a gateway DB present => the script REFUSES (there is no fallback) and exits
     non-zero with an ACTIONABLE message: the install-sqlite3 command, NOT any docker suggestion. FAILS
     IF: it silently `cp`s the live WAL DB (a potentially torn snapshot), exits 0, the message does not
-    name the install fix, or it still mentions a docker/image fallback (the removed 2026-07-10 path)."""
+    name the install fix, or it still mentions a docker/image fallback."""
     tree = _make_tree(tmp_path)
     # Point the sqlite override at a command that does not exist. With a DB present this is fatal — the
     # docker/Python fallback was removed, so there is nothing else to try.
@@ -225,7 +224,7 @@ def test_no_sqlite3_refuses_hard_with_actionable_message(tmp_path):
     assert "apt-get install" in r.stderr or "install" in r.stderr.lower(), \
         "the refusal must be actionable (how to install sqlite3)"
     assert "docker" not in r.stderr.lower(), \
-        "the refusal must NOT suggest docker (the fallback was removed 2026-07-10)"
+        "the refusal must NOT suggest docker: there is no docker fallback"
     # And it must NOT have produced a snapshot containing a raw-copied DB.
     assert _snapshots(tree) == [], "no snapshot may be produced without a WAL-safe copy"
 
@@ -235,7 +234,7 @@ def test_unwritable_wal_sidecar_fails_preflight_then_recovers(tmp_path):
     """A WAL sidecar (gateway.sqlite-shm) that is not writable by the current user fails the preflight
     LOUDLY and EARLY — before any snapshot work — naming the file and printing the `chmod g+rw` fix;
     once made writable, the run proceeds past the preflight. FAILS IF: the unwritable sidecar is not
-    caught (the 2026-07-10 sidecar-perm trap after a compose recreation), the message does not name the
+    caught, the message does not name the
     file or the chmod fix, OR a snapshot is somehow produced despite the unwritable sidecar."""
     tree = _make_tree(tmp_path)
     # A dummy -shm sidecar next to the DB, made unwritable (0o400: readable, NOT writable).
@@ -262,8 +261,7 @@ def test_unwritable_wal_sidecar_fails_preflight_then_recovers(tmp_path):
                            "Linux CI leg (gateway-ci on ubuntu) exercises this preflight")
 def test_backups_dir_preflight_when_parent_unwritable(tmp_path):
     """When the backups dir does not exist AND its parent is not writable, the script refuses BEFORE the
-    snapshot with the exact `sudo install -d … -m 0750 <dir>` create command (the 2026-07-10 trap: a
-    root-owned data root means the publish-time mkdir dies AFTER a successful snapshot). FAILS IF: the
+    snapshot with the exact `sudo install -d … -m 0750 <dir>` create command. FAILS IF: the
     unwritable parent is not caught, the message lacks the `install -d` fix, OR a snapshot is produced
     despite the un-creatable backups dir."""
     tree = _make_tree(tmp_path)
@@ -305,7 +303,7 @@ def test_vanished_db_on_an_established_box_refuses_rather_than_publishing_a_dble
     one: the state volume failed to mount, or AUSMT_DATA_DIR drifted. Publishing a DB-less snapshot
     there starts a countdown in which the contents-blind prune rotates the last DB-bearing copy out.
 
-    FAILS IF the run exits 0 and publishes: pre-lane it logged 'fresh box before first submission?'
+    FAILS IF the run exits 0 and publishes: earlier it logged 'fresh box before first submission?'
     and returned success on an established box."""
     tree = _make_tree(tmp_path, with_db=False)
     b = tree["backups"]

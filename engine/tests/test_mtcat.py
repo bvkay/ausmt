@@ -1,7 +1,7 @@
 """MTCAT emission (2.0 semantics; the field-level 2.0 pins live in test_mtcat20_emission.py).
 
 The build emits mtcat.json — the portal-owned discovery document other portals could harvest.
-This validates structure against schema/mtcat.schema.json with a dependency-free checker (jsonschema
+This validates structure against engine/schema/mtcat.schema.json with a dependency-free checker (jsonschema
 is optional; a small recursive validator keeps the core test suite stdlib-only) and confirms the
 required Portal / Survey / Station objects are populated from real data.
 
@@ -37,9 +37,9 @@ SCHEMA_VERSION = re.match(r"^MTCAT v(\d+\.\d+):", SCHEMA["title"]).group(1)
 def _check(node, schema, path="$"):
     """Minimal draft-07 subset validator: type, required, const, enum, pattern, items, properties.
 
-    MTCAT 1.2 pins the ratified vocabularies (name_type, contributor role, identifier_type, relation,
+    MTCAT 1.2 pins the vocabularies (name_type, contributor role, identifier_type, relation,
     identifies, the station band) with `enum`, so this stdlib checker learns `enum` too: without it every
-    _check call in this file would silently wave an out-of-vocabulary token through, and the vocab pins
+    _check call in this file would silently pass an out-of-vocabulary token through, and the vocab pins
     would only ever be enforced where jsonschema happens to be installed. `integer` is honoured as a
     distinct type for the same reason (a stringified count must not pass as a number)."""
     import re
@@ -59,7 +59,7 @@ def _check(node, schema, path="$"):
     if "const" in schema:
         assert node == schema["const"], f"{path}: expected const {schema['const']}"
     if "enum" in schema:
-        assert node in schema["enum"], f"{path}: {node!r} is not in the ratified vocab {schema['enum']}"
+        assert node in schema["enum"], f"{path}: {node!r} is not in the declared vocab {schema['enum']}"
     if "pattern" in schema and isinstance(node, str):
         assert re.search(schema["pattern"], node), f"{path}: {node!r} fails /{schema['pattern']}/"
     if isinstance(node, dict):
@@ -106,7 +106,7 @@ def test_portal_config_omitting_schema_version_still_stamps_the_current_version(
     """A readable portal config that OMITS portal.schema_version must stamp the version the served
     schema declares, not a stale one.
 
-    build_portal used to carry THREE independent literal defaults for this single value: the
+    build_portal once carried THREE independent literal defaults for this single value: the
     no-config/unreadable-config default in load_portal_config, its parsed-config default, and the
     emitter's own p.get fallback. All three now read MTCAT_SCHEMA_VERSION, generated from the schema's
     own title, so the value has one home; engine/tests/test_mtcat_version_parity.py pins every surface
@@ -184,7 +184,7 @@ def test_mtcat_formats_match_the_download_manifest(tmp_path):
         if want:
             assert s["formats"] == want, s["survey_id"]
         else:
-            # 2.0 (owner finding 62): a survey with nothing distributed OMITS the key - [] would
+            # 2.0: a survey with nothing distributed OMITS the key - [] would
             # falsely assert that no formats are KNOWN for withheld holdings.
             assert "formats" not in s, s["survey_id"]
     assert any(s.get("formats") for s in doc["surveys"]), "this build distributes something, so prove it"
@@ -270,7 +270,7 @@ def test_mtcat_builder_unit():
 
 
 def test_mtcat_builder_emits_org_ror_and_raid_when_declared():
-    """C7 task 6: mtcat.schema.json gained additive optional survey fields organisation_ror, raid;
+    """mtcat.schema.json gained additive optional survey fields organisation_ror, raid;
     mtcat_document emits them when the survey's SMETA carries org_ror/raid."""
     sys.path.insert(0, str(ROOT / "extract"))
     import build_portal as bp

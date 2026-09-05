@@ -1,4 +1,4 @@
-"""S3: feed.xml -- a minimal Atom feed of surveys sorted by their latest release date (fallback:
+"""feed.xml -- a minimal Atom feed of surveys sorted by their latest release date (fallback:
 dates end/start year), for a modeller to watch "what's new" without polling the whole portal.
 
 FAILS IF (pre-fix): build_portal has no feed_entries()/build_feed_xml() at all (AttributeError);
@@ -47,15 +47,15 @@ def test_feed_entries_uses_latest_release_note_not_first():
 
 
 def test_feed_entries_uses_attribution_declared_date_when_no_release_notes():
-    """PINNED CROSS-LANE DATE RULE: attribution.declared_date (C46) is a first-class candidate date.
+    """PINNED CROSS-SURFACE DATE RULE: attribution.declared_date is a first-class candidate date.
     A survey with NO release_notes but a declared_date must date its feed entry BY that declared_date,
     NOT the bare-year Dec-31 fallback. FAILS PRE-FIX: _survey_latest_date ignored attribution entirely,
-    so this survey dated to 2019-12-31 (year_end)."""
+    so this survey dated to that fallback instead (year_end)."""
     smeta = {"Declared Only": {"slug": "declared", "year_end": 2019,
                                "attribution": {"declared_date": "2026-07-25"}}}
     entries = bp.feed_entries(smeta)
     assert len(entries) == 1
-    assert entries[0]["date"] == "2026-07-25", entries   # declared_date, NOT 2019-12-31
+    assert entries[0]["date"] == "2026-07-25", entries   # the declared_date, NOT the year-end fallback
 
 
 def test_feed_entries_declared_date_joins_release_note_candidate_set():
@@ -113,7 +113,7 @@ def test_build_feed_xml_well_formed_and_sorted():
     assert titles == ["New Survey", "Old Survey"]
     ids = [e.find(f"{ATOM_NS}id").text for e in root.findall(f"{ATOM_NS}entry")]
     assert ids == ["tag:ausmt:new", "tag:ausmt:old"]
-    # RE-PINNED for the path-URL contract (owner ruling 2026-08-18): entry links carry the
+    # RE-PINNED for the path-URL contract: entry links carry the
     # published path form <base>surveys/<slug>, not the retired fragment form <base>#/survey/<slug>
     # (this line RED-failed against the old form before being re-pinned; the fragment-free pin
     # lives in test_sitemap_pathurls.py).

@@ -1,24 +1,24 @@
 """kind=time_series rows on station.json: the archive's bytes, described but never re-hosted.
 
-A2 projects the verified-resource register through the ONE internal model (`station_document`) as
+The engine projects the verified-resource register through the ONE internal model (`station_document`) as
 resource rows that carry a ROUTE and nothing local: `access_url` on the canonical NCI fileServer
 host, `repository`, the closed `processing_level`/`packaging` vocabularies crosswalked out of the
-station concepts, the D19 role axes, and the R9 fieldnote naming the day the CRAWLER read a 200.
+station concepts, the role axes, and the fieldnote naming the day the CRAWLER read a 200.
 There is no `path`, no checksum and no `service_urls`: AusMT hands the reader off, it does not host.
 
 Four gates decide whether a row exists at all, and each is pinned separately because each fails
 differently:
 
-  * `review: verified` (D9). A pending row is an ADJUDICATION QUEUE entry, and best-guess attachment
-    of a file to a station is silent scientific error; a retired row (D17) is evidence of a resource
+  * `review: verified`. A pending row is an ADJUDICATION QUEUE entry, and best-guess attachment
+    of a file to a station is silent scientific error; a retired row is evidence of a resource
     that ceased to exist. Neither projects.
-  * `level != level2` (D19, ruled 2026-08-24). NCI's level_2 tree holds transfer functions, not time
+  * `level != level2`. NCI's level_2 tree holds transfer functions, not time
     series: seeding them here would assert a verified TIME SERIES for stations that have none. The
     fixture register carries a VERIFIED level2 row so this exclusion is a tested rule and
     not an accident of the corpus.
   * the station is OPEN. A non-served survey's record is the withheld stub, whose key set is
     closed-world; a coordinate-gated station inside a served survey is excluded by the SAME two
-    scalars the C42 byte gate ANDs, because its raw time series carries the position the mask
+    scalars the byte gate ANDs, because its raw time series carries the position the mask
     withholds.
   * a level with nothing verified produces NO row, never a row with a null `access_url`.
 
@@ -52,10 +52,10 @@ FILESERVER = "https://thredds.nci.org.au/thredds/fileServer/"
 # The API reference states ts_access.json's stability promise in prose. engine.Dockerfile COPYs
 # contract/ + engine/ and one generated portal file, never docs/, so in the engine image this file
 # does not exist and the prose legs below skip on the reason ci_check_skips.py already allow-lists
-# for that designed topology. On every checkout lane the docs tree is present and they assert.
+# for that designed topology. On every checkout workflow the docs tree is present and they assert.
 API_REFERENCE = REPO / "docs" / "docs" / "interoperability" / "api-reference.md"
 DOCS_SKIP_REASON = ("engine image build: docs tree not shipped "
-                    "(designed topology; the docs surface is pinned from checkout lanes)")
+                    "(designed topology; the docs surface is pinned from the checkout workflows)")
 
 
 def _ts_access_docs_section() -> str:
@@ -78,7 +78,7 @@ def _build(surveys, out, *extra):
 def built(tmp_path_factory):
     """The vendored corpus built WITH the committed register.
 
-    FAILS against the pre-A2 emitter, which read the register and projected nothing from it."""
+    FAILS against the earlier emitter, which read the register and projected nothing from it."""
     pytest.importorskip("mt_metadata")
     out = tmp_path_factory.mktemp("station-ts") / "data"
     r = _build(SURVEYS, out, "--ts-index", str(TS_INDEX))
@@ -106,7 +106,7 @@ def test_a_verified_row_becomes_a_time_series_resource(built):
 
 
 def test_the_access_url_is_the_absolute_percent_encoded_fileserver_route(built):
-    """The C5 fixture: NVP_2019 serves `C5 [REMOTE].zip`, whose encoded form is the only string that
+    """The remote-zip fixture: NVP_2019 serves `C5 [REMOTE].zip`, whose encoded form is the only string that
     HEADs 200. A literal space in an emitted route is a dead download."""
     rows = {r["id"]: r for r in _rows(_station(built, "example-survey", "EXAMPLE01"))}
     url = rows["ts-raw_packed"]["access_url"]
@@ -124,12 +124,12 @@ def test_no_row_carries_a_local_path_a_checksum_or_a_service_url(built):
 
 
 def test_repository_names_the_holder_of_the_bytes(built):
-    """D2: the deferral trigger has fired and the crawler knows the host with certainty."""
+    """The deferral trigger has fired and the crawler knows the host with certainty."""
     assert {r["repository"] for r in _rows(_station(built, "example-survey", "EXAMPLE01"))} == {"NCI"}
 
 
 def test_the_processing_vocabularies_are_the_schema_enums_crosswalked_out(built):
-    """Gate 12 in use: this lane is STATION_VOCABULARY_CROSSWALK's first consumer, and the tokens it
+    """Gate 12 in use: this module is STATION_VOCABULARY_CROSSWALK's first consumer, and the tokens it
     emits come from the clean station vocabulary, never from NCI's level names."""
     levels = SCHEMA["definitions"]["resource"]["properties"]["processing_level"]["enum"]
     packagings = SCHEMA["definitions"]["resource"]["properties"]["packaging"]["enum"]
@@ -194,7 +194,7 @@ def test_a_derived_row_links_to_the_runs_this_record_publishes(built_with_runs):
 
 
 def test_the_fieldnote_names_the_crawl_and_not_the_build(built):
-    """R9 as amended by D18: rule 14 forbids a network call inside the build, so a build cannot
+    """Rule 14 forbids a network call inside the build, so a build cannot
     say it verified anything. The date is the crawler's, carried through unchanged."""
     for row in _rows(_station(built, "example-survey", "EXAMPLE01")):
         assert row["note"] == "verified against NCI THREDDS on 2026-08-24", row
@@ -218,7 +218,7 @@ def test_only_the_hand_off_row_states_a_size(built):
 # ---- what never projects -------------------------------------------------------------------------
 
 def test_a_verified_level2_row_projects_nothing(built):
-    """D19, ruled 2026-08-24. The fixture register carries a VERIFIED level2 row, so this is the
+    """The fixture register carries a VERIFIED level2 row, so this is the
     exclusion rule under test and not a corpus that happens to hold no level_2 files."""
     yaml = pytest.importorskip("yaml")
     register = yaml.safe_load((TS_INDEX / "example-survey" / "ts-index.yaml").read_text(encoding="utf-8"))
@@ -231,7 +231,7 @@ def test_a_verified_level2_row_projects_nothing(built):
 
 
 def test_a_pending_and_a_retired_row_project_nothing(built):
-    """D9 and D17. EXAMPLE02 carries one of each and nothing else, so its record must carry the
+    """The pending row and the retired row. EXAMPLE02 carries one of each and nothing else, so its record must carry the
     served renditions alone."""
     doc = _station(built, "example-survey", "EXAMPLE02")
     assert _rows(doc) == [], doc.get("resources")
@@ -284,7 +284,7 @@ def _register_for(root, package, station_ids):
 @pytest.fixture(scope="module")
 def built_masked(tmp_path_factory):
     """One exact, one generalised and one withheld-position station in ONE open survey, each with a
-    verified register row, built by the C42 stager."""
+    verified register row, built by the stager."""
     pytest.importorskip("mt_metadata")
     c42 = _c42()
     root = tmp_path_factory.mktemp("station-ts-masked")
@@ -300,7 +300,7 @@ def built_masked(tmp_path_factory):
 
 
 def test_a_coordinate_gated_station_gets_no_route(built_masked):
-    """The C1 gate, reusing the SAME two scalars the byte gate ANDs rather than a parallel check: a
+    """The access gate, reusing the SAME two scalars the byte gate ANDs rather than a parallel check: a
     generalised or position-withheld station's raw time series carries the position the mask
     withholds, so it is excluded even though its survey is open and its register row is verified."""
     c42 = _c42()
@@ -311,7 +311,7 @@ def test_a_coordinate_gated_station_gets_no_route(built_masked):
         assert _rows(docs[station]) == [], docs[station].get("resources")
 
 
-# ---- ts_access.json, the route-detail boot artifact (A5) ------------------------------------------
+# ---- ts_access.json, the route-detail boot artifact -----------------------------------------------
 
 def _ts_access(out):
     """The emitted artifact, or None when the build wrote none (which is itself an assertion)."""
@@ -320,9 +320,9 @@ def _ts_access(out):
 
 
 def test_ts_access_carries_bytes_and_url_path_per_open_station_and_level(built):
-    """A5: `{ausmt_id: {level: {bytes, url_path}}}`. station.json is never fetched on navigation
+    """`{ausmt_id: {level: {bytes, url_path}}}`. station.json is never fetched on navigation
     (build_portal:5369-5370), so this is the only artifact that can carry the archive's route into a
-    manifest the portal builds (D3). `url_path` is the archive's own string VERBATIM, which is the
+    manifest the portal builds. `url_path` is the archive's own string VERBATIM, which is the
     form that identifies the file; the encoding happens where it becomes a URL, never in storage."""
     doc = _ts_access(built)
     assert doc, "the fixture register projects three routes, so the artifact must exist"
@@ -366,7 +366,7 @@ def test_ts_access_holds_the_blessed_row_shape_and_the_additive_rule(built):
     `bytes` is stated CONDITIONALLY on purpose, because that is what the emitter guarantees. The
     register tolerates a row with no size (_tsindex._row checks the figure only when it is present,
     and the surveys validator mirrors that rule verbatim by design, so requiring it here would make
-    the engine stricter than ratified and hard-stop a build on a register surveys CI passed green),
+    the engine stricter than the validator and hard-stop a build on a register surveys CI passed green),
     and _tsproject.route_rows omits the key rather than inventing a zero. Suppressing the whole route
     instead is worse than a missing figure: route_rows also feeds the front door's /go/ts table
     (deploy/scripts/gen_ts_routes.py, which reads only url_path), so a size-less row would cost the
@@ -416,22 +416,22 @@ def test_the_blessed_docs_section_promises_what_the_emitter_guarantees():
 
     Making the register demand the figure was the other way out and is the wrong one twice over: the
     surveys validator mirrors the engine's row reader verbatim BY DESIGN and states that absence
-    stays silent, so an engine that refused would be stricter than ratified and would hard-stop a
+    stays silent, so an engine that refused would be stricter than the validator and would hard-stop a
     build on a register surveys CI passed green; and route_rows also feeds the front door's /go/ts
     table, which reads only url_path, so suppressing a size-less route would cost a reader a working
     download over a missing number. The prose moved to the truth instead.
 
     The level-token leg is the same debt in the other enumerated fact. The section listed the four
     tokens as a closed set one paragraph above the one promising that new tokens may appear, and no
-    pin read the list at all: the B0 pin asserts row shape and the mtcat identity join and never the
-    names. So the one enumerated fact on a surface blessed as third-party-stable could go stale in
+    pin read the list at all: the existing pin asserts row shape and the mtcat identity join and never
+    the names. So the one enumerated fact on a surface blessed as third-party-stable could go stale in
     silence the next time a level was added. The list is now read out of the emitter's own
     vocabulary rather than restated here, which is what makes the sentence self-maintaining.
 
     FAILS IF the unconditional promise returns, if the conditional wording stops naming the register
     as the condition, if the enumeration goes back to reading as closed, if a publishable level
     token stops being named, or if the never-projecting one stops being named as excluded. Skipped
-    only where the docs tree is not shipped (the engine image); asserted on every checkout lane."""
+    only where the docs tree is not shipped (the engine image); asserted on every checkout workflow."""
     section = _ts_access_docs_section()
     assert "`url_path`" in section, "the blessed section must still name the key it always carries"
     assert not re.search(r"[Ee]very row carries at least `bytes`", section), (
@@ -487,8 +487,8 @@ def test_a_build_with_no_register_writes_no_artifact_at_all(tmp_path):
 
 
 def test_a_coordinate_gated_station_is_absent_from_the_artifact(built_masked):
-    """R5 stated in the artifact: suppression lives in RESOLUTION, so a masked station is not in the
-    file at all. Membership IS the guard here - the shape carries route detail by design (D3)."""
+    """Stated in the artifact: suppression lives in RESOLUTION, so a masked station is not in the
+    file at all. Membership IS the guard here - the shape carries route detail by design."""
     c42 = _c42()
     ids = {json.loads(p.read_text(encoding="utf-8"))["station"]:
            json.loads(p.read_text(encoding="utf-8"))["ausmt_id"]
@@ -571,9 +571,9 @@ def test_the_rows_are_emitted_in_the_level_order_the_table_declares():
 
 def test_the_level_tokens_are_derived_from_the_crosswalk_and_exclude_level2():
     """The route table's vocabulary keys ARE crosswalk keys, so a level added to the crosswalk
-    cannot be silently unroutable here; level2 is absent by ruling, not by omission."""
+    cannot be silently unroutable here; level2 is absent by rule, not by omission."""
     assert set(bp._TS_LEVEL_ROUTE) == {"raw_packed", "level0", "level1_mth5", "level1_netcdf"}
-    assert "level2" not in bp._TS_LEVEL_ROUTE, "D19: level_2 holds transfer functions, not time series"
+    assert "level2" not in bp._TS_LEVEL_ROUTE, "level_2 holds transfer functions, not time series"
     assert {v["vocab"] for v in bp._TS_LEVEL_ROUTE.values()} <= set(bp.STATION_VOCABULARY_CROSSWALK)
 
 

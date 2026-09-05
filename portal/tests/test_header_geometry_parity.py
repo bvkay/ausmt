@@ -17,7 +17,7 @@ surface cannot silently re-float the other while both stay locally plausible.
 
 WHY THE ENGINE HALF LIVES HERE rather than in engine/tests: portal-ci runs on portal/** AND on
 engine/extract/_pages.py (see .github/workflows/portal-ci.yml), so a change to either header fires
-this lane; the engine lane triggers on engine/** alone and cannot see an index.html edit. The
+this module; the engine workflow triggers on engine/** alone and cannot see an index.html edit. The
 engine half is read from _pages.py's SOURCE TEXT, the same mechanism as
 test_collection_colours.py: _pages.py cannot simply be imported (it sibling-imports _au_outline
 and _stationcheck, which need the engine's own path set up), and re-typing its CSS here would only
@@ -123,7 +123,7 @@ def test_every_chrome_surface_carries_one_nav_container_rule():
     """The nav CONTAINER rule, character-identical on EVERY surface wearing the chrome. FAILS IF
     the wrap modes (or the gap, or the display) drift apart: a nowrap container and a wrap
     container hand the same three min-width:112px tabs different row counts and different resolved
-    widths, which is exactly the 47.5px tab-group offset the C9 review measured between the SPA and
+    widths, which is exactly the 47.5px tab-group offset the review measured between the SPA and
     the pages at 1280px.
 
     It compares all five surfaces rather than the SPA-and-pages pair this pin started as, because
@@ -200,9 +200,9 @@ def test_the_two_headers_measure_text_in_one_font_stack():
 
 # --------------------------------------------------------------------------- the identity mark
 #
-# Brand-assets lane E3: the header identity is the AusMT mark on EVERY surface, replacing the
+# The header identity is the AusMT mark on EVERY surface, replacing the
 # AuScope-derived symbol the SPA carried alone. The relationship with AuScope stays explicit in
-# footer and About content; it is no longer embedded in the lockup.
+# footer and About content; it is not embedded in the lockup.
 #
 # The mark is a fixed 30 x 30 box, which is why it can join the zero-basis .hleft zone without
 # moving the centre tabs: a flex:1 1 0 side hands its leftover space out evenly whatever it holds,
@@ -243,9 +243,9 @@ def test_the_mark_the_two_headers_name_is_a_real_committed_asset():
 # symbol after the SPA and the 2,655 generated pages had switched, so a reader following the
 # header's own "Contribute a survey" link watched the site's identity change under them.
 #
-# NO PAGE IS EXEMPT. about.html was the last one, its identity slot held open while the owner ruled
-# on that header; the ruling is that about wears the chrome every other surface wears. There is no
-# exemption list here any more, and the pages are discovered from the filesystem, so a page cannot
+# NO PAGE IS EXEMPT. about.html was the last one, its identity slot held open while that header
+# was still being settled; the rule is that about wears the chrome every other surface wears. There is
+# no exemption list here any more, and the pages are discovered from the filesystem, so a page cannot
 # arrive with an identity of its own. 404.html is a bare error document with no header at all.
 MARK_IMG = f'<img class="brandmark" src="{MARK_SRC}" alt="AusMT" width="30" height="30">'
 
@@ -282,9 +282,9 @@ def test_every_static_chrome_page_carries_the_ausmt_mark():
 
 
 def test_no_header_stands_the_auscope_symbol_in_for_an_identity():
-    """The ruling that closed the carve-out, pinned as one. FAILS IF any page carries the AuScope
+    """The rule that closed the carve-out, pinned as one. FAILS IF any page carries the AuScope
     symbol in its identity slot: the AusMT mark opens every header, and nothing stands in for it.
-    A header copied from the pre-ruling about.html is exactly how the old slot comes back.
+    A header copied from the pre-rule about.html is exactly how the old slot comes back.
 
     Scoped to the identity CLASS rather than to the image file, which is the narrower of the two
     statements and the one this pin owns: the whole-file ban lives below."""
@@ -297,7 +297,7 @@ def test_no_header_stands_the_auscope_symbol_in_for_an_identity():
 
 # ------------------------------------------------------- the parent-organisation mark, WITHDRAWN
 #
-# The AuScope mark used to close every header from the right zone. The owner's ruling moves the
+# No AuScope mark closes a header from the right zone. The rule moves the
 # relationship to the two places that state it in words: the footer, on every surface, and About's
 # "Who enables AusMT" section. A symbol repeated in the top-right corner of every page said nothing
 # those two do not, so it leaves EVERY header, and the right zone keeps the contextual status slot
@@ -321,7 +321,7 @@ def test_no_chrome_page_is_exempt_from_the_identity_mark():
     """The guard over the per-surface identity pin above: it may not be hollowed out by skipping a
     page. FAILS IF any discovered chrome page is missing the AusMT mark that opens its header.
 
-    It used to hold BOTH marks on every page. One of the two is gone from every header, so what is
+    It once held BOTH marks on every page. One of the two is gone from every header, so what is
     left to hold is the one that remains, and the withdrawal of the other is pinned below rather
     than folded in here: a page that lost its identity and a page that grew a parent mark back are
     different defects and read better as different failures."""
@@ -334,10 +334,10 @@ def test_no_chrome_page_is_exempt_from_the_identity_mark():
 
 
 def test_no_chrome_surface_carries_the_org_mark_in_its_header():
-    """The ruling, on every surface at once. FAILS IF the anchor literal, the .orgmark class or
+    """The rule, on every surface at once. FAILS IF the anchor literal, the .orgmark class or
     either of its two CSS rules comes back to the SPA, to any static chrome page or to the engine's
     pages sheet: those five spellings are how the mark would return, and a header copied from a
-    pre-ruling page carries all four at once.
+    pre-rule page carries all four at once.
 
     The engine surface is read from its SOURCE, the same mechanism the pins above use: the sheet
     cannot be imported without the engine's path set up, and the emitter is one literal."""
@@ -360,14 +360,14 @@ def test_no_chrome_surface_carries_the_org_mark_in_its_header():
 # spelling of it in one slot.
 ORG_ASSET = ORG_SRC.rsplit("/", 1)[-1]
 
-# Zero appearances per chrome page. It was one while the mark closed every header; the ruling took
+# Zero appearances per chrome page. It was one while the mark closed every header; the rule took
 # that slot away and left the portal's shipped documents naming the file nowhere at all.
 ORG_ASSET_PER_PAGE = 0
 
 
 def test_no_chrome_page_names_the_auscope_image_at_all():
     """FAILS IF a chrome page carries the AuScope image in any slot, by either spelling. The mark
-    was appended to a zone, so the way it comes back is a careless copy of a pre-ruling header, and
+    was appended to a zone, so the way it comes back is a careless copy of a pre-rule header, and
     a page naming the file again is that copy whatever markup it arrived in."""
     pages = _chrome_pages()
     assert pages, "no chrome page was discovered; the glob or the header marker has moved"
@@ -382,7 +382,7 @@ def test_the_withdrawn_asset_is_still_the_real_committed_file_its_other_consumer
     """The file STAYS, and this holds it to being the artefact it was. FAILS IF it is deleted,
     replaced by a placeholder or re-encoded without its alpha channel.
 
-    Three consumers outlive the header slot and none of them is in this ruling: the documentation
+    Three consumers outlive the header slot and none of them is in this rule: the documentation
     site's sidebar copy is made from these bytes (tests/test_docs_branding.py), the generated
     collection page draws the same file as a corner mark on its member-footprint panel, and
     tools/gen_social_card.py composites it into the social card. Deleting it because no header
@@ -471,7 +471,7 @@ def test_every_chrome_surface_declares_the_headers_own_line_height():
     to be inherited from its host document's body: the identity block's two line boxes are
     font-size x line-height, so an inherited 1.55 or 1.6 renders the SAME header 8.47px or 10.19px
     taller than the SPA's the moment that block wraps. Different heights on different pages is a
-    different header on different pages, and the standing ruling is one header on every surface."""
+    different header on different pages, and the standing rule is one header on every surface."""
     surfaces = _chrome_surfaces()
     assert len(surfaces) >= 2, "no chrome surfaces were discovered; the glob or the zone marker moved"
     for where, text in surfaces:
@@ -483,9 +483,9 @@ def test_every_chrome_surface_declares_the_headers_own_line_height():
 
 def test_every_chrome_surface_carries_the_same_zone_geometry():
     """The zone rules, character-identical on EVERY surface wearing the chrome, not just across the
-    pair above. The pair covers the SPA and the generated pages, which is where the geometry was
-    ruled; releases.html and about.html each carry their OWN copy of the chrome, and both kept the
-    auto-basis sides the C9 ruling replaced. An auto basis sizes each side zone from its own content,
+    pair above. The pair covers the SPA and the generated pages, which is where the geometry is
+    specified; releases.html and about.html each carry their OWN copy of the chrome, and both kept
+    the auto-basis sides the zone rule replaced. An auto basis sizes each side zone from its own content,
     so on those two pages the identity block set the width of its own zone and shoved the tab group
     out to x=525.63 and x=525.27 at 1280px, while the SPA, the generated pages and brand.html all
     sat at x=350.83. A reader following the header's own Releases or About link watched the nav jump
@@ -496,6 +496,6 @@ def test_every_chrome_surface_carries_the_same_zone_geometry():
         rules = _zone_rules(text, where)
         for zone in ZONES:
             assert rules[zone] == reference[zone], (
-                f".{zone} has drifted from the ruled zone geometry:\n"
+                f".{zone} has drifted from the declared zone geometry:\n"
                 f"  portal/index.html            {reference[zone]!r}\n"
                 f"  {where:<28} {rules[zone]!r}")

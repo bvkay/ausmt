@@ -1,4 +1,4 @@
-"""The published-URL id freeze (path-URL contract commit 3, owner ruling 2026-08-18).
+"""The published-URL id freeze.
 
 /surveys/<slug>, /stations/<ausmt_id> and /collections/<id> are published URL contracts, so the id
 vocabulary is FROZEN in portal/data/url_registry.json. Pinned here:
@@ -43,8 +43,8 @@ _PORTAL_TREE_PROBES = (
     ROOT.parent / "portal" / "index.html",
 )
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: portal tree not shipped "
-                              "(designed topology; the committed registry is pinned from "
-                              "checkout lanes)")
+                              "(designed topology; the committed registry is pinned from the "
+                              "checkout workflows)")
 portal_tree = pytest.mark.skipif(not any(p.is_file() for p in _PORTAL_TREE_PROBES),
                                  reason=IMAGE_TOPOLOGY_SKIP_REASON)
 
@@ -169,7 +169,7 @@ def test_cli_update_seeds_then_check_is_green_and_auto_records_additions(tmp_pat
 
 
 def test_cli_check_fails_on_a_mutated_slug_with_the_prescribed_message(tmp_path):
-    """THE FREEZE, end to end (the lane's RED proof): mutate one published slug in the build; the
+    """THE FREEZE, end to end (the module's RED proof): mutate one published slug in the build; the
     committed-registry check must exit non-zero and print the prescribed message."""
     data = _write_data_dir(tmp_path, _MTCAT)
     reg = tmp_path / "url_registry.json"
@@ -229,7 +229,7 @@ def test_committed_registry_against_a_real_built_tree():
     """REAL-DATA TIER: when AUSMT_URL_REGISTRY_DATA names a built portal data dir (mtcat.json,
     optionally sitemap.xml), the committed registry must pass the freeze and sitemap checks
     against it. Skips cleanly where no built tree exists (dev boxes, CI): the fixture-driven tests
-    above prove the checker itself, and the owner's publish flow runs the CLI against the real
+    above prove the checker itself, and the publish flow runs the CLI against the real
     build."""
     data = os.environ.get("AUSMT_URL_REGISTRY_DATA", "").strip()
     if not data or not (Path(data) / "mtcat.json").is_file():
@@ -246,7 +246,7 @@ def test_committed_registry_against_a_real_built_tree():
 
 
 def test_the_hand_off_namespace_can_never_reach_the_registry_or_the_sitemap():
-    """NEGATIVE PIN (THREDDS A10). `/go/ts/<survey>/<station>/<level>` is a front-door redirect into
+    """NEGATIVE PIN (THREDDS). `/go/ts/<survey>/<station>/<level>` is a front-door redirect into
     the NCI archive, NOT a published entity URL: it resolves through a generated table whose
     membership is the access decision, so an id reaching this registry through it would freeze a
     route the access gate is entitled to withdraw.

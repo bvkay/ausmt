@@ -1,27 +1,6 @@
-// Fills the Releases page from the served release index. A release is a quarterly, frozen copy of one
-// build's catalogue surface (mtcat.json / surveys.json / manifest.json) plus that build's survey
-// bundles, cut by engine/extract/cut_release.py into <data-root>/releases/<tag>/ and indexed by
-// <data-root>/releases/releases.json. This script reads BOTH documents and hard-codes nothing about any
-// release, so the page cannot go stale or advertise a release that was never cut.
-//
-// HONESTY RULES, which are the whole point of the page:
-//
-//   1. Absent-or-empty index and unreadable index are DIFFERENT states. A 404 (or an index whose
-//      releases[] is empty) means no release is published here, and the page says so. A network
-//      failure, a non-404 status or a malformed document means this request could not find out, and
-//      the page says THAT instead. Collapsing the two would let a routing problem be reported to every
-//      reader as "no releases have ever been cut".
-//   2. Nothing is linked that has not been confirmed to exist. Every file link is built from the
-//      release's OWN files[] block in its release.json, so a release whose document cannot be read
-//      gets an explanation rather than a row of links that would 404.
-//   3. A DOI is either resolvable or absent. When a release carries a syntactically real DOI it
-//      becomes a doi.org link; otherwise the citation shows the plain text "DOI: not yet minted".
-//      There is never a dead resolver link, and the pending marker is never an anchor.
-//   4. The catalogue documents are only ever LINKED here, never parsed, so this page has no opinion
-//      about the MTCAT payload shape and nothing to break when the schema version moves.
-//
-// Every value that reaches the DOM does so through textContent or a DOM property, never innerHTML:
-// tags, notes, commits and file paths all originate in a served JSON document.
+// Fills the Releases page from the served index and each release's own document, hard-coding nothing.
+// Absent, unreadable and empty are DIFFERENT states, no link is built for an unconfirmed file, and a
+// DOI is either resolvable or plain pending text. See docs: portal internals, releases.js.
 (function () {
   var loading = document.getElementById("relLoading");
   var empty = document.getElementById("relEmpty");
@@ -45,11 +24,9 @@
     node.hidden = false;
   }
 
-  // Show the working: name the exact document that was requested, on both the empty and the unreadable
-  // state. "No releases cut yet" and "the release tier is not published at this path on this
-  // deployment" are indistinguishable from a 404 alone, and the difference is an operator's problem to
-  // diagnose, not a reader's to guess at. Ships hidden so it can only ever state a URL that was really
-  // requested.
+  // Name the exact document that was requested, on both the empty and the unreadable state, and ship
+  // hidden so the line can only ever state a URL that was really requested.
+  // See docs: portal internals, releases.js.
   function probe(prefix, url) {
     var code = document.getElementById(prefix + "Path");
     var line = document.getElementById(prefix + "Probe");
@@ -117,9 +94,9 @@
 
   // --- the citation -------------------------------------------------------------------------------
 
-  // "AusMT contributors (<year>). AusMT Data Portal, Release <tag>. AuScope."
-  // The year comes from the release's own cut timestamp. If that is missing or unparseable the
-  // parenthetical is dropped rather than guessed: an invented year in a citation is worse than none.
+  // The citation names the contributors, the year in brackets, the portal, the release tag and
+  // AuScope, and the year is omitted rather than guessed when the cut timestamp cannot be parsed.
+  // See docs: portal internals, releases.js.
   function citationText(tag, cut) {
     var y = year(cut);
     return "AusMT contributors" + (y ? " (" + y + ")" : "") +

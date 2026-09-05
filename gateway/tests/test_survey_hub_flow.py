@@ -1,8 +1,8 @@
-"""C43 Stage 1 survey-hub + nav-shell flow tests (record D13 verification pins), driven through the
+"""Stage 1 survey-hub + nav-shell flow tests (verification pins), driven through the
 real gateway HTTP surface with the in-process edit seam.
 
 Load-bearing pins here:
-  * CSP SWEEP (rendered): every C43 surface — the nav shell, the survey hub (both tabs), and the
+  * CSP SWEEP (rendered): every surface - the nav shell, the survey hub (both tabs), and the
     external JS routes — carries NO inline <script> and NO on*= handler (all dead under the
     strictPages CSP, script-src 'self'). Extends the source-level sweep in test_serve_reconcile.py
     with a RENDERED check over the new pages (the non-vacuous form: it inspects served bytes).
@@ -46,7 +46,7 @@ custom_local_note: "keep me byte-for-byte"
 """
 
 
-# SIDEBARMERGE (owner ruling 2026-07-24): a survey carrying EVERY merged-away section (organisation +
+# SIDEBARMERGE: a survey carrying EVERY merged-away section (organisation +
 # instruments under Core fields; lead + principal under Investigators; identifiers + related_identifiers +
 # time_series under Identifiers & PIDs), each with intra-section comments and a RETIRED/legacy key
 # (instruments[].pid, time_series.collection_pid) so a merged-form edit's diff-minimality and the
@@ -109,8 +109,8 @@ def _diff_changed(text: str) -> list[str]:
 
 
 def _section_html(body: str, key: str) -> str:
-    """The rendered HTML of ONE hub Metadata section block. HUB-SINGLE-SAVE (2026-08-14): the sections
-    are <section> blocks inside ONE form, so a block ends at </section> (it used to end at </form>).
+    """The rendered HTML of ONE hub Metadata section block. HUB-SINGLE-SAVE: the sections
+    are <section> blocks inside ONE form, so a block ends at </section>, never at </form>.
     Splitting on the wrong terminator would swallow every following section and quietly hollow out the
     per-section assertions built on this helper."""
     assert f'data-hub-section-form="{key}"' in body, f"no section block for {key!r}"
@@ -173,10 +173,10 @@ def _assert_csp_clean(name: str, html: str) -> None:
 
 
 # --------------------------------------------------------------------------------------------------
-# CSP SWEEP (rendered) — every C43 surface
+# CSP SWEEP (rendered) - every surface
 # --------------------------------------------------------------------------------------------------
 def test_c43_surfaces_are_csp_clean(tmp_path):
-    """RENDERED CSP sweep of every C43 Stage-1 surface: the surveys list (nav shell), the survey hub
+    """RENDERED CSP sweep of every Stage-1 surface: the surveys list (nav shell), the survey hub
     Overview tab, the hub Metadata tab, the queue (shell), the uploader keys page (shell), and the two
     new external JS routes (raw JS, not <script>-wrapped, session-gated). FAILS IF any surface ships an
     inline <script> or an on*= handler, or a JS route serves HTML-wrapped script."""
@@ -207,7 +207,7 @@ def test_c43_surfaces_are_csp_clean(tmp_path):
 
 
 def test_c43_js_routes_are_session_gated(tmp_path):
-    """The C43 external JS routes redirect an ANONYMOUS request to login (303) — same gate as the
+    """The external JS routes redirect an ANONYMOUS request to login (303) - same gate as the
     pages that reference them. FAILS IF a route serves ungated or 404s (the page would load with a
     broken chrome)."""
     async def _body():
@@ -222,11 +222,11 @@ def test_c43_js_routes_are_session_gated(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# NAV SHELL presence (S1-1)
+# NAV SHELL presence
 # --------------------------------------------------------------------------------------------------
 def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
     """Every session-gated curator page renders the left rail (the Stage-1 surfaces PLUS the Stage-3a
-    Collections entry, record D5-A) and the context bar's drift chip carrying the server-rendered
+    Collections entry) and the context bar's drift chip carrying the server-rendered
     published HEAD + Request-rebuild button. FAILS IF a page loses the shell or the rail drops a
     surface."""
     async def _body():
@@ -246,10 +246,10 @@ def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
                 assert 'href="/gateway/curator/edit"' in r.text          # Surveys
                 assert 'href="/gateway/curator/queue"' in r.text          # Submission queue
                 assert 'href="/gateway/curator/uploaders"' in r.text      # Uploader keys
-                # Serve state: C43 S2b-i promoted the panel to a first-class screen, so the rail
+                # Serve state: the panel is a first-class screen of its own, so the rail
                 # now points at /gateway/curator/serve (was the queue's #serve-state anchor).
                 assert 'href="/gateway/curator/serve"' in r.text           # Serve state
-                # Collections joined the rail in Stage 3a (record D5-A) — present on every page (not
+                # Collections joined the rail in Stage 3a - present on every page (not
                 # the active item on these non-collections pages).
                 assert 'href="/gateway/curator/collections">Collections</a>' in r.text, \
                     f"{path}: Collections missing from the rail"
@@ -262,7 +262,7 @@ def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# SURVEY HUB (S1-2)
+# SURVEY HUB
 # --------------------------------------------------------------------------------------------------
 def test_survey_list_links_to_hub_not_edit_form(tmp_path):
     """The Surveys list rows link to the per-survey HUB (the task home), not straight to the edit
@@ -279,7 +279,7 @@ def test_survey_list_links_to_hub_not_edit_form(tmp_path):
 
 
 def test_surveys_list_is_a_table_filled_browser_side(tmp_path):
-    """C43 FR2-1 SURVEYS-TABLE PIN. The Surveys list is a proper TABLE (not a bare link list): a row
+    """SURVEYS-TABLE PIN. The Surveys list is a proper TABLE (not a bare link list): a row
     per slug with Survey / Slug / Version / Licence / Stations columns, the slug rendered as a mono
     chip, the Survey cell linking to the hub, and data-cell placeholders the external surveys-list.js
     fills from the served corpus (surveys.json + build_report.json). The server renders only slugs (a
@@ -309,7 +309,7 @@ def test_surveys_list_is_a_table_filled_browser_side(tmp_path):
 
 def test_surveys_list_js_route_raw_and_session_gated(tmp_path):
     """The surveys-list.js route serves RAW JS (not <script>-wrapped) and is session-gated (anon =>
-    303 to login), like the other C43 external scripts. FAILS IF it 404s, serves HTML, or is
+    303 to login), like the other external scripts. FAILS IF it 404s, serves HTML, or is
     ungated."""
     async def _body():
         surveys_live = _hub_client(tmp_path)
@@ -328,7 +328,7 @@ def test_surveys_list_js_route_raw_and_session_gated(tmp_path):
 
 
 def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
-    """The Overview & QA tab renders the QA scaffold (browser-populated from /data). C43 Stage 2a: the
+    """The Overview & QA tab renders the QA scaffold (browser-populated from /data). Stage 2a: the
     Stations and History tab-strip entries are now REAL in-hub tabs (?tab=stations / ?tab=history),
     NOT the Stage-1 link-out/absence. FAILS IF the QA data-hook is missing, or the Stations/History
     tabs regress to the Stage-1 link-out / are absent."""
@@ -353,7 +353,7 @@ def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
 
 
 def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
-    """IDCONS D1 (SPEC §2) — the HUB Metadata tab (the sidebar editor the curator actually uses) renders
+    """The HUB Metadata tab (the sidebar editor the curator actually uses) renders
     the identifier surface as ONE consolidated 'Identifiers & PIDs' section, exactly like the full form.
     The sidebar/TOC shows a SINGLE entry (no standalone 'Related identifiers' section), the consolidated
     form carries BOTH the identifiers map widgets (project_raid) AND the typed related_identifiers list
@@ -386,7 +386,7 @@ def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
             assert 'name="l_related_identifiers_0_identifier"' in form_html
             assert "10.25914/existing-doi" in form_html                          # existing typed row prefilled
             assert 'name="o_identifiers"' in form_html and 'name="o_related_identifiers"' in form_html
-            # Plain-language guidance (the heart of the owner complaint) is present in the panel.
+            # Plain-language guidance is present in the panel.
             assert "Where does it go?" in form_html
             assert "Derived from (this data was processed from it)" in form_html  # human relation label
             assert 'value="IsDerivedFrom"' in form_html                          # exact vocab still POSTed
@@ -395,7 +395,7 @@ def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
 
 
 def test_hub_consolidated_section_round_trips_both_groups(tmp_path):
-    """IDCONS D1 — a SINGLE post of the consolidated 'Identifiers & PIDs' hub section round-trips BOTH the
+    """A SINGLE post of the consolidated 'Identifiers & PIDs' hub section round-trips BOTH the
     identifiers MAP fields (project_raid) AND the related_identifiers LIST rows: build_section_patch
     iterates every widget section and assembles whichever widgets are present, so one form carrying both
     groups produces a patch touching both keys. FAILS IF the combined section post drops either group."""
@@ -434,7 +434,7 @@ def test_hub_consolidated_section_round_trips_both_groups(tmp_path):
 
 
 def test_hub_metadata_tab_single_form_all_sections(tmp_path):
-    """HUB-SINGLE-SAVE STRUCTURE PIN (2026-08-14). The Metadata tab renders a section TOC + ONE form
+    """HUB-SINGLE-SAVE STRUCTURE PIN. The Metadata tab renders a section TOC + ONE form
     carrying EVERY section as a <section> block + ONE commit tray. FAILS IF the tab reverts to a form
     per section (that is exactly what cost the curator a merge job / version bump / preview / confirm
     per section), or drops the TOC / the single tray. RED against the pre-change hub, which rendered
@@ -450,7 +450,7 @@ def test_hub_metadata_tab_single_form_all_sections(tmp_path):
             sections = re.findall(r'data-hub-section-form="([^"]+)"', r.text)
             # Scalars + each (possibly merged) sidebar section is its own BLOCK. SIDEBARMERGE:
             # organisation and instruments are folded into the "Core fields" (_scalars) block and are
-            # NOT standalone; CONTRIBUTOR-CREDIT-SPEC §6: the unified People & credit block is "people".
+            # NOT standalone; the contributor-credit model: the unified People & credit block is "people".
             assert "_scalars" in sections and "people" in sections
             assert "organisation" not in sections, \
                 "organisation must be folded into the merged Core fields block, not a standalone one"
@@ -478,11 +478,11 @@ def test_hub_metadata_tab_single_form_all_sections(tmp_path):
 
 
 def test_hub_enter_key_defaults_to_an_unnamed_save(tmp_path):
-    """IMPLICIT-SUBMISSION PIN (2026-08-14). A form's default button — the one Enter in a text field
+    """IMPLICIT-SUBMISSION PIN. A form's default button - the one Enter in a text field
     activates, is the FIRST submit button in tree order. With every section folded into ONE form, any
     NAMED submit anywhere on the tab would become that default and Enter in a text field would post an
-    extra field nobody asked for. (The retired legacy Convert action was exactly such a button; A2/D7
-    deleted it, and this guard stays because the hazard is structural.) An unnamed submit must come
+    extra field nobody asked for. (The retired legacy Convert action was exactly such a button; it was
+    deleted, and this guard stays because the hazard is structural.) An unnamed submit must come
     first, so Enter is a plain Save. FAILS IF the first submit inside the metadata form carries a name,
     or if the guard is missing / focusable."""
     async def _body():
@@ -492,7 +492,7 @@ def test_hub_enter_key_defaults_to_an_unnamed_save(tmp_path):
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             body = (await client.get("/gateway/curator/survey/hub-survey-2026?tab=metadata")).text
-            # A2 (D7): no named submit is rendered anywhere on the tab any more.
+            # No named submit is rendered anywhere on the tab any more.
             assert "people_convert" not in body
             form = _one_form_html(body)
             first = re.search(r'<button[^>]*type="submit"[^>]*>', form)
@@ -510,7 +510,7 @@ def test_hub_enter_key_defaults_to_an_unnamed_save(tmp_path):
 def test_hub_per_section_submit_is_section_scoped(tmp_path):
     """SECTION-SCOPED PATCH PIN (flow). Submit ONLY the organisation section's widgets (name unchanged,
     ror set) and the preview diff changes organisation WITHOUT rewriting the untouched
-    lead_investigator section. HUB-SINGLE-SAVE (2026-08-14): still the load-bearing pin under the one
+    lead_investigator section. HUB-SINGLE-SAVE: still the load-bearing pin under the one
     combined form — a save now carries every section, and the no-clobber promise rests entirely on
     assemble_section returning _OMIT for a section that round-trips to its o_<section> snapshot.
     FAILS IF a submit leaks a section the curator did not touch into the patch/diff."""
@@ -547,11 +547,11 @@ def test_hub_per_section_submit_is_section_scoped(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# SIDEBARMERGE (owner ruling 2026-07-24) — M1/M2/M3 merged sidebar entries
+# SIDEBARMERGE - merged sidebar entries
 # --------------------------------------------------------------------------------------------------
 def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
-    """SIDEBARMERGE IA PIN (M1/M2/M3). The Metadata sidebar collapses to ONE entry per merged group in
-    the owner-ruled order: Core fields (scalars + Organisation + Instruments) / Investigators (Lead +
+    """SIDEBARMERGE IA PIN. The Metadata sidebar collapses to ONE entry per merged group in
+    the settled order: Core fields (scalars + Organisation + Instruments) / Investigators (Lead +
     Principal) / Identifiers & PIDs (now incl. Time series levels) / Publications / Funding / Access /
     Attribution & rights / Processing / Collection / CARE governance. The retired standalone entries
     (Organisation, Instruments, Lead investigator, Principal investigators, Time series) are GONE as
@@ -567,9 +567,8 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             r = await client.get("/gateway/curator/survey/merge-survey-2026?tab=metadata")
             assert r.status_code == 200
             body = r.text
-            # The sidebar/TOC is exactly the merged order, one entry per merged group. CONTRIBUTOR-
-            # CREDIT-SPEC §6: the four investigator/creator/contributor panels collapse to ONE
-            # "People & credit" entry.
+            # The sidebar/TOC is exactly the merged order, one entry per merged group: the four
+            # investigator/creator/contributor panels collapse to ONE "People & credit" entry.
             toc = re.findall(r'data-hub-section="[^"]+">([^<]+)', body)
             assert toc == ["Core fields", "People &amp; credit", "Organisations &amp; roles",
                            "Identifiers &amp; PIDs", "Citation", "Identity &amp; designation",
@@ -588,14 +587,14 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             def _form(key):
                 return _section_html(body, key)
 
-            # M3 Core fields: three grouped headings + all three constituents' widgets + o_ snapshots.
+            # Core fields: three grouped headings + all three constituents' widgets + o_ snapshots.
             core = _form("_scalars")
             for needle in ("<h2>Core fields</h2>", "<h2>Organisation</h2>", "<h2>Instruments</h2>",
                            'name="f_project_name"', 'name="s_organisation_name"', 'name="o_organisation"',
                            'name="l_instruments_0_manufacturer"', 'name="o_instruments"'):
                 assert needle in core, f"Core fields form missing {needle}"
 
-            # §6 People & credit: ONE panel of unified rows + the ratified widgets and the short
+            # People & credit: ONE panel of unified rows + the widgets and the short
             # credit explainer (NOT the retired precedence sentence). (The o_creators/o_contributors
             # round-trip anchors render only when the survey CARRIES those lists; this survey has
             # neither, so their absence is correct - it keeps an empty panel absent -> _OMIT.)
@@ -605,7 +604,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
                            'name="l_people_0_role_ProjectLeader"', "Cited authors form the citation"):
                 assert needle in people, f"People & credit form missing {needle}"
             assert ("When a lead investigator is set the portal credits the lead") not in people
-            # A2 (D7): the legacy Convert notices are GONE. The survey still carries both retired flat
+            # The legacy Convert notices are GONE. The survey still carries both retired flat
             # keys on disk; the editor models them with NOTHING, so they are never shown and never
             # patched (byte-preserved as unmodelled keys).
             assert "people_convert" not in people
@@ -613,7 +612,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             # ONE advanced-JSON escape per underlying list.
             assert 'name="j_creators"' in people and 'name="j_contributors"' in people
 
-            # M1 Identifiers & PIDs: the folded Time series levels group (d) + its widgets/snapshot/hint.
+            # Identifiers & PIDs: the folded Time series levels group (d) + its widgets/snapshot/hint.
             ids = _form("identifiers")
             for needle in ("Time series levels available",
                            'name="c_time_series_levels_available_raw_packed"', 'name="o_time_series"',
@@ -627,7 +626,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
 
 
 def test_hub_core_fields_merge_round_trips_scalars_org_instruments(tmp_path):
-    """SIDEBARMERGE M3 COMBINED-POST PIN. ONE post of the merged Core fields form round-trips ALL THREE
+    """SIDEBARMERGE COMBINED-POST PIN. ONE post of the merged Core fields form round-trips ALL THREE
     constituents — a top-level scalar (project_name), the Organisation map (ror), and a fresh Instruments
     row — because build_section_patch assembles whichever widgets the one form carries. FAILS IF the
     combined post drops any constituent."""
@@ -658,7 +657,7 @@ def test_hub_core_fields_merge_round_trips_scalars_org_instruments(tmp_path):
 
 
 def test_hub_curated_homes_merge_round_trips_in_one_post(tmp_path):
-    """A2 COMBINED-POST PIN, replacing the retired M2 Investigators pin. ONE post of the metadata form
+    """COMBINED-POST PIN, replacing the retired Investigators pin. ONE post of the metadata form
     round-trips the citation map (preferred text + the nested preferred-identifier pair), the
     identity_classification designation mapping, an organisations row with its role checkbox group and
     its primary-custodian radio, AND an acknowledgements row. FAILS IF any of the four new panels drops
@@ -703,7 +702,7 @@ def test_hub_curated_homes_merge_round_trips_in_one_post(tmp_path):
 
 
 def test_hub_identifiers_merge_round_trips_time_series(tmp_path):
-    """SIDEBARMERGE M1 COMBINED-POST PIN. ONE post of the Identifiers & PIDs form round-trips the
+    """SIDEBARMERGE COMBINED-POST PIN. ONE post of the Identifiers & PIDs form round-trips the
     identifiers map (project_raid), a related_identifiers row, AND the folded time_series levels — three
     sections in one submit. FAILS IF the folded time_series group drops out of the combined post."""
     async def _body():
@@ -779,7 +778,7 @@ def test_hub_merged_form_no_clobber_and_legacy_preserved(tmp_path):
 
 
 def test_hub_identifiers_edit_preserves_time_series_legacy_key(tmp_path):
-    """SIDEBARMERGE M1 LEGACY-BYTE PIN. Editing the identifiers project_raid through the merged
+    """SIDEBARMERGE LEGACY-BYTE PIN. Editing the identifiers project_raid through the merged
     Identifiers & PIDs form, while the folded time_series levels ride along UNCHANGED (o_time_series
     snapshot carries the retired collection_pid), preserves time_series byte-for-byte: the retired
     collection_pid never appears in the diff. FAILS IF folding time_series into the identifiers form
@@ -821,7 +820,7 @@ def test_hub_identifiers_edit_preserves_time_series_legacy_key(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# HUB-SINGLE-SAVE (2026-08-14) — one save across every section; the JS-hidden spare rows
+# HUB-SINGLE-SAVE - one save across every section; the JS-hidden spare rows
 # --------------------------------------------------------------------------------------------------
 def _hub_form_fields(body: str) -> dict:
     """The exact name/value pairs a browser would submit for the hub's ONE metadata form. Isolated by
@@ -840,7 +839,7 @@ def _one_form_html(body: str) -> str:
 
 
 def test_hub_single_save_spans_two_sections_in_one_merge_job(tmp_path):
-    """HUB-SINGLE-SAVE COMBINED-SAVE PIN (2026-08-14). The curator edits TWO sidebar sections — Core
+    """HUB-SINGLE-SAVE COMBINED-SAVE PIN. The curator edits TWO sidebar sections - Core
     fields (a top-level scalar) and Access (the access map) — and clicks Save ONCE. The whole hub form
     is submitted as a browser would submit it, producing exactly ONE merge job whose patch carries BOTH
     sections and exactly ONE version bump (1.0.0 -> 1.0.1).
@@ -911,7 +910,7 @@ def test_hub_single_save_spans_two_sections_in_one_merge_job(tmp_path):
 
 
 def test_hub_spare_rows_carry_the_marker_and_editor_js_hides_them(tmp_path):
-    """SPARE-ROW MARKER PIN (2026-08-14). The server still renders the no-JS spare blank rows (a
+    """SPARE-ROW MARKER PIN. The server still renders the no-JS spare blank rows (a
     deliberate degradation invariant) but stamps them data-spare-row="1", and editor.js hides exactly
     those on init. The rows a curator actually has — and the template editor.js clones for +Add — must
     NOT carry the marker, or a real row (or every JS-added row) would render invisible.
@@ -964,7 +963,7 @@ def test_hub_spare_rows_carry_the_marker_and_editor_js_hides_them(tmp_path):
 
 
 def test_hub_combined_save_field_error_keeps_other_sections_values(tmp_path):
-    """COMBINED-SAVE ERROR PIN (2026-08-14). A per-field parse failure in section B (a malformed ORCID
+    """COMBINED-SAVE ERROR PIN. A per-field parse failure in section B (a malformed ORCID
     in People & credit) re-renders the HUB Metadata tab with the error beside its owning section AND
     section A's typed-but-unsaved values intact — nothing the curator entered anywhere in the one form
     is discarded, and they stay on the tab they were editing.
@@ -1000,7 +999,7 @@ def test_hub_combined_save_field_error_keeps_other_sections_values(tmp_path):
             assert "new version" not in out, "a failed parse must not reach the preview"
             # We are back on the HUB Metadata tab (not the standalone full form).
             assert 'id="hub-metadata-form"' in out and 'data-hub-section-form="people"' in out
-            assert "?tab=history" in out, "the hub tab strip is missing — this is not the hub"
+            assert "?tab=history" in out, "the hub tab strip is missing - this is not the hub"
             assert "<h1>Edit metadata" not in out, "bounced to the standalone full form"
             # The error is annotated on its OWNING section (the _section_error_html list), and the
             # offending value is preserved there so the curator can see and fix what they typed.

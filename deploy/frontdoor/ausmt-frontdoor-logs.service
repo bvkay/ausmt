@@ -1,5 +1,5 @@
-# AusMT front-door log shipping (C47 deliverable 3). A oneshot the ausmt-frontdoor-logs.timer fires
-# once a day, a few minutes AHEAD of the C45 fold (ausmt-stats.timer, 03:35 UTC): it runs
+# AusMT front-door log shipping. A oneshot the ausmt-frontdoor-logs.timer fires
+# once a day, a few minutes AHEAD of the stats fold (ausmt-stats.timer, 03:35 UTC): it runs
 # deploy/frontdoor/ship-frontdoor-logs.sh, which rsyncs the masked access-frontdoor*.json logs off the
 # VPS over the tailnet into $AUSMT_DATA_DIR/logs/caddy — the exact dir the aggregator globs. Same
 # trust class + install idiom as ausmt-stats.service: NON-root operator uid, .env-driven (no shell
@@ -18,7 +18,7 @@
 [Unit]
 Description=AusMT front-door log shipping (pull masked access-frontdoor logs over the tailnet, daily)
 # The runbook for this unit (resolved by the install sed exactly like ExecStart) — never a literal
-# <operator> path (the 2026-07 backup-unit Documentation bug).
+# <operator> path, which would name a path that never exists.
 Documentation=file://__DEPLOY_DIR__/frontdoor/RUNBOOK.md
 # Needs the network up (it pulls over the tailnet) and a synced clock for the log timestamps.
 After=time-sync.target network-online.target

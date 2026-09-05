@@ -55,8 +55,8 @@ def test_normalize_rejects_empty_tf(tmp_path):
         normalize(empty, tmp_path, survey_id="x", station_id="EMPTY01")
 
 
-# --- C17: the round-trip gate must not vacuously pass a re-read with fewer periods or a dropped
-# tipper (the prefix-`min()`-and-allclose the gate used to run over would happily "verify" either).
+# --- The round-trip gate must not vacuously pass a re-read with fewer periods or a dropped
+# tipper (a prefix-`min()`-and-allclose gate would happily "verify" either).
 # We simulate a broken re-read by monkeypatching TF.read so ONLY the SECOND call inside normalize()
 # (the canonical-XML round-trip re-read) is mutated afterward — the first call (reading `src`) is
 # untouched. This is the least invasive way to produce "an XML re-read that lost data" without
@@ -107,7 +107,7 @@ def test_normalize_rejects_dropped_tipper_roundtrip(tmp_path, monkeypatch):
 # --- Fill-mask fix: some real EDIs (Geotools/MT-GFZ producer; all 57 auslamp-tas stations) carry the
 # community missing-data sentinel 1.000000E+32 INSIDE impedance blocks at undetermined periods.
 # mt_metadata's EDI reader turns those into 0+0j but its EMTF-XML writer faithfully re-emits the 1e32
-# sentinel (D6: the canonical XML stays mt_metadata-faithful), which re-reads as (1e32+1e32j). The
+# sentinel (the canonical XML stays mt_metadata-faithful), which re-reads as (1e32+1e32j). The
 # unmasked gate compared orig 0+0j vs re-read (1e32+1e32j) => maxdiff=sqrt(2)*1e32=1.414e+32 and
 # refused to publish a canonical XML. The fix masks fill cells (|v|>_FILL_MAX) on EITHER side in the
 # impedance and derived-EDI comparisons, exactly as _compare_optional_field already did for the
@@ -141,7 +141,7 @@ def _inject_impedance_fill(edi_text: str, blocks=("ZXYR", "ZXYI")) -> str:
 
 def test_normalize_masks_impedance_fill(tmp_path):
     """FAILS IF: a real-shaped EDI carrying the 1e32 missing-data sentinel inside its impedance blocks
-    cannot produce a canonical XML — i.e. normalize() raises 'impedance maxdiff=1.414e+32' (the pre-fix
+    cannot produce a canonical XML - i.e. normalize() raises 'impedance maxdiff=1.414e+32' (the pre-fix
     behaviour that blocked all 57 auslamp-tas stations from getting canonical XML). Post-fix, the fill
     cells are masked, normalize() succeeds, and roundtrip_maxdiff is finite and small."""
     poisoned = _inject_impedance_fill(STANDARD.read_text(encoding="utf-8"))
@@ -169,7 +169,7 @@ def _perturb_impedance_cell(tf) -> None:
 
 def test_normalize_still_rejects_genuine_impedance_drift(tmp_path, monkeypatch):
     """ANTI-VACUOUS COMPANION. FAILS IF: the fill mask is so broad that a GENUINE impedance value drift
-    between write and re-read no longer raises — i.e. the gate has been neutered into always-pass. We
+    between write and re-read does not raise, i.e. the gate has been neutered into always-pass. We
     perturb one NON-fill impedance cell on the re-read side (Zxx[0], well beyond rtol) and assert the
     round-trip gate STILL raises with the fix in place. A mask that (wrongly) covered every cell would
     make this test fail — proving it guards against over-masking (demonstrated separately in scratchpad
@@ -179,7 +179,7 @@ def test_normalize_still_rejects_genuine_impedance_drift(tmp_path, monkeypatch):
         normalize(STANDARD, tmp_path, survey_id="vulcan")
 
 
-# --- C2: canonical EMTF-XML must not FABRICATE metadata; conditioning must be persisted. ----------
+# --- Canonical EMTF-XML must not FABRICATE metadata; conditioning must be persisted. --------------
 def _read_back(res):
     """Re-read the written canonical XML and return its TF (fresh read, not the in-memory object)."""
     rt = TF()
@@ -197,7 +197,7 @@ def test_citation_authors_are_the_survey_org_not_ausmt(tmp_path):
     rt = _read_back(res)
     authors = rt.survey_metadata.citation_dataset.authors
     assert authors == "Geoscience Australia", authors
-    assert authors != "AusMT", "citation authors are the portal brand — fabricated attribution"
+    assert authors != "AusMT", "citation authors are the portal brand - fabricated attribution"
     # title = survey title + station; DOI carried through (mt_metadata normalises to a doi.org URL)
     assert rt.survey_metadata.citation_dataset.title == "Vulcan MT Survey - A1"
     assert "10.9999/vulcan" in str(rt.survey_metadata.citation_dataset.doi)
@@ -205,7 +205,7 @@ def test_citation_authors_are_the_survey_org_not_ausmt(tmp_path):
 
 def test_citation_prefers_named_creators_over_org(tmp_path):
     """FAILS IF: named creators are present in survey_meta but the citation authors fall back to the org
-    (or worse, "AusMT"). creators[] is the ratified citation author list, joined with '; ' so a
+    (or worse, "AusMT"). creators[] is the citation author list, joined with '; ' so a
     'Last, First' name stays unambiguous."""
     sm = {"org": "Geoscience Australia",
           "creators": [{"name": "A. Researcher", "orcid": "0000-0002-1825-0097"},
@@ -217,7 +217,7 @@ def test_citation_prefers_named_creators_over_org(tmp_path):
 
 
 def test_citation_ignores_a_stale_retired_investigators_facet(tmp_path):
-    """A1 (reader retirement): a stale SMETA still carrying the retired investigators facet and NO
+    """A stale SMETA still carrying the retired investigators facet and NO
     creators must fall STRAIGHT to the custodian org. Pre-change the facet supplied the author line, so
     this returned "A. Researcher, B. Scientist"."""
     sm = {"org": "Geoscience Australia",
@@ -362,12 +362,12 @@ def test_fieldnotes_drop_is_targeted_not_wholesale(tmp_path):
     assert "fieldnotes.datalogger.id" not in c2.value
 
 
-# --- Final-audit 4.2: library-default metadata the XML asserts must carry conditioning notes. ------
+# --- Library-default metadata the XML asserts must carry conditioning notes. ----------------------
 def test_edi_library_defaults_are_noted_not_silently_asserted(tmp_path):
     """FAILS IF: normalize() writes a canonical XML that asserts a sign convention, a declination
     epoch/model, or channel orientations for an EDI source WITHOUT a conditioning note saying the
-    source never stated them. This is the LG-2 fabrication class the C2 fix did not cover (final
-    hostile audit 4.2, reproduced on this very fixture: Vulcan_A1's XML asserts <SignConvention>+,
+    source never stated them. This is the fabrication class the earlier fix did not cover
+    (reproduced on this very fixture: Vulcan_A1's XML asserts <SignConvention>+,
     Declination epoch="1995", and Ey orientation 0.0 = NORTH — from zero-length, azimuth-less EMEAS
     lines — none of it source-stated). The values may stay (the writer requires them, exactly like
     the Issue-#4 rotation zero-fill), but each must be flagged NOT-asserted in the conditioned list."""
@@ -396,7 +396,7 @@ def test_default_notes_are_edi_gated(tmp_path):
     assert "declination" not in joined, notes
 
 
-# --- C46-W3a: EMTF-XML Copyright truth fix. The served XML must NOT carry mt_metadata's default
+# --- EMTF-XML Copyright truth fix. The served XML must NOT carry mt_metadata's default
 # "Unrestricted Release" / "may be copied freely … IRIS" boilerplate; it must state the survey's REAL
 # declared licence + access level, and those fields must SURVIVE the write->read round-trip. --------
 import re as _re2  # noqa: E402
@@ -412,7 +412,7 @@ def _copyright_xml(res):
 
 def test_copyright_boilerplate_never_emitted(tmp_path):
     """FAILS IF: any served canonical XML carries the mt_metadata default Copyright boilerplate — the
-    live mis-statement C46-W3a fixes (every pre-fix XML claimed "Unrestricted Release" and "may be copied
+    live mis-statement this fix closes (every pre-fix XML claimed "Unrestricted Release" and "may be copied
     freely … neither the author(s) … nor IRIS …" on the LIBRARY's authority, not the custodian's).
     Checked across an open survey, an embargoed one, AND a bare (no survey_meta) call — the fix runs
     unconditionally so NO emitted XML keeps the boilerplate."""

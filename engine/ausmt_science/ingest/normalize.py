@@ -2,7 +2,7 @@
 
 Any TF input (EDI / EMTF XML) -> mt_metadata TF object -> a *conditioned*, schema-valid canonical
 EMTF XML + a derived EDI, with a VERIFIED round-trip (impedance preserved). This backs the Phase-1
-D6 canonical EMTF XML store (see docs developer docs / the Phase-1 format-backbone design).
+canonical EMTF XML store (see docs developer docs / the Phase-1 format-backbone design).
 Requires the core mt_metadata/mth5 stack; every heavy import is function-local so merely importing
 this module is cheap and never pulls the heavy stack until normalize() is actually called.
 
@@ -32,7 +32,7 @@ distinct conditioning failures occur that way, and item 7 below is a different c
   6. Site.project pattern is ^[a-zA-Z0-9-_]*$ (no spaces) — survey project names like "Stuart Shelf
      2009" fail the write; sanitized (the readable name stays in survey.yaml). Found by the
      remote-reference data inspection across real dialects (EDL/BIRRP).
-  7. Library-default metadata the XML asserts as fact (final hostile audit 4.2): for EDI sources the
+  7. Library-default metadata the XML asserts as fact: for EDI sources the
      sign convention, declination epoch/model, and degenerate-geometry channel orientations are
      mt_metadata defaults the source never stated. The values stay (the writer requires them) but
      each gets a machine-readable NOT-asserted conditioning note, like the rotation zero-fill.
@@ -55,10 +55,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-# C46-W3a: the canonical licence tables (single-sourced in contract/licenses.json -> _contract via the
+# The canonical licence tables (single-sourced in contract/licenses.json -> _contract via the
 # stdlib-only `extract._license_text` leaf) so the EMTF-XML Copyright truth fix builds its conditions_of_use
 # from the SAME id/URL/recognition maps as the LICENSE.txt instrument — no second licence vocabulary. This
-# resolves in every context normalize runs in: the engine test lane and the build both put engine/ on
+# resolves in every context normalize runs in: the engine test run and the build both put engine/ on
 # sys.path (so `extract` is an importable package); the fallback covers an extract/-only-on-path caller.
 try:
     from extract._license_text import canon_license, recognised, _LIC_URLS
@@ -141,13 +141,13 @@ def source_file_from_geographic_name(geographic_name: Optional[str]) -> Optional
 
 def _survey_meta_get(survey_meta: Optional[dict]):
     """Extract (authors, title_prefix, doi) intent from a survey SMETA dict, honestly. The EDI/EMTF-XML
-    export attribution author line follows CONTRIBUTOR-CREDIT-SPEC §2.1: the creators[] names in order
+    export attribution author line follows the contributor-credit model: the creators[] names in order
     when present, else the custodian organisation; NEVER the portal brand. Returns (None,None,None) when
     survey_meta is absent so the caller can fall back to an explicit-unknown, not a fabricated value.
 
-    A1 (reader retirement): the middle rung - the back-compat facet built from the two retired flat
-    credit keys - is GONE. A stale or hand-built survey_meta that still carries that key is ignored and
-    the author line falls straight to the custodian org, so no retired value can reach a served XML.
+    NO back-compat facet is built from the two retired flat credit keys. A stale or hand-built
+    survey_meta that still carries one is ignored and the author line falls straight to the custodian
+    org, so no retired value can reach a served XML.
 
     creators are joined with '; ' (a creator name may be 'Last, First', so a comma join would be
     ambiguous). Non-mapping creator rows are skipped, so an odd hand-built list degrades to the org
@@ -160,7 +160,7 @@ def _survey_meta_get(survey_meta: Optional[dict]):
     creator_names = [n for n in creator_names if n]
     org = (survey_meta.get("org") or "").strip() or None
     if creator_names:
-        authors = "; ".join(creator_names)               # §2.1: creators[] are the citation authors
+        authors = "; ".join(creator_names)               # creators[] are the citation authors
     else:
         authors = org                                    # else the custodian org (never the portal brand)
     cite = survey_meta.get("cite") if isinstance(survey_meta.get("cite"), dict) else {}
@@ -169,7 +169,7 @@ def _survey_meta_get(survey_meta: Optional[dict]):
     return authors, title, doi
 
 
-# --- C46-W3a: EMTF-XML Copyright truth fix -----------------------------------------------------------
+# --- EMTF-XML Copyright truth fix ---------------------------------------------------------------
 # mt_metadata 1.0.9 ships a Copyright block whose defaults ASSERT rights the custodian never granted:
 # release_status defaults to "Unrestricted Release" and conditions_of_use to a "may be copied freely …
 # neither the author(s) … nor IRIS …" paragraph — an unowned licence statement inside every served XML.
@@ -363,7 +363,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
         tf._rotation_angle = np.zeros(n_periods)
         notes.append("rotation: unknown — writer requires array; zeros written, frame NOT asserted")
 
-    # Issue #7 (final hostile audit 4.2): fields mt_metadata fills with LIBRARY DEFAULTS that an EDI
+    # Issue #7: fields mt_metadata fills with LIBRARY DEFAULTS that an EDI
     # cannot state machine-readably, yet the written XML asserts as station facts — the sign
     # convention (<SignConvention>+), the declination epoch/model, and channel orientations
     # synthesised from degenerate EMEAS geometry (zero-length, azimuth-less dipoles => Ey "north").
@@ -392,7 +392,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
             pass
         try:
             for run in (getattr(tf.station_metadata, "runs", None) or []):
-                # Run has no .ex/.ey attributes — channels are reached via get_channel() (pydantic
+                # Run has no .ex/.ey attributes - channels are reached via get_channel() (pydantic
                 # ListDict model, verified on mt_metadata 1.0.9's Run).
                 try:
                     ex, ey = run.get_channel("ex"), run.get_channel("ey")
@@ -464,7 +464,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
     except Exception:  # noqa: BLE001  (citation model varies across versions; non-fatal)
         pass
 
-    # C46-W3a: the Copyright TRUTH FIX. mt_metadata's Copyright defaults ("Unrestricted Release" +
+    # The Copyright TRUTH FIX. mt_metadata's Copyright defaults ("Unrestricted Release" +
     # the "copied freely … IRIS" conditions) are an UNOWNED licence statement that ships inside every
     # served XML. Replace them with the survey's declared licence + access level: release_status from
     # the access level, conditions_of_use built from the licence id + deed URL (custodian-owned), and
@@ -508,7 +508,7 @@ def _pin_create_time(xml_path: Path, tf) -> bool:
     minute this build ran.
 
     The served EMTF XML and the per-survey EMTF-XML zip publish a SHA-256 that a consumer is invited to
-    check against a previously published one. mt_metadata assigns Provenance.create_time = now() inside
+    check against one published earlier. mt_metadata assigns Provenance.create_time = now() inside
     to_xml() with no knob to pass a value (verified: setting provenance.creation_time before the write
     does not reach the file), so an untouched canonical XML publishes a new digest for its station AND
     for its survey's whole XML zip on every rebuild of unchanged inputs. That is the same build-clock
@@ -546,12 +546,12 @@ def _pin_create_time(xml_path: Path, tf) -> bool:
 def _mask_fills(a, b):
     """Boolean mask of cells where EITHER side is the ~1e32 EMTF-XML missing-data fill (|v|>_FILL_MAX).
 
-    Same convention as extract/_mtm.py._is_missing — NOT invented here. Real EDIs from some producers
+    Same convention as extract/_mtm.py._is_missing - NOT invented here. Real EDIs from some producers
     (e.g. Geotools/MT-GFZ) carry the community missing-data sentinel 1e32 INSIDE impedance data blocks
     at periods where a component is undetermined. mt_metadata's EDI reader turns those into 0+0j, but
-    its EMTF-XML writer faithfully re-emits the 1e32 sentinel (D6: the canonical XML must stay
+    its EMTF-XML writer faithfully re-emits the 1e32 sentinel (the canonical XML must stay
     mt_metadata-faithful, sentinels included), which re-reads as (1e32+1e32j). Comparing orig 0+0j vs
-    re-read (1e32+1e32j) at such a cell is a fill-vs-fill artefact, not a corrupted transfer function —
+    re-read (1e32+1e32j) at such a cell is a fill-vs-fill artefact, not a corrupted transfer function -
     so the round-trip comparators exclude these cells and verify only the real (non-fill) values."""
     import numpy as np  # noqa: PLC0415
 
@@ -633,7 +633,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     # Behaviour is UNCHANGED for a file mt_metadata reads directly: read_with_fallback's first act is
     # the same TF().read(str(src)), and the retry it may attempt is parse-only (a normalised copy in a
     # TemporaryDirectory destroyed before the call returns; tf.fn points back at `src`), so the bytes
-    # this function writes, hashes or serves are unaffected -- see the D1 note in extract/_mtm.py.
+    # this function writes, hashes or serves are unaffected -- see the note in extract/_mtm.py.
     # NOT recorded here: build_portal's catalogue pass reads every source file first and already
     # records the per-station fallback into build_report (surveys.<slug>.source_parse_fallbacks), so
     # adding it to `conditioned` would double-report it and would put a READ-side workaround into a
@@ -659,7 +659,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     # ~1e32 — this is the community-standard convention (SPUD/EMTF/mtpy-v2 readers treat |v|>1e8 as
     # missing, exactly as AusMT's own _mtm._is_missing does for the portal tf.json). Do NOT "null" or
     # strip these fills here: that would make AusMT's served canonical form DIVERGE from what the
-    # reference tool produces (the whole point of D6 is to serve the standard form). The portal's
+    # reference tool produces (the whole point is to serve the standard form). The portal's
     # tf.json is a display derivative that nulls the fill; the canonical XML keeps it.
     tf.write(str(canonical_xml), file_type="emtfxml")
     _fix_enum_repr(canonical_xml)
@@ -699,8 +699,8 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
             f"canonical EMTF-XML round-trip FAILED for {src.name}: impedance maxdiff={maxdiff:.3e} "
             f"(rtol={rtol}, atol={atol})")
 
-    # tipper / impedance_error / tipper_error: previously never compared, so a re-read that silently
-    # dropped or corrupted any of these passed the gate. Absent-on-original is fine either way.
+    # tipper / impedance_error / tipper_error are compared as well, so a re-read that silently
+    # drops or corrupts any of them cannot pass the gate. Absent-on-original is fine either way.
     _compare_optional_field("tipper", tf.tipper, tf_rt.tipper, src_name=src.name, rtol=rtol, atol=atol)
     _compare_optional_field("impedance_error", tf.impedance_error, tf_rt.impedance_error,
                              src_name=src.name, rtol=rtol, atol=atol)

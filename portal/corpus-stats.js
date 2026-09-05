@@ -1,15 +1,7 @@
-// Fills the About page header's corpus-totals block ("N stations · N surveys") from the SAME static data
-// products the portal app reads: catalogue.json (one row per station) and surveys.json (one entry per
-// survey). About does not load the app bundle, so this is a self-contained script rather than a call into
-// src/data.js; it duplicates only the base-url resolution, which it must match exactly.
-//
-// Honest by construction. The block ships hidden and is revealed ONLY once both documents resolve to a
-// non-empty corpus, so a file:// page (fetch blocked or cross-origin), a deployment whose data is not
-// published yet, and an empty build all show nothing at all rather than a fabricated or "0 stations"
-// total. Nothing is hard-coded: the numbers can only ever be what the served catalogue says.
-//
-// build.json is deliberately NOT a source here. It carries build IDENTITY (build_id, engine_commit,
-// source_commit, generated) and no counts, so it cannot answer this question.
+// Fills the About page header's corpus totals from catalogue.json and surveys.json. The block ships
+// hidden and is revealed only once both resolve to a non-empty corpus, so a blocked fetch or an
+// unpublished data set shows nothing rather than a zero.
+// See docs: portal internals, corpus-stats.js.
 (function () {
   var el = document.getElementById("corpusCounts");
   var nSt = document.getElementById("corpusStations");

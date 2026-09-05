@@ -1,4 +1,4 @@
-"""Treatment D+ palette pin (owner-approved AuScope Style Guide palette).
+"""The D+ palette pin (the AuScope Style Guide palette).
 
 The five surface/accent tokens live in a :root block that is DUPLICATED verbatim across index.html,
 about.html and add-survey.html. This pins the D+ target values AND that the three copies agree, so a
@@ -12,7 +12,7 @@ Each assertion states its failure criterion:
     #E0782F, ...) would trip every line.
   * cross-file parity — FAILS if the five-token declaration is not byte-identical across the three files.
 
-ENCODING (portability fix, 2026-08-19): the reads below state encoding="utf-8" explicitly. Without it
+ENCODING: the reads below state encoding="utf-8" explicitly. Without it
 Path.read_text() decodes with the LOCALE codec, which is cp1252 on a default Windows shell, and index.html
 carries UTF-8 superscript tick labels (10 to the -3 and friends) whose bytes are undefined in cp1252 - so
 these tests raised UnicodeDecodeError locally while passing in CI, where the locale is UTF-8. A test that is

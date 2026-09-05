@@ -1,14 +1,14 @@
 """THE STATION SCHEMA VERSION HAS ONE SOURCE, AND THIS IS THE PIN THAT KEEPS IT THAT WAY.
 
 The sibling of test_survey_metadata_version_parity.py for the third public contract, station.json.
-The machinery is the one the MTCAT lane learned the hard way and the survey-metadata lane reused, so
+The machinery is the one the MTCAT workflow learned the hard way and the survey-metadata workflow reused, so
 no site ever holds a literal.
 
 SINGLE SOURCE: the STATION_VERSION constant in contract/generate.py. The schema artifact's `title`
 DISPLAYS the version ("AusMT Station Metadata <MAJOR.MINOR>[-draft]: ...") and is verified against the
 constant by contract/generate.py:station_schema_version(), which also emits STATION_SCHEMA_VERSION
 into engine/extract/_contract.py (the generated constant the emitter reads), gated by
-`generate.py --check` in both CI lanes.
+`generate.py --check` in both CI workflows.
 
 THIS MODULE reads the version back off every surface that states one, INDEPENDENTLY of the shared
 function (its own regex over the generate.py source, so the pin cannot agree with itself vacuously):
@@ -175,7 +175,7 @@ def _docs_display() -> str:
 
 @pytest.mark.skipif(not DOCS_INDEX.is_file(),
                     reason="engine image build: docs tree not shipped "
-                           "(designed topology; the docs surface is pinned from checkout lanes)")
+                           "(designed topology; the docs surface is pinned from the checkout workflows)")
 def test_docs_current_version_display_agrees():
     """Statement 7: the docs reference index states which station schema version the documentation
     describes. Skipped only where the docs tree is not shipped (the engine image)."""

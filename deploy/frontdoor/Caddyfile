@@ -1,4 +1,4 @@
-# AusMT public front door (C47 public bridge) — the VPS edge for the public demo name.
+# AusMT public front door (public bridge) - the VPS edge for the public demo name.
 #
 # TOPOLOGY (maintainer/C47-PublicBridge.md): internet -> THIS Caddy on a small Sydney VPS (public IP,
 # DNS A/AAAA at the registrar) -> over the tailnet (WireGuard) -> the box's dedicated READER-ONLY
@@ -6,8 +6,8 @@
 # The box gets NO inbound internet exposure and NO firewall changes. The curator/admin workbench stays
 # tailnet-only exactly as before; this file routes ONLY the PUBLIC submission subset of /gateway (submit,
 # request-key, healthz, status) plus the public Add Survey page, and refuses every other /gateway surface
-# (owner ruling 2026-07-24: an MT user who clicks Add Survey must be able to reach the page and lodge a
-# survey, so the contribution flow is public while the workbench stays walled — see WALL 1 below).
+# (an MT user who clicks Add Survey must be able to reach the page and lodge a
+# survey, so the contribution flow is public while the workbench stays walled: see WALL 1 below).
 #
 # This Caddy is the TRUE edge: nothing sits in front of it (no Cloudflare — a rejected alternative,
 # see the record). So the direct peer IS the real client, and this file deliberately sets NO
@@ -22,12 +22,12 @@
 	# only — no personal hostname. Supplied from .env.
 	email {$AUSMT_ACME_EMAIL}
 
-	# Admin API on a UNIX SOCKET, not a TCP port (ops-hardening O1, 2026-07-25). The original rationale
+	# Admin API on a UNIX SOCKET, not a TCP port (ops-hardening). The original rationale
 	# for `admin off` was "a static edge needs no extra LISTENING PORT" — a unix socket honours that
 	# exactly: it opens NO network port (the socket lives in the container's own /run, not on the host,
 	# even under network_mode: host), so there is no new internet- or host-reachable surface. What it
 	# buys is a working `caddy reload`: install-frontdoor.sh reloads the running edge in place after a
-	# Caddyfile change instead of leaving it serving the OLD wall (the 2026-07 stale-config incident).
+	# Caddyfile change instead of leaving it serving the OLD wall (the stale-config failure mode).
 	# `caddy reload --config /etc/caddy/Caddyfile` reads this admin address from the file. If you would
 	# rather forgo in-place reload entirely, set `admin off` here again: the installer detects the reload
 	# failure and falls back to `docker compose restart frontdoor` (a ~1s bounce; certs persist in the
@@ -38,7 +38,7 @@
 	# forwarded address; client_ip == the real remote peer, which the log block masks at write time.
 }
 
-# ---- The ONE transport to the box reader (2026-08-28 serve-path tuning) --------------------------
+# ---- The ONE transport to the box reader (serve-path tuning) -------------------------------------
 # Every proxy to the box imports this snippet, so there is exactly one place the upstream transport
 # can be got wrong. It dials h2c: tailscale serve forwards :8445 as a RAW TCP tunnel (RUNBOOK
 # `--tcp=8445`), so the h2c bytes pass end to end to the box reader listener, which accepts h2c
@@ -61,15 +61,15 @@
 
 # The public site. A bare hostname address turns on Caddy's automatic HTTPS: it obtains + renews a
 # certificate for {$AUSMT_PUBLIC_NAME} over ACME and AUTOMATICALLY serves an HTTP->HTTPS redirect on
-# :80 for the same name (C47 invariant d). Do NOT add `auto_https off` — that would drop both the cert
+# :80 for the same name (invariant d). Do NOT add `auto_https off` - that would drop both the cert
 # and the redirect.
 {$AUSMT_PUBLIC_NAME} {
 	encode zstd gzip
 
-	# ---- C45 masked-at-edge access log — AT THE FRONT DOOR on public traffic (C47 invariant c) -----
+	# ---- Masked-at-edge access log - AT THE FRONT DOOR on public traffic (invariant c) -------------
 	# This is the analytics feed now: the public client is masked HERE (IPv4 -> /24, IPv6 -> /48) so a
-	# FULL IP never touches disk, with the SAME at-edge guarantees as the box's C45 block. The log is
-	# shipped over the tailnet to the box (ship-frontdoor-logs.sh) where the C45 aggregator folds it.
+	# FULL IP never touches disk, with the SAME at-edge guarantees as the box's block. The log is
+	# shipped over the tailnet to the box (ship-frontdoor-logs.sh) where the aggregator folds it.
 	# The filter masks the client-address fields AND deletes every header that can carry a full client
 	# address (X-Forwarded-For / X-Real-IP / Forwarded — even though we trust none, a caller can still
 	# SEND them and they must never land in the log) or a credential/PII (Cookie / Authorization /
@@ -100,7 +100,7 @@
 					ipv4 24
 					ipv6 48
 				}
-				# R28: redact the /gateway/status/<token> capability from the logged URI - this is the
+				# Redact the /gateway/status/<token> capability from the logged URI - this is the
 				# PUBLIC edge where a status hit actually lands. The token is a secrets.token_urlsafe(32)
 				# bearer whose DB form is SHA-256 hashed; un-redacted it lands in this masked log verbatim
 				# and ships to the box. The regexp field op rewrites ONLY the token segment (the
@@ -120,7 +120,7 @@
 
 	# Baseline security headers + HSTS (public TLS is now in force, so tell browsers to stay on HTTPS).
 	# CSP is NOT set here — it rides through from the box reader listener's per-page policy via the
-	# reverse_proxy below, so the three pages keep their exact C45/portal CSPs.
+	# reverse_proxy below, so the three pages keep their exact portal CSPs.
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
@@ -129,8 +129,8 @@
 	}
 
 	# ---- WALL 1: explicit PUBLIC-SUBSET allowlist, deny-by-default for the gateway surface -----------
-	# Wall 1 is no longer a blanket "refuse the whole gateway" deny. The Add Survey contribution flow is
-	# now PUBLIC (owner ruling 2026-07-24), so wall 1 is an ALLOWLIST of the exact FIVE public entry
+	# Wall 1 is not a blanket "refuse the whole gateway" deny. The Add Survey contribution flow is
+	# PUBLIC, so wall 1 is an ALLOWLIST of the exact FIVE public entry
 	# points, with a deny-by-default 404 for everything else under /gateway. The allow `handle`s run
 	# BEFORE the deny `handle`, and `handle` blocks are mutually exclusive and evaluated in SOURCE ORDER,
 	# so a public route is proxied and every other /gateway path falls through to the explicit 404. Every
@@ -140,11 +140,11 @@
 	#
 	# THE PUBLIC SUBSET (read gateway/app.py — these are the ONLY routes reachable at the public name):
 	#   * GET  /add-survey.html (+ trailing slash) — the contribution page (map, ROR autocomplete, the
-	#                        C13 Submit-to-AusMT button). Static; served by the box reader.
+	#                        Submit-to-AusMT button). Static; served by the box reader.
 	#   * POST /gateway/submit          — the direct-upload endpoint the Submit button POSTs to.
-	#   * POST /gateway/request-key     — self-serve email key issuance (K1).
+	#   * POST /gateway/request-key     - self-serve email key issuance.
 	#   * GET  /gateway/healthz         — the liveness probe the page uses to reveal the Submit button.
-	#   * GET  /gateway/status/*        — the capability-token submission-status page (design §3).
+	#   * GET  /gateway/status/*        - the capability-token submission-status page.
 	# Everything else under /gateway — the ENTIRE curator/admin workbench (login, queue, publish, serve
 	# control, passkey enrolment, analytics, uploader-key management) — is an EXPLICIT 404. The bare
 	# `/gateway` is enumerated alongside `/gateway/*` because `/gateway/*` does not match a path with no
@@ -154,7 +154,7 @@
 	# Wall 2 (the box reader listener, deploy/docker/caddy/Caddyfile :8081) is an INDEPENDENT allowlist
 	# of the SAME subset behind the port-scoped tailnet ACL: it proxies only these four gateway routes to
 	# the gateway container and serves add-survey.html itself, refusing every other /gateway path on its
-	# own (C47 invariant b). Two independent allowlists of one subset — a breach needs BOTH to widen.
+	# own (invariant b). Two independent allowlists of one subset - a breach needs BOTH to widen.
 	@public_add_survey {
 		method GET
 		path /add-survey.html /add-survey.html/
@@ -218,9 +218,9 @@
 	}
 	# A bare /stations has nothing to list and never will: the 2,625 station pages are served for
 	# the URL contract but are deliberately noindex and unadvertised, so the prefix keeps its 301
-	# to the portal root, query preserved. /surveys and /collections used to do the same because
-	# there was nothing behind them; the engine now emits an index page at each, the box serves it
-	# at that exact path, so those two prefixes PASS THROUGH to the reader like any other portal
+	# to the portal root, query preserved. /surveys and /collections must NOT be redirected the same
+	# way: the engine emits an index page at each and the box serves it at that exact path, so those
+	# two prefixes PASS THROUGH to the reader like any other portal
 	# path. Redirecting them here would make two canonical, indexable hub pages unreachable from
 	# the public name, and the doctor's tier-3 leg probes both for exactly that reason.
 	@stations_bare path /stations /stations/
@@ -229,7 +229,7 @@
 	}
 	# ---- end path-url contract ----------------------------------------------------------------------
 
-	# ---- TIME-SERIES HAND-OFF ROUTES (owner ruling R3/R5, namespace D12, table D15) ------------------
+	# ---- TIME-SERIES HAND-OFF ROUTES --------------------------------------------------------------------
 	# /go/ts/<survey>/<station>/<level> answers 302 to the ONE NCI THREDDS fileServer URL for that exact
 	# file. AusMT hands the reader off; it never proxies, re-hosts or re-zips a byte.
 	#
@@ -243,13 +243,13 @@
 	# (deploy/tests/test_frontdoor_ts_routes.py drives these directives against a real Caddy).
 	#
 	# KEYED ON {ausmt_pathurl_rest} (declared at :202-205), the raw URI up to the first '?'. That is
-	# the OPPOSITE of the preserve-the-query ruling at :190-194, by design: a query must not ride
+	# the OPPOSITE of the preserve-the-query rule at :190-194, by design: a query must not ride
 	# onto an NCI URL, so it is stripped BEFORE the lookup and can never reach the Location - which is
 	# also what stops `?u=https://evil.example` turning this into an open redirect. Chained maps resolve
 	# LAZILY (the point of the note at :187), so this map may read the other map's output.
 	#
 	# TERMINAL AT THE FRONT DOOR: neither handle proxies, so no /go/ts/ request ever reaches the box and
-	# the C47 wall-2 allowlist (deploy/docker/caddy/Caddyfile) is untouched by construction. The map
+	# the wall-2 allowlist (deploy/docker/caddy/Caddyfile) is untouched by construction. The map
 	# file is mounted read-only by compose.yaml and validated with the config by install-frontdoor.sh
 	# (`caddy validate` FAILS on a missing import, which is the point: the table is part of the config).
 	# To withdraw every hand-off route: empty ts-routes.map and re-run the installer (RUNBOOK 10.1b).
@@ -284,7 +284,7 @@
 }
 
 # >>> legacy-redirect
-# ---- Legacy-name permanent redirect (canonical-name ruling, 2026-08-18) -------------------------
+# ---- Legacy-name permanent redirect -------------------------------------------------------------
 # {$AUSMT_LEGACY_REDIRECT_NAME} (the retired public name, e.g. ausmt.au) answers every request with
 # a 301 to the SAME path and query on {$AUSMT_PUBLIC_NAME} (the canonical AuScope name). The block
 # is REDIRECT-ONLY by design: no reverse_proxy (a request must never reach the reader wall under

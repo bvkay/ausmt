@@ -4,7 +4,7 @@
 // WHY A DRIVER AND NOT MORE SOURCE PINS. tests/test_map_attribution.py can read that the page asks
 // for a control and that a module builds one; it cannot see whether the control reaches the DOM,
 // whether it starts collapsed, whether a click or a keyboard focus opens it, or what it ends up
-// printing. Those are the owner's actual ask, so they are driven here: the real page, the real
+// printing. Those are the actual ask, so they are driven here: the real page, the real
 // module, a real DOM, and the page's own buttons pressed to build each map.
 //
 // The three maps are the footprint PICKER (a modal, opened by "Pick on map"), the station PREVIEW
@@ -42,7 +42,7 @@ const EDI_TEXT = '>HEAD\nDATAID="S01"\nLAT=-30.10\nLONG=136.20\n\n>FREQ\n1 10 10
 // ---- The Leaflet stand-in -----------------------------------------------------------------------
 // Everything the page's map paths touch degenerates to a chainable stub EXCEPT the three members
 // this test is about: L.map (so a map object exists to mount onto), L.tileLayer (so the layer's OWN
-// declared credit is observable, which is the property the whole ruling turns on) and
+// declared credit is observable, which is the property the whole rule turns on) and
 // L.control.attribution (which gets a REAL container, because the collapsed control is assembled in
 // the DOM and under a blanket stub there would be no node to assemble it on and every assertion
 // about it would be vacuous).
@@ -241,7 +241,7 @@ function assertControl(win, mapId, expectedCredit) {
     `#${mapId}: the glyph is one letter, so it carries a label that says what it opens`);
 
   // NO LEAFLET FLAG AND NO PREFIX. The credit is a licence term; the library's name beside it is a
-  // courtesy the owner asked to be rid of.
+  // courtesy the portal does not carry.
   const text = p.credit.textContent || "";
   ok(!/Leaflet/.test(text), `#${mapId}: the control must print no Leaflet prefix, got ` + JSON.stringify(text));
   ok(!p.credit.querySelector(".leaflet-attribution-flag"),

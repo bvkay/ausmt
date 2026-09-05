@@ -1,11 +1,11 @@
 """Data-type palette: the four hues must stay separable at SITE-DOT size, in normal and dichromatic vision.
 
-Owner, 2026-08-19, on the deployed badge map: "Long Period and Broadband icon colours are too similar".
+Reported on the deployed badge map: "Long Period and Broadband icon colours are too similar".
 At 4px the two read as one cool blob, because the old pair separated mostly by HUE (teal 221 deg vs
 indigo 299 deg) while differing by only 9 L* - and small-mark discrimination is value-driven, not hue
 driven. BBMT moved #5E5ED6 -> #3730B8: a deeper, more saturated blue-indigo that puts a 24.6 L* gap and a
-55.7 C* gap between it and the LP teal, which is deliberately unchanged (teal is the established fabric
-colour across the portal and the owner's atlases).
+55.7 C* gap between it and the LP teal, which is deliberately unchanged (teal is the established
+fabric colour across the portal and the project's atlases).
 
 THE PALETTE HAS TWO AUTHORITIES, and that is the first thing this file pins. There is no gen_config /
 portal.config.yaml colour flow - that file carries branding, deployment, analytics and feature flags only.
@@ -20,7 +20,7 @@ is that they never disagree, which is what test_the_two_palette_authorities_agre
 FAILS IF:
   * the JS palette and the CSS tokens drift apart (a change applied to one surface only);
   * any data-type pair falls under PAIR_FLOOR dE00 (the palette-wide separability invariant);
-  * the LP/BB pair specifically falls under LP_BB_FLOOR (the pair this lane was opened to fix);
+  * the LP/BB pair specifically falls under LP_BB_FLOOR (the pair this module was opened to fix);
   * the LP/BB pair falls under LP_BB_DEUTAN_FLOOR once deuteranopia is SIMULATED - the guard that stops a
     future edit raising normal-vision distance while quietly re-converging them for red-green deficient
     readers, which a plain dE00 floor cannot see;
@@ -38,15 +38,15 @@ STATE_JS = ROOT / "src" / "state.js"
 INDEX = ROOT / "index.html"
 # The third consumer, and the reason this file rather than the engine's suite carries the parity
 # pin: portal-ci runs on portal/** and on the engine files portal tests read, so a change to either
-# palette fires it. The engine lane triggers on engine/** alone and would not see a state.js edit.
+# palette fires it. The engine workflow triggers on engine/** alone and would not see a state.js edit.
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
 TYPES = ("LPMT", "BBMT", "AMT", "GDS")
 TOKEN_OF = {"LPMT": "--lpmt", "BBMT": "--bbmt", "AMT": "--amt", "GDS": "--gds"}
 
-# Stated floors. PAIR_FLOOR is the palette-wide invariant UX8 established and this lane preserves (the
-# binding pair is AMT/GDS at 21.1, untouched here). LP_BB_FLOOR is this lane's own promise: the pair the
-# owner reported must stay far clear of the general floor, not merely legal. LP_BB_DEUTAN_FLOOR is the
+# Stated floors. PAIR_FLOOR is the established palette-wide invariant this module preserves (the
+# binding pair is AMT/GDS at 21.1, untouched here). LP_BB_FLOOR is this module's own promise: the
+# reported pair must stay far clear of the general floor, not merely legal. LP_BB_DEUTAN_FLOOR is the
 # same promise under simulated deuteranopia, where the old pair collapsed to 15.3.
 PAIR_FLOOR = 21.0
 LP_BB_FLOOR = 30.0
@@ -181,7 +181,7 @@ def pages_palette():
 def test_the_two_palette_authorities_agree():
     """The JS marker palette and the CSS tokens must carry identical hexes, so a map dot and its legend
     swatch can never be different colours. FAILS IF a palette edit lands on one surface only - the exact
-    accident this lane could have caused (two files, one change)."""
+    accident this module could have caused (two files, one change)."""
     js, css = js_palette(), css_palette()
     for ty in TYPES:
         assert ty in js, f"TYPE_COL is missing {ty}"
@@ -194,10 +194,10 @@ def test_the_static_pages_draw_the_same_palette_as_the_portal():
     """The THIRD consumer, added once the static entity pages started drawing type-coloured maps.
 
     This is the pin the BBMT drift proved was missing. The engine's _TYPE_COL kept the superseded
-    #5B54D6 after this file's own lane moved BBMT to #3730B8, so a reader who opened a survey page
-    and then the same survey in the portal saw two different blues for one data type; and because an
-    ENGINE test asserted the stale hex as a literal, applying the measured value there would have
-    failed CI. A palette drift that CI defends is the precise failure a parity pin exists to catch.
+    #5B54D6 after this file's palette moved BBMT to #3730B8, so a
+    reader who opened a survey page and then the same survey in the portal saw two different blues
+    for one data type; and because an ENGINE test asserted the stale hex as a literal, applying the
+    measured value there fails CI. A palette drift that CI defends is the precise failure a parity pin catches.
 
     The engine side is still asserted as a literal in the engine's own suite, which is right: that
     pin says "this hex, deliberately". This one says the two files agree, which is the property no
@@ -217,7 +217,7 @@ def test_the_static_pages_draw_the_same_palette_as_the_portal():
 
 
 def test_every_data_type_pair_clears_the_palette_floor():
-    """Palette-wide separability (the UX8 invariant, preserved by this lane). FAILS IF any pair of the four
+    """Palette-wide separability (the invariant, preserved by this module). FAILS IF any pair of the four
     data-type hues falls under PAIR_FLOOR dE00. Non-vacuous: the binding pair (AMT/GDS) sits at ~21.1, just
     above the floor, so this is a live constraint rather than slack."""
     pal = js_palette()
@@ -230,15 +230,15 @@ def test_every_data_type_pair_clears_the_palette_floor():
 
 
 def test_lp_bb_pair_is_separated_by_luminance_not_hue_alone():
-    """The pair the owner reported. FAILS IF LP/BB falls under LP_BB_FLOOR, or if the separation is once
+    """The pair the review reported. FAILS IF LP/BB falls under LP_BB_FLOOR, or if the separation is once
     again carried by hue with the lightnesses nearly equal - the old pair was 26.1 dE00 yet unreadable at
     4px because only 9 L* separated them, and lightness is what small marks are discriminated by."""
     pal = js_palette()
     lp, bb = pal["LPMT"], pal["BBMT"]
     d = de00(lp, bb)
     assert d >= LP_BB_FLOOR, (
-        f"LP {lp} vs BB {bb}: dE00 {d:.2f} is under this lane's stated {LP_BB_FLOOR} floor "
-        f"(the pre-lane pair was 26.08 and the owner called it too similar).")
+        f"LP {lp} vs BB {bb}: dE00 {d:.2f} is under the stated {LP_BB_FLOOR} floor "
+        f"(the pair this floor was set against measured 26.08 and read as one colour).")
     l_lp, c_lp, h_lp = lch(lp)
     l_bb, c_bb, _ = lch(bb)
     assert abs(l_lp - l_bb) >= 18.0, (
@@ -247,7 +247,7 @@ def test_lp_bb_pair_is_separated_by_luminance_not_hue_alone():
     assert abs(c_lp - c_bb) >= 30.0, (
         f"LP C*={c_lp:.1f} vs BB C*={c_bb:.1f}: the pair must also differ in saturation, not hue alone.")
     # LP stays teal-family: a future edit must not "fix" separability by moving the established fabric
-    # colour instead of the one the owner asked to move.
+    # colour instead of the one the review asked to move.
     assert 180.0 <= h_lp <= 240.0, f"LPMT must stay teal-family (hue 180-240 deg), got {h_lp:.1f} deg"
 
 
@@ -263,13 +263,13 @@ def test_lp_bb_pair_survives_simulated_red_green_deficiency():
         assert d >= LP_BB_DEUTAN_FLOOR, (
             f"under simulated {kind}opia LP {lp}->{simulate(lp, kind)} and BB {bb}->{simulate(bb, kind)} "
             f"are only dE00 {d:.2f} apart, under the {LP_BB_DEUTAN_FLOOR} floor. "
-            f"(The pre-lane pair measured 15.26 deutan / 19.23 protan - that is the defect.)")
+            f"(The pair this floor was set against measured 15.26 deutan / 19.23 protan.)")
 
 
 def test_no_data_type_collides_with_the_action_accent():
     """A data-type dot must never read as the portal's action/selection accent (--copper) or disappear into
-    the marker stroke (#11182D). FAILS IF a palette edit walks a type into either - the UX6 Wave B rule,
-    re-pinned here because this lane moved a hex toward the dark end."""
+    the marker stroke (#11182D). FAILS IF a palette edit walks a type into either - the rule,
+    re-pinned here because this module moved a hex toward the dark end."""
     pal = js_palette()
     for ty in TYPES:
         assert de00(pal[ty], "#EF7256") >= PAIR_FLOOR, f"{ty} {pal[ty]} is confusable with the --copper accent"

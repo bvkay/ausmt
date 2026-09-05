@@ -1,6 +1,6 @@
 """The programmatic-fetch documentation, and the death of the fictional /api tier.
 
-DOCS WAVE, STAGE 2. About's seventh answer used to carry three worked patterns: whole-survey bundles, a
+About's seventh answer once carried three worked patterns: whole-survey bundles, a
 manifest-driven per-station loop and a bounding-box fetch. About is now the two-minute front door, so it
 keeps a ten-line quickstart and the bundle forms, and the two deep patterns moved to the docs site's API
 reference (docs/docs/interoperability/api-reference.md, "Fetching data today"). Every assertion those
@@ -9,17 +9,17 @@ the markdown instead of the HTML.
 
 Three groups of claim are pinned here.
 
-(1) ABOUT'S QUICKSTART EXISTS, IS REACHABLE, AND IS SHORT. The owner asked for a ten-line programmatic
+(1) ABOUT'S QUICKSTART EXISTS, IS REACHABLE, AND IS SHORT. The brief asked for a ten-line programmatic
     quickstart on the front door, so the length is a pin rather than a style note: the whole point is
     that a reader can run it before deciding to read anything else. The section, its entry in the page's
     section-nav strip, and the "API access" card's link into it are asserted together (parsed DOM, so an
     HTML comment cannot pass any of them).
 
-(2) NOTHING IN THE PORTAL TREE ADVERTISES A /api/... PATH. Before the api-docs lane the station drawer
+(2) NOTHING IN THE PORTAL TREE ADVERTISES A /api/... PATH. Before the API docs landed, the station drawer
     offered a "Read API (planned)" over /api/station/<id>.json, /api/survey/<slug>.json and
     /api/station/<id>/edi. No AusMT deployment has ever served an /api tier: those three paths were
     fiction. This scan FAILS if any such path comes back anywhere in the shipped portal tree. RED-proven:
-    run against origin/main before that lane it reports portal/src/drawer.js.
+    run against origin/main before that change, it reports portal/src/drawer.js.
 
 (3) THE DOCS PATTERNS STAY TRUE OF THE ARTIFACTS THEY DESCRIBE. The content assertions are deliberately
     specific about facts that were verified against the live corpus before being written down, because
@@ -28,8 +28,8 @@ Three groups of claim are pinned here.
 
       * the three bundle URL forms (-edi.zip / -xml.zip / -tf.h5) are the only three the engine emits
         (engine/schema/manifest.schema.json bundles.format enum: edi-zip, xml-zip, mth5);
-      * the per-station formats are edi, emtfxml and mth5 (files.format enum). Since the tier-1 lane
-        `mth5` is in BOTH enums and means a different artifact in each, so the patterns must tell a
+      * the per-station formats are edi, emtfxml and mth5 (files.format enum). `mth5` is in BOTH
+        enums and means a different artifact in each, so the patterns must tell a
         reader to filter on the LIST (files[] vs bundles[]) before the format token;
       * artifact bytes are located through the manifest's url + sha256, never by templating a path from a
         station id (in the live corpus, station A1 of vulcan-2022 is served as
@@ -38,7 +38,7 @@ Three groups of claim are pinned here.
     The bounding-box pattern is pinned to two things it cannot be allowed to drift from, because both
     would be silently wrong rather than visibly broken:
 
-      * THE STATION FIELDS. Public-surface audit (2026-08-22): catalogue.json is portal-internal and not
+      * THE STATION FIELDS. Public-surface audit: catalogue.json is portal-internal and not
         a contract, so the bbox pattern selects from mtcat.json's stations[] (station_id, survey_id,
         latitude, longitude), which IS the contract. Every field the example reads is checked against
         engine/schema/mtcat.schema.json, so a field nobody writes cannot be documented.
@@ -145,7 +145,7 @@ def test_about_has_the_api_section_and_it_is_navigable():
 
 
 def test_quickstart_is_ten_lines_or_fewer():
-    """The owner's stage-2 ruling asked for a TEN-LINE programmatic quickstart on the front door. A
+    """The stage-2 rule asked for a TEN-LINE programmatic quickstart on the front door. A
     quickstart a reader has to scroll is not one, so the length is the pin."""
     lines = [ln for ln in _quickstart().strip().splitlines() if ln.strip()]
     assert len(lines) <= 10, (
@@ -197,7 +197,7 @@ def test_about_names_the_field_a_slug_is_actually_read_from():
 
 
 def test_about_sends_depth_seekers_to_the_docs_api_reference():
-    """Owner ruling 3: About and the station drawer both link the docs site's API reference for depth.
+    """About and the station drawer both link the docs site's API reference for depth.
     FAILS if About stops linking it, which would strand a reader who needs the per-station or
     bounding-box patterns that moved off this page."""
     assert DOCS_API_URL in _api_section_text(), (
@@ -222,8 +222,7 @@ def _docs_fetch_section():
     """The 'Fetching data today' section of the docs API reference, up to the next h2."""
     raw = APIDOC.read_text(encoding="utf-8")
     assert "## Fetching data today" in raw, (
-        f"{APIDOC} must carry the worked fetch patterns under '## Fetching data today'; they moved there "
-        f"from about.html in the documentation wave")
+        f"{APIDOC} must carry the worked fetch patterns under '## Fetching data today'")
     return raw.split("## Fetching data today", 1)[1].split("\n## ", 1)[0]
 
 
@@ -243,9 +242,8 @@ def _code_blocks(fragment):
 def test_docs_document_the_bundle_forms_with_a_worked_command():
     """The three bundle forms plus a worked command that actually pulls bytes.
 
-    REFERENCE-GRADE LANE: the command used to hard-code https://ausmt.au. The docs are now
-    host-relative throughout (owner ruling: every absolute portal URL becomes a path under the portal
-    root, so the pending DNS cutover cannot invalidate a page), and the runnable examples take that root
+    The command once hard-coded https://ausmt.au. The docs are
+    host-relative throughout, and the runnable examples take that root
     from a BASE variable. The pin moved with the convention; what it guards is unchanged, namely that
     the subsection carries a command a reader can run rather than only a path listing."""
     sub = _docs_sub("-tf.h5")
@@ -261,7 +259,7 @@ def test_docs_document_the_manifest_flow():
     sub = _docs_sub("manifest.json", "jq -r")
     assert "/data/manifest.json" in sub, "the per-station pattern starts at the download index"
     assert "/data/products/manifest.json" not in sub, (
-        "the products/ mirror of the manifest is retired (public-surface audit, 2026-08-22); the download "
+        "the products/ mirror of the manifest is retired; the download "
         "index is /data/manifest.json")
     assert "sha256" in sub, "the per-station pattern must tell the reader to verify the sha256"
     for fmt in ("`edi`", "`emtfxml`"):
@@ -378,8 +376,8 @@ def test_bbox_states_the_generalisation_caveat_and_its_contract_fields():
         assert value in frag, f"the prose must name the coordinates_state value {value}"
     # The docs name station.json's coordinate_policy, so an EMITTED record must actually carry it, and
     # only where the position is non-exact (an exact record gaining the key would tell a reader every
-    # position is qualified). Emitted documents rather than emitter source text: this lane installs no
-    # engine stack, and a grep for a source literal survives no refactor of the emitter.
+    # position is qualified). Emitted documents rather than emitter source text: the portal suite
+    # installs no engine stack, and a grep for a source literal survives no refactor of the emitter.
     def _emitted(station):
         return json.loads((STATION_PRODUCTS / "open-survey" / station / "station.json")
                           .read_text(encoding="utf-8"))
@@ -434,7 +432,7 @@ def test_no_fictional_api_paths_anywhere_in_the_portal_tree():
 
 def test_the_scan_actually_looks_at_the_files_that_used_to_carry_the_fiction():
     """Guards the guard. The scan above passes trivially if its file walk collects nothing, so pin that
-    it reaches both files this lane changed."""
+    it reaches both files the change touched."""
     seen = {p.relative_to(ROOT).as_posix() for p in _shipped_portal_files()}
     for expected in ("src/drawer.js", "about.html", "index.html"):
         assert expected in seen, f"the fictional-path scan must cover {expected}; it walked {sorted(seen)}"

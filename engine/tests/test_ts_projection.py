@@ -1,6 +1,6 @@
 """The projection seam, pinned: existence and route detail part ways, and level2 opens nothing.
 
-These are the rules a leak or a wrong claim would have to get past, so every fixture is the
+These are the rules a leak or a wrong claim has to get past, so every fixture is the
 adversarial case, not the happy path.
 """
 import sys
@@ -23,7 +23,7 @@ def test_the_flag_follows_the_register_for_a_withheld_station():
     rows = [_row()]
     assert station_flag(rows) is True
     # ...while the route detail is EMPTY for the same station: existence survives withholding,
-    # the route does not (R13 vs R5, the sharpest seam in the lane)
+    # the route does not (the sharpest seam in the workflow)
     assert route_rows(rows, station_open=False) == {}
 
 
@@ -42,7 +42,7 @@ def test_retiring_the_last_verified_row_takes_the_flag_down():
 
 def test_a_verified_level2_row_is_evidence_but_never_a_claim():
     rows = [_row(level="level2")]
-    assert rows[0]["review"] == "verified"  # non-vacuity: the row would project but for D19
+    assert rows[0]["review"] == "verified"  # non-vacuity: only the LEVEL keeps this row out
     assert station_flag(rows) is False
     assert route_rows(rows, station_open=True) == {}
 
@@ -97,7 +97,7 @@ def test_the_resource_emitter_ASKS_the_projection_rather_than_restating_it(monke
 
     The vocabulary pin above forbids the LEVEL SETS from diverging; it cannot see the other half,
     which is the publication predicate itself. While the emitter restated `review == verified`, a
-    change to which review states publish had to be made in two places, and a lane that made it in
+    change to which review states publish had to be made in two places, and a change that made it in
     one would still pass every vocabulary check in this file. So the emitter is driven here by
     REPLACING the projection's answer: a row the projection declines emits nothing, however the
     register reads.

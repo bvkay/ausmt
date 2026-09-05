@@ -1,4 +1,4 @@
-"""C40 serve-reconcile gateway half: the curator "request rebuild" button + the serve-state panel.
+"""Serve-reconcile gateway half: the curator "request rebuild" button + the serve-state panel.
 
 The button writes the zero-argument rebuild.request the host reconcile agent consumes; the panel
 shows published HEAD vs served build, the last reconcile outcome, and a pending indicator. This file
@@ -117,9 +117,9 @@ def test_rebuild_requires_csrf(tmp_path):
 
 def test_rebuild_success_writes_valid_request_and_redirects(tmp_path):
     """A valid session + CSRF writes a well-formed rebuild.request attributed to the curator and
-    redirects (303) to the SERVE-STATE screen's panel. C43 FR2-1 (owner ruling, ratified 2026-07-11)
-    moved the serve panel off the queue page to /gateway/curator/serve, so the redirect follows it
-    there — that is where the curator now sees the 'rebuild requested — pending' state. FAILS IF: the
+    redirects (303) to the SERVE-STATE screen's panel.
+    The serve panel is at /gateway/curator/serve rather than on the queue page, so the redirect
+    follows it there: that is where the curator sees the pending-rebuild state. FAILS IF: the
     file is absent/malformed, the curator is not recorded, or the response is not a redirect to the
     serve screen."""
     async def _body():
@@ -180,7 +180,7 @@ def test_rebuild_unwritable_state_dir_503(tmp_path):
 
 
 # ---- panel rendering on the SERVE-STATE screen -------------------------------------------------
-# C43 FR2-1 (owner ruling, ratified 2026-07-11): the serve-state panel was REMOVED from the queue page
+# The serve-state panel does not belong on the queue page
 # — the dedicated /gateway/curator/serve screen (which embeds render_serve_panel) + the ever-present
 # drift chip own the served-vs-published job now. These panel-render pins MOVE with the panel to its
 # new home /serve (checked against test_c43_stage2b_ops.py: that file pins the ops floor / sync strip
@@ -253,7 +253,7 @@ def test_published_head_via_git_seam_on_shell_and_serve(tmp_path):
     """The server-side published HEAD comes from the injected git seam (the publish flow's runner). It
     is surfaced on EVERY shelled page by the context-bar drift chip AND on the serve screen's panel;
     with a seam returning a known short sha the page shows it, with a failing seam it shows
-    'unavailable' and does NOT 500. (C43 FR2-1: the queue no longer carries the panel, but the drift
+    'unavailable' and does NOT 500. (the queue does not carry the panel, but the drift
     chip carries the published HEAD hub-wide, so the queue page still reflects the seam.) FAILS IF: the
     git seam result is not reflected, or a git error 500s the page."""
     async def _body():
@@ -283,13 +283,13 @@ def test_published_head_via_git_seam_on_shell_and_serve(tmp_path):
 # ---- CSP delivery + the queue-is-pure-queue invariant (strictPages blocks inline) ---------------
 
 def test_queue_page_is_pure_queue_and_csp_clean(tmp_path):
-    """C43 FR2-1 + CSP PIN. The queue page is PURELY the queue now (owner ruling, ratified
-    2026-07-11): the inline serve-state panel is GONE — it does NOT reference serve-state.js and
-    carries no serve-state panel id (that job moved to /gateway/curator/serve + the drift chip). It
-    still carries the shared UI script and stays CSP-clean: Caddy serves every /gateway/* page under
-    script-src 'self', so inline <script> blocks and inline on*= handlers are silently BLOCKED and any
-    inline JS is dead code that only fails in production. FAILS IF: the serve panel leaks back onto the
-    queue, or anyone re-inlines a script / adds an onclick-style attribute."""
+    """CSP PIN. The queue page is PURELY the queue: no inline serve-state panel renders; it does NOT
+    reference serve-state.js and carries no serve-state panel id (that job moved to
+    /gateway/curator/serve + the drift chip). It still carries the shared UI script and stays
+    CSP-clean: Caddy serves every /gateway/* page under script-src 'self', so inline <script> blocks
+    and inline on*= handlers are silently BLOCKED and any inline JS is dead code that only fails in
+    production. FAILS IF: the serve panel leaks back onto the queue, or anyone re-inlines a script /
+    adds an onclick-style attribute."""
     import re
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):
@@ -313,9 +313,9 @@ def test_queue_page_is_pure_queue_and_csp_clean(tmp_path):
 
 def test_no_page_renderer_emits_inline_handlers_or_scripts():
     """SOURCE-LEVEL CSP SWEEP: no gateway HTML-emitting module may contain an inline event-handler
-    attribute (ANY on*= — onerror/ontoggle/onkeydown included, review S3) or an inline <script>
-    block without src= (review S2) — all are dead under the strictPages CSP. Three handlers shipped
-    that way and silently never ran until 2026-07-08; behaviours belong in CURATOR_UI_JS's
+    attribute (ANY on*= - onerror/ontoggle/onkeydown included) or an inline <script>
+    block without src= - all are dead under the strictPages CSP. Three handlers shipped
+    that way and silently never ran; behaviours belong in CURATOR_UI_JS's
     data-attribute delegation and scripts belong behind the external routes. FAILS IF: a new inline
     handler or inline script block lands in any listed module — or a listed module is renamed away
     (coverage must fail loudly, not silently narrow)."""
@@ -325,7 +325,7 @@ def test_no_page_renderer_emits_inline_handlers_or_scripts():
     offenders = []
     for name in ("curatorpage.py", "metaedit.py", "statuspage.py", "uploader_keys.py", "app.py"):
         p = pkg / name
-        assert p.exists(), f"CSP sweep target vanished (renamed?): {name} — update this sweep"
+        assert p.exists(), f"CSP sweep target vanished (renamed?): {name} - update this sweep"
         for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
             if re.search(r"""\bon[a-z]{3,}\s*=\s*['"\\]""", line):
                 offenders.append(f"{name}:{i} (handler): {line.strip()[:90]}")
@@ -335,22 +335,22 @@ def test_no_page_renderer_emits_inline_handlers_or_scripts():
 
 
 def test_c43_external_js_constants_are_raw_and_referenced_externally():
-    """C43 Stage-1 CSP coverage (record D13): the new nav-shell + survey-hub behaviours ship as
+    """Stage-1 CSP coverage: the new nav-shell + survey-hub behaviours ship as
     EXTERNAL route constants (script-src 'self' kills inline), and the pages that use them reference
-    them by external <script src=…>, never inline. FAILS IF a C43 JS constant is removed/renamed
+    them by external <script src=…>, never inline. FAILS IF a JS constant is removed/renamed
     (coverage silently narrows) or a page inlines its script instead of referencing the route. This
-    NAMES the C43 constants so their coverage cannot quietly vanish."""
+    NAMES the constants so their coverage cannot quietly vanish."""
     import re
     from pathlib import Path
 
     from gateway import curatorpage
-    # The new C43 external JS constants exist and are RAW JS (no <script> wrapper, no on*= handler).
+    # The new external JS constants exist and are RAW JS (no <script> wrapper, no on*= handler).
     for const_name in ("CONTEXT_BAR_JS", "SURVEY_HUB_JS"):
         js = getattr(curatorpage, const_name)
         assert isinstance(js, str) and js.strip(), f"{const_name} vanished or empty"
         assert "<script" not in js, f"{const_name} must be raw JS, not <script>-wrapped"
         assert not re.search(r"""\bon[a-z]{3,}\s*=\s*['"]""", js), \
-            f"{const_name} uses an inline on*= handler (dead under CSP) — use addEventListener"
+            f"{const_name} uses an inline on*= handler (dead under CSP) - use addEventListener"
     # The shell + hub reference the routes externally (src=), never inline.
     src = (Path(curatorpage.__file__)).read_text(encoding="utf-8")
     assert 'src="/gateway/curator/context-bar.js"' in src
@@ -358,7 +358,7 @@ def test_c43_external_js_constants_are_raw_and_referenced_externally():
 
 
 def test_rendered_forms_carry_the_delegated_data_attributes():
-    """S1 PIN: the delegated behaviours only work if the RENDERED markup carries the data
+    """PIN: the delegated behaviours only work if the RENDERED markup carries the data
     attributes — reverting them regresses silently otherwise (ui.js keeps serving handlers nothing
     triggers). Rendered where cheap (the serve panel), source-literal where the renderer needs a
     full fixture graph (Reject / Revoke / toggle). FAILS IF: any of the four migrated sites loses
@@ -399,10 +399,10 @@ def test_ui_js_route_serves_shared_behaviours(tmp_path):
     """GET /gateway/curator/ui.js (loaded by EVERY curator page via the shell, INCLUDING the
     pre-session login page) returns the shared delegation JS: the data-confirm submit guard
     (Rebuild/Reject/Revoke confirms ride it) and the data-toggle-big click handler (the preview
-    size toggle). Deliberately UNGATED (review C2): a session gate here 303s the login page's own
+    size toggle). Deliberately UNGATED: a session gate here 303s the login page's own
     script fetch into a nosniff console error on every login view; the content is a static
-    public-repo constant. FAILS IF: the route 404s (every confirm/toggle silently dies again, the
-    pre-2026-07-08 state), lacks either delegated behaviour, or regains a gate that breaks the
+    public-repo constant. FAILS IF: the route 404s (every confirm/toggle silently dies again),
+    lacks either delegated behaviour, or regains a gate that breaks the
     login page."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):

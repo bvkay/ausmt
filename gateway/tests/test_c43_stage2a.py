@@ -1,19 +1,20 @@
-"""C43 Stage 2a verification pins (record D13 + the contract's pin list). Each pin states its failure
+"""Stage 2a verification pins (the contract's pin list). Each pin states its failure
 criterion (Invariant 10) and is mutation-provable — the report carries a captured failing run for each
 guarded behaviour. Async bodies run under conftest.run().
 
 Pins here:
   * PHASE QUADRANT + φyx UNWRAP (phaseqc, the authoritative server-side seam the STATIONS_JS mirrors):
-    the +180 presentation shift on t[4] is inverted before classifying — a TRUE-Q3 station (stored t[4]
-    near 0…90) classifies IN-quadrant; reading the stored value as true phase mis-classifies it.
-  * [FC-2] LAG LABEL: with served ≠ published the Stations panel carries the publish-pending label.
+    the +180 presentation shift on t[4] is inverted before classifying - a station whose TRUE phase
+    sits in the third quadrant (stored t[4] near 0…90) classifies IN-quadrant; reading the stored
+    value as true phase mis-classifies it.
+  * LAG LABEL: with served ≠ published the Stations panel carries the publish-pending label.
   * CSP SWEEP extended to every NEW Stage-2a renderer/JS constant + rendered surface.
   * HISTORY READ-ONLY: the history-job argv carries only the read-only `log` verb (allowlist assertion).
   * QUARANTINE CONTAINMENT: a traversal attempt 404s; a real package file serves with the safe
     attachment + nosniff discipline.
   * KEYS: a note is stored + rendered + ABSENT from any git-bound artifact; submission counts are
     correct; revoked rows render read-only (no note editor, no revoke button).
-  * S2a-5 BUILD-ID SHORTENER: canonical triple-barrel -> short display; malformed -> verbatim fallback.
+  * BUILD-ID SHORTENER: canonical triple-barrel -> short display; malformed -> verbatim fallback.
 """
 from __future__ import annotations
 
@@ -32,8 +33,8 @@ from gateway.tests.conftest import (
 # Phase quadrant classification + the φyx +180 unwrap (phaseqc — the authoritative seam)
 # ==================================================================================================
 def test_phi_xy_quadrant_classification():
-    """φxy (t[3], stored = true) classifies against Q1 widened by the engine-gate slack (fix-round F4:
-    band −10…100 with QUADRANT_SLACK_DEG = 10). FAILS IF an in-band(+slack) value is flagged (a red
+    """φxy (t[3], stored = true) classifies against the first quadrant widened by the engine-gate
+    slack (band −10…100 with QUADRANT_SLACK_DEG = 10). FAILS IF an in-band(+slack) value is flagged (a red
     dot on a point the engine gate tolerates), an outside-by-more-than-slack value is not flagged, or
     the slack edges are wrong (the −10.0/100.0 edge vectors are IN; −10.1/100.1 are OUT — a
     hard-band implementation fails the edge vectors)."""
@@ -51,7 +52,7 @@ def test_phi_xy_quadrant_classification():
 
 
 def test_quadrant_slack_matches_engine_gate():
-    """CROSS-IMPORT PARITY PIN (fix-round F4a, architect ruling): the workbench's QUADRANT_SLACK_DEG
+    """CROSS-IMPORT PARITY PIN: the workbench's QUADRANT_SLACK_DEG
     must EQUAL the engine gate's single-sourced constant (engine/extract/_conventions.py:98) — the
     workbench verdict and the served-corpus Gate-2 verdict must never diverge on tolerance. FAILS IF
     either side changes its slack without the other. _conventions imports stdlib-only at module level
@@ -68,43 +69,45 @@ def test_quadrant_slack_matches_engine_gate():
         sys.path.remove(str(eng))
     assert phaseqc.QUADRANT_SLACK_DEG == conv.QUADRANT_SLACK_DEG, (
         f"workbench slack {phaseqc.QUADRANT_SLACK_DEG} != engine gate slack "
-        f"{conv.QUADRANT_SLACK_DEG} (_conventions.py) — the two verdicts have diverged")
+        f"{conv.QUADRANT_SLACK_DEG} (_conventions.py) - the two verdicts have diverged")
 
 
 def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
-    """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits in Q3 (−180…−90) has a STORED t[4] near 0…90
-    (because engine _edi_tf stores phs_yx_adj = true + 180, re-wrapped). The workbench MUST subtract
-    the shift and classify the TRUE phase — so a true-Q3 station classifies IN-quadrant. FAILS IF the
-    workbench reads the stored value as the true phase (then stored 45° would look like Q1 = 'in Q1',
-    and against Q3 it would read as OUT — the mis-classification this pin catches).
+    """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits in the third quadrant (−180…−90) has a
+    STORED t[4] near 0…90 (because engine _edi_tf stores phs_yx_adj = true + 180, re-wrapped). The
+    workbench MUST subtract the shift and classify the TRUE phase - so a station whose true phase
+    sits in the third quadrant classifies IN-quadrant. FAILS IF the workbench reads the stored value
+    as the true phase (then a stored 45° would look like the first quadrant, and against quadrant Q3
+    it would read as OUT - the mis-classification this pin catches).
 
     NON-VACUOUS: for true φyx = −135°, stored t[4] = +45°. in_quadrant_yx(+45°) must be True (it
-    unwraps to −135° ∈ Q3). A naive `Q3_LO <= 45 <= Q3_HI` is False — so a no-unwrap implementation
+    unwraps to −135° ∈ Q3). A naive `Q3_LO <= 45 <= Q3_HI` is False - so a no-unwrap implementation
     fails this exact assertion."""
     for true_yx in (-135.0, -100.0, -170.0, -90.0, -180.0, -91.0):
         stored = phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG)  # == engine norm_phase
         assert phaseqc.true_phi_yx(round(stored, 1)) is not None
         assert abs(phaseqc.true_phi_yx(round(stored, 1)) - true_yx) < 0.05, (true_yx, stored)
         assert phaseqc.in_quadrant_yx(round(stored, 1)) is True, (
-            f"true φyx={true_yx} (stored t[4]={round(stored, 1)}) must classify IN Q3 after the +180 "
-            "unwrap — reading the stored value directly would mis-classify it")
+            f"true yx phase={true_yx} (stored t[4]={round(stored, 1)}) must classify in the third "
+            "quadrant after the +180 unwrap - reading the stored value directly would mis-classify it")
 
 
 def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():
-    """The converse: a station whose TRUE φyx is beyond the Q3 band by MORE than the slack (a genuinely
-    wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (stored −135 would then read
-    as Q3 = 'in', hiding the real wrong-quadrant station) or the slack edge is wrong (−79.9 is 10.1°
-    outside the band => OUT; −80.0 is exactly at the slack edge => IN)."""
+    """The converse: a station whose TRUE φyx is beyond the Q3 quadrant band by MORE than the
+    slack (a genuinely wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (a
+    stored −135 would then read as in-quadrant, hiding the real wrong-quadrant station) or the slack
+    edge is wrong (−79.9 is 10.1° outside the band => OUT; −80.0 is exactly at the slack edge =>
+    IN)."""
     for true_yx in (45.0, 10.0, -45.0, -79.9):
         stored = round(phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
         assert phaseqc.in_quadrant_yx(stored) is False, (true_yx, stored)
 
 
 def test_phi_yx_slack_and_seam_edges():
-    """Fix-round F4 edge semantics for yx: (a) a true value within the slack of the band (−85, −80) is
+    """Edge semantics for yx: (a) a true value within the slack of the band (−85, −80) is
     IN (the engine gate tolerates it — no red dot); (b) a true value just past +180 THROUGH THE SEAM
     (+175 maps to −185 on the (−360,0] axis, within slack of the −180 edge) is IN — the seam mapping is
-    what makes Q3±slack one contiguous window. FAILS IF the seam mapping is dropped (naive (−180,180]
+    what makes the quadrant plus slack one contiguous window. FAILS IF the seam mapping is dropped (naive (−180,180]
     comparison calls +175 OUT) or the slack is not applied."""
     for true_yx in (-85.0, -80.0, 175.0, 171.0):
         stored = round(phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
@@ -115,7 +118,7 @@ def test_phi_yx_slack_and_seam_edges():
 
 
 def test_classify_series_median_verdict():
-    """classify_series (fix-round F4c — engine-rule alignment): the VERDICT is the MEDIAN of classified
+    """classify_series, aligned with the engine rule: the VERDICT is the MEDIAN of classified
     points vs band+slack (median_in), per-point flags mark only beyond-slack points (red dots), and the
     reported median rides the engine's seam-mapped axis for yx. FAILS IF a scattered outlier flips the
     verdict (median-vs-point confusion), the median seam mapping is dropped (a ±180-straddling cluster
@@ -129,7 +132,7 @@ def test_classify_series_median_verdict():
     # xy: a coherently wrong series => median beyond band+slack => verdict OUT.
     xy_bad = phaseqc.classify_series([-120.0, -130.0, -140.0], mode="xy")
     assert xy_bad["median"] == -130.0 and xy_bad["median_in"] is False
-    # yx healthy Q3 cluster: median reported in (−180,180], verdict IN.
+    # yx healthy cluster in quadrant Q3: median reported in (−180,180], verdict IN.
     yx_stored = [round(phaseqc.wrap180(v + 180.0), 1) for v in (-135.0, -100.0, -170.0)]
     yx = phaseqc.classify_series(yx_stored, mode="yx")
     assert yx["median"] == -135.0 and yx["median_in"] is True and yx["any_out"] is False
@@ -148,31 +151,32 @@ def test_classify_series_median_verdict():
 def test_stations_js_mirrors_phaseqc_constants():
     """SOURCE ASSERTION: the browser-side STATIONS_JS embeds the SAME phase constants + structural
     elements phaseqc defines (the EXECUTABLE parity pin proves the semantics; this cheap sweep catches
-    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the
-    Q1/Q3 bounds, the slack, the floored modulo, the seam map, or the unwrap-then-classify structure."""
+    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the first-
+    and third-quadrant bounds, the slack, the floored modulo, the seam map, or the
+    unwrap-then-classify shape."""
     js = curatorpage.STATIONS_JS
     assert "YX_SHIFT = 180.0" in js, "the +180 presentation shift must be in the JS mirror"
     assert "Q1_LO = 0.0" in js and "Q1_HI = 90.0" in js
     assert "Q3_LO = -180.0" in js and "Q3_HI = -90.0" in js
-    assert "SLACK = 10.0" in js, "the engine-gate slack must be in the JS mirror (fix-round F4)"
-    # FLOORED modulo (fix-round F1): the CPython float-% form, never bare truncated %.
+    assert "SLACK = 10.0" in js, "the engine-gate slack must be in the JS mirror"
+    # FLOORED modulo: the CPython float-% form, never bare truncated %.
     assert "function floormod" in js and "if (r !== 0 && r < 0) r += y" in js
     # trueYx must SUBTRACT the shift then wrap (the unwrap), and inQ3 must go through trueYx + mapYx.
     assert "wrap180(stored - YX_SHIFT)" in js, "φyx must be unwrapped (stored - shift), not read raw"
     assert "var v = trueYx(stored)" in js, "inQ3 must classify the UNWRAPPED true phase"
     assert "function mapYx" in js and "mapYx(v)" in js, "yx must classify on the seam-mapped axis"
-    assert "function medianOf" in js, "the median verdict (F4c) must be in the JS mirror"
+    assert "function medianOf" in js, "the median verdict must be in the JS mirror"
 
 
 def test_combined_phase_plot_supersedes_separate_plots_source():
-    """C43 FR2-3 SOURCE PIN (owner ruling 2026-07-11: both phases on ONE ±180 plot). The two separate
-    phase plots are SUPERSEDED by a single combined plot: STATIONS_JS carries the pure combinedPhasePlan
-    mapper + one phasePlot (full ±180 axis, both bands shaded by owner) + phaseVerdictParts (BOTH
-    components) + combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component
-    verdictStrip are GONE; and renderPlots stacks ρa, the combined phase plot (+ its verdict strip),
-    then tipper. FAILS IF a separate per-component phase plot returns, the mapper/verdict-parts
-    disappear, or the plot order drifts. (There were no pre-existing EXECUTABLE per-plot pins to rework
-    — the plots were covered only via classify() parity; the executable mapper pin lives in
+    """SOURCE PIN. The two separate phase plots are SUPERSEDED by a single combined plot:
+    STATIONS_JS carries the pure combinedPhasePlan mapper + one phasePlot (the full ±180 axis, each
+    band shaded by its owning component) + phaseVerdictParts (BOTH components) +
+    combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component verdictStrip are
+    GONE; and renderPlots stacks ρa, the combined phase plot (+ its verdict strip), then tipper.
+    FAILS IF a separate per-component phase plot returns, the mapper/verdict-parts disappear, or the
+    plot order drifts. (There were no pre-existing EXECUTABLE per-plot pins to rework
+    - the plots were covered only via classify() parity; the executable mapper pin lives in
     test_c43_hub_js_parity.py::test_combined_phase_plan_mapper_from_real_corpus.)"""
     js = curatorpage.STATIONS_JS
     assert "function combinedPhasePlan(" in js, "the pure combined-phase mapper must exist"
@@ -182,10 +186,11 @@ def test_combined_phase_plot_supersedes_separate_plots_source():
     assert "function phiXyPlot(" not in js, "the separate φxy plot must stay superseded"
     assert "function phiYxPlot(" not in js, "the separate φyx plot must stay superseded"
     assert "function verdictStrip(" not in js, "the single-component verdict strip is superseded"
-    # The combined plot is the FULL ±180 axis carrying both series, with both bands shaded by owner.
+    # The combined plot is the FULL ±180 axis carrying both series, with each band shaded by its
+    # owning component.
     assert "var lo = -180, hi = 180;" in js, "the combined phase axis must span the full ±180"
-    assert "comp: 'xy', lo: Q1_LO, hi: Q1_HI" in js, "Q1 band owned by xy"
-    assert "comp: 'yx', lo: Q3_LO, hi: Q3_HI" in js, "Q3 band owned by yx"
+    assert "comp: 'xy', lo: Q1_LO, hi: Q1_HI" in js, "the first quadrant band is owned by xy"
+    assert "comp: 'yx', lo: Q3_LO, hi: Q3_HI" in js, "the third quadrant band is owned by yx"
     # renderPlots order: ρa, combined phase (+ its verdict strip), tipper.
     m = re.search(r"function renderPlots\(host, t\)\s*\{(.*?)\n  \}", js, re.DOTALL)
     assert m, "renderPlots must exist"
@@ -196,7 +201,7 @@ def test_combined_phase_plot_supersedes_separate_plots_source():
 
 
 # ==================================================================================================
-# [FC-2] lag label on the Stations panel
+# The lag label on the Stations panel
 # ==================================================================================================
 def _hub_survey(tmp_path):
     surveys_live = tmp_path / "surveys-live"
@@ -207,7 +212,7 @@ def _hub_survey(tmp_path):
 
 
 def test_fc2_lag_label_rendered_when_served_differs_from_published(tmp_path):
-    """[FC-2] LAG-LABEL PIN. The Stations tab carries the server-rendered published HEAD in
+    """LAG-LABEL PIN. The Stations tab carries the server-rendered published HEAD in
     data-published-head; the stations JS compares it to the served build's source_commit and renders
     the 'facts from build … — publish pending' label ON THE PANEL. This pin proves the label MACHINERY
     is present: the panel scaffold carries the published HEAD hook AND the JS carries the publish-
@@ -235,21 +240,20 @@ def test_fc2_lag_label_rendered_when_served_differs_from_published(tmp_path):
             m = re.search(r'<div id="survey-stations"[^>]*>', r.text)
             assert m, "the survey-stations panel scaffold must render"
             assert 'data-published-head="pub1234"' in m.group(0), (
-                "the stations panel itself must carry the [FC-2] published-HEAD hook")
+                "the stations panel itself must carry the published-HEAD hook")
             assert 'src="/gateway/curator/stations.js"' in r.text
-        # The JS carries the [FC-2] label + the lag comparison (served source_commit vs published HEAD).
+        # The JS carries the lag label + the lag comparison (served source_commit vs published HEAD).
         js = curatorpage.STATIONS_JS
-        assert "publish pending" in js, "the [FC-2] publish-pending label must be in the stations JS"
+        assert "publish pending" in js, "the publish-pending label must be in the stations JS"
         assert "lagPending" in js and "publishedHead" in js, "the served-vs-published lag compare"
     run(_body())
 
 
 # ==================================================================================================
-# S2a-SPLIT: the Stations tab split layout (list LEFT / data panel RIGHT; narrow = panel-first)
+# The Stations tab split layout (list LEFT / data panel RIGHT; narrow = panel-first)
 # ==================================================================================================
 def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
-    """C43 FR2-2 RENDER PIN (three thirds; supersedes the S2a two-column split by owner ruling round
-    2, reworked-not-deleted). The Stations tab body carries the split grid with THREE slots: the
+    """RENDER PIN. The Stations tab body carries the split grid with THREE slots: the
     station FACTS (#station-facts, .st-facts) and the PLOTS column (#station-plots-col, .st-plots)
     precede the site TABLE (#stations-list, .st-list) in DOM order — facts, then plots, then table.
     Facts-first DOM order is the load-bearing narrow-stacking mechanism (see the CSS pin below): on a
@@ -265,7 +269,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert r.status_code == 200
             body = r.text
             assert 'class="stations-split"' in body, "the split grid container must render"
-            # C43 FR2-1: every hub tab is wide by default now (the Stations tab included).
+            # Every hub tab is wide by default (the Stations tab included).
             assert 'class="wrap wide"' in body, "the stations tab must use the wide page measure"
             i_facts = body.find('id="station-facts"')
             i_plots = body.find('id="station-plots-col"')
@@ -273,7 +277,7 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert i_facts >= 0, "the FACTS slot (#station-facts) must render"
             assert i_plots >= 0, "the PLOTS slot (#station-plots-col) must render"
             assert i_list >= 0, "the TABLE slot (#stations-list) must render"
-            # DOM ORDER (owner ruling round 2): facts FIRST, then plots, then table — so a narrow
+            # DOM ORDER: facts FIRST, then plots, then table - so a narrow
             # single column stacks facts / plots / table (panel-first stacking preserved).
             assert i_facts < i_plots < i_list, (
                 "DOM order must be facts (#station-facts) < plots (#station-plots-col) < table "
@@ -281,18 +285,17 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert 'class="st-list"' in body, "the table container carries the grid-left .st-list class"
             assert 'class="st-facts"' in body, "the facts container carries the middle .st-facts class"
             assert 'class="st-plots"' in body, "the plots container carries the right .st-plots class"
-            # C43 FR2-1 scope (invariant FLIPPED): the hub's OTHER tabs are ALSO wide now — wide-by-
-            # default supersedes the H2 'stations-only opt-in', so the overview tab (the old negative
+            # Scope: the hub's OTHER tabs are ALSO wide, and wide-by-
+            # default supersedes the 'stations-only opt-in', so the overview tab (the old negative
             # control) is wide too.
             r2 = await client.get("/gateway/curator/survey/s2a-survey")
             assert r2.status_code == 200 and 'class="wrap wide"' in r2.text, (
-                "C43 FR2-1: every hub tab fills the width (the old overview-not-wide control retired)")
+                "every hub tab fills the width")
     run(_body())
 
 
 def test_stations_split_css_layout_mechanism_present():
-    """C43 FR2-2 CSS-MECHANISM PIN (three thirds; supersedes the S2a two-column mechanism by owner
-    ruling, reworked-not-deleted). Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
+    """CSS-MECHANISM PIN. Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
     regression that silently breaks the layout goes red even though the DOM is unchanged:
       (a) WIDE: .stations-split is a 3-column grid; the site table is placed in grid-column 1 (LEFT),
           the facts in column 2 (MIDDLE), and the plots in column 3 (RIGHT) — all on grid-ROW 1.
@@ -305,12 +308,12 @@ def test_stations_split_css_layout_mechanism_present():
     FAILS IF any mechanism piece is dropped from the shell CSS."""
     head = curatorpage._HEAD
     # (a) three-column grid with explicit table-left / facts-middle / plots-right placement. grid-ROW
-    # is load-bearing, not decoration (usability incident 2026-07-11): with only grid-COLUMN set,
+    # is load-bearing, not decoration: with only grid-COLUMN set,
     # auto-placement cannot move backwards within a row, so a DOM-later item wanting an earlier column
     # drops to ROW 2 silently. ALL THREE must pin grid-row:1. FAILS IF any grid-row:1 is dropped.
     assert ".stations-split{display:grid" in head, "the split must be a CSS grid"
     assert "grid-template-columns:minmax(21rem,25rem) minmax(0,1fr) minmax(0,1fr)" in head, (
-        "wide: three columns — the table column fits its columns un-truncated (21-25rem), facts + "
+        "wide: three columns - the table column fits its columns un-truncated (21-25rem), facts + "
         "plots split the rest")
     assert ".stations-split .st-list{grid-column:1;grid-row:1}" in head, (
         "the TABLE must be pinned to column 1 ROW 1 (grid auto-placement drops it to row 2 otherwise)")
@@ -339,7 +342,7 @@ def test_stations_split_css_layout_mechanism_present():
 
 
 def test_stations_split_no_page_scroll_on_row_select():
-    """S2a-SPLIT NO-SCROLL PIN. Clicking a station must populate the RIGHT panel WITHOUT scrolling the
+    """SPLIT NO-SCROLL PIN. Clicking a station must populate the RIGHT panel WITHOUT scrolling the
     page away. The row handler must NOT navigate to a fragment or call scrollIntoView — it selects the
     row (adds the .on highlight) and repopulates #station-detail in place. FAILS IF the JS reintroduces
     a location-hash link (href='#') or a scroll call in the row-selection path (the merged behaviour put
@@ -349,7 +352,8 @@ def test_stations_split_no_page_scroll_on_row_select():
     assert "'st-row'" in js, "each list row carries the .st-row selection class"
     assert "classList.add('on')" in js, "the selected row gets a visible highlight (.on)"
     # No scroll CALL and no scroll-to-hash navigation in the JS (a prose mention in a comment is fine;
-    # a .scrollIntoView( invocation or an assignment to location.hash is the viewport-jumping vector).
+    # a `.scrollIntoView(` invocation or an assignment to location.hash is the viewport-jumping
+    # vector).
     assert ".scrollIntoView(" not in js, "row selection must not call scrollIntoView (viewport jump)"
     assert "location.hash" not in js, "row selection must not navigate to a fragment (viewport jump)"
     assert "link.href = '#'" not in js, "the merged in-list hash anchor (viewport-jumping) must be gone"
@@ -411,7 +415,7 @@ def test_stations_and_history_rendered_surfaces_csp_clean(tmp_path):
 
 
 # ==================================================================================================
-# History read-only (allowlist assertion, S1 fix-round F1 style)
+# History read-only (allowlist assertion)
 # ==================================================================================================
 def test_history_argv_is_read_only_log_verb():
     """HISTORY READ-ONLY PIN (allowlist style). The history-job argv carries ONLY the read-only `log`
@@ -487,8 +491,8 @@ def test_history_tab_renders_real_git_log(tmp_path):
             # NO rename/retire ACTION in the History tab (Stage 4). Read-only: the History body carries
             # no <form> and no rename/retire action route. (The copy may mention "rename" descriptively
             # — the pin is on the absence of an ACTION, not the word.) Anchor: the tab body's own
-            # lead copy (C43-HUB replaced the per-tab h1 with the unified mockup header, so the old
-            # '…— history</h1>' anchor no longer exists; the context-bar rebuild form sits ABOVE it).
+            # lead copy (the unified mockup header replaced the per-tab h1, so the old
+            # 'history</h1>' anchor does not exist; the context-bar rebuild form sits ABOVE it).
             assert "Read-only audit trail" in r.text
             history_body = r.text.split("Read-only audit trail", 1)[-1]
             assert "<form" not in history_body, "the History tab must carry no action form (read-only)"
@@ -582,7 +586,7 @@ def test_quarantine_non_quarantined_id_404s(tmp_path):
 
 
 # ==================================================================================================
-# Keys deltas (D7)
+# Keys deltas
 # ==================================================================================================
 def test_key_note_stored_rendered_and_counts(tmp_path):
     """KEYS PIN. A note set on a key is stored (sqlite), rendered on the page, and the submission count
@@ -618,7 +622,7 @@ def test_key_note_stored_rendered_and_counts(tmp_path):
 
 
 def test_key_note_absent_from_git_bound_artifacts(tmp_path):
-    """PII-CONTAINMENT PIN (D2.5): a key note lives ONLY in sqlite — it NEVER enters surveys-live (the
+    """PII-CONTAINMENT PIN: a key note lives ONLY in sqlite, and NEVER enters surveys-live (the
     git-bound publication ledger). FAILS IF a note byte reaches any file under surveys-live."""
     async def _body():
         from gateway import uploader_keys as uploader_keys_mod
@@ -667,11 +671,11 @@ def test_revoked_key_renders_read_only(tmp_path):
 
 
 def test_revoked_key_note_post_refused(tmp_path):
-    """F6 PIN (architect ruling — revoked keys are IMMUTABLE audit rows). A note POST to a REVOKED key
+    """PIN: revoked keys are IMMUTABLE audit rows. A note POST to a REVOKED key
     id is refused 4xx and the stored note is UNCHANGED — the UI hiding the editor is not the
     enforcement; the route + the DB `AND revoked_utc IS NULL` guard are. FAILS IF the route accepts a
     note update on a revoked id (the shipped pre-fix behaviour, 'by-design' docstring overruled), or
-    the DB layer alone would have persisted it."""
+    the DB layer alone would persist it."""
     async def _body():
         from gateway import uploader_keys as uploader_keys_mod
         async with app_client(tmp_path, git_runner=FakeGit()) as (client, _app, gw, cfg):
@@ -695,7 +699,7 @@ def test_revoked_key_note_post_refused(tmp_path):
 
 
 def test_note_and_create_length_caps(tmp_path):
-    """F5 PIN. Over-length inputs are REFUSED (400) and nothing persists beyond the cap: a 2001-char
+    """PIN. Over-length inputs are REFUSED (400) and nothing persists beyond the cap: a 2001-char
     note POST leaves the stored note unchanged; an over-length name/email on create creates no key.
     (Cap posture: REJECT, not truncate — silently dropping the tail of a curator's text loses
     information without telling them.) FAILS IF an over-length value persists or is truncated in."""
@@ -736,10 +740,10 @@ def test_note_and_create_length_caps(tmp_path):
 
 
 # ==================================================================================================
-# S2a-5 build-id display shortener
+# The build-id display shortener
 # ==================================================================================================
 def test_build_id_shortener_canonical_and_verbatim_fallback():
-    """S2a-5 PIN. A canonical triple-barrel build id shortens to '<source short> · HH:MM UTC'; a
+    """SHORTENER PIN. A canonical triple-barrel build id shortens to '<source short> · HH:MM UTC'; a
     malformed id falls back VERBATIM (never hide information). FAILS IF the canonical form is not
     shortened, or a malformed id is mangled/hidden instead of shown verbatim."""
     canon = "252a96fed49c74477ed24e159e6689c8100fcb4c-b898f26-2026-07-10T06:00:39.252632+00:00"

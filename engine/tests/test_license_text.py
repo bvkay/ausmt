@@ -1,4 +1,4 @@
-"""C34/D2 — the stdlib-only _license_text leaf is the SINGLE SOURCE of the licence rights text and
+"""The stdlib-only _license_text leaf is the SINGLE SOURCE of the licence rights text and
 the recognised-id gate, shared by build_portal (bundle LICENSE.txt) and the gw-runner (intake
 LICENSE.md). These tests pin that the extraction did not change behaviour and that the new gate is
 correct.
@@ -10,8 +10,8 @@ NON-VACUOUS failure criteria:
   * _license_text imports NOTHING from the heavy scientific stack (numpy/mt_metadata/PyYAML) — that
     is the whole point of the leaf (the runner must import it without the engine build stack). FAILS
     if an import of the leaf drags in a heavy module.
-  * recognised() accepts redistributable AND metadata-only ids, rejects typos/placeholders/None —
-    the fail-closed D3 gate for LICENSE.md generation (FAILS against a startswith or a too-broad gate).
+  * recognised() accepts redistributable AND metadata-only ids, rejects typos/placeholders/None -
+    the fail-closed gate for LICENSE.md generation (FAILS against a startswith or a too-broad gate).
 Stdlib only.
 """
 import sys
@@ -49,7 +49,7 @@ def test_build_portal_delegates_to_the_same_object():
 
 
 def test_leaf_is_stdlib_only_no_heavy_stack():
-    # The leaf's whole purpose (D2) is that the runner can import it WITHOUT the engine build stack.
+    # The leaf's whole purpose is that the runner can import it WITHOUT the engine build stack.
     # Import it in a fresh subprocess with only extract/ on the path and assert none of numpy /
     # mt_metadata / mth5 / yaml were pulled in as a side effect. FAILS if the leaf grows a heavy import.
     import subprocess
@@ -65,7 +65,7 @@ def test_leaf_is_stdlib_only_no_heavy_stack():
 
 
 def test_recognised_gate_accepts_recognised_rejects_unknown():
-    # D3 fail-closed gate for LICENSE.md generation.
+    # Fail-closed gate for LICENSE.md generation.
     assert lt.recognised("CC-BY-4.0")                      # redistributable
     assert lt.recognised("cc-by-4.0")                      # case-insensitive
     assert lt.recognised("CC-BY")                          # bare alias -> canonical

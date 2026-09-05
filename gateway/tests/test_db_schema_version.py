@@ -1,11 +1,10 @@
-"""Schema-version stamp + migration runner + forward-compat guard (audit Angle 1 minor / Angle 4 §3).
+"""Schema-version stamp + migration runner + forward-compat guard (audit Angle 1 minor / Angle 4).
 
-gateway/db.py created its schema with no version stamp, so the first future schema change would have
-had no migration path. db.Database now stamps PRAGMA user_version and refuses a DB written by a newer
-build.
+A schema created with no version stamp leaves the first future schema change with no migration path.
+db.Database stamps PRAGMA user_version and refuses a DB written by a newer build.
 
-NON-VACUOUS failure criteria (each fails against the pre-stamp db.py):
-  * a fresh DB opens stamped at SCHEMA_VERSION (pre-fix: user_version stayed 0);
+NON-VACUOUS failure criteria (each fails against an unstamped db.py):
+  * a fresh DB opens stamped at SCHEMA_VERSION (unstamped: user_version stays 0);
   * a legacy DB carrying the current tables at user_version 0 upgrades to SCHEMA_VERSION cleanly and
     its existing rows survive;
   * a DB stamped 99 (newer than this build) is REFUSED with SchemaTooNew (pre-fix: opened blind).
@@ -83,8 +82,8 @@ def _table_columns(path, table: str) -> set[str]:
 
 def test_fresh_db_lands_at_v2_with_uploader_keys(tmp_path):
     """A fresh DB is stamped at the current SCHEMA_VERSION (>= 2) and carries the uploader_keys table
-    (the feat/uploader-key-management migration), INCLUDING the v3 `note` column (C43 D7) and the v5
-    provenance/expires_utc/allowance_remaining columns (feat/selfserve-submit-keys). Fails if a
+    (the uploader-key migration), INCLUDING the v3 `note` column and the v5
+    provenance/expires_utc/allowance_remaining columns. Fails if a
     migration never ran on a fresh DB, or a schema change dropped/renamed a column."""
     path = tmp_path / "gateway.sqlite"
     db.Database(path).close()
@@ -170,7 +169,7 @@ def test_v2_db_with_data_upgrades_to_v3_adding_note(tmp_path):
     """A v2 DB (uploader_keys WITHOUT the note column, stamped 2) with an existing key row upgrades to
     v3 cleanly: the migration ADDS the `note` column (defaulting existing rows to NULL) and the
     existing row survives with its other fields intact. Fails if the v3 migration drops data, does not
-    add `note`, or the ALTER is not additive. Simulates the C43 D7 migration on an already-deployed v2
+    add `note`, or the ALTER is not additive. Simulates the migration on an already-deployed v2
     DB. NON-VACUOUS: the pre-fix state genuinely lacks the column, so a no-op migration would leave
     user_version at 2 and the note assertion would KeyError/mismatch."""
     path = tmp_path / "gateway.sqlite"
@@ -213,7 +212,7 @@ def test_v2_db_with_data_upgrades_to_v3_adding_note(tmp_path):
 
 
 def test_fresh_db_lands_at_v4_with_curator_totp(tmp_path):
-    """A fresh DB is stamped at SCHEMA_VERSION (>= 4) and carries the curator_totp table (the C41 D2
+    """A fresh DB is stamped at SCHEMA_VERSION (>= 4) and carries the curator_totp table (the v4
     migration) with exactly its four columns. Fails if the v4 migration never ran on a fresh DB, or a
     schema change dropped/renamed a column."""
     path = tmp_path / "gateway.sqlite"
@@ -227,7 +226,7 @@ def test_fresh_db_lands_at_v4_with_curator_totp(tmp_path):
 def test_v3_db_with_data_upgrades_to_v4_adding_curator_totp(tmp_path):
     """A v3 DB (uploader_keys present, NO curator_totp, stamped 3) with an existing uploader-key row
     upgrades to v4 cleanly: the migration ADDS curator_totp and the existing key row survives. Fails if
-    the v4 migration drops data or does not create curator_totp. Simulates the C41 D2 migration on an
+    the v4 migration drops data or does not create curator_totp. Simulates the migration on an
     already-deployed v3 DB. NON-VACUOUS: the pre-fix state genuinely lacks the table, so a no-op
     migration would leave user_version at 3 and the table assertion would fail."""
     path = tmp_path / "gateway.sqlite"

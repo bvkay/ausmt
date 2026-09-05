@@ -1,14 +1,14 @@
-"""C42 Amendment A2 — executable JS pin for the base-station-id resolver (the override-fieldset key).
+"""Executable JS pin for the base-station-id resolver (the override-fieldset key).
 
-The C43-S2a standing rule requires stations-panel behaviour to be pinned with EXECUTABLE JS (the
+The standing rule requires stations-panel behaviour to be pinned with EXECUTABLE JS (the
 function actually runs under node), never a string match alone. This pins baseStationId — the DOM-free
-helper that resolves a station's BASE id (the id the coordinate-override fieldset MUST key by, D2
-fix-round-2: base ids only, never file stems, never variant-suffixed ids) from the boot-loaded
+helper that resolves a station's BASE id (the id the coordinate-override fieldset MUST key by:
+base ids only, never file stems, never variant-suffixed ids) from the boot-loaded
 base_ids.json map, falling back to the station's own catalogue id when absent (a non-variant station is
 its own base; a variant-free corpus has no base_ids.json => empty map => every station its own base).
 
-Red on pre-change code: baseStationId did not exist in STATIONS_JS (the extraction assert raises), so
-the workbench had no authoritative base id and could not build a base-keyed fieldset — the A2 gap.
+Red on pre-change code: baseStationId does not exist in STATIONS_JS (the extraction assert raises),
+so the workbench has no authoritative base id and cannot build a base-keyed fieldset.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def test_js_base_station_id_resolver(tmp_path):
     station's OWN catalogue id when the id is absent from the map (a non-variant station is its own base;
     a variant-free corpus has no base_ids.json => empty map => every station its own base). FAILS IF a
     variant station is not collapsed to its engine-derived base, or a non-variant station is not keyed by
-    its own catalogue id (the two ways a fieldset could emit a key the engine's D2 gate forbids)."""
+    its own catalogue id (the two ways a fieldset could emit a key the engine's gate forbids)."""
     cases = [
         # variant station: present in the boot map -> its engine-derived base id.
         {"map": {"au.s.site1.lemigraph": "SITE1"}, "ausmtId": "au.s.site1.lemigraph", "catId": "SITE1.lemigraph"},

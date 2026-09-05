@@ -1,7 +1,7 @@
-"""A3 (LANE-CONTRACT-FORM-CREDIT): the survey.yaml the public Add Survey page PACKAGES is validated by
+"""The survey.yaml the public Add Survey page PACKAGES is validated by
 the REAL surveys validator, not by a same-author expectation of what it should look like.
 
-The lane rewrites the form's credit and citation questions onto the ratified MTCAT 2.0 homes
+The form's credit and citation questions are written onto the MTCAT 2.0 homes
 (citation{}, organisations[], acknowledgements[], dates.issued, the ProjectLeader contributors row and
 the typed related_identifiers row a pasted identifier becomes). Every one of those blocks is checked
 surveys-side by rules the portal cannot see, and a form that writes a shape the validator refuses would

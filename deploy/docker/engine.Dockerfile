@@ -6,22 +6,22 @@
 #   (_validation/validate_survey.py) is supplied at RUNTIME via a read-only bind mount
 #   (compose.yaml mounts the surveys-live checkout at /srv/surveys) and located through
 #   AUSMT_VALIDATOR_PATH, the env pin that engine/extract/build_portal.py's _load_validator()
-#   already reads for exactly this cross-repo case (ADR-001). Baking the surveys repo into this
+#   already reads for exactly this cross-repo case. Baking the surveys repo into this
 #   image would require a second build context / git submodule wiring that the contract for this
 #   image does not include; the bind-mount keeps ausmt-surveys on its own release cadence.
 #
 # ONE stage (python:3.12-slim, non-root ausmt:10001): install the COMMITTED lock, install the engine
-# editable, verify the contract, ENTRYPOINT to the build pipeline module. (An in-build stack-less
-# pytest sanity lane used to run here; C39 removed it as redundant -- see the HISTORY note below and
-# the note at its former site.) No CMD: the actual --surveys/--out/--products/... args are supplied by
+# editable, verify the contract, ENTRYPOINT to the build pipeline module. (There is NO in-build
+# stack-less pytest run here; it is redundant with the two CI runs -- see the note further down.)
+# No CMD: the actual --surveys/--out/--products/... args are supplied by
 # the caller (compose.yaml's build-runner service, or an operator's `docker run`/`compose run`) --
 # build_portal.py has no meaningful zero-arg invocation (--out is `required=True`), so a bare
 # `docker run ausmt-engine` intentionally exits on argparse's own usage error rather than silently
 # doing nothing.
 #
-# REPRODUCIBILITY (corrected 2026-07-28). This file used to carry a `locker` stage that IGNORED the
-# committed engine/environments/requirements-mtmetadata-lock.txt and re-resolved the floating direct
-# pins fresh on every build, justified by this claim:
+# REPRODUCIBILITY. There is NO `locker` stage here: a stage that IGNORES the committed
+# engine/environments/requirements-mtmetadata-lock.txt and re-resolves the floating direct
+# pins fresh on every build would be justified only by this claim:
 #
 #   "the committed lock was captured on WINDOWS (it pins win32_setctime==1.2.0, a Windows-only
 #    package, with no environment marker -- an unconditional `pip install -r` of that file on Linux
@@ -29,12 +29,12 @@
 #
 # That claim is FALSE and the bypass it justified was the real problem. win32_setctime ships as
 # win32_setctime-1.2.0-py3-none-any.whl, a pure-python universal wheel that installs on any platform;
-# every one of the lock's pins resolves to a linux/amd64 CPython 3.12 wheel (verified 2026-07-28 by a
+# every one of the lock's pins resolves to a linux/amd64 CPython 3.12 wheel (verified by a
 # cross-platform resolve of the whole file). Nothing ever failed outright.
 #
 # What the bypass DID cost was reproducibility: the resolve floated, so the image shipped whatever
-# PyPI held at build time rather than the VERIFIED stack. Re-resolving the same direct pins on
-# 2026-07-28 produced numpy 2.5.1 / scipy 1.18.0 / pandas 3.0.5 / xarray 2026.7.0 against the lock's
+# PyPI held at build time rather than the VERIFIED stack. Re-resolving the same direct pins
+# produced numpy 2.5.1 / scipy 1.18.0 / pandas 3.0.5 / xarray 2026.7.0 against the lock's
 # verified numpy 2.4.6 / scipy 1.17.1 / pandas 3.0.3 / xarray 2026.4.0. The lock exists precisely
 # because normalize.py's metadata conditioning is version-sensitive, so the image was shipping an
 # unverified science stack while the repo carried a verified one.
@@ -48,22 +48,21 @@
 # PackageFinder.allow_all_prereleases and pip-tools 7.4.1 crashed on it). Refreshing the lock is a
 # deliberate act documented in the lock file's own header, not a build-time side effect.
 #
-# HISTORY (C39, CI minutes economy): the runtime stage used to `RUN python -m pytest -q tests` as an
+# HISTORY (CI minutes economy): the runtime stage used to `RUN python -m pytest -q tests` as an
 # in-build STACK-LESS sanity check — against whatever mt_metadata/mth5 the `locker` stage resolved
 # for THIS build, NOT the pinned lock the image ships. That in-build run was the least truthful of
-# the engine suite's three runs (it tested the locker-stage resolution, not the shipped stack) and
-# was the only one costing ~4 min on every image build, so C39 REMOVED it (see the note at its former
-# site further down this file). The FULL, pinned-lock pytest lane — the real release gate — runs in
+# the engine suite's three runs (it tested a build-time resolution, not the shipped stack) and
+# was the only one costing ~4 min on every image build (see the note further down this file).
+# The FULL, pinned-lock pytest run, the real release gate, runs in
 # CI (.github/workflows/deploy-images.yml's `engine-full-tests` job) INSIDE the shipped image with the
-# lock installed and the M5 skip tripwire; the fast source-tree gate runs in build-products.yml. No
-# CI truth was given back: the two truthful runs remain, only the redundant least-truthful one is gone.
-# (The `locker` stage that note refers to no longer exists; see REPRODUCIBILITY above. The gap it
-# described is now closed at the root: there is no separate build-time resolve to be untruthful about,
-# because the image and the release gate both install the one committed lock.)
+# lock installed and the skip tripwire; the fast source-tree gate runs in build-products.yml. Two
+# truthful runs remain, and the redundant least-truthful one is not among them.
+# (With no separate build-time resolve there is nothing for a run to be untruthful about: the image
+# and the release gate both install the one committed lock.)
 
 FROM python:3.12-slim AS runtime
 
-# U2: engine_commit fallback. This stage COPYs engine/ WITHOUT .git (see the COPY below), so
+# engine_commit fallback. This stage COPYs engine/ WITHOUT .git (see the COPY below), so
 # build_identity()'s git resolution for THIS repo (ausmt/) is ALWAYS None in a container -- the
 # first live deployment's footer showed "None - None - <date>" for exactly this reason. GIT_SHA is
 # passed as a build-arg by deploy-images.yml (github.sha -- the FULL 40-char SHA; see that
@@ -74,7 +73,7 @@ FROM python:3.12-slim AS runtime
 ARG GIT_SHA=unknown
 ENV AUSMT_ENGINE_COMMIT=${GIT_SHA}
 
-# git is a REAL runtime dependency, not a build tool: build_identity() (C12) records the SURVEYS
+# git is a REAL runtime dependency, not a build tool: build_identity() records the SURVEYS
 # checkout's HEAD as source_commit in build.json/build_provenance.json -- the build<->data
 # handshake. python:3.12-slim ships no git, so without this every containerised rebuild would
 # silently record source_commit=null (the in-image test suite caught exactly that: fourth
@@ -88,7 +87,7 @@ RUN apt-get update \
 RUN groupadd --gid 10001 ausmt \
  && useradd --uid 10001 --gid ausmt --home-dir /home/ausmt --create-home --shell /usr/sbin/nologin ausmt
 
-# U2: /srv/surveys is a read-only bind mount of the HOST operator's ausmt-surveys checkout, owned by
+# /srv/surveys is a read-only bind mount of the HOST operator's ausmt-surveys checkout, owned by
 # the host uid -- NOT by the ausmt(10001) user this container runs as. git >=2.35's dubious-ownership
 # check refuses to run ANY command (including rev-parse) in a repo owned by a different uid, so
 # build_identity()'s source_commit resolution silently failed (rev-parse errored -> caught -> None)
@@ -140,13 +139,13 @@ COPY portal/src/contract.js /app/portal/src/contract.js
 WORKDIR /app/engine
 # Editable install, no deps (the lock already installed every dependency pinned). This install is
 # what makes `python -m extract.build_portal` resolve: pyproject's [tool.setuptools.packages.find]
-# includes BOTH ausmt_science* AND extract* (C37/F8), so `extract` is a real installed package on
-# sys.path -- NOT a cwd artifact. (Pre-C37 the comment here claimed the install did this while it
-# did not: `extract` was excluded from the package list, and the module only resolved because this
-# WORKDIR put the engine dir on sys.path. That undocumented cwd contract is retired.) The image
-# ENTRYPOINT below still runs from this WORKDIR, but resolution no longer DEPENDS on it; and the
-# gw-runner's preview subprocess now passes an explicit cwd via AUSMT_ENGINE_DIR (runner.py, C37
-# item 2) so its engine spawn is likewise independent of the inherited working directory.
+# includes BOTH ausmt_science* AND extract*, so `extract` is a real installed package on
+# sys.path -- NOT a cwd artifact. `extract` must stay in that package list: with it excluded the
+# module resolves only because this WORKDIR puts the engine dir on sys.path, which is a cwd
+# contract nothing states. The image
+# ENTRYPOINT below still runs from this WORKDIR, but resolution must not DEPEND on it; and the
+# gw-runner's preview subprocess passes an explicit cwd via AUSMT_ENGINE_DIR (runner.py)
+# so its engine spawn is likewise independent of the inherited working directory.
 RUN python -m pip install --no-cache-dir --no-deps -e .
 
 # Contract gate: fail the image build itself if engine/extract/_contract.py has drifted from
@@ -154,24 +153,24 @@ RUN python -m pip install --no-cache-dir --no-deps -e .
 # didn't miss a generated file).
 RUN python ../contract/generate.py --check
 
-# C39 (CI minutes economy): the in-build stack-less pytest lane that stood here was REMOVED —
-# it was the least truthful of the engine suite's three runs and the only one paying ~4 min on
-# every image build. The three runs were:
-#   (a) THIS in-build `RUN python -m pytest -q tests` — ran against whatever mt_metadata/mth5 the
+# CI minutes economy: NO in-build stack-less pytest run stands here.
+# Such a run would be the least truthful of the engine suite's three runs and the only one paying
+# ~4 min on every image build. The three runs were:
+#   (a) an in-build `RUN python -m pytest -q tests` - ran against whatever mt_metadata/mth5 the
 #       `locker` stage happened to resolve at build time, NOT the pinned lock the image ships (see
 #       the HISTORY note at the top of this file, which admits exactly that). Least faithful → dropped.
 #   (b) deploy-images.yml's `engine-full-tests` job — runs `pytest` INSIDE the SHIPPED image with
-#       the pinned lock installed, piped through the M5 skip tripwire. This is the real release gate
-#       and is UNCHANGED; it is also where the D3.1 topology skip ("gateway tree not shipped")
+#       the pinned lock installed, piped through the skip tripwire. This is the real release gate
+#       and is UNCHANGED; it is also where the topology skip ("gateway tree not shipped")
 #       legitimately fires (engine image ships engine/ only, no /app/gateway), covered by the
 #       ci_check_skips.py allow-list. That skip is unaffected by removing (a): the image topology at
 #       (b) is identical, so the skip still fires there and its allow-list entry stays load-bearing.
 #   (c) build-products.yml — the fast source-tree gate on the pinned lock. UNCHANGED.
 # Nothing downstream in this Dockerfile depended on the deleted RUN's layer (the next step chowns
 # /app wholesale; no file the pytest run produced is read later), so removing it is layer-safe.
-# 2026-07-28: (b)'s description of itself, "with the pinned lock installed", only became TRUE with the
-# locker-stage removal above. Until then the shipped image carried the locker's floating resolve, so
-# the release gate tested a stack the repo had never verified.
+# (b)'s description of itself, "with the pinned lock installed", is TRUE only while no locker stage
+# stands above. A shipped image carrying a locker's floating resolve leaves the release gate
+# testing a stack the repo has never verified.
 
 # Drop root for the actual runtime process.
 RUN chown -R ausmt:ausmt /app

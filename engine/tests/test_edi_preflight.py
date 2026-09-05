@@ -12,7 +12,7 @@ that the verdict matches what the reader actually did. When mt_metadata changes 
 file goes RED and the pre-flight gets fixed. It never silently starts lying, which for a check whose
 whole value is trust is the only acceptable failure mode.
 
-MEASURED AGREEMENT BEHIND THESE TESTS (2026-08-09, pinned mt_metadata 1.0.9 / mth5 0.6.8), over the
+MEASURED AGREEMENT BEHIND THESE TESTS (pinned mt_metadata 1.0.9 / mth5 0.6.8), over the
 two corpora that live outside this repository, every file, exact:
 
   GSSA Western Gawler 2023 (GAWLER_PHASE_2_MT, 312 EDIs)
@@ -46,8 +46,8 @@ DECL = FIX / "LineNo__StationNo_11.edi"        # JSON >INFO + "Declination": 5, 
 STOCKJSON = FIX / "LineNo__StationNo_104.edi"  # JSON >INFO + trailing commas, NO empower token
 NODECL = FIX / "LineNo__StationNo_39.edi"      # plain-text >INFO, nothing wrong with it
 
-# Every EDI this repository ships that is a real instrument/processing dialect. MEASURED
-# 2026-08-09, because an earlier version of this comment claimed more than the files deliver: of
+# Every EDI this repository ships that is a real instrument/processing dialect. MEASURED,
+# because the comment must claim no more than the files deliver: of
 # the six, exactly one takes the Empower branch (LineNo__StationNo_11) and the other five take the
 # standard branch. NOTHING here takes the Phoenix branch, and two of the three real_dialects files
 # carry no >INFO block at all. The Empower and Phoenix branches are therefore each pinned by their
@@ -233,7 +233,7 @@ def test_the_silent_delimiter_class_is_counted_not_only_the_one_that_raises():
     """Declination is merely the only scraped value that lands in a numerically-typed field, so it is
     the only one that stops the read. On this fixture 141 of the 159 values mt_metadata STORES keep a
     trailing comma, and the other 140 ride into free-text metadata without a word to anyone. (The
-    fallback lane's docstring says '141 of 160'; the stored dict is 159 keys. Measured here, on the
+    fallback module's docstring says '141 of 160'; the stored dict is 159 keys. Measured here, on the
     dict itself, so the two sides of the comparison cannot disagree.)"""
     real_info, _ = _info_dict_of(DECL)
     really_delimited = sum(1 for v in real_info.values() if isinstance(v, str) and v.rstrip().endswith(","))
@@ -364,7 +364,7 @@ def _null_ish_cases() -> list[tuple[str, bytes]]:
 
 @pytest.mark.parametrize("case", _null_ish_cases(), ids=lambda c: c[0])
 def test_a_null_ish_value_in_a_fatal_field_is_not_a_false_alarm(case, tmp_path):
-    """proven failing 2026-08-09 on abc82d2: all 15 of these were predicted `will_not_read` while
+    """Proven failing on abc82d2: all 15 of these were predicted `will_not_read` while
     the reader opened every one of them, because the prediction did not mirror the NULL_VALUES skip
     `edi.py::station_metadata` performs before it assigns anything.
 
@@ -409,7 +409,7 @@ def test_mt_metadata_really_skips_a_null_ish_value_before_it_reaches_a_field(tmp
 
 
 def test_an_empty_channel_number_is_not_blamed_on_its_units(tmp_path):
-    """proven failing 2026-08-09 on abc82d2: an empty contact resistance produced the sentence
+    """Proven failing on abc82d2: an empty contact resistance produced the sentence
     `the file supplies ""; the units make it unreadable as a number`.
 
     The silent class is about a value that CARRIES ITS UNITS into a number field, and the sentence
@@ -432,7 +432,7 @@ def test_an_empty_channel_number_is_not_blamed_on_its_units(tmp_path):
 
 
 def test_a_number_written_in_non_ascii_digits_is_predicted_unreadable_and_really_is(tmp_path):
-    """proven failing 2026-08-09 on abc82d2: predicted `reads`, the reader raised.
+    """Proven failing on abc82d2: predicted `reads`, the reader raised.
 
     The FALSE-CLEAN direction, and the only one measured anywhere in this module. `float()` accepts
     any Unicode decimal digit, so `float("١٢٣")` is 123.0, but the reader's scalar
@@ -456,7 +456,7 @@ def test_a_number_written_in_non_ascii_digits_is_predicted_unreadable_and_really
 
 
 def test_the_bounded_advisory_names_a_file_that_will_not_read_even_when_it_sorts_last(tmp_path):
-    """proven failing 2026-08-09 on abc82d2: the one verdict that is a reason to HOLD a package was
+    """Proven failing on abc82d2: the one verdict that is a reason to HOLD a package was
     pushed off the end of the bounded list by files whose only problem is a stray comma.
 
     `preflight_tree` returns findings in path order, and the gateway advisory sliced the first
@@ -483,7 +483,7 @@ def test_the_bounded_advisory_names_a_file_that_will_not_read_even_when_it_sorts
 # =============================================================================================
 
 def test_the_check_never_writes_to_the_files_it_reads(tmp_path):
-    """D1 in miniature. Anything that edits an EDI is out of scope for this module permanently, so
+    """The never-edit rule in miniature. Anything that edits an EDI is out of scope for this module permanently, so
     the whole tree is hashed before and after both entry points, the CLI included."""
     package = tmp_path / "package"
     package.mkdir()
@@ -641,7 +641,7 @@ def test_agreement_over_an_external_corpus():
 
         AUSMT_PREFLIGHT_CORPUS=<dir> pytest -q tests/test_edi_preflight.py -k external_corpus
 
-    Measured 2026-08-09: 312 of 312 on the GSSA Western Gawler 2023 delivery, 1424 of 1424 on the
+    Measured: 312 of 312 on the GSSA Western Gawler 2023 delivery, 1424 of 1424 on the
     selected corpus. ANY disagreement fails here, loudly, with the file named."""
     import os  # noqa: PLC0415
     root = Path(os.environ["AUSMT_PREFLIGHT_CORPUS"])

@@ -1,5 +1,5 @@
-"""Bounded multipart intake (design §4.1). request.form() spools file parts to a
-SpooledTemporaryFile that rolls over to tempfile.gettempdir() — a filesystem the /gw/incoming
+"""Bounded multipart intake. request.form() spools file parts to a
+SpooledTemporaryFile that rolls over to tempfile.gettempdir() - a filesystem the /gw/incoming
 headroom check does not measure — and starlette 1.3.1 does NOT apply max_part_size to file-part
 bytes, so neither the Content-Length gate (absent under Transfer-Encoding: chunked) nor a
 max_part_size argument bounds a hostile file part before it lands on disk.

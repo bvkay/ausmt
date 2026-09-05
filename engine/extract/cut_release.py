@@ -6,14 +6,14 @@ per-survey bundle it serves, cut into `<data-root>/releases/<tag>/`, with a `rel
 provenance document and a pre-generated DataCite record beside it. It exists so a paper can cite a
 specific state of the corpus: `builds/<ts>` dirs are pruned (deploy/Makefile rebuild-data keeps the
 newest five) and `current` moves every rebuild, so neither is citable. `releases/` is a SIBLING of
-`builds/` under the data root, exactly like the C18 `cache/` tier, so it survives both the prune and
+`builds/` under the data root, exactly like the `cache/` tier, so it survives both the prune and
 the atomic `current` symlink swap.
 
 WHAT THIS IS NOT. This tool MINTS NOTHING. It has no network access, no DataCite credentials and no
 git write path. It prepares the metadata so that the day AuScope's ARDC/DataCite access lands, the
 emitted `datacite.json` can be submitted as-is, and `--doi` can be run again on the SAME tag to
 stamp the minted DOI back into `release.json` + `datacite.json` (the post-minting backfill). The
-corpus git tag is PRINTED for the owner to run; this tool never invokes git.
+corpus git tag is PRINTED for a person to run; this tool never invokes git.
 
 USAGE (host, against a data root):
 
@@ -158,7 +158,7 @@ def resolve_current(data_root: Path) -> Path:
 
 
 def build_identity(build: Path) -> dict:
-    """The C12 build.json identity block a release must carry. Absent build.json fails the cut: a
+    """The build.json identity block a release must carry. Absent build.json fails the cut: a
     snapshot whose commits cannot be named is not citable provenance, it is just a pile of files."""
     doc = read_json(build / "build.json", "build.json")
     if not isinstance(doc, dict) or not doc.get("build_id"):
@@ -208,7 +208,7 @@ def doi_parts(mtcat) -> list:
       * the survey's own `doi` - the clearest "part of this release" there is;
       * each `related_identifiers[]` row whose `identifier_type` is DOI.
     NOTE FOR REVIEW: rolling the related-identifier rows in means a source archive a survey declares
-    as IsDerivedFrom is emitted under HasPart, which overstates containment. The lane spec asks for
+    as IsDerivedFrom is emitted under HasPart, which overstates containment. The specification asks for
     HasPart over the DOI-typed related identifiers, so that is what ships; if the relation should
     instead be carried verbatim from each row, this is the ONE function to change."""
     out: list = []
@@ -249,7 +249,7 @@ def corpus_counts(mtcat) -> tuple[int, int]:
 
 def _rights_row(licence_id: str) -> dict:
     """One rightsList row for a corpus licence id. `rights` is the id VERBATIM and the SPDX
-    identifier/scheme ride along only for ids the C6 contract actually knows a deed URL for, so a
+    identifier/scheme ride along only for ids the contract actually knows a deed URL for, so a
     non-SPDX corpus value (e.g. 'PUBLIC DOMAIN') is never dressed up as an SPDX id it is not."""
     row = {"rights": licence_id}
     url = (LICENSES.get("urls") or {}).get(licence_id)
@@ -263,7 +263,7 @@ def _rights_row(licence_id: str) -> dict:
 
 def _corpus_licences(manifest) -> list:
     """Distinct data licences actually present in the download manifest, canonicalised through the
-    C6 alias table and sorted. Derived, never asserted: the rightsList states what the corpus IS
+    licence alias table and sorted. Derived, never asserted: the rightsList states what the corpus IS
     licensed under this quarter, not what it was licensed under when this file was written."""
     files, bundles = manifest_rows(manifest)
     aliases = LICENSES.get("aliases") or {}
@@ -475,7 +475,7 @@ def _files_block(dest: Path, copied: list) -> list:
 
 def _print_tag_commands(tag: str, source_commit, surveys_live: str) -> None:
     """PRINT the corpus tag commands. This tool never runs git: tagging and pushing the surveys repo
-    is an owner action against an owner-authenticated remote, and a build container has no business
+    is a human action against an authenticated remote, and a build container has no business
     holding that credential."""
     print("")
     print("Tag the corpus for this release (run these yourself; cut_release never runs git):")
@@ -599,7 +599,7 @@ def main(argv=None) -> int:
     ap.add_argument("--note", default=None, help="one-line note carried into release.json and DataCite")
     ap.add_argument("--surveys-live", default="<surveys-live>",
                     help="path to the surveys-live git checkout ON THE HOST, used only to print the "
-                         "corpus tag commands the owner runs")
+                         "corpus tag commands, which are run by hand")
     a = ap.parse_args(argv)
 
     try:

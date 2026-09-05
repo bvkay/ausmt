@@ -1,6 +1,6 @@
 # Gateway RUNTIME deps (design: stdlib + fastapi + uvicorn + python-multipart only — no ORM, no
 # pydantic-settings, no extra deps). These floors match the versions installed + tested into the
-# ausmt conda env on 2026-07-05 (recorded per the C10 contract's dep-provenance rule).
+# ausmt conda env, which is the environment the suite is run in.
 #
 # THESE FLOORS ARE NOT WHAT SHIPS. requirements-lock.txt beside this file is the exact linux/amd64
 # CPython 3.12 closure resolved from these floors, and deploy/docker/gateway.Dockerfile installs THAT.

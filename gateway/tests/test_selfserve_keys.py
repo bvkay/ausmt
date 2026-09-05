@@ -1,4 +1,4 @@
-"""Self-serve submission keys (feat/selfserve-submit-keys, K1-K4). A SECOND key-issuance path
+"""Self-serve submission keys. A SECOND key-issuance path
 alongside the operator-issued keys: POST /gateway/request-key mints an `email_verified` uploader key,
 BOUND to the requesting email, with a 14-day expiry and a 5-submission allowance, and mails it. Both
 kinds coexist; operator keys are unchanged.
@@ -83,7 +83,7 @@ class _FakeSMTPSSL(_FakeSMTP):
 def _mail_cfg(tmp_path, **over):
     """A make_config with SMTP configured so the real mailer path (mail_configured True) is exercised
     in the mailer-unit tests."""
-    # The mailbox fixtures stay on the owner-controlled ausmt.au MAIL domain (mail is unrelated to
+    # The mailbox fixtures stay on the AusMT-controlled ausmt.au MAIL domain (mail is unrelated to
     # the web canonical name); the submit-page URL is a WEB link, so it follows the canonical name.
     base = dict(smtp_host="smtp.example.org", smtp_port=587, smtp_user="submissions@ausmt.au",
                 smtp_pass="a-secret-pw", mail_from="submissions@ausmt.au",
@@ -93,7 +93,7 @@ def _mail_cfg(tmp_path, **over):
 
 
 # --------------------------------------------------------------------------------------------------
-# K2: minting + provenance via the endpoint
+# Minting + provenance via the endpoint
 # --------------------------------------------------------------------------------------------------
 def test_request_key_mints_email_verified_key_with_binding_expiry_allowance(tmp_path):
     """An allowed request mints an email_verified key BOUND to the requesting email with a ~14-day
@@ -124,7 +124,7 @@ def test_request_key_mints_email_verified_key_with_binding_expiry_allowance(tmp_
 
 
 # --------------------------------------------------------------------------------------------------
-# K1: neutral-202-always + no enumeration
+# Neutral-202-always + no enumeration
 # --------------------------------------------------------------------------------------------------
 def test_neutral_202_identical_for_valid_invalid_ratelimited_and_smtp_down(tmp_path):
     """The endpoint ALWAYS returns the byte-identical neutral 202 — valid+issued, invalid email,
@@ -170,7 +170,7 @@ def test_invalid_email_mints_nothing_and_never_mails(tmp_path):
 
 def test_smtp_unconfigured_disables_issuance(tmp_path):
     """With no mailer seam AND no SMTP config, issuance is DISABLED: the endpoint mints nothing and
-    still returns the neutral 202 (K3). RED-proves: a handler that minted regardless of a configured
+    still returns the neutral 202. RED-proves: a handler that minted regardless of a configured
     mail path would leave an undeliverable key row."""
     async def _body():
         # No mailer injected and make_config sets no SMTP -> cfg.mail_configured is False.
@@ -183,7 +183,7 @@ def test_smtp_unconfigured_disables_issuance(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# K2: submit-path enforcement — email binding, expiry, allowance; operator keys unaffected
+# Submit-path enforcement - email binding, expiry, allowance; operator keys unaffected
 # --------------------------------------------------------------------------------------------------
 def _issue_email_verified(gw, *, email, expires_utc=None, allowance=5):
     """Mint an email_verified key straight through the DB (bypassing the endpoint) so the submit-path
@@ -299,7 +299,7 @@ def test_operator_keys_unaffected_by_binding_and_expiry(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# K1: rate limits (per-email, per-ip, global) + persistence across restart
+# Rate limits (per-email, per-ip, global) + persistence across restart
 # --------------------------------------------------------------------------------------------------
 def test_rate_limit_per_email(tmp_path):
     """The per-email daily cap limits issuance to ONE address without blocking OTHER addresses.
@@ -387,7 +387,7 @@ def test_rate_limit_store_failure_fails_closed(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# K4: no key material in logs
+# No key material in logs
 # --------------------------------------------------------------------------------------------------
 def test_no_key_material_in_logs_on_success_or_mail_failure(tmp_path, caplog):
     """Neither a successful issuance nor a mail failure writes the key plaintext to any log line
@@ -413,7 +413,7 @@ def test_no_key_material_in_logs_on_success_or_mail_failure(tmp_path, caplog):
 
 
 # --------------------------------------------------------------------------------------------------
-# K3: the stdlib mailer (mock smtplib, never the network)
+# The stdlib mailer (mock smtplib, never the network)
 # --------------------------------------------------------------------------------------------------
 def test_is_syntactic_email():
     """The syntactic email gate accepts plausible addresses and rejects obvious junk (a FORMAT check,
@@ -491,7 +491,7 @@ def test_mailer_unconfigured_returns_false(tmp_path):
 
 def test_mailer_body_has_no_em_dash_and_carries_reply_to(tmp_path, monkeypatch):
     """The email body carries no em dash (house rule for user-facing strings) and the message sets
-    Reply-To to the From address (K3). Fails if an em dash slips into the body or Reply-To is missing."""
+    Reply-To to the From address. Fails if an em dash slips into the body or Reply-To is missing."""
     _FakeSMTP.instances = []
     monkeypatch.setattr(smtplib, "SMTP", _FakeSMTP)
     monkeypatch.setattr(smtplib, "SMTP_SSL", _FakeSMTPSSL)
@@ -522,14 +522,13 @@ def test_smtp_pass_redacted_from_config_dump(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# K1 integration seam: the PORTAL FORM posts JSON, not urlencoded (found live 2026-07-24)
+# Integration seam: the PORTAL FORM posts JSON, not urlencoded
 # --------------------------------------------------------------------------------------------------
 def test_request_key_accepts_the_portal_forms_json_body(tmp_path):
-    """add-survey.html posts {"email": ...} as application/json. The original route read a
-    Form(...) parameter, silently saw "" from a JSON body, and every real browser request died at
-    the syntactic gate behind the neutral 202 - zero keys, zero log rows, zero mail (the live
-    2026-07-24 incident). RED against that route shape: a JSON post must mint exactly like an
-    urlencoded one."""
+    """add-survey.html posts {"email": ...} as application/json. The original route read a Form(...)
+    parameter, silently saw "" from a JSON body, and every real browser request died at the
+    syntactic gate behind the neutral 202 - zero keys, zero log rows, zero mail. RED against that
+    route shape: a JSON post must mint exactly like an urlencoded one."""
     async def _body():
         mailer = FakeMailer()
         async with app_client(tmp_path, mailer=mailer) as (client, _app, gw, _cfg):

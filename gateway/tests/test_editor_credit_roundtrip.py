@@ -1,15 +1,15 @@
-"""CONTRIBUTOR-CREDIT-SPEC (§6, the ausmt-side editor typed rows): creators[] and contributors[] are
+"""The contributor-credit model (the ausmt-side editor typed rows): creators[] and contributors[] are
 modelled LIST_SECTION widgets that must round-trip AND save end-to-end.
 
 Three failure modes this pins:
-  1. The EDITABLE_LISTS gap (the SAME bug the related_identifiers lane shipped with): the widget assembles
+  1. The EDITABLE_LISTS gap (the SAME bug the related_identifiers workflow shipped with): the widget assembles
      a creators/contributors patch that the runner then REJECTS on save as a non-editable field, because
      the key was missing from gateway.runner.edit.EDITABLE_LISTS. The end-to-end assertions below drive a
      real merge and assert the save is ACCEPTED - RED before creators/contributors join the allow-list.
   2. Byte-clean round-trip: an unchanged creators/contributors list (org creator with ror-but-no-orcid,
      person creator with orcid-but-no-ror) reassembles to its snapshot -> _OMIT, so an unrelated edit
      never blanks or re-quotes a credit list the curator did not touch.
-  3. INFERRED-REVIEW adjudication: the RATIFIED migration (surveys origin/main, hardened 2026-07-25) marks a
+  3. INFERRED-REVIEW adjudication: the migration marks a
      seeded row with a COMMENT-ABOVE INFERRED-REVIEW note (its own line directly above `- name:`), NOT an
      inline comment. ruamel re-homes that above-comment onto a NEIGHBOUR (row 0 -> the parent list key;
      row i>0 -> the previous row's trailing comment), so the runner detector (inferred_review_indices) reads
@@ -57,7 +57,7 @@ def test_people_name_type_is_fail_closed():
     assert any(getattr(x, "section", "") == "people" for x in e1), e1
 
     # A bogus role checkbox contributes nothing (no error, no contributors entry) - the panel can only
-    # ever tick a ratified role.
+    # ever tick a known role.
     bogus_role = {"l_people_0_name": "X", "l_people_0_name_type": "person",
                   "l_people_0_role_Wizard": "1", **_snap("creators", []), **_snap("contributors", [])}
     patch, errs = ef.build_section_patch(bogus_role)
@@ -177,11 +177,11 @@ def test_people_panel_contributors_save_is_accepted_by_the_runner(tmp_path):
 
 # ---- INFERRED-REVIEW detection + save-strips-the-marker adjudication -----------------------------
 
-# GROUND TRUTH (hermetic): the BYTE-EXACT output of the ratified credit migration
-# (_tools/migrate_credit.py at surveys origin/main, hardened 2026-07-25) on a survey carrying legacy
-# principal_investigators (-> two person creators) + lead_investigator (-> one ProjectLeader contributor).
+# GROUND TRUTH (hermetic): the BYTE-EXACT output of the credit migration
+# (_tools/migrate_credit.py) on a survey carrying legacy principal_investigators (-> two person
+# creators) + lead_investigator (-> one ProjectLeader contributor).
 # The INFERRED-REVIEW note rides its OWN comment line directly ABOVE each `- name:` row (comment-ABOVE) -
-# the ratified format, because an inline comment after a quoted scalar tripped the vendored mini parser.
+# the required format, because an inline comment after a quoted scalar tripped the vendored mini parser.
 # Reproduced literally here so the test carries NO sibling-repo dependency. Captured verbatim by running
 # the migration against a minimal fixture and copying its emitted bytes.
 _SEEDED_YAML = (
@@ -290,11 +290,11 @@ def test_editing_creators_strips_the_comment_above_marker_but_leaves_contributor
 
 
 def test_people_panel_chips_carry_the_migration_flags_labelled_by_source(tmp_path):
-    """§6.2 CHIPS CARRY. The runner's review_flags (indices into the ORIGINAL creators[]/contributors[])
-    map onto the MERGED unified rows and each seeded row carries a 'needs review' chip labelled which
-    underlying list seeded it (Creators / Contributors). Drives the People panel with the read-job's own
-    flags for the comment-above fixture and asserts a chip on the two creator rows and the contributor
-    row - never on an unflagged row."""
+    """CHIPS CARRY. The runner's review_flags (indices into the ORIGINAL creators[]/contributors[])
+    map onto the MERGED unified rows and each seeded row carries a 'needs review' chip labelled
+    which underlying list seeded it (Creators / Contributors). Drives the People panel with the
+    read-job's own flags for the comment-above fixture and asserts a chip on the two creator rows
+    and the contributor row - never on an unflagged row."""
     from gateway import curatorpage as cp
     pkg = _merge_pkg(tmp_path, _SEEDED_YAML)
     res = edit.run_read_job(pkg)
@@ -323,7 +323,7 @@ def test_people_panel_chips_absent_on_a_clean_survey(tmp_path):
 def _canonical_form(fields):
     """Build the People & credit form POST that an UNCHANGED load of `fields` (its creators[] +
     contributors[]) would submit: merge to unified rows, then emit l_people_* + the cited/role ticks +
-    the o_ anchors. Used to prove the no-op round-trip is byte-stable."""
+    the o_ anchors. It proves the no-op round-trip is byte-stable."""
     rows = ef.merge_people(fields.get("creators") or [], fields.get("contributors") or [])
     tick_rows = []
     for r in rows:
@@ -354,7 +354,7 @@ def test_merge_people_keys_by_orcid_url_form_then_name():
 
 def test_people_multi_role_decomposition_in_ratified_order():
     """SAVE. One person with several ticked roles decomposes to one contributors[] entry per role,
-    ordered by the RATIFIED role order (not tick/checkbox order). A cited tick adds a creators[] entry."""
+    ordered by the role order (not tick/checkbox order). A cited tick adds a creators[] entry."""
     form = _people_form([{"name": "Kay, Ben", "name_type": "person", "cited": True,
                           "roles": ["DataCurator", "ProjectLeader"]}])  # deliberately reverse order
     patch, errs = ef.build_section_patch(form)
@@ -427,12 +427,12 @@ def test_people_no_op_round_trip_is_a_runner_no_op(tmp_path):
 
 
 # ==================================================================================================
-# A2 (LANE-CONTRACT-FORM-CREDIT): the legacy Convert flow and its _delete_keys directive are GONE
-# (D7), and the three ratified curated homes plus the designation mapping round-trip end to end.
+# The legacy Convert flow and its _delete_keys directive are GONE,
+# and the three curated homes plus the designation mapping round-trip end to end.
 # ==================================================================================================
 
 def test_the_legacy_convert_surface_is_gone(tmp_path):
-    """D7: with the corpus migration run and the retired keys deleted, there is nothing left to
+    """With the corpus migration run and the retired keys deleted, there is nothing left to
     convert. The people_convert submit, the hidden legacy payload fields and the _delete_keys patch
     directive are all removed, so a hand-crafted convert POST contributes NOTHING and the runner has
     no delete surface at all. FAILS IF any part of the retired mechanism still functions."""
@@ -454,7 +454,7 @@ def test_the_legacy_convert_surface_is_gone(tmp_path):
 def test_an_unmodelled_retired_key_is_byte_preserved_through_an_unrelated_save(tmp_path):
     """A pre-migration survey that STILL carries a retired flat credit key is simply an unmodelled
     key now: the editor never reads or patches it, so an unrelated edit leaves it byte-for-byte
-    alone. This is what lets the ausmt wave run clean against BOTH corpora."""
+    alone. This is what lets the ausmt suite run clean against BOTH corpora."""
     patch = {"region": "Renamed Region"}
     pkg = _merge_pkg(tmp_path, b'name: Demo\nversion: 1.0.0\nregion: Old\n'
                                b'lead_investigator:\n  name: "Heinson, Graham"\n'
@@ -487,7 +487,7 @@ _MTCAT20_SECTION_FORM = {
 
 
 def test_the_new_sections_are_editable_and_save_through_the_runner(tmp_path):
-    """THE EDITABLE_KEYS GATE (the exact gap the related_identifiers and credit lanes each shipped
+    """THE EDITABLE_KEYS GATE (the exact gap the related_identifiers and credit workflows each shipped
     with): the editor assembles citation / identity_classification / organisations / acknowledgements,
     so all four MUST be patchable or run_merge_job refuses the curator's save as a non-editable field.
     RED before they join EDITABLE_MAPS/EDITABLE_LISTS."""
@@ -569,7 +569,7 @@ _ORG_SEEDED_YAML = (
 
 
 def test_read_job_surfaces_organisations_review_flags(tmp_path):
-    """The corpus-wide custodian seeding (T4) marks every organisations row it writes, so the runner
+    """The corpus-wide custodian seeding marks every organisations row it writes, so the runner
     read job must surface organisations markers exactly as it does creators/contributors. RED before
     organisations joins _CREDIT_LIST_KEYS and the read job's loop: the chip would never appear and the
     curator would never be asked to confirm the seeded roles."""
@@ -579,7 +579,7 @@ def test_read_job_surfaces_organisations_review_flags(tmp_path):
 
 
 def test_saving_organisations_strips_its_marker_and_leaves_creators(tmp_path):
-    """Per-LIST-SECTION marker stripping (D17, no per-row stripping): editing organisations clears ITS
+    """Per-LIST-SECTION marker stripping (no per-row stripping): editing organisations clears ITS
     marker (the adjudication) and leaves the untouched creators marker alone."""
     form = {
         "l_organisations_0_name": "Geological Survey of South Australia",
@@ -625,7 +625,7 @@ def _package_for_validation(tmp_path, extra_yaml: bytes = b""):
 
 
 def test_preferred_identifier_without_its_designation_is_refused_by_the_merge(tmp_path):
-    """ENTRY-GATE GUARD (D18 / emitter D20): the editor CAN write citation.preferred_identifier, and
+    """ENTRY-GATE GUARD: the editor CAN write citation.preferred_identifier, and
     the validator FAILs a pair that no designation matches. The merge surfaces that FAIL verbatim, so
     an inconsistent curator save can never reach the engine. RED if the editor writes the pair and
     nothing refuses it."""
