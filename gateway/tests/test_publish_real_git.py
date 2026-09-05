@@ -1,10 +1,10 @@
 """The REAL-git publish workflow.
 
 `real_git_runner` (publish.py:86) is the ONLY place the gateway executes the git binary, yet ALL
-pytest coverage went through FakeGit, which returned rc=0 for any unmodeled verb. The
+pytest coverage went through FakeGit, which at the time returned rc=0 for any unmodeled verb. The
 sole real-git workflow (curator-e2e) could not be run. So the fail-closed rollback (publish.py _rollback)
 — the core publication-ledger guarantee — had NEVER run against a real repository, and the first live
-curator approve failed twice on real-git behaviours FakeGit cannot represent.
+curator approve (Olympic Dam) failed twice on real-git behaviours FakeGit cannot represent.
 
 This file drives the FULL curator approve flow (and the metadata-edit commit path) with
 git_runner=publish.real_git_runner — NO FakeGit anywhere here — against a REAL repo pair built per

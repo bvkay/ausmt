@@ -19,7 +19,7 @@ Three layers:
      document; the shared-definition guarantee (subject_row and the relationship core vs the mtcat
      schema, structurally).
   2. built layer, the 3-survey corpus (open + embargoed + metadata_only, each curating every
-     class): the same proofs on documents that carry every class, plus the discipline (the
+     class): the same proofs on documents that carry every class, plus the extent discipline (the
      curated extent is never station-derived, so no exact station coordinate reaches a non-served
      survey's document) and the projection chains on real emitted values (organisation, raid).
   3. the corpus arm (dev box): when AUSMT_SURVEY_METADATA_DATA names a full-corpus build output dir,
@@ -127,7 +127,7 @@ def document_invariants(doc, mtcat_survey=None):
 
 
 def test_reference_checks_actually_detect_violations():
-    """Guard on the guards: each chain checker must CATCH its planted violation (pattern)."""
+    """Guard on the guards: each chain checker must CATCH its planted violation."""
     doc = fixture("t20-synthetic")
     good = copy.deepcopy(doc)
     good["identifiers"].append({"scheme": "DOI", "identifier": "10.99999/example-basin-2024"})

@@ -50,7 +50,7 @@ def test_feed_entries_uses_attribution_declared_date_when_no_release_notes():
     """PINNED CROSS-SURFACE DATE RULE: attribution.declared_date is a first-class candidate date.
     A survey with NO release_notes but a declared_date must date its feed entry BY that declared_date,
     NOT the bare-year Dec-31 fallback. FAILS PRE-FIX: _survey_latest_date ignored attribution entirely,
-    so this survey dated to (year_end)."""
+    so this survey dated to that fallback instead (year_end)."""
     smeta = {"Declared Only": {"slug": "declared", "year_end": 2019,
                                "attribution": {"declared_date": "2026-07-25"}}}
     entries = bp.feed_entries(smeta)

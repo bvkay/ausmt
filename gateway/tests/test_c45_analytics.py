@@ -433,7 +433,7 @@ def test_analytics_csv_neutralises_spreadsheet_formula_injection():
 
 def test_analytics_export_links_are_on_the_screen(tmp_path):
     """AFFORDANCE PIN. The screen must offer the 'download report data' links, else the export is
-    unreachable for the brief it exists for. FAILS IF either export link is missing."""
+    unreachable for the custodian it exists for. FAILS IF either export link is missing."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
@@ -918,7 +918,7 @@ def test_no_state_detail_map_leaves_the_table_exactly_as_it_was(tmp_path):
 
 def test_the_by_survey_table_reports_how_many_countries_reached_each_survey(tmp_path):
     """CUSTODIAN PROMISE PIN. "Your survey was downloaded N times from M countries" is the sentence
-    this screen exists to let the brief write, and M was nowhere in the pipeline. The by-survey table
+    this screen exists to let a survey custodian write, and M was nowhere in the pipeline. The by-survey table
     must carry the country COUNT per survey, and only the count: the list itself is a named survey
     beside a named country, which is a small cell in a community this size. FAILS IF the count is
     absent, if it counts 'unknown' as a country, or if the country list is rendered."""
@@ -1160,7 +1160,7 @@ def test_the_survey_csv_blanks_the_country_cell_it_never_measured():
 
 def test_the_country_table_says_api_requests_joined_it_later(tmp_path):
     """GEO SCOPE SEAM PIN. The caption says the map counts downloads plus visits plus API requests,
-    and it does. The map is cumulative, and API requests are the youngest counted class to carry
+    and it does, NOW. The map is cumulative, and API requests are the newest counted class to carry
     geography at all, so on a box with days folded before that change the caption describes only the
     later part of its own map. The table must say so where it is true, and must not say it where it is
     not. FAILS IF the seam goes unstated, or if a box with no such history carries the note anyway."""
@@ -1220,7 +1220,7 @@ def _aged_out_seam_stats(**over) -> dict:
 
 
 def test_no_disclosure_points_at_a_note_that_is_not_on_the_page(tmp_path):
-    """DANGLING-CITATION PIN. Neither disclosure may tell the reader that "the note under the
+    """DANGLING-CITATION PIN. Two disclosures tell the reader that "the note under the
     quarterly table names the months", but that note is built from the THREE months the quarterly
     table shows while the disclosures citing it fire off a scan of every retained month, which the
     aggregator never prunes. Once a second-seam month ages out of the three-month window the citation
@@ -1621,7 +1621,7 @@ def test_the_bulk_line_does_not_claim_the_export_produces_a_citation_pack(tmp_pa
 
 
 def test_the_screen_states_the_one_thing_the_portal_adds_to_the_log(tmp_path):
-    """DISCLOSURE PIN. A preamble saying, truthfully, that nothing here is a beacon and nothing
+    """DISCLOSURE PIN. The preamble says, truthfully, that nothing here is a beacon and nothing
     new is collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
     the second half of that sentence is not true as written and must be restated rather than left
     standing. The restatement has to be specific: WHAT is added (a query flag), to WHAT (fetches that

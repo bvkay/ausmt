@@ -28,7 +28,7 @@ import build_portal as bp        # noqa: E402
 
 
 def test_typo_license_is_not_redistributable():
-    # The exact defect the gate closes: a single-character typo (letter O for zero 0) passes startswith('CC').
+    # The exact defect the gate closes: a single-character typo (letter O for zero 0) once passed startswith('CC').
     assert not bp.redistributable("CC-BY-4.O"), "a typo'd CC id must NOT be redistributable (was the prefix hole)"
     assert not bp.redistributable("CC-nonsense"), "arbitrary 'CC…' free text must NOT be redistributable"
     assert not bp.redistributable("CC BY 4.0 or whatever"), "extra words must NOT match"

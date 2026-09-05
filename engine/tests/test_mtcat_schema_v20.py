@@ -1,6 +1,6 @@
 """MTCAT 2.0: the schema DESCRIBES what the portal serves, and CONSTRAINS it.
 
-Successor to the retired v1.2 acceptance module. MTCAT 2.0 is a MAJOR version; its breaking list is small and
+Successor to the retired v1.2 acceptance module. MTCAT 2.0 is a MAJOR version (correctness over compatibility while the ecosystem is nascent); its breaking list is small and
 deliberate: null-as-undeclared removed (one defined null: the paired withheld station
 coordinates), the empty-array state for formats removed (minItems 1), sources[]/changes removed,
 and the top-level library-version keys removed. 2.0 also adds description, subjects[],
@@ -260,7 +260,7 @@ def _mutate(path, value):
 
 
 # One mutation per constraint. The 1.2-era cases whose constraints survive are kept; the 2.0 cases
-# are ported from the fixture suite (and friends).
+# are ported from the fixture suite.
 RED_CASES = [
     # ---- derived discovery facets ---------------------------------------------------------------
     (("surveys", 0, "n_stations"), "3",

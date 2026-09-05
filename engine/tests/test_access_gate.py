@@ -6,14 +6,14 @@ redistributable(lic) and kind=="edi"`. A CC-BY survey marked embargoed/metadata_
 EDI byte-copied and every manifest row emitted. The gate additionally requires the survey be
 OPEN and not under an active embargo.
 
-NON-VACUOUS failure criteria (each fails against a level-only gate or a broken helper):
+NON-VACUOUS failure criteria (each fails against a licence-only gate or a broken helper):
 
   Pure gate (stack-less — the logic is pure):
     * open + no embargo                       -> SERVED               (regression: must still serve)
     * open + future embargo_until             -> SERVED               (level is the state of record;
                                                                         a stray date doesn't withhold)
-    * metadata_only                           -> NOT served           (a level-only gate serves it)
-    * embargoed + FUTURE date                 -> NOT served, active   (a level-only gate serves it)
+    * metadata_only                           -> NOT served           (a licence-only gate serves it)
+    * embargoed + FUTURE date                 -> NOT served, active   (a licence-only gate serves it)
     * embargoed + PAST date                   -> NOT served + STALE-embargo warning
                                                   (DECISION: level is state of record; no silent
                                                    auto-publish on a lapsed date — a curator flips it)
@@ -23,7 +23,7 @@ NON-VACUOUS failure criteria (each fails against a level-only gate or a broken h
 
   Build path (drives the real pipeline; requires mt_metadata/mth5):
     * CC-BY + embargoed(future)   -> ZERO manifest rows/bytes, edi_available=0, survey STILL in
-                                     catalogue/surveys/mtcat (discovery universal)   (bytes withheld)
+                                     catalogue/surveys/mtcat (discovery universal)   (a licence-only gate serves it)
     * CC-BY + metadata_only       -> same
     * CC-BY + embargoed(past)     -> STILL not served (lapsed embargo is not auto-publication)
     * open + no embargo (baseline sample) -> served (regression)
@@ -194,7 +194,7 @@ def test_embargoed_survey_emits_none_of_the_three_bundles(tmp_path, access_block
     """The two new bundles (EMTF-XML zip, TF MTH5) flow through the IDENTICAL can_serve
     gate as the EDI zip — so a withheld survey emits NONE of the three, even with --survey-h5 ON. FAILS
     if any bundle row is emitted OR any bundle file lands on disk for a withheld survey. (The
-    generic 'bundles == ' assertion never exercised the flag-gated MTH5 path; this does.)"""
+    generic 'bundles == []' assertion never exercised the flag-gated MTH5 path; this does.)"""
     pytest.importorskip("mt_metadata")
     pytest.importorskip("mth5")
     out, man, cat, smeta, mtcat, _err = _build(tmp_path, access_block, "--survey-h5")
@@ -223,14 +223,15 @@ def test_embargoed_survey_smeta_badges_honestly(tmp_path):
 
 
 # -------------------------------------------------------------------------- DISPLAY-PRODUCT gate
-# withholds the BYTES (manifest/edi/xml/bundles); extends the gate to the DERIVED DISPLAY products
+# The access gate withholds the BYTES (manifest/edi/xml/bundles); this display-product gate extends
+# it to the DERIVED DISPLAY products
 # the portal PLOTS. For an embargoed dataset the response curves ARE the data — a portal that plots the
 # thinned tf.json curves for an embargoed survey has published the data it withheld from download. So for
 # a non-served survey the tf.json series columns become EMPTY ARRAYS and the sci.json science-derived
 # fields are nulled; the CATALOGUE row (locations/band/nper/sha256) stays public (discovery is universal),
 # and the processing-metadata sci fields (rr/sw/alg) stay (metadata, not data). The --products tree is a
-# DISTRIBUTION surface too (deploy/Makefile writes products/ INSIDE the served build dir), so
-# withholds its derived science for a non-served survey — asserted by the products leak-sweep below.
+# DISTRIBUTION surface too (deploy/Makefile writes products/ INSIDE the served build dir), so the
+# products gate withholds its derived science for a non-served survey — asserted by the products leak-sweep below.
 
 def _tf_sci(out):
     """Load the emitted portal projections (tf.json, sci.json) from a build's out dir."""
@@ -329,7 +330,7 @@ def test_withheld_build_passes_verify_data_dir(tmp_path):
 # is exactly the embargoed pre-publication science the byte/display gates withhold elsewhere. Its
 # dimensionality.json (a pure interpretation product) is NOT emitted at all. The OPEN survey in the SAME
 # build is unaffected. These PINs build a 3-survey corpus (open + embargoed + metadata_only) and sweep the
-# WHOLE emitted products/ tree; the emitter emitted full science for every station (see
+# WHOLE emitted products/ tree; the pre-fix emitter emitted full science for every station (see
 # _reconstruct_prefix_station_json + test_products_leak_sweep_catches_prefix_emitter, the red-prove).
 
 # TF-derived science field NAMES that must never appear under a non-served survey's products.
@@ -613,8 +614,7 @@ def test_root_artifacts_carry_no_register_route_detail(tmp_path):
 def test_ts_access_membership_is_exactly_the_open_stations(tmp_path):
     """The MEMBERSHIP claim itself, stated as a set rather than as a string sweep: under a register
     covering every access state, the artifact's keys are the served surveys' ausmt_ids and no
-    others. This set is the guarantee that the leak-clean-by-construction shape alone
-    does not give."""
+    others. This set is the guarantee that replaces the leak-clean-by-construction shape."""
     out, prod, served, nonserved = _build_products_corpus(tmp_path)
     out2, _forbidden, _routes = _build_with_leak_register(tmp_path, prod, (*served, *nonserved))
     ids = {}

@@ -157,7 +157,7 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
     """DEGRADATION PIN. When the metadata read-job fails on a NON-metadata tab, the hub still
     renders (200): the title falls back to the slug, the orientation line carries no fact
     segments, and the tab's own content is unaffected. FAILS IF the failure bounces the curator
-    off the hub (the -HUB metadata-only behaviour) or 500s."""
+    off the hub (the earlier metadata-only behaviour) or 500s."""
     async def _body():
         surveys_live = _live(tmp_path)
 
@@ -179,7 +179,7 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
 # Overview scaffold + citation-email stamp
 # --------------------------------------------------------------------------------------------------
 def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
-    """ SCAFFOLD PIN, inverted. The citation-author email heuristic read ONLY the two
+    """SCAFFOLD PIN, inverted. The citation-author email heuristic read ONLY the two
     retired flat credit keys, so with those migrated away it could never fire again; it and its
     scaffold attribute are deleted outright. FAILS IF the attribute or the helper comes back."""
     assert not hasattr(curatorpage, "citation_author_email")
@@ -218,7 +218,7 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
     """SEVERITY-ROW + DEAD-BRANCH SOURCE PIN. The needs-attention rows are severity rows
     ('qa ' + kind, with the terse text and the full diagnosis in a title attr) and the refusal
     boilerplate is a single REFUSED_NOTE constant appended once by the plan builder. Both the old
-    string-matching metadata branch (citation|author|email/…) and the server-stamped
+    string-matching metadata branch (/citation|author|email/…) and the server-stamped
     data-citation-email info row that replaced it are now DELETED. FAILS IF either
     citation-author branch returns, the note constant multiplies, or the severity-row classes
     disappear."""

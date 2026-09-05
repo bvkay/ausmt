@@ -1,4 +1,4 @@
-"""Curator Approve -> commit-to-surveys-live flow + fail-closed rollback (v2/), with git faked
+"""Curator Approve -> commit-to-surveys-live flow + fail-closed rollback (v2), with git faked
 at its injected seam (no real git). v2 is COMMIT-AND-PUSH ONLY — NO rebuild: PUBLISHED means
 committed+pushed, not served.
 
@@ -51,7 +51,7 @@ def test_happy_path_commits_and_stages(tmp_path):
             commit_calls = [c for c in git.calls if "commit" in c]
             assert commit_calls, "no git commit was issued"
             assert any(m in " ".join(commit_calls[0]) for m in COMMIT_AUTHOR_MARKERS)
-            # v2 + PUBLISHED reason states it is committed, and that the reconcile agent (not
+            # v2: the PUBLISHED reason states it is committed, and that the reconcile agent (not
             # a manual make) closes the serve gap.
             reason = gw.db.transitions_for(sid)[-1]["reason"].lower()
             assert "committed" in reason and "reconcile" in reason
@@ -124,7 +124,7 @@ def test_git_runner_env_scrubs_secrets(tmp_path, monkeypatch):
 
 
 def test_blocking_fail_refuses_approve_409(tmp_path):
-    # Proven failing: disabling has_blocking_fail (if False:) let an curator approve on a FAIL
+    # Proven failing: disabling has_blocking_fail (if False:) let a curator approve on a FAIL
     # submission transition to PUBLISHING and run git (verified earlier).
     async def _body():
         git = FakeGit()
@@ -320,7 +320,7 @@ def test_reconciliation_moves_stuck_publishing(tmp_path):
 
 
 def test_slug_charset_validation():
-    # The trailing-newline cases pin an anchored `$` matches before a final newline, so a
+    # The trailing-newline cases pin this: an anchored `$` matches before a final newline, so a
     # `.match` gate accepted "slug\n" and it reached a path/branch name — `.fullmatch` rejects it.
     for bad in ("../evil", "a/b", "with space", "", ".hidden", "a" * 200,
                 "good-slug_1.2\n", "good-slug_1.2\n\n"):
@@ -383,7 +383,7 @@ def test_generic_email_with_ack_publishes_and_audits(tmp_path):
 
 
 def test_submitter_email_with_ack_still_409(tmp_path):
-    # - THE CONTRACT TEST. The submitter's OWN email present + ack_pii=yes => 409. No
+    # THE CONTRACT TEST. The submitter's OWN email present + ack_pii=yes => 409. No
     # acknowledgement can override a submitter-email hit. Also the MIXED case (submitter + generic) is
     # a 409 with ack, and a CASE-VARIANT of the submitter email is still a submitter hit
     # (submitter-needle matching is case-insensitive by contract). Failure criterion: fails

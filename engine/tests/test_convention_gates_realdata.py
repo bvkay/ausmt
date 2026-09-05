@@ -32,7 +32,7 @@ pytestmark = pytest.mark.skipif(
 REALDATA = Path(_REALDATA) if _REALDATA else Path(".")
 
 # The three REAL convention-flipped stations (both off-diagonal medians coherently out of
-# quadrant: arg Zxy ~ -140..-124, arg Zyx ~ +34..+44 - the axis-swap/convention class).
+# quadrant: arg Zxy ~ -140..-124 (Q3), arg Zyx ~ +34..+44 (Q1) - the axis-swap/convention class).
 # Pinned BY NAME per the adjudication: Gate 2 FAILING these is the living proof it can fail.
 NEGATIVE_CONTROLS = [
     "USArray.TTW52.2016.edi",
@@ -77,7 +77,7 @@ def test_no_other_usarray_station_fails():
 
 def test_ccmt_uniform_zrot_served_as_stored_v3a():
     """FAILS IF: a ccmt-2017 station (served survey; survey-uniform ZROT=8, ROTATION=FIX - the
-    serve-as-stored case of frame) is ROTATED, or served without the declared angle
+    serve-as-stored case of frame POLICY v3) is ROTATED, or served without the declared angle
     recorded, or its quadrants break as-stored. The rule: the engine serves data as
     stored and reports the frame - it does not de-rotate. (Under v2 this was the record case; v3
     records every uniform declaration regardless of magnitude, so the outcome is unchanged here.)"""
@@ -117,7 +117,7 @@ def test_ccmt_uniform_zrot_served_as_stored_v3a():
 
 
 def test_auslamp_pax_serve_path_refuses_v3c():
-    """Arm C on real bytes. FAILS IF: a PAX-rotated (per-period ZROT) AusLAMP-SA specimen is SERVED.
+    """Per-period refusal on real bytes. FAILS IF: a PAX-rotated (per-period ZROT) AusLAMP-SA specimen is SERVED.
     Under frame POLICY v3 the serve path REFUSES per-period frame mixing - a single served curve
     from period-varying frames is misleading-by-construction.
     Historical red: v2 de-rotated per period and served it (disp.action == "derotate")."""

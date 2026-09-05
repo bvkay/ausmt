@@ -82,7 +82,7 @@ def test_the_expected_strings_carry_the_distinctive_escapes():
     # were regenerated from a broken encoder would still satisfy the round-trip above.
     by = {v["name"]: v["encoded_path"] for v in _load()["vectors"]}
     assert by["space_and_brackets"].endswith("C5%20%5BREMOTE%5D.zip")
-    # !'* are the set encodeURIComponent leaves alone, which is why the JS mirror cannot delegate
+    # !'()* are the set encodeURIComponent leaves alone, which is why the JS mirror cannot delegate
     # to it; + and & would otherwise be read as a space and a parameter separator.
     for esc in ("%21", "%27", "%28", "%29", "%2A", "%2B", "%26"):
         assert esc in by["sub_delims_are_escaped"], esc

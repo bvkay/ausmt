@@ -12,8 +12,8 @@ sitemap is where the contract is ADVERTISED, so it must emit the path form and n
   * station URLs are DELIBERATELY ABSENT: the station pages exist (the served URL contract)
     but are unadvertised and noindexed, so the sitemap cannot dilute the survey and collection
     pages that carry the ranking;
-  * per-collection URLs are ADDED as <base>/collections/<id> (a sitemap without them emits no
-    collection links at all);
+  * per-collection URLs are ADDED as <base>/collections/<id> (the sitemap emitted no collection
+    links at all before this);
   * the hash-fragment forms leave the sitemap entirely: the path form is the published contract,
     and crawlers ignore fragments anyway;
   * the Atom feed entry <link> moves to the same path form.

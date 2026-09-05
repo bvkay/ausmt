@@ -273,7 +273,7 @@ def test_the_mutation_set_differs_from_a_passing_document_by_exactly_the_field_u
 
 
 def test_a_withheld_embargoed_document_validates_with_the_same_schema():
-    """Policy transition keeps identity (pattern): the same survey_id, an embargoed rights
+    """Policy transition keeps identity: the same survey_id, an embargoed rights
     block with a dated embargo, no extent, still a valid document."""
     doc = _base()
     doc["rights"] = {"license": "CC-BY-4.0", "access": "embargoed", "embargo_until": "2027-02-01"}

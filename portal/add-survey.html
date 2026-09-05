@@ -1574,9 +1574,9 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_lead_orcid","leadOrcidOk");
 
-  // ----- DOI normalisation on blur. A contributor who pastes a full resolver URL (https://doi.org/ 10.x/y,
-  // dx.doi.org, http variants) into a DOI slot triggered the live validator's "publication DOI looks
-  // malformed" warning. See docs: portal internals, add-survey.html.
+  // ----- DOI normalisation on blur. A contributor who pastes a full resolver URL
+  // (https://doi.org/10.x/y, dx.doi.org, http variants) into a DOI slot trips the live validator's
+  // "publication DOI looks malformed" warning. See docs: portal internals, add-survey.html.
   function wireDoiBlur(input){ if(!input) return;
     input.addEventListener("blur",()=>{ const n=normalizeDoi(input.value); if(n!==input.value) input.value=n; }); }
   function wireConditionalDoiBlur(input, typeSelect){ if(!input) return;
@@ -2068,14 +2068,14 @@ if(typeof document!=="undefined"&&document.getElementById){
   function submitBlocked(msg){ submitPanel('<b class="submitbad">'+esc(msg)+"</b>"); }
   function setSubmitting(on){
     submitBusy=on;
-    $("btnSubmitGateway").disabled=on;                 // See docs: portal internals, add-survey.html.
-    $("btnCancelSubmit").style.display=on?"":"none";    // See docs: portal internals, add-survey.html.
+    $("btnSubmitGateway").disabled=on;                 // the double-submit guard
+    $("btnCancelSubmit").style.display=on?"":"none";    // Cancel is meaningful only while the XHR is live
     $("submitProg").classList.toggle("show",on);
     if(!on){ $("submitBar").style.width="0"; }
   }
   $("btnCancelSubmit").onclick=()=>{ if(submitInFlight) submitInFlight.abort(); };
   $("btnSubmitGateway").onclick=async()=>{
-    if(submitBusy) return;                              // See docs: portal internals, add-survey.html.
+    if(submitBusy) return;                              // already building or in flight
     const meta=readMeta(), pf=parsed(), ediF=ediFiles(), mh=mth5Files(), xf=xmlFiles();
     // See docs: portal internals, add-survey.html.
     const v=validateSurvey(meta, pf, mh.map(f=>({name:f.name,hdf5:f.hdf5})), xf.map(f=>({name:f.name,emtf:f.emtf})));
@@ -2099,7 +2099,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     Object.keys(fields).forEach(k=>fd.append(k, fields[k]));
     track("GatewaySubmitAttempted");   // See docs: portal internals, add-survey.html.
     const xhr=new XMLHttpRequest(); submitInFlight=xhr;
-    xhr.open("POST", "/gateway/submit");                 // See docs: portal internals, add-survey.html.
+    xhr.open("POST", "/gateway/submit");                 // a literal same-origin relative path
     xhr.setRequestHeader("X-AusMT-Submit-Key", key);     // See docs: portal internals, add-survey.html.
     if(xhr.upload){ xhr.upload.onprogress=e=>{ if(e.lengthComputable){ const pct=Math.round(100*e.loaded/e.total);
       $("submitBar").style.width=pct+"%"; $("submitProgText").textContent="Uploading… "+pct+"%"; } }; }

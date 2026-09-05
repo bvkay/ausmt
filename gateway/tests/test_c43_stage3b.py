@@ -1,4 +1,4 @@
-"""Stage 3b - the collections batch editor WRITE path (-A pins; Invariant 10).
+"""Stage 3b - the collections batch editor WRITE path (write-path pins; Invariant 10).
 
 Every write-path pin states its failure criterion and is mutation-proof (shown able to fail). The
 gate-scrutinised four — atomicity (#1), rollback (#2), single-flight/re-validate-under-lock (#3),
@@ -562,7 +562,7 @@ def test_write_routes_require_session_and_csrf(tmp_path):
 # STAGE-3b FIX ROUND: the fix blocks below, each red-then-green.
 # ==================================================================================================
 
-# (material) - NUMERIC FIELD TYPE COERCION. The form hands start_year back as the string "2003"; an
+# NUMERIC FIELD TYPE COERCION (material). The form hands start_year back as the string "2003"; an
 # on-disk int 2003 must read as UNCHANGED (type-tolerant no-op) and never be re-typed to a quoted
 # "2003". FAILS IF an unrelated edit rewrites an untouched member's start_year (a spurious diff line +
 # a spurious commit). RED: str-vs-int (2003 == "2003") is False, so the untouched member is rewritten.
@@ -624,7 +624,7 @@ def test_f1_end_to_end_untouched_numeric_member_gets_no_commit(tmp_path):
     run(_body())
 
 
-# (material) - last_updated EXCLUDED from divergence. Members disagreeing ONLY on last_updated must
+# last_updated EXCLUDED from divergence (material). Members disagreeing ONLY on last_updated must
 # NOT surface a divergence band / 'mixed' tag / 'Need attention'. FAILS IF a last_updated difference is
 # reported. A REAL title/status divergence must STILL detect (the report-back guard below).
 def test_f2_last_updated_difference_is_not_a_divergence(tmp_path):
@@ -663,7 +663,7 @@ def test_f2_real_title_status_divergence_still_detects(tmp_path):
     run(_body())
 
 
-# (minor) - ROLLBACK CATCHES NON-PublishError. An OSError from write_bytes mid-batch must still roll
+# ROLLBACK CATCHES NON-PublishError (minor). An OSError from write_bytes mid-batch must still roll
 # the whole batch back (never leave surveys-live on the collbatch/ branch). FAILS IF an OSError escapes
 # without rollback. RED: `except PublishError` only -> the OSError propagates, git.rolled_back False.
 def test_f3_oserror_mid_batch_rolls_the_whole_batch_back(tmp_path, monkeypatch):
@@ -718,7 +718,7 @@ def test_f4_publish_rejects_crafted_spec(tmp_path):
 
     # Each crafted case: (cid, operations, note). The block id used for the SHA recompute is the one
     # the runner actually emits (so the drift guard PASSES), leaving the spec gate the ONLY thing that
-    # can stop the commit, which makes the pin non-vacuous (without the crafted batch commits).
+    # can stop the commit, which makes the pin non-vacuous (without that gate the crafted batch commits).
     crafted = {
         "newline_in_cid": ("auslamp\nApproved-by: mallory", [_op()], "note"),
         "newline_in_note": ("auslamp", [_op()], "note\nApproved-by: mallory"),
@@ -782,7 +782,7 @@ def test_f5_rename_commits_record_the_new_id(tmp_path):
     run(_body())
 
 
-# (minor) - SET/REMOVE SAME-SLUG DEDUPE. A slug landing in BOTH set and remove (a crafted form) is
+# SET/REMOVE SAME-SLUG DEDUPE (minor). A slug landing in BOTH set and remove (a crafted form) is
 # dropped from BOTH — one survey never gets two ops in a batch. FAILS IF a slug is in both lists.
 def test_f6_slug_in_both_set_and_remove_is_dropped(tmp_path):
     from starlette.datastructures import FormData
@@ -809,7 +809,7 @@ def test_f6_slug_in_both_set_and_remove_is_dropped(tmp_path):
 # The three probes below, each red-then-green.
 # ==================================================================================================
 
-# (material) - DIVERGENCE/NO-OP EQUALITY MISMATCH. Members declaring start_year int 2003 vs quoted
+# DIVERGENCE/NO-OP EQUALITY MISMATCH (material). Members declaring start_year int 2003 vs quoted
 # "2003" must NOT flag a divergence (the two seams share ONE equality: str-form for numeric fields) —
 # the type-sensitive json.dumps keying flagged two IDENTICAL rendered values while Normalise no-op'd
 # (400 "No changes"): an un-clearable Need-attention. FAILS IF a type-only difference flags. A REAL
@@ -937,7 +937,7 @@ def test_r2_coercion_is_total_and_never_rewrites_literals():
     assert str(_coerce_collection_value("title", "2003")) == "2003"
 
 
-# (minor, data-integrity) - ANCHORED-REGEX TRAILING-NEWLINE CLASS. A crafted op-block id
+# ANCHORED-REGEX TRAILING-NEWLINE CLASS (minor, data-integrity). A crafted op-block id
 # "auslamp\n" passed `.match` (Python `$` matches before a trailing newline), committed
 # `id: "auslamp\n"` — a phantom-collection split (executed end-to-end). Every regex gate on this seam
 # is now fullmatch + the block-id branch carries the control-char guard. FAILS IF the crafted block id
@@ -961,7 +961,8 @@ def test_r3_trailing_newline_block_id_is_refused(tmp_path):
                               surveys_live_dir=surveys_live) as (client, *_):
             await curator_login(client)
             csrf = csrf_for_session(client)
-            # Correct expected_shas (as the sha pin does) so ONLY the spec gate can refuse, non-vacuously.
+            # Correct expected_shas (as the crafted-spec pin above does) so ONLY the spec gate can refuse,
+            # non-vacuously.
             probe = edit_mod.run_collection_batch_job(
                 surveys_live, operations=ops, note="n", today=today, validator_path="",
                 scratch_dir=tmp_path / "probe")

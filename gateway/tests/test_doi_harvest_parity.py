@@ -1,4 +1,4 @@
-"""the contributor-credit model (curator DOI harvest): the curator publications rows reuse the SAME
+"""The contributor-credit model (curator DOI harvest): the curator publications rows reuse the SAME
 client-side harvest the public Add Survey form uses. This pins the two guarantees:
 
   1. NO DUPLICATE-DRIFT: the gateway's bundled copy (gateway/static/doi_harvest.js) is BYTE-IDENTICAL to

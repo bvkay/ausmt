@@ -4,16 +4,16 @@ PURE FUNCTIONS, no I/O — the AUTHORITATIVE specification of the workbench's ph
 classification logic is unit-testable server-side (the contract's "test the classification
 logic at the JS-data seam" — a server-side helper is that seam). The browser-side STATIONS_JS mirrors
 these exact rules; an EXECUTABLE Node parity pin (test_c43_stage2a_js_parity.py) runs the extracted JS
-against this module over a boundary-heavy vector sweep, so the mirror cannot drift semantically (the
-a source-string pin lets a truncated-versus-floored modulo divergence ship).
+against this module over a boundary-heavy vector sweep, so the mirror cannot drift semantically (a
+source-string pin lets a truncated-versus-floored modulo divergence ship).
 
 THE ONE LOAD-BEARING FACT (verified against engine/extract/_edi_tf.py:143):
   tf.json t[4] = phs_yx_adj is stored with a +180 PRESENTATION SHIFT — `norm_phase(pyx, add=180.0)`.
-  So the TRUE φyx = stored − 180, re-wrapped. A station whose TRUE φyx is (−180…−90 - the
+  So the TRUE φyx = stored − 180, re-wrapped. A station whose TRUE φyx is in Q3 (−180…−90 - the
   physically expected quadrant for yx) therefore has a STORED t[4] near 0…90. Reading the stored value
-  AS the true phase would mis-classify a healthy station - the trap the φyx-unwrap pin guards.
+  AS the true phase would mis-classify a healthy Q3 station - the trap the φyx-unwrap pin guards.
 
-  φxy (t[3]) carries NO shift - it is stored as the true phase and its expected quadrant is (0…90).
+  φxy (t[3]) carries NO shift - it is stored as the true phase and its expected quadrant is Q1 (0…90).
 
 ENGINE-GATE ALIGNMENT: the engine's Gate-2 convention check
 (engine/extract/_conventions.py convention_check) judges MEDIANS against the quadrant bands widened by
@@ -31,8 +31,9 @@ from __future__ import annotations
 # workbench SUBTRACTS this to recover the true phase before classifying/plotting.
 YX_PRESENTATION_SHIFT_DEG = 180.0
 
-# Expected quadrants (inclusive bounds, degrees). xy is expected; TRUE yx is expected
-# (checked on the (−360, 0] seam-mapped axis, where ± slack is one contiguous window).
+# Expected quadrants (inclusive bounds, degrees). xy is expected in quadrant Q1; TRUE yx is
+# expected in quadrant Q3 (checked on the (−360, 0] seam-mapped axis, where the Q3 quadrant plus
+# slack is one contiguous window).
 Q1_LO, Q1_HI = 0.0, 90.0
 Q3_LO, Q3_HI = -180.0, -90.0
 
@@ -63,14 +64,14 @@ def true_phi_yx(stored_phs_yx_adj: float | None) -> float | None:
 
 
 def _map_yx(true_yx: float) -> float:
-    """The engine gate's wrap-safe yx axis: map a TRUE φyx from (−180, 180] to (−360, 0] so ± slack
+    """The engine gate's wrap-safe yx axis: map a TRUE φyx from (−180, 180] to (−360, 0] so the Q3 quadrant plus slack
     is one contiguous window and a value/median near ±180 cannot straddle the representation seam
     (mirrors _conventions.convention_check's `b if b <= 0 else b - 360.0`)."""
     return true_yx if true_yx <= 0 else true_yx - 360.0
 
 
 def in_quadrant_xy(phs_xy: float | None) -> bool | None:
-    """True iff φxy (t[3], stored = true) is within widened by the slack (−slack … 90+slack - the
+    """True iff φxy (t[3], stored = true) is within the Q1 quadrant widened by the slack (−slack … 90+slack - the
     engine gate's xy band). None => no flag for a missing point. A False drives a RED dot: the point is
     outside the band by MORE than the slack."""
     if phs_xy is None:
@@ -99,9 +100,10 @@ def _median(vals: list) -> float:
 
 
 def classify_series(values: list, *, mode: str) -> dict:
-    """Classify a whole phase series (a tf column) into per-point flags + the MEDIAN verdict (
-    aligned with the engine rule). `mode` is 'xy' (values are stored=true φxy, expected in the first quadrant) or 'yx'
-    (values are stored phs_yx_adj, unwrapped to true φyx, expected on the seam-mapped axis).
+    """Classify a whole phase series (a tf column) into per-point flags + the MEDIAN verdict (aligned
+    with the engine rule). `mode` is 'xy' (values are stored=true φxy, expected in the first quadrant) or 'yx'
+    (values are stored phs_yx_adj, unwrapped to true φyx, expected in the third quadrant on the
+    seam-mapped axis).
 
     Returns {points, any_out, n_classified, median, median_in}:
       * points   — per-point bool|None (band ± slack; False = a RED dot);

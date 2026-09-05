@@ -50,7 +50,7 @@ def test_canonical_store_is_additive(tmp_path):
 def test_canonical_store_same_dataid_no_overwrite(tmp_path):
     """Two EDIs in one survey sharing a DATAID (the same-site-two-codes case `_disambiguate` exists for)
     must produce TWO distinct canonical XML files, and `canonical_written` must equal the files on disk.
-    Regression guard: emit_canonical_store must not key on the PRE-disambiguation DATAID, or both write
+    Regression guard: emit_canonical_store once keyed on the PRE-disambiguation DATAID, so both wrote
     the same <DATAID>.xml (one overwritten) while the count incremented twice."""
     import re as _re
     src_edis = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))

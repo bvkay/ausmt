@@ -1,1 +1,1 @@
-"""AusMT submission gateway (contract). See maintainer/C10-GatewayDesign.md - frozen design."""
+"""AusMT submission gateway. See maintainer/C10-GatewayDesign.md - frozen design."""

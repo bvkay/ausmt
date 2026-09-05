@@ -170,7 +170,7 @@ def test_a_sign_run_the_collapse_cannot_rescue_is_left_alone(tmp_path, value):
 # --------------------------------------------------------------------------------------------
 
 def test_preflight_calls_the_doubled_sign_a_repair_ausmt_makes():
-    """The preflight clause: the class reads will_not_read while it is terminal, and AusMT
+    """The preflight clause: the class was will_not_read while it was terminal, and AusMT now
     rescues it, so the curator report must say needs_repair and say what AusMT does."""
     finding = pf.preflight_file(REFLAT)
     assert finding["outcome"] == pf.NEEDS_REPAIR, finding

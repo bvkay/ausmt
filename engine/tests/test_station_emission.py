@@ -209,7 +209,7 @@ def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
 
 def test_a_withheld_record_gains_no_diagnostics_and_no_sidecar(built_access):
     """The asymmetry the fold could have collapsed: a withheld station has no dimensionality.json, and
-    folding the call in gives it one under another name."""
+    folding the call in gives it one under another name, which is the collapse this pin refuses."""
     _, withheld = _split(built_access)
     for key, doc in withheld.items():
         assert "diagnostics" not in doc, f"{key}: the interpretation product must stay out of a stub"
@@ -285,7 +285,7 @@ def _coord_fixtures():
 
 @pytest.fixture(scope="module")
 def built_masked(tmp_path_factory):
-    """One exact, one generalised and one withheld station in one survey, built stager so
+    """One exact, one generalised and one withheld station in one survey, built by the stager so
     the positions are distinctive enough to attribute a hit to a policy class."""
     pytest.importorskip("mt_metadata")
     c42 = _coord_fixtures()
@@ -357,7 +357,7 @@ def test_the_masked_stations_still_publish_a_record(built_masked):
     assert by_station[c42.HID["id"]]["location"] == {"lat": None, "lon": None}
 
 
-# --------------------------------------------------------------- X archives are containment
+# --------------------------------------------------------------- Archives are containment
 
 def test_a_masked_station_advertises_no_archive_it_put_no_bytes_into(built_masked):
     """An `archive` row is a CONTAINMENT claim, and the byte gate decides containment per station: a

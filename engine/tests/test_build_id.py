@@ -127,7 +127,7 @@ def test_build_json_deterministic_aside_from_generated(tmp_path):
     assert d1["source_commit"] == d2["source_commit"]
 
 
-# -- engine_commit env fallback + "unknown" (never literal "None") ---------------------------
+# --- engine_commit env fallback + "unknown" (never literal "None") ---------------------------
 # These call build_identity() directly (unit-level, not a subprocess build) so git resolution can be
 # monkeypatched to None regardless of whether this checkout happens to be a git repo -- the container
 # scenario the bug came from (engine/ COPYed without .git, so _git_commit_at(HERE) is always None).
@@ -161,7 +161,7 @@ def test_build_id_never_contains_literal_none_string(tmp_path, monkeypatch):
     assert "unknown" in doc["build_id"], f"expected 'unknown' placeholder in build_id: {doc['build_id']!r}"
 
 
-# -- build_provenance.json git_commit env fallback, HONEST about "unavailable" ----------------
+# --- build_provenance.json git_commit env fallback, HONEST about "unavailable" ----------------
 # _build_prov's git_commit gets the SAME AUSMT_ENGINE_COMMIT fallback build_identity has (the engine
 # image ships engine/ WITHOUT .git, so _git_commit_at(HERE) is always None in a container), but where
 # build_identity's opaque build_id renders the terminal string "unknown", provenance stays HONEST: an

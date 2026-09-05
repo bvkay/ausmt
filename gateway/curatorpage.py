@@ -313,7 +313,7 @@ _HEAD = """<!doctype html>
 # Every curator page loads the shared UI script (delegated data-confirm / data-toggle-big handlers)
 # as an EXTERNAL same-origin script — the strictPages CSP (script-src 'self') silently blocks inline
 # script blocks AND on*-attribute handlers on every /gateway/* page, so inline handlers are dead code
-# that only fails in production.
+# that only fails in production (three shipped that way and never ran).
 _TAIL = '<script src="/gateway/curator/ui.js" defer></script></body></html>'
 
 
@@ -487,7 +487,7 @@ EDITOR_UI_JS = """
 """
 
 
-# the contributor-credit model: the unified People & credit panel enhancements, appended to editor.js (the
+# The contributor-credit model: the unified People & credit panel enhancements, appended to editor.js (the
 # script both the full editor form and the hub Metadata tab already load). RAW string (JS-native
 # backslashes). ALL progressive - the panel is fully usable without JS (both id fields + every control
 # show, manual entry + the +Add person spare rows work, and the server already renders cited rows in
@@ -684,7 +684,7 @@ _PEOPLE_CREDIT_JS = r"""
 EDITOR_UI_JS = EDITOR_UI_JS + _PEOPLE_CREDIT_JS
 
 
-# the contributor-credit model (curator DOI harvest): the DOI citation-harvest core, served to the curator
+# The contributor-credit model (curator DOI harvest): the DOI citation-harvest core, served to the curator
 # editor as an external same-origin script (the strictPages script-src 'self' CSP blocks inline). It is the
 # SAME code the public Add Survey form uses, delivered as the BYTE-IDENTICAL bundled copy under
 # gateway/static/ (the gateway app image is content-blind: it ships only gateway/ and cannot read portal/ at
@@ -774,7 +774,7 @@ CONTEXT_BAR_JS = """
 #
 # DATA HONESTY:
 #   * QA flags = the sum of counts over the survey.frame CONVENTION-WARN entries ("served with note"
-# stations) - ONE definition (qaFlagCount) shared card and the tab chip.
+#     stations) - ONE definition (qaFlagCount) shared by the card and the tab chip.
 #   * The Frame card headline derives from the frame notes' DE-ROTATION entries ONLY (convention/
 #     quadrant warns are QA flags, not frame state); the sub-line uses the record's own vocabulary
 #     ("declared-zero reference" — never "geomagnetic", which the engine deliberately never asserts).
@@ -1286,9 +1286,9 @@ SURVEY_HUB_JS = r"""
 # THE PHASE FACT (mirrors gateway/phaseqc.py — the authoritative, pinned server-side spec; the
 # EXECUTABLE Node parity pin runs these very functions against phaseqc):
 #   tf.json t[4] = phs_yx_adj is stored with a +180 presentation shift (engine _edi_tf.norm_phase). The
-#   workbench SUBTRACTS 180 and re-wraps (FLOORED modulo — JS's truncated % diverges on negatives,
-# diverges on negatives) to recover TRUE φyx, plotted on a FULL ±180 axis band shaded.
-# φxy (t[3]) is stored true, plotted 0…90 band shaded. ENGINE-GATE ALIGNED (see
+#   workbench SUBTRACTS 180 and re-wraps (FLOORED modulo — JS's truncated % diverges on negatives)
+#   to recover TRUE φyx, plots it on a FULL ±180 axis with the quadrant Q3 (−180…−90) band shaded.
+#   φxy (t[3]) is stored true, plotted 0…90 with the quadrant Q1 band shaded. ENGINE-GATE ALIGNED (see
 #   _conventions.py Gate 2): a point draws RED only when outside its band by MORE than
 #   QUADRANT_SLACK_DEG (10°, cross-import-pinned equal to the engine constant); the verdict strip
 #   beneath each phase plot is the MEDIAN of classified points vs band+slack (yx median on the
@@ -2391,7 +2391,7 @@ def _page(title: str, body: str) -> str:
 # script-src 'self'). Published HEAD is server-rendered here from serve_state.read_published_head.
 
 # The rail sections and their entries, as (group, [(key, label, href)]). Collections joined the
-# Surveys group in Stage 3a (-A) - the read-only projection at /gateway/curator/collections;
+# Surveys group in Stage 3a - the read-only projection at /gateway/curator/collections;
 # it sits beside Surveys because a collection is a programme grouping OF surveys.
 _RAIL = (
     ("Surveys", (("surveys", "Surveys", "/gateway/curator/edit"),
@@ -3357,7 +3357,7 @@ def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: 
 # ---- Usage-analytics screen -------------------------------------------------
 # A READ-ONLY Operations page rendering the host aggregator's stats.json (downloads/visits/countries +
 # a daily series). SAME trust class as the ops floor: the facts come from stats.json read SERVER-side
-# (serve_state.read_stats - the ops-status.json seam, no new mount, intact). ZERO JS: the daily
+# (serve_state.read_stats - the ops-status.json seam, no new mount). ZERO JS: the daily
 # series is a SERVER-RENDERED inline SVG sparkline, so nothing here touches the strictPages CSP
 # (script-src 'self'). Fail-closed: a missing stats.json shows an honest empty state; a stale one (old
 # generated_at, the serve_state band) shows a prominent STALE banner — never a 500, never a silent
@@ -3988,8 +3988,9 @@ def _country_table(stats: dict) -> str:
     # captions are deliberately the same string.
     #
     # The caption states what the map counts NOW, and the API third of it is younger than the other
-    # two: API requests are the youngest counted class to carry geography at all. This map is
-    # cumulative, so on a box with days folded before that change it is a MIXTURE, and the caption
+    # two: API requests are the newest counted class to carry geography; before that change they
+    # carried none. This map is cumulative, so on a box with days folded before that change it is a
+    # MIXTURE, and the caption
     # alone would overstate the historical portion. The note says so, and only where it is true: a box
     # every folded day of which was counted under the current rules has no such history and gets no
     # note.
@@ -4583,7 +4584,7 @@ def _checklist_panel(cl: "checklist_mod.Checklist") -> str:
         warning = (f'<p style="color:{_PALETTE["bad"]};font-weight:600">'
                    'A blocking check FAILED — approve is refused until it is resolved.</p>')
     elif cl.has_acknowledgeable_blocking_fail:
-        # an acknowledgeable-only block. The curator approve is available via the acknowledgement
+        # An acknowledgeable-only block. The curator approve is available via the acknowledgement
         # checkbox (a deliberate curator decision), NOT hard-refused. The submitter's own email would
         # be unacknowledgeable and hit the branch above instead.
         warning = (f'<p style="color:{_PALETTE["warn"]};font-weight:600">'
@@ -4645,7 +4646,7 @@ def _reports_panel(*, validate_report: dict | None, preview_summary: dict | None
     return "".join(parts)
 
 
-# the acknowledgement checkbox label. Rendered ONLY when the PII block is acknowledgeable
+# The acknowledgement checkbox label. Rendered ONLY when the PII block is acknowledgeable
 # (non-submitter addresses) and there are NO submitter hits. When a submitter hit exists the checkbox
 # is NOT rendered and the button is hard-disabled — the server-side 409 is the guarantee either way.
 _ACK_PII_LABEL = (
@@ -5038,7 +5039,7 @@ def _profile_select_widget(name: str, label: str, value) -> str:
             f'<select name="{_esc(name)}">{"".join(opts)}</select></p>')
 
 
-# - plain-language display text for the relation <select>. The option VALUE stays
+# Plain-language display text for the relation <select>. The option VALUE stays
 # the exact DataCite vocab (RELATION_TYPES, POSTed byte-identically so the fail-closed validator sees the
 # same token); only the human-facing option TEXT is expanded so a geophysicist who never read the spec can
 # tell which relation to pick. Any vocab not mapped here falls back to its raw token.
@@ -5052,7 +5053,7 @@ _RELATION_DISPLAY = {
     "IsDocumentedBy": "Documented by (an activity or project record describes this dataset)",
 }
 
-# - plain-language display text for the `identifies` <select>, in NCI Table 1 ORDER.
+# Plain-language display text for the `identifies` <select>, in NCI Table 1 ORDER.
 # The option VALUE stays the exact vocab token (POSTed byte-identically so the fail-closed validator sees
 # the same token); only the human-facing option TEXT is expanded so a geophysicist can pick the level.
 _IDENTIFIES_DISPLAY = {
@@ -5065,7 +5066,7 @@ _IDENTIFIES_DISPLAY = {
     "entire": "Entire dataset (single record, all levels)",
 }
 
-# the contributor-credit model - plain-language option TEXT for the credit-row selects. As with the other
+# The contributor-credit model - plain-language option TEXT for the credit-row selects. As with the other
 # typed selects the option VALUE stays the exact vocab token (POSTed byte-identically so the fail-closed
 # validator sees the same token); only the human-facing TEXT is expanded so a geophysicist can pick without
 # reading the spec. Any vocab not mapped here falls back to its raw token.
@@ -5147,7 +5148,7 @@ def _levels_widget(section: str, subkey: str, fields: dict, submitted: dict | No
 
 
 def _reorder_controls_html() -> str:
-    """the contributor-credit model (creators are an ORDERED list): the per-row move up/down buttons. The
+    """The contributor-credit model (creators are an ORDERED list): the per-row move up/down buttons. The
     delegated handler in EDITOR_UI_JS moves the row's DOM node AND renumbers the section's row indices so
     the assembled order (editor_form._assemble_list reads rows in numeric index order) matches the visual
     order - the reorder therefore persists through save. Degrades to inert buttons without JS (the server
@@ -5161,7 +5162,7 @@ def _reorder_controls_html() -> str:
             '&darr; down</button></p>')
 
 
-# the contributor-credit model: the "needs review" chip on a migration-seeded credit row awaiting curator
+# The contributor-credit model: the "needs review" chip on a migration-seeded credit row awaiting curator
 # adjudication (the INFERRED-REVIEW marker the runner detected). Advisory only - it never blocks saving;
 # saving the list rewrites it WITHOUT the marker, which IS the adjudication (apply_patch replaces the list
 # wholesale AND explicitly strips row 0's comment-above marker off the parent key, which a replace alone
@@ -5381,7 +5382,7 @@ def _blank_row(values) -> bool:
 # so no real index or field text can collide with it, and the surrounding underscores survive.
 ROW_INDEX_TOKEN = "ROWIDX"
 
-# the contributor-credit model: sections whose ORDER is meaningful get per-row up/down reorder controls.
+# The contributor-credit model: sections whose ORDER is meaningful get per-row up/down reorder controls.
 # creators[] is the citation author order; contributors[] is not ordered, so it does not.
 _REORDERABLE_SECTIONS = frozenset({"creators"})
 
@@ -5397,7 +5398,7 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
     from . import editor_form
     subfields = editor_form.LIST_SECTIONS[section]
     reorderable = section in _REORDERABLE_SECTIONS
-    # the contributor-credit model: publications rows carry the "Look up DOI" harvest button (like the
+    # The contributor-credit model: publications rows carry the "Look up DOI" harvest button (like the
     # related_identifiers PID chip); it rides every row + the template so a JS-added row gets it too.
     row_suffix = _DOI_HARVEST_BUTTON_HTML if section == "publications" else ""
     # Prefill existing rows: resubmitted rows win (preserve typed values on a validation error),
@@ -5626,7 +5627,7 @@ _PEOPLE_NAME_PH = "e.g. Family, Given  or  Organisation name"
 _PEOPLE_ORCID_PH = "e.g. 0000-0002-1825-0097"
 _PEOPLE_ROR_PH = "e.g. https://ror.org/03yghzc09"
 
-# explainer - ONE short paragraph replacing the retired lead-suppresses-PIs precedence sentence and
+# The panel explainer - ONE short paragraph replacing the retired lead-suppresses-PIs precedence sentence and
 # the old credit-model paragraph.
 _PEOPLE_EXPLAINER = (
     '<p class="sub">Cited authors form the citation, in order (use the up/down controls on a cited row); '
@@ -5666,7 +5667,7 @@ def _people_role_checkboxes(index, roles: set) -> str:
             '<span class="k">Roles (what they did)</span><br>' + "".join(boxes) + '</div>')
 
 
-# the "needs review" chip on a unified row seeded by the migration (the INFERRED-REVIEW marker the
+# The "needs review" chip on a unified row seeded by the migration (the INFERRED-REVIEW marker the
 # runner detected on the underlying creators/contributors row). Labelled which list seeded it. Advisory
 # only; saving the row rewrites the underlying list WITHOUT the marker (the adjudication, cleared via the
 # runner's existing _strip_inferred_review_comment path).
@@ -5864,7 +5865,7 @@ def _identifies_select_widget(name: str, value) -> str:
                                       editor_form.IDENTIFIES_LEVELS, display_labels=_IDENTIFIES_DISPLAY)
 
 
-# D-L: the acquisition sub-keys folded onto a related_identifiers row from the retired
+# The acquisition sub-keys folded onto a related_identifiers row from the retired
 # sources[] list — rendered behind a COLLAPSED "acquisition details" disclosure, shown only when the
 # curator opens it (an upstream dataset AusMT obtained). (subkey, label, kind) — the field NAMES match
 # editor_form.LIST_SECTIONS["related_identifiers"] so the assembler reads them back.
@@ -5972,7 +5973,7 @@ def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: di
         '<p class="sub">Every DOI or PID this survey already has at another archive goes here — one row '
         'each. Start by picking WHAT the identifier points at; the DataCite relation is set for you. This '
         'is the ONLY place a dataset-level DOI/PID is recorded; there is no separate "dataset DOI" box.</p>'
-        # D-L - the WHERE-DOES-IT-GO cheat line, now in data-LEVEL language (the curator thinks
+        # The WHERE-DOES-IT-GO cheat line, now in data-LEVEL language (the curator thinks
         # in NCI Table 1 levels, not DataCite relations).
         '<p class="sub" style="border-left:3px solid #2E4254;padding-left:.6rem">'
         '<b>Where does it go?</b><br>'
@@ -6114,7 +6115,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     # time_series is folded into the Identifiers & PIDs panel (group d) and related_identifiers into
     # group b, so both are skipped as standalone panels. Field names are unchanged -> assembly is byte-
     # identical; the mirror is presentation-only.
-    # the contributor-credit model: the retired Lead/Principal investigator and
+    # The contributor-credit model: the retired Lead/Principal investigator and
     # the separate Creators/Contributors panels are REPLACED by ONE unified "People & credit" panel
     # (keyword "people") that decomposes to the two served lists on save.
     # The three curated homes plus the designation mapping join the order, next to the
@@ -6190,7 +6191,8 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
 # its snapshot assembles to _OMIT — so the combined form's patch names exactly the sections the
 # curator actually touched, and untouched sections stay byte-for-byte alone.
 
-# Stations and History are REAL in-hub tabs, never a link-out. The tab ORDER is fixed: Overview & QA
+# Stations and History are REAL in-hub tabs (they first shipped as a link-out and nothing). The tab
+# ORDER is fixed: Overview & QA
 # (landing) / Stations / Metadata / History.
 _HUB_TABS = (("overview", "Overview & QA"), ("stations", "Stations"),
              ("metadata", "Metadata"), ("history", "History"))
@@ -6305,7 +6307,7 @@ def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str
     coord_overrides = coord_overrides if isinstance(coord_overrides, dict) else {}
     import json as _json
     overrides_attr = _esc(_json.dumps(coord_overrides, sort_keys=True))
-    # THREE thirds. The split container carries THREE slots
+    # The stations scaffold: THREE thirds. The split container carries THREE slots
     # the JS fills: station FACTS (#station-facts, col 2), the PLOTS column (#station-plots-col, col 3),
     # and the site TABLE (#stations-list, col 1). DOM ORDER is FACTS then PLOTS then TABLE — so on a
     # narrow single column they stack facts / plots / table (the panel-first stacking rule preserved);
@@ -6492,7 +6494,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
                                    intro_html=_LIST_SECTION_INTROS.get(section, ""))
 
     core_inner = (scalar_panel_inner + _map_inner("organisation") + _list_inner("instruments"))
-    # the contributor-credit model: ONE "People & credit" panel REPLACES the
+    # The contributor-credit model: ONE "People & credit" panel REPLACES the
     # retired Lead/Principal investigator + separate Creators/Contributors panels. It merges the two
     # served lists into unified rows and decomposes them back on save (build_section_patch owns the
     # creators[]/contributors[] keys via assemble_people).
@@ -6765,7 +6767,7 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
     return _page("AusMT surveys", body)
 
 
-# ---- Stage 3a collections console (-A) -----------------------------------------------
+# ---- Stage 3a collections console ---------------------------------------------------
 # Two READ-ONLY server-rendered views over the runner's collections projection: the index (summary
 # cards + list table + inconsistency bands) and the per-id detail (rollup facts + member/Declares
 # table + callouts). NO write controls in 3a — creation/edit/merge/normalise are Stage 3b. ZERO JS:
@@ -6774,7 +6776,7 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
 # here is a rollup keyed by exact collection.id. Membership is by SLUG (read live from surveys-live),
 # never the rollup's display labels (the labels-vs-slugs trap that broke the stations tab, hotfix #33).
 
-# The programme fields whose per-member divergence the console marks with a ◆ (-A). Kept in
+# The programme fields whose per-member divergence the console marks with a ◆. Kept in
 # sync with the runner's _COLLECTION_DIVERGENCE_FIELDS: `last_updated` is EXCLUDED - it is a
 # gateway-managed per-member timestamp, not a curator-reconcilable programme field (a Normalise on it
 # has no form field to fix); it is never a divergence the console reports.
@@ -6956,7 +6958,7 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
     return _shell("AusMT collections", body, nav=nav)
 
 
-# Record collection type is validator-unenforced, so the console's select IS the guardrail
+# Collection type is validator-unenforced, so the console's select IS the guardrail
 # and these tuples ARE that select's options. app.py imports them for its write-path gates rather than
 # restating them, so the gate can never refuse a value the console offers, or admit one it does not.
 # The vocabulary is docs/docs/developer/collection-ids.md; a value added here must be added
@@ -7495,7 +7497,7 @@ def render_removal_preview(*, slug: str, version: str, removed: list, station_co
 
 # ---- survey retirement - the danger-zone confirmation + terminal page --------------------
 # Whole-survey removal: a git rm -r of the survey package, gated by a typed slug + a required release
-# note + a valid TOTP second factor. The confirmation page DISCLOSES exactly what the lists
+# note + a valid TOTP second factor. The confirmation page DISCLOSES exactly what a retirement takes
 # (package contents + N stations, serving-until-rebuild, collections recompute, bookmark/DOI honesty,
 # the git-revert undo). No inline JS: the submit rides the shared CURATOR_UI_JS data-confirm.
 

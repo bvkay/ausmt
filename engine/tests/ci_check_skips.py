@@ -19,7 +19,7 @@ exact environment, so the allow-list is the same for both:
         engine.Dockerfile's `ENV AUSMT_VALIDATOR_PATH` block, which explains that the validator
         arrives at RUNTIME on a bind mount and is never baked into the image). LEGITIMATE: it is a
         dev-box-only cross-repo integration check.
-        Empirically confirmed (verification): with the stack present and no sibling checkout, this
+        Empirically confirmed: with the stack present and no sibling checkout, this
         is the ONE and ONLY skip the engine suite produces; every mt_metadata/mth5/yaml/jsonschema/
         _mth5 importorskip RUNS (all of those deps ARE in the CI lock / image).
 
@@ -40,7 +40,7 @@ Two independent checks (either one FAILS the tripwire):
 Usage (from the engine/ cwd, both workflows):
     pytest -q -rs tests | tee /tmp/pytest.out; python tests/ci_check_skips.py < /tmp/pytest.out
 
-a repeatable --allow flag lets a DIFFERENT workflow supply its own allow-list. Passing --allow at
+A repeatable --allow flag lets a DIFFERENT workflow supply its own allow-list. Passing --allow at
 least once (even `--allow ""`) REPLACES the built-in list entirely; passing it zero times keeps today's
 behaviour (the engine built-in list below). The gateway workflow runs gateway/tests AND deploy/tests
 in one report and pipes it through this with a single --allow - i.e. one substantive allow entry - so,
@@ -88,7 +88,7 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # title, contract parser, generated _contract constant, the real build's emitted portal block,
     # build_portal.py's own literal guard) keep ASSERTING in the image, so the release gate still
     # proves the image's internal coherence. INERT on the checkout workflows: build-products.yml checks
-    # out the whole monorepo and its path filter names all five portal files, so there these tests RUN
+    # out the whole monorepo and its path filter names all four portal files, so there these tests RUN
     # (a checkout missing one of them fails the read rather than skipping; the guard opens as soon as
     # any pinned portal file is present).
     "engine image build: portal tree not shipped",    # test_mtcat_version_parity.py, image builds only

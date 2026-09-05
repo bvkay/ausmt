@@ -11,7 +11,7 @@ whole-tree sweep audits the pages like every other emitter.
 
 Emission rides --sitemap-base exactly as the sitemap does: same flag, same URL base, and the two
 outputs must agree (every sitemap URL has a page; no orphan pages), so the sitemap can never
-advertise a 404. Without the flag no pages directory exists and the build is byte-identical to a
+advertise a 404. Without the flag no pages directory exists and the build is byte-identical to an
 earlier build.
 """
 import json
@@ -68,7 +68,7 @@ def _build(surveys, out, *, sitemap=True, extra=()):
 
 def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     """FAILS IF pages are emitted without --sitemap-base (a flagless build must stay byte-identical
-    to a earlier build), a sitemap URL lacks a page (an advertised 404), a station URL appears in
+    to an earlier build), a sitemap URL lacks a page (an advertised 404), a station URL appears in
     the sitemap (station pages exist for the URL contract but are deliberately unadvertised: 2,625
     templated documents would read as thin content and dilute the pages that carry the ranking),
     or a station PAGE goes missing (the served /stations/<id> shape would 404)."""
@@ -163,7 +163,7 @@ def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch, capsys):
     # The house convention for a self-check the build fails: ERROR lines on stderr, then return 2.
     # An operator running `make rebuild-data` gets a message rather than a traceback, and the
     # reconciliation now reads like every other gate in main() (LANE-CONTRACT-PAGE-HIERARCHY.md,
-    # which flags the RuntimeError this test requires as the odd one out).
+    # which flags the RuntimeError this test once required as the odd one out).
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
                             "--bundle-edi", "--no-validate",
                             "--products", str(tmp_path / "out" / "products"),
@@ -448,12 +448,12 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
 def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
     """The page hierarchy, asserted as ORDER rather than as prose.
 
-    The page must not read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
+    The page once read cite, embargo, hero, tiles, facts, downloads, contributors, publications,
     stations: a citation box and an unlabelled abstract held the top of the document and the map was
     a 240px right rail, so the one thing a reader opens a survey to see arrived below the fold with
     no section it belonged to. FAILS IF the map stops leading the hero, if the lede is not the
     blurb's own first sentence, if a named section loses its heading or its anchor, if the sections
-    fall out of the brief's order, or if the machine-readable links drift back out of Identifiers
+    fall out of the order asserted here, or if the machine-readable links drift back out of Identifiers
     and provenance."""
     surveys = _make_rich_survey(tmp_path)
     out = _build(surveys, tmp_path / "out")
@@ -786,8 +786,8 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
 
 
 def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide():
-    """a real collision. _TS_LEVELS gave BOTH level0 and raw_packed the badge
-    level 0, so a survey carrying both renders two panels badged and a station cell reading
+    """A real collision. _TS_LEVELS gave BOTH level0 and raw_packed the data level 0 badge,
+    so a survey carrying both rendered two panels badged at data level 0 and a station cell reading
     "L0 3.2 GB &#183; L0 41 KB" with nothing to tell the reader which was which. level1_netcdf, which
     ts_access.json emits and the SPA's own TS_LEVELS names, had no panel at all.
 
@@ -813,7 +813,7 @@ def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide()
 
 
 def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_details(tmp_path):
-    """the download section is an interface component, not a run of technical text.
+    """The download section is an interface component, not a run of technical text.
     Every product row gets its own action, and the complete SHA-256 stops competing with format and
     size for attention.
 
@@ -954,7 +954,7 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
 
 
 def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations(tmp_path):
-    """it can only run AFTER the station pages carry the detail.
+    """It can only run AFTER the station pages carry the detail.
 
     The default table was 13 columns wide inside an 840px column, forced to scroll horizontally by
     an unconditional min-width of 1180px that a 5-column table also paid. The deployment and
@@ -977,7 +977,7 @@ def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations
         f"a five-column table must not be forced into a horizontal scrollbar: .stbl{{{stbl}}}"
     assert "position:sticky" in page, "the station column still pins while the table scrolls"
 
-    # the split, followed fact by fact on the station whose survey row could carry them instead
+    # the move, followed fact by fact on the station whose survey row once carried them
     run = doc["runs"][0]
     for key in ("start", "end"):
         assert str(run["time_period"][key])[:16].replace("T", " ") in stn
@@ -1219,7 +1219,7 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                              base="https://x.example")
     assert "Packed raw" in page and "1 of 1 stations" in page
     assert "Raw 3.2 GB" in page, "the table cell states the level and the real size"
-    # The download panel must not send a reader standing on THIS survey's page to the bare map with
+    # The download panel once sent a reader standing on THIS survey's page to the bare map with
     # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
     assert '<a href="/#/survey/s">Build a download script</a>' in page, \
         "the download-script action must keep the survey context, not point at the bare map"
@@ -1369,7 +1369,7 @@ def test_every_collection_member_gets_its_own_colour_and_a_dot_label():
                             member_points={f"Member {i}": [(115.0 + i, -20.0 - i * 0.5)]
                                            for i in range(14)},
                             member_facts=None, level_counts=None, formats=None)
-    # A member's colour is stated once, on the group carrying that member's dots, and never
+    # A member's colour is stated once, on the group carrying that member's dots; it was once
     # repeated on every circle. Either element answers this test, which is about fourteen members
     # getting fourteen distinct colours and not about where the attribute sits. The coast rings are
     # excluded by naming the two elements rather than by matching a bare fill, because a <path>
@@ -1428,7 +1428,7 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
 
 
 def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
-    """and 45, as measurable properties of the emitted CSS and SVG.
+    """Measurable properties of the emitted CSS and SVG.
 
     Four separate debts. The BBMT swatch drifted from the value the portal measured for LP/BB
     separability and deutan-safety (portal/src/state.js), and the drift was TEST-LOCKED. The minimap
@@ -1506,7 +1506,7 @@ def test_the_register_lookup_matches_the_documented_ausmt_id_prefix():
 
 
 def test_a_page_with_empty_slots_carries_no_stray_blank_lines():
-    """A served survey page must carry no blank line in an absent block's place
+    """13 of the 27 served survey pages carried a blank line in the place of an absent block
     (the collection edge, the citation record, the publications list). Cosmetic, but a page emitter
     that leaves the shape of what it did not write is a page emitter that will one day leave the
     content too. FAILS IF a rendered body contains two consecutive newlines."""
@@ -1658,7 +1658,7 @@ def _prose_collection(pages, prose=_PROSE, **over):
 
 
 def test_collection_prose_renders_as_paragraphs_with_a_subheading(tmp_path):
-    """FAULT 1. The whole collection description must not be emitted as ONE escaped <p>, or every
+    """FAULT 1. The whole collection description was emitted as ONE escaped <p>, so every
     paragraph break and every section heading the author wrote was destroyed: about 450 words
     arrived as a single block.
 

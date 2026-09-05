@@ -270,7 +270,7 @@ def test_an_unrelated_failure_is_not_swallowed_by_the_impedance_fallback(tmp_pat
 
 
 def test_the_rescued_station_builds_and_the_declaration_masks_what_is_left(tmp_path):
-    """Read time and mask time together, over a built survey: the file that can yield nothing
+    """Read time and mask time together, over a built survey: the file that once yielded nothing
     now yields a GDS station, and its (already absent) impedance products stay absent. This is the
     halls-creek shape end to end."""
     _survey(tmp_path, "rescued", BROKEN_Z, channels=["Bx", "By", "Bz"], name="Rescued")

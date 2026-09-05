@@ -249,7 +249,7 @@ def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
                 # Serve state: promoted the panel to a first-class screen, so the rail
                 # now points at /gateway/curator/serve (was the queue's #serve-state anchor).
                 assert 'href="/gateway/curator/serve"' in r.text           # Serve state
-                # Collections joined the rail in Stage 3a (-A) - present on every page (not
+                # Collections joined the rail in Stage 3a - present on every page (not
                 # the active item on these non-collections pages).
                 assert 'href="/gateway/curator/collections">Collections</a>' in r.text, \
                     f"{path}: Collections missing from the rail"

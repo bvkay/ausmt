@@ -55,7 +55,7 @@ def test_normalize_rejects_empty_tf(tmp_path):
         normalize(empty, tmp_path, survey_id="x", station_id="EMPTY01")
 
 
-# -- The round-trip gate must not vacuously pass a re-read with fewer periods or a dropped
+# --- The round-trip gate must not vacuously pass a re-read with fewer periods or a dropped
 # tipper (a prefix-`min()`-and-allclose gate would happily "verify" either).
 # We simulate a broken re-read by monkeypatching TF.read so ONLY the SECOND call inside normalize()
 # (the canonical-XML round-trip re-read) is mutated afterward — the first call (reading `src`) is
@@ -179,7 +179,7 @@ def test_normalize_still_rejects_genuine_impedance_drift(tmp_path, monkeypatch):
         normalize(STANDARD, tmp_path, survey_id="vulcan")
 
 
-# -- Canonical EMTF-XML must not FABRICATE metadata; conditioning must be persisted. ----------
+# --- Canonical EMTF-XML must not FABRICATE metadata; conditioning must be persisted. ----------
 def _read_back(res):
     """Re-read the written canonical XML and return its TF (fresh read, not the in-memory object)."""
     rt = TF()
@@ -412,7 +412,7 @@ def _copyright_xml(res):
 
 def test_copyright_boilerplate_never_emitted(tmp_path):
     """FAILS IF: any served canonical XML carries the mt_metadata default Copyright boilerplate — the
-    live mis-statement fixes (every pre-fix XML claimed "Unrestricted Release" and "may be copied
+    live mis-statement this fix closes (every pre-fix XML claimed "Unrestricted Release" and "may be copied
     freely … neither the author(s) … nor IRIS …" on the LIBRARY's authority, not the custodian's).
     Checked across an open survey, an embargoed one, AND a bare (no survey_meta) call — the fix runs
     unconditionally so NO emitted XML keeps the boilerplate."""

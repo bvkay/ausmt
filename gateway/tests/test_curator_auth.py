@@ -94,7 +94,7 @@ def test_no_session_routes_redirect_or_401(tmp_path):
             assert queue.status_code == 303  # -> login
             detail = await client.get(f"/gateway/curator/submission/{sid}", follow_redirects=False)
             assert detail.status_code == 303
-            # NOTE (revised): the preview SUBTREE is authorized by the unguessable submission
+            # NOTE: the preview SUBTREE is authorized by the unguessable submission
             # id in the path, NOT the session (the null-origin iframe cannot send the cookie). So an
             # unauthenticated request with a VALID id serves the (embargo-safe, PII-scrubbed) preview —
             # see test_curator_preview.py::test_preview_authorized_by_id_not_session. The session gate

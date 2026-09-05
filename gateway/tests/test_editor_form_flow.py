@@ -260,7 +260,7 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             assert 'name="s_access_coordinates"' in body  # Coordinate-access <select>
             assert 'name="s_access_embargo_until"' in body and 'type="date"' in body
             assert 'name="c_time_series_levels_available_raw_packed"' in body  # checkbox
-            # the contributor-credit model: the unified People & credit panel replaces the four
+            # The contributor-credit model: the unified People & credit panel replaces the four
             # investigator/creator/contributor panels. Its widgets (a spare row, the name_type select,
             # the Cited-author checkbox, a role checkbox) are present.
             assert 'data-editor-rows="people"' in body

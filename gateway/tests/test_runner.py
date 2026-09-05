@@ -143,7 +143,7 @@ def test_preview_spawns_engine_with_explicit_engine_dir_cwd(tmp_path, monkeypatc
     # undocumented contract that broke the first live runner). Captures the cwd the runner hands to
     # _run_subprocess for the engine module and pins it to the configured engine_dir.
     # FAILS IF the engine spawn reverts to cwd=None or ignores cfg.engine_dir (proven RED on a scratch
-    # revert of the cwd arg back to None - recorded verification transcript).
+    # revert of the cwd arg back to None - recorded in the verification transcript).
     engine_dir = tmp_path / "app" / "engine"
     engine_dir.mkdir(parents=True)
     cfg = RunnerConfig(
@@ -168,13 +168,13 @@ def test_preview_spawns_engine_with_explicit_engine_dir_cwd(tmp_path, monkeypatc
                              tmp_path / "preview-summary.json", deadline=10**12)
     assert ok is True
     assert seen_cwd == [engine_dir], f"engine spawned with cwd {seen_cwd}, expected [{engine_dir}]"
-    assert seen_cwd[0] is not None  # never inherit the runner's cwd (regression)
+    assert seen_cwd[0] is not None  # never inherit the runner's cwd (the regression this pins)
 
 
 def test_preview_spawns_engine_with_the_configured_validator_path(tmp_path, monkeypatch):
     # The preview build runs the SAME validator gate again in-process (build_portal._load_validator),
     # which reads AUSMT_VALIDATOR_PATH and otherwise walks upward for a sibling ausmt-surveys
-    # checkout, exiting rc=2 when neither resolves. The runner must not spawn it with the ambient
+    # checkout, exiting rc=2 when neither resolves. The runner once spawned it with the ambient
     # environment only, so the validator the runner was CONFIGURED with (cfg.validator_path, the same
     # value _run_validator hands the validator subprocess) was never communicated: the two gates
     # agreed only where the box happened to export the same env var. Captures the env handed to
@@ -258,9 +258,9 @@ def test_preview_end_to_end_real_engine(tmp_path):
 
     cfg = RunnerConfig(
         incoming_dir=tmp_path / "incoming", quarantine_dir=tmp_path / "quarantine",
-        # Merge of c35b + (both semantics): the validator resolves via c35b's
-        # require_validator_dir (sibling -> vendored -> FAIL, never a bare skip), and the engine
-        # spawns's EXPLICIT cwd (cfg.engine_dir) instead of inheriting the process cwd -
+        # Merge of both semantics: the validator resolves via require_validator_dir()
+        # (sibling -> vendored -> FAIL, never a bare skip), and the engine spawns with an
+        # EXPLICIT cwd (cfg.engine_dir) instead of inheriting the process cwd -
         # the dev-box analogue of the image's WORKDIR /app/engine. No monkeypatch.chdir: with
         # `extract` a real installed package, resolution does not ride on the cwd at all.
         jobs_dir=tmp_path / "jobs", validator_path=str(require_validator_dir()), timeout_s=900,
@@ -373,8 +373,8 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
 
 
 def test_real_validator_accepts_emtfxml_as_a_standard_input(tmp_path):
-    """END-STATE PIN, inverted from its honest-state predecessor when the surveys-repo
-    surveys validator gained EMTF-XML input (surveys main 7ab0a0d) and the vendored copy + PIN
+    """END-STATE PIN, inverted from its honest-state predecessor when the surveys validator gained
+    EMTF-XML input (surveys main 7ab0a0d) and the vendored copy + PIN
     were resynced. An EMTF-XML-only package now validates as a standard input with no curator
     enablement: the accepted-extension table and the structural where-do-transfer-functions-live
     check both moved together, which is exactly what the predecessor pin demanded. FAILS IF a future
@@ -418,7 +418,9 @@ def _emulate_real_validator(cmd, report: dict) -> None:
     """Behave like the REAL validate_survey.py from inside a fake _run_subprocess: write `report` to
     the --json FILE the argv names (stdout carries only human [LEVEL] lines). Crucially, this ASSERTS
     the argv shape first — [python, .../validate_survey.py, <existing folder positional>, --json,
-    <report file>] - so no mocked test can ever again mask an argv regression.
+    <report file>] - so no mocked test can ever again mask an argv regression (the ship-blocker: the
+    folder was passed as the --json VALUE with no positional, argparse exited 2, and every real
+    submission quarantined while the stdout-JSON fakes kept the suite green).
 
     The EXPECTED shape is single-sourced from runner.validator_argv rather
     than re-encoded by hand here — the observed cmd must be exactly what the shared helper would build
@@ -509,7 +511,7 @@ def test_corrupt_deflate_quarantines_not_crashes(tmp_path):
     # A zip whose central directory is valid (passes zipsafety.inspect) but whose compressed data is
     # corrupted raises zlib.error/BadZipFile at extraction — NONE of which are OSError. process_job
     # must catch it and write a 'quarantined' done-file, NOT let the exception kill the runner and
-    # leave a stale running-file with no done-file (fix #3).
+    # leave a stale running-file with no done-file.
     # Proven failing: with the narrow (UnsafeMember, OSError) catch, process_job raised
     # zlib.error, no done-file was written, and the running-file was left behind.
     cfg = _runner_cfg(tmp_path)

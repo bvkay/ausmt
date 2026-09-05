@@ -128,14 +128,16 @@ def _abstract_of(y: dict) -> str:
 
 def _license_of(y: dict) -> str:
     """The declared licence id as text. Capped like every other field, and '' for a non-scalar: the
-    engine's canon_license() calls .strip on what it is given, so a collection here would raise out
+    engine's canon_license() calls .strip() on what it is given, so a collection here would raise out
     of a module whose contract is to never raise on bad input (generate_intake_files)."""
     return _scalar_text(y.get("license"))
 
 
 def _station_count(package_root: Path) -> int:
     """A CHEAP station count: the number of one-station transfer-function files under
-    transfer_functions/edi/ and transfer_functions/emtfxml/. Not a parse, just a glob, so it is a best-effort figure the README states
+    transfer_functions/edi/ and transfer_functions/emtfxml/ (EMTF XML is a first-class submission
+    input, so counting only EDIs would report an XML-only survey as having no stations). Not a
+    parse, just a glob, so it is a best-effort figure the README states
     honestly ('N stations') and omits when zero/unknown.
 
     It deliberately does NOT de-duplicate a station supplied in both formats, and does not count
@@ -169,7 +171,7 @@ def _read_survey_yaml(package_root: Path) -> dict:
 
 
 def _license_md_body(y: dict, now_utc: datetime) -> str | None:
-    """The LICENSE.md text, or None when the declared licence is NOT recognised (fail-closed an
+    """The LICENSE.md text, or None when the declared licence is NOT recognised (fail-closed: an
     unrecognised id generates nothing so the validator WARNING stands). The rights statement is the
     engine's single-source license_instrument_text so LICENSE.md and the bundle LICENSE.txt
     carry byte-identical rights wording for the same licence id."""
@@ -236,7 +238,7 @@ def _readme_md_body(y: dict, package_root: Path, now_utc: datetime) -> str:
 
 def generate_intake_files(package_root: Path, *, now_utc: datetime | None = None) -> list[str]:
     """Generate LICENSE.md and README.md into `package_root` (the extracted <slug>/ folder) when they
-    are ABSENT, rules. Returns the sorted list of filenames actually written (so the
+    are ABSENT, per the rules below. Returns the sorted list of filenames actually written (so the
     caller can log/report exactly what was generated).
 
     Fail-closed and non-destructive:

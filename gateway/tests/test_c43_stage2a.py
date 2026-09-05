@@ -1,4 +1,4 @@
-"""Stage 2a verification pins (+ the contract's pin list). Each pin states its failure
+"""Stage 2a verification pins (the contract's pin list). Each pin states its failure
 criterion (Invariant 10) and is mutation-provable — the report carries a captured failing run for each
 guarded behaviour. Async bodies run under conftest.run().
 
@@ -33,8 +33,8 @@ from gateway.tests.conftest import (
 # Phase quadrant classification + the φyx +180 unwrap (phaseqc — the authoritative seam)
 # ==================================================================================================
 def test_phi_xy_quadrant_classification():
-    """φxy (t[3], stored = true) classifies widened by the engine-gate slack (a point is
-    band −10…100 with QUADRANT_SLACK_DEG = 10). FAILS IF an in-band(+slack) value is flagged (a red
+    """φxy (t[3], stored = true) classifies against the first quadrant widened by the engine-gate
+    slack (band −10…100 with QUADRANT_SLACK_DEG = 10). FAILS IF an in-band(+slack) value is flagged (a red
     dot on a point the engine gate tolerates), an outside-by-more-than-slack value is not flagged, or
     the slack edges are wrong (the −10.0/100.0 edge vectors are IN; −10.1/100.1 are OUT — a
     hard-band implementation fails the edge vectors)."""
@@ -73,12 +73,12 @@ def test_quadrant_slack_matches_engine_gate():
 
 
 def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
-    """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits (−180…−90) has a STORED t[4] near 0…90
+    """THE φyx-UNWRAP PIN. A station whose TRUE φyx sits in the third quadrant (−180…−90) has a STORED t[4] near 0…90
     (because engine _edi_tf stores phs_yx_adj = true + 180, re-wrapped). The workbench MUST subtract
     the shift and classify the TRUE phase - so a station whose true phase sits in the third
     quadrant classifies IN-quadrant. FAILS IF the
-    workbench reads the stored value as the true phase (then stored 45° would look like Q1 = 'in Q1',
-    and it would read as OUT - the mis-classification this pin catches).
+    workbench reads the stored value as the true phase (then a stored 45° would look like the first
+    quadrant, and against the third it would read as OUT - the mis-classification this pin catches).
 
     NON-VACUOUS: for true φyx = −135°, stored t[4] = +45°. in_quadrant_yx(+45°) must be True (it
     unwraps to −135° ∈). A naive `Q3_LO <= 45 <= Q3_HI` is False - so a no-unwrap implementation
@@ -88,14 +88,14 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
         assert phaseqc.true_phi_yx(round(stored, 1)) is not None
         assert abs(phaseqc.true_phi_yx(round(stored, 1)) - true_yx) < 0.05, (true_yx, stored)
         assert phaseqc.in_quadrant_yx(round(stored, 1)) is True, (
-            f"true phi_yx={true_yx} (stored t[4]={round(stored, 1)}) must classify in the third "
+            f"true yx phase={true_yx} (stored t[4]={round(stored, 1)}) must classify in the third "
             "quadrant after the +180 unwrap - reading the stored value directly would mis-classify it")
 
 
 def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():
-    """The converse: a station whose TRUE φyx is beyond the band by MORE than the slack (a genuinely
-    wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (stored −135 would then read
-    as = 'in', hiding the real wrong-quadrant station) or the slack edge is wrong (−79.9 is 10.1°
+    """The converse: a station whose TRUE φyx is beyond the third-quadrant band by MORE than the slack
+    (a genuinely wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (a stored −135
+    would then read as in-quadrant, hiding the real wrong-quadrant station) or the slack edge is wrong (−79.9 is 10.1°
     outside the band => OUT; −80.0 is exactly at the slack edge => IN)."""
     for true_yx in (45.0, 10.0, -45.0, -79.9):
         stored = round(phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
@@ -131,7 +131,7 @@ def test_classify_series_median_verdict():
     # xy: a coherently wrong series => median beyond band+slack => verdict OUT.
     xy_bad = phaseqc.classify_series([-120.0, -130.0, -140.0], mode="xy")
     assert xy_bad["median"] == -130.0 and xy_bad["median_in"] is False
-    # yx healthy cluster: median reported in (−180,180], verdict IN.
+    # yx healthy third-quadrant cluster: median reported in (−180,180], verdict IN.
     yx_stored = [round(phaseqc.wrap180(v + 180.0), 1) for v in (-135.0, -100.0, -170.0)]
     yx = phaseqc.classify_series(yx_stored, mode="yx")
     assert yx["median"] == -135.0 and yx["median_in"] is True and yx["any_out"] is False
@@ -150,8 +150,9 @@ def test_classify_series_median_verdict():
 def test_stations_js_mirrors_phaseqc_constants():
     """SOURCE ASSERTION: the browser-side STATIONS_JS embeds the SAME phase constants + structural
     elements phaseqc defines (the EXECUTABLE parity pin proves the semantics; this cheap sweep catches
-    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the quadrant
-    and bounds, the slack, the floored modulo, the seam map, or the unwrap-then-classify shape."""
+    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the first-
+    and third-quadrant bounds, the slack, the floored modulo, the seam map, or the
+    unwrap-then-classify shape."""
     js = curatorpage.STATIONS_JS
     assert "YX_SHIFT = 180.0" in js, "the +180 presentation shift must be in the JS mirror"
     assert "Q1_LO = 0.0" in js and "Q1_HI = 90.0" in js
@@ -169,8 +170,8 @@ def test_stations_js_mirrors_phaseqc_constants():
 def test_combined_phase_plot_supersedes_separate_plots_source():
     """SOURCE PIN. The two separate
     phase plots are SUPERSEDED by a single combined plot: STATIONS_JS carries the pure combinedPhasePlan
-    mapper + one phasePlot + phaseVerdictParts (BOTH
-    components) + combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component
+    mapper + one phasePlot (the full ±180 axis, each band shaded by its owning component) +
+    phaseVerdictParts (BOTH components) + combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component
     verdictStrip are GONE; and renderPlots stacks ρa, the combined phase plot (+ its verdict strip),
     then tipper. FAILS IF a separate per-component phase plot returns, the mapper/verdict-parts
     disappear, or the plot order drifts. (There were no pre-existing EXECUTABLE per-plot pins to rework
@@ -184,10 +185,11 @@ def test_combined_phase_plot_supersedes_separate_plots_source():
     assert "function phiXyPlot(" not in js, "the separate φxy plot must stay superseded"
     assert "function phiYxPlot(" not in js, "the separate φyx plot must stay superseded"
     assert "function verdictStrip(" not in js, "the single-component verdict strip is superseded"
-    # The combined plot is the FULL ±180 axis carrying both series, with both bands shaded by band ownership.
+    # The combined plot is the FULL ±180 axis carrying both series, with each band shaded by its
+    # owning component.
     assert "var lo = -180, hi = 180;" in js, "the combined phase axis must span the full ±180"
-    assert "comp: 'xy', lo: Q1_LO, hi: Q1_HI" in js, "the first band is the xy component"
-    assert "comp: 'yx', lo: Q3_LO, hi: Q3_HI" in js, "the third band is the yx component"
+    assert "comp: 'xy', lo: Q1_LO, hi: Q1_HI" in js, "the first quadrant band is owned by xy"
+    assert "comp: 'yx', lo: Q3_LO, hi: Q3_HI" in js, "the third quadrant band is owned by yx"
     # renderPlots order: ρa, combined phase (+ its verdict strip), tipper.
     m = re.search(r"function renderPlots\(host, t\)\s*\{(.*?)\n  \}", js, re.DOTALL)
     assert m, "renderPlots must exist"

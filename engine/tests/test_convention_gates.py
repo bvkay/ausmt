@@ -162,7 +162,7 @@ def test_uniform_zrot_served_as_stored_v3a(tmp_path):
     parsed = _parse(tmp_path, "rot30.edi", rot_text)
     assert "skip" not in parsed
     fr = parsed["frame"]
-    assert fr["derotated"] is False, "must serve AS STORED - nothing de-rotated"
+    assert fr["derotated"] is False, "a declared acquisition frame must serve AS STORED - nothing de-rotated"
     assert fr["frame_served"] == "declared-azimuth"
     assert fr["declared_azimuth_deg"] == 30.0
     assert fr["impedance_rotation_deg_source"] is None   # nothing was rotated
@@ -264,7 +264,7 @@ def test_diagnostic_derotation_math_roundtrip():
 def test_diagnostic_derotation_wrong_sign_is_caught():
     """Adversarial meta-pin (permanent red evidence) for the diagnostic math: FAILS IF a
     WRONG-SIGNED de-rotation could pass the round-trip above — i.e. proves that pin can fail. The
-    correct de-rotation of an as-stored Zr = R(θ) R(θ)^T applies R(-θ); the WRONG sign applies
+    correct de-rotation of an as-stored Zr = R(θ) Z0 R(θ)^T applies R(-θ); the WRONG sign applies
     R(+θ) (= R(-θ)ᵀ), yielding a 2θ over-rotation that must DIVERGE from the unrotated original."""
     text = VULCAN.read_text(encoding="latin-1")
     Z0 = _z_from_text(text)
@@ -314,7 +314,7 @@ def test_conjugated_z_fails_with_convention_message(tmp_path):
     Zyx Q3->Q2) - the exact hazard that would invert the induction-arrow claim."""
     text = VULCAN.read_text(encoding="latin-1")
     Z = _z_from_text(text)
-    # PRECONDITION: the base really is e^{+iωt}
+    # PRECONDITION: the base really is e^{+iωt}, so the quadrants are Q1 and Q3
     assert 0 < np.median(np.degrees(np.angle(Z[:, 0, 1]))) < 90
     assert -180 < np.median(np.degrees(np.angle(Z[:, 1, 0]))) < -90
     parsed = _parse(tmp_path, "conj.edi", _z_to_text(text, np.conj(Z)))
@@ -326,8 +326,8 @@ def test_conjugated_z_fails_with_convention_message(tmp_path):
 
 def test_axis_swapped_z_fails(tmp_path):
     """FAILS IF: an x/y axis-swapped station (Zxy<->Zyx, Zxx<->Zyy — the reflection Gate 1 cannot
-    see and a ±90° rotation does NOT produce) is served. Signature: arg Zxy lands, arg Zyx
- - the exact shape of the three real USArray negative controls."""
+    see and a ±90° rotation does NOT produce) is served. Signature: arg Zxy lands in Q3, arg Zyx
+    in Q1 - the exact shape of the three real USArray negative controls."""
     text = VULCAN.read_text(encoding="latin-1")
     Z = _z_from_text(text)
     Zs = Z[:, ::-1, ::-1]                 # swap x/y axes: rows and columns
@@ -341,7 +341,7 @@ def test_single_component_distortion_warns_not_fails(tmp_path):
     shape — TAS105/MBN09/WG-14 class) is FAILED, or served with no honesty note."""
     text = VULCAN.read_text(encoding="latin-1")
     Z = _z_from_text(text)
-    Z[:, 1, 0] = np.conj(Z[:, 1, 0])      # flip Zyx alone: -> Q2; Zxy stays
+    Z[:, 1, 0] = np.conj(Z[:, 1, 0])      # flip Zyx alone: Q3 -> Q2; Zxy stays Q1
     parsed = _parse(tmp_path, "distort.edi", _z_to_text(text, Z))
     assert "skip" not in parsed, "single-component out-of-quadrant must be WARN, never FAIL"
     ck = parsed["frame"]["convention_check"]
@@ -381,7 +381,7 @@ def test_quadrant_constants_single_sourced():
 # ---------------------------------------------------------------------------------------------
 def test_clean_sample_station_is_untouched():
     """FAILS IF: the gates alter or annotate a clean station (sample-survey Vulcan_A1: uniform
-    ZROT=0, HX=0/HY=90, phases). The clean corpus is the false-positive budget: zero."""
+    ZROT=0, HX=0/HY=90, Q1/Q3 phases). The clean corpus is the false-positive budget: zero."""
     parsed = bp._parse_one_edi(VULCAN)
     assert "skip" not in parsed
     fr = parsed["frame"]
@@ -551,7 +551,7 @@ def test_small_uniform_angle_served_as_stored_v3a(tmp_path):
     parsed = _parse(tmp_path, "v3a.edi", rot_text)
     assert "skip" not in parsed
     fr = parsed["frame"]
-    assert fr["derotated"] is False, "must serve AS STORED - no rotation"
+    assert fr["derotated"] is False, "a declared acquisition frame must serve AS STORED - no rotation"
     assert fr["frame_served"] == "declared-azimuth"
     assert fr["declared_azimuth_deg"] == 8.0
     assert fr["impedance_rotation_deg_source"] is None   # nothing was rotated
@@ -616,7 +616,7 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
 # Declared-zero stations participate in the arm-B vote as angle 0.0
 # ---------------------------------------------------------------------------------------------
 def test_classify_survey_frame_declared_zero_participates_f1():
-    """FAILS IF: declared-zero (kind 'none') stations are excluded-B
+    """FAILS IF: declared-zero (kind 'none') stations are excluded from the
     spread vote or the note's min/max range. A served station always sits in SOME declared frame —
     zero serves under the declared-zero reference — so [0°, 20°] mixes frames exactly as [8°, 20°]
     does, and the stamped range must include the 0° members.
@@ -666,7 +666,7 @@ def test_survey_zero_member_gets_mixed_frames_note_f1(tmp_path):
 
 
 # ---------------------------------------------------------------------------------------------
-# Fix round divergent tipper/impedance declared frames are REPORTED (never rotated)
+# Divergent tipper/impedance declared frames are REPORTED (never rotated)
 # ---------------------------------------------------------------------------------------------
 _N_VULCAN = 62   # Vulcan_A1's period count (>FREQ //62)
 

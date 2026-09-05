@@ -231,7 +231,7 @@ def test_station_json_states_the_dimensionality_call_with_its_caveat(tmp_path):
 
 def test_proc_info_survives_a_missing_writer_vocabulary():
     """The package-path identity cannot import the bare `_edi_catalog` sibling, and the whole body
-    of proc_info_from_tf must not sit inside the try that swallows that failure, or the SAME
+    of proc_info_from_tf once sat inside the try that swallowed that failure, so the SAME
     function on the SAME TF returned rr=0 (a wrong claim in a published sci column) and alg=None
     through `extract._mtm` while the bare copy returned the truth. Only the writer-vocabulary
     claim (`sw`) needs the vocabulary; alg/rr/name/version are computed regardless, and without

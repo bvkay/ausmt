@@ -88,10 +88,10 @@ class RunnerConfig:
         max_upload_mb = int(env.get("AUSMT_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB)))
         # Fail closed on a zeroed/negative override, IDENTICALLY to the gateway (config._RANGES floors
         # both of these at 1, and fail_closed_startup SystemExits on a breach). The runner reads the
-        # SAME two knobs, and an int() with no floor lets a zeroed AUSMT_JOB_TIMEOUT_S
+        # SAME two knobs, and an int() with no floor would let a zeroed AUSMT_JOB_TIMEOUT_S
         # (every job times out instantly -> everything quarantines) or AUSMT_MAX_UPLOAD_MB (a zero
-        # extraction byte-cap) was silently accepted while the gateway rejected it - the runner would
-        # crash-loop honestly on a bad numeric knob instead (deploy review section 5, MEDIUM).
+        # extraction byte-cap) through while the gateway rejected it - the runner crash-loops
+        # honestly on a bad numeric knob instead.
         for _env_name, _value in (("AUSMT_JOB_TIMEOUT_S", job_timeout_s),
                                   ("AUSMT_MAX_UPLOAD_MB", max_upload_mb)):
             if _value < 1:
@@ -358,7 +358,7 @@ def _run_preview(cfg: RunnerConfig, package_dir: Path, preview_dir: Path, summar
     """Run the engine preview build of the single package into preview_dir, then write a compact
     preview-summary.json (station count, types, coord flags, warnings). Returns True on success.
 
-    The layout contract:
+    The layout contract (established EMPIRICALLY from the Olympic Dam 2004 incident):
     safe-extract preserves the zip's single <slug>/ root, so package_dir/<slug>/survey.yaml is
     exactly the `--surveys <root>` shape build_portal's discover_work iterates — discovery is at the
     RIGHT level (the real 58-EDI package built 58/58 once its slug was valid). Two guards make a
@@ -610,7 +610,7 @@ def run_forever(cfg: RunnerConfig, poll_interval_s: float = 2.0) -> None:  # pra
     before the next. The loop's ordering and crash-recovery contracts live in poll_once, which IS
     unit-tested (test_runner.py) - the correction: this loop is NOT covered by any compose e2e that
     boots the runner, so the coverage claim the old docstring made was false; the contracts are pinned
-    at the poll_once seam instead. The single-threaded known limitation stands (report): an edit
+    at the poll_once seam instead. The single-threaded known limitation stands: an edit
     job arriving MID submission-job waits for it; the gateway's bounded poll surfaces a retryable
     timeout to the curator."""
     while True:

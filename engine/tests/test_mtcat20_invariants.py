@@ -4,7 +4,7 @@ PERMANENT TEST STAGE (final pre-freeze review section 39): this suite runs on ev
 change, forever - a future feature can never silently break identity, migration, ordering or the
 zero-null/zero-empty posture. Sources:
 
-  * the executable fixture suite, whose
+  * AusMT_2026/schemas-draft/run-fixture-suite.py - the executable fixture suite, whose
     migrate_12_to_20() IS the 1.2 -> 2.0 emitter-change specification and is carried here
     VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example and a
     corpus-shaped 1.2 migration input.
@@ -270,7 +270,7 @@ def _document_invariants(doc):
 # ---------------------------------------------------------------- layer 1: fixtures
 
 def test_spec_example_validates_and_holds_its_invariants():
-    """+ the interchange spec's worked example validates against the schema and
+    """The interchange spec's worked example validates against the schema and
     passes every reference invariant (in-bbox stations, represented bands, ordered periods,
     unique sorted rates, reconciling counts)."""
     errs = list(_validator().iter_errors(SPEC_DOC))
@@ -279,7 +279,7 @@ def test_spec_example_validates_and_holds_its_invariants():
 
 
 def test_migration_input_is_really_a_break_and_migrates_clean():
-    """+ the corpus-shaped 1.2 fixture does NOT validate raw against the 2.0 schema (the
+    """The corpus-shaped 1.2 fixture does NOT validate raw against the 2.0 schema (the
     break is real: nulls-as-undeclared, empty formats, legacy blocks), and migrate_12_to_20 over
     it DOES validate, with zero nulls (outside the defined pair), zero empties, and every
     reference invariant holding."""
@@ -321,7 +321,7 @@ def test_reference_checks_actually_detect_violations():
     CATCH a planted violation, or a green scan proves nothing."""
     assert not count_invariant({"survey_id": "s", "n_stations_time_series_verified": 7,
                                 "n_stations": 9}, SPEC_DOC["stations"])
-    assert not projection_shape_ok(SPEC_DOC), "the schema's own example satisfies the projection shape"
+    assert not projection_shape_ok(SPEC_DOC), "the spec example satisfies the projection shape"
     false_flag = copy.deepcopy(SPEC_DOC)
     false_flag["stations"][0]["has_time_series"] = False
     assert any("not the literal true" in v for v in projection_shape_ok(false_flag))

@@ -1,8 +1,8 @@
-"""The curator approve commits to surveys-live. Publish is COMMIT-AND-PUSH ONLY: the
+"""A curator Approve commits to surveys-live. Publish is COMMIT-AND-PUSH ONLY: the
 gateway writes the approved submission into the surveys-live git history (the ledger) and pushes it.
 It does NOT build - which is what makes the no-Docker-socket invariant hold cleanly (the
 gateway never invokes the build, never needs the socket). `PUBLISHED` therefore means "committed to
-surveys-live main and pushed", NOT yet served. Since the HOST-side serve-reconcile agent closes
+surveys-live main and pushed", NOT yet served. The HOST-side serve-reconcile agent closes
 that gap automatically on its next tick (~15 min; deploy/scripts/reconcile.sh — still not the
 gateway, still no socket); manual `make rebuild-data` remains the fallback, and the UI copy says so.
 
@@ -141,7 +141,7 @@ class PreState:
 
 
 def preflight(git_runner, surveys_live: Path) -> PreState:
-    """Design step 1 pre-flight: the checkout must be CLEAN and on main before we touch it. A
+    """Step 1 pre-flight: the checkout must be CLEAN and on main before we touch it. A
     dirty tree or a HEAD not on main => ABORT (raise), so nothing is staged into an unknown state.
     Returns the captured pre-state (ref + branch) for a byte-exact rollback."""
     status = git_runner(["status", "--porcelain"], cwd=surveys_live)
@@ -391,7 +391,7 @@ def commit_survey_removal(git_runner, surveys_live: Path, slug: str, curator_nam
     surveys-live/surveys/<slug>/ in ONE commit inside the same rollback guard as the station-removal
     path, then ff-only merge + push. Returns the new commit sha.
 
-    This GENERALISES the station-removal machinery to survey scope ("Mechanics"): unlike a
+    This GENERALISES the station-removal machinery to survey scope: unlike a
     station removal there is NO survey.yaml to re-write and NO validator run (there is nothing left to
     validate) — the whole directory goes. Survey-scope DIFF-MINIMALITY: `git rm -r -- surveys/<slug>`
     touches exactly the slug's paths and nothing else. Fail-closed at every step: a failure anywhere

@@ -1,4 +1,4 @@
-"""the contributor-credit model (engine credit citation path): the suppression kill, the citation-author
+"""The contributor-credit model (engine credit citation path): the suppression kill, the citation-author
 assembly, the verbatim creators[]/contributors[] seam, the DataCite HostingInstitution export, the
 funders grant_id pass-through, and the mth5 project_lead derivation + ORCID url.
 
@@ -55,7 +55,7 @@ def test_no_retired_credit_key_is_read_into_smeta():
 # --------------------------------------------------------------- citation-author precedence
 
 def test_citation_prefers_verbatim_cite_au_over_org_when_no_creators():
-    """ middle rung: a hand-authored verbatim cite.au wins over the org-year synthesis when no
+    """Middle rung: a hand-authored verbatim cite.au wins over the org-year synthesis when no
     creators are present. The retired lead/PI keys never enter this chain."""
     y = {"organisation": {"name": "Custodian Org"}, "cite": {"au": "Verbatim, Author"},
          "lead_investigator": {"name": "Ignored Lead"}}
@@ -63,7 +63,7 @@ def test_citation_prefers_verbatim_cite_au_over_org_when_no_creators():
 
 
 def test_citation_falls_back_to_org_year_when_no_creators_or_cite():
-    """ fallback (unchanged default): no creators and no hand-authored cite -> the org name. A survey
+    """Fallback (unchanged default): no creators and no hand-authored cite -> the org name. A survey
     that carries only a lead_investigator still renders the org citation (the retired field is not the
     citation author)."""
     y = {"organisation": {"name": "Custodian Org"}, "lead_investigator": {"name": "A Lead"}}
@@ -142,7 +142,7 @@ def test_hosting_institution_is_export_only_never_in_surveys_json_seam():
 # --------------------------------------------------------------- funders grant_id pass-through
 
 def test_funders_carry_grant_id_when_present_only():
-    """ (mth5 follow-up): _funders_of threads grant_id from the survey funding row when it declares a
+    """The mth5 follow-up: _funders_of threads grant_id from the survey funding row when it declares a
     real one, and OMITS it otherwise (the corpus carries grant_id: null, so no placeholder grant id ever
     reaches the mth5 producer). Pre-change _funders_of emitted only {name, pid}."""
     y = {"funding": [{"organisation": "ARC", "organisation_ror": None, "grant_id": "DP000000"},
@@ -183,7 +183,7 @@ def test_project_lead_prefers_projectleader_contributor_then_creator_and_never_a
 # --------------------------------------------------------------- EDI/XML export attribution (normalize)
 
 def test_edi_export_attribution_reads_creators_over_a_stale_retired_facet():
-    """ (scope: the EDI/EMTF-XML export attribution): _survey_meta_get assembles the citation-author
+    """Scope: the EDI/EMTF-XML export attribution. _survey_meta_get assembles the citation-author
     line from creators[] when present. A stale investigators key in a hand-built SMETA never competes."""
     authors, _title, _doi = _survey_meta_get({
         "org": "Custodian Org",

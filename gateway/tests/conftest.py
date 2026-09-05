@@ -377,7 +377,7 @@ class FakeGit:
             # side so the removal rollback tests are honest (a rollback must restore a git-rm'd path).
             # The leading `--` and any flags are skipped; the rest are repo-relative paths. `git rm
             # -r -- surveys/<slug>` retires a WHOLE survey (a DIRECTORY), so when `-r`/`-rf` is present a
-            # directory target is removed recursively (rmtree) - modeled explicitly (strict-fake:
+            # directory target is removed recursively (rmtree) - modeled explicitly (the strict fake:
             # extending the fake to survey-scope removal is a deliberate act, with the real-git workflow in
             # test_publish_real_git.py as the reference for the true recursive-rm semantics).
             import shutil

@@ -31,8 +31,8 @@ agree with itself vacuously), and asserts they are all the same string:
   8. the docs current-version display           (docs/docs/reference/index.md)
   9. a REAL BUILD's emitted mtcat.json portal block (the version a harvester is actually served)
 
-plus TWO class guards: no MAJOR.MINOR literal may sit next to `schema_version` in build_portal.py,
-gen_config.py ever again, and portal/portal.config.yaml may not re-declare a
+plus TWO class guards: no MAJOR.MINOR literal may sit next to `schema_version` in build_portal.py
+or gen_config.py ever again, and portal/portal.config.yaml may not re-declare a
 schema_version key (the config surface is generated, never hand-stated, since the inversion).
 
 Two surfaces are pinned elsewhere and deliberately not repeated here: about.html's prose statement, in
@@ -197,7 +197,7 @@ def test_every_engine_surface_that_states_the_mtcat_version_agrees():
 @portal_surface
 def test_every_portal_surface_that_states_the_mtcat_version_agrees():
     """Statements 5-7, checked against the same authority (the constant, read here even in the
-    image module's absence of these files, because the authority lives in contract/). Skipped where
+    image's absence of these files, because the authority lives in contract/). Skipped where
     the portal tree is not shipped; asserted on every checkout workflow, which is where these files
     change."""
     want = _authority()

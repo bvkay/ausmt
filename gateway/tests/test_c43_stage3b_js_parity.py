@@ -1,4 +1,4 @@
-"""Stage-3b F: EXECUTABLE JS<->Python parity pin for the candidate-picker filter (pin
+"""Stage 3b: EXECUTABLE JS<->Python parity pin for the candidate-picker filter (pin
 10). The standing workflow rule (from the Stage-2a stations-JS lesson): browser JS gets
 EXECUTABLE test coverage from the start — string-only pins are banned, because a source-substring
 assertion cannot catch a SEMANTICS divergence (truncated-`%` bug shipped past exactly such a

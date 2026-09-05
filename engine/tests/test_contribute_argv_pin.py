@@ -3,7 +3,7 @@
 ausmt-surveys/_validation/contribute.py builds the engine preview by spawning
 `python -m extract.build_portal` with a HAND-BUILT argv. Nothing on the engine side notices when a
 build_portal flag that consumer depends on is renamed/removed — engine changes cannot trigger the
-surveys tests (the cross-repo triggering gap names). This test pins the PROVIDER side: every flag
+surveys tests (the cross-repo triggering gap). This test pins the PROVIDER side: every flag
 contribute.py passes must still exist in build_portal's CLI.
 
 CI has no ausmt-surveys sibling (private repo, no token — see build-products.yml), so the flag list is
@@ -32,7 +32,7 @@ _SIBLING_CONTRIBUTE = _ENGINE_DIR.parents[1] / "ausmt-surveys" / "_validation" /
 def _build_portal_help() -> str:
     """The real build_portal CLI surface via `-m extract.build_portal --help` (exit 0, all flags
     printed). Exercises the ACTUAL parser contribute.py invokes — no build_portal refactor needed, and
-    no clash with any workflow editing build_portal's argparse (this reads whatever surface exists)."""
+    no clash with any concurrent change to build_portal's argparse (this reads whatever surface exists)."""
     proc = subprocess.run(
         [sys.executable, "-m", "extract.build_portal", "--help"],
         cwd=str(_ENGINE_DIR), capture_output=True, text=True)
@@ -42,7 +42,7 @@ def _build_portal_help() -> str:
 
 def test_build_portal_still_offers_every_flag_contribute_uses():
     # FAILS IF build_portal renames/removes any flag the surveys consumer passes — the cross-repo
-    # break pins. Proven non-vacuous: renaming build_portal's `--extractor` (or dropping it from the
+    # break this test pins. Proven non-vacuous: renaming build_portal's `--extractor` (or dropping it from the
     # vendored list's target) makes the flag absent from --help and reds this test.
     help_text = _build_portal_help()
     present = set(re.findall(r"--[A-Za-z][A-Za-z0-9-]*", help_text))

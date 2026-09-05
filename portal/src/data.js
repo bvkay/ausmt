@@ -85,9 +85,9 @@ function tsGoRoute(s,level){
 // The archive's own address for one register url_path (the reference field beside the route). See docs:
 // portal internals, data.js.
 const TS_FILESERVER="https://thredds.nci.org.au/thredds/fileServer/";
-// The `u` flag is load-bearing, not tidiness: without it the class matches per UTF-16 CODE UNIT, so a code
-// point above the BMP arrives as a lone surrogate and encodeURIComponent throws URIError - which, from
-// #dlTs. See docs: portal internals, data.js.
+// The `u` flag is load-bearing: without it a code point above the BMP arrives as a lone surrogate and
+// encodeURIComponent throws URIError, which aborts the whole hand-off export. See docs: portal
+// internals, data.js.
 function tsArchiveUrl(p){return TS_FILESERVER+String(p==null?"":p).trim().replace(/^\/+/,"")
   .replace(/[^A-Za-z0-9_.~/-]/gu,c=>{const e=encodeURIComponent(c);
     return e===c?"%"+c.charCodeAt(0).toString(16).toUpperCase():e;});}

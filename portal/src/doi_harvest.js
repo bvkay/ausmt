@@ -73,8 +73,8 @@
       return { author: author, year: year, title: title, journal: journal, doi: d };
     } catch (e) { return null; }
   }
-  // Compact human citation for a read-only preview line: "Kay B, Heinson G, et al. (2023). Title. See docs:
-  // portal internals, doi_harvest.js.
+  // Compact human citation for a read-only preview line: authors, year, title, journal, with three
+  // or more authors collapsed. See docs: portal internals, doi_harvest.js.
   function formatCitation(p) {
     p = p || {};
     const full = String(p.author == null ? "" : p.author).trim();

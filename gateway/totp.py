@@ -1,6 +1,6 @@
 """RFC 6238 TOTP - the workbench's destructive-op second factor.
 
-STDLIB ONLY, by design ("the TOTP is stdlib by design"): hmac / hashlib / struct / base64 /
+STDLIB ONLY, by design: hmac / hashlib / struct / base64 /
 time / secrets - no new dependency. TOTP is RFC 6238 (HOTP-over-time, RFC 4226), SHA-1, 30-second
 steps, a ±1-step verify window for box clock skew, per-curator secret.
 
@@ -62,7 +62,7 @@ def _decode_secret(secret: str) -> bytes:
 
 
 def current_step(now: float | None = None, *, step_s: int = _STEP_S) -> int:
-    """The RFC 6238 time-step counter T = floor(unix_time / step_s) (= 0). Integer, monotone
+    """The RFC 6238 time-step counter T = floor(unix_time / step_s), counted from the unix epoch. Integer, monotone
     non-decreasing — the value the DB stores as last_used_step so a code can never be replayed within
     or across its validity window (a later deletion needs a step STRICTLY GREATER than the last used)."""
     unix = time.time() if now is None else now
@@ -70,7 +70,7 @@ def current_step(now: float | None = None, *, step_s: int = _STEP_S) -> int:
 
 
 def code_at(secret: str, counter: int, *, digits: int = _DIGITS) -> str:
-    """HOTP(K, counter) (RFC 4226): HMAC-SHA1 of the 8-byte big-endian counter under the secret,
+    """HOTP(K, counter) (RFC 4226, section 5.3): HMAC-SHA1 of the 8-byte big-endian counter under the secret,
     dynamic-truncated to `digits` decimal digits, zero-padded. TOTP is this with counter == the
     time-step. A negative counter is clamped to 0 (a ±window at step 0 must not pack a negative int)."""
     key = _decode_secret(secret)

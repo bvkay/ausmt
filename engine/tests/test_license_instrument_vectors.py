@@ -50,7 +50,7 @@ def test_vectors_cover_the_new_rendering_classes():
 
 def test_expected_strings_carry_the_distinctive_wording():
     # Non-vacuity of the EXPECTED strings themselves (independent of the render): the ga-derivative
-    # vector must literally carry GA's derivative wording + supersession + the(a) clause; the
+    # vector must literally carry GA's derivative wording + supersession + the CC-BY §3(a) clause; the
     # ga-attribution (no-changes) vector must carry the © line and NO changes clause. So a vector file
     # of trivial cases can't masquerade as coverage.
     by = {v["name"]: v["expected"] for v in _load()["vectors"]}
@@ -77,6 +77,6 @@ def test_expected_strings_carry_the_distinctive_wording():
 
 def test_none_path_vector_is_byte_stable():
     # The frozen-pin spine: the none-of-the-new vector equals a fresh None-path render (no sources, no
-    # changes) - i.e. the instrument bytes. FAILS if the None-path ever shifts.
+    # changes) - i.e. the instrument bytes as they stood before those additions. FAILS if the None-path ever shifts.
     v = next(x for x in _load()["vectors"] if x["kind"] == "none")
     assert v["expected"] == lt.license_instrument_text(v["lic"], v["licensor"], v["year"])

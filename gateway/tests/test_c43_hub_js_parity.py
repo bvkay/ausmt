@@ -39,7 +39,7 @@ import pytest
 
 from gateway import curatorpage
 
-# Shared harness helpers + skip posture (parity file is the house pattern).
+# Shared harness helpers + skip posture (the parity file is the house pattern).
 from gateway.tests.test_c43_stage2a_js_parity import (  # noqa: F401
     _ENGINE_DIR, _ENGINE_SKIP_REASON, _extract_js_function, _run_node,
 )
@@ -315,7 +315,7 @@ def test_refusal_rows_terse_with_full_reason_in_title(warn_report, tmp_path):
 
 
 def test_package_note_renders_once_despite_multiple_refusals(warn_report, tmp_path):
-    """BOILERPLATE-ONCE PIN (contract). With TWO refusals in the report, the refused-stations-
+    """BOILERPLATE-ONCE PIN. With TWO refusals in the report, the refused-stations-
     stay-in-package note appears EXACTLY ONCE in the plan, positioned after the last fail row and
     before the first warn row. FAILS IF the note repeats per refusal row (the mockup regression
     this pin exists for) or disappears."""
@@ -394,7 +394,7 @@ def test_chip_and_qa_card_share_one_flag_definition(warn_report, tmp_path):
 def test_conditioning_scope_all_n_form(warn_report, tmp_path):
     """CONDITIONING-TABLE PIN. The scope cell renders the mockup's 'all N' form when every served
     station carries the note (the fixture's lineage notes are survey-wide), never a bare count
-    with a redundant enumeration. FAILS IF the all-N form regresses to '6 (CP1B10, …)' or
+    with a redundant enumeration. FAILS IF the all-N form regresses to '6 (station A1, CP1B10, …)' or
     the count does not match the engine's."""
     got = _run_plan(tmp_path, warn_report)
     survey = warn_report["survey"]
@@ -407,7 +407,7 @@ def test_conditioning_scope_all_n_form(warn_report, tmp_path):
 
 
 def test_no_metadata_info_row_is_ever_planned(warn_report, tmp_path):
-    """ INFO-ROW PIN, inverted. The citation-author metadata info row is retired with the
+    """INFO-ROW PIN, inverted. The citation-author metadata info row is retired with the
     server-side heuristic that stamped it, so attentionPlan now plans fail rows, ONE package note and
     warn rows, and NEVER an info row. FAILS IF an info row (or the deleted email helpers) returns."""
     got = _run_plan(tmp_path, warn_report)
@@ -419,7 +419,7 @@ def test_no_metadata_info_row_is_ever_planned(warn_report, tmp_path):
 
 def test_frame_card_derotation_headline_from_note_vocabulary(warn_report, tmp_path):
     """FRAME-CARD PIN (both branches). Headline derives from DE-ROTATION notes ONLY: the real
-    as-stored fixture yields 'as-stored'; grafting the ENGINE'S OWN derotation/ note shapes
+    as-stored fixture yields 'as-stored'; grafting the ENGINE'S OWN derotation note shapes
     (verbatim vocabulary from _conventions.py) onto the real report yields 'N de-rotated' with
     the enumerated-carrier union, and the sub-line 'declared acquisition frame recorded'.
     Convention-warn entries must NEVER flip the headline. FAILS IF warns count as frame state,
@@ -439,7 +439,7 @@ process.stdout.write(JSON.stringify(p.cases.map(function (c) { return frameCardF
     r3 = {"note": "frame: served in its declared acquisition frame, x-axis 8 deg",
           "count": 3, "stations": None, "except": None}
     cases = [real_frame,                       # as-stored (warns present, no derotation)
-             real_frame + [imp, tip],          # 2 de-rotated (counted ONCE across two notes)
+             real_frame + [imp, tip],          # 2 de-rotated (station S02 counted ONCE across two notes)
              real_frame + [r3]]                # as-stored + declared-frame sub-line
     got = _run_node(tmp_path, driver, {"cases": cases})
     assert got[0] == {"headline": "as-stored", "sub": "declared-zero reference"}
@@ -584,7 +584,7 @@ process.stdout.write(JSON.stringify(cases.map(function (c) {
 
 
 def test_short_sha_canonical_and_verbatim_fallback(warn_report, tmp_path):
-    """TRUNCATED-SHA PIN (contract). A REAL engine-emitted catalogue sha256 truncates to
+    """TRUNCATED-SHA PIN. A REAL engine-emitted catalogue sha256 truncates to
     'xxxx…yy' (first 4 + last 2, the mockup's inline form; the FULL hash rides the title attr —
     render pin in the styling file); an odd/short/non-hex value renders VERBATIM (never hide
     information — the builddisplay posture), and empty stays empty. FAILS IF the canonical form
@@ -592,7 +592,7 @@ def test_short_sha_canonical_and_verbatim_fallback(warn_report, tmp_path):
     cat = _load_corpus(warn_report)["catalogue"]
     js_c = re.search(r"var C = \{.*?\};", curatorpage.STATIONS_JS, re.DOTALL)
     assert js_c
-    real_sha = next(r[14] for r in cat if r[14])   # C.sha256 = 14 (pinned column map)
+    real_sha = next(r[14] for r in cat if r[14])   # C.sha256 = 14 (pinned by the column map)
     assert re.match(r"^[0-9a-f]{64}$", real_sha), "engine sha256 must be 64 lowercase hex"
     vectors = [real_sha, "ABCDEF123456", "abcdef12345", "not-a-hash", "", None]
     driver = _stations_driver("""
@@ -832,8 +832,8 @@ def test_combined_phase_plan_mapper_from_real_corpus(warn_report, tmp_path):
     with the tf rows the REAL engine emitted, produces: (1) the φxy series verbatim (stored = true) and
     the φyx series UNWRAPPED to true phase (stored − 180, re-wrapped — trueYx); (2) per-point flags +
     median verdicts MATCHING phaseqc.classify_series (the parity-tested seam the plot dots use); (3)
-    TWO bands own the ±180 axis - belongs to xy, (+ the +170..+180 seam continuation) to yx,
-    and NO band crosses 0 (and stay separately owned). phaseVerdictParts yields BOTH component
+    TWO bands span the ±180 axis - quadrant Q1 belongs to xy, quadrant Q3 (plus the +170..+180 seam
+    continuation) to yx, and NO band crosses 0 (the two quadrants stay separate). phaseVerdictParts yields BOTH component
     verdicts, in order, with the out flag = median-out.
 
     MUTATION-PROOFS (each reds this pin): dropping the yx unwrap (reading yx RAW) — non-vacuous because
@@ -881,7 +881,8 @@ process.stdout.write(JSON.stringify(out));
         assert plan["yx"]["median"] == cyx["median"], sid
         assert plan["xy"]["medianIn"] == cxy["median_in"], sid
         assert plan["yx"]["medianIn"] == cyx["median_in"], sid
-        # (3) band ownership: -> xy; (+ seam) -> yx; NO band crosses 0 (merged-band mutation dies).
+        # (3) band ownership: quadrant Q1 -> xy; quadrant Q3 (plus the seam) -> yx; NO band crosses
+        #     0 (a merged-band mutation dies here).
         bands = plan["bands"]
         assert [b for b in bands if b["comp"] == "xy"] == [{"comp": "xy", "lo": 0.0, "hi": 90.0}], sid
         yx_bands = [b for b in bands if b["comp"] == "yx"]
@@ -890,7 +891,7 @@ process.stdout.write(JSON.stringify(out));
             f"{sid}: the +170..+180 seam continuation band (φyx wraps ±180) must be present")
         for b in bands:
             assert not (b["lo"] < 0 < b["hi"]), (
-                f"{sid}: no band may cross 0 - that would merge the two quadrants into one band: {b}")
+                f"{sid}: no band may cross 0 - that would merge the xy and yx quadrant bands into one: {b}")
         # verdict: BOTH components (φxy then φyx), out flag = median-out.
         verdict = got[sid]["verdict"]
         assert [p["comp"] for p in verdict] == ["φxy", "φyx"], (sid, verdict)

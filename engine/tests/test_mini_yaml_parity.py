@@ -84,7 +84,7 @@ def test_parity_comment_after_quoted_scalar():
 
 
 def test_parity_quoted_mapping_keys():
-    """ (station-id override): a QUOTED mapping key must parse like PyYAML parses it.
+    """Station-id override: a QUOTED mapping key must parse like PyYAML parses it.
     Filenames with spaces/parentheses are only expressible quoted, and the fallback must not drop
     such keys entirely. The same alternation must NOT turn a quoted list-item SCALAR that contains a
     colon into a one-key map, so both shapes are pinned here against PyYAML."""
@@ -105,7 +105,7 @@ def test_parity_quoted_mapping_keys():
 def test_parity_comment_on_key_line_before_nested_block():
     """A trailing comment on a KEY line whose value is a nested block
     ('data_types:  # pick one' followed by indented items) must parse like PyYAML parses it. The
-    fallback must not read the comment as the key's scalar VALUE and then bail out of the nested block,
+    fallback once read the comment as the key's scalar VALUE, then bailed out of the nested block,
     truncating every later top-level key (block sequences) or flattening children into the parent
     (nested maps). The shipped _template/_example both carry this shape, so a no-PyYAML box failed
     the reference package against its own validator."""

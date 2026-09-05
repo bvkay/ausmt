@@ -76,7 +76,7 @@ def test_jdump_serialises_date_as_isostring():
 
 
 def test_jdump_still_raises_on_a_genuinely_alien_type():
-    """A non-date/decimal object is a real bug and must still surface as TypeError (never blind-stred
+    """A non-date/decimal object is a real bug and must still surface as TypeError (never blind-str()ed
     into a served product) — that raise is exactly what LAYER 2's per-survey dry-run catches."""
     with pytest.raises(TypeError):
         bp._jdump({"x": object()})
@@ -84,7 +84,7 @@ def test_jdump_still_raises_on_a_genuinely_alien_type():
 
 def test_build_with_unquoted_declared_date_is_green(tmp_path):
     """End-to-end: a survey.yaml carrying a BARE unquoted attribution.declared_date (the exact form
-    emission) builds GREEN and surveys.json carries the date as the STRING "". On origin/main
+    emission) builds GREEN and surveys.json carries the date as a STRING, not a datetime. On origin/main
     this crashed the entire build (SystemExit) and the gateway quarantined the submission."""
     surveys = tmp_path / "surveys"
     _make_package(surveys, "date-survey",

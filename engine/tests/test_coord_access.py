@@ -206,7 +206,7 @@ def _sweep_non_exact_true_values(out_dir):
     NOTE: this text/byte sweep is STRUCTURALLY BLIND to binary containers — an IEEE-754 double
     inside an HDF5 file never matches a string variant, and the text-token numeric parse cannot see
     it either. Served *.h5 files (tier-2 bundles under bundles/ AND tier-1 per-station files under
-    h5/) are therefore swept SEPARATELY and NUMERICALLY by _sweep_h5_for_non_exact (fix-round
+    h5/) are therefore swept SEPARATELY and NUMERICALLY by _sweep_h5_for_non_exact (the numeric
     leg); a leak-sweep over a build that enables any binary distribution emitter must run BOTH legs,
     over EVERY such emitter's tree."""
     hits = []
@@ -230,7 +230,7 @@ def _sweep_h5_for_non_exact(out_dir, *, epsilon=1e-3):
     (bundles/<slug>-tf.h5) and the tier-1 per-station files (h5/<slug>/<station>.h5) are the same
     container class from the same writer, so neither gets its own weaker check.
 
-    Exists because the text sweep cannot see into binary containers. RED against the
+    Exists because the text sweep cannot see into binary containers. RED against the earlier
     build, where emit_survey_mth5 received the FULL station list and re-read the RAW source
     EDIs (TF(fn=...)), bypassing both the mask and the byte gate; RED again against a tier-1 producer
     handed the same unfiltered list, which is why the fixture build must enable both emitters."""
@@ -729,7 +729,7 @@ def test_fail_closed_override_typo_drops_only_that_survey(tmp_path):
     the healthy survey builds and serves in full, rc=0.
 
     FAILS IF one survey's override typo aborts the WHOLE build (rc!=0 / no catalogue at all — the
-    behaviour, where CoordinatePolicyError propagated uncaught from the corpus mask seam), or
+    earlier behaviour, where CoordinatePolicyError propagated uncaught from the corpus mask seam), or
     if the bad survey's stations/bytes appear anyway, or the drop is silent."""
     base = tmp_path / "surveys"
     base.mkdir(parents=True)
@@ -758,7 +758,7 @@ def test_fail_closed_override_typo_drops_only_that_survey(tmp_path):
 
 
 # =====================================================================================================
-# one shared matcher, so validation and application cannot diverge (probe-e class)
+# ONE SHARED MATCHER: validation and application cannot diverge (probe-e class)
 # =====================================================================================================
 
 # Probe-e (the verifier's constructed leak): file ALPHA.edi whose DATAID is BRAVO — the custodian
@@ -1004,7 +1004,7 @@ def test_unit_published_id_resolver_is_a_conservative_superset_of_the_matcher():
     assert coordacc.station_policy_by_published_id("exact", ov, "A1.lemigraph") == "withheld"
     assert coordacc.station_policy_by_published_id("exact", ov, "A2") == "exact"
     assert coordacc.station_policy_by_published_id("exact", ov, "A1x") == "exact", \
-        "the key plus a dot, not a stem: the suffixed id is a different physical site"
+        "the key plus a dot, not a stem: station A1x is a different physical site"
     assert coordacc.station_policy_by_published_id("generalised", {}, "A1") == "generalised", \
         "no override: the survey default, exactly as station_policy returns it"
     # The ONE documented over-mask: a natural DATAID carrying a dot after an override key. The build

@@ -6,7 +6,7 @@ Guards under test, each with a stated failure criterion + proven-failing evidenc
   unsandboxed top-level navigation to the preview.
 - path containment: `..`/absolute under /preview/{id}/ => 404 (fails if a traversal served a file
   outside preview-data).
-- id-authorized (revised): a VALID submission id serves the embargo-safe preview WITHOUT a
+- id-authorized: a VALID submission id serves the embargo-safe preview WITHOUT a
   session (the null-origin iframe can't send the cookie); a nonexistent id => 404.
 - strict CSP + nosniff on every served asset (fails if the CSP/nosniff header was absent).
 - only allow-listed content types are served.

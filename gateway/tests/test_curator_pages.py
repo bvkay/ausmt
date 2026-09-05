@@ -411,7 +411,7 @@ def test_public_page_identical_ack_vs_nonack_while_publishing(tmp_path):
 
 def test_pii_absent_from_served_preview(tmp_path):
     # The submitter email must appear in the CURATOR detail HTML but NEVER in the served preview
-    # output (PII bullet). Failure criterion: fails if the email fixture appears in ANY
+    # output (the PII rule). Failure criterion: fails if the email fixture appears in ANY
     # served preview asset. (Here the fixture package's preview is PII-clean; the checklist test
     # covers the FAIL case where PII IS present.)
     async def _body():

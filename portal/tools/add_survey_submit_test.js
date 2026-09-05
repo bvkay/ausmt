@@ -843,7 +843,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
-  // 8f. CONTRIBUTOR CREDIT MODEL (the contributor-credit model). The "who should be credited?" question
+  // 8f. CONTRIBUTOR CREDIT MODEL. The "who should be credited?" question
   //     -> creators[] (basic tier: name + Organisation checkbox, ORDER preserved) and the advanced typed
   //     contributors[] rows (name_type + the 8-token fail-closed role <select>). Drives every new field
   //     for real, then reads the REAL packaged survey.yaml and asserts the emitted shape the validator

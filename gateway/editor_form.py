@@ -61,7 +61,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # Only the two survey/project-level PIDs a curator legitimately sets stay modelled here.
     "identifiers": [
         ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
-        # (identifiers design): the ONE survey/platform-level instrument PID (PIDINST, e.g.
+        # The ONE survey/platform-level instrument PID (PIDINST, e.g.
         # 10.82388/<id>) - the survey-layer counterpart to the deep per-serial instruments[].pid.
         # Additive; the surveys validator only WARNS on its format, so it is plain "text" here
         # (a light hint, never a form block) — the same posture as project_raid above.
@@ -138,7 +138,7 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
 
 # List (repeatable-row) sections: per-row scalar sub-fields.
 LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
-    # the contributor-credit model (editor typed rows): creators[] - who the citation names, an ORDERED
+    # The contributor-credit model (editor typed rows): creators[] - who the citation names, an ORDERED
     # editorial list (order IS the citation author order, so the row renders with up/down reorder controls
     # in curatorpage). name_type is FAIL-CLOSED (person|organisation); orcid is people-only and ror
     # organisations-only, both OPTIONAL curator hints (WARNING-only at the validator). orcid/ror sit in
@@ -160,7 +160,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("orcid", "ORCID (people)", "0000-0002-1825-0097", "orcid"),
         ("ror", "ROR id (organisations)", "https://ror.org/03yghzc09", "ror"),
     ],
-    # organisations[] is the FULL role statement where the parties
+    # The organisations[] list is the FULL role statement where the parties
     # genuinely differ (industry-collected government releases make collector / custodian / publisher /
     # distributor different parties). The scalar organisation: block keeps its meaning (primary
     # custodial responsibility, the discovery projection). Two sub-fields are NOT plain scalars: roles
@@ -173,7 +173,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("roles", "What this organisation is", "", "org_roles"),
         ("primary_custodian", "Primary custodian", "", "primary_custodian"),
     ],
-    # acknowledgements[] rows {text, type?, source?}. The wording is
+    # The acknowledgements[] rows {text, type?, source?}. The wording is
     # the row's whole payload and is preserved VERBATIM; type is the contract's CANDIDATE vocabulary, so
     # the validator WARNs rather than blocks an unknown token and the editor mirrors that (a stored
     # out-of-vocab type must round-trip, not lock the curator out of the section).
@@ -212,7 +212,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine keeps reading
     # sources[], so nothing served changes.
     #
-    # + D-L: the single typed list of provenance relations to identifiers AusMT does NOT own.
+    # The single typed list of provenance relations to identifiers AusMT does NOT own.
     # The primary per-row control is `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
     # terms) — FIRST on the row and FAIL-CLOSED like relation/identifier_type. The DataCite `relation`
     # DERIVES from `identifies` server-side, so it is not a curator control on an identifies
@@ -233,7 +233,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     ],
 }
 
-# D-L: the related_identifiers row sub-keys that are OPTIONAL - `identifies` (absent on a legacy
+# The related_identifiers row sub-keys that are OPTIONAL - `identifies` (absent on a legacy
 # row) plus the acquisition fields merged from the retired sources[] list. Unlike the always-emitted typed
 # core (identifier / identifier_type / relation / custodian), an empty optional key is written back ONLY
 # when the ORIGINAL row already carried it, so a corpus row that has no acquisition fields (and a legacy
@@ -243,7 +243,7 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
 _OPTIONAL_LIST_KEYS: dict[str, frozenset] = {
     "related_identifiers": frozenset({"identifies", "title", "licence", "retrieved", "statement",
                                       "profile"}),
-    # the contributor-credit model: orcid is people-only and ror organisations-only, so on any given credit
+    # The contributor-credit model: orcid is people-only and ror organisations-only, so on any given credit
     # row one of them is legitimately absent. Marked OPTIONAL so an empty orcid/ror is written back ONLY
     # when the original row already carried it - an org creator {name, name_type: organisation, ror} and a
     # person creator {name, name_type: person, orcid} each round-trip to their snapshot (-> _OMIT) instead
@@ -296,7 +296,7 @@ LICENSE_REDISTRIBUTABLE = LICENSE_IDS[:13]
 # "ga" prescribes the Geoscience Australia form (and makes attribution.statement required at validate).
 SOURCE_PROFILES = ("ga", "generic")
 
-# (identifiers design - the related-identifiers model): the two FROZEN, FAIL-CLOSED vocabularies the
+# The related-identifiers model: the two FROZEN, FAIL-CLOSED vocabularies the
 # typed relation adds. RELATION_TYPES is the curated DataCite subset as the editor presets;
 # IDENTIFIER_TYPES is the small set AusMT records against. Both are BAKED copies — the gateway APP image
 # is content-blind (ships only gateway/, never the surveys validator — see gateway.Dockerfile), so a
@@ -377,7 +377,7 @@ IDENTIFIER_PAIR_KEYS = ("scheme", "identifier")
 # The two designation lists identity_classification may carry, and the case each belongs to.
 IDENTITY_DESIGNATION_LISTS = ("represents", "own_identifiers")
 
-# the contributor-credit model (the unified People & credit panel: "one huge
+# The contributor-credit model (the unified People & credit panel: "one huge
 # list which makes no sense"): the served schema keeps creators[] (citation authors) and contributors[]
 # (who-did-what roles) as TWO lists, but the editor presents them as ONE panel of unified rows
 # (one row per person/org). The panel is the `people` section: its rows POST as l_people_<i>_<subkey>
@@ -458,7 +458,7 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
         if subkey == "level" and value not in ACCESS_LEVELS:
             raise SectionError(section, f"access level '{value}' is not one of "
                                         f"{', '.join(ACCESS_LEVELS)}")
-    # sources[].licence is vocab-validated against the SAME contract vocab as the top-level
+    # The sources[].licence field is vocab-validated against the SAME contract vocab as the top-level
     # licence (killing the free-text seam), and profile against the attribution-profile vocab. The
     # <select> only offers vocab values, so a normal submit is always valid; this fail-closes a
     # hand-crafted out-of-vocab POST (the same fail-closed-at-the-form posture as access.coordinates).
@@ -468,7 +468,7 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "profile" and value not in SOURCE_PROFILES:
         raise SectionError(section, f"attribution profile '{value}' is not one of "
                                     f"{', '.join(SOURCE_PROFILES)}")
-    # the typed related-identifiers presets. Fail-closed like access.coordinates / profile - the
+    # The typed related-identifiers presets. Fail-closed like access.coordinates / profile - the
     # <select> only offers vocab values, so a normal submit is always valid; this rejects a hand-crafted
     # out-of-vocab POST (a mis-typed relation would publish a wrong provenance claim).
     if kind == "relation" and value not in RELATION_TYPES:
@@ -483,7 +483,7 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "identifies" and value not in IDENTIFIES_LEVELS:
         raise SectionError(section, f"data level '{value}' is not one of "
                                     f"{', '.join(IDENTIFIES_LEVELS)}")
-    # the contributor-credit model - the typed credit-row presets. Fail-closed like the vocabs above: the
+    # The contributor-credit model - the typed credit-row presets. Fail-closed like the vocabs above: the
     # <select> only offers vocab values, so a normal submit is always valid; this rejects a hand-crafted
     # out-of-vocab POST. A mis-typed name_type mis-classifies the actor (wrong citation rendering) and a
     # mis-typed role publishes a wrong provenance claim about who did what, so each must block, not ship.
@@ -532,7 +532,7 @@ _ABSENT = object()  # the section had no original value (distinct from a real nu
 # overrides is the one such key: _resolve_coordinate_overrides may deliberately DROP it (set-all-
 # to-inherit-removes-the-key path), so carrying it back from the snapshot would un-delete a curator's
 # removal. Every other section is fully covered by "modelled subfields ∪ nothing", so the map is sparse.
-# Adds two more: citation.preferred_identifier (the nested pair, assembled both-or-neither by
+# Two more keys join it: citation.preferred_identifier (the nested pair, assembled both-or-neither by
 # _resolve_preferred_identifier, which may deliberately DROP the key) and identity_classification's two
 # designation lists (_resolve_designation_rows, same absent-vs-empty discipline).
 _SPECIAL_MANAGED_KEYS: dict[str, set[str]] = {
@@ -623,7 +623,7 @@ def _assemble_map(form: dict, section: str):
             if rows:
                 out[key] = rows
 
-    # - carry forward UNMODELLED original keys verbatim. Any key the source section
+    # Carry forward UNMODELLED original keys verbatim. Any key the source section
     # carried that the widget does not model (the retired flat identifier keys dataset_doi / project /
     # related_publication(_doi), OR any unknown/legacy key the editor never modelled) is re-emitted exactly
     # as stored, so the assembled value still equals the o_<section> snapshot on an untouched section
@@ -654,7 +654,7 @@ def _resolve_coordinate_overrides(form: dict, original) -> dict:
         map. Re-emit it verbatim from the o_access snapshot (`original`); apply_patch's surgical merge
         then leaves it byte-clean. Absent + no original map => {} (nothing to preserve; byte-unchanged).
       * field PRESENT (the stations-panel coord-policy-form): assemble it. A non-empty map is written
-        verbatim; an empty / all-inherit map returns {} so apply_patch DELETES a pinned key
+        verbatim; an empty / all-inherit map returns {} so apply_patch DELETES a key that was pinned
         (the intended set-all-to-inherit-removes-the-key — NO over-preservation regression).
 
     The preserved values are NOT re-validated here: they came from the survey's own stored access
@@ -875,7 +875,7 @@ def _assemble_list(form: dict, section: str) -> list:
             # removes the key rather than writing `ror: null`.
             if subkey in never_null and not value:
                 continue
-            # D-L: an OPTIONAL sub-key (identifies + the acquisition fields) is written back only
+            # An OPTIONAL sub-key (identifies + the acquisition fields) is written back only
             # when it has a value OR the original row already carried it — never introduce an empty one the
             # source row lacked (mirrors the map scalar rule; keeps a corpus row's round-trip byte-clean).
             if subkey in optional and not value and subkey not in orig_row:
@@ -889,7 +889,7 @@ def _assemble_list(form: dict, section: str) -> list:
         if idf and str(idf).strip() in IDENTIFIES_LEVELS:
             row["relation"] = derived_relation(idf)
             any_value = True
-        # - carry forward UNMODELLED per-row keys from the correspondingly-indexed
+        # Carry forward UNMODELLED per-row keys from the correspondingly-indexed
         # original row (the render assigns row index i to original[i]). The retired instruments[].pid — and
         # any unknown/legacy per-row key — is re-emitted verbatim, so an untouched list reassembles equal to
         # its o_<section> snapshot (-> _OMIT, byte-preserved) instead of the wholesale-replace dropping it.
@@ -903,7 +903,7 @@ def _assemble_list(form: dict, section: str) -> list:
                         any_value = True
         if any_value:
             rows.append(row)
-    # (validate_survey.py: the primary-custodian selection selects AMONG custodial rows): the radio
+    # Primary-custodian gate (validate_survey.py: the selection selects AMONG custodial rows): the radio
     # is refused on a row that does not tick custodian. Fail-closed at the form so the curator sees why,
     # rather than meeting the validator FAIL only at preview.
     if section == "organisations" and primary_idx is not None:
@@ -1122,7 +1122,7 @@ def assemble_section(form: dict, section: str):
         value = _assemble_list(form, section)
     else:
         # A JSON-only section (JSON_SECTIONS) with a blank j_<section>: the panel's own copy says
-        # blank means unchanged, so it contributes nothing. Reachable care fix.
+        # blank means unchanged, so it contributes nothing. Reachable since the care fix.
         return _OMIT
 
     original = _original_snapshot(form, section)

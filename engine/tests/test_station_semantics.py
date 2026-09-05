@@ -157,7 +157,7 @@ def _archive_row(rid, fmt="zip"):
 
 
 def _archive_row_the_record_put_no_bytes_into(doc):
-    """The shape: the survey builds a survey MTH5, this station's bytes are not in it, and the
+    """The containment shape: the survey builds a survey MTH5, this station's bytes are not in it, and the
     record has no mth5 rendition to prove otherwise."""
     doc["resources"].append(_archive_row("survey-mth5", fmt="mth5"))
 
@@ -495,7 +495,7 @@ def test_verify_self_building_runs_the_station_gate(tmp_path):
     verify.py run that builds its own corpus must run the station gate too, or a developer's green
     run means less than the deployment gate's.
 
-    The self-building path passes no --products, so this is also where earns its keep: without the
+    The self-building path passes no --products, so this is also where the unconditional served-root write earns its keep: without the
     unconditional served-root write there would be no station.json for the gate to read.
 
     AUSMT_VALIDATOR_PATH is pinned through the four-arm seam so the run is hermetic in

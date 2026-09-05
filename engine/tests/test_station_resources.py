@@ -63,7 +63,7 @@ def _manifest(out):
 # ---- the rows ------------------------------------------------------------------------------------
 
 def test_an_open_station_publishes_its_served_renditions(built):
-    """FAILS against the emitter, which published no resources[] at all."""
+    """FAILS against the earlier emitter, which published no resources[] at all."""
     doc = _station(built, "example-survey", "EXAMPLE01")
     rows = {r["id"]: r for r in doc["resources"]}
     assert "edi" in rows and "emtfxml" in rows
@@ -74,7 +74,7 @@ def test_an_open_station_publishes_its_served_renditions(built):
 
 
 def test_the_role_axes_are_emitted_only_where_they_are_certain(built):
-    """The level-2 rule at its default."""
+    """The role axes at their default."""
     rows = {r["id"]: r for r in _station(built, "example-survey", "EXAMPLE01")["resources"]}
     assert (rows["edi"]["provenance_role"], rows["edi"]["representation_role"]) == ("source", "original")
     assert (rows["emtfxml"]["provenance_role"],

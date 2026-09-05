@@ -1,6 +1,6 @@
-"""Serve-state helpers curator serve-reconcile panel.
+"""Serve-state helpers for the curator serve-reconcile panel.
 
-The gap closes: `PUBLISHED` means "committed to surveys-live and pushed", NOT "served" - the
+The gap this closes: `PUBLISHED` means "committed to surveys-live and pushed", NOT "served" - the
 portal keeps serving the old build until a rebuild runs. A host-side reconcile timer rebuilds on
 drift, and this module is the GATEWAY half: the curator's front-door view of that state
 (published HEAD vs served build, last reconcile outcome, a pending-rebuild indicator) plus the
@@ -34,11 +34,12 @@ REQUEST_FILENAME = "rebuild.request"
 STATUS_FILENAME = "reconcile-status.json"
 # The ops floor's host-written state file. Written by the alert timer
 # (deploy/scripts/alert.sh) into the SAME state dir, read SERVER-side here (the reconcile-status.json
-# seam - no new mount, intact). The gateway never writes it.
+# seam - no new mount, the existing trust boundary intact). The gateway never writes it.
 OPS_STATUS_FILENAME = "ops-status.json"
 # Usage analytics. The host aggregator (deploy/scripts/aggregate_stats.py, a daily
 # timer) folds the Caddy access log into this cumulative stats.json in the SAME state dir; the Analytics
-# screen reads it SERVER-side (the ops-status.json seam - no new mount, no new privilege, intact).
+# screen reads it SERVER-side (the ops-status.json seam - no new mount, no new privilege, the
+# existing trust boundary intact).
 # The gateway NEVER writes it. It carries aggregates only — counts + dailies, never an address or a UA.
 STATS_FILENAME = "stats.json"
 

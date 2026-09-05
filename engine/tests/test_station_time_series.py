@@ -78,7 +78,7 @@ def _build(surveys, out, *extra):
 def built(tmp_path_factory):
     """The vendored corpus built WITH the committed register.
 
-    FAILS against the emitter, which read the register and projected nothing from it."""
+    FAILS against the earlier emitter, which read the register and projected nothing from it."""
     pytest.importorskip("mt_metadata")
     out = tmp_path_factory.mktemp("station-ts") / "data"
     r = _build(SURVEYS, out, "--ts-index", str(TS_INDEX))
@@ -231,7 +231,7 @@ def test_a_verified_level2_row_projects_nothing(built):
 
 
 def test_a_pending_and_a_retired_row_project_nothing(built):
-    """The channel rule and the retired row. EXAMPLE02 carries one of each and nothing else, so its record must carry the
+    """The pending row and the retired row. EXAMPLE02 carries one of each and nothing else, so its record must carry the
     served renditions alone."""
     doc = _station(built, "example-survey", "EXAMPLE02")
     assert _rows(doc) == [], doc.get("resources")
@@ -284,7 +284,7 @@ def _register_for(root, package, station_ids):
 @pytest.fixture(scope="module")
 def built_masked(tmp_path_factory):
     """One exact, one generalised and one withheld-position station in ONE open survey, each with a
-    verified register row, built stager."""
+    verified register row, built by the stager."""
     pytest.importorskip("mt_metadata")
     c42 = _c42()
     root = tmp_path_factory.mktemp("station-ts-masked")

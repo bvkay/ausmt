@@ -144,7 +144,7 @@ def make_merge_job(slug: str, patch: dict, bump: str, note: str, today: str) -> 
 
 
 def make_history_job(slug: str) -> dict:
-    """A `history` edit-job (a history read-job): the runner returns the READ-ONLY git log of the survey's
+    """A `history` edit-job: the runner returns the READ-ONLY git log of the survey's
     package directory (version, release note, when, author). The runner OWNS the git read
     so the gateway process issues no git verb for this; job carries only the slug."""
     return {"kind": "history", "slug": slug}

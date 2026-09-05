@@ -49,7 +49,7 @@ def _seed_corpus(surveys_live) -> None:
 
 
 def _assert_csp_clean(html: str) -> None:
-    """Record CSP sweep: every <script> carries src= (inline blocks are dead under script-src
+    """CSP sweep: every <script> carries src= (inline blocks are dead under script-src
     'self'), NO on*= handler attributes, and the shared ui.js loads. Mirrors
     test_serve_reconcile.test_queue_page_is_pure_queue_and_csp_clean."""
     for m in re.finditer(r"<script\b[^>]*>", html):
@@ -181,7 +181,7 @@ def test_index_renders_cards_bands_and_table(tmp_path):
             # Membership-by-slug honesty line.
             assert "resolved by survey <b>slug</b>" in html
             # Stage 3b: the 'New collection…' entry and the actionable band remedies
-            # (record E) now appear (the read-only 3a 'next stage' copy is superseded).
+            # now appear (the read-only 3a 'next stage' copy is superseded).
             assert "New collection" in html
             assert 'href="/gateway/curator/collections/new"' in html
             assert "Merge" in html and "into" in html          # near-dup merge entry point

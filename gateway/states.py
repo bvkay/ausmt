@@ -1,4 +1,4 @@
-"""The submission state machine. This module is data only:
+"""The submission state machine. This module is data only -
 no I/O — so the legal-transition set is one auditable table that both the DB layer and the property
 test read.
 

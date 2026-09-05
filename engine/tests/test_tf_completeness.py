@@ -9,7 +9,7 @@ These tests are each able to fail:
   * ERROR COLUMNS: a synthetic EDI with KNOWN Z + Z.VAR yields the documented propagation values,
     hand-computed in the test (rho.err = 0.4*T*|Z|*|dZ|; phs.err = deg(|dZ|/|Z|)).
   * TIPPER COMPONENTS: a real-dialect tipper matches the component dict, and source-masked periods are
-    null in ALL FOUR component columns (composes fill/exact-zero mask).
+    null in ALL FOUR component columns (composes with the fill/exact-zero mask).
   * PLACEHOLDER: a flat-|T|=1.0 tipper is masked (all four series + tip_mag null) and a NOTICE names the
     station; a real (varying) tipper is untouched.
 """
@@ -74,7 +74,7 @@ def test_contract_grew_to_18_appended_only():
 
 def test_old_slice_byte_identical_to_golden():
     """★ FAILS IF: t[0..9] of any checked-in fixture differs from the committed golden. The golden was
-    minted from the outputs; any change to an existing column (including tip_mag) is a STOP.
+    minted from the earlier outputs; any change to an existing column (including tip_mag) is a STOP.
     Compares the JSON-normalised OLD slice only — the 8 new columns are deliberately excluded."""
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     assert set(golden) == set(_GOLDEN_FIXTURES), "golden station set drifted from the fixture set"
@@ -158,7 +158,7 @@ def test_tipper_components_match_component_dict_and_mask_fills():
 
 
 def test_placeholder_tipper_masked_with_notice(capsys):
-    """★ FAILS IF: the real-corpus placeholder tipper (Phoenix EMpower |T| flat at 1.0) is NOT
+    """★ FAILS IF: the real-corpus placeholder tipper (Phoenix EMpower station A01: |T| flat at 1.0) is NOT
     masked, or no NOTICE names the station. This is the honesty guard on a REAL file."""
     per, comp = mtm.components(REAL / "phoenix_empower_A01.edi")
     # all four tipper series masked to null (dict collapses an all-None series to None)
@@ -175,7 +175,7 @@ def test_placeholder_tipper_masked_with_notice(capsys):
 
 def test_real_varying_tipper_is_not_masked():
     """FAILS IF: a genuine (varying, off-unity) tipper is wrongly detected as a placeholder and masked.
-    Guards detector over-firing. Exercises the predicate directly with a real-shaped
+    Guards against the detector over-firing. Exercises the predicate directly with a real-shaped
     varying series (no on-disk EDI needed)."""
     n = 6
     txr = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35]
@@ -195,7 +195,7 @@ def test_real_varying_tipper_is_not_masked():
 
 
 def test_placeholder_tipper_note_rides_the_report_channel(capsys):
-    """The mask's NOTICE must not be a bare stderr print inside the parse layer, which is the one
+    """The mask's NOTICE was once a bare stderr print inside the parse layer, the one
     honesty decision that never reached build_report.json, and under a cache hit it did not
     fire at all (a hit and a miss must emit the same diagnostics). With a notes channel the caller
     owns emission: the fact rides the cached parse product and the report, and stderr stays quiet

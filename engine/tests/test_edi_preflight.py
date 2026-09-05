@@ -12,7 +12,7 @@ that the verdict matches what the reader actually did. When mt_metadata changes 
 file goes RED and the pre-flight gets fixed. It never silently starts lying, which for a check whose
 whole value is trust is the only acceptable failure mode.
 
-MEASURED AGREEMENT BEHIND THESE TESTS, over the
+MEASURED AGREEMENT BEHIND THESE TESTS (pinned mt_metadata 1.0.9 / mth5 0.6.8), over the
 two corpora that live outside this repository, every file, exact:
 
   GSSA Western Gawler 2023 (GAWLER_PHASE_2_MT, 312 EDIs)
@@ -483,7 +483,7 @@ def test_the_bounded_advisory_names_a_file_that_will_not_read_even_when_it_sorts
 # =============================================================================================
 
 def test_the_check_never_writes_to_the_files_it_reads(tmp_path):
-    """The never-edit rule in miniature. Anything that edits an EDI is out of scope for this module, so
+    """The never-edit rule in miniature. Anything that edits an EDI is out of scope for this module permanently, so
     the whole tree is hashed before and after both entry points, the CLI included."""
     package = tmp_path / "package"
     package.mkdir()

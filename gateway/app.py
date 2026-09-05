@@ -44,7 +44,7 @@ _UPLOAD_CHUNK = 1024 * 1024
 _POLL_INTERVAL_S = 5.0
 _STATUS_404_BODY = b"not found"  # byte-identical for every unknown/invalid token
 
-# Fix-round server-side length caps on the uploader-key free-text fields. The caps are the
+# Server-side length caps on the uploader-key free-text fields. The caps are the
 # GATE (an over-length POST is refused 400, never silently truncated); the form maxlength attributes
 # are client courtesy only. Modest values: a note is "who it's for / expiry intent" (2000 chars is
 # paragraphs), a name is a short operator label, an email caps at the RFC 5321 path limit.
@@ -52,7 +52,7 @@ _NOTE_MAX_CHARS = 2000
 _KEY_NAME_MAX_CHARS = 120
 _KEY_EMAIL_MAX_CHARS = 254
 
-# Stage 3b collections editor - the gateway-side guardrails (-A the console's select
+# Stage 3b collections editor - the gateway-side guardrails (the console's select
 # IS the guardrail; type/id/status are validator-WARNING-grade only, so the write path enforces them
 # here before an operation is built). The id vocab is the engine's (docs/.../collection-ids.md). The
 # type and status vocabularies are the select's own tuples, imported above rather than restated: a
@@ -119,7 +119,7 @@ class Gateway:
         # the job on the jobs/edit/ file queue and polls for the gw-runner's result with a bounded
         # timeout — the yaml work happens in the gw-runner service (the ENGINE image, where ruamel
         # lives), never in this process (review FIX 1). The seam BLOCKS while polling, so
-        # async handlers call it via asyncio.to_thread (review FIX 4); the sync form route already
+        # async handlers call it via asyncio.to_thread; the sync form route already
         # runs in Starlette's threadpool. Tests inject an in-process seam.
         self._edit_runner = edit_runner or (
             lambda job: metaedit.default_edit_runner(job, self.cfg.jobs_dir,
@@ -569,13 +569,13 @@ class Gateway:
             published_available=published.available, csrf=csrf)
 
     def handle_rebuild_request(self, request: Request, csrf: str | None) -> Response:
-        """POST /gateway/curator/rebuild (brief note 4): session + CSRF gated exactly like
+        """POST /gateway/curator/rebuild: session + CSRF gated exactly like
         the uploader-key POSTs. Writes /gw/state/rebuild.request ATOMICALLY with {requested_at,
         requested_by} — AUDIT ONLY; the host reconcile agent keys on the file's EXISTENCE and never
         parses its content (zero-argument by design). Idempotent (a second press overwrites the same
         file). Fails CLOSED with a 503 if the state dir is missing/unwritable (mirrors the house
         curator-503 style) rather than pretending the request was queued. On success, redirects to the
-        serve-state screen's panel (303) - moved the serve panel (and its pending indicator)
+        serve-state screen's panel (303): the serve panel (and its pending indicator) moved
         off the queue page to /gateway/curator/serve, so that is where the curator lands to see the
         'rebuild requested — pending' state (matching how the other curator form posts respond)."""
         curator = self._session_curator(request)
@@ -598,7 +598,7 @@ class Gateway:
         last reconcile) PLUS the operations floor: the reconcile SYNC strip, four cards (Backups,
         Alerts, Box, Freshness), and the retained-builds + backup-snapshots tables — all READ-ONLY (no
         privileged action rendered). The ops facts come from ops-status.json read SERVER-side (the
-        reconcile-status.json seam - serve_state.read_ops_status; no new mount, intact). Every
+        reconcile-status.json seam - serve_state.read_ops_status; no new mount). Every
         read is best-effort: published HEAD degrades to 'unavailable', a missing/stale ops-status.json
         flips every dependent card to an explicit STALE state — the page never 500s. `def` (blocking
         file/git reads run in Starlette's threadpool, matching the queue rationale)."""
@@ -628,8 +628,8 @@ class Gateway:
     def handle_analytics(self, request: Request) -> Response:
         """GET /gateway/curator/analytics: the usage-analytics screen. READ-ONLY:
         renders the host aggregator's stats.json (downloads/visits/countries + a daily series) read
-        SERVER-side (serve_state.read_stats — the ops-status.json seam; no new mount, no new privilege,
-        no new mount). Fail-closed like the ops floor: a missing stats.json shows the honest empty state, a
+        SERVER-side (serve_state.read_stats — the ops-status.json seam; no new mount, no new
+        privilege). Fail-closed like the ops floor: a missing stats.json shows the honest empty state, a
         stale one (old generated_at, the serve_state staleness band — fail-closed both directions) shows
         a STALE banner; the page never 500s and never renders a stale file as live. ZERO JS (the daily
         series is a server-rendered inline SVG), so it is clean under the strictPages CSP. `def`
@@ -702,7 +702,7 @@ class Gateway:
 
     # ---- Privileged serve-state ACTIONS. Every write is session + CSRF
     # gated; the intent file is the ONLY thing the gateway does — the host actions agent validates and
-    # executes (the gateway gains no shell, intact). Single-flight (one pending intent of a kind)
+    # executes (the gateway gains no shell). Single-flight (one pending intent of a kind)
     # is enforced in serve_state.write_intent under a lock; a StateDirUnwritable fails CLOSED (503).
 
     def _serve_redirect(self) -> Response:
@@ -891,7 +891,7 @@ class Gateway:
         snapshot. REUSES the destructive-op gate VERBATIM in the same order: session, CSRF, the UX
         inventory check, the TOTP second factor (enrolled? rate-limited? valid? not-replayed?), the
         typed-snapshot-id match, then CONSUME the code atomically and write the intent. The host
-        re-validates the id AND drills the snapshot before any swap (the same order as the drill gate). ANY gate failure
+        re-validates the id AND drills the snapshot before any swap. ANY gate failure
         returns 400/409/429 with NOTHING written.
 
         Ordering nuance (identical to retire): the code is VERIFIED + replay-checked at the TOTP gate,
@@ -954,7 +954,8 @@ class Gateway:
         """GET /gateway/curator/ui.js — the shared curator-page behaviours (delegated data-confirm /
         data-toggle-big handlers) as an external same-origin script. The strictPages CSP blocks
         BOTH inline script blocks and inline on*-attribute handlers on every /gateway/* page —
-        three shipped inline and silently never ran. Deliberately UNGATED: the LOGIN page
+        three shipped inline and silently never ran (the Reject and Revoke confirms and the preview
+        size toggle). Deliberately UNGATED: the LOGIN page
         loads it via the shared shell before any session exists — a gate here means every login
         view fetches JS, gets a 303 to HTML, and logs a nosniff console error. The content is a
         static public-repo constant; there is nothing to protect."""
@@ -1259,7 +1260,7 @@ class Gateway:
         """POST begin-enrolment: session + CSRF gated. Generates a fresh secret, stores it as a PENDING
         enrolment (not active), and shows it ONCE with the activate form. Refused when an enrolment is
         already ACTIVE — an active secret is rotated (with the current code), never silently replaced by
-        a session-only begin (that would be the collapse forbids)."""
+        a session-only begin (that would be the collapse the second factor forbids)."""
         curator = self._session_curator(request)
         if curator is None:
             return self._unauthorized_api()
@@ -1452,8 +1453,7 @@ class Gateway:
                                  status_code: int = 200) -> Response:
         """GET /gateway/curator/collections/{id} (Stage 3b). Render the collection
         EDITOR for ONE id: the fan-out edit form + the two-column membership manager over the candidate
-        list. An unknown id -> 404. `?id=<canonical>` pre-fills the id field (the Merge entry point,
-        record E). `error` re-renders after a refused preview (no-op / invalid id)."""
+        list. An unknown id -> 404. `?id=<canonical>` pre-fills the id field (the Merge entry point). `error` re-renders after a refused preview (no-op / invalid id)."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
@@ -1503,7 +1503,7 @@ class Gateway:
         return (result.get("collections") or {}, result.get("near_duplicates") or [],
                 result.get("surveys") or [])
 
-    # ---- Stage 3b collections editor: the WRITE path (-A) ---------------------
+    # ---- Stage 3b collections editor: the WRITE path -----------------------------
 
     def _build_collection_spec(self, form, *, is_new: bool):
         """Turn the editor/create form into the desired-end-state spec, or (None, error). The form IS
@@ -1513,7 +1513,7 @@ class Gateway:
         side guardrails: the id must be lowercase-hyphenated; type/status must be in-vocab."""
         fid = (form.get("f_id") or "").strip()
         # Fullmatch, not match - an anchored `$` matches before a trailing newline.
-        # (.strip above already removes one; every regex gate on this seam is exact-semantics anyway.)
+        # (.strip() above already removes one; every regex gate on this seam is exact-semantics anyway.)
         if not _COLLECTION_ID_RE.fullmatch(fid):
             return None, "The collection id must be lowercase-hyphenated (a-z 0-9 -), e.g. 'auslamp-sa'."
         ftype = (form.get("f_type") or "").strip()
@@ -1772,7 +1772,7 @@ class Gateway:
         """Open the edit form for a published survey: the gateway enqueues a `read`
         edit-job on the jobs/edit/ queue, the gw-runner returns the editable subset as JSON, the
         gateway renders the seeded form. This handler is a sync `def` route, so the seam's bounded
-        blocking poll runs in Starlette's threadpool — never on the event loop (review FIX 4).
+        blocking poll runs in Starlette's threadpool — never on the event loop.
         `field_errors` (a list of editor_form.SectionError) re-renders the per-section widget
         annotations after a failed preview; `submitted` (the raw form dict) re-prefills the widgets
         with the curator's typed values so a validation error never discards their work."""
@@ -1822,8 +1822,7 @@ class Gateway:
     async def handle_edit_preview(self, request: Request, slug: str, form: dict) -> Response:
         """Submit the edit: build the patch from the form, enqueue a `merge`
         edit-job, render the returned diff + validator verdict. Session + CSRF gated. The seam's
-        blocking poll runs via asyncio.to_thread so the single-worker event loop keeps serving
-        (review FIX 4)."""
+        blocking poll runs via asyncio.to_thread so the single-worker event loop keeps serving."""
         name = self._session_curator(request)
         if name is None:
             return self._unauthorized_api()
@@ -1840,8 +1839,8 @@ class Gateway:
         patch, patch_errors = self._build_patch(form)
         if patch_errors:
             # Per-field validation failures (bad ORCID/DOI/date/level, malformed advanced JSON):
-            # re-render the form with each error rather than a blanket failure (deliverable
-            # 12). The errors carry the section so the renderer can annotate the right widget block,
+            # re-render the form with each error rather than a blanket failure. The errors carry
+            # the section so the renderer can annotate the right widget block,
             # and the submitted form is passed back so the curator's typed values survive the round
             # (never silently discarded — the old blanket path lost them). HUB-SINGLE-SAVE: the
             # re-render lands on whichever surface posted (hub Metadata tab / standalone full form).
@@ -1901,7 +1900,7 @@ class Gateway:
         # Re-run the merge to regenerate the exact bytes the curator confirmed (no yaml in the gateway
         # - the gw-runner does it). This is the authoritative artifact; the hash pin is checked
         # against it at commit time inside publish.commit_metadata_edit. Blocking poll off the loop
-        # via to_thread (review FIX 4).
+        # via to_thread.
         merge = metaedit.make_merge_job(slug, patch, bump, note,
                                         time.strftime("%Y-%m-%d", time.gmtime()))
         try:
@@ -1979,7 +1978,7 @@ class Gateway:
         """List the survey's EDI files for removal (removal deliverable 1): the gateway enqueues a
         `list_stations` edit-job, the gw-runner returns the EDI filenames + derived station ids from
         the surveys-live checkout, the gateway renders the checkbox list. Sync `def` route so the
-        seam's bounded blocking poll runs in Starlette's threadpool (review FIX 4)."""
+        seam's bounded blocking poll runs in Starlette's threadpool."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
@@ -2169,7 +2168,7 @@ class Gateway:
 
     def _retire_confirm_response(self, request: Request, name: str, slug: str, *, error: str = "",
                                  status_code: int = 200) -> Response:
-        """Render the retirement confirmation page for `slug`: the record disclosure + the typed-slug
+        """Render the retirement confirmation page for `slug`: the retirement disclosure + the typed-slug
         / release-note / TOTP-code form — or, when the action cannot proceed, the honest refusal in
         place of the form (the last-survey guard, or an un-enrolled curator). Reused by the GET
         confirmation route AND by the POST handler's fail-closed re-renders (so a refusal shows the
@@ -2358,7 +2357,7 @@ class Gateway:
     # ---- preview sandbox ---------------------------------------------------------
 
     def handle_curator_preview(self, request: Request, submission_id: str, subpath: str) -> Response:
-        # Authorized by the UNGUESSABLE submission id in the path, NOT the session (revised).
+        # Authorized by the UNGUESSABLE submission id in the path, NOT the session.
         # The null-origin sandboxed iframe that embeds this preview cannot send the curator cookie —
         # its subresource fetches (catalogue.json etc.) are credential-less cross-origin — so a
         # session gate here would 401 the preview's own assets and it would never render. The id is a
@@ -2562,7 +2561,7 @@ class Gateway:
         # the button/checkbox was hidden — that is UX; the 409 is the guarantee. Retry from
         # PUBLISH_FAILED re-checks too, and acknowledgement is PER-ACTION: nothing about the
         # ack persists on the row, so a retry needs ack_pii again.
-        # - ANY non-acknowledgeable blocking FAIL (every submitter-email hit - - and every
+        #   - ANY non-acknowledgeable blocking FAIL (every submitter-email hit and every
         #     non-PII block) => 409, no acknowledgement can override it.
         #   - blocking FAILs that are ALL acknowledgeable => 409 UNLESS ack_pii is affirmative.
         validator, preview, _note = self._load_reports(sub)
@@ -2698,7 +2697,7 @@ class Gateway:
         return JSONResponse({"detail": "unauthorized"}, status_code=401,
                             headers={"Cache-Control": "no-store"})
 
-    # --- self-serve key issuance --------------------------------------------------------
+    # ---- self-serve key issuance --------------------------------------------------------
 
     @staticmethod
     def _client_ip(request: Request) -> str:
@@ -3270,8 +3269,8 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
         return gw.handle_surveys_list_js(request)
 
     # ---- Metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
-    # do blocking directory/subprocess work so they are `def` (threadpool), matching the
-    # rationale; the POSTs are async (they take the PUBLISH_LOCK / await to_thread for git).
+    # do blocking directory/subprocess work so they are `def` (threadpool), matching the status and
+    # curator-route rationale; the POSTs are async (they take the PUBLISH_LOCK / await to_thread for git).
     @app.get("/gateway/curator/edit")
     def curator_edit_list(request: Request):
         return gw.handle_edit_list(request)
@@ -3282,8 +3281,8 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_survey_hub(request: Request, slug: str, tab: str = "overview"):
         return gw.handle_survey_hub(request, slug, tab)
 
-    # ---- Collections console. Index (3a) + the Stage-3b editor/create/preview/publish WRITE path
-    # (-A). GET pages are `def` (blocking whole-corpus read-job -> threadpool); the POSTs
+    # ---- Collections console. Index (3a) + the Stage-3b editor/create/preview/publish WRITE path.
+    # GET pages are `def` (blocking whole-corpus read-job -> threadpool); the POSTs
     # are async (they await the runner seam / take the PUBLISH_LOCK for git). The preview POSTs pass the
     # RAW FormData (not a collapsed dict) so the repeated keep/add checkboxes survive. NOTE: the /new
     # routes are registered BEFORE /{cid} so 'new' is not swallowed as a collection id.
@@ -3327,7 +3326,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_edit_form(request: Request, slug: str):
         return gw.handle_edit_form(request, slug)
 
-    # IDCONS the curator DOI-resolution status chip endpoint. Session-gated GET; HEADs doi.org
+    # The curator DOI-resolution status chip endpoint. Session-gated GET; HEADs doi.org
     # server-side under the alive-rule and returns {status,label,identifier}. Advisory — never blocks save.
     @app.get("/gateway/curator/pid-check")
     def curator_pid_check(request: Request):

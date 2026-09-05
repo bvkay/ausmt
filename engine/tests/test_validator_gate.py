@@ -132,14 +132,14 @@ def test_env_var_path_resolves_real_validator(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------------
-# Falsifiability: both arms of the environment enumeration must be reachable and
+# Falsifiability: both arms (iii) and (iv) of the environment enumeration must be reachable and
 # distinct (Invariant 10: a skip arm that could swallow a real broken checkout would be vacuous).
 # _repo_root() is the seam: point it at a scratch topology, never at the real tree.
 # --------------------------------------------------------------------------------------------------
 def test_d31_image_topology_skips_with_exact_reason(tmp_path, monkeypatch):
     """Arm (iii), falsifiability (a): a scratch root shaped like the ENGINE IMAGE (/app: an
-    engine tree, NO gateway dir, no sibling beside it) must SKIP with the exact reason string the
-    resolver raises, NOT fail. FAILS IF the resolver raises AssertionError or skips with a different
+    engine tree, NO gateway dir, no sibling beside it) must SKIP with the exact allow-listed
+    reason string, NOT fail. FAILS IF the resolver raises AssertionError or skips with a different
     reason (the tripwire allow-list matches this exact substring)."""
     root = tmp_path / "app"
     (root / "engine" / "tests").mkdir(parents=True)

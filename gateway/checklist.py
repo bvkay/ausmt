@@ -46,7 +46,7 @@ class Check:
 @dataclass(frozen=True)
 class Checklist:
     checks: list[Check]
-    # file names (relative to the scanned root) where a GENERIC (non-submitter) email
+    # File names (relative to the scanned root) where a GENERIC (non-submitter) email
     # matched. Curator-only, file names ONLY (never an address). It renders the classified list
     # and builds the acknowledge audit reason. Empty unless the PII check is acknowledgeable.
     pii_generic_files: tuple[str, ...] = ()
@@ -250,13 +250,13 @@ def build(*, validate_report: dict | None, preview_summary: dict | None,
         checks.append(Check("pii", "No submitter PII in package", NA,
                             "no built product on disk to sweep yet", blocking=False))
     elif scan.submitter_hits:
-        # the submitter's own email is present. Acknowledgement is NOT available for this.
+        # The submitter's own email is present. Acknowledgement is NOT available for this.
         detail = (f"submitter email present in built artifact ({bounded_names(scan.submitter_hits)}) — "
                   "acknowledgement is not available for submitter PII; this block is absolute")
         checks.append(Check("pii", "No submitter PII in package", FAIL, detail, blocking=True,
                             acknowledgeable=False))
     elif scan.generic_hits:
-        # only non-submitter addresses. A curator may acknowledge that every one is part of the
+        # Only non-submitter addresses. A curator may acknowledge that every one is part of the
         # original submitted records (e.g. an EDI `>INFO` contact line) and none is the submitter's.
         detail = (f"an email address is present in built artifact ({bounded_names(scan.generic_hits)}) — "
                   "acknowledgeable: confirm each is part of the original submitted records (e.g. an "

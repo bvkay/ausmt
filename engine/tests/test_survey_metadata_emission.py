@@ -656,7 +656,7 @@ def test_verify_validates_every_document_and_pins_the_slug_set(tmp_path):
 
 def test_designation_dedup_folds_scheme_case():
     """A case-mismatched scheme must not let the SAME identifier be emitted both as an identifier
-    OF the dataset and as a relationship TO it - the dedup key must not compare schemes raw, or
+    OF the dataset and as a relationship TO it - the dedup key once compared schemes raw, so
     scheme 'doi' beside identifier_type 'DOI' published the dataset IsIdenticalTo itself (the exact
     self-reference the partition exists to prevent). The fold reuses the normalisation
     _sm_bare_identifier already applies for its own DOI test."""

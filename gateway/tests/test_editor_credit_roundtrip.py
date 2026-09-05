@@ -1,4 +1,4 @@
-"""the contributor-credit model (the ausmt-side editor typed rows): creators[] and contributors[] are
+"""The contributor-credit model (the ausmt-side editor typed rows): creators[] and contributors[] are
 modelled LIST_SECTION widgets that must round-trip AND save end-to-end.
 
 Three failure modes this pins:

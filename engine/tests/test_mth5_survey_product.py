@@ -77,7 +77,7 @@ def test_survey_metadata_and_dataset_doi_injected(tmp_path):
         m.close_mth5()
 
 
-# the contributor-credit model (mth5 follow-up): a SMETA carrying the typed credit lists + a real grant id.
+# The contributor-credit model (mth5 follow-up): a SMETA carrying the typed credit lists + a real grant id.
 # project_lead is the lead-most credited party (the ProjectLeader contributor here, ahead of the lead
 # creator), its ORCID belongs in project_lead.url (a full https URL - AuthorPerson has no serialised id),
 # and the grant id rides through funders when the survey declares one.
@@ -93,7 +93,7 @@ _CREDIT_SMETA = {
 
 
 def test_project_lead_url_and_grant_id_round_trip(tmp_path):
-    """the contributor-credit model: the mth5 survey_metadata carries the lead-most credited party as
+    """The contributor-credit model: the mth5 survey_metadata carries the lead-most credited party as
     project_lead (the ProjectLeader contributor, ahead of the lead creator), its ORCID as a full
     https://orcid.org/<id> project_lead.url, and the grant id in funding_source.grant_id. RED against the
     pre-change producer: it seeded project_lead from the retired credit facet and wrote the ORCID to a non-
@@ -193,7 +193,7 @@ def test_collection_producer_groups_members_distinctly(tmp_path):
 
 
 def test_collection_guard_disabled_by_default_and_ram_capped():
-    """ the tier-3 producer is disabled by construction (collection_h5_enabled default OFF) and,
+    """The tier-3 producer is disabled by construction (collection_h5_enabled default OFF) and,
     when enabled, refuses a build above max_collection_stations so an AusLAMP-national ~6 GiB build cannot
     OOM the host."""
     off = bp.load_flags(None)
@@ -206,10 +206,10 @@ def test_collection_guard_disabled_by_default_and_ram_capped():
     assert capped is False and "max_collection_stations" in why, "over the cap => refused (RAM gate)"
 
 
-# -------------------------------------------------------------------- version pin on the manifest
+# --------------------------------------------------------------------- version pin on the manifest
 
 def test_manifest_records_mth5_version_pin(tmp_path):
-    """ the download manifest self-declares the mth5 / mt_metadata pin its served bundles were
+    """The download manifest self-declares the mth5 / mt_metadata pin its served bundles were
     written with, so a consumer reads the exact library version beside the artifact's size/sha256."""
     import mt_metadata  # noqa: PLC0415
     import mth5  # noqa: PLC0415

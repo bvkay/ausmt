@@ -5,7 +5,7 @@ The csv is the custodian's curated per-station acquisition record, distilled fro
 Two properties carry all the safety: (1) WHITELIST - only the named columns ever cross into a
 served document, because raw field sheets carry crew names and free-text deployment notes; (2)
 ID DISCIPLINE - the sheet supplies facts only, never run ids, so the run-id store stays the sole
-id authority and a sheet without a stored id still publishes no runs (unchanged).
+id authority and a sheet without a stored id still publishes no runs (the run gate is unchanged).
 
 NON-VACUOUS: the build half writes a real csv into a staged fixture package, runs the actual
 producer, validates the emitted station.json against the shipped schema artifact, and greps the

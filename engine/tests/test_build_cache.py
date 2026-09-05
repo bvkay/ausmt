@@ -107,7 +107,7 @@ def _digest(p: Path) -> str:
 
 def _forensics(cache_dir: Path, *outs: Path) -> str:
     """Failure-time context for counter asserts: every build's FULL counters block (salt_fp,
-    degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. The failures were undiagnosable afterwards because none of this was captured; with
+    degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. Failures of this class were undiagnosable afterwards because none of this was captured; with
     it, one glance discriminates the classes - degenerate/salt_fp drift -> salt instability;
     write_errors/read_errors -> environmental I/O; plain counter drift -> content. Evaluated only
     when an assert actually fails (Python's assert-message lazy evaluation)."""
@@ -218,7 +218,7 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     served XML is looked up BY THE STATION'S FILENAME derived from that same EDI's DATAID — never by
     index. The original version chose the target via UNSORTED rglob (platform-dependent readdir order)
     but compared sorted _served_xml()[0]: green on NTFS (rglob happened to yield Vulcan_A1.edi first),
-    red on the Linux runner (yielded Vulcan_A2.edi -> mutated A2, compared -> false 'STALE CACHE'
+    red on the Linux runner (yielded Vulcan_A2.edi -> mutated A2, compared A1 -> false 'STALE CACHE'
     with hits=3 misses=2, i.e. the edit HAD missed and re-derived correctly)."""
     import re
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
@@ -391,7 +391,7 @@ def test_c18b_gate_green_on_fresh_warm_build(tmp_path, clean_salt):
 
 def test_c18b_gate_skips_loudly_without_surveys_arg(tmp_path, clean_salt):
     """FAILS IF: verify.py --data-dir WITHOUT --surveys either runs the gate or drops the loud skip
-    note. The absent-arg path must preserve every behaviour (VERIFY still PASSes on a clean
+    note. The absent-arg path must preserve the behaviour it had before the gate existed (VERIFY still PASSes on a clean
     build) AND announce that the cache-staleness gate did NOT run."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     out = tmp_path / "out"
@@ -830,7 +830,7 @@ def test_per_survey_instrumentation_sums_to_corpus_total(tmp_path, clean_salt, c
     sum_w = sum(int(r[4]) for r in rows)
 
     m_total = re.search(r"C18 cache \[\w+\]: hits=(\d+) misses=(\d+) writes=(\d+)", both)
-    assert m_total, f"the corpus-total cache line is missing (tests pin it):\n{both}"
+    assert m_total, f"corpus-total cache line missing (tests pin it):\n{both}"
     tot_h, tot_m, tot_w = (int(m_total.group(i)) for i in (1, 2, 3))
     assert (sum_h, sum_m, sum_w) == (tot_h, tot_m, tot_w), \
         f"per-survey deltas {(sum_h, sum_m, sum_w)} != corpus total {(tot_h, tot_m, tot_w)}"
@@ -944,7 +944,7 @@ def test_degenerate_salt_dirty_checkout_no_reads_or_writes(tmp_path, monkeypatch
 
 
 # --------------------------------------------------------------------------------------------------
-# Salt stability across in-process builds (flake class) + its injection companions
+# Salt stability across in-process builds (the flake class) + its injection companions
 # --------------------------------------------------------------------------------------------------
 
 def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
@@ -1071,7 +1071,7 @@ def test_warm_build_byte_identical_to_populating_build(tmp_path, clean_salt):
 
 def test_no_change_rebuild_counters_are_deterministic(tmp_path, clean_salt):
     """FAILS IF: a no-change incremental rebuild does not hit EXACTLY the served-blob count with zero
-    misses and zero writes. Asserts the counters, never a timing (forbids wall-clock)."""
+    misses and zero writes. Asserts the counters, never a timing (wall-clock is forbidden)."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     # cold rw build: all miss, all write.

@@ -137,7 +137,7 @@ def test_surveys_index_marks_a_doi_only_where_the_rollup_carries_one(built):
 
 def test_index_pages_ride_the_sitemap_flag(tmp_path):
     """FAILS IF the index pages are emitted without --sitemap-base. They are tier 3 like every other
-    page: one flag governs the whole tier, so a flagless build stays byte-identical to a earlier
+    page: one flag governs the whole tier, so a flagless build stays byte-identical to an earlier
     build."""
     surveys = _make_survey(tmp_path, slug="idx-c", name="Index C")
     bare = _build(surveys, tmp_path / "bare", sitemap=False)
@@ -155,7 +155,7 @@ def test_index_pages_ride_the_sitemap_flag(tmp_path):
 # third asset, or the same asset in the wrong slot, fails here.
 #
 # ONE mark in the header now: the AusMT identity opening the left zone. The AuScope parent mark
-# that could close the right zone is absent from every header on the site (the relationship is
+# that once closed the right zone is withdrawn from every header on the site (the relationship is
 # stated in words, in the footer and in About's Who enables AusMT section), so the header's fetched
 # set is a single file.
 # The chrome's own fetched assets, in the order a page writes them: the header identity, then the
@@ -404,7 +404,7 @@ def test_a_many_row_hub_still_counts_in_the_plural():
 
 
 def _synthetic_collections(n_colls=6, n_stations=2625, members_each=5):
-    """Six collections at corpus scale: the emitted copy names six candidates, and the whole
+    """Six collections at corpus scale: six candidate collections are planned, and the whole
     served corpus of stations spread across their member surveys."""
     per_coll = n_stations // n_colls
     per_member = per_coll // members_each
@@ -430,7 +430,7 @@ def test_collections_index_shares_one_outline_and_stays_inside_the_budget():
 
     Its cost scales with MEMBER STATION COUNT, not with card count: one card carries a full
     member-coloured scatter of every station in the collection, so the served single-collection
-    page is already ~100 KB. The emitted copy names six candidate collections, and nothing pinned
+    page is already ~100 KB. Six candidate collections are planned, and nothing pinned
     the size of this page at all while its sibling was held to 300 KB. FAILS IF the outline stops
     being shared or the page grows past the same ceiling the surveys hub answers to."""
     pages = _pages_module()
@@ -454,7 +454,7 @@ def _detail_page(pages, rows, i=0):
 def test_the_hub_card_draws_a_dot_for_every_member_station():
     """A card's map is a COVERAGE claim, so it draws every member station or it misreports one.
 
-    The card must not grid-decimate above a per-card cap split between members and
+    The card once grid-decimated above a per-card cap, and the cap was split between members and
     then snapped to a grid, so it bit about a third harder than its own number implied: the AusLAMP
     card drew 180 of its 1,354 stations and the legacy GDS card 193 of its 579. The two largest
     programmes in the corpus were the two the card understated most, and a reader comparing cards
@@ -495,7 +495,7 @@ def test_the_hub_card_draws_a_dot_for_every_member_station():
 
 
 def test_no_collection_map_draws_the_single_survey_locator_ring():
-    """The ring the brief asked to be rid of: a large grey circle sitting mid-continent on a card.
+    """The ring that had to go: a large grey circle sitting mid-continent on a card.
 
     The ring is the minimap's stand-in for dots too small to draw, so it says "this one survey is
     here". A collection gathers many surveys and has no one location, and the ring was marking the
@@ -577,7 +577,7 @@ def test_the_hub_cards_print_ranges_licences_and_periods_the_way_the_entity_page
 def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor():
     """The stretched-link pattern. A card is one destination, so the whole card should behave
     like one target; but a card full of overlapping links is a screen-reader's nightmare and a
-    button in a row breaks the catalogue -> survey -> data hierarchy the brief set. So the TITLE
+    button in a row breaks the catalogue -> survey -> data hierarchy the site keeps. So the TITLE
     stays the single real anchor and a ::after on it covers the card.
 
     FAILS IF the card stops being positioned (the overlay would escape to the page), if the overlay
@@ -623,7 +623,7 @@ def test_the_collections_card_keeps_its_explore_link_above_the_stretched_overlay
 
 def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
     """The hub's own words, verbatim, between the summary line and the
-    list; and the map action carries the in-site forward arrow (keeps U+2192 for actions that
+    list; and the map action carries the in-site forward arrow (the convention keeps U+2192 for actions that
     stay on the site and U+2197 for links that leave the page)."""
     pages = _pages_module()
     page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
@@ -640,7 +640,7 @@ def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
 
 
 def test_the_hub_locator_grows_and_its_container_steps_back():
-    """The locator map is the card's only picture and must not be too small to read at a glance;
+    """The locator map is the card's only picture and was too small to read at a glance;
     it grows about ten percent. The PANEL around it steps toward the card's own fill so the
     Australia outline reads as the object rather than as a box on a box. The shared-symbol geometry
     is untouched, which is what keeps the budget pin honest."""
@@ -701,7 +701,7 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
 # ==================================================================================================
 # The page kinds this tier emits, with the tab that must be active, the machine-readable link the
 # footer must resolve to, and whether the header's right status slot carries anything. The footer
-# column must NOT differ per row, which is exactly what the one-footer rule settles; it is
+# column once differed per row, which is exactly what the one-footer rule ended; it is
 # kept as a column, one value repeated, so a re-divergence shows up here as rows that disagree.
 # LANE-ADDENDUM-HUB-FEEDBACK.md. The tokens asserted below are the SPA header's own
 # (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
@@ -792,7 +792,7 @@ def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(bui
 
 
 def test_one_footer_of_three_regions_on_every_page_kind(built):
-    """Restated to the rule: ONE footer, three regions, byte-identical on every page.
+    """The rule restated: ONE footer, three regions, byte-identical on every page.
 
     The footer must not be contextual, or a reader cannot learn it once. Left is the catalogue,
     the same document from every page; centre is the AuScope acknowledgement with the attribution
@@ -903,7 +903,7 @@ def test_the_footer_regions_lay_out_side_by_side_and_stack_when_narrow(built):
     lets a side zone go under its own content rather than force a wrap.
 
     Below 1421px of footer CONTENT the centre takes a row of its own UNDER the two side regions,
-    where it spans the footer and is centred on its axis. Below 520px the side phrases not
+    where it spans the footer and is centred on its axis. Below 520px the side phrases do not
     share a row either, so every region takes one and aligns left, which is the 375px stack. Both
     numbers are the portal's, because this tier and the portal now carry ONE rule set: the wider
     surface sets the number and portal/tests/test_footer_regions.py holds the two sides identical.
@@ -1021,7 +1021,7 @@ def test_every_page_kind_carries_the_ausmt_mark_beside_the_wordmark(built):
             f"{rel}: the mark must carry the shared sizing rule the SPA header uses"
 
 
-# The parent-organisation mark, WITHDRAWN. It must not close a header from the right zone; the
+# The parent-organisation mark, WITHDRAWN. It once closed every header from the right zone; the
 # rule takes it off every surface of the site, so what this asserts is that the emitter
 # puts it on NO page kind, in no zone. The portal surface's half of the same rule is held in
 # portal/tests/test_header_geometry_parity.py, character for character.

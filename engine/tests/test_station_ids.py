@@ -156,7 +156,7 @@ def test_an_unmapped_file_is_not_an_error():
 # --------------------------------------------------------------------------------------------
 
 def test_station_id_charset_is_the_safe_component_fixed_point():
-    """_stationids.station_id_is_safe is DEFINED as 'safe_component would return this unchanged'.
+    """_stationids.station_id_is_safe() is DEFINED as 'safe_component would return this unchanged'.
     It is implemented separately (stdlib-only leaf, no import cycle), so the two are pinned in
     agreement over the shared vector fixture plus the id scheme. Divergence here is the
     bug class where a value passes validation and is then silently rewritten."""
@@ -334,7 +334,7 @@ def test_the_block_parses_identically_without_pyyaml():
 # Default stability for a survey with no `station_ids` block is pinned by
 # test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field, in the section
 # below. It replaced a test named ..._is_byte_identical_... that compared no bytes at all: it
-# asserted two catalogue ids and the site_name column, so nothing in this suite catches
+# asserted two catalogue ids and the site_name column, so nothing in this suite could catch
 # the feature's additive fields leaking into a survey that never declared the block.
 
 
@@ -621,7 +621,7 @@ def test_the_pyyaml_refusal_never_asks_the_parser_it_gates(tmp_path, capsys, mon
     this test pins the refusal against the fallback's after-a-list blind spot, where a
     trailing comment on a key line (`data_types:   # select all that apply`) swallowed every later
     top-level key and the station_ids block VANISHED from the parse entirely - so a parse-based
-    gate asks the parser being gated, gets None, and builds the survey with no override
+    gate can only ask the parser being gated, get None, and build the survey with no override
     at all. Engine 02e6fe5 (section-2 review) fixed that truncation at the source, so the same
     fixture now PARSES - asserted below so a regression of that fix reds here too - and the refusal
     must fire anyway, because the gate reads the text. The surviving reason the block stays
@@ -660,7 +660,7 @@ def test_the_mini_yaml_fallback_under_reads_an_unquoted_filename_key():
 def test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field(tmp_path):
     """Default stability: a package with NO `station_ids` block builds as it did before the workflow.
     The previous name claimed byte-identity and asserted only two catalogue ids, so nothing in the
-    suite catches the feature leaking into a survey that never asked for it. The two
+    suite could catch the feature leaking into a survey that never asked for it. The two
     additive surfaces this module created are named here: no record carries `source_provenance`, and
     no station.json carries `provenance.source`."""
     surveys = _make_survey(tmp_path, slug="plain", name="Plain")

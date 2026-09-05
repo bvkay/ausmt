@@ -81,7 +81,7 @@ def test_smeta_related_identifiers_empty_when_absent():
     assert sm["related_identifiers"] == []
 
 
-# ---: identifiers.instrument_pid (survey/platform-level; distinct from per-instrument pid) -----
+# --- identifiers.instrument_pid (survey/platform-level; distinct from per-instrument pid) -----
 
 def test_instrument_pid_of_verbatim():
     y = {**_MIN, "identifiers": {"instrument_pid": "10.82388/bt6orvhn"}}

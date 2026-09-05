@@ -234,7 +234,7 @@ def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(buil
     """The mark names the site the card belongs to, and it leads rather than trails, so it sits on
     the same text margin the title does with clear space under it.
 
-    Three things are held. The slot is the size and place it was curator approved at, held against literals
+    Three things are held. The slot is the size and place it was settled at, held against literals
     rather than against the constants that draw it, because a slot rebuilt from _CARD_CORNER_SIZE
     grows with that constant and so would accept a mark of any size. The mark's ink stays inside
     that slot, so it cannot grow into the title. And the slot's LEFT edge has teeth: the strip
@@ -325,8 +325,8 @@ def test_the_collection_card_draws_its_members_in_their_own_colours_and_no_inset
     a collection spanning a continent has no single place to point at.
 
     The inset is detected by the colour its own PANEL FILL lands on when composited at
-    _CARD_INSET_ALPHA. Two nearer-looking probes do not work. Counting card ground not
-    separates the families, because a translucent inset punches no ground-coloured hole in a survey
+    _CARD_INSET_ALPHA. Two nearer-looking probes do not work. Counting card ground does not
+    separate the families, because a translucent inset punches no ground-coloured hole in a survey
     card either. And the inset's copper centre marker is a member colour in the hub palette, so a
     collection whose member happens to be drawn in copper would fail a marker count for a reason
     that has nothing to do with insets. The blend is a colour only compositing can produce.
@@ -511,7 +511,7 @@ def test_the_column_scan_catches_a_title_that_crosses_the_edge(tmp_path):
 
 def test_the_known_offender_fits_the_column_by_stepping_down_and_wrapping(tmp_path):
     """The card the column rule was written for. Its title at 64 px and its three-state region line
-    neither may run across the footprint panel; the title steps down the ladder to fit on one
+    both once ran across the footprint panel; the title now steps down the ladder to fit on one
     line, and the region wraps to a second rather than crossing the edge."""
     pages = _pages_module()
     from PIL import Image, ImageDraw
@@ -526,7 +526,7 @@ def test_the_known_offender_fits_the_column_by_stepping_down_and_wrapping(tmp_pa
 
 
 def test_a_page_only_ever_advertises_a_card_that_was_written(built):
-    """FAILS IF a page names a card URL with no file behind it. The page must not derive the URL from
+    """FAILS IF a page names a card URL with no file behind it. The page once derived the URL from
     "is Pillow importable", which is a claim about the environment and not about the file, so a
     failed write shipped an og:image that every link-preview fetcher resolved to a 404."""
     for rel, want in (("surveys/card-a.html", "/data/pages/og/card-a.png"),

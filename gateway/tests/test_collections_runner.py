@@ -2,12 +2,12 @@
 
 These exercise gateway.runner.edit.run_collections_job DIRECTLY (the same in-suite-reaches-the-runner
 pattern as test_edit_runner.py). Each pin states its failure criterion in one line; the parity,
-divergence and slug pins are mutation-provable (the red-then-green evidence is Stage-3a
+divergence and slug pins are mutation-provable (the red-then-green evidence is in the Stage-3a
 report). The rollup/near-dup PARITY pins import the engine's own _group_collections /
 _near_duplicate_collection_ids and assert the runner AGREES with them for a real fixture tree — so the
 console can never disagree with the portal. Importing the engine pulls the mt_metadata extractor
 stack, so those two pins skipif on a stack-less env (the gateway CI workflow), with the one skip reason the
-gateway module's tripwire allows; every OTHER pin here is engine-free and RUNS in that module.
+gateway workflow's tripwire allows; every OTHER pin here is engine-free and RUNS in that workflow.
 """
 from __future__ import annotations
 
@@ -164,7 +164,7 @@ def test_near_duplicate_behavioural_case_fold(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# - out-of-vocab status drop happens INSIDE the per-member fold. FAILS IF an invalid status
+# Out-of-vocab status drop happens INSIDE the per-member fold. FAILS IF an invalid status
 # on the first member permanently nulls the field: an invalid-first + valid-later corpus must roll up
 # to the VALID status (the pre-fix end-of-loop drop yielded None here — red-proven vs the engine).
 # --------------------------------------------------------------------------------------------------
@@ -188,7 +188,7 @@ def test_out_of_vocab_status_with_no_valid_member_is_none(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# - membership predicate is the engine's truthiness. FAILS IF a falsy id (unquoted 0/False)
+# Membership predicate is the engine's truthiness. FAILS IF a falsy id (unquoted 0/False)
 # forms a collection: such a member must be dropped exactly as the engine drops it.
 # --------------------------------------------------------------------------------------------------
 def test_falsy_id_member_is_excluded(tmp_path):
@@ -201,7 +201,7 @@ def test_falsy_id_member_is_excluded(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# - malformed-YAML resilience (NEGATIVE CONTROL). FAILS IF one unparseable survey.yaml blanks
+# Malformed-YAML resilience (NEGATIVE CONTROL). FAILS IF one unparseable survey.yaml blanks
 # the WHOLE projection: a malformed member is dropped and the OTHER collections still project (mirrors
 # build_portal.py:810-817 dropping just the one bad package). Red-proven: catching only OSError before
 # let the ruamel YAMLError propagate to {ok:False} and the gateway's empty state.
@@ -230,7 +230,7 @@ def test_non_mapping_survey_yaml_is_dropped(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# - PUBLISHED-SOURCE behaviour (documents the intentional non-served semantics). A member
+# PUBLISHED-SOURCE behaviour (documents the intentional non-served semantics). A member
 # carrying a collection.id but ZERO EDIs (a build-dropped-class survey) IS included in the console
 # rollup — the console reads the published survey.yaml, not the served post-gate build. FAILS IF the
 # runner silently drops a 0-station member (which would make it a served mirror, not the edit truth).

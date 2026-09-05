@@ -42,7 +42,7 @@ _STATE_BLURB = {
     states.QUARANTINED: "Quarantined. Validation or the preview build did not complete cleanly.",
     states.REJECTED_AV: "Rejected. The uploaded archive matched a virus signature and was deleted.",
     # PUBLISHED means committed to the survey repository, NOT yet on the live map - do not
-    # overstate it. Since the serve-reconcile timer runs that rebuild automatically.
+    # overstate it. The serve-reconcile timer runs that rebuild automatically.
     states.PUBLISHING: "Publishing. The curator approved this submission; it is being committed.",
     states.PUBLISHED: ("Published. Committed to the AusMT survey repository. It will appear on the "
                        "live map after the next automatic data rebuild (typically within about "
@@ -160,7 +160,7 @@ def _preview_section(summary: dict) -> str:
     for key in ("station_count", "types", "coord_flags", "warnings"):
         if key in summary:
             # Strip absolute paths from preview values too - warnings can echo a build
-            # path; the strip keeps's "no absolute paths in the status page" invariant
+            # path; the strip keeps the "no absolute paths in the status page" invariant
             # uniform across validator rows, the AV note, AND preview values.
             value = _preview_value(summary[key])
             items.append(f"<tr><td class=\"k\">{_esc(key)}</td><td>{value}</td></tr>")

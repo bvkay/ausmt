@@ -3762,7 +3762,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "a no-cite survey's Cite tab must explicitly say 'custodian citation not recorded, cite the survey package', not a silent AUSMT_SELF masquerade");
   drwN.classList.remove("open");
 
-  // CR. CONTRIBUTOR CREDIT MODEL (the contributor-credit model): the survey drawer renders contributors[]
+  // CR. CONTRIBUTOR CREDIT MODEL: the survey drawer renders contributors[]
   // with human role phrases, and the stale lead/principal-investigator display (the survey-summary
   // 'investigators' row served from the retired keys) is gone. Poke Gamma (base fixture carries no credit
   // lists) with the pinned seam shape: a person ProjectLeader with an ORCID, an org DataCollector with no

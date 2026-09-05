@@ -221,7 +221,7 @@ def test_a_doi_is_normalised_to_the_bare_canonical_form():
 
 def test_the_parse_product_carries_the_run_facts():
     """The extractors run inside the cached per-EDI parse, so a warm rebuild emits the same runs a
-    cold one does. FAILS against the parse, whose product had no `run_facts` key."""
+    cold one does. FAILS against the earlier parse, whose product had no `run_facts` key."""
     pytest.importorskip("mt_metadata")
     import build_portal as bp  # noqa: PLC0415
     edi = HERE / "fixtures" / "edi-info-json" / "LineNo__StationNo_11.edi"
@@ -274,7 +274,7 @@ def test_the_cache_format_tag_records_the_parse_product_shape_change(tmp_path):
 
 def test_non_channel_dotted_keys_never_become_channels():
     """The named-components rule is an ALLOW-LIST over the known component families. Any dotted
-    run.<x>.<y> key must not be promoted to a channel, or a structured non-channel path like
+    run.<x>.<y> key was once promoted to a channel, so a structured non-channel path like
     run.acquired_by.author fabricated an acquired_by channel row in the citable station.json
     (the schema types `component` as a free string, so nothing downstream refused it)."""
     d = rf.run_facts("run.acquired_by.author = A. Person\n"
