@@ -48,7 +48,7 @@ compass-referenced surveys without declination stamps. Field values say "declare
 "declared-azimuth"; nothing here asserts absolute geographic where the file does not prove it.
 
 GATE 2 - sign-convention quadrant check. Under e^{+iωt} with x=north/y=east, arg(Zxy) lies in the
-quadrant Q1 (0..90°) and arg(Zyx) in quadrant Q3 (-180..-90°). Per station the gate takes
+first quadrant (0..90°) and arg(Zyx) in the third quadrant (-180..-90°). Per station the gate takes
 the MEDIAN phase of each off-diagonal over the mid-band periods (central 60%, after masking
 absent/degenerate values) and:
   * BOTH medians coherently in wrong quadrants -> FAIL (a pure convention/frame flip: conjugation
