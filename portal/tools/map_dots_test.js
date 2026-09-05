@@ -7,7 +7,7 @@
 // to be: no Leaflet, no DOM, no map. Everything asserted below is therefore a real result from shipped
 // code, not from a re-implementation.
 //
-// WHAT IT WAS: the change-6 badge driver (declutter, leader tails, panes, the badge rule and its router).
+// WHAT IT WAS: the badge driver (declutter, leader tails, panes, the badge rule and its router).
 // That feature was removed and every one of those sections went with it; the removal
 // itself is pinned at the SOURCE in tests/test_map_dots.py, because a jsdom run cannot observe the absence
 // of a layer it never draws. What survives here is what the map still does: size a dot by zoom, and dim a
@@ -120,7 +120,7 @@ ok(A.hasPosition({ lat: 0, lon: 0 }) === true, "a real (0,0) is a position, not 
 ok(A.hasPosition({ lat: NaN, lon: 140 }) === false, "a NaN coordinate must never reach the map");
 ok(A.hasPosition(null) === false, "a missing station must not crash the predicate");
 
-// ---- composition with change 2 ------------------------------------------------------------------
+// ---- composition with the focus dim --------------------------------------------------------------
 // Every map object is a station dot now, so the focus dim is one rule over one kind of thing, keyed on the
 // survey. Non-focused must be dimmer, and still VISIBLE (a dim that hides them takes the national
 // context off the map).

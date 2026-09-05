@@ -119,7 +119,7 @@ function renderRecentlyAdded(){
     strip.classList.toggle("hidden",!entries.length);}
 }
 function setView(v){
-  // Stage B (selection-state isolation): navigating OFF the map ends any All-EDIs selection lens - the lens
+  // Navigating OFF the map ends any All-EDIs selection lens - the lens
   // is a map-scoped view and its rail is hidden on other views, so it must not persist. See docs: portal
   // internals, main.js.
   if(v!=="map"&&typeof restoreSelectLens==="function")restoreSelectLens();
@@ -364,7 +364,7 @@ function buildLegend(){
     `title="Show or hide ${label} stations on the map"><span class="dot" style="background:var(${v})"></span>${label}</button>`).join("");
   const small=typeof window!=="undefined"&&window.innerWidth<=760;   // body defaults collapsed on small widths
   const el=document.createElement("div");el.id="mapLegend";el.className="maplegend";
-  // The hint takes the slot a "Legend" title occupies elsewhere (the box carries no desktop title; the
+  // The hint takes the slot a "Legend" title stands in elsewhere (the box carries no desktop title; the
   // "Legend" button above is the small-width collapse control only), so the affordance is stated once,
   // where the eye lands first, without a heading the desktop layout does not have.
   el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+

@@ -88,8 +88,8 @@ def test_the_engine_half_of_the_parity_carries_the_same_vectors():
 def test_the_engine_ramp_gives_every_member_its_own_colour():
     """The property the vectors above are a witness for, asserted well past the palette's eight.
 
-    The eight-entry palette must not cycle, or the ninth member takes the first member's colour and a legend
-    could not tell two surveys apart. Distinctness is what the ramp buys; the vectors pin WHICH colours.
+    The eight-entry palette must not cycle: when it did, the ninth member took the first member's
+    colour and a legend could not tell two surveys apart. Distinctness is what the ramp buys; the vectors pin WHICH colours.
     """
     member_colours = _engine_member_colours()
     for n in (9, 12, 14, 20, 33):

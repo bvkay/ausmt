@@ -1,6 +1,6 @@
 """The export panel's handler bindings degrade instead of dying.
 
-exports.js must not bind nine handlers with unguarded document.getElementById(id).onclick= at parse
+exports.js once bound nine handlers with unguarded document.getElementById(id).onclick= at parse
 time: one missing id threw, aborted the file mid-load, and silently dropped every later binding and
 top-level assignment. The bindings must go through the guarded helper, and the disabled-state loop
 in filters.js must tolerate a missing element the same way.
@@ -41,7 +41,7 @@ def test_select_all_clears_drawn_shapes():
 
 
 def test_selection_hint_copy_is_single_sourced():
-    # The empty-state hint must not be typed twice (index.html markup default + the filters.js
+    # The empty-state hint was once typed twice (index.html markup default + the filters.js
     # ternary), so a copy edit had to touch both or they diverged. The markup owns it; filters.js
     # reads it at load.
     literal = "take everything that passes the filters."

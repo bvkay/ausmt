@@ -47,7 +47,7 @@ def _text():
 
 def test_the_usage_note_is_the_owners_words_unaltered():
     """FAILS IF the usage note is paraphrased, trimmed or restyled into different words. It states
-    what people may do with the marks, so its wording is the to set, not this page's."""
+    what people may do with the marks, so its wording is the custodian's to set, not this page's."""
     flat = re.sub(r"\s+", " ", _text())
     assert USAGE_NOTE in flat, "the usage note must appear verbatim, exactly as the brief states it"
 

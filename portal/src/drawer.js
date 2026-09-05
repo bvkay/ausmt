@@ -5,8 +5,8 @@
 // (no inline onclick): .close buttons, [data-act] card actions, [data-cite] citation copy, [data-prod]
 // product tiles. See docs: portal internals, drawer.js.
 const drawer=document.getElementById("drawer");
-// The drawer is a dialog. role + a base aria-label are set here (index.html's #drawer element is declared
-// in index.html, so the ARIA is stamped from JS); openStation/openSurvey refine the aria-label per subject.
+// The drawer is a dialog. role + a base aria-label are set here (the #drawer element is declared as
+// plain markup in index.html, so the ARIA is stamped from JS); openStation/openSurvey refine the aria-label per subject.
 // See docs: portal internals, drawer.js.
 if(drawer&&drawer.setAttribute){drawer.setAttribute("role","dialog");drawer.setAttribute("aria-label","Details");drawer.setAttribute("tabindex","-1");}
 // Focus management, mirroring plots.js's modal pattern - remember the invoking element on
@@ -39,8 +39,8 @@ let _drawerSubject=null;
 // A small section-role chip using the engine README taxonomy - "Source data",
 // "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
-// ---- two-phase boot: the loading surfaces ------------------------------------------------------ The
-// drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json -> the
+// ---- two-phase boot: the loading surfaces ------------------------------------------------------
+// The drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json -> the
 // processing/screening rows). See docs: portal internals, drawer.js.
 function hydrBlock(what){return `<div class="hydrating" role="status">Loading ${esc(what)}…</div>`;}
 function hydrFailBlock(what){return `<div class="hydrating hydrfail" role="status">Could not load ${esc(what)}.</div>`;}
@@ -628,7 +628,7 @@ function openStation(i,opts){
   if(!rehydrate)_rememberDrawerOpener();              // capture the invoking element before the rewrite
   _drawerSubject={kind:"station",i};                  // what rehydrateOpenDrawer re-renders when a gate settles
   const s=ST[i],t=tfRow(i)||[[]],m=SMETA[s.survey]||{},sc=sciRow(i);
-  // sc[SC.dim] (dimensionality) is not surfaced in the drawer screening grid: it is inferable from the
+  // The sc[SC.dim] (dimensionality) value is not surfaced in the drawer screening grid: it is inferable from the
   // phase tensor + skew, which are shown (strike/|β|/3-D-periods line below). See docs: portal internals,
   // drawer.js.
   const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
@@ -693,7 +693,7 @@ function openStation(i,opts){
   // NO SCREENING SURFACE RENDERS in the drawer: the automated indicators are not public, so there is no
   // "screening" panel and no ["screening","Screening"] TABS entry. See docs: portal internals, drawer.js.
   const filesHtml=`<div class="sechead">Related products</div>`+relatedProducts(s);
-  // Provenance: three source-data rows visible (processing software, transfer function source file+sha ·
+  // Provenance: three source-data rows visible (processing software, transfer function source file+sha,
   // source archive), then the Dataset-maturity stars, then EVERYTHING ELSE (lineage graph, full provenance
   // table, identifiers, format availability). See docs: portal internals, drawer.js.
   const _srcArchive=sourceArchiveCell(m);
@@ -1128,7 +1128,7 @@ function renderCards(){
     ? (_cardLayout==="compact"?vis.map(surveyRow).join(""):vis.map(surveyCard).join(""))
     : `<div class="emptynote">No surveys match the current search and filters. Clear the search box or the licence/type chips above to widen the results.</div>`;
   renderDiscovery(vis.length);
-  // Stage B: keep the header #nVis coherent with #surveyCount (both the discovery-filtered set) on every
+  // Keep the header #nVis coherent with #surveyCount (both the discovery-filtered set) on every
   // grid re-render - e.g. a facet toggle, which re-renders here but has no other updateCounts path.
   if(curView==="surveys"&&typeof updateCounts==="function")updateCounts();}
 // "Clear filters": drop the discovery facets (licence + data-type chips) and the
@@ -1163,7 +1163,7 @@ function drawerFitOptions(){
   if(!(w>0&&isFinite(w)))w=0;
   return {paddingTopLeft:[0,0],paddingBottomRight:[w,0]};}
 function selectSurvey(sv){
-  // Stage B (selection-state isolation): scoping the map to one survey is a TEMPORARY LENS. See docs:
+  // Scoping the map to one survey is a TEMPORARY LENS. See docs:
   // portal internals, drawer.js.
   if(typeof enterSelectLens==="function")enterSelectLens();
   tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");

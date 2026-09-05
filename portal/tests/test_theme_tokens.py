@@ -1,4 +1,4 @@
-"""Styling D+ palette pin.
+"""The AuScope Style Guide palette pin.
 
 The five surface/accent tokens live in a :root block that is DUPLICATED verbatim across index.html,
 about.html and add-survey.html. This pins the D+ target values AND that the three copies agree, so a

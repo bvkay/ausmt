@@ -27,9 +27,9 @@ function passesCore(s){
   // Two-phase boot: s.q comes from sci.json, a PHASE 2 product. See docs: portal internals, filters.js.
   if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
   if(!passesYearRange(s))return false;
-  // "Downloadable here" is the s.ediAvail licence predicate: the flag behind the Data available
-  // dropdown's "tf" option and the one the selection exports read for their not-included honesty.
-  // See docs: portal internals, filters.js.
+  // "Downloadable here" is the s.ediAvail licence predicate, the same flag the selection exports
+  // read for their not-included honesty. Its CONTROL is the discovery-bar facet (drawer.js), so the
+  // map filters on it wherever a reader sets it. See docs: portal internals, filters.js.
   if(typeof surveyFacetOn==="function"&&surveyFacetOn("dl")&&!s.ediAvail)return false;
   // Data available: the single-select TIME-SERIES level chooser in Browse. See docs: portal internals,
   // filters.js.
@@ -52,7 +52,7 @@ function surveyMatchesSearch(sv){
   if(!q)return true;
   const m=(typeof SMETA!=="undefined"&&SMETA[sv])||{};
   return [sv,m.org,m.region,m.blurb].some(x=>String(x||"").toLowerCase().includes(q));}
-// Stage B (selection-state isolation): the Surveys CATALOGUE is filtered ONLY by its own discovery
+// The Surveys CATALOGUE is filtered ONLY by its own discovery
 // controls, the #surveySearch box (surveyMatchesSearch) plus the discovery facets (surveyPassesFacets,
 // applied by renderCards / updateCounts). See docs: portal internals, filters.js.
 function surveyVisible(sv){return surveyMatchesSearch(sv);}
@@ -203,7 +203,8 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
   applyTreeVisibility();   // default = everything expanded; normalises caret glyphs on (re)build
 }
 
-// static control wiring (registrations only; functions resolved at event time) The SINGLE data-type state
+// static control wiring (registrations only; functions resolved at event time)
+// The SINGLE data-type state
 // path. See docs: portal internals, filters.js.
 document.getElementById("typeBoxes").addEventListener("change",()=>{
   if(typeof syncLegendTypes==="function")syncLegendTypes();
@@ -282,7 +283,7 @@ function scopeStations(){return selected.size?ST.filter(s=>selected.has(s.i)):vi
 // available, year, tree); Select & download is the map-selection box and the Download/Metadata blocks
 // (advanced). See docs: portal internals, filters.js.
 let sidebarMode="browse";
-// Stage B (selection-state isolation): the All-EDIs / survey "Download" tile (selectSurvey, drawer.js)
+// The All-EDIs / survey "Download" tile (selectSurvey, drawer.js)
 // enters Select & download mode and scopes the MAP by checking ONLY its own survey in the tree. See docs:
 // portal internals, filters.js.
 let _selLens=null;                 // Array<[surveyValue, wasChecked]> awaiting restore; null = no lens live
@@ -296,7 +297,7 @@ function restoreSelectLens(){
   tree.querySelectorAll('input[value]').forEach(c=>{if(c.value in want)c.checked=want[c.value];});
   refresh();}
 function setSidebarMode(mode){
-  // Stage B: leaving Select & download for Browse ends any All-EDIs lens - restore the survey checkboxes
+  // Leaving Select & download for Browse ends any All-EDIs lens - restore the survey checkboxes
   // the tile scoped so the Browse pane shows the visitor's own tree again, never the single-survey scoping
   // the tile applied. See docs: portal internals, filters.js.
   if(mode==="browse"&&sidebarMode==="select")restoreSelectLens();
@@ -320,9 +321,9 @@ const yearFrom=document.getElementById("yearFrom"),yearTo=document.getElementByI
 if(yearFrom)yearFrom.addEventListener("input",refresh);
 if(yearTo)yearTo.addEventListener("input",refresh);
 
-// Availability > Transfer functions lives in the Browse "Data available" single-select (#availSel,
-// its "tf" option) and nowhere else: there is no #tfAvail checkbox. See docs: portal internals,
-// filters.js.
+// Availability > Transfer functions has no control of its own: there is no #tfAvail checkbox and
+// #availSel carries no "tf" option. The PREDICATE s.ediAvail outlives it - passesCore above reads
+// it, and so do the selection exports. See docs: portal internals, filters.js.
 
 // No "Go to place" control exists: no goToPlace(), no #goPlace input and no AU_PLACES list, here or
 // in index.html or state.js.

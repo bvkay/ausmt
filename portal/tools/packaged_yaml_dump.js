@@ -88,7 +88,7 @@ function fillRequired(win, slug) {
   $("m_auth").checked = true; $("m_licdecl").checked = true; $("m_locconf").checked = true;
 }
 
-// Every scenario the module's new questions can produce, driven through the LIVE DOM.
+// Every scenario the form's new credit questions can produce, driven through the LIVE DOM.
 const SCENARIOS = {
   // The bare case: only the essentials. Proves the seeded custodian row alone validates.
   "packaged-bare": () => {},

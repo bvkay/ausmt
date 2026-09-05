@@ -146,8 +146,8 @@ let HOME_BOUNDS=null,_fitWasDegenerate=false;
 // synthetic sizes (the headless map's getSize() is a Proxy, so it reads degenerate).
 function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeof size.y==="number"&&size.x>0&&size.y>0);}
 // PURE: the corrector fires ONLY when the user has not taken control (never fight a deliberate view) AND the
-// primary fit was degenerate (so a healthy fit, and any later programmatic fit such as a collection
-// framing - is left untouched). Split out so the no-fight-with-user decision is unit-testable.
+// primary fit was degenerate (so a healthy fit - and any later programmatic fit, such as a
+// collection framing - is left untouched). Split out so the no-fight-with-user decision is unit-testable.
 function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // a withheld-coordinate station has no position - no (0,0) phantom marker, no crash

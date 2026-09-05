@@ -15,7 +15,7 @@ Each assertion states its failure criterion:
   * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
     (nVis/nSel/nTot). Those three report the current map's filter and selection state, and About has
     neither. Non-vacuous: index.html HAS these ids, so a naive copy-the-whole-header would trip this.
-    NARROWED by the API docs section, deliberately: the ban does not extend to the class "counts",
+    NARROWED by the API docs section, deliberately: the ban once extended to the class "counts",
     on the reasoning that a static page has no counts to state. That reasoning covered app state only.
     About now carries a CORPUS-totals block (total stations / total surveys, read from the catalogue at
     load time) in index's right zone, reusing index's .counts styling so the two headers render
@@ -274,7 +274,7 @@ def _header_shape(path):
 
 
 def test_header_parity_about_matches_index():
-    """The api-docs pass. About's header must NOT differ from the SPA's in the two visible ways it could: its primary nav
+    """The api-docs pass. About's header once differed from the SPA's in two visible ways: its primary nav
     items carried none of index's ids, and its right zone was empty while index's carried a mono stats
     block. Both are now aligned, and this pins the alignment structurally (parsed DOM, so comments and
     raw-text coincidences cannot pass it).

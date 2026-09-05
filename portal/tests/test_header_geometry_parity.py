@@ -200,7 +200,7 @@ def test_the_two_headers_measure_text_in_one_font_stack():
 
 # --------------------------------------------------------------------------- the identity mark
 #
-# Brand-assets workflow the header identity is the AusMT mark on EVERY surface, replacing the
+# The header identity is the AusMT mark on EVERY surface, replacing the
 # AuScope-derived symbol the SPA carried alone. The relationship with AuScope stays explicit in
 # footer and About content; it is not embedded in the lockup.
 #

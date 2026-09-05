@@ -8,7 +8,7 @@ the same defect the `.meta td a` rule already fixed for the summary tables, and 
 
 WHAT EACH LAYER PROVES (the three are deliberately different failure modes, not three spellings of one):
 
-  * here, test_data_level_link_rules_reuse_the_established_styling - the SHEET declares the styling for
+  * here, the first pin below - the SHEET declares the styling for
     all three containers, at the value the portal's established link rules already use (read out of the
     sheet, never hard-coded here: the module's instruction was reuse, not a new colour), with :visited stated
     explicitly. FAILS IF a rule is missing, if someone invents a second accent, or if :visited is left to

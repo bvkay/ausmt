@@ -85,7 +85,7 @@ function ptSvg(t){const per=t[T.periods];if(!per.length||!t[T.pt_min].some(v=>v!
    `<rect x="${PADL}" y="2" width="8" height="8" fill="#3B82C4"/><text x="${PADL+11}" y="9" fill="#8FA3B0" font-size="10">β≤−3</text><rect x="${PADL+48}" y="2" width="8" height="8" fill="#D8CFC0"/><text x="${PADL+59}" y="9" fill="#8FA3B0" font-size="10">|β|&lt;3</text><rect x="${PADL+96}" y="2" width="8" height="8" fill="#C44B3B"/><text x="${PADL+107}" y="9" fill="#8FA3B0" font-size="10">β≥3</text></svg>`;}
 
 // Plot kind registry. Each kind has a heading, an always-visible subline (the convention / axis-key text
-// that must survive VISIBLY, not hover-only, for the arrows), and an svg builder that takes only the TF
+// that must survive VISIBLY for the induction arrows, never hover-only), and an svg builder that takes only the TF
 // row. See docs: portal internals, plots.js.
 const PLOT_META={
   rho:  {title:"apparent resistivity ρ (Ω·m)", sub:"", svg:rhoSvg},

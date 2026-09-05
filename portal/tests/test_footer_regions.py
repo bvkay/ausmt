@@ -63,7 +63,7 @@ Each assertion states its failure criterion:
     portal/index.html's by a character, once the token layer is resolved to the colours it carries.
     The rule above held the box across the five token surfaces and could not reach 404.html or the
     generated tier, which write the same colours as literals; those two carried a rule set of their
-    own in rem units with no bottom padding, and that is what the brief saw as the footers sitting
+    own in rem units with no bottom padding, and that is what showed as the footers sitting
     differently and aligning differently between the Map, the hubs and About. Measured in Chrome
     before this pin, at 2560px the centre sentence's midpoint sat 245.55px left of the viewport's on
     the portal and 274.66px left of it on the generated tier; the footer stood 48.75px on one tier
@@ -122,7 +122,7 @@ _EXTERNAL_NAV = ("https://www.auscope.org.au",)
 # NO FOOTER CARRIES A MAP CREDIT, on any surface. The basemap's attribution is a licence obligation
 # (OpenStreetMap data under ODbL, tiles rendered from Protomaps' build) and it is met where the map
 # is: in the map's own attribution control, collapsed behind an (i) in the corner. It cannot be met
-# in the footer, for two reasons the rule is on.
+# in the footer, for the two reasons below.
 #
 # ONE: the footer is the same box on seven surfaces, and a line only the SPA carries makes it a
 # different box there. Measured in Chrome with the credit in place, the SPA's footer stood 90.80px
@@ -201,7 +201,7 @@ def _outside_queries(text):
 def _index_footer():
     """index.html's <footer> with HTML comments stripped, so prose inside it cannot satisfy a pin.
 
-    NOTHING ELSE IS STRIPPED. Removing the SPA's basemap credit from this footer before any
+    NOTHING ELSE IS STRIPPED. This footer once had the SPA's basemap credit removed before any
     comparison, which is what let one surface carry a line the other six did not while every
     "identical everywhere" pin still passed. The credit is gone from every footer, so the readers
     compare what is there."""
@@ -347,7 +347,7 @@ def test_the_committed_lockup_is_the_brand_kit_file_unaltered():
 # They were the drift the rule did not reach: each carried its own footer, and the "About this
 # build" the old footer pointed at landed on one of them.
 #
-# 404.html is not a difference, though About this build can only be a link there: Caddy
+# 404.html was once the ONE difference, because About this build could only be a link there: Caddy
 # rewrites any unmatched path to that document, so every link it carries is root-absolute, and it
 # loads no script and so could never fill a version chip. With Releases and About this build out of
 # the footer, that difference is gone and all six documents carry the identical three regions; the
@@ -702,7 +702,7 @@ _CENTRE_WEIGHT = "font-weight:700"
 # 1919x325, so the width follows from the height. The brief asked for it 10 percent taller: it stood
 # 28.00px (measured, matching the declaration) and now stands 30.80px, which carries the width from
 # 165.33px to 181.86px. The number is written exactly, not rounded: a rounded 31px is a different
-# ratio, and the ratio is what the rule is.
+# ratio, and the ratio is what the rule fixes.
 LOCKUP_HEIGHT = "height:30.8px"
 
 _FOOTER_RULE = r"(?m)^\s*footer\{([^}]*)\}"
@@ -1070,7 +1070,7 @@ def test_the_centre_zone_holds_the_same_markup_on_every_surface():
     the six portal documents and neither on the generated tier, which predates this rule and is
     held as it stands by the two region pins above; the right zone's lockup src is necessarily
     written differently by a page served from the root and a page served from /surveys. Widening
-    this pin to those two would restate what they already hold and would fail on a difference the
+    this pin to those two would restate what they already hold and would fail on a difference that
     has not been settled.
 
     FAILS if any surface adds, drops or reorders anything inside the acknowledgement: a second

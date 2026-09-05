@@ -20,7 +20,7 @@ served EDI artifact for the station - and render openStation() for each:
   * REAL-ENDPOINT PRESENCE - FAILS if the station's station.json (templated with the station's OWN
     slug and id), the download index /data/manifest.json, or the docs pointer link are missing. This
     is the non-vacuous half: a build that merely deleted the API section would pass the absence pin
-    and fail here. Public-surface audit, the rule: the only public metadata
+    and fail here. Public-surface audit: the only public metadata
     contracts are mtcat.json and station.json; manifest.json is the download index; everything else
     under /data is portal-internal. So the section must NOT advertise /data/surveys.json (no
     contract; superseded by survey-metadata.json), /data/products/manifest.json (the retired twin of
@@ -182,8 +182,8 @@ def test_drawer_edi_line_absent_for_an_embargoed_station(tmp_path):
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 @pytest.mark.parametrize("access", ["open", "embargoed", "metadata_only"])
 def test_drawer_never_advertises_dimensionality_and_always_lists_station_json(tmp_path, access):
-    """dimensionality.json is served alongside station.json and is NOT a contract, so the API section never advertises it, for any access level. It must not be listed for
-    an open survey only, because the engine returns before writing it for a non-served survey
+    """dimensionality.json is served alongside station.json and is NOT a contract, so the API section
+    never advertises it, for any access level. It was listed for an open survey only, because the engine returns before writing it for a non-served survey
     (build_portal.py _write_station_products, "no dimensionality.json for a non-served survey"); the
     open-survey row is gone too now.
 

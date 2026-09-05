@@ -410,7 +410,7 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
     be unreachable from the site unless the Documentation section carried the route.
 
     FAILS if the sentence or its link is missing, and FAILS if it grows a version chip: the route is
-    what section 8 inherited, not the running build's identity, which the rule is off the page."""
+    what section 8 inherited, not the running build's identity, which the rule keeps off the page."""
     docs = _section("docs")
     assert 'href="releases.html"' in docs, (
         "section 8 must link releases.html; it is the page's one entry point")
@@ -432,7 +432,7 @@ def test_section_eight_keeps_the_only_route_to_the_releases_page():
 # reader sees and part of what the contents box promises, so it is pinned WITH the title rather than
 # beside it.
 #
-# The page is eight sections and nothing else. "This build" must not close it WITHOUT a number, as a
+# The page is eight sections and nothing else. "This build" once closed it WITHOUT a number, as a
 # colophon rather than a ninth answer to "what is this site"; it is not on the page. Its two
 # paragraphs that were not build identity moved into the numbered sections that own their subjects,
 # and the route to the citable releases moved into section 8, so nothing the colophon carried is

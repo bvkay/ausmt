@@ -27,7 +27,7 @@ FAILS IF:
   * LP stops being teal-family (a rewrite that "fixed" separability by moving the wrong one).
 
 The colour maths is stdlib-only on purpose (no new dependency for a four-colour check): sRGB -> linear ->
-XYZ -> CIELAB, CIEDE2000, and the Vienot 1999 LMS-projection dichromat simulation.
+XYZ(D65) -> CIELAB, CIEDE2000, and the Vienot 1999 LMS-projection dichromat simulation.
 """
 import math
 import re
@@ -45,8 +45,8 @@ TYPES = ("LPMT", "BBMT", "AMT", "GDS")
 TOKEN_OF = {"LPMT": "--lpmt", "BBMT": "--bbmt", "AMT": "--amt", "GDS": "--gds"}
 
 # Stated floors. PAIR_FLOOR is the palette-wide invariant established and this module preserves (the
-# binding pair is AMT/GDS at 21.1, untouched here). LP_BB_FLOOR is this module's own promise: the pair the
-# reported must stay far clear of the general floor, not merely legal. LP_BB_DEUTAN_FLOOR is the
+# binding pair is AMT/GDS at 21.1, untouched here). LP_BB_FLOOR is this module's own promise: the
+# reported pair must stay far clear of the general floor, not merely legal. LP_BB_DEUTAN_FLOOR is the
 # same promise under simulated deuteranopia, where the old pair collapsed to 15.3.
 PAIR_FLOOR = 21.0
 LP_BB_FLOOR = 30.0
@@ -193,7 +193,8 @@ def test_the_two_palette_authorities_agree():
 def test_the_static_pages_draw_the_same_palette_as_the_portal():
     """The THIRD consumer, added once the static entity pages started drawing type-coloured maps.
 
-    Without it the engine's _TYPE_COL can keep a superseded hex after this file's palette moves, so a
+    This is the pin the BBMT drift proved was missing. The engine's _TYPE_COL kept a superseded hex
+after this file's palette moved, so a
     reader who opens a survey page and then the same survey in the portal sees two different blues for
     one data type; and while an ENGINE test asserts the stale hex as a literal, applying the measured
     value there fails CI. A palette drift that CI defends is the precise failure a parity pin catches.
@@ -246,7 +247,7 @@ def test_lp_bb_pair_is_separated_by_luminance_not_hue_alone():
     assert abs(c_lp - c_bb) >= 30.0, (
         f"LP C*={c_lp:.1f} vs BB C*={c_bb:.1f}: the pair must also differ in saturation, not hue alone.")
     # LP stays teal-family: a future edit must not "fix" separability by moving the established fabric
-    # colour instead of the one the brief asked to move.
+    # colour instead of the one the review asked to move.
     assert 180.0 <= h_lp <= 240.0, f"LPMT must stay teal-family (hue 180-240 deg), got {h_lp:.1f} deg"
 
 

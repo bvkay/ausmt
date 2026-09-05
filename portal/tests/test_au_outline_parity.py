@@ -1,7 +1,7 @@
 """engine/extract/_au_outline.py and portal/vendor/au-outline.js are ONE coastline, in two languages.
 
 Both files say they carry the same geometry so the survey minimap, the link-preview cards and the SPA
-collections footprint draw one map. That claim must not rest on two hand-maintained coordinate lists
+collections footprint draw one map. That claim once rested on two hand-maintained coordinate lists
 and a comment asking the reader to believe it. Both are now GENERATED in a single pass by
 engine/extract/_au_outline_build.py from Natural Earth, and these pins hold the arrangement:
 

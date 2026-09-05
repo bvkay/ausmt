@@ -241,7 +241,7 @@ function assertControl(win, mapId, expectedCredit) {
     `#${mapId}: the glyph is one letter, so it carries a label that says what it opens`);
 
   // NO LEAFLET FLAG AND NO PREFIX. The credit is a licence term; the library's name beside it is a
-  // courtesy that was asked to be rid of.
+  // courtesy the portal does not carry.
   const text = p.credit.textContent || "";
   ok(!/Leaflet/.test(text), `#${mapId}: the control must print no Leaflet prefix, got ` + JSON.stringify(text));
   ok(!p.credit.querySelector(".leaflet-attribution-flag"),

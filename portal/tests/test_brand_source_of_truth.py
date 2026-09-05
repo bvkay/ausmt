@@ -14,7 +14,7 @@ that file. These pins hold that arrangement:
     rasterised, not the first two: the coastline carries islands as well as the mainland and
     Tasmania, and a ring this pin skipped would be land the mark could omit without failing.
   * Tasmania survives the rasterisation. It is three dots at this pitch, close enough to the count a
-    coarser lattice would round away, and an Australia without Tasmania is a defect the brief would
+    coarser lattice would round away, and an Australia without Tasmania is a defect a reader would
     see before anyone else.
   * the palette is FOUR declared hex stops with their derivation recorded, and every dot colour is the
     ramp evaluated at that dot's own column. No dot may carry a colour off the ramp.

@@ -1,6 +1,6 @@
 """The programmatic-fetch documentation, and the death of the fictional /api tier.
 
-About's seventh answer must not carry the three worked patterns: whole-survey bundles, a
+About's seventh answer once carried three worked patterns: whole-survey bundles, a
 manifest-driven per-station loop and a bounding-box fetch. About is now the two-minute front door, so it
 keeps a ten-line quickstart and the bundle forms, and the two deep patterns moved to the docs site's API
 reference (docs/docs/interoperability/api-reference.md, "Fetching data today"). Every assertion those
@@ -242,7 +242,7 @@ def _code_blocks(fragment):
 def test_docs_document_the_bundle_forms_with_a_worked_command():
     """The three bundle forms plus a worked command that actually pulls bytes.
 
-    REFERENCE-GRADE: the command must not hard-code https://ausmt.au. The docs are
+    REFERENCE-GRADE: the command once hard-coded https://ausmt.au. The docs are
     host-relative throughout, and the runnable examples take that root
     from a BASE variable. The pin moved with the convention; what it guards is unchanged, namely that
     the subsection carries a command a reader can run rather than only a path listing."""
