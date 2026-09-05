@@ -1,4 +1,4 @@
-"""MTCAT 2.0 emission semantics, implemented at the source (the ratified migrate_12_to_20
+"""MTCAT 2.0 emission semantics, implemented at the source (the migrate_12_to_20
 transform IS the emitter-change specification; AusMT_2026/schemas-draft/run-fixture-suite.py).
 
 The 2.0 breaking list, each pinned here against the real emitter:
@@ -7,8 +7,8 @@ The 2.0 breaking list, each pinned here against the real emitter:
     never emitted null; the ONE defined null is the paired stations[].latitude/longitude (position
     not published). Relationship rows carry no null-valued keys either (the 110-error class).
   * formats is emitted only when at least one format is actually distributed (never []); an
-    embargoed/withheld survey OMITS the key (owner unified review finding 62: [] would falsely
-    assert that no formats are KNOWN when the holdings exist and are merely withheld).
+    embargoed/withheld survey OMITS the key ([] would falsely assert that no formats are KNOWN
+    when the holdings exist and are merely withheld).
   * sources[]/changes are never emitted: a sources row maps to a related_identifiers row (spec
     6.9); a row carrying statement/licence/retrieved/profile content is a HARD STOP (that content
     must be captured in survey-metadata, not silently deleted).
@@ -30,7 +30,7 @@ And the 2.0 additions:
     A withheld state omits bbox/centroid (they would republish the withheld footprint).
 
 stations[].has_time_series and surveys[].n_stations_time_series_verified project from the
-verified-resource register stamp (the THREDDS lane): true-or-absent, count present iff positive.
+verified-resource register stamp (the THREDDS workflow): true-or-absent, count present iff positive.
 """
 import sys
 import types
@@ -146,7 +146,7 @@ def test_sources_and_changes_are_never_emitted_and_sources_rows_map_to_related_i
 
 def test_sources_row_with_rights_content_is_a_hard_stop():
     """A sources row carrying statement/licence/retrieved/profile content must HARD STOP the build
-    (per the ratified transform): that content moves to survey-metadata, never silently deleted."""
+    (per the transform): that content moves to survey-metadata, never silently deleted."""
     import pytest
     meta = {"Demo Survey": dict(_BASE, sources=[
         {"identifier": "10.99999/upstream", "statement": "Attribution wording to reproduce."}])}
@@ -203,7 +203,7 @@ def test_subjects_pass_through_verbatim_and_absent_means_absent():
 # ---------------------------------------------------------------- sample_rates_hz
 
 def test_sample_rates_canonicalised_from_float_artefacts():
-    """The float-artefact fixture (RED-proof mandated by the ratified plan): binary-float noise on
+    """The float-artefact fixture (RED-proof mandated by the plan): binary-float noise on
     the same physical rate collapses under round-to-6-significant-figures; the result is deduped
     and sorted ascending."""
     meta = {"Demo Survey": dict(_BASE)}

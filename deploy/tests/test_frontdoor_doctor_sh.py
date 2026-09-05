@@ -1,13 +1,13 @@
-"""VPS front-door doctor (deploy/frontdoor/doctor.sh, ops-hardening O4 + O3 zombie kit).
+"""VPS front-door doctor (deploy/frontdoor/doctor.sh, ops-hardening + zombie kit).
 
 Black-box over `sh`. Every external command the doctor uses is overridable by an AUSMT_DOCTOR_* env var,
 so the test points each at a tiny stub and drives the real report/exit/hash-compare/zombie-grouping logic
 with no docker/tailscale/VPS. The load-bearing pins: the report is one labelled line per check, the exit
-is non-zero iff any check FAILs, the config check PASSES on a hash match and FAILS on a mismatch (the O1
+is non-zero iff any check FAILs, the config check PASSES on a hash match and FAILS on a mismatch (the
 stale-config trap), and the zombie kit NAMES the top leaker by parent PID.
 
 Skips on Windows / no POSIX sh (platform reason, same as the reconcile/preflight suites); RUNS with
-nothing skipped on the gateway-ci ubuntu lane, so the skip tripwire needs no allow entry.
+nothing skipped on the gateway-ci ubuntu workflow, so the skip tripwire needs no allow entry.
 """
 from __future__ import annotations
 
@@ -179,8 +179,8 @@ def test_report_all_pass_is_labelled_and_exits_zero(tmp_path):
 
 
 def test_config_hash_match_passes(tmp_path):
-    """O1 trap, green side: when the container's mounted Caddyfile hashes EQUAL to the repo file, the
-    config check PASSES. Proves the FAIL pin below is non-vacuous."""
+    """Stale-config trap, green side: when the container's mounted Caddyfile hashes EQUAL to the repo
+    file, the config check PASSES. Proves the FAIL pin below is non-vacuous."""
     cf = _caddyfile(tmp_path)
     env = _env(tmp_path, cf, FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest())
     r = _run(env, "report")
@@ -189,9 +189,9 @@ def test_config_hash_match_passes(tmp_path):
 
 
 def test_config_hash_mismatch_fails_and_exits_nonzero(tmp_path):
-    """O1 trap, red side: when the RUNNING container's Caddyfile hash DIFFERS from the repo file, the
-    config check must FAIL and the whole run must exit non-zero (so it can gate an alert). FAILS IF a
-    drifted running config is reported green."""
+    """Stale-config trap, red side: when the RUNNING container's Caddyfile hash DIFFERS from the repo
+    file, the config check must FAIL and the whole run must exit non-zero (so it can gate an alert).
+    FAILS IF a drifted running config is reported green."""
     cf = _caddyfile(tmp_path)
     env = _env(tmp_path, cf, FAKE_HASH="deadbeef" * 8)
     r = _run(env, "report")
@@ -202,7 +202,7 @@ def test_config_hash_mismatch_fails_and_exits_nonzero(tmp_path):
 
 
 def test_zombie_kit_names_top_leaker_by_parent(tmp_path):
-    """O3: the zombie kit must count Z-state procs and group them by PARENT PID with the heaviest parent
+    """The zombie kit must count Z-state procs and group them by PARENT PID with the heaviest parent
     at the top (the named leaker). Fixture: ppid 4242 has two zombies, ppid 9001 has one, so 4242 must
     lead. FAILS IF the kit does not aggregate by parent or does not surface the top parent first."""
     cf = _caddyfile(tmp_path)
@@ -215,7 +215,7 @@ def test_zombie_kit_names_top_leaker_by_parent(tmp_path):
     assert grouped, f"expected grouped-by-parent lines:\n{r.stdout}"
     assert "4242" in grouped[0], f"the heaviest parent (4242, 2 zombies) must lead:\n{r.stdout}"
     assert "leaky-parent" in grouped[0], "the leaker's command line should be named"
-    assert "init: true" in r.stdout, "the kit must list the container-PID-1 reaping fix"
+    assert "init: true" in r.stdout, "the kit must list the container PID-1 reaping fix"
 
 
 def test_unknown_subcommand_exits_2(tmp_path):
@@ -237,7 +237,7 @@ def test_upstream_down_fails(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Canonical-name lane: the legacy-name legs (certificate for BOTH names; the legacy 301; skip-clean).
+# Canonical-name workflow: the legacy-name legs (certificate for BOTH names; the legacy 301; skip-clean).
 # --------------------------------------------------------------------------------------------------
 def _hash_env(tmp_path, cf, **extra):
     return _env(tmp_path, cf, FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest(), **extra)
@@ -365,7 +365,7 @@ def test_config_check_agrees_with_the_installers_rendering(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Path-URL contract lane (2026-08-18): the /surveys/<slug> 301 leg.
+# Path-URL contract workflow: the /surveys/<slug> 301 leg.
 # --------------------------------------------------------------------------------------------------
 def test_pathurl_leg_passes_on_the_contract_301(tmp_path):
     """GREEN side (proves the FAIL pins below are non-vacuous): with the edge answering the pinned
@@ -488,9 +488,9 @@ def test_pathurl_leg_probes_the_pinned_slug_over_https(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# Time-series hand-off routes (THREDDS lane): the ts-routes leg. Three facts, one leg - the mounted
+# Time-series hand-off routes (THREDDS workflow): the ts-routes leg. Three facts, one leg - the mounted
 # table hashes equal to the repo copy, an OPEN route 302s to the table's own NCI Location, and a route
-# the table does NOT name 404s. The last one is the R5 suppression, so it is a FAIL, not a WARN.
+# the table does NOT name 404s. The last one is the suppression, so it is a FAIL, not a WARN.
 # --------------------------------------------------------------------------------------------------
 def _work(tmp_path: Path, label: str) -> Path:
     """A fresh root per doctor run: _env builds its stub bindir once per directory."""
@@ -533,7 +533,7 @@ def test_ts_routes_leg_warns_on_a_survey_the_table_could_not_resolve(tmp_path):
 
 
 def test_ts_routes_leg_fails_on_a_stale_mounted_table(tmp_path):
-    """THE O1 TRAP, extended to the ACCESS DECISION. Check 2 hash-compares only the Caddyfile, so a
+    """THE STALE-CONFIG TRAP, extended to the ACCESS DECISION. Check 2 hash-compares only the Caddyfile, so a
     route table that drifted on the VPS (an old copy, a hand-edit) would otherwise serve unnoticed -
     and a stale table is a stale suppression, not just stale config. FAILS IF a drifted table is
     reported green."""
@@ -558,7 +558,7 @@ def test_ts_routes_leg_fails_when_an_open_route_does_not_hand_off(tmp_path):
 
 
 def test_ts_routes_leg_fails_when_an_unlisted_route_resolves(tmp_path):
-    """THE R5 PIN. A path the table does not name must produce NO Location: the map's `default ""` is
+    """THE SUPPRESSION PIN. A path the table does not name must produce NO Location: the map's `default ""` is
     the suppression, so anything but a 404 there means a route resolved that no register published.
     FAILS IF the leg tolerates a 200, a 302 or a soft redirect on an unlisted path."""
     for code in ("302", "200"):
@@ -600,8 +600,8 @@ def test_ts_routes_leg_skips_cleanly_when_unreachable_and_warns_with_no_table(tm
 
 
 def test_tailnet_path_direct_passes_and_derp_fails(tmp_path):
-    """The relay tripwire (2026-08-28 diagnosis: the VPS-box path silently regressed to DERP Sydney,
-    with multi-second TTFB outliers and relay throughput caps). A direct pong PASSES; a pong `via
+    """The relay tripwire: the VPS-box path can silently regress to a DERP relay, with multi-second
+    TTFB outliers and relay throughput caps. A direct pong PASSES; a pong `via
     DERP(...)` must FAIL the run and name both the relay and the remediation. FAILS IF the leg is
     missing, mislabelled, or a relayed path exits zero."""
     ok = _work(tmp_path, "direct")

@@ -1,6 +1,6 @@
-"""about.html carries the SAME header/footer chrome as index.html (fix/about-uniform-chrome).
+"""about.html carries the SAME header/footer chrome as index.html.
 
-The owner's ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and
+The ask: About must wear the portal's three-zone header (brand / centre nav / right zone) and
 the site's one footer, so chrome is uniform across pages. These are STRUCTURAL assertions parsed
 from the real DOM (stdlib html.parser, so no jsdom / node dependency and no substring-vs-comment false
 positives — HTML comments are not surfaced as elements by the parser).
@@ -15,7 +15,7 @@ Each assertion states its failure criterion:
   * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
     (nVis/nSel/nTot). Those three report the current map's filter and selection state, and About has
     neither. Non-vacuous: index.html HAS these ids, so a naive copy-the-whole-header would trip this.
-    NARROWED by the api-docs lane, deliberately: the ban used to extend to the class "counts" as well,
+    NARROWED by the API docs section, deliberately: the ban once extended to the class "counts",
     on the reasoning that a static page has no counts to state. That reasoning covered app state only.
     About now carries a CORPUS-totals block (total stations / total surveys, read from the catalogue at
     load time) in index's right zone, reusing index's .counts styling so the two headers render
@@ -23,12 +23,12 @@ Each assertion states its failure criterion:
     the half of the old assertion that was actually about honesty; the class ban was about styling.
   * NO version chip, anywhere. FAILS if any element carrying data-ver-chip survives on any of the
     four documents. The chip was the last of the About-this-build popover's copy: the popover left
-    every footer with the one-footer ruling, the chip followed it into about.html's #build section,
-    and the owner has now deleted that section too. Zero on every surface, held from both ends: the
-    attribute is gone and so is the version.js load that filled it, on EVERY document the portal
-    ships rather than on about.html alone. A script whose whole job is to fill an element no page
-    carries is a request that changes nothing a reader can see, and a page that still loads it reads
-    as a page that still has a chip.
+    every footer with the one-footer rule, the chip followed it into about.html's #build section,
+    and that section is deleted too. Zero on every surface, held from both ends: the attribute is
+    gone, and so is the script that filled it: no page loads it and the tree does not ship it. A
+    script whose whole job is to fill an element no page carries reaches no reader.
+  * every page script the tree ships is loaded by at least one page, and every script a page
+    loads is one the tree ships. FAILS in either direction.
 """
 import re
 from html.parser import HTMLParser
@@ -39,6 +39,9 @@ ABOUT = ROOT / "about.html"
 INDEX = ROOT / "index.html"
 ADD = ROOT / "add-survey.html"
 RELEASES = ROOT / "releases.html"
+# The scripts this repository authors under vendor/: the coastline the build generates. A
+# third-party library there is somebody else's file and is not held to being loaded.
+AUTHORED_VENDOR_SCRIPTS = ("vendor/au-outline.js",)
 
 
 class _Collector(HTMLParser):
@@ -154,8 +157,8 @@ def test_about_has_no_live_counts_elements():
 
 def test_no_portal_document_carries_a_ver_chip():
     """FAILS if a version chip survives on any of the four documents. about.html held the last one;
-    with its #build section deleted there is no chip on the site, which is what makes the version.js
-    load below dead code rather than a spare."""
+    with its #build section deleted there is no chip on the site, which is what made the script
+    that filled one a file no page had a use for."""
     for path in (ABOUT, INDEX, ADD, RELEASES):
         chips = [a for (tag, a, _inh) in _parse(path) if "data-ver-chip" in a]
         assert not chips, (
@@ -164,34 +167,24 @@ def test_no_portal_document_carries_a_ver_chip():
 
 
 def test_about_references_no_nonexistent_federation_doc():
-    """C22 citation honesty (2026-07-07). FAILS if about.html references FEDERATION.md — no such file
-    exists anywhere in the repository (verified repo-wide before this test was written), so the pre-C22
-    line 236 ("see the MTCAT v1.0 specification and FEDERATION.md in the project repositories") pointed
-    readers at a fabricated document. Chief-architect ruling: REMOVE the claim, do not repoint (federation
-    is documented as a property of MTCAT itself, and docs/docs/developer/data-files.md describes
-    mtcat.json as the discovery/federation document). UX6 Wave F (#17): the restructured About now DOES link
-    docs-site pages (the "Detailed documentation" answer points at real mkdocs pages, incl. the MTCAT page),
-    but the fabricated FEDERATION.md filename must still never reappear here — that is what this guards.
+    """Citation honesty. FAILS if about.html names FEDERATION.md: no such file exists anywhere in the
+    repository, so the reference sends a reader after a document that is not there. Federation is a
+    property of MTCAT itself and docs/docs/developer/data-files.md describes mtcat.json as the
+    discovery and federation document, so the claim is stated rather than repointed at a file name.
 
-    Raw-text check ON PURPOSE (unlike this module's parsed-DOM tests): even a commented-out reference is
-    a stale claim waiting to be resurrected, and the parser drops comments. The companion assertion pins
-    the HONEST half of the sentence: the spec reference must SURVIVE the removal, so an over-deletion also
-    fails here.
+    Raw-text check ON PURPOSE (unlike this module's parsed-DOM tests): a commented-out reference is
+    still a claim waiting to be resurrected, and the parser drops comments. The companion assertion
+    pins the HONEST half of the sentence: the spec reference must SURVIVE the removal, so an
+    over-deletion fails here too.
 
-    MTCAT 1.2 fix round: the over-deletion pin used to be the literal string "MTCAT v1.0". That was a
-    VERSION NUMBER doing a link's job, and it went stale the moment the served schema moved past 1.0 (it
-    was already wrong at 1.1). It is now pinned to the docs-site URL the bullet actually links, which is
-    what a reader needs and which does not rot on a schema bump. The version a consumer should trust is
-    the one the document declares about itself, never a number typed into this page.
-
-    Docs-consolidation round: the pinned URL moved from /data-model/mtcat/ to
-    /reference/mtcat-schema/. The two pages were a stub and its own reference, saying the same thing
-    twice; the stub was merged into the reference under the one-owner-per-topic pass, and About's
-    bullet now points at the surviving owner. The pin is still a URL rather than a version, for the
-    reason given above."""
+    The over-deletion pin is the docs-site URL the bullet links, never the literal string
+    "MTCAT v1.0". A version number doing a link's job goes stale on the next schema bump, and the
+    version a consumer should trust is the one the document declares about itself, never a number
+    typed into this page. The URL is /reference/mtcat-schema/, the one page carrying the schema
+    reference."""
     raw = ABOUT.read_text(encoding="utf-8")
     assert "FEDERATION.md" not in raw, (
-        "about.html must not reference FEDERATION.md — that file does not exist in the repository")
+        "about.html must not reference FEDERATION.md - that file does not exist in the repository")
     assert "https://ausmt.readthedocs.io/en/latest/reference/mtcat-schema/" in raw, (
         "the honest MTCAT specification reference must survive the FEDERATION.md removal (over-deletion)")
     assert "MTCAT v1.0" not in raw, (
@@ -200,7 +193,7 @@ def test_about_references_no_nonexistent_federation_doc():
 
 
 def test_mtcat_link_in_footer_not_header_across_pages():
-    """UX7a (A5). The machine-readable MTCAT link moved from the header's right zone into the footer's
+    """The machine-readable MTCAT link moved from the header's right zone into the footer's
     bottom-left, applied identically across index / about / add-survey. Each page must carry EXACTLY ONE
     apilink (a.apilink -> data/mtcat.json) INSIDE <footer>, and NONE inside <header>.
 
@@ -231,7 +224,7 @@ def test_mtcat_link_in_footer_not_header_across_pages():
                        if tag == "a" and "apilink" in _classes(a)]
         assert len(footer_hits) == 1, (
             f"{path.name}: <footer> must carry exactly one MTCAT apilink (bottom-left); found {len(footer_hits)}")
-        # The honest Wave-A link target + title + visible text must survive the move verbatim.
+        # The honest link target + title + visible text must survive the move verbatim.
         assert footer_hits[0].get("href") == "data/mtcat.json", (
             f"{path.name}: the footer MTCAT link must point at data/mtcat.json, got {footer_hits[0].get('href')}")
         title = footer_hits[0].get("title") or ""
@@ -281,24 +274,24 @@ def _header_shape(path):
 
 
 def test_header_parity_about_matches_index():
-    """api-docs lane. About's header used to differ from the SPA's in two visible ways: its primary nav
+    """The api-docs pass. About's header once differed from the SPA's in two visible ways: its primary nav
     items carried none of index's ids, and its right zone was empty while index's carried a mono stats
     block. Both are now aligned, and this pins the alignment structurally (parsed DOM, so comments and
     raw-text coincidences cannot pass it).
 
     Failure criteria:
-      * NAV ID ORDER: FAILS if the ids of the elements inside <nav> are not exactly
-        [navMap, navSurveys, navCollections], in that order, on BOTH pages. Non-vacuous: before the lane
+      * NAV ID ORDER: FAILS if the ids of the elements inside <nav> are not exactly [navMap, navSurveys,
+        navCollections], in that order, on BOTH pages. Non-vacuous: before this alignment landed,
         about.html's nav items were bare <a href="index.html"> with no ids at all, so About failed this.
         The TAG is deliberately not compared: index's are <button>s that switch app views in place, About
         is static so its must be links. Ids + order + placement are the parity that matters.
       * CENTRE-ZONE ORDER: FAILS if the five primary items are not in the same order on both pages:
-        Map, Surveys, Collections, About, Contribute. It was six until the docs wave, when the owner cut
-        "How to use AusMT" from every header (the welcome tour and About cover it). The sixth slot is
+        Map, Surveys, Collections, About, Contribute. It is five, not six: "How to use AusMT" is cut
+        from every header (the welcome tour and About cover it). The sixth slot is
         pinned SHUT below, so a header that grows a sixth centre item fails here rather than drifting
         back.
       * STATS BLOCK: FAILS if either page's right zone lacks a single .counts element. Non-vacuous: the
-        pre-lane about.html had an empty .hright, so it failed this half.
+        earlier about.html had an empty .hright, so it failed this half.
       * ACTIVE-PAGE HIGHLIGHT NOT REGRESSED: FAILS if adding the ids also made a view button active on
         About (only the current page may be highlighted) or dropped index's active Map button."""
     idx, abt = _header_shape(INDEX), _header_shape(ABOUT)
@@ -347,11 +340,11 @@ def test_header_parity_about_matches_index():
 
 
 def test_no_page_header_keeps_the_retired_how_to_use_entry():
-    """Docs wave, stage 2 (owner ruling): the "How to use AusMT" header entry is gone from every page.
+    """The "How to use AusMT" header entry is absent from every page.
     On index it was a <button id="howToUse"> that opened the #introOverlay help panel; on About it was an
     <a href="#howto">, and releases.html arrived on main with an <a href="about.html#howto"> copy of the
     same item. All are pinned absent, by id and by visible text, on all four shipped pages. Non-vacuous:
-    run against the pre-wave HTML, index.html, about.html and releases.html all fail.
+    run against HTML that still carries the entry, index.html, about.html and releases.html all fail.
 
     The #howto ANCHOR survives on About (answer 3 keeps that id, so an inbound deep link still lands) and
     is deliberately not what this asserts against; the assertion is about the HEADER entry.
@@ -365,7 +358,7 @@ def test_no_page_header_keeps_the_retired_how_to_use_entry():
         header = raw.split("<header>", 1)[1].split("</header>", 1)[0]
         header = re.sub(r"<!--.*?-->", "", header, flags=re.S)
         assert "How to use AusMT" not in header, (
-            f"{path.name}: the 'How to use AusMT' header entry was retired in the docs wave")
+            f"{path.name}: the 'How to use AusMT' header entry stays out of the header")
         assert 'id="howToUse"' not in raw, (
             f"{path.name}: #howToUse was retired with the help panel it opened")
 
@@ -408,12 +401,12 @@ def test_index_still_has_the_count_ids_the_about_guard_forbids():
 
 
 def test_no_page_keeps_an_about_this_build_control_in_the_footer():
-    """The one-footer ruling took Releases and About this build out of the footer on every surface, so
+    """The one-footer rule took Releases and About this build out of the footer on every surface, so
     the disclosure popover goes with them: what a reader saw on opening it was the software licence
     and the build's identity, and about.html carries both in its own body now.
 
     FAILS if a <details class="aboutbuild"> comes back to any of these four footers. Non-vacuous
-    against the pre-ruling tree, where all four carried one."""
+    against the pre-rule tree, where all four carried one."""
     for path in (INDEX, ABOUT, ADD, RELEASES):
         els = _footer_els(path)
         details = [a for (tag, a) in els if tag == "details" and "aboutbuild" in _classes(a)]
@@ -423,7 +416,7 @@ def test_no_page_keeps_an_about_this_build_control_in_the_footer():
 
 
 def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_it():
-    """The colophon's deletion, held from every end it could come back through. The owner's ruling is
+    """The colophon's deletion, held from every end it could come back through. The rule is
     that about.html states what AusMT IS, what it licenses and where the documentation lives; the
     running build's identity is not one of those, and a chip that has to be kept in step with a
     config file is a maintenance cost for a fact no reader asked for.
@@ -475,8 +468,8 @@ def test_the_build_colophon_is_gone_from_about_and_the_releases_route_survives_i
 # measurements of THIS header's content at THIS font stack, and a change to the header's wording or
 # its nav will move the wrap points. Anything that changes the header's height must re-measure the
 # ladder. What this file CAN hold, and does, is that the offset is a variable rather than a constant,
-# that the ladder descends, and that it resolves to the measured header height at the two widths the
-# lane pins.
+# that the ladder descends, and that it resolves to the measured header height at the two widths
+# this module pins.
 ANCHOR_VAR = "--about-anchor-offset"
 
 # The measured header height at each pinned width, from the same run the ladder was built from.
@@ -575,24 +568,37 @@ def test_the_ladder_resolves_to_the_measured_header_height_at_the_pinned_widths(
             f"in-page anchor lands {header - got}px under it")
 
 
-def test_no_portal_document_loads_the_script_that_filled_the_chip():
-    """The other end of the deletion, on EVERY document rather than on about.html alone. version.js
-    exists to fill [data-ver-chip]; the pin above proves no surface carries one, so on every surface
-    the load is a request that changes nothing a reader can see. Nothing else reads what the file
-    defines: window.AUSMT_VERSION has no consumer in the shipped portal, so the load is inert and
-    not merely invisible.
+def test_every_script_a_page_loads_is_shipped_and_every_page_script_is_loaded():
+    """The two directions of one rule, over every document the portal ships.
 
-    THE FILE IS KEPT, and that is not a contradiction: its label logic and its config-missing
-    sentinel are the contract a future /build page would be held to, and tools/interaction_test.js
-    drives it in its own jsdom for exactly that reason.
+    A page that loads a script the tree does not carry sends every visitor after a 404, and a
+    script the tree carries that no page loads is a file a reader can open and reason about that
+    reaches nobody. The second direction is the one that bites: the version chip was deleted from
+    every surface, its script stopped being loaded, and the file went on being shipped, pinned and
+    read as though a page still used it.
 
-    FAILS if the tag comes back on any document, and FAILS in the other direction if config.js or
-    corpus-stats.js went with it on about.html: corpus-stats.js reads AUSMT_CONFIG.data_base_url
-    from config.js to find the catalogue the header's totals come from."""
+    Read over the page scripts at the top of portal/ and the coastline this repository generates
+    into vendor/. Third-party libraries under vendor/ are somebody else's file and are held only by
+    the first direction. FAILS in the other direction too if config.js or corpus-stats.js left
+    about.html: corpus-stats.js reads AUSMT_CONFIG.data_base_url from config.js to find the
+    catalogue the header's totals come from."""
+    loaded = {}
     for path in sorted(ROOT.glob("*.html")):
-        assert '<script src="version.js">' not in path.read_text(encoding="utf-8"), (
-            f"{path.name}: no surface carries a version chip, so the script that fills one is a "
-            f"dead load")
+        for src in re.findall(r'<script[^>]*\bsrc="([^"]+)"', path.read_text(encoding="utf-8")):
+            if "://" in src:
+                continue
+            loaded.setdefault(src, []).append(path.name)
+    assert loaded, "no page loaded a script, so this pin would pass over nothing"
+    absent = ["%s (loaded by %s)" % (src, ", ".join(pages))
+              for src, pages in sorted(loaded.items()) if not (ROOT / src).exists()]
+    assert not absent, (
+        "a page loads a script this tree does not ship, so every visitor pays a 404:\n"
+        + "\n".join(absent))
+    shipped = [p.name for p in sorted(ROOT.glob("*.js"))] + list(AUTHORED_VENDOR_SCRIPTS)
+    dead = [name for name in shipped if name not in loaded]
+    assert not dead, (
+        "a page script is shipped and loaded by no page, so it reaches no reader and no visitor:\n"
+        + "\n".join(dead))
     text = ABOUT.read_text(encoding="utf-8")
     assert '<script src="config.js">' in text, (
         "config.js stays: corpus-stats.js reads AUSMT_CONFIG.data_base_url from it")
@@ -601,7 +607,7 @@ def test_no_portal_document_loads_the_script_that_filled_the_chip():
 
 
 def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is():
-    """API-access honesty (feat/api-cors-geojson-honesty, inverted by feat/geojson-station-h5-and-about).
+    """API-access honesty.
 
     This pin was written when NO GeoJSON was generated or served: the only one was the portal's
     in-browser export button (portal/src/exports.js, #dlGeo), so the card was forbidden from claiming
@@ -626,7 +632,7 @@ def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is()
 
 
 def test_the_about_button_carries_the_contribute_button_treatment_on_every_page():
-    """Owner ruling (about-polish lane): the header's About link wears the same outlined-button style as
+    """The header's About link wears the same outlined-button style as
     "Contribute a survey", on every page that renders it, so the two header actions read as siblings.
     FAILS IF any page's .about rule drops the border (the old muted borderless style creeping back) or
     the pages drift apart from each other."""

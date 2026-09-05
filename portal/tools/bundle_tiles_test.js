@@ -1,8 +1,8 @@
 "use strict";
-// C32 portal bundle-tile driver. Boots the REAL portal modules in jsdom against a synthetic MANIFEST
+// Portal bundle-tile driver. Boots the REAL portal modules in jsdom against a synthetic MANIFEST
 // and asserts surveyBundleTiles() renders/gates the three per-survey bundle tiles correctly:
 //   * a served survey shows EDI-zip, EMTF-XML-zip and (flag-on) the TF MTH5 tile, the MTH5 labelled
-//     "transfer functions only" (never implying time series) — the C32 labelling requirement;
+//     "transfer functions only" (never implying time series) - the labelling requirement;
 //   * a survey with no bundle rows (embargoed / withheld) renders the empty withheld state ("");
 //   * a hostile slug that reached a bundle url is HTML-escaped in the emitted markup (no raw < or ">
 //     and no live attribute break-out) — paths are built from the sanitized slug, and escAttr is the
@@ -57,8 +57,8 @@ ok(t.indexOf("bundles/demo-xml.zip") >= 0, "EMTF-XML-zip tile url missing");
 ok(t.indexOf("bundles/demo-tf.h5") >= 0, "TF MTH5 tile url missing");
 ok(/EDI bundle/.test(t), "EDI-zip tile label missing");
 ok(/EMTF-XML bundle/.test(t), "EMTF-XML-zip tile label missing");
-// C32 core labelling requirement: the MTH5 tile must say transfer functions, never imply time series
-ok(/transfer functions/i.test(t), "MTH5 tile must be labelled 'transfer functions' (C32)");
+// Core labelling requirement: the MTH5 tile must say transfer functions, never imply time series
+ok(/transfer functions/i.test(t), "MTH5 tile must be labelled 'transfer functions'");
 ok(t.toLowerCase().indexOf("time series") < 0, "MTH5 tile must NOT imply time series");
 // size formatting rides through (fmtBytes) so the tiles show a human size
 ok(/KB|MB|B/.test(t), "bundle tiles should show a formatted size");

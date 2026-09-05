@@ -5,7 +5,7 @@ portal/data JSON products (`python -m extract.build_portal`). It is a SIBLING of
 importable science library `ausmt_science` under `engine/`; both are installed by the
 engine's editable/pip install so `extract` resolves by INSTALLED PACKAGE, not by cwd.
 
-Naming note (design record C37): the top-level name `extract` is deliberately
+Naming note: the top-level name `extract` is deliberately
 generic and is ACCEPTED here because this package lives only inside a dedicated engine
 image + env — it is never published to PyPI, so there is no external namespace to collide
 with. Making it a real installed package (this `__init__.py` + `"extract*"` in

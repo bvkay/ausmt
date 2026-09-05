@@ -1,9 +1,9 @@
-"""The serve-path tuning pins (2026-08-28 load analysis, AusMT_2026/PORTAL-LOAD-PERF-2026-08-28.md).
+"""The serve-path tuning pins.
 
 The measured defects these pins guard against coming back:
 
   * the front door spoke HTTP/1.1 to the box reader with default pooling, so the browser's 15
-    parallel h2 streams funnelled into a staircase of upstream TTFBs (1.1s / 1.6s / 2.2s waves on
+    parallel h2 streams funnelled into a staircase of upstream TTFBs (1.1s / 1.6s / 2.2s steps on
     a cold load). tailscale serve forwards :8445 as a RAW TCP tunnel (RUNBOOK: `--tcp=8445`), so
     h2c passes end to end once both ends agree: the reader listener accepts h2c and every
     front-door proxy to the box dials it through one shared snippet.
@@ -65,7 +65,7 @@ def test_box_reader_listener_accepts_h2c():
 
 def test_box_trusted_proxies_survive_the_server_split():
     """FAILS IF splitting the servers options into scoped blocks dropped trusted_proxies from either
-    listener. The C45 masking promise depends on client_ip derivation on BOTH listeners; scoped
+    listener. The masking promise depends on client_ip derivation on BOTH listeners; scoped
     blocks do not inherit from an unscoped one, so each must carry the directive itself."""
     text = _box()
     for scope in (":8080", ":8081"):
@@ -174,7 +174,7 @@ def test_frontdoor_snippet_validates(tmp_path):
 # ---- doctor: the relay tripwire -------------------------------------------------------------------
 
 def test_doctor_has_the_tailnet_path_leg():
-    """FAILS IF doctor.sh loses the DERP-relay tripwire. The 2026-08-28 diagnosis found the VPS-box
+    """FAILS IF doctor.sh loses the DERP-relay tripwire. The diagnosis found the VPS-box
     path silently relaying through DERP Sydney (multi-second TTFB outliers, throughput caps); the
     path regressing again must fail the routine doctor run, with the remediation named."""
     text = _DOCTOR.read_text(encoding="utf-8")

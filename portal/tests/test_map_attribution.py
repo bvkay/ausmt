@@ -1,13 +1,13 @@
 """The map's attribution: on the map, collapsed to one glyph, and following the layer that is drawn.
 
-The owner asked for the corner line off the map. What goes is the LINE and the "Leaflet" flag beside
-it, which is a courtesy to a library; what stays is the credit, because the basemap is OpenStreetMap
-data under ODbL and every tile source this site can draw asks for credit of its own. It is met by
-Leaflet's own attribution control, mounted with prefix:false and collapsed behind a small "(i)" that
-opens on hover, on focus and on click.
+The corner line comes off the map. What goes is the LINE and the "Leaflet" flag beside it, which is
+a courtesy to a library; what stays is the credit, because the basemap is OpenStreetMap data under
+ODbL and every tile source this site can draw asks for credit of its own. It is met by Leaflet's
+own attribution control, mounted with prefix:false and collapsed behind a small "(i)" that opens on
+hover, on focus and on click.
 
-WHY THE CONTROL AND NOT A LINE IN THE FOOTER, which is what the round before this shipped. Two
-reasons the owner ruled on, and this module holds the second:
+WHY THE CONTROL AND NOT A LINE IN THE FOOTER. Two reasons stand behind that, and this module holds
+the second:
 
   * the footer is the same box on seven surfaces, and a line only the SPA carried made it a
     different box there. tests/test_footer_regions.py holds that half;
@@ -20,7 +20,7 @@ reasons the owner ruled on, and this module holds the second:
 THE TWO SURFACES THAT DRAW MAPS ARE HELD TOGETHER. portal/index.html draws one and
 portal/add-survey.html draws three, and all four wear the same control from the same module, with
 the same rules declared character for character on both documents. A collapsed control on one
-surface and a Leaflet-flagged line on the other would be two answers to one ruling.
+surface and a Leaflet-flagged line on the other would be two answers to one rule.
 
 WHAT THIS MODULE CANNOT SEE, stated rather than implied: it reads source. Whether the glyph is
 actually one glyph wide, whether the expanded text clears the legend, and whether a click really
@@ -29,7 +29,7 @@ drives the SPA's control in the real document it builds, and tools/map_attributi
 all three of add-survey's. The pixel half is a browser measurement, recorded with the round's
 screenshots.
 
-The ruling: AusMT_2026/LANE-CONTRACT-ABOUT-PAGE.md A9-REVISED (owner ruling 2026-09-03).
+The rule: LANE-CONTRACT-ABOUT-PAGE.md.
 """
 import re
 import shutil
@@ -99,7 +99,7 @@ def test_one_module_builds_the_collapsed_control_for_every_map_this_site_draws()
     src = _text(MODULE)
     assert "prefix: false" in src or "prefix:false" in src, (
         "the control is mounted with prefix:false: the Leaflet flag and word are a courtesy to a "
-        "library, not a licence term, and the owner asked for them off the map")
+        "library, not a licence term, and they stay off the map")
     assert not re.search(r"\bel\.innerHTML|container\.innerHTML", src), (
         "the module must not write into Leaflet's attribution container: Leaflet rewrites that "
         "container's innerHTML on every attribution update, so anything put inside it is lost the "
@@ -111,7 +111,7 @@ def test_one_module_builds_the_collapsed_control_for_every_map_this_site_draws()
             f"attribution")
         assert "mapattrib-toggle" not in re.sub(r"<style>.*?</style>", "", page, flags=re.S), (
             f"{name}: the toggle is assembled in src/mapattrib.js and styled here; a second "
-            f"assembly is a second answer to one ruling")
+            f"assembly is a second answer to one question")
 
 
 def test_the_toggle_is_a_real_button_a_keyboard_can_reach():
@@ -160,7 +160,7 @@ def test_the_spa_map_mounts_the_collapsed_control_and_credits_the_layer_it_draws
     src = _text(MAP_JS)
     assert re.search(r'L\.map\("map",\s*\{[^}]*attributionControl:\s*false', src), (
         "the map is created with attributionControl:false: Leaflet's default control carries the "
-        "flag and the word the owner asked for off the map")
+        "flag and the word that stay off the map")
     assert "AusmtMapAttrib.mount(" in src, (
         "the SPA mounts the collapsed control in place of the default one")
     attributions = re.findall(r"attribution:\s*([A-Za-z_0-9]+|\"[^\"]*\")", src)
@@ -197,7 +197,7 @@ def test_the_dormant_user_layer_path_still_guards_and_still_escapes():
 
     THE PATH IS DORMANT: the layer control below it is built but never added to the map, so the
     fetch never runs today. The guard and the escaping are pinned anyway, and the escaping is
-    DRIVEN through a stub by tests/test_url_guard.py, precisely so a later lane that re-enables the
+    DRIVEN through a stub by tests/test_url_guard.py, precisely so a later change that re-enables the
     control cannot re-open the sink by omission.
 
     FAILS if the guard goes, or if the source reaches addAttribution unescaped."""
@@ -230,8 +230,8 @@ def test_add_surveys_three_maps_all_wear_the_control_and_keep_their_own_credit()
             f"add-survey.html #{name}: Leaflet's default control carries the flag and the word; "
             f"the map is created without one, got {opts!r}")
     assert page.count("AusmtMapAttrib.mount(") == 3, (
-        "each of the three maps mounts the collapsed control; a map without one is the corner line "
-        "the owner asked to be rid of")
+        "each of the three maps mounts the collapsed control; a map without one is the corner "
+        "line this control replaces")
     tiles = re.findall(r"L\.tileLayer\((.*?)\)\.addTo", page, re.S)
     assert len(tiles) == 3, f"three tile layers, one per map; found {len(tiles)}"
     for tile in tiles:
@@ -242,12 +242,12 @@ def test_add_surveys_three_maps_all_wear_the_control_and_keep_their_own_credit()
 def test_both_map_documents_declare_the_one_control_rule_set():
     """ONE RULE SET on both documents that draw maps, character for character. The SPA's map and
     add-survey's three are the same control and must look and behave the same; two copies that
-    drift are how the footer's seven surfaces drifted before the ruling that this lane exists to
+    drift are how the footer's seven surfaces drifted before the rule that this module exists to
     carry out.
 
     THE COLLAPSED STATE IS THE DEFAULT, asserted rather than assumed: the credit is hidden by the
     base rule and revealed by the open state's rule, so a document that failed to load the module
-    shows the glyph and nothing else rather than the line the owner asked to be rid of.
+    shows the glyph and nothing else rather than the line that came off the map.
 
     FAILS if either document's rule set drifts by a character, if a rule is declared twice, if the
     collapsed state stops hiding the text, or if the open state stops showing it."""

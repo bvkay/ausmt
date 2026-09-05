@@ -1,4 +1,4 @@
-"""C20 — transfer-function completeness: error columns, full complex tipper, placeholder honesty.
+"""Transfer-function completeness: error columns, full complex tipper, placeholder honesty.
 
 The tf.json contract grew 10 -> 18 (contract/columns.json TF_COLUMNS):
   t[10] rho_xy_err  t[11] rho_yx_err  t[12] phs_xy_err  t[13] phs_yx_err
@@ -9,7 +9,7 @@ These tests are each able to fail:
   * ERROR COLUMNS: a synthetic EDI with KNOWN Z + Z.VAR yields the documented propagation values,
     hand-computed in the test (rho.err = 0.4*T*|Z|*|dZ|; phs.err = deg(|dZ|/|Z|)).
   * TIPPER COMPONENTS: a real-dialect tipper matches the component dict, and source-masked periods are
-    null in ALL FOUR component columns (composes with the C19b fill/exact-zero mask).
+    null in ALL FOUR component columns (composes with the fill/exact-zero mask).
   * PLACEHOLDER: a flat-|T|=1.0 tipper is masked (all four series + tip_mag null) and a NOTICE names the
     station; a real (varying) tipper is untouched.
 """
@@ -63,7 +63,7 @@ def _normnum(x):
 
 
 def test_contract_grew_to_18_appended_only():
-    """FAILS IF: the tf contract is not exactly the 10 original columns followed by the 8 C20 columns
+    """FAILS IF: the tf contract is not exactly the 10 original columns followed by the 8 new columns
     in the frozen order. Pins the APPEND (a reorder or a wrong new name fails)."""
     assert TF_COLUMNS[:10] == ["periods", "rho_xy", "rho_yx", "phs_xy", "phs_yx_adj",
                                "tip_mag", "pt_min", "pt_max", "pt_az", "pt_beta"], TF_COLUMNS
@@ -74,7 +74,7 @@ def test_contract_grew_to_18_appended_only():
 
 def test_old_slice_byte_identical_to_golden():
     """★ FAILS IF: t[0..9] of any checked-in fixture differs from the committed golden. The golden was
-    minted from the pre-C20 outputs; any change to an existing column (including tip_mag) is a STOP.
+    minted from the earlier outputs; any change to an existing column (including tip_mag) is a STOP.
     Compares the JSON-normalised OLD slice only — the 8 new columns are deliberately excluded."""
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     assert set(golden) == set(_GOLDEN_FIXTURES), "golden station set drifted from the fixture set"
@@ -82,7 +82,7 @@ def test_old_slice_byte_identical_to_golden():
         _, _, cols = _cols(path)
         got = None if cols is None else _normnum(cols[:10])
         assert got == golden[name], (
-            f"{name}: OLD SLICE t[0..9] changed vs golden — this is a C20 STOP condition. "
+            f"{name}: OLD SLICE t[0..9] changed vs golden - this is a STOP condition. "
             f"An existing column moved or its value drifted.")
 
 
@@ -158,12 +158,12 @@ def test_tipper_components_match_component_dict_and_mask_fills():
 
 
 def test_placeholder_tipper_masked_with_notice(capsys):
-    """★ FAILS IF: the real-corpus placeholder tipper (Phoenix EMpower A01: |T| flat at 1.0) is NOT
-    masked, or no NOTICE names the station. This is the D2 honesty guard on a REAL file."""
+    """★ FAILS IF: the real-corpus placeholder tipper (Phoenix EMpower station A01: |T| flat at 1.0) is NOT
+    masked, or no NOTICE names the station. This is the honesty guard on a REAL file."""
     per, comp = mtm.components(REAL / "phoenix_empower_A01.edi")
     # all four tipper series masked to null (dict collapses an all-None series to None)
     for k in ("TXR", "TXI", "TYR", "TYI"):
-        assert comp.get(k) is None, f"placeholder tipper leaked {k} — D2 mask failed"
+        assert comp.get(k) is None, f"placeholder tipper leaked {k} - the mask failed"
     # tip_mag consequently absent from the derived row
     cols = tfmod.tf_from_components(per, comp)
     assert all(v is None for v in cols[_T["tip_mag"]]), "tip_mag rendered on a masked placeholder tipper"
@@ -175,7 +175,7 @@ def test_placeholder_tipper_masked_with_notice(capsys):
 
 def test_real_varying_tipper_is_not_masked():
     """FAILS IF: a genuine (varying, off-unity) tipper is wrongly detected as a placeholder and masked.
-    Guards against the D2 detector over-firing. Exercises the predicate directly with a real-shaped
+    Guards against the detector over-firing. Exercises the predicate directly with a real-shaped
     varying series (no on-disk EDI needed)."""
     n = 6
     txr = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35]
@@ -195,8 +195,8 @@ def test_real_varying_tipper_is_not_masked():
 
 
 def test_placeholder_tipper_note_rides_the_report_channel(capsys):
-    """The mask's NOTICE used to be a bare stderr print inside the parse layer - the one C20
-    honesty decision that never reached build_report.json, and under a C18 cache hit it did not
+    """The mask's NOTICE was once a bare stderr print inside the parse layer, the one
+    honesty decision that never reached build_report.json, and under a cache hit it did not
     fire at all (a hit and a miss must emit the same diagnostics). With a notes channel the caller
     owns emission: the fact rides the cached parse product and the report, and stderr stays quiet
     at the parse layer."""
@@ -207,7 +207,7 @@ def test_placeholder_tipper_note_rides_the_report_channel(capsys):
     assert "placeholder tipper" not in capsys.readouterr().err, (
         "with a notes channel the parse layer must not also print; the caller owns emission")
     # The wiring: both file-based parse arms hand the channel over, the record carries the flag
-    # (riding the C18 cache), and the per-survey report lists the station.
+    # (riding the cache), and the per-survey report lists the station.
     src = (Path(__file__).resolve().parent.parent / "extract" / "build_portal.py").read_text(encoding="utf-8")
     assert src.count("components_from_tf(tfobj, notes=") == 2, (
         "both parse arms must pass the notes channel")

@@ -156,7 +156,7 @@ def test_report_does_not_disturb_canonical_provenance(tmp_path):
         assert isinstance(per_station, dict), "provenance conditioning is a per-station map, unchanged"
         for _station, notes in per_station.items():
             assert isinstance(notes, list) and all(isinstance(x, str) for x in notes), \
-                "each station keeps its ordered list of note strings — the canonical record is unchanged"
+                "each station keeps its ordered list of note strings - the canonical record is unchanged"
 
     # station.json also still carries the raw per-station notes (persisted, not just aggregated)
     any_station = False
@@ -184,7 +184,7 @@ def test_per_station_xml_emission_failures_surface_in_build_report(tmp_path, mon
     import ausmt_science.ingest.normalize as _ni  # noqa: PLC0415
 
     real_normalize = _ni.normalize
-    victim = "A2"  # sample survey station id (DATAID A2); the sibling A1 emits normally
+    victim = "A2"  # sample survey station id (DATAID A2); the sibling station A1 emits normally
 
     def _fake_normalize(src, out_dir, *, survey_id, station_id=None, **kw):
         if station_id and victim in str(station_id):

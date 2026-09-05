@@ -41,10 +41,10 @@ def test_mini_yaml_parses_structured_lists():
 
 
 def test_mini_yaml_matches_pyyaml_on_pid_chain_fields():
-    """C7: the mini-yaml fallback must agree with PyYAML on organisation.ror,
+    """The mini-yaml fallback must agree with PyYAML on organisation.ror,
     identifiers.project_raid and time_series.collection_pid too: the new SMETA
     fields this contract adds, all of which are declared (non-null) in the pid-survey fixture.
-    A1: the retired lead_investigator key is still ON DISK in the fixture and is read by NEITHER
+    The retired lead_investigator key is still ON DISK in the fixture and is read by NEITHER
     parser path, so the two SMETAs agree by both ignoring it."""
     yaml = pytest.importorskip("yaml")
     text = (HERE / "fixtures" / "pid-survey" / "survey.yaml").read_text(encoding="utf-8")
@@ -69,7 +69,7 @@ def test_survey_meta_never_crashes_on_bad_shapes():
 
 
 def test_parity_comment_after_quoted_scalar():
-    """2026-07-25: an inline comment after a QUOTED scalar must strip like PyYAML strips it; a hash
+    """An inline comment after a QUOTED scalar must strip like PyYAML strips it; a hash
     inside the quotes is data. The credit migration's review notes exposed the divergence."""
     import yaml
     from extract.build_portal import _mini_yaml
@@ -84,8 +84,8 @@ def test_parity_comment_after_quoted_scalar():
 
 
 def test_parity_quoted_mapping_keys():
-    """2026-08-08 (station-id override): a QUOTED mapping key must parse like PyYAML parses it.
-    Filenames with spaces/parentheses are only expressible quoted, and the fallback used to drop
+    """Station-id override: a QUOTED mapping key must parse like PyYAML parses it.
+    Filenames with spaces/parentheses are only expressible quoted, and the fallback once dropped
     such keys entirely. The same alternation must NOT turn a quoted list-item SCALAR that contains a
     colon into a one-key map, so both shapes are pinned here against PyYAML."""
     import yaml
@@ -103,9 +103,9 @@ def test_parity_quoted_mapping_keys():
 
 
 def test_parity_comment_on_key_line_before_nested_block():
-    """2026-08-25 (section-2 D3): a trailing comment on a KEY line whose value is a nested block
+    """A trailing comment on a KEY line whose value is a nested block
     ('data_types:  # pick one' followed by indented items) must parse like PyYAML parses it. The
-    fallback used to read the comment as the key's scalar VALUE, then bail out of the nested block,
+    fallback once read the comment as the key's scalar VALUE, then bailed out of the nested block,
     truncating every later top-level key (block sequences) or flattening children into the parent
     (nested maps). The shipped _template/_example both carry this shape, so a no-PyYAML box failed
     the reference package against its own validator."""

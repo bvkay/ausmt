@@ -1,4 +1,4 @@
-"""releases.html: the citable-snapshot listing page (feat/release-machinery, portal half).
+"""releases.html: the citable-snapshot listing page, portal half.
 
 The page lists the quarterly releases cut by engine/extract/cut_release.py. Everything it says about a
 release is READ at load time from the served release index and the per-release release.json, so the two
@@ -19,7 +19,7 @@ Each assertion states its failure criterion:
     meaning on a page with no map, no filter and no selection.
   * FOOTER CHROME - FAILS if the footer keeps the retired About-this-build popover or a version
     chip, loses the bottom-left MTCAT link, or does not carry the AuScope-NCRIS lockup the
-    one-footer ruling put in the right region on every surface.
+    one-footer rule put in the right region on every surface.
   * NO INLINE SCRIPT - FAILS if the page carries an inline <script> block. The deployed CSP for every
     page except add-survey.html is script-src 'self' with no 'unsafe-inline' (@strictPages in
     deploy/docker/caddy/Caddyfile is a `not path /add-survey.html` matcher, so a NEW page picks up the
@@ -32,7 +32,7 @@ Each assertion states its failure criterion:
   * SAFE RENDERING - FAILS if releases.js reaches the DOM through innerHTML: every value it renders
     (tags, notes, commits, file paths) comes from a served JSON document.
   * THE ENTRY POINT - FAILS if about.html's Documentation section stops linking this page, or if a
-    Releases link comes back to index.html's footer. The ruling took the link out of every footer
+    Releases link comes back to index.html's footer. The rule took the link out of every footer
     and the #build colophon that first inherited it is deleted, so section 8 is the page's one
     route in.
 """
@@ -140,7 +140,7 @@ def _nav_ids(path):
 def _centre_order(path):
     """The five primary header items in document order, each reduced to a stable label. Mirrors the
     reducer in test_about_uniform_chrome.test_header_parity_about_matches_index, including its
-    treatment of a stray .about item as 'other:<href>', which is how a sixth header entry (the retired
+    styling of a stray .about item as 'other:<href>', which is how a sixth header entry (the retired
     How-to-use link, or a successor to it) shows up here instead of passing quietly."""
     out = []
     for _tag, a, in_nav in _header(path):
@@ -156,11 +156,11 @@ def _centre_order(path):
 
 
 def test_header_parity_releases_matches_about():
-    """Docs wave, stage 2 (owner ruling): every shipped header is FIVE items, namely Map, Surveys,
-    Collections, About, Contribute. Releases arrived on main carrying the retired sixth entry, a
-    "How to use AusMT" link to about.html#howto, so this pin held it to a six-item order that About no
-    longer has. Non-vacuous in both halves: run against that six-item header, the RELEASES assertion
-    below fails with other:about.html#howto in slot four."""
+    """Every shipped header is FIVE items, namely Map, Surveys, Collections, About, Contribute.
+    Releases arrived on main carrying the retired sixth entry, a "How to use AusMT" link to
+    about.html#howto, so this pin holds it to the five-item order the shipped header carries.
+    Non-vacuous in both halves: run against that six-item header, the RELEASES assertion below fails
+    with other:about.html#howto in slot four."""
     assert _nav_ids(RELEASES) == ["navMap", "navSurveys", "navCollections"], (
         f"releases.html nav must be navMap, navSurveys, navCollections in that order; "
         f"got {_nav_ids(RELEASES)}")
@@ -193,7 +193,7 @@ def test_no_live_app_state_ids():
 
 
 def test_footer_chrome_matches_the_other_pages():
-    """The one-footer ruling emptied the right region of Releases and About this build and put the
+    """The one-footer rule emptied the right region of Releases and About this build and put the
     AuScope-NCRIS lockup there instead, so the chrome this page must match is the new one. FAILS if
     the popover or a version chip comes back here, if the MTCAT link leaves the bottom-left, or if
     the lockup is missing. The strings and the targets are held for all six documents at once in
@@ -219,11 +219,10 @@ def test_footer_chrome_matches_the_other_pages():
 # --- deployed-CSP and link safety -----------------------------------------------------------------
 
 def test_scripts_are_external_only():
-    """version.js MOVED OUT of this list rather than being weakened out of it. It exists to fill
-    [data-ver-chip]; no document on this site carries one, and nothing reads what it defines, so on
-    this page it was a request that changed nothing a reader could see. The zero-loads-anywhere half
-    is held in tests/test_about_uniform_chrome.py across every document the portal ships, which is
-    where the chip's own pins already live. Contract: AusMT_2026/LANE-CONTRACT-ABOUT-PAGE.md."""
+    """The scripts this page loads, and no others. The version chip left every surface with the
+    About-this-build popover, so the script that filled it is gone from the tree as well as from
+    this page; tests/test_about_uniform_chrome.py holds every page script the tree ships to being
+    loaded by at least one page. Contract: LANE-CONTRACT-ABOUT-PAGE.md."""
     raw = RELEASES.read_text(encoding="utf-8")
     for src in ("config.js", "releases.js"):
         assert f'<script src="{src}"></script>' in raw, f"releases.html must load {src} as an external script"
@@ -353,10 +352,10 @@ def test_releases_js_does_not_parse_the_catalogue():
 # --- the entry point ------------------------------------------------------------------------------
 
 def test_about_carries_the_entry_point_the_footer_gave_up():
-    """The Releases link was in every footer until the one-footer ruling; the page still needs ONE
+    """The Releases link was in every footer until the one-footer rule; the page still needs ONE
     entry point or it is unreachable from the site. It was about.html's #build colophon, which also
-    carried the running build's identity; the owner has deleted that section and ruled the identity
-    off the page, so the route alone survives in section 8, Documentation, beside the other places
+    carried the running build's identity; that section is deleted and the identity is gone from the
+    page, so the route alone survives in section 8, Documentation, beside the other places
     a reader is sent for more.
 
     FAILS if about.html's Documentation section stops linking releases.html, if the deleted colophon
@@ -372,7 +371,7 @@ def test_about_carries_the_entry_point_the_footer_gave_up():
     els = _footer(INDEX)
     links = [a for (t, a, _ab) in els if t == "a" and a.get("href") == "releases.html"]
     assert not links, (
-        f"index.html's footer must carry no Releases link; the ruling took it out: {links}")
+        f"index.html's footer must carry no Releases link: {links}")
 
 
 # --- behaviour ------------------------------------------------------------------------------------

@@ -7,8 +7,8 @@
 // to be: no Leaflet, no DOM, no map. Everything asserted below is therefore a real result from shipped
 // code, not from a re-implementation.
 //
-// WHAT IT WAS: the change-6 badge driver (declutter, leader tails, panes, the badge rule and its router).
-// The owner removed that feature on 2026-08-24 and every one of those sections went with it; the removal
+// WHAT IT WAS: the badge driver (declutter, leader tails, panes, the badge rule and its router).
+// That feature was removed and every one of those sections went with it; the removal
 // itself is pinned at the SOURCE in tests/test_map_dots.py, because a jsdom run cannot observe the absence
 // of a layer it never draws. What survives here is what the map still does: size a dot by zoom, and dim a
 // survey that is not in focus.
@@ -69,7 +69,7 @@ let failed = 0;
 function ok(cond, msg) { if (!cond) { console.error("MAP DOTS FAILED: " + msg); failed++; } }
 
 // ---- radius curve -------------------------------------------------------------------------------
-// UNIFORM SITE DOT SIZE (owner, 2026-08-19): "the same size as the icons set for the AusLAMP sites". The
+// UNIFORM SITE DOT SIZE: "the same size as the icons set for the AusLAMP sites". The
 // per-type base split (LP 2.0 / everything else 3.0) is GONE. One curve serves every data type, and it is
 // the LP one - BB/AMT/GDS come DOWN to the AusLAMP texture size rather than LP coming up. Data type is
 // carried by COLOUR alone; size carries only zoom.
@@ -79,7 +79,7 @@ for (let z = 0; z < 18; z++) {
 }
 // Floor and ceiling both hold, at absurd zooms too. The floor is what stops a dot going sub-pixel at
 // far-out zoom, where an invisible dot would read as "no coverage here" - a false claim about the corpus.
-// It matters more since the 2026-08-24 dots-only ruling: at national zoom a dot is now the ONLY thing that
+// It matters more since the dots-only rule: at national zoom a dot is now the ONLY thing that
 // says a survey is there, with no badge standing in for it.
 for (const z of [-5, 0, 4, 8, 22, 99]) {
   const rr = A.radiusForZoom(z);
@@ -112,7 +112,7 @@ ok(A.weightForZoom(4) === 1.0 && A.weightForZoom(5) === 1.5,
   "the stroke weight must still step at z5, got " + A.weightForZoom(4) + " / " + A.weightForZoom(5));
 
 // ---- positioned stations only -------------------------------------------------------------------
-// C42: a coordinate-withheld station carries null lat/lon and has no place on the map. Every map path
+// A coordinate-withheld station carries null lat/lon and has no place on the map. Every map path
 // funnels through this one predicate, which is why it is pinned here rather than at each call site.
 ok(A.hasPosition({ lat: -30, lon: 140 }) === true, "an exact position must reach the map");
 ok(A.hasPosition({ lat: null, lon: null }) === false, "a withheld position must never reach the map");
@@ -120,9 +120,10 @@ ok(A.hasPosition({ lat: 0, lon: 0 }) === true, "a real (0,0) is a position, not 
 ok(A.hasPosition({ lat: NaN, lon: 140 }) === false, "a NaN coordinate must never reach the map");
 ok(A.hasPosition(null) === false, "a missing station must not crash the predicate");
 
-// ---- composition with change 2 ------------------------------------------------------------------
+// ---- composition with the focus dim -------------------------------------------------------------
 // Every map object is a station dot now, so the focus dim is one rule over one kind of thing, keyed on the
-// survey. Non-focused must be dimmer, and still VISIBLE (Option A keeps the national context on the map).
+// survey. Non-focused must be dimmer, and still VISIBLE (a dim that hides them takes the national
+// context off the map).
 ok(A.dimStyleFor("Compact", "Compact").fillOpacity > A.dimStyleFor("Spread", "Compact").fillOpacity,
   "the focus dim must dim a non-focused survey");
 ok(A.dimStyleFor("Spread", "Compact").fillOpacity > 0,

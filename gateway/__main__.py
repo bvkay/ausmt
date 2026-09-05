@@ -1,5 +1,5 @@
 """`python -m gateway` — bind uvicorn on 0.0.0.0:8000 (container-internal; compose publishes it
-loopback-only and Caddy fronts it, design §1). create_app() runs fail_closed_startup(), so a
+loopback-only and Caddy fronts it). create_app() runs fail_closed_startup(), so a
 missing/short AUSMT_SUBMIT_KEY aborts before the port is bound.
 """
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """Rolled access logs must still reach the fold (the rotation blind spot).
 
-ONE invariant, three config surfaces, so it gets one owner rather than a third of a pin in each of
-three files: a log line that has ROLLED must still be readable by the daily C45 fold.
+ONE invariant, three config surfaces, so it gets one home rather than a third of a pin in each of
+three files: a log line that has ROLLED must still be readable by the daily fold.
 
 Caddy compresses a rolled log file by default, producing `access-<stamp>.json.gz`. Both consumers key
 on the plain `.json` name: the aggregator's fold glob (deploy/scripts/aggregate_stats.py) and the
@@ -23,7 +23,7 @@ The two config pins run everywhere. The shim run needs a POSIX shell to execute 
 so it carries the same `_SH is None` skip its four sibling shell pins carry (test_alert_sh,
 test_actions_sh, test_backup_sh, test_frontdoor_doctor_sh), and DELIBERATELY without an entry in the
 CI skip allow-list: `sh` is present on the runner, so the skip cannot fire there, and if it ever did
-the tripwire should red the lane rather than wave it through. That is the same convention the lane
+the tripwire should red the workflow rather than pass it through. That is the same convention the workflow
 already applies to its flock(1) case.
 """
 from __future__ import annotations

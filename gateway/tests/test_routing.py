@@ -1,4 +1,4 @@
-"""Routing contract (security review #1). The FastAPI routes are registered UNDER /gateway/* and the
+"""Routing contract. The FastAPI routes are registered UNDER /gateway/* and the
 upload response emits a /gateway-prefixed status_url, so the Caddy ingress MUST preserve the prefix
 (`handle`, not the prefix-stripping `handle_path`). A handle_path there 404s every request through
 the production origin while the :8444 debug publish still works — the exact trap that shipped green.
@@ -70,7 +70,7 @@ def test_status_url_is_gateway_prefixed(tmp_path):
 
 def test_caddyfile_preserves_gateway_prefix():
     # The Caddy ingress for /gateway/* MUST preserve the prefix (`handle`), NOT strip it
-    # (`handle_path`). proven failing 2026-07-05: the original Caddyfile shipped `handle_path
+    # (`handle_path`). proven failing: the original Caddyfile shipped `handle_path
     # /gateway/*`, which strips /gateway so the app (routes all /gateway/*) 404s every proxied
     # request — caught only because this assertion pins the directive.
     text = _CADDYFILE.read_text(encoding="utf-8")
@@ -78,7 +78,7 @@ def test_caddyfile_preserves_gateway_prefix():
     m = re.search(r"^\s*(handle_path|handle)\s+/gateway/\*\s*\{", text, re.MULTILINE)
     assert m is not None, "no /gateway/* routing block found in the Caddyfile"
     assert m.group(1) == "handle", (
-        "Caddy must use `handle /gateway/*` (prefix preserved) — `handle_path` strips /gateway and "
+        "Caddy must use `handle /gateway/*` (prefix preserved): `handle_path` strips /gateway and "
         "404s every request the app serves under /gateway/*"
     )
     # And it must reverse-proxy to the gateway service.

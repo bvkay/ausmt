@@ -19,7 +19,7 @@ token the engine's own PII scrub writes:
 
 NON-VACUOUS (Invariant 10): every expected value below was read OUT of those bytes, so an extractor
 that silently stopped matching fails here; and the build half asserts the facts reach the parse
-product, whose shape change is what the C18 cache tag bump covers.
+product, whose shape change is what the cache tag bump covers.
 """
 import json
 import shutil
@@ -98,7 +98,7 @@ def test_an_unparseable_unit_keeps_the_source_and_gains_no_number():
 
 
 def test_the_exclusion_rule_beats_any_corroboration():
-    """D9: a source assertion contradicting the channel list wins. A1.edi states that its HZ/RX/RY
+    """A source assertion contradicting the channel list wins. A1.edi states that its HZ/RX/RY
     channel declarations are exporter template artifacts, so those three are excluded by name."""
     d = facts("enriched-dotted")
     assert d["excluded_components"] == ["hz", "rx", "ry"]
@@ -118,8 +118,8 @@ def test_mtpy_fieldnotes_reads_the_manufacturers_and_the_geometry_only():
 
 
 def test_lemimt_site_reads_the_instrument_and_leaves_the_rate_where_none_is_stated():
-    """A23's SITE line carries no rate token at all, so only the Instrument line qualifies it. A
-    dialect that matched would otherwise invent a rate for 296 stations."""
+    """Station A23's SITE line carries no rate token at all, so only the Instrument line qualifies
+    it. A dialect that matched would otherwise invent a rate for 296 stations."""
     d = facts("lemimt-site")
     assert d["dialects"] == ["lemimt-site"]
     assert d["run"]["data_logger"] == {"model": "LEMI-424"}
@@ -128,7 +128,7 @@ def test_lemimt_site_reads_the_instrument_and_leaves_the_rate_where_none_is_stat
 
 
 def test_the_lemimt_band_token_is_never_read_as_an_acquisition_rate():
-    """OWNER RULING: the `S-<rate>Hz` token in the SITE line records the MERGING OF DOWNSAMPLED EDI
+    """The `S-<rate>Hz` token in the SITE line records the MERGING OF DOWNSAMPLED EDI
     FILES, not the rate the station was acquired at, so nothing in the site string reaches `run` and
     the token qualifies no station. Reading it as a rate published a processing parameter as a
     measurement on 178 records."""
@@ -148,7 +148,7 @@ def test_the_band_token_qualifies_nothing_even_beside_a_real_fact():
 
 
 def test_empower_json_takes_the_highest_rate_as_the_run_nominal_rate():
-    """D10: the 24 kHz sampleRate is the run's nominal rate and the lower ones are the decimation
+    """The 24 kHz sampleRate is the run's nominal rate and the lower ones are the decimation
     ladder riding the transfer-function product, not extra runs."""
     d = facts("empower-json")
     assert d["dialects"] == ["empower-json"]
@@ -157,8 +157,9 @@ def test_empower_json_takes_the_highest_rate_as_the_run_nominal_rate():
 
 
 def test_phoenix_compact_json_reads_the_local_blocks_and_never_the_remote_one():
-    """D10 again, in the other Phoenix shape: `RH` is the REMOTE station. Its coordinates differ
-    from the local receiver's, and nothing it states may become this station's channel or run."""
+    """The same rule again, in the other Phoenix shape: `RH` is the REMOTE station. Its coordinates
+    differ from the local receiver's, and nothing it states may become this station's channel or
+    run."""
     d = facts("phoenix-compact")
     assert d["run"]["data_logger"] == {"model": "MTU5A", "serial_number": "4759"}
     assert d["run"]["time_period"] == {"start": "2023-02-16T06:34:51Z",
@@ -221,13 +222,13 @@ def test_a_doi_is_normalised_to_the_bare_canonical_form():
 
 def test_the_parse_product_carries_the_run_facts():
     """The extractors run inside the cached per-EDI parse, so a warm rebuild emits the same runs a
-    cold one does. FAILS against the pre-A6 parse, whose product had no `run_facts` key."""
+    cold one does. FAILS against the earlier parse, whose product had no `run_facts` key."""
     pytest.importorskip("mt_metadata")
     import build_portal as bp  # noqa: PLC0415
     edi = HERE / "fixtures" / "edi-info-json" / "LineNo__StationNo_11.edi"
     parsed = bp._parse_one_edi(edi)
     assert parsed["run_facts"]["run"]["sample_rate_hz"] == 24000.0
-    assert json.dumps(parsed["run_facts"])   # JSON-serialisable: it rides the C18 cache value
+    assert json.dumps(parsed["run_facts"])   # JSON-serialisable: it rides the cache value
 
 
 def test_the_extraction_confidence_classes_reach_the_build_report(tmp_path):
@@ -236,7 +237,7 @@ def test_the_extraction_confidence_classes_reach_the_build_report(tmp_path):
     needs a home, and build_report is the curation surface the presence rule already uses.
 
     FAILS against the pre-fix build, whose report carried no `run_extraction` at all: the class and
-    the dialect were computed for every value, cached inside the C18 parse product and then dropped,
+    the dialect were computed for every value, cached inside the parse product and then dropped,
     so nothing shipped could tell a structured_dialect value from a pattern_extracted one. This
     fixture is the case that makes it matter - EXAMPLE01's logger is read off a LEMIMT free-text
     line, which is the weakest class the extractors emit."""
@@ -274,7 +275,7 @@ def test_the_cache_format_tag_records_the_parse_product_shape_change(tmp_path):
 
 def test_non_channel_dotted_keys_never_become_channels():
     """The named-components rule is an ALLOW-LIST over the known component families. Any dotted
-    run.<x>.<y> key used to be promoted to a channel, so a structured non-channel path like
+    run.<x>.<y> key was once promoted to a channel, so a structured non-channel path like
     run.acquired_by.author fabricated an acquired_by channel row in the citable station.json
     (the schema types `component` as a free string, so nothing downstream refused it)."""
     d = rf.run_facts("run.acquired_by.author = A. Person\n"

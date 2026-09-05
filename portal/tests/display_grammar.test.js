@@ -1,10 +1,10 @@
-// C1 PARITY: the SPA's display grammar against the engine's, helper for helper.
+// PARITY: the SPA's display grammar against the engine's, helper for helper.
 //
 // One period, one range and one licence must PRINT the same whether a reader meets them on a static
 // entity page or in the workspace. The engine owns the reference implementations in
 // engine/extract/_pages.py (_fmt_period, _range, _cc_human/_fmt_licence); portal/src/state.js carries
 // the JS twins. This file pins the twins against the SAME worked examples the engine suite pins the
-// Python leaf against (engine/tests/test_entity_pages.py, the B9 R1/R2/R3 block), written as LITERALS
+// Python leaf against (engine/tests/test_entity_pages.py, the display-grammar block), written as LITERALS
 // on both sides: no cross-runtime import, no generated vector file, so neither suite can be made
 // green by editing the other's source of truth.
 //
@@ -37,16 +37,16 @@ ok(typeof fmtPeriod === "function", "fmtPeriod loaded from state.js");
 ok(typeof fmtRange === "function", "fmtRange loaded from state.js");
 ok(typeof licHuman === "function", "licHuman loaded from state.js");
 
-// ---- R1: the period display helper, the owner's worked examples VERBATIM -----------------------
+// ---- The period display helper, the worked examples VERBATIM -----------------------------------
 // The same seven pairs the engine suite asserts on _fmt_period. Under 100 a period reads to two
 // significant figures with trailing zeros stripped; at or above 100 it is a thousands-separated
 // integer; it is NEVER an exponent, whatever the magnitude.
 for (const [value, shown] of [[5.33333, "5.3"], [0.005012, "0.005"], [9.6e-05, "0.000096"],
                               [0.004, "0.004"], [100000, "100,000"], [11651, "11,651"], [5, "5"]])
   eq(fmtPeriod(value), shown, "R1 worked example " + JSON.stringify(value));
-ok(fmtPeriod(9.6e-05).indexOf("e") < 0, "R1: exponent notation must never reach a rendered slot");
+ok(fmtPeriod(9.6e-05).indexOf("e") < 0, "exponent notation must never reach a rendered slot");
 
-// TIE VECTORS. Not in the owner's list, and the reason the JS twin cannot simply call toFixed:
+// TIE VECTORS. Not among the worked examples, and the reason the JS twin cannot simply call toFixed:
 // Python rounds an exact .5 tie to the EVEN neighbour and JS rounds it away from zero, so a 1.25 s
 // period printed "1.3" in the workspace beside "1.2" on the survey page. These are the values where
 // the two runtimes' default tie rules disagree, pinned as literals on both sides of the parity.
@@ -60,15 +60,15 @@ eq(fmtPeriod(undefined), "-", "R1: an undefined period is a plain hyphen");
 eq(fmtPeriod("not a number"), "-", "R1: an unparseable period is a plain hyphen");
 eq(fmtPeriod(0), "0", "R1: zero prints as zero");
 
-// ---- R2: the range separator ------------------------------------------------------------------
-// The owner's revised ruling: a numeric range in UI chrome reads as a SPACED HYPHEN-MINUS. Not an
+// ---- The range separator ----------------------------------------------------------------------
+// The revised rule: a numeric range in UI chrome reads as a SPACED HYPHEN-MINUS. Not an
 // en dash, not an em dash, not the word "to".
 eq(fmtRange(2016, 2021), "2016 - 2021", "R2: a year range takes the spaced hyphen");
 eq(fmtRange(fmtPeriod(5), fmtPeriod(100000)), "5 - 100,000", "R2: a period range takes the spaced hyphen");
 ok(fmtRange(1, 2).indexOf("\u2013") < 0 && fmtRange(1, 2).indexOf("\u2014") < 0,
-   "R2: the range separator carries no dash glyph");
+   "the range separator carries no dash glyph");
 
-// ---- R3: the licence in human form ------------------------------------------------------------
+// ---- The licence in human form ----------------------------------------------------------------
 // The SPDX identifier is the machine's name for a licence; what a reader sees in chrome is the form
 // the licence is published under. The form is derived from the identifier's own grammar (prefix,
 // clause letters keeping their internal hyphens, version, jurisdiction port) over the identifiers
@@ -84,7 +84,7 @@ for (const [id, shown] of [["CC-BY-4.0", "CC BY 4.0"], ["CC0-1.0", "CC0 1.0"],
 // instrument does not carry is echoed verbatim, because that is what _fmt_licence does: its lookup
 // table has a key only for an allow-listed id. A wider JS domain meant the survey page printed
 // "CC-BY-2.0" while the workspace printed "CC BY 2.0" for the same survey - two surfaces, one
-// identifier, two readings, which is exactly what R3 was ruled to stop.
+// identifier, two readings, which is exactly what the licence rule exists to stop.
 for (const id of ["CC-BY-2.0", "CC0-2.0", "CC-BY-ND-2.5", "CC-BY-NC-SA-2.0", "CC-BY-4.0-NZ"])
   eq(licHuman(id), id, "R3: a CC id the instrument does not recognise is echoed, as the pages echo it");
 // An identifier the instrument does not recognise is echoed, never invented into a human form.
@@ -96,10 +96,10 @@ eq(licHuman(""), "", "R3: no licence, no text");
 // a display form, which is how one card came to read "CC-BY-3.0-AU" beside another's "CC BY 4.0".
 const allCc = ctx.LICENSES.redistributable.concat(ctx.LICENSES.recognised_only)
   .filter(id => /^CC/.test(id));
-ok(allCc.length >= 14, "R3: the instrument's CC ids are readable from contract.js (" + allCc.length + ")");
+ok(allCc.length >= 14, "the instrument's CC ids are readable from contract.js (" + allCc.length + ")");
 for (const id of allCc)
   ok(licHuman(id) !== id && licHuman(id).indexOf(" ") > 0,
-     "R3: every recognised CC id needs a reader's form, " + JSON.stringify(id) +
+     "every recognised CC id needs a reader's form, " + JSON.stringify(id) +
      " printed " + JSON.stringify(licHuman(id)));
 
 console.log(fail ? ("FAILED " + fail) : "ALL PASSED");

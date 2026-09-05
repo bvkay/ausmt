@@ -12,7 +12,7 @@
 //
 // SECTION B (userLayer, map.js). Leaflet's addAttribution renders its argument as HTML. The layer
 // control is not mounted today, so the fetch never runs; the pin drives the REAL userLayer handler
-// with hostile GeoJSON anyway, so the guard is proven before an owner revisit re-enables the control.
+// with hostile GeoJSON anyway, so the guard is proven before a revisit re-enables the control.
 //
 //   node tools/url_guard_test.js
 // Exit 0 = passed, 1 = a real failure.

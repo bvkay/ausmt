@@ -1,5 +1,5 @@
-"""Unit tests for the structured metadata-editor form assembly (gateway/editor_form.py) — the
-2026-07-08 "hostile JSON" fix that replaces the raw-JSON textareas with per-section widgets.
+"""Unit tests for the structured metadata-editor form assembly (gateway/editor_form.py) - the
+"hostile JSON" fix that replaces the raw-JSON textareas with per-section widgets.
 
 These are pure-function tests of the SERVER-SIDE half: the widget form fields <-> section dicts
 mapping, the advanced-JSON override precedence, per-field format validation, repeatable-row
@@ -84,7 +84,7 @@ def test_empty_input_for_present_key_clears_to_none():
 def test_absent_key_left_empty_is_omitted():
     """A sub-key the original section did NOT carry, left empty, is not introduced. FAILS IF the
     assembler adds an empty key the source lacked (breaking round-trip on subset-map surveys)."""
-    # identifiers originally only carried dataset_doi + project_raid (a real subset case).
+    # identifiers carries only dataset_doi + project_raid (a real subset case).
     original = {"dataset_doi": None, "project_raid": None}
     form = {
         "s_identifiers_dataset_doi": "",
@@ -153,7 +153,7 @@ def test_bad_embargo_date_errors():
         ef.assemble_section(form, "access")
 
 
-# ---- access.coordinates (C42 survey-level coordinate-access policy) ------------------------------
+# ---- access.coordinates (survey-level coordinate-access policy) ------------------------------
 
 def test_coordinate_policy_key_and_vocab_match_engine():
     """The editor's declared key + vocab are IDENTICAL to what the engine consumes: the sub-key is
@@ -183,8 +183,8 @@ def test_coordinate_policy_key_parity_through_real_engine_parser():
         default, overrides = coordacc.parse_coordinate_policy(assembled)
         assert default == policy, (
             f"editor-assembled {assembled!r} parsed by the engine to {default!r}, not the intended "
-            f"{policy!r} — a key/spelling mismatch would make the policy a silent no-op")
-        assert overrides == {}  # survey-level lane only; no per-station overrides written here
+            f"{policy!r} - a key/spelling mismatch would make the policy a silent no-op")
+        assert overrides == {}  # survey-level only; no per-station overrides written here
 
 
 def test_coordinate_policy_unset_round_trips_to_omit():
@@ -219,7 +219,7 @@ def test_setting_coordinate_policy_adds_only_that_key():
     assert ef.assemble_section(form, "access") == {**original, "coordinates": "withheld"}
 
 
-# ---- access.coordinate_overrides (C43 Stage-4 per-station coordinate-access overrides) -----------
+# ---- access.coordinate_overrides (Stage-4 per-station coordinate-access overrides) -----------
 #
 # The stations-panel fieldset (exact / generalised / withheld + inherit) assembles a
 # {BASE_station_id: policy} map and submits it as the ONE field s_access_coordinate_overrides
@@ -263,8 +263,8 @@ def test_coordinate_overrides_key_parity_through_real_engine():
     default, overrides = coordacc.parse_coordinate_policy(assembled)
     assert default == "exact"
     assert overrides == overrides_in, (
-        f"engine parsed overrides {overrides!r}, not the editor-assembled {overrides_in!r} "
-        f"— a key/spelling drift would make the per-station policy a silent no-op")
+        f"engine parsed overrides {overrides!r}, not the editor-assembled {overrides_in!r}: "
+        f"a key/spelling drift would make the per-station policy a silent no-op")
     # every key validates against the REAL records (no raise) ...
     coordacc.validate_overrides(overrides, records)
     # ... and is EFFECTIVE: each key changes at least one record's resolved policy vs the bare default.
@@ -272,7 +272,7 @@ def test_coordinate_overrides_key_parity_through_real_engine():
         hits = [r for (_p, r) in records
                 if coordacc.station_policy(default, overrides, r.get("id"), r.get("variant")) == pol
                 and coordacc.station_policy(default, {}, r.get("id"), r.get("variant")) != pol]
-        assert hits, (f"override {key!r}={pol!r} matched no record — a validated-but-inert key "
+        assert hits, (f"override {key!r}={pol!r} matched no record - a validated-but-inert key "
                       f"(the matcher-divergence class)")
 
 
@@ -352,8 +352,8 @@ def test_coordinate_overrides_empty_and_inherit_omit_the_key():
 
 
 def test_coordinate_overrides_inherit_removes_a_present_key():
-    """INHERIT removes a previously-pinned station: original had {CP1L04: withheld}; resubmitting an
-    empty map yields an access block that no longer carries coordinate_overrides, so apply_patch's
+    """INHERIT removes a pinned station: the original carries {CP1L04: withheld}; resubmitting an
+    empty map yields an access block that carries no coordinate_overrides, so apply_patch's
     surgical map-merge DELETES the key (byte-clean removal). FAILS IF a removed override lingers."""
     original = {"level": "open", "coordinate_overrides": {"CP1L04": "withheld"}}
     form = {
@@ -400,7 +400,7 @@ def test_coordinate_overrides_malformed_payload_rejected():
                              **_snap("access", {"level": "open"})}, "access")
 
 
-# ---- C42 coordinate-privacy: an ordinary access edit must PRESERVE the overrides map --------------
+# ---- Coordinate-privacy: an ordinary access edit must PRESERVE the overrides map --------------
 #
 # The Metadata-tab per-section access form models only the four access scalars (level / coordinates /
 # embargo_until / contact) — it does NOT render s_access_coordinate_overrides. So an ordinary access
@@ -409,10 +409,10 @@ def test_coordinate_overrides_malformed_payload_rejected():
 # explicit EMPTY map (the stations panel: DELETE the key — set-all-to-inherit). Before this fix an
 # absent field collapsed to {} exactly like an explicit clear, so apply_patch's surgical merge deleted
 # the whole coordinate_overrides map, silently reverting every withheld/generalised station to the
-# survey default (usually exact) — its TRUE coordinates served on the next build (a C42 leak).
+# survey default (usually exact) - its TRUE coordinates served on the next build (a leak).
 
 def test_ordinary_access_edit_preserves_existing_coordinate_overrides():
-    """C42 LEAK PIN (RED on pre-fix HEAD dfa5bab): a Metadata-tab access edit that changes ONLY
+    """LEAK PIN (RED on pre-fix HEAD dfa5bab): a Metadata-tab access edit that changes ONLY
     embargo_until — submitting NO s_access_coordinate_overrides field, exactly what that form posts —
     must PRESERVE the survey's existing coordinate_overrides map. FAILS IF an unrelated access edit
     drops a withheld/generalised station back to the survey default (the silent un-masking)."""
@@ -430,7 +430,7 @@ def test_ordinary_access_edit_preserves_existing_coordinate_overrides():
     assert out is not ef._OMIT
     assert out["embargo_until"] == "2027-06-30"
     assert out["coordinate_overrides"] == {"SITE1": "withheld", "SITE2": "generalised"}, \
-        "an embargo-only access edit dropped the coordinate_overrides map (C42 coordinate-privacy leak)"
+        "an embargo-only access edit dropped the coordinate_overrides map (a coordinate-privacy leak)"
 
 
 def test_access_edit_with_absent_overrides_and_no_original_stays_omit():
@@ -453,7 +453,7 @@ def test_stations_panel_clear_all_removes_overrides_despite_original_map():
     """OVER-PRESERVATION GUARD: field PRESENT + explicit EMPTY map (the stations-panel set-all-to-
     inherit) must still DELETE the key even when the original carried a map and a sibling scalar also
     changed. This is the OTHER side of the absent/present distinction — the fix must not over-preserve
-    a map the curator explicitly cleared. FAILS IF the clear-all no longer removes the key."""
+    a map the curator explicitly cleared. FAILS IF the clear-all does not remove the key."""
     original = {"level": "open", "contact": "old@example.org",
                 "coordinate_overrides": {"SITE1": "withheld"}}
     form = {
@@ -469,7 +469,7 @@ def test_stations_panel_clear_all_removes_overrides_despite_original_map():
 
 
 def test_survey_level_coordinates_default_survives_sibling_scalar_edit():
-    """C42 sibling-scalar class (the survey-level policy, one level up from the per-station map): editing
+    """Sibling-scalar class (the survey-level policy, one level up from the per-station map): editing
     a SIBLING access scalar (embargo) must not drop the survey-level `coordinates` policy. The Metadata
     form round-trips the coordinates <select>, so it is re-posted verbatim and the assembler keeps it.
     FAILS IF a sibling-only edit drops access.coordinates (the same silent un-mask, survey-granularity)."""
@@ -545,7 +545,7 @@ def test_coordinate_and_level_selects_validate_independently():
 
 def test_time_series_levels_checkboxes():
     """levels_available assembles from the checked c_time_series_levels_available_* boxes in canonical
-    order. FAILS IF checkbox names are not read or order is not canonical. IDCONS D2: collection_pid is
+    order. FAILS IF checkbox names are not read or order is not canonical. The collection_pid field is
     RETIRED from the editor UI, so a stray s_time_series_collection_pid input is IGNORED (not assembled);
     a stored collection_pid instead ROUND-TRIPS verbatim via the unmodelled-key carry-forward."""
     form = {
@@ -563,8 +563,8 @@ def test_time_series_levels_checkboxes():
 
 def test_list_rows_assemble_and_blank_rows_dropped():
     """A list section assembles filled rows; an all-empty spare row is dropped. FAILS IF a blank spare
-    row lands in the yaml as a row of nulls (the no-JS degradation must be inert). A2: retargeted off
-    the retired principal_investigators section onto publications, an all-scalar list of the same shape
+    row lands in the yaml as a row of nulls (the no-JS degradation must be inert). The section read
+    here is publications, an all-scalar list
     (creators/contributors are assembled by the unified People panel, not this generic path)."""
     form = {
         "l_publications_0_author": "Alice Example",
@@ -580,8 +580,8 @@ def test_list_rows_assemble_and_blank_rows_dropped():
 
 def test_list_partial_row_kept_with_nulls():
     """A partially-filled row is kept with the empty sub-fields as null. FAILS IF a partial row is
-    dropped (losing curator input). IDCONS D2: instruments[].pid is RETIRED from the row widgets, so a
-    stray l_instruments_0_pid input is IGNORED — the assembled row carries only the modelled sub-keys."""
+    dropped (losing curator input). The instruments[].pid sub-key is RETIRED from the row widgets, so a
+    stray l_instruments_0_pid input is IGNORED - the assembled row carries only the modelled sub-keys."""
     form = {
         "l_instruments_0_manufacturer": "Phoenix",
         "l_instruments_0_model": "",
@@ -662,7 +662,7 @@ def test_build_section_patch_empty_form_is_empty_patch():
     assert patch == {} and errors == []
 
 
-# ---- C46: attribution (map) + sources (list) capture --------------------------------------------
+# ---- Attribution (map) + sources (list) capture -------------------------------------------------
 
 # The GENERATED engine contract seam, loaded by path (engine-truth). _contract.py is a stdlib-only
 # generated constants file (no heavy stack), so it loads cleanly in the stack-less gateway test env.
@@ -671,7 +671,7 @@ def test_build_section_patch_empty_form_is_empty_patch():
 _ENGINE_CONTRACT_PY = Path(__file__).resolve().parents[2] / "engine" / "extract" / "_contract.py"
 
 # The REAL surveys validator, loaded from the VENDORED copy that ships with the gateway (the same copy
-# the F7 oracles use). The C46-W1c key-parity pin feeds an editor-assembled patch through THIS validator
+# the oracles use). The key-parity pin feeds an editor-assembled patch through THIS validator
 # and asserts zero unknown-key warnings — cross-repo engine-truth, not a hand-typed expectation.
 _VENDORED_VALIDATOR_PY = (Path(__file__).resolve().parent / "fixtures" / "vendored_validation"
                           / "validate_survey.py")
@@ -714,7 +714,7 @@ def _write_survey(folder: Path, meta: dict) -> None:
     (folder / "LICENSE.md").write_text("# Licence\n\n**CC-BY-4.0**\n", encoding="utf-8")
 
 
-# D-L3 (SPEC §9.3): the acquisition fields (title/licence/retrieved/statement/profile) that used to live
+# The acquisition fields (title/licence/retrieved/statement/profile) that would otherwise live
 # on a sources[] row now ride a related_identifiers row (identifies: entire). Same SOURCE_KEYS allow-list
 # at the validator, so the key-parity pin now feeds the merged row.
 _C46_FORM = {
@@ -738,15 +738,15 @@ _C46_FORM = {
 
 def test_key_parity_editor_patch_through_real_validator(tmp_path):
     """KEY-PARITY PIN (the important one): an editor-assembled attribution + related_identifiers patch
-    (the row carrying the MERGED acquisition fields, D-L3), written to a survey.yaml and read back by the
+    (the row carrying the MERGED acquisition fields), written to a survey.yaml and read back by the
     REAL vendored surveys validator, produces ZERO unknown-key warnings — the editor's FROZEN section keys
-    equal the validator's ATTRIBUTION_KEYS / SOURCE_KEYS (the C42-editor key-parity lesson, cross-repo).
+    equal the validator's ATTRIBUTION_KEYS / SOURCE_KEYS (the key-parity lesson, cross-repo).
     MUTATION-PROOF below (rename one key -> red)."""
     vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_validate")
     patch, errors = ef.build_section_patch(_C46_FORM)
     assert not errors, errors
     assert set(patch) == {"attribution", "related_identifiers"}, patch
-    # the relation DERIVED from identifies: entire (D-L2) and the acquisition fields round-tripped onto the row
+    # the relation DERIVED from identifies: entire, and the acquisition fields round-tripped onto the row
     assert patch["related_identifiers"][0]["relation"] == "IsVariantFormOf"
     assert patch["related_identifiers"][0]["title"] == "AusLAMP SA – NCI/AuScope archive"
 
@@ -774,7 +774,7 @@ def test_key_parity_mutation_proof(tmp_path):
     _write_survey(folder, _survey_meta_with(patch))
     rep = vv.validate(folder)
     assert any(i["check"] == "attribution" and "custodianX" in i["message"] for i in rep.items), \
-        "validator did not flag a drifted attribution key — the parity pin would be vacuous"
+        "validator did not flag a drifted attribution key - the parity pin would be vacuous"
 
 
 def test_attribution_bool_and_round_trip():
@@ -786,7 +786,7 @@ def test_attribution_bool_and_round_trip():
         **_snap("attribution", {"custodian": "GSSA", "changes_made": True, "declared_date": "2026-07-13"}),
     }
     assert ef.assemble_section(form, "attribution") is ef._OMIT
-    # unticking a previously-true flag is a real change to False (not a silent drop)
+    # unticking a flag the original set true is a real change to False (not a silent drop)
     form2 = {"s_attribution_custodian": "GSSA",
              **_snap("attribution", {"custodian": "GSSA", "changes_made": True})}
     assert ef.assemble_section(form2, "attribution") == {"custodian": "GSSA", "changes_made": False}
@@ -800,7 +800,7 @@ def test_attribution_bad_declared_date_errors():
 
 
 def test_related_identifiers_acquisition_licence_and_profile_vocab_enforced():
-    """D-L3: the acquisition fields merged onto a related_identifiers row keep the fail-closed vocab
+    """The acquisition fields merged onto a related_identifiers row keep the fail-closed vocab
     discipline the retired sources[] row had — licence against the contract vocab, profile against
     ga|generic. A valid pair assembles; an out-of-vocab value fail-closes at the form. FAILS IF the merged
     row would accept a value the validator/engine would reject."""
@@ -819,7 +819,7 @@ def test_related_identifiers_acquisition_licence_and_profile_vocab_enforced():
                              **_snap("related_identifiers", [])}, "related_identifiers")
 
 
-# ---- §2a/§2b: related_identifiers (typed list) + identifiers.instrument_pid ----------------------
+# ---- related_identifiers (typed list) + identifiers.instrument_pid -------------------------------
 
 def test_related_identifiers_vocab_matches_vendored_validator():
     """PARITY PIN: the editor's baked RELATION_TYPES / IDENTIFIER_TYPES / identifies vocab equal the surveys
@@ -858,30 +858,30 @@ def _load_credit_validator():
 
 
 def test_credit_vocab_matches_surveys_validator():
-    """PARITY PIN (CONTRIBUTOR-CREDIT-SPEC §6): the editor's baked NAME_TYPES / CONTRIBUTOR_ROLES equal the
-    surveys validator's FROZEN credit vocabularies, read from the arm conftest resolves. Skipped only when
-    that validator predates the credit vocab - a stale sibling checkout, since the vendored copy carries
-    it; that skip is deliberately NOT on gateway-ci's allow-list, so a CI run that lost the vocab reds the
-    lane instead of passing quietly. Where it runs it FAILS IF the editor vocab drifts from the ratified
-    validator vocab - a mis-typed name_type/role would mis-classify an actor or publish a wrong provenance
-    claim, so the two must never disagree."""
+    """PARITY PIN (the contributor-credit model): the editor's baked NAME_TYPES / CONTRIBUTOR_ROLES
+    equal the surveys validator's FROZEN credit vocabularies, read from the arm conftest resolves.
+    Skipped only when that validator predates the credit vocab - a stale sibling checkout, since the
+    vendored copy carries it; that skip is deliberately NOT on gateway-ci's allow-list, so a CI run
+    that lost the vocab reds the workflow instead of passing quietly. Where it runs it FAILS IF the
+    editor vocab drifts from the validator vocab - a mis-typed name_type/role would mis-classify an
+    actor or publish a wrong provenance claim, so the two must never disagree."""
     vv = _load_credit_validator()
     if vv is None:
         pytest.skip(f"the resolved validator {require_validator_dir()} predates the credit vocab")
     assert set(ef.NAME_TYPES) == set(vv.NAME_TYPES), "editor NAME_TYPES drifted from the validator"
     assert set(ef.CONTRIBUTOR_ROLES) == set(vv.CONTRIBUTOR_ROLES), \
         "editor CONTRIBUTOR_ROLES drifted from the validator"
-    # the ordered tuple must match the validator's ratified order too (creators/contributors selects
-    # present the roles in the spec's §3.1 order).
+    # the ordered tuple must match the validator's order too (creators/contributors selects
+    # present the roles in the spec's order).
     assert tuple(ef.CONTRIBUTOR_ROLES) == tuple(vv.CONTRIBUTOR_ROLES_ORDERED), \
-        "editor CONTRIBUTOR_ROLES order drifted from the validator's ratified order"
+        "editor CONTRIBUTOR_ROLES order drifted from the validator's declared order"
 
 
 def test_credit_vocab_pin_reads_the_resolved_validator_arm(monkeypatch):
     """The credit-vocab pin must read the SAME validator arm as every other cross-repo oracle in this
     suite, i.e. whatever conftest.resolve_validator_dir returns. FAILS IF this pin re-derives its own
     candidate order and prefers the vendored copy: that inversion shipped, so on every dev box the
-    ratified vocab was compared against a snapshot while the live sibling went unread. Both arms are
+    vocab was compared against a snapshot while the live sibling went unread. Both arms are
     asserted because they resolve to the same file in CI, where only the vendored copy exists."""
     for forced in (None, "1"):
         if forced is None:
@@ -964,17 +964,17 @@ def test_related_identifiers_validator_fails_bad_relation_non_vacuous(tmp_path):
     _write_survey(folder, meta)
     rep = vv.validate(folder)
     assert any(i["check"] == "related_identifiers" and i["level"] == "FAIL" for i in rep.items), \
-        "validator did not FAIL a bogus relation — the vocab pin would be vacuous"
+        "validator did not FAIL a bogus relation - the vocab pin would be vacuous"
 
 
 def test_identifies_out_of_vocab_is_fail_closed():
-    """D-L1: `identifies` is a fail-closed vocab (like relation/identifier_type) — an out-of-vocab level
+    """`identifies` is a fail-closed vocab (like relation/identifier_type) - an out-of-vocab level
     is a SectionError, because a mis-typed level auto-derives a WRONG relation and must block, not ship."""
     with pytest.raises(ef.SectionError):
         ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
                              "l_related_identifiers_0_identifies": "level9",
                              **_snap("related_identifiers", [])}, "related_identifiers")
-    # every ratified level is accepted
+    # every allowed level is accepted
     for lvl in ef.IDENTIFIES_LEVELS:
         out = ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
                                    "l_related_identifiers_0_identifier_type": "DOI",
@@ -984,9 +984,9 @@ def test_identifies_out_of_vocab_is_fail_closed():
 
 
 def test_relation_auto_derives_from_identifies_server_side():
-    """D-L2: when a row states `identifies`, the DataCite relation DERIVES from it server-side — the form
+    """When a row states `identifies`, the DataCite relation DERIVES from it server-side - the form
     carries NO explicit relation (the control is hidden on an identifies row), and the assembler writes the
-    derived value. Every level maps to its ratified relation. FAILS IF a level does not derive its relation."""
+    derived value. Every level maps to its relation. FAILS IF a level does not derive its relation."""
     expected = {"collection": "IsPartOf", "raw_packed": "IsDerivedFrom", "level0": "IsDerivedFrom",
                 "level1": "IsDerivedFrom", "level2": "IsVariantFormOf", "level3": "IsSourceOf",
                 "entire": "IsVariantFormOf"}
@@ -1000,7 +1000,7 @@ def test_relation_auto_derives_from_identifies_server_side():
 
 
 def test_legacy_relation_row_without_identifies_is_preserved():
-    """D-L2 back-compat: a legacy row that carries an explicit relation but NO identifies keeps its relation
+    """Back-compat: a legacy row that carries an explicit relation but NO identifies keeps its relation
     exactly (no derivation, no identifies key introduced) — an unchanged submit round-trips to _OMIT. FAILS
     IF the merge clobbers a legacy relation or sprays a null identifies onto the row."""
     legacy = [{"identifier": "10.25914/legacy", "identifier_type": "DOI", "relation": "Cites",
@@ -1027,7 +1027,7 @@ def test_identifies_row_derives_even_when_no_explicit_relation_field_present():
 
 
 def test_instrument_pid_persists_and_round_trips():
-    """identifiers.instrument_pid (§2b, wave-1 EXPAND) assembles from its input and round-trips to
+    """identifiers.instrument_pid (additive) assembles from its input and round-trips to
     _OMIT when unchanged. FAILS IF the new field is not read, or an unchanged submit emits a diff. It
     is additive/WARNING-only at the validator, so the editor never blocks on its format (plain text)."""
     form = {"s_identifiers_dataset_doi": "10.5281/zenodo.1",
@@ -1043,8 +1043,8 @@ def test_instrument_pid_persists_and_round_trips():
 
 
 # ==================================================================================================
-# A2 (LANE-CONTRACT-FORM-CREDIT section 5): the retired flat credit keys leave the editor, and the
-# ratified MTCAT 2.0 curated homes arrive - citation{}, organisations[], acknowledgements[] and the
+# The retired flat credit keys leave the editor, and the
+# MTCAT 2.0 curated homes arrive - citation{}, organisations[], acknowledgements[] and the
 # identity_classification designation mapping. Every vocab is pinned to the vendored surveys
 # validator (the fail-closed parity discipline), and the key-parity pin feeds a fully assembled
 # patch through the REAL validator so an editor key the validator does not recognise is caught
@@ -1052,10 +1052,10 @@ def test_instrument_pid_persists_and_round_trips():
 # ==================================================================================================
 
 def test_retired_flat_credit_keys_are_no_longer_editor_sections():
-    """A2 (D14/D7): lead_investigator and principal_investigators are GONE from the editor registries,
+    """lead_investigator and principal_investigators are GONE from the editor registries,
     and with them the legacy Convert surface (_LEGACY_CREDIT_KEYS / convert_requested /
     _apply_legacy_convert / DELETE_DIRECTIVE). FAILS IF any of them survives - a curator control that
-    edits a key the migration deleted and the engine no longer reads."""
+    edits a key the migration deleted and the engine does not read."""
     assert "lead_investigator" not in ef.MAP_SECTIONS
     assert "principal_investigators" not in ef.LIST_SECTIONS
     for gone in ("_LEGACY_CREDIT_KEYS", "convert_requested", "_apply_legacy_convert",
@@ -1089,7 +1089,7 @@ def test_citation_text_source_out_of_vocab_fails_closed():
 
 
 def test_citation_text_source_without_preferred_text_fails_closed():
-    """D17: text_source states where preferred_text came from, so it is meaningless without one.
+    """text_source states where preferred_text came from, so it is meaningless without one.
     FAILS IF a bare text_source assembles (it would claim provenance for wording that is not there)."""
     form = {"s_citation_preferred_text": "", "s_citation_text_source": "source_provided",
             **_snap("citation", {})}
@@ -1098,7 +1098,7 @@ def test_citation_text_source_without_preferred_text_fails_closed():
 
 
 def test_citation_preferred_identifier_assembles_as_a_nested_pair():
-    """D18 (resolved): the editor writes citation.preferred_identifier ONLY as the NESTED
+    """The editor writes citation.preferred_identifier ONLY as the NESTED
     {scheme, identifier} pair. FAILS IF flat scheme/identifier sub-keys land on citation (the
     validator WARNs them as unrecognised keys) or the pair is not nested."""
     form = {"s_citation_preferred_text": "GSSA (2016).",
@@ -1112,7 +1112,7 @@ def test_citation_preferred_identifier_assembles_as_a_nested_pair():
 
 
 def test_citation_preferred_identifier_is_both_or_neither():
-    """D18: a half-declared pair cannot anchor the citation invariant, so the editor fail-closes on one
+    """A half-declared pair cannot anchor the citation invariant, so the editor fail-closes on one
     half. FAILS IF a lone scheme (or a lone identifier) is assembled and shipped to the validator."""
     for half in ({"s_citation_preferred_identifier_scheme": "DOI",
                   "s_citation_preferred_identifier_identifier": ""},
@@ -1261,11 +1261,11 @@ def test_acknowledgements_type_vocab_is_warn_only_not_fail_closed():
         {"text": "Wording", "type": "legacy_type"}]
 
 
-# ---- identity_classification (survey-metadata lane D12; the designation home) --------------------
+# ---- identity_classification (the designation home) --------------------
 
 def test_identity_classification_assembles_case_and_represents_rows():
     """The designation mapping {case, represents[] | own_identifiers[]} assembles from the case select
-    plus its pair rows. FAILS IF the rows are not read (the citation chain would have nothing to
+    plus its pair rows. FAILS IF the rows are not read (the citation chain then has nothing to
     match) or the retired scalar-string form is emitted."""
     form = {"s_identity_classification_case": "case_a",
             "l_identity_classification_represents_0_scheme": "DOI",
@@ -1316,7 +1316,7 @@ def test_identity_classification_absent_rows_preserve_the_stored_designation():
 # ---- vocab parity pins against the vendored surveys validator ------------------------------------
 
 def test_mtcat20_vocabs_match_the_vendored_validator():
-    """PARITY PIN (A2): the editor's baked ORG_ROLES_ORDERED / ACKNOWLEDGEMENT_TYPES /
+    """PARITY PIN: the editor's baked ORG_ROLES_ORDERED / ACKNOWLEDGEMENT_TYPES /
     CITATION_TEXT_SOURCES / IDENTITY_CLASSIFICATIONS equal the surveys validator's FROZEN
     vocabularies, and the modelled section keys equal its row allow-lists. FAILS IF a vocab or key set
     is extended surveys-side and not mirrored here - the drift that publishes an unrecognised key or
@@ -1364,7 +1364,7 @@ _MTCAT20_FORM = {
 
 
 def test_key_parity_mtcat20_patch_through_real_validator(tmp_path):
-    """KEY-PARITY PIN (A2, the important one): an editor-assembled citation + identity_classification +
+    """KEY-PARITY PIN (the important one): an editor-assembled citation + identity_classification +
     organisations + acknowledgements patch, written to a survey.yaml and read back by the REAL vendored
     surveys validator, produces ZERO unknown-key warnings AND ZERO FAILs - the editor's frozen section
     keys equal the validator's allow-lists and the assembled citation chain is internally consistent.
@@ -1387,7 +1387,7 @@ def test_key_parity_mtcat20_patch_through_real_validator(tmp_path):
 
 def test_key_parity_mtcat20_mutation_proof(tmp_path):
     """NON-VACUOUS proof: dropping the designation (identity_classification) makes the REAL validator
-    FAIL the assembled citation.preferred_identifier - the D20 citation-chain rule this lane relies on
+    FAIL the assembled citation.preferred_identifier - the citation-chain rule this module relies on
     to refuse an inconsistent curator save. FAILS IF the validator would accept an undesignated
     preferred_identifier (which would make the parity pin above vacuous)."""
     vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_mtcat20_mut")
@@ -1402,7 +1402,7 @@ def test_key_parity_mtcat20_mutation_proof(tmp_path):
 
 
 def test_gateway_carries_no_retired_credit_key_outside_tests():
-    """GREP PIN (A2): no retired flat credit key is read anywhere in the gateway package outside the
+    """GREP PIN: no retired flat credit key is read anywhere in the gateway package outside the
     test tree and the vendored validator copy. The legitimate needles are the PII fixture in
     test_intake_files.py and the round-trip fixture in test_edit_runner.py, both under tests/.
     FAILS IF a reader, a registry entry or a rendered control survives the retirement."""
@@ -1418,12 +1418,12 @@ def test_gateway_carries_no_retired_credit_key_outside_tests():
     assert not offenders, f"retired credit keys still referenced: {offenders}"
 
 
-# ---- G1 (section-3 review): the CARE panel must reach the patch ---------------------------------
+# ---- the CARE panel must reach the patch --------------------------------------------------------
 
 def test_care_json_edit_reaches_the_patch():
     """The CARE governance panel renders as j_care on both editing surfaces under 'leave blank to
     leave unchanged' - so a non-blank j_care MUST become a care patch. FAILS IF build_section_patch
-    never reads j_care (pre-lane: 'care' was in neither MAP_SECTIONS nor LIST_SECTIONS, so a
+    never reads j_care (earlier: 'care' was in neither MAP_SECTIONS nor LIST_SECTIONS, so a
     curator's Indigenous data-governance edit was silently discarded with no diff and no error)."""
     edited = {"traditional_owner_acknowledgement": "NEW WORDING",
               "land_access": {"permission_obtained": True},

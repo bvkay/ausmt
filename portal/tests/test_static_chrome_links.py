@@ -1,13 +1,13 @@
-"""Where the static pages' chrome actually points (findability lane, index pages).
+"""Where the static pages' chrome actually points (findability workflow, index pages).
 
-The static portal pages (about, releases, add-survey, and brand since the brand-assets lane) carry
+The static portal pages (about, releases, add-survey, and brand) carry
 the same header as index.html so the chrome reads identically across the site. Their LINKS did not
 follow: every primary nav item pointed at bare index.html, which meant
 
   * Surveys and Collections both landed on the Map - four header items that silently
     mis-navigated, documented as deliberate in about.html's own source comment because no route
     existed to point them at;
-  * every one of those links took a needless 301 hop (/index.html -> /), including add-survey's
+  * every one of those links took a needless 301 hop (`/index.html` -> `/`), including add-survey's
     "Back to portal";
   * the guided-tour link was index.html?tour=1, whose query the alias redirect dropped, so the
     tour could not be started from its only documented entry point;
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = "https://ausmt.auscope.org.au"
 
 # page -> its canonical path, the URL a crawler must be told is the one true address for it.
-# brand.html joined them in the brand-assets lane: it is substantive, linked from About and
+# brand.html joined them in the brand-assets workflow: it is substantive, linked from About and
 # advertised in sitemap.xml, so it answers to the same chrome rules as the other three.
 _STATIC_PAGES = {
     "about.html": f"{BASE}/about.html",
@@ -87,7 +87,7 @@ def test_every_static_page_declares_its_canonical(name, url):
 
 def test_the_404_page_recovers_to_the_surveys_index():
     """FAILS IF the 404 page's recovery link still points at the dead #/surveys hash route. It is
-    the one link a reader who arrived on a stale URL is offered, and it used to leave them on the
+    the one link a reader who arrived on a stale URL is offered, and it must not leave them on the
     map with no explanation."""
     text = _text("404.html")
     assert 'href="/surveys"' in text, "the 404 recovery link must reach the surveys index"
@@ -95,7 +95,7 @@ def test_the_404_page_recovers_to_the_surveys_index():
 
 
 def test_the_spa_header_surveys_and_collections_are_real_links():
-    """LANE-ADDENDUM-HUB-FEEDBACK.md R10, the owner's live review of /surveys.
+    """LANE-ADDENDUM-HUB-FEEDBACK.md, the live review of /surveys.
 
     The hub pages exist and are served at /surveys and /collections, so the SPA header's own Surveys
     and Collections controls stop being in-app view switches and become links to them, matching the
@@ -115,9 +115,9 @@ def test_the_spa_header_surveys_and_collections_are_real_links():
 
 
 def test_the_spa_keeps_its_in_app_surveys_and_collections_views_on_their_hash_routes():
-    """The other half of R10: making the header controls into links must not RETIRE the in-app
+    """The other half: making the header controls into links must not RETIRE the in-app
     views. #/surveys and #/collections are published in the wild and still switch the SPA's own
-    grid views, and the header no longer wires a click handler onto controls that navigate away.
+    grid views, and the header does not wire a click handler onto controls that navigate away.
 
     FAILS IF the hash branches go, or if a click handler is left on a control that is now a link
     (which would run a view switch the browser is about to navigate away from)."""

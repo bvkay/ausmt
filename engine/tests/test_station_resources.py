@@ -1,19 +1,19 @@
 """resources[] on the promoted station.json: what represents this station, and what merely contains it.
 
-D3: an open station's resources are the SERVED, ADDRESSABLE things - its transfer function as EDI,
+An open station's resources are the SERVED, ADDRESSABLE things - its transfer function as EDI,
 as canonical EMTF XML and as MTH5, plus the per-survey archives those files are bundled into. Each
 carries the path the download manifest records for the same bytes, and none carries `identifiers[]`,
 because a DOI identifying THIS EXACT file does not exist for anything AusMT serves today.
 
-D19 splits the role question in two, and the lane emits both axes only where they are mechanically
+The role question splits in two, and the engine emits both axes only where they are mechanically
 certain: the served EDI is the never-edited source in its original form; the EMTF XML and the MTH5
 are engine conversions of it, so they are derived alternates. The bundle archives carry NEITHER
-axis, because whether a zip of source EDIs is source or derived is a semantics call this lane must
+axis, because whether a zip of source EDIs is source or derived is a semantics call this module must
 not improvise.
 
 `related_collection_identifiers[]` is the containing-collection hook, and it is projected ONLY from
 rows whose ENTITY SCOPE the curation states, because placement verification is mandatory and this
-lane resolves no DOIs. A row carrying no `identifies`, a row that is not a DOI, and a DOI a survey
+workflow resolves no DOIs. A row carrying no `identifies`, a row that is not a DOI, and a DOI a survey
 declares at two different levels are all REFUSED and reported for curation instead: an unplaceable
 row would publish a wrong citation claim.
 
@@ -63,18 +63,18 @@ def _manifest(out):
 # ---- the rows ------------------------------------------------------------------------------------
 
 def test_an_open_station_publishes_its_served_renditions(built):
-    """FAILS against the pre-A8 emitter, which published no resources[] at all."""
+    """FAILS against the earlier emitter, which published no resources[] at all."""
     doc = _station(built, "example-survey", "EXAMPLE01")
     rows = {r["id"]: r for r in doc["resources"]}
     assert "edi" in rows and "emtfxml" in rows
     assert rows["edi"]["kind"] == "transfer_function" and rows["edi"]["format"] == "edi"
     assert rows["emtfxml"]["format"] == "emtfxml"
     assert all("identifiers" not in r for r in doc["resources"]), \
-        "no DOI identifies any exact file AusMT serves today (D3)"
+        "no DOI identifies any exact file AusMT serves today"
 
 
 def test_the_role_axes_are_emitted_only_where_they_are_certain(built):
-    """D19 at its ratified default."""
+    """The role axes at their default."""
     rows = {r["id"]: r for r in _station(built, "example-survey", "EXAMPLE01")["resources"]}
     assert (rows["edi"]["provenance_role"], rows["edi"]["representation_role"]) == ("source", "original")
     assert (rows["emtfxml"]["provenance_role"],
@@ -86,7 +86,7 @@ def test_the_role_axes_are_emitted_only_where_they_are_certain(built):
 def test_the_survey_archives_ride_every_station_whose_bytes_are_in_them(built):
     """An archive row is a CONTAINMENT claim, so a bundle rides the stations that actually put bytes
     into it, not every station of its survey. In this all-exact fixture that is every station; the
-    C42 arm in test_station_emission.py is where the two differ."""
+    arm in test_station_emission.py is where the two differ."""
     doc = _station(built, "example-survey", "EXAMPLE01")
     archives = [r for r in doc["resources"] if r["kind"] == "archive"]
     assert {r["format"] for r in archives} == {"zip"}

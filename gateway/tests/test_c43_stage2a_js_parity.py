@@ -1,7 +1,7 @@
-"""C43-S2a fix round F3: EXECUTABLE JS↔Python parity pins for the Stations-tab classification and
+"""EXECUTABLE JS↔Python parity pins for the Stations-tab classification and
 URL construction (modelled on portal/tests/test_interactions.py's node-driver pattern).
 
-WHY EXECUTABLE: the fix round's F1 (JS truncated `%` vs Python floored `%` on negatives — 362 trueYx
+WHY EXECUTABLE: the modulo defect (JS truncated `%` vs Python floored `%` on negatives - 362 trueYx
 mismatches and a verdict flip at stored≈−0.05) SHIPPED PAST the source-string parity pin, which only
 asserted the JS *contains* certain substrings. These pins EXECUTE the extracted JS functions in Node
 and compare against gateway.phaseqc (the authoritative spec) over a boundary-heavy vector set, so a
@@ -10,12 +10,12 @@ semantics divergence — not just a missing substring — goes red.
 Node dependency posture (stated for the gate): pure `node` only — NO jsdom, NO npm install, no new
 deps (the extracted functions are DOM-free). Local dev box: node v22 present. Gateway CI
 (gateway-ci.yml, ubuntu-latest): node is preinstalled on GitHub-hosted runners, so these pins RUN in
-CI. If node were ever absent, the pytest.skip reason below is deliberately NOT on the gateway lane's
+CI. If node were ever absent, the pytest.skip reason below is deliberately NOT on the gateway workflow's
 skip-tripwire allow-list (engine/tests/ci_check_skips.py --allow "real engine stack / ..."), so the
-lane would fail LOUDLY rather than silently hollowing these pins out — the house tripwire posture.
+workflow would fail LOUDLY rather than silently hollowing these pins out - the house tripwire posture.
 
 Vector-set note: the sweep uses 0.5°-step values plus 2dp seam values (0, ±0.05, ±90, ±180, …).
-Exact x.25-style binary-representable decimal halves are deliberately excluded — Python round() is
+Exact x.25-style binary-representable decimal halves are deliberately excluded - Python round() is
 round-half-even while JS Math.round is half-up, and the pin exists to catch MODULO/BAND semantics
 divergence, not decimal-rounding-convention differences on inputs the 1dp tf.json data cannot carry.
 """
@@ -35,8 +35,8 @@ NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(
     NODE is None,
-    reason="node not present — executable JS parity pins need the node binary "
-           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must red the lane)")
+    reason="node not present - executable JS parity pins need the node binary "
+           "(deliberately NOT on the gateway skip-tripwire allow-list: absent node in CI must fail loudly)")
 
 
 # --------------------------------------------------------------------------------------------------
@@ -91,12 +91,12 @@ def _sweep_vectors() -> list:
 
 
 # --------------------------------------------------------------------------------------------------
-# F1: wrap180 / trueYx / inQ1 / inQ3 parity (executable — Node vs phaseqc)
+# wrap180 / trueYx / inQ1 / inQ3 parity (executable - Node vs phaseqc)
 # --------------------------------------------------------------------------------------------------
 def test_js_wrap180_trueyx_quadrant_parity_sweep(tmp_path):
-    """EXECUTABLE PARITY (F1). The extracted STATIONS_JS wrap180/trueYx/inQ1/inQ3 must agree EXACTLY
+    """EXECUTABLE PARITY. The extracted STATIONS_JS wrap180/trueYx/inQ1/inQ3 must agree EXACTLY
     with phaseqc over the full ±360 sweep + seam values. FAILS IF the JS modulo/band semantics diverge
-    from the Python spec anywhere in the domain — in particular the truncated-% bug: JS `%` keeps the
+    from the Python spec anywhere in the domain - in particular the truncated-% bug: JS `%` keeps the
     dividend's sign, so a negative stored t[4] (exactly the wrong-convention stations this feature
     exists to catch) unwraps to the wrong value and flips the verdict (shown red against the pre-fix
     JS: 362 trueYx mismatches, verdict flip at stored≈−0.05)."""
@@ -135,14 +135,14 @@ process.stdout.write(JSON.stringify(out));
 
 
 # --------------------------------------------------------------------------------------------------
-# F2: URL construction parity (executable — absolute /data/... URLs, tricky slug/id encoding)
+# URL construction parity (executable - absolute /data/... URLs, tricky slug/id encoding)
 # --------------------------------------------------------------------------------------------------
 def test_js_data_urls_absolute(tmp_path):
-    """EXECUTABLE URL PIN (F2). The extracted STATIONS_JS dataUrl/stationJsonUrl must produce the
-    exact expected ABSOLUTE strings for a tricky slug/id (space, plus, hash — hash unencoded would
+    """EXECUTABLE URL PIN. The extracted STATIONS_JS dataUrl/stationJsonUrl must produce the
+    exact expected ABSOLUTE strings for a tricky slug/id (space, plus, hash - hash unencoded would
     truncate the URL at a fragment). ALSO asserts (source-level) that EVERY fetchJson target in the
     JS is absolute (/data/... or a variable built from these helpers). FAILS IF any fetch is
-    page-relative — from /gateway/curator/survey/<slug> a relative 'data/...' resolves to
+    page-relative - from /gateway/curator/survey/<slug> a relative 'data/...' resolves to
     /gateway/curator/survey/data/... → 404 → the whole Stations tab is dead (the shipped pre-fix
     state, shown red)."""
     js = curatorpage.STATIONS_JS
@@ -170,10 +170,10 @@ process.stdout.write(JSON.stringify(out));
 
 
 # --------------------------------------------------------------------------------------------------
-# F4d: classify (slack + median) parity (executable — series semantics, seam-straddling medians)
+# Classify (slack + median) parity (executable - series semantics, seam-straddling medians)
 # --------------------------------------------------------------------------------------------------
 def test_js_classify_median_parity(tmp_path):
-    """EXECUTABLE SERIES PARITY (F4d). The extracted STATIONS_JS classify (slack-widened per-point
+    """EXECUTABLE SERIES PARITY. The extracted STATIONS_JS classify (slack-widened per-point
     flags + seam-mapped median + median-vs-band verdict) must agree exactly with
     phaseqc.classify_series over boundary-heavy series, including a yx cluster straddling the ±180
     seam (where a naive median of (−180,180]-wrapped values is catastrophically wrong). FAILS IF the
@@ -203,7 +203,7 @@ process.stdout.write(JSON.stringify(out));
         {"mode": "xy", "values": [10.0, 45.0, 95.0, -5.0, 200.0, None]},
         # xy: median beyond band+slack (coherent wrong quadrant).
         {"mode": "xy", "values": [-120.0, -130.0, -140.0]},
-        # yx: healthy Q3 cluster (stored values for true -135/-100/-170).
+        # yx: healthy Q3 quadrant cluster (stored values for true -135/-100/-170).
         {"mode": "yx", "values": [_stored_for_true_yx(t) for t in (-135.0, -100.0, -170.0)]},
         # yx: SEAM-STRADDLING cluster — true values -179, -178, +179 (stored 1.0, 2.0, -1.0). A naive
         # (-180,180] median would average across the seam; the engine's (-360,0] mapping keeps it sane.
@@ -227,31 +227,31 @@ process.stdout.write(JSON.stringify(out));
 
 
 # ==================================================================================================
-# H1 (C43-S2a-HOTFIX): the Stations-tab row filter, driven by an ENGINE-PRODUCED catalogue.
+# The Stations-tab row filter, driven by an ENGINE-PRODUCED catalogue.
 #
 # THE LESSON IS THE PIN: the merged Stage-2a filter compared the catalogue `survey` column to the
 # hub's SLUG, but the engine writes the survey display LABEL there (build_portal.py:
-# r["survey"] = survey_label) — zero matches, Stations tab blank on EVERY production survey
-# (owner-reported 2026-07-11). No pin caught it because none drove the filter with rows the ENGINE
+# r["survey"] = survey_label): zero matches, Stations tab blank on EVERY production survey.
+# No pin caught it because none drove the filter with rows the ENGINE
 # produced. These pins run the REAL engine (the same _run_preview seam the gateway uses) over the
 # engine's own sample survey and drive the EXTRACTED filter function with the emitted catalogue —
 # hand-built rows are banned here by design.
 #
-# Skip posture: the engine stack (mt_metadata) is absent in the stackless gateway CI lane, so these
-# pins skip there with EXACTLY the lane's one allow-listed tripwire reason (gateway-ci.yml --allow);
-# on the dev box (ausmt env) and the engine lanes they RUN. Node-absent boxes hit the file-level
+# Skip posture: the engine stack (mt_metadata) is absent in the stackless gateway CI workflow, so these
+# pins skip there with EXACTLY the gateway CI's one allow-listed tripwire reason (gateway-ci.yml --allow);
+# on the dev box (ausmt env) and the engine workflows they RUN. Node-absent boxes hit the file-level
 # pytestmark above, which is deliberately NOT allow-listed.
 # ==================================================================================================
 _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
-# EXACTLY the gateway lane's one allow-listed skip reason (.github/workflows/gateway-ci.yml --allow).
+# EXACTLY the gateway workflow's one allow-listed skip reason (.github/workflows/gateway-ci.yml --allow).
 _ENGINE_SKIP_REASON = "real engine stack / sample survey / validator not present"
 
 
 def _has_real_engine() -> bool:
     """Mirrors test_runner.py's precondition for the no-mocks engine e2e: mt_metadata importable +
     the sample survey + a validator (sibling or vendored — _run_preview's in-build validation needs
-    one). The mt_metadata requirement is what legitimately skips the H1 engine-truth pins in the
-    stackless gateway lane."""
+    one). The mt_metadata requirement is what legitimately skips the engine-truth pins in the
+    stackless gateway workflow."""
     import importlib.util
 
     from gateway.tests.conftest import resolve_validator_dir
@@ -279,7 +279,7 @@ def engine_corpus(tmp_path_factory):
     surveys = {"burra-2017": "Burra Reconnaissance 2017", "burra-2017-18": "Burra 2017-18"}
     sy = (sample / "survey.yaml").read_text(encoding="utf-8")
     assert "slug: sample-survey" in sy and 'name: "CI Sample Survey"' in sy, (
-        "sample survey.yaml drifted — the two-survey fixture derives from its slug/name lines")
+        "sample survey.yaml drifted - the two-survey fixture derives from its slug/name lines")
     pkg = base / "package"
     for slug, label in surveys.items():
         d = pkg / slug
@@ -304,14 +304,13 @@ def engine_corpus(tmp_path_factory):
 
 
 def test_stations_filter_selects_engine_built_rows_by_slug(engine_corpus, tmp_path):
-    """H1 EXECUTABLE ENGINE-TRUTH PIN. The extracted STATIONS_JS row filter (surveyRows), driven in
+    """EXECUTABLE ENGINE-TRUTH PIN. The extracted STATIONS_JS row filter (surveyRows), driven in
     Node with the catalogue the REAL ENGINE emitted, must return EXACTLY the stations the engine
     built for each slug — judged against the engine's own slug-keyed products/<slug>/ tree, an
     INDEPENDENT observable (the products tree is keyed by slug on disk; the catalogue rows carry
     the label). FAILS IF the filter misses a station the engine built for the slug (the shipped
-    Stage-2a defect: label-vs-slug compare matched nothing — shown red 2026-07-11, 0 of 2 rows for
-    both fixture slugs) OR pulls a sibling survey's rows across the trailing-dot boundary
-    (au.burra-2017. must not match au.burra-2017-18.*, and vice versa)."""
+    label-vs-slug compare matched nothing) OR pulls a sibling survey's rows across the trailing-dot
+    boundary (au.burra-2017. must not match au.burra-2017-18.*, and vice versa)."""
     js = curatorpage.STATIONS_JS
     cmap = re.search(r"var C = \{.*?\};", js, re.DOTALL)
     assert cmap, "the catalogue column map (var C = {...}) not found in STATIONS_JS"
@@ -342,7 +341,7 @@ process.stdout.write(JSON.stringify(out));
         rows = got[slug]
         assert sorted(r["id"] for r in rows) == built, (
             f"slug {slug!r}: filter selected {sorted(r['id'] for r in rows)} but the engine built "
-            f"{built} (products/{slug}/) — a missed station blanks the Stations tab; an extra one "
+            f"{built} (products/{slug}/) - a missed station blanks the Stations tab; an extra one "
             f"leaks a sibling survey across the au.<slug>. boundary")
         for r in rows:
             assert r["ausmt_id"].startswith(f"au.{slug}."), (slug, r)
@@ -355,15 +354,15 @@ process.stdout.write(JSON.stringify(out));
 
 
 def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
-    """H1 VERIFY-GATE PIN, engine-truth form (architect ruling 2026-07-11). The 'au.' + slug + '.'
+    """VERIFY-GATE PIN, engine-truth form. The 'au.' + slug + '.'
     prefix join is exact ONLY because every slug that can reach the hub is a safe_component FIXED
     POINT: the engine passes every declared slug through safe_component before it enters ausmt_id
     (build_portal.py discover_work), safe_component is idempotent, and the hub route 404s unless an
     on-disk <slug>/survey.yaml package exists — so no non-fixed-point slug is reachable. The literal
     every-validate_slug-legal-slug form of the gate is FALSE (a legal slug may contain '..', which
-    safe_component collapses to '-'; verified 2026-07-11: 108 of 4920 legal probes transform); such
-    a slug fails EMPTY (zero rows — the honest no-stations message), never WRONG (a sibling's rows).
-    FAILS IF the engine's slug normalisation drifts so a produced slug is no longer a fixed point
+    safe_component collapses to '-': 108 of 4920 legal probes transform); such
+    a slug fails EMPTY (zero rows, the honest no-stations message), never WRONG (a sibling's rows).
+    FAILS IF the engine's slug normalisation drifts so a produced slug is not a fixed point
     (the prefix join would then silently blank that survey's Stations tab), or a fixture-tree
     package declares a non-fixed-point slug."""
     import importlib
@@ -380,7 +379,7 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
     assert produced, "fixture sanity: the engine produced no slug-keyed products"
     for slug in produced:
         assert bp.safe_component(slug) == slug, (
-            f"engine-produced slug {slug!r} is not a safe_component fixed point — "
+            f"engine-produced slug {slug!r} is not a safe_component fixed point - "
             f"'au.' + slug + '.' would no longer prefix-match its own ausmt_ids")
         publish.validate_slug(slug)
     # (2) Every on-disk package slug in the fixture tree (engine/data/<pkg>/survey.yaml), read the
@@ -399,8 +398,8 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
 # ==================================================================================================
 # Frame-declaration readability — SUPERSEDED presentation, same invariant.
 #
-# S2a-SPLIT presented station.json's `frame` block as typed fact rows (frameRows). C43-HUB H3
-# (owner feedback round 2) replaced that table with the mockup's single worded line —
+# The split view presented station.json's `frame` block as typed fact rows (frameRows). The hub
+# replaced that table with the mockup's single worded line -
 # frameWords(frame): 'declared-zero · no rotation declared' — with EVERY extra frame field kept in
 # the collapsed raw-JSON <details>. The invariant is unchanged: the words derive from VERBATIM
 # station.json values (frame_served / derotated / declared_azimuth_deg), never a recompute, and
@@ -423,7 +422,7 @@ def _py_frame_words(frame: dict) -> str:
     """The reference frameWords mapping (VERBATIM coercion, no recompute) the JS must match.
     Mirrors the JS String() coercions (see _js_str) so the pin compares the JS against the SERVED
     values, not against itself: frame_served as stored, then de-rotated / declared-azimuth /
-    no-rotation from the derotated + declared_azimuth_deg fields, then (C25-V3 F2) the divergent
+    no-rotation from the derotated + declared_azimuth_deg fields, then the divergent
     tipper frame from tipper_declared_azimuth_deg (present only when it diverges — the engine omits
     it when equal or undeclared)."""
     fs = frame.get("frame_served")
@@ -463,7 +462,7 @@ def _real_frames(engine_corpus) -> list:
 
 
 def test_frame_words_verbatim_from_real_station_json(engine_corpus, tmp_path):
-    """FRAME-WORDS ENGINE-TRUTH PIN (C43-HUB H3, superseding the S2a frameRows table). The
+    """FRAME-WORDS ENGINE-TRUTH PIN (superseding the frameRows table). The
     extracted STATIONS_JS frameWords, driven in Node with the `frame` block a REAL engine build
     wrote to station.json, must render the mockup's worded line from VERBATIM served values —
     'declared-zero · no rotation declared' for the clean sample corpus — never a recompute.
@@ -489,7 +488,7 @@ process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(
     assert any(g == "declared-zero · no rotation declared" for g in got), got
     # Synthetic engine-shaped variants exercise the OTHER branches (values in the engine's own
     # field vocabulary; the real corpus is all-clean so cannot reach them). The third is the
-    # C25-V3 F2 panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances) —
+    # panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances);
     # tipper_declared_azimuth_deg is emitted by the engine ONLY when divergent, so its presence
     # must surface a 'tipper declared azimuth' part.
     variants = [{"frame_served": "declared-zero", "derotated": True,
@@ -505,7 +504,7 @@ process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(
 
 
 def test_frame_panel_renders_words_and_collapsed_raw_json():
-    """FRAME-PANEL SOURCE PIN (C43-HUB H3 shape; gate F1/F2 round widened the collapsed dump to
+    """FRAME-PANEL SOURCE PIN (the hub shape, which widens the collapsed dump to
     the WHOLE station.json). factsPanel must render the frame fact via frameWords(station.frame)
     AND keep the FULL raw document (frame + conditioning + coordinate QC + every extra field) in
     a collapsed <details> whose <pre> is JSON.stringify(station, ...) set by textContent. FAILS
@@ -514,7 +513,7 @@ def test_frame_panel_renders_words_and_collapsed_raw_json():
     js = curatorpage.STATIONS_JS
     assert "function frameWords(" in js, "the pure frame-words builder must exist"
     assert "frameWords(station.frame)" in js, "factsPanel must word the served frame"
-    assert "function frameRows(" not in js, "the superseded S2a fact-row table must stay replaced"
+    assert "function frameRows(" not in js, "the superseded fact-row table must stay replaced"
     assert "el('details')" in js, "the raw station.json must be kept in a collapsed <details>"
     assert "el('summary', 'raw station.json')" in js, "the details summary labels the raw JSON"
     # The raw JSON is still present, verbatim, via textContent (never innerHTML) — the WHOLE

@@ -11,7 +11,7 @@ ROOT = HERE.parent
 
 FILES = ["catalogue.json", "tf.json", "sci.json", "surveys.json",
          "collections.json", "mtcat.json", "build_provenance.json", "manifest.json",
-         "build.json"]   # C12: build identity — every build writes it, including an empty one
+         "build.json"]   # Build identity - every build writes it, including an empty one
 
 
 def test_empty_build_generates_valid_json(tmp_path):
@@ -41,7 +41,7 @@ def test_empty_build_generates_valid_json(tmp_path):
     assert catalogue == []
     assert surveys == {}
     assert collections == {}
-    # the download manifest has a valid empty shape (no downloadable artifacts yet). SPEC A2 adds the
+    # the download manifest has a valid empty shape (no downloadable artifacts yet). It carries the
     # document-level mth5/mt_metadata version pin (additive keys, present even on an empty build so the
     # manifest self-declares the library it was written with — mirroring mtcat/build_provenance); the
     # values are the installed versions, or None when the stack is absent (an EDI-only build env).

@@ -1,4 +1,4 @@
-"""Zip central-directory safety (design §4.3 / §8). Each hostile shape is rejected with a DISTINCT
+"""Zip central-directory safety. Each hostile shape is rejected with a DISTINCT
 reason and — proven separately in test_upload.py — nothing is written under quarantine/. These are
 pure-unit tests against zipsafety.inspect(); test_upload.py drives the same shapes through the HTTP
 seam.
@@ -31,7 +31,7 @@ def test_good_package_passes():
 
 
 def test_zip_slip_parent_segment_rejected():
-    # proven failing 2026-07-05: without the `..`-segment guard, inspect() returned the member list
+    # Proven failing: without the `..`-segment guard, inspect() returned the member list
     # instead of raising -> AssertionError on pytest.raises.
     data = make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/../evil.edi": b"x"})
     with pytest.raises(zipsafety.ZipRejection) as exc:
@@ -40,7 +40,7 @@ def test_zip_slip_parent_segment_rejected():
 
 
 def test_absolute_path_rejected():
-    # proven failing 2026-07-05: absolute-path member accepted -> no raise.
+    # Proven failing: absolute-path member accepted -> no raise.
     data = make_zip({"mysurvey/survey.yaml": b"s", "/etc/evil.edi": b"x"})
     with pytest.raises(zipsafety.ZipRejection) as exc:
         _inspect(data)
@@ -49,11 +49,11 @@ def test_absolute_path_rejected():
 
 def test_backslash_rejected():
     # zipfile normalises '\\' -> '/' in its writer, reader, AND the ZipInfo constructor, so a
-    # backslash cannot reach inspect() via a python-parsed archive — the guard is belt-and-braces
+    # backslash cannot reach inspect() via a python-parsed archive - the guard is belt-and-braces
     # against a foreign zip tool whose bytes some other parser might surface un-normalised. Tested at
     # check_member()'s seam by setting .filename directly (bypassing the constructor's normalisation)
     # to prove the branch fires on a literal backslash.
-    # proven failing 2026-07-05: with the backslash branch removed, check_member() returned without
+    # Proven failing: with the backslash branch removed, check_member() returned without
     # raising -> pytest.raises failed "DID NOT RAISE".
     info = zipfile.ZipInfo("placeholder")
     info.filename = "mysurvey\\evil.edi"
@@ -64,7 +64,7 @@ def test_backslash_rejected():
 
 def test_symlink_external_attr_rejected():
     # S_IFLNK (0o120000) in the top 16 bits of external_attr marks a symlink.
-    # proven failing 2026-07-05: symlink member accepted (mode check absent).
+    # Proven failing: symlink member accepted (mode check absent).
     attr = (0o120777 << 16)
     data = make_zip(
         {"mysurvey/survey.yaml": b"s", "mysurvey/link.edi": b"/etc/passwd"},
@@ -76,7 +76,7 @@ def test_symlink_external_attr_rejected():
 
 
 def test_nested_archive_rejected():
-    # proven failing 2026-07-05: a member named x.zip accepted (nested-archive check absent).
+    # Proven failing: a member named x.zip accepted (nested-archive check absent).
     data = make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/inner.zip": b"PK", "mysurvey/S.edi": b"e"})
     with pytest.raises(zipsafety.ZipRejection) as exc:
         _inspect(data)
@@ -84,14 +84,14 @@ def test_nested_archive_rejected():
 
 
 def test_ratio_bomb_rejected():
-    # proven failing 2026-07-05: 5-MiB-of-'A' member (ratio >> 100:1) accepted (ratio check absent).
+    # Proven failing: 5-MiB-of-'A' member (ratio >> 100:1) accepted (ratio check absent).
     with pytest.raises(zipsafety.ZipRejection) as exc:
         _inspect(ratio_bomb_zip())
     assert "ratio" in str(exc.value)
 
 
 def test_member_count_bomb_rejected():
-    # proven failing 2026-07-05: 2001-member zip accepted (member-count cap absent).
+    # Proven failing: 2001-member zip accepted (member-count cap absent).
     members = {"mysurvey/survey.yaml": b"s", "mysurvey/S.edi": b"e"}
     for i in range(zipsafety.MAX_MEMBERS + 1):
         members[f"mysurvey/f{i}.txt"] = b"x"
@@ -101,7 +101,7 @@ def test_member_count_bomb_rejected():
 
 
 def test_two_survey_yaml_rejected():
-    # proven failing 2026-07-05: two survey.yaml at depth <=2 accepted.
+    # Proven failing: two survey.yaml at depth <=2 accepted.
     data = make_zip({
         "mysurvey/survey.yaml": b"s",
         "mysurvey/survey.yaml ": b"s",  # distinct name; both at depth 2 -> forge via second dir
@@ -124,7 +124,7 @@ def _two_manifest_zip() -> bytes:
 
 
 def test_zero_transfer_functions_rejected():
-    # proven failing 2026-07-05: package with no transfer function accepted (count check absent).
+    # Proven failing: package with no transfer function accepted (count check absent).
     data = make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/README.md": b"hi"})
     with pytest.raises(zipsafety.ZipRejection) as exc:
         _inspect(data)
@@ -132,7 +132,7 @@ def test_zero_transfer_functions_rejected():
 
 
 def test_emtfxml_only_package_accepted():
-    """EMTF XML is a first-class submission input (owner ruling 2026-08-03), so a package whose only
+    """EMTF XML is a first-class submission input, so a package whose only
     transfer functions are EMTF XML must pass the shape rule.
 
     FAILS IF the shape rule still demands a .edi: before this change an EMTF-XML-only submission was
@@ -157,7 +157,7 @@ def test_mixed_edi_and_emtfxml_package_accepted():
 
 
 def test_more_than_one_top_level_dir_rejected():
-    # proven failing 2026-07-05: two top-level dirs accepted (single-package rule absent).
+    # Proven failing: two top-level dirs accepted (single-package rule absent).
     data = make_zip({
         "a/survey.yaml": b"s", "a/S.edi": b"e",
         "b/other.txt": b"x",
@@ -176,9 +176,9 @@ def test_disallowed_char_rejected():
 
 
 def test_duplicate_member_name_rejected():
-    # review #13: a zip with two entries of the same name extracts last-wins, so the file the
+    # A zip with two entries of the same name extracts last-wins, so the file the
     # validator/engine reads can differ from the central-directory view a reviewer inspected. Reject.
-    # proven failing 2026-07-06: before the seen_names check, the duplicate passed inspect() (both
+    # Proven failing: before the seen_names check, the duplicate passed inspect() (both
     # entries counted) and only the last survived extraction.
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:

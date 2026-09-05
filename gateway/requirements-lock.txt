@@ -1,11 +1,11 @@
 # AusMT gateway image lock: the EXACT transitive closure of gateway/requirements.txt, resolved for
-# linux/amd64 CPython 3.12 (the python:3.12-slim base gateway.Dockerfile builds on). Captured
-# 2026-07-28. deploy/docker/gateway.Dockerfile installs THIS file, so the shipped image is
+# linux/amd64 CPython 3.12 (the python:3.12-slim base gateway.Dockerfile builds on). Captured by
+# the refresh recipe below. deploy/docker/gateway.Dockerfile installs THIS file, so the shipped image is
 # reproducible: rebuilding the same commit installs the same versions, today and in six months.
 #
 # WHY A COMMITTED LOCK, NOT FLOORS. requirements.txt carries deliberate FLOORS (fastapi>=..., the
-# tested majors) and the image used to resolve them fresh on every build, so two builds of the SAME
-# commit could ship different dependency versions and a PyPI release could break the image with no
+# tested majors), and an image that resolved them fresh on every build would let two builds of the SAME
+# commit ship different dependency versions, and a PyPI release could break the image with no
 # repo change. That matters more here than in a typical web app because gateway/upload.py imports
 # starlette.formparsers.MultiPartParser DIRECTLY (a non-public API, see that module's header) to cap
 # a multipart stream by bytes; a floating starlette can move or rename it with no deprecation. The
@@ -19,7 +19,7 @@
 #      Redirect that output into this file, then restore this header above the pins.
 #   2. Run the gateway suite against the new versions before committing:
 #        python -m pytest -q gateway/tests
-#      In particular the multipart/upload tests: they are the tripwire for a starlette move.
+#      The multipart/upload tests in particular: they are the tripwire for a starlette move.
 #   3. Bump any FLOOR in requirements.txt that the refresh has outgrown, in the same commit, so the
 #      two files never tell different stories.
 #   4. Commit the refresh on its own, with the reason (a CVE, a needed feature, routine currency).

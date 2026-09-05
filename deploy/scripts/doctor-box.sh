@@ -1,5 +1,5 @@
 #!/bin/sh
-# AusMT box doctor (ops-hardening O4) — one-screen health of the box (the EliteDesk that builds and
+# AusMT box doctor (ops-hardening) - one-screen health of the box (the EliteDesk that builds and
 # serves the corpus). Invoked as `make doctor` (or `make doctor PROFILE=gateway`), or directly.
 #
 # Prints ONE labelled PASS / WARN / FAIL line per check and a final summary. Exits NON-ZERO if any check
@@ -20,7 +20,7 @@
 #      table) and the SERVED /data/ts_access.json name the same (station, level) set. The table lives
 #      on the VPS and the data here, so a withheld flip is suppressed only once the table is
 #      regenerated, committed and installed - this is the line that says the two have not drifted
-#   8. the kernel journal for out-of-memory KILLS in the last 24 h (incident 2026-08-15: the engine
+#   8. the kernel journal for out-of-memory KILLS in the last 24 h (a known incident: the engine
 #      build was OOM-killed five nights running and every one surfaced only as "rebuild FAILED"; the
 #      kernel line naming the process, its uid and its size is the fact an operator needs, so this
 #      check reads it and says it by name; WARN when the journal is unreadable, never a silent PASS)
@@ -152,7 +152,7 @@ check_surveys_live() {
 		fail "surveys-live: $sl is not a git checkout (.git missing) - the reconcile agent cannot pull"
 		return
 	fi
-	# Clean: no modified/untracked entries. An untracked survey dir is the incident-2026-07-11 class
+	# Clean: no modified/untracked entries. An untracked survey dir is the known incident class
 	# (built + served but git can never remove it).
 	# Check git's EXIT STATUS, not just its stdout: `status --porcelain` prints nothing and exits
 	# non-zero on a dubious-ownership, locked-index or corrupt-.git error, so reading empty-as-clean
@@ -167,7 +167,7 @@ check_surveys_live() {
 		fail "surveys-live: checkout is DIRTY - local edits/untracked entries would be built + served: $(printf '%s' "$dirty" | tr '\n' ';' | head -c 160)"
 	fi
 	# Group-writable: the shared-group publish model. A .git that has lost g+w locks the operator out of
-	# git pull after a gateway (uid 10002) publish (incident 2026-07-11).
+	# git pull after a gateway (uid 10002) publish (a known incident).
 	if [ -w "$sl/.git" ] && [ "$( (ls -ld "$sl/.git" 2>/dev/null | cut -c6) )" = "w" ]; then
 		pass "surveys-live: .git is group-writable (shared-group publish model)"
 	else
@@ -264,7 +264,7 @@ check_ts_route_parity() {
 	# (deploy/frontdoor/ts-routes.map, committed) while the DATA lives here, so a withheld flip is
 	# suppressed only once the table is regenerated, committed and installed. Both renderings come from
 	# ONE projection, so their (station, level) key sets must be EQUAL: a route that resolves for a
-	# station the data does not publish is the R5 leak, and a published route that 404s is a broken
+	# station the data does not publish is a leak, and a published route that 404s is a broken
 	# hand-off. Compared against the SERVED artifact on the reader port rather than a file on disk:
 	# what is served is what the public gets.
 	code_dir="${AUSMT_CODE_DIR:-}"

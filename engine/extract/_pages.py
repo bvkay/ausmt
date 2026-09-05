@@ -6,10 +6,9 @@ served at the path-URL contract's own shapes (/surveys/<slug>, /stations/<ausmt_
 Every page is rendered ONLY from the already-served public documents (surveys.json entries,
 survey-metadata.json, station.json, the collections rollup, the manifest's bundle rows and the
 time-series register), so a page can never disclose anything the gated products do not already
-publish; the C42 posture is inherited, and the coord-access whole-tree sweep audits pages/ like
-every other emitter. All free text is HTML-escaped (curator-authored YAML is still a public
-serving surface), and the JSON-LD block escapes "</" so document text can never close the
-script element.
+publish, and the coord-access whole-tree sweep audits pages/ like every other emitter. All free
+text is HTML-escaped (curator-authored YAML is still a public serving surface), and the JSON-LD
+block escapes "</" so document text can never close the script element.
 
 Survey pages carry the full design of record: a "Cite this survey" disclosure (surname-plus-initial
 authors, source-led locator), location minimap on the shared schematic outline (_au_outline, the
@@ -18,8 +17,8 @@ per-level download panels with manifest sizes and checksums, grouped contributor
 and the five-column station table (station, lat, lon, T max, time series) whose rows link to the
 station pages that carry the deployment and instrument metadata. Time-series panels and cells
 render ONLY the levels the served register carries. NO em/en dashes and NO tick glyphs anywhere:
-numeric ranges take a spaced hyphen, absent cells are plain hyphens, availability is stated as data
-(sizes), per the owner's rulings.
+numeric ranges take a spaced hyphen, absent cells are plain hyphens, and availability is stated as
+data (sizes).
 
 Per-survey AND per-collection link-preview cards (og:image) are rendered when Pillow is importable;
 without it every entity page falls back to the portal's root card. Both paths emit the og/twitter
@@ -76,14 +75,14 @@ _TYPE_COL = {"LPMT": "#2E8FA3", "BBMT": "#3730B8", "AMT": "#CDA1EC", "GDS": "#C2
 _TYPE_FALLBACK = "#4FC3D9"
 
 # The portal collections view's member palette (portal/src/drawer.js COLL_PAL), same order. It has
-# eight entries and used to CYCLE, so a collection with more members than that gave two surveys the
+# eight entries and must NOT cycle: a collection with more members than that would give two surveys the
 # same colour and its legend could not disambiguate them (AusLAMP: 14 members, 8 colours, 6 reused).
 _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
 
-# The map panel's own ground, one step CLOSER to the card it sits on than the near-black it used to
-# carry. The panel was a box on a box: a dark rectangle inside a lighter card, so the eye read the
-# rectangle before it read the coastline. Stepping the fill to the card's own token and softening the
-# rule leaves the Australia outline as the only object with an edge, which is what the panel is for.
+# The map panel's own ground, one step CLOSER to the card it sits on than a near-black would be. A
+# darker rectangle inside a lighter card reads as a box on a box, and the eye then finds the
+# rectangle before the coastline. Holding the fill at the card's own token and keeping the rule soft
+# leaves the Australia outline as the only object with an edge, which is what the panel is for.
 _MAP_PANEL = "#18213D"
 _MAP_PANEL_LINE = "#222C4E"
 
@@ -110,6 +109,50 @@ def _e(v) -> str:
 
 def _jsonld(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=1).replace("</", "<\\/")
+
+
+# The JSON-LD keyword vocabulary, in ONE place. Four surfaces state it (the homepage catalogue, the
+# two hubs and every survey Dataset) and four copies drift, so they are built here instead;
+# portal/tests/test_jsonld_keywords.py holds the portal's own copy equal to this list. A keyword
+# describes a document to something reading its markup and is not a ranking signal: web search does
+# not use it, and nothing here is written expecting one to.
+#
+# British spelling, and lower case except for a proper noun. The last five are the terms the markup
+# already carried, kept so no surface loses a word it had.
+_KEYWORDS_BASE = (
+    "magnetotelluric", "magnetotelluric survey", "magnetotelluric surveys",
+    "Australian magnetotelluric data", "Australia MT", "MT data", "MT transfer functions",
+    "AusMT", "electromagnetic geophysics", "AusLAMP", "geomagnetic depth sounding", "GDS",
+    "magnetotellurics", "MT", "transfer functions", "geophysics", "Australia",
+)
+
+# A band class, spelt the way a reader would search for it. The keys are the served station types.
+_KEYWORD_FOR_TYPE = {
+    "LPMT": "long-period magnetotelluric",
+    "BBMT": "broadband magnetotelluric",
+    "AMT": "audio-magnetotelluric",
+    "GDS": "geomagnetic depth sounding",
+}
+
+
+def _keywords(*extra) -> list:
+    """The base vocabulary, then whatever THIS page's own record supports, deduped in first-seen
+    order. Every extra term must be read from the record: a survey may not be described by a word
+    its record does not carry."""
+    out = []
+    for term in list(_KEYWORDS_BASE) + [str(t).strip() for t in extra if t and str(t).strip()]:
+        if term not in out:
+            out.append(term)
+    return out
+
+
+def _survey_keywords(served_types, region, org, collection) -> list:
+    """A survey Dataset's keywords: the base vocabulary plus its own band classes, its region, its
+    organisation and its collection, each read from the survey's record."""
+    bands = [_KEYWORD_FOR_TYPE[t] for t in ("LPMT", "BBMT", "AMT", "GDS")
+             if t in (served_types or set())]
+    coll = (collection or {}).get("title") or (collection or {}).get("id") or ""
+    return _keywords(*bands, region, org, coll)
 
 
 def _breadcrumb(base, trail):
@@ -178,9 +221,9 @@ def _fmt_period(v) -> str:
     return out.rstrip("0").rstrip(".") if "." in out else out
 
 
-# The range separator, one place. The owner's revised ruling: numeric ranges in UI chrome read as a
-# SPACED HYPHEN-MINUS rather than as the word "to", and the glyph ban is untouched (no en dash, no
-# em dash, no tick glyphs anywhere in engine chrome). Curator prose is not chrome and is not touched.
+# The range separator, one place: a numeric range in UI chrome reads as a SPACED HYPHEN-MINUS, and
+# no en dash, em dash or tick glyph may appear anywhere in engine chrome. Curator prose is not chrome
+# and is not touched.
 def _range(lo, hi) -> str:
     return f"{lo} - {hi}"
 
@@ -192,8 +235,8 @@ def _range(lo, hi) -> str:
 #
 # Derived rather than listed because a hand-kept map covering only the ids today's corpus declares
 # goes wrong silently: the instrument recognises fourteen CC ids, so the first third-party release
-# under a 3.0, -AU, NC or ND id would have printed "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on
-# the next, which is the inconsistency this rule exists to remove. The grammar is the deed's own:
+# under a 3.0, -AU, NC or ND id would print "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on the
+# next, which is the inconsistency this rule exists to remove. The grammar is the deed's own:
 # the prefix, the clause letters (which keep their internal hyphens: BY-NC-SA), the version, and a
 # jurisdiction port where one exists.
 #
@@ -333,7 +376,7 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
             x, y = p(pt[0], pt[1])
             head = f'<circle cx="{x}" cy="{y}" r="{r}"'
             # A dot whose colour encodes WHICH member survey it belongs to must also say so in
-            # text: colour alone is not an identifier (design brief 45), and the SPA's own scatter
+            # text: colour alone is not an identifier, and the SPA's own scatter
             # has carried these titles all along. Type-coloured dots need none; the type is a
             # category the legend and the tiles already name.
             if labelled:
@@ -368,7 +411,7 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
         clat = sum(pt[1] for pt in points) / len(points)
         mx, my = p(clon, clat)
         # Muted, not coral: the ring is a locator hint on a map, and coral is reserved for primary
-        # actions and active states (design brief 3). Same ink as the footprint panel's scale bar,
+        # actions and active states. Same ink as the footprint panel's scale bar,
         # so the two map annotations read as one layer over the geography.
         marker = (f'<circle cx="{mx}" cy="{my}" r="9" fill="none" stroke="#8FA3B0" '
                   f'stroke-width="1.4" opacity=".75"/>')
@@ -468,11 +511,9 @@ _CSS = """
   .typebadge{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
   .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
   .prose{max-width:70ch}
-  /* The collection page reads at the width of its own hero map, not at the 70ch reading measure
-     the survey pages keep: its prose runs beside a map and a metric rail, and a column narrower
-     than the graphic above it reads as a mistake. One token carries the map width so the two
-     cannot drift, and below the hero's own collapse breakpoint the rail is gone and the prose
-     takes the full column. .prose is NOT widened: it is shared with the survey pages. */
+  /* The collection page reads at the width of its own hero map, not the 70ch measure the survey pages
+     keep: a narrower column under a wider graphic reads as a mistake. One token carries the map
+     width so the two cannot drift; .prose is shared with the survey pages and is NOT widened. */
   main{--collw:820px;--railw:230px;--railgap:1.2rem}
   .collprose{max-width:min(var(--collw), 100% - var(--railgap) - var(--railw))}
   @media(max-width:860px){.collprose{max-width:var(--collw)}}
@@ -563,46 +604,14 @@ _CSS = """
   .counts b{color:#E8EDF1}
   @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
   /* The centre is the region that gives: the machine-readable link and the lockup are each a fixed
-     object that reads badly broken or badly scaled, the acknowledgement is prose that does not. The
-     right grows so a wrapped row keeps the lockup against the right edge.
-
-     THE QUERIES ASK THE FOOTER'S OWN WIDTH, not the viewport's, and the footer spans the page
-     rather than the reading column: it is the page's bottom edge, the same band the Map carries,
-     and a footer set inside the 840px measure could not fit the bold acknowledgement on one line
-     at any viewport.
-
-     THIS IS ONE RULE SET WITH portal/index.html, character for character with the four colour
-     tokens resolved to the literals this tier writes. Nothing here may be tuned for this tier
-     alone; the numbers are the widest surface's, and portal/tests/test_footer_regions.py holds
-     all seven surfaces identical. The side zones take an equal ZERO basis, which is what puts the
-     acknowledgement on the page's axis rather than in the space left over beside them, and
-     min-width:0 lets a side zone go under its own content instead of forcing a wrap. The
-     separation above the footer is main's bottom padding, not a margin here: the Map's footer is
-     the last child of a column whose body does not scroll.
-
-     The regions align on their CENTRES, not on a baseline: the lockup is a block beside a line of
-     text, and a baseline would hang it off that text's baseline and add its whole height above the
-     row. The overrides follow the rules they override; the two tie on specificity and source order
-     wins.
-
-     The lockup's width follows its height, so the committed file's own 1919px raster never reaches
-     the page. max-width caps it at the zone in the stacked state, where the row is the footer's
-     whole width; object-fit keeps its proportions in the state where that cap bites.
-
-     THE FOOTER IS AT THE BOTTOM OF THE VIEWPORT, not at the end of the scroll. Sticky, not fixed:
-     a sticky box keeps its own place in flow, so the last line of a long page is never left
-     underneath it and no page owes the footer a padding-bottom that would have to track the wrap
-     state. A sticky box is never pushed DOWN from that place, so the column above supplies the
-     free space instead. The ground is opaque because content passes beneath it, and the stacking
-     order is stated because a station table's frozen first column declares z-index:2.
-
-     Below 560px of VIEWPORT the footer returns to ordinary flow: that is where the three regions
-     stop sharing rows on the widest-footered surface, and a three-row footer would sit over most
-     of a phone screen. It is a viewport query because a container query cannot ask about the
-     container it is declared on.
-
-     The centre's weight is one declaration on the zone: the whole acknowledgement is bold, the
-     anchor with it, and 700 is the sans family's bold. */
+     object that reads badly broken or badly scaled, and the acknowledgement is prose that does not.
+     THIS IS ONE RULE SET WITH portal/index.html, character for character with the four colour tokens
+     resolved to the literals this tier writes, so nothing may be tuned for this tier alone;
+     portal/tests/test_footer_regions.py holds all seven surfaces identical. The equal zero-basis side
+     zones, the queries on the FOOTER's own width, the centre-aligned regions and the lockup's
+     max-width cap are each load-bearing. The footer is STICKY rather than fixed, so it keeps its own
+     place in flow and no page owes it a padding-bottom; its stacking order is stated because a
+     station table's frozen first column declares z-index:2, and below 560px it returns to flow. */
   footer{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:7px 18px;border-top:1px solid #2B3557;font-size:12.5px;color:#8FA3B0;line-height:1.5;container-type:inline-size;position:sticky;bottom:0;background:#11182D;z-index:3}
   footer a{color:#EF7256;text-decoration:none}
   .fleft{flex:1 1 0;min-width:0}
@@ -673,8 +682,8 @@ def _site_header(active="", status="") -> str:
     Left is the AusMT identity and links the root. The centre carries the three filled application
     tabs with the CURRENT page's tab in the active state, and beside them the two smaller outlined
     supporting controls: the three tabs are the application, About and Contribute are functions
-    around it, and the owner kept that distinction and their wording. The right zone is the status
-    slot, which is CONTEXTUAL (see the callers) while the shell around it is identical.
+    around it, which is why the two groups look different. The right zone is the status slot, which is
+    CONTEXTUAL (see the callers) while the shell around it is identical.
 
     THE FETCHED ASSET, WHICH IS ONE AND NAMED. The identity zone opens with the AusMT mark, the same
     file and the same markup the SPA header carries, so a reader arriving on a survey page from a
@@ -683,10 +692,10 @@ def _site_header(active="", status="") -> str:
     and not 180 circles inlined into 2,655 documents. Everything else in this header stays inline,
     and the src allow-list in engine/tests/test_index_pages.py names this path and nothing else.
 
-    The AuScope parent mark used to close the right zone. It is withdrawn from every header on the
-    site: the relationship is stated in words, in the footer this sheet also emits and in About's
-    "Who enables AusMT" section, and a symbol repeated in a corner said nothing either of those does
-    not. The right zone keeps the contextual status slot alone.
+    NO AuScope parent mark closes the right zone, on this header or any other on the site: the
+    relationship is stated in words, in the footer this sheet also emits and in About's "Who enables
+    AusMT" section, and a symbol repeated in a corner says nothing either of those does not. The right
+    zone keeps the contextual status slot alone.
 
     VERSION SKEW, STATED HONESTLY FOR THE FIRST DEPLOY. /vendor/* is served from the portal image and
     the pages tree from the data volume, so the two can be a deploy apart. Once both carry the mark
@@ -728,13 +737,10 @@ _MTCAT_HREF = "/data/mtcat.json"
 def _site_footer(build=None) -> str:
     """The site's ONE footer, three regions, identical on every page in this tier and on the SPA.
 
-    It was contextual: the left link handed over the machine-readable document for the page you
-    were standing on, and every page kind therefore wore a different footer. The owner's ruling is
-    one footer everywhere, so the left link is the catalogue itself. Nothing is lost by that: a
-    survey and a station page each carry their own record under "Identifiers and provenance" in the
-    body, which is where a per-page document belongs, and the collection and hub footers already
-    pointed at MTCAT. The arrow is the leaves-this-page one; the link hands over a JSON document,
-    not another page of the site.
+    The left link is the catalogue itself, not the machine-readable document for the page a reader
+    is standing on: a per-page document belongs in the body, and a survey and a station page each
+    carry their own record under "Identifiers and provenance". The arrow is the leaves-this-page one,
+    because the link hands over a JSON document rather than another page of the site.
 
     The centre states who enables AusMT and then carries the attribution and the licence note. The
     URL text is the only link in the line: it is the reader-legible form of the address, so it says
@@ -755,9 +761,8 @@ def _site_footer(build=None) -> str:
     party's logs. The MTCAT link takes no target, so a new tab means one thing here: the link leaves
     AusMT. The pair is spelt exactly as the portal's six documents spell it.
 
-    Releases and About this build left this region with the ruling. Neither is lost: /about.html
-    carries the running build's identity, the software licence and the route to the citable
-    releases in its own body, which is the page the retired control pointed at anyway.
+    Neither Releases nor About this build belongs in this region: /about.html carries the running
+    build's identity, the software licence and the route to the citable releases in its own body.
 
     The year is a literal, the one the SPA's own footer carries. It is deliberately not a build-time
     value: a copyright year that moves when a page is rebuilt makes every page in the tree differ
@@ -789,7 +794,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     # `jsonld` is ONE node or a list of nodes, emitted in order as one script element each. Order is
     # load-bearing: the entity node stays first on every page that carries one, so anything reading
     # "the page's structured data" gets the record the page is about and not its breadcrumb. A
-    # @graph wrapper would have collapsed the two into a node no first-block reader can follow.
+    # @graph wrapper collapses the two into a node no first-block reader can follow.
     nodes = [n for n in (jsonld if isinstance(jsonld, list) else [jsonld]) if n]
     ld = "".join(f'<script type="application/ld+json">{_jsonld(n)}</script>\n' for n in nodes)
     # noindex: the page exists for the URL contract and for humans following published links, but
@@ -819,11 +824,10 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f"<title>{_e(title)}</title>\n"
         f'<meta name="description" content="{_e(description)}">\n'
         f'<link rel="canonical" href="{_e(canonical)}">\n'
-        # ICON LINKS (brand-assets lane E4). This tier shipped none, so every one of the entity pages
-        # asked the server for /favicon.ico on every visit and got a 404. Both are same-origin portal
-        # paths served beside these pages, and both are absolute because a page served at
-        # /surveys/<slug> cannot resolve a relative vendor path. The favicon is transparent, so the one
-        # file serves a light and a dark browser chrome.
+        # ICON LINKS. Without them every entity page asks the server for /favicon.ico and gets a 404.
+        # Both are same-origin portal paths served beside these pages, and both must be ABSOLUTE,
+        # because a page served at /surveys/<slug> cannot resolve a relative vendor path. The favicon
+        # is transparent, so the one file serves a light and a dark browser chrome.
         '<link rel="icon" href="/vendor/favicon.svg" type="image/svg+xml">\n'
         '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png">\n'
         f"{og}"
@@ -922,12 +926,11 @@ def _related_by_identifies(smeta):
 
 
 # The AusMT access acknowledgement. It is a SEPARATE statement from the citation and is never
-# folded into it (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md section 9): providing access does
-# not make AusMT the cited object.
+# folded into it: providing access does not make AusMT the cited object.
 #
 # ONE WORDING, not one per surface. about.html carries the same sentence as the block a reader is
 # asked to copy, and portal/tests/test_about_copy_batch.py holds the two equal by reading this
-# constant, so a change here that the page does not follow fails the portal lane rather than
+# constant, so a change here that the page does not follow fails the portal workflow rather than
 # shipping two versions of one statement.
 _ACKNOWLEDGEMENT = (
     "Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric "
@@ -937,9 +940,8 @@ _ACKNOWLEDGEMENT = (
 # The related-identifier scopes that name THIS SURVEY RECORD rather than something near it. Only
 # `entire` qualifies. A collection row names the parent, a raw_packed row names the time-series
 # archive, a level3 row names a derived model and a level2 row names the published transfer-function
-# PRODUCT: each is a resource of the survey, not the survey, and the model requires that distinction
-# to survive (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md section 14, with survey-level and
-# resource-level citation separated in section 7). Promoting a product identifier would print it
+# PRODUCT: each is a resource of the survey, not the survey, and survey-level and resource-level
+# citation stay separate. Promoting a product identifier would print it
 # under the survey's own authors and publisher, which asserts a citation neither layer states.
 _SELF_IDENTIFIES = ("entire",)
 
@@ -947,17 +949,16 @@ _SELF_IDENTIFIES = ("entire",)
 def _citation_locator(smeta, access_url):
     """The locator slot of the formatted citation, SOURCE-LED and SCOPE-BOUND.
 
-    A citation should identify the dataset as persistently and specifically as the source allows
-    (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md sections 3 and 4). Where the survey's own
-    record carries a persistent identifier FOR ITSELF, that identifier is the locator. The AusMT
-    page URL is used only where the record carries none, and then as the access route rather than as
-    a claim that the AusMT page is the object being cited.
+    A citation identifies the dataset as persistently and specifically as the source allows. Where
+    the survey's own record carries a persistent identifier FOR ITSELF, that identifier is the
+    locator. The AusMT page URL is used only where the record carries none, and then as the access
+    route rather than as a claim that the AusMT page is the object being cited.
 
     Two rows claiming the same self-identifying scope are not a tie to break. Row order in a curated
     YAML file is not a curation decision, so an ambiguous record promotes nothing and keeps the
-    access route: section 13 rules that an absent preferred citation means AusMT asserts none, which
-    is true and useful, where an arbitrary pick is neither. Naming one target among several is a
-    curation act belonging in a curator-declared preferred identifier (section 12)."""
+    access route: an absent preferred citation means AusMT asserts none, which is true and useful,
+    where an arbitrary pick is neither. Naming one target among several is a curation act belonging
+    in a curator-declared preferred identifier."""
     doi = _doi_url((smeta or {}).get("doi"))
     if doi:
         return doi
@@ -990,7 +991,7 @@ def _channel_key(name) -> str:
 def _channels_declared(declared) -> str:
     """The channels tile from the survey's OWN channels_recorded declaration.
 
-    The declaration is the ratified authority on what a survey measured: it is what masks the
+    The declaration is the authority on what a survey measured: it is what masks the
     impedance and the tipper survey-wide, so it is also what the page may state. Known channels
     print in the corpus's spelling and in one fixed order, and a channel outside that vocabulary
     prints as the declaration spells it rather than being dropped, because a tile that silently
@@ -1022,9 +1023,9 @@ def _survey_kind(served_types) -> str:
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
                 base, extent=None, discovery=None, build=None, og_image=None) -> str:
     """`og_image` is the absolute URL of the card the EMITTER has already written for this survey,
-    or None for the portal's root card. The page used to derive it from "is Pillow importable",
-    which is a claim about the environment rather than about the file: a card whose write failed
-    still left the page advertising it, and a link preview then fetched a 404."""
+    or None for the portal's root card. It must never be derived from "is Pillow importable", which is
+    a claim about the environment rather than about the file: a card whose write failed would leave the
+    page advertising it, and a link preview would then fetch a 404."""
     smeta = smeta or {}
     title = ((sm_doc or {}).get("title")) or label
     blurb = smeta.get("blurb") or ""
@@ -1096,7 +1097,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
           "includedInDataCatalog": {"@type": "DataCatalog", "name": "AusMT", "url": base + "/"},
           "measurementTechnique": "magnetotellurics",
           "variableMeasured": "magnetotelluric transfer function",
-          "keywords": ["magnetotellurics", "MT", "transfer function", "geophysics", "Australia"]}
+          "keywords": _survey_keywords(served_types, region, org, smeta.get("collection"))}
     if org:
         creator = {"@type": "Organization", "name": org}
         if smeta.get("org_ror"):
@@ -1186,9 +1187,9 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                                     + ([size] if size else []))
         bundle_items.append(f"<tr><td>{_e(lbl)}</td><td>{meta_bits}</td>"
                             f'<td><a href="/data/{_e(rel)}">Download &#8595;</a></td></tr>')
-        # The COMPLETE digest, from the manifest row the page already reads. The page used to carry
-        # an 8-character prefix, which is not enough to verify anything; the whole value belongs on
-        # the page but not in competition with format and size, so it sits behind a disclosure.
+        # The COMPLETE digest, from the manifest row the page already reads. An 8-character prefix
+        # is not enough to verify anything; the whole value belongs on the page but not in
+        # competition with format and size, so it sits behind a disclosure.
         if sha:
             integrity_items.append(f"<tr><td>{_e(lbl)}</td>"
                                    f'<td class="shacell">sha256 {_e(sha)}</td></tr>')
@@ -1206,7 +1207,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                 doi_line = (f'<div class="doi">Published release: <a href="{_e(u)}">'
                             f'{_e(_bare_doi(related["level2"].get("identifier")) or u)}</a></div>')
         # Host attribution from the manifest's own tier, and only where every row agrees: a mixed
-        # card would have to name a host per row, and the tier is the manifest's word, not ours.
+        # card has to name a host per row, and the tier is the manifest's word, not ours.
         tiers = {(r or {}).get("tier") for r in (bundle_rows or [])}
         host = {"repo": "Hosted by AusMT", "nci": "Hosted at NCI"}.get(
             next(iter(tiers)) if len(tiers) == 1 else None, "")
@@ -1293,7 +1294,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
 
     def tile(num, lab):
         return f'<div class="cstat"><div class="cnum">{num}</div><div class="clab">{lab}</div></div>'
-    # The FIXED core (brief 13): stations, type, acquisition, period. Every survey answers these in
+    # The FIXED core: stations, type, acquisition, period. Every survey answers these in
     # the same four slots and the same order, so the rhythm is predictable across the corpus; each
     # is still presence-guarded, because a predictable slot is not a licence to invent a value.
     core = [tile(n_stations, "stations")]
@@ -1345,8 +1346,8 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         facts.append(f"<dt>Licence</dt><dd>{_e(_fmt_licence(lic))}</dd>")
     if len(rates) > 1:
         facts.append(f"<dt>Sample rates</dt><dd>{', '.join(f'{r:,.0f}' for r in sorted(rates))} Hz</dd>")
-    # The dipole summary and the survey-level instrument PID are gone by ruling: dipoles live in
-    # the station table, and the platform-PID registry is retired (per-station PIDs remain).
+    # No dipole summary and no survey-level instrument PID here: dipoles live in the station table,
+    # and only per-station platform PIDs exist.
     if smeta.get("instrument_model"):
         instruments = "<br>".join(_e(part.strip())
                                   for part in str(smeta["instrument_model"]).split(";") if part.strip())
@@ -1393,10 +1394,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                  if pub_rows else "")
 
     # ---- the station table ----
-    # The five default columns of design brief 17. Deployment and instrument metadata used to live
-    # here in eight more columns, which is why the station pages had to grow their Runs section
-    # FIRST: the survey table is a chooser, and the per-station detail belongs behind the station
-    # link this table's first column already carries.
+    # The five default columns. Deployment and instrument metadata do NOT belong
+    # here in eight more columns: the survey table is a chooser, and the per-station detail belongs
+    # behind the station link this table's first column already carries, in the station pages' Runs
+    # section.
     header = ["Station", "Lat", "Lon", "T max (s)", "Time series"]
     rows_html = []
     for doc in docs:
@@ -1441,8 +1442,8 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
             p for p in ('<h2 id="contributors">Contributors and organisations</h2>',
                         people_html, facts_html) if p)
     # Slots that render nothing leave NOTHING behind: joining the non-empty ones means a survey with
-    # no collection, no citation record or no publications does not carry a stray blank line where
-    # that block would have been (13 of the 27 served pages carried one).
+    # no collection, no citation record or no publications does not carry a stray blank line in
+    # that block's place.
     body = "\n".join(part.rstrip("\n") for part in (
         crumb,
         nav,
@@ -1670,7 +1671,7 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
     line as the corpus grows: it fails loudly rather than quietly dropping stations.
 
     The per-dot `<title>` rides with the legend. It exists so that colour is not the only
-    identifier of a member survey (design brief 45), and the legend is what gives those colours
+    identifier of a member survey, and the legend is what gives those colours
     names. The card has no legend, and its whole surface is one stretched link, so no pointer can
     reach a dot there to read a title in the first place."""
     if not member_points:
@@ -1710,7 +1711,7 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
 
 
 def _prose_block(paragraphs) -> str:
-    """Curator paragraphs as escaped <p class="collprose">, with one ratified structural
+    """Curator paragraphs as escaped <p class="collprose">, with one structural
     convention: a paragraph whose first two characters are '# ' is that section's subheading and
     renders as <h3>. Everything else is a paragraph.
 
@@ -1745,12 +1746,12 @@ def _prose_of(coll, key) -> str:
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
                     member_facts=None, level_counts=None, formats=None, build=None,
                     og_image=None) -> str:
-    """The collection page as an EXPLORATORY layer (design brief 23 to 31), not a catalogue record.
+    """The collection page as an EXPLORATORY layer, not a catalogue record.
 
     `member_facts` ({slug: row}), `level_counts` ({level: n stations}) and `formats` are rollups the
     emitter computes from the SAME served documents the member survey pages render from. All three
     are optional: a caller that supplies none gets the hero, the map and the member list, and the
-    sections those rollups would have filled are simply not written.
+    sections those rollups would fill are simply not written.
 
     `og_image` is the absolute URL of the card the emitter has already written for this collection,
     or None for the portal's root card. A collection whose members disclose no position gets no card
@@ -1767,7 +1768,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
           "measurementTechnique": "magnetotellurics",
           "variableMeasured": "magnetotelluric transfer function",
           "hasPart": [{"@type": "Dataset", "url": f"{base}/surveys/{s}"} for _lbl, s in member_slugs],
-          "keywords": ["magnetotellurics", "MT", "AusLAMP", "geophysics", "Australia"]}
+          "keywords": _keywords(*[(m or {}).get("org") for m in member_smeta], title)}
     # licence / creators / temporal coverage roll up from the member surveys' own served records:
     # a single shared licence is stated; mixed licences state nothing (never overclaim).
     lics = {(_LICENSE_URLS.get((m or {}).get("lic"), (m or {}).get("lic")))
@@ -1921,7 +1922,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
 _INDEX_MAP_WIDTH = 230          # the surveys index card map
 _COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
 
-# The vocabulary named here is the one docs/docs/developer/collection-ids.md ratifies, and the two
+# The vocabulary named here is the one docs/docs/developer/collection-ids.md declares, and the two
 # must not drift: a reader meeting a chip on this hub looks the value up in that page. Every value but
 # `other` is named; `other` is the catch-all, and a lede that named it would tell a reader nothing.
 # gateway/tests/test_c43_collection_type_vocab.py holds this sentence to that rule.
@@ -1929,9 +1930,8 @@ _COLLECTIONS_LEDE = ("Collections group related surveys for discovery and explor
                      "may be a field programme, a data release, an institutional holding, or a "
                      "compilation of related surveys.")
 
-# The surveys hub's own lede, the owner's wording verbatim. It sits between the summary line (the
-# headline numbers) and the list, and it answers the question a hub page has to answer before its
-# cards can: what IS this list, and what is it for.
+# The surveys hub's own lede. It sits between the summary line and the list, and answers the question
+# a hub page has to answer before its cards can: what IS this list, and what is it for.
 _SURVEYS_LEDE = ("Discover magnetotelluric surveys from across Australia. Browse survey coverage, "
                  "acquisition periods and available data.")
 
@@ -2005,6 +2005,18 @@ def _card_facts_line(bits) -> str:
     return _CARD_SEP.join(b for b in bits if b)
 
 
+
+def _hub_catalogue(*, name, description, url, base) -> dict:
+    """The DataCatalog a hub page IS. Emitted BEFORE the breadcrumb, like every other entity node,
+    so a consumer reading only the first block gets what the page is about."""
+    return {"@context": "https://schema.org", "@type": "DataCatalog",
+            "name": name, "description": description, "url": url,
+            "isAccessibleForFree": True,
+            "publisher": {"@type": "Organization", "name": "AuScope",
+                          "url": "https://www.auscope.org.au"},
+            "keywords": _keywords()}
+
+
 def surveys_index_page(*, rows, base, build=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
@@ -2067,7 +2079,9 @@ def surveys_index_page(*, rows, base, build=None) -> str:
         f'<div class="idxlist">{"".join(cards)}</div>\n')
     return _shell(title="Surveys - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
-                  jsonld=_breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")]),
+                  jsonld=[_hub_catalogue(name="AusMT surveys", description=desc, url=url,
+                                        base=base),
+                          _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")])],
                   extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts)
 
 
@@ -2112,7 +2126,9 @@ def collections_index_page(*, rows, base, build=None) -> str:
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
     return _shell(title="Collections - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
-                  jsonld=_breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")]),
+                  jsonld=[_hub_catalogue(name="AusMT collections", description=desc, url=url,
+                                        base=base),
+                          _breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")])],
                   extra_css=_INDEX_CSS, nav="navCollections", build=build)
 
 

@@ -1,21 +1,21 @@
-"""C12: build identity. Every build writes <out>/build.json — {build_id, engine_commit,
-source_commit, generated} — so a served portal can be traced to the engine + surveys commits that
+"""Build identity. Every build writes <out>/build.json - {build_id, engine_commit,
+source_commit, generated} - so a served portal can be traced to the engine + surveys commits that
 produced it (the build<->data handshake the review flagged as missing). build_id is a plain
 concatenation "<engine_commit>-<source_commit>-<generated>", but an unresolved commit segment is
-now rendered as the literal string "unknown" (never the Python str(None) "None" — U2: the live
+now rendered as the literal string "unknown" (never the Python str(None) "None" - the live
 footer showed "None - None - <date>" on the first container deployment because a bare f-string
 folded None straight into the join). source_commit is ALSO folded into build_provenance.json so the
 one existing provenance document carries the handshake too, not just the new file.
 
-U2: engine_commit also falls back to the AUSMT_ENGINE_COMMIT env var when git resolution yields
-None — the engine image COPYs engine/ WITHOUT a .git directory, so _git_commit_at(HERE) is always
+engine_commit also falls back to the AUSMT_ENGINE_COMMIT env var when git resolution yields
+None - the engine image COPYs engine/ WITHOUT a .git directory, so _git_commit_at(HERE) is always
 None inside a container; CI bakes the actual commit into that env var at image-build time (see
 engine.Dockerfile's ARG GIT_SHA / ENV AUSMT_ENGINE_COMMIT and deploy-images.yml's build-arg).
 Precedence: real git result first, then the env var, then the "unknown" placeholder.
 
 NON-VACUOUS (Invariant 10): source_commit is asserted None for a --surveys root that is NOT inside a
 git repo, and asserted EQUAL to the actual `git rev-parse --short HEAD` of a tmp_path git repo built
-around a fixture survey copy for the git case — an independent observable (the git command's own
+around a fixture survey copy for the git case - an independent observable (the git command's own
 output), not a re-derivation of whatever the build computed internally.
 """
 import json
@@ -60,7 +60,7 @@ def test_build_json_present_with_expected_keys_and_null_source_commit_outside_gi
     for k in ("build_id", "engine_commit", "source_commit", "generated"):
         assert k in doc, f"build.json missing key {k}"
     assert doc["source_commit"] is None, f"expected null source_commit outside a git repo, got {doc['source_commit']!r}"
-    # U2: build_id renders a None source_commit as the WORD "unknown" in the join, never Python's
+    # build_id renders a None source_commit as the WORD "unknown" in the join, never Python's
     # str(None) "None" (this is the exact live-footer bug: "None - None - <date>").
     assert "None" not in doc["build_id"], f"literal 'None' leaked into build_id: {doc['build_id']!r}"
     assert doc["build_id"] == f"{doc['engine_commit']}-unknown-{doc['generated']}"
@@ -91,11 +91,11 @@ def test_build_json_source_commit_matches_git_head_of_surveys_dir(tmp_path):
 
 
 def test_build_json_and_provenance_carry_served_tool_versions(tmp_path):
-    """C32 §2: build.json AND build_provenance.json gain additive mt_metadata_version / mth5_version
+    """build.json AND build_provenance.json gain additive mt_metadata_version / mth5_version
     keys, read from the SINGLE lib_versions() source of truth. This build runs the real mt_metadata/mth5
     stack (pytest.importorskip at module top), so both keys must be present and match the imported
     library __version__ (an independent observable — not a re-read of the build's own output). FAILS if a
-    key is missing or disagrees with the actually-installed library, or if the C12 build_id format drifted."""
+    key is missing or disagrees with the actually-installed library, or if the build_id format drifted."""
     import mt_metadata
     import mth5
     surveys_copy = tmp_path / "surveys_ver"
@@ -108,9 +108,9 @@ def test_build_json_and_provenance_carry_served_tool_versions(tmp_path):
             f"{name} mt_metadata_version {doc.get('mt_metadata_version')!r} != {mt_metadata.__version__!r}"
         assert doc.get("mth5_version") == mth5.__version__, \
             f"{name} mth5_version {doc.get('mth5_version')!r} != {mth5.__version__!r}"
-    # additive only: the C12 identity fields + build_id string format are untouched by the version keys
+    # additive only: the identity fields + build_id string format are untouched by the version keys
     assert bj["build_id"] == f"{bj['engine_commit']}-unknown-{bj['generated']}", \
-        "C32 version keys must not alter the C12 build_id string format"
+        "the version keys must not alter the build_id string format"
 
 
 def test_build_json_deterministic_aside_from_generated(tmp_path):
@@ -127,7 +127,7 @@ def test_build_json_deterministic_aside_from_generated(tmp_path):
     assert d1["source_commit"] == d2["source_commit"]
 
 
-# --- U2: engine_commit env fallback + "unknown" (never literal "None") ---------------------------
+# --- engine_commit env fallback + "unknown" (never literal "None") ---------------------------
 # These call build_identity() directly (unit-level, not a subprocess build) so git resolution can be
 # monkeypatched to None regardless of whether this checkout happens to be a git repo -- the container
 # scenario the bug came from (engine/ COPYed without .git, so _git_commit_at(HERE) is always None).
@@ -161,7 +161,7 @@ def test_build_id_never_contains_literal_none_string(tmp_path, monkeypatch):
     assert "unknown" in doc["build_id"], f"expected 'unknown' placeholder in build_id: {doc['build_id']!r}"
 
 
-# --- U2: build_provenance.json git_commit env fallback, HONEST about "unavailable" ----------------
+# --- build_provenance.json git_commit env fallback, HONEST about "unavailable" ----------------
 # _build_prov's git_commit gets the SAME AUSMT_ENGINE_COMMIT fallback build_identity has (the engine
 # image ships engine/ WITHOUT .git, so _git_commit_at(HERE) is always None in a container), but where
 # build_identity's opaque build_id renders the terminal string "unknown", provenance stays HONEST: an
@@ -199,10 +199,10 @@ def test_build_prov_git_commit_prefers_real_git_over_env(monkeypatch):
     assert bp._build_prov("mt_metadata")["git_commit"] == "deadbeef", "real git must win over the env fallback"
 
 
-# --- C32 §2: lib_versions() is the ONE source of truth for served tool versions --------------------
+# --- lib_versions() is the ONE source of truth for served tool versions --------------------
 
 def test_lib_versions_is_single_source_reused_by_cache_salt():
-    """The same lib_versions() helper feeds BOTH the C18 cache salt and the C32 served version keys, so
+    """The same lib_versions() helper feeds BOTH the cache salt and the served version keys, so
     the two facts can never diverge. Sane shape: a dict whose keys, when present, are strings; and when
     the mt_metadata/mth5 stack IS installed (it is here — module-top importorskip) both keys resolve to
     the imported __version__. FAILS if the helper returns a non-dict, a non-string version, or disagrees

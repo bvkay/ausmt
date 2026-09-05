@@ -3,11 +3,11 @@
 
 `tf_from_components` returns one entry per station as a column set (TF_COLUMNS order):
   [periods, rho_xy, rho_yx, phs_xy, phs_yx_adj, tip_mag, pt_min, pt_max, pt_az, pt_beta,
-   rho_xy_err, rho_yx_err, phs_xy_err, phs_yx_err, tzx_re, tzx_im, tzy_re, tzy_im]   (C20: 10 -> 18)
-Arrays are thinned to <=32 periods and rounded; nulls where data absent/invalid. The eight C20
+   rho_xy_err, rho_yx_err, phs_xy_err, phs_yx_err, tzx_re, tzx_im, tzy_re, tzy_im]   (10 -> 18)
+Arrays are thinned to <=32 periods and rounded; nulls where data absent/invalid. The eight
 columns ride the SAME per-row thinning as the original ten (they are appended to each row before
 the thin), so all 18 columns share one period axis. Errors from RHO*.ERR / PHS*.ERR (impedance-error
-propagation, in _mtm); tzx/tzy are the tipper components TX/TY as read (no sign changes — the
+propagation, in _mtm); tzx/tzy are the tipper components TX/TY as read (no sign changes - the
 Parkinson reversal is a portal presentation concern).
 
 The component dict comes from mt_metadata (`_mtm.components_from_tf`); this module turns it into
@@ -40,8 +40,8 @@ def sig(x, n=4):
     # Non-finite -> None (rides the existing None path every consumer already tolerates). MTpy
     # writes literal `inf` into impedance-ERROR arrays for dead/infinite-variance points;
     # math.log10(inf) -> int(inf) raised OverflowError here, build_portal caught it as a
-    # station-level "PARSE FAIL" and SILENTLY DROPPED the whole station (2026-07-10: FR01, NF19,
-    # NF21, SA26W_2 — 4 real stations lost from the served corpus over single bad error points).
+    # station-level "PARSE FAIL" and SILENTLY DROPPED the whole station (FR01, NF19, NF21,
+    # SA26W_2 - 4 real stations lost from the served corpus over single bad error points).
     # None serializes as JSON null ("no finite error estimate", honest); returning inf raw would
     # poison tf.json (Python json emits non-RFC `Infinity`, which browsers' JSON.parse rejects).
     if not math.isfinite(x):
@@ -65,9 +65,9 @@ def tf_from_components(periods, comp):
         return None
     rxy, ryx = comp.get("RHOXY"), comp.get("RHOYX")
     pxy, pyx = comp.get("PHSXY"), comp.get("PHSYX")
-    exy, eyx = comp.get("RHOXY.ERR"), comp.get("RHOYX.ERR")           # C20: rho errors (t[10], t[11])
-    pexy, peyx = comp.get("PHSXY.ERR"), comp.get("PHSYX.ERR")         # C20: phase errors (t[12], t[13])
-    txr, txi = comp.get("TXR"), comp.get("TXI")                       # C20: full complex tipper (t[14..17])
+    exy, eyx = comp.get("RHOXY.ERR"), comp.get("RHOYX.ERR")           # Rho errors (t[10], t[11])
+    pexy, peyx = comp.get("PHSXY.ERR"), comp.get("PHSYX.ERR")         # Phase errors (t[12], t[13])
+    txr, txi = comp.get("TXR"), comp.get("TXI")                       # Full complex tipper (t[14..17])
     tyr, tyi = comp.get("TYR"), comp.get("TYI")
     zxxr, zxxi = comp.get("ZXXR"), comp.get("ZXXI")
     zxyr, zxyi = comp.get("ZXYR"), comp.get("ZXYI")
@@ -93,7 +93,7 @@ def tf_from_components(periods, comp):
     def at(arr, i):
         # The single accessor every per-point read flows through — so non-finite values are
         # filtered HERE, once, instead of per column. MTpy writes literal `inf` into error
-        # arrays for dead points (2026-07-10: FR01/NF19/NF21/SA26W_2), and inf survives round()
+        # arrays for dead points (FR01/NF19/NF21/SA26W_2), and inf survives round()
         # (round(inf,1)=inf) while norm_phase would mint a NaN ((inf+180)%360). A leaked
         # non-finite poisons tf.json: Python json emits non-RFC `Infinity`, browsers' JSON.parse
         # rejects the whole file. Non-finite -> None = "no value here", the path every column
@@ -106,7 +106,7 @@ def tf_from_components(periods, comp):
             return None
         return v
 
-    def rt(v):  # tipper-component rounding (C20): 4 dp preserves arrow direction; None stays None
+    def rt(v):  # tipper-component rounding: 4 dp preserves arrow direction; None stays None
         return round(v, 4) if v is not None else None
 
     rows = []
@@ -125,14 +125,14 @@ def tf_from_components(periods, comp):
             if all(v is not None for v in zv):
                 pt = pt_params(*zv)
         r_xy, r_yx = at(rxy, i), at(ryx, i)
-        # C20 error columns (t[10..13]): present only where the source carried an impedance error.
+        # Error columns (t[10..13]): present only where the source carried an impedance error.
         # A rho error is meaningful only where its rho value renders (rho>0); gate it the same way so a
         # bar can never attach to an absent point. Phase errors are gated on their own presence.
         e_xy = sig(at(exy, i)) if (r_xy and r_xy > 0 and at(exy, i) is not None) else None
         e_yx = sig(at(eyx, i)) if (r_yx and r_yx > 0 and at(eyx, i) is not None) else None
         pe_xy = round(at(pexy, i), 1) if at(pexy, i) is not None else None
         pe_yx = round(at(peyx, i), 1) if at(peyx, i) is not None else None
-        # C20 tipper components (t[14..17]): TX/TY as read (already source-masked by _is_missing in
+        # Tipper components (t[14..17]): TX/TY as read (already source-masked by _is_missing in
         # _mtm — 1e32 fills and exact-zero elements are None). No sign change here; the Parkinson
         # reversal lives in the portal arrow panel. tzx = (TXR,TXI) = Hz/Hx; tzy = (TYR,TYI) = Hz/Hy.
         tzx_re, tzx_im = rt(at(txr, i)), rt(at(txi, i))

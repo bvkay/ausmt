@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Regenerate the C42 coordinate-access portal fixtures from the REAL engine.
+"""Regenerate the coordinate-access portal fixtures from the REAL engine.
 
 The portal coordinate-access test (tools/coord_access_test.js) loads engine-BUILT portal
-artifacts — never hand-typed catalogue rows (the C42 house rule, D6). This script stages a survey
+artifacts - never hand-typed catalogue rows (house rule). This script stages a survey
 with one exact + one generalised + one withheld station (distinctive coordinates) and runs the real
 extract.build_portal over it, then copies the portal-consumed artifacts into
 tests/fixtures/c42/. Requires the mt_metadata/mth5 build stack (same as engine/tests/test_coord_access.py).
@@ -15,7 +15,7 @@ The committed fixtures are the build's own output, so a reader can verify the ex
   * products/sweep-survey/<ID>/station.json — location {lat,lon} masked; distribution.edi_available
     false for a byte-gated (non-exact) station; coordinate_policy present for the non-exact stations.
   * coord_policy.json — ausmt_id -> policy ('generalised'/'withheld') for the NON-EXACT stations only.
-C42 Amendment A1 (2026-07-12): the engine now emits an explicit coordinate-policy MARKER on a boot-loaded
+The engine emits an explicit coordinate-policy MARKER on a boot-loaded
 artifact (coord_policy.json) for non-exact stations, so the portal can badge a generalised station's
 position honestly. Exact stations stay unmarked (no marker file for an all-exact corpus).
 """
@@ -80,7 +80,7 @@ def main():
     FIXTURES.mkdir(parents=True, exist_ok=True)
     for f in ("catalogue.json", "tf.json", "sci.json", "surveys.json", "collections.json",
               "mtcat.json", "qc_report.json",
-              # C42 A1: the coordinate-policy marker boot artifact (ausmt_id -> policy for the non-exact
+              # The coordinate-policy marker boot artifact (ausmt_id -> policy for the non-exact
               # stations). Emitted by the engine because this fixture survey has a generalised + a withheld
               # station; the portal drawer reads it to badge the generalised station.
               "coord_policy.json"):

@@ -2,8 +2,8 @@
 """Pre-flight EDI reader check: tell a curator or a submitter what an EDI's >INFO block will do to
 its metadata BEFORE a build runs, in words a geophysicist can act on.
 
-WHY THIS EXISTS. The 2026-08 >INFO fallback (see `_mtm.normalise_info_json_delimiters`) made the
-engine READ the GSSA Western Gawler 2023 delivery. It did not make the problem VISIBLE. Today the
+WHY THIS EXISTS. The >INFO fallback (see `_mtm.normalise_info_json_delimiters`) makes the
+engine READ the GSSA Western Gawler 2023 delivery. It does not make the problem VISIBLE. Today the
 only way to learn that a delivery's magnetic declination is unreadable, or that 141 of a station's
 160 scraped >INFO values will be stored with a stray comma, or that a contact resistance written as
 "2.5 kilo-ohms" quietly stores nothing at all, is to read build logs after the fact. This module
@@ -55,7 +55,7 @@ from pathlib import Path
 
 # The mt_metadata release this mirror was read from. Pinned in the lock
 # (engine/environments/requirements-mtmetadata-lock.txt) and re-asserted by the parity test.
-# 1.0.10 re-read completed 2026-08-27 (the perf-fork pin move): information.py and
+# 1.0.10 re-read completed (the perf-fork pin move): information.py and
 # define_measurement.py carry ZERO substantive change (black reformatting only, verified
 # whitespace-blind); tools.py adds a US-footprint guard on the elevation lookup, which is
 # outside the parse surface this mirror predicts and always skips for AU coordinates. The
@@ -72,7 +72,7 @@ WILL_NOT_READ = "will_not_read"      # no code path in AusMT reads this file; it
 # of the read and the file does not open at all.
 #
 # MEASURED, not assumed: each key below was injected into a real EDI with a non-numeric value against
-# the pinned mt_metadata 1.0.9 and observed to RAISE (2026-08-09). Keys that looked equally dangerous
+# the pinned mt_metadata 1.0.9 and observed to RAISE. Keys that looked equally dangerous
 # and were observed NOT to raise are deliberately absent -- `station.location.declination.model`,
 # `transfer_function.software.name`, `station.time_period.start` and `provenance.creation_time` all
 # absorb junk quietly, and reporting them fatal would be a false alarm.
@@ -109,7 +109,7 @@ _FATAL_INFO_FIELDS = {
 # published station carries no contact resistance at all.
 #
 # Keyed by the attribute path AFTER `run.<component>.`, with the words the report uses. Every entry
-# was MEASURED against mt_metadata 1.0.9's Electric/Magnetic models (2026-08-09): each one exists,
+# was MEASURED against mt_metadata 1.0.9's Electric/Magnetic models: each one exists,
 # each one accepts "12.5", and each one refuses "12 bananas". That matters because the sentence this
 # table produces blames the units, so it must only ever be said about a field that is really a number
 # and really there. Two plausible-looking names are deliberately ABSENT because the measurement says
@@ -620,7 +620,7 @@ def _station_name_is_readable(raw_dataid: str) -> bool:
     """`validate_station_name` RAISES on any surviving character outside letters, digits and
     underscore -- and `read_header` calls it OUTSIDE the try/except that guards the assignment, so a
     station called `MT01(a)` stops a STOCK read before anything else is attempted. Measured against
-    mt_metadata 1.0.9 (2026-08-09): `MT-01`, `MT 01` and `MT_01` all read; `MT01(a)`, `MT#1` and
+    mt_metadata 1.0.9: `MT-01`, `MT 01` and `MT_01` all read; `MT01(a)`, `MT#1` and
     `MT/1` all raise. Reads mt_metadata's own rewrite, NOT `station_name` above, which sweeps the
     refused characters too and would answer yes for every name."""
     return bool(_STATION_NAME_OK.match(_mt_metadata_rewrite(raw_dataid)))
@@ -633,7 +633,7 @@ def _is_number(value: object) -> bool:
 
     The one place the two tests disagree is Unicode: `float()` accepts any decimal digit, so
     `float("١٢٣")` is 123.0, while the reader's validator refuses that string.
-    Measured 2026-08-09 over 26 numeric-coercion strings pushed through a real declination: the
+    Measured over 26 numeric-coercion strings pushed through a real declination: the
     Arabic-Indic, Devanagari and full-width digit forms were the only disagreements, and every
     ASCII form (`nan`, `inf`, `1e400`, `1_000`, `'5.'`, `'+5'`, `' 5 '`, non-breaking spaces
     either side) agreed. So non-ASCII is rejected before `float()` is asked, which closes the only
@@ -748,8 +748,8 @@ def preflight_bytes(raw: bytes, *, label: str = "") -> dict:
     #    a temporary copy and the custodian's own value is kept as the station's site_name. Measured
     #    on the GSSA/BHP Roxby Downs 2018 release: nine of 764 files, all now published.
     #
-    #    Because it is a rescue, it no longer SHORT-CIRCUITS the terminal surfaces below. It used to
-    #    return here, which was right while it was terminal and would now report needs_repair for a
+    #    Because it is a rescue, it must NOT SHORT-CIRCUIT the terminal surfaces below. Returning
+    #    here is right only for a terminal check, and would report needs_repair for a
     #    file that also carries something nothing can read. Its row rides `blocking_fields` whatever
     #    the final verdict is, so a curator still sees it.
     dataid_row = None

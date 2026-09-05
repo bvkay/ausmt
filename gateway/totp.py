@@ -1,14 +1,13 @@
-"""RFC 6238 TOTP — the workbench's destructive-op second factor (C41 D2 owner amendment, 2026-07-11).
+"""RFC 6238 TOTP - the workbench's destructive-op second factor.
 
-STDLIB ONLY, by design (C41: "the TOTP is stdlib by design"): hmac / hashlib / struct / base64 /
-time / secrets — no new dependency. TOTP is RFC 6238 (HOTP-over-time, RFC 4226), SHA-1, 30-second
+STDLIB ONLY, by design: hmac / hashlib / struct / base64 /
+time / secrets - no new dependency. TOTP is RFC 6238 (HOTP-over-time, RFC 4226), SHA-1, 30-second
 steps, a ±1-step verify window for box clock skew, per-curator secret.
 
-The threat this closes (D2): the typed slug protects against a mistaken click; the second factor
-protects against a STOLEN curator session — a different and worse threat. Because the secret lives
+The threat this closes: the typed slug protects against a mistaken click; the second factor
+protects against a STOLEN curator session - a different and worse threat. Because the secret lives
 only in the gateway sqlite (never git, WAL-safe backed up), and verification is stdlib arithmetic,
-the box needs no egress (the 2026-07-11 DNS-outage failure mode would not have locked deletion out —
-an emailed code would have).
+the box needs no egress.
 
 PURE FUNCTIONS: this module holds no state. Enrolment storage (the per-curator secret + the
 replay-guard `last_used_step`) lives in gateway.db; the fail-closed verification POLICY (enrolled?
@@ -39,7 +38,7 @@ _SECRET_BYTES = 20  # 160-bit secret == the RFC 6238 SHA-1 test-vector key lengt
 def generate_secret(*, nbytes: int = _SECRET_BYTES) -> str:
     """A fresh per-curator secret as an UNPADDED uppercase base32 string (the authenticator-app
     manual-entry format). `secrets.token_bytes` is the CSPRNG; base32 (RFC 4648) is what otpauth://
-    and every authenticator expect. Padding `=` is stripped for a clean copy/paste — verify() re-pads
+    and every authenticator expect. Padding `=` is stripped for a clean copy/paste - verify() re-pads
     on decode, so a stripped or user-typed (spaces, lowercase) secret still resolves."""
     raw = secrets.token_bytes(nbytes)
     return base64.b32encode(raw).decode("ascii").rstrip("=")
@@ -51,8 +50,8 @@ def _decode_secret(secret: str) -> bytes:
     genuinely malformed secret — the caller treats an undecodable secret as 'no valid enrolment'."""
     cleaned = secret.strip().replace(" ", "").upper()
     if not cleaned:
-        # F2: an empty / whitespace-only secret cleans to "" and base64.b32decode("") returns b"" — a
-        # VALID HMAC key — so verify() would compute and could MATCH an empty-key code instead of
+        # An empty / whitespace-only secret cleans to "" and base64.b32decode("") returns b"" - a
+        # VALID HMAC key - so verify() would compute and could MATCH an empty-key code instead of
         # refusing, contradicting the fail-closed claim. Reject it: verify() catches ValueError and
         # returns None, so an empty secret fails closed as documented. Unreachable via the DB today
         # (curator_totp.secret is NOT NULL and generate_secret is never empty) — defence in depth that
@@ -63,7 +62,7 @@ def _decode_secret(secret: str) -> bytes:
 
 
 def current_step(now: float | None = None, *, step_s: int = _STEP_S) -> int:
-    """The RFC 6238 time-step counter T = floor(unix_time / step_s) (T0 = 0). Integer, monotone
+    """The RFC 6238 time-step counter T = floor(unix_time / step_s), counted from the unix epoch. Integer, monotone
     non-decreasing — the value the DB stores as last_used_step so a code can never be replayed within
     or across its validity window (a later deletion needs a step STRICTLY GREATER than the last used)."""
     unix = time.time() if now is None else now
@@ -71,7 +70,7 @@ def current_step(now: float | None = None, *, step_s: int = _STEP_S) -> int:
 
 
 def code_at(secret: str, counter: int, *, digits: int = _DIGITS) -> str:
-    """HOTP(K, counter) (RFC 4226 §5.3): HMAC-SHA1 of the 8-byte big-endian counter under the secret,
+    """HOTP(K, counter) (RFC 4226, section 5.3): HMAC-SHA1 of the 8-byte big-endian counter under the secret,
     dynamic-truncated to `digits` decimal digits, zero-padded. TOTP is this with counter == the
     time-step. A negative counter is clamped to 0 (a ±window at step 0 must not pack a negative int)."""
     key = _decode_secret(secret)
@@ -88,9 +87,9 @@ def verify(code: str, secret: str, now: float | None = None, *, window: int = 1,
     Returns the MATCHED STEP (an int the caller compares to last_used_step for single-use/replay
     enforcement), or None if the code matches no step in the window OR is malformed.
 
-    ±1 step (30 s) is the box clock-skew tolerance (D2). The comparison is constant-time
+    ±1 step (30 s) is the box clock-skew tolerance. The comparison is constant-time
     (hmac.compare_digest) so no timing oracle reveals how close a wrong guess was. A malformed code
-    (wrong length, non-digit, or an undecodable secret) is a clean None — never an exception — so the
+    (wrong length, non-digit, or an undecodable secret) is a clean None - never an exception - so the
     route returns a uniform 'wrong code' with nothing staged. On a match at multiple steps (cannot
     happen for distinct HOTP outputs, but defensive) the HIGHEST matching step is returned so the
     replay guard advances maximally."""
@@ -116,8 +115,8 @@ def verify(code: str, secret: str, now: float | None = None, *, window: int = 1,
 
 def otpauth_uri(secret: str, *, account: str, issuer: str = "AusMT",
                 digits: int = _DIGITS, step_s: int = _STEP_S) -> str:
-    """The otpauth://totp/ provisioning URI (Key Uri Format) for MANUAL authenticator entry — no QR
-    image dependency (D2: single-digit curator population; a QR needs an image lib the gateway does
+    """The otpauth://totp/ provisioning URI (Key Uri Format) for MANUAL authenticator entry - no QR
+    image dependency (single-digit curator population; a QR needs an image lib the gateway does
     not carry). Issuer + account are percent-encoded; the secret is the bare base32. Algorithm/digits/
     period are stated explicitly so an app that does not assume the SHA-1/6/30 defaults still matches."""
     from urllib.parse import quote

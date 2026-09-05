@@ -1,5 +1,5 @@
 #!/bin/sh
-# AusMT deploy preflight (C33). READ-ONLY: this script CHECKS and REPORTS, it never creates,
+# AusMT deploy preflight. READ-ONLY: this script CHECKS and REPORTS, it never creates,
 # chowns, pulls, or edits anything. Every FAIL prints the exact command to fix it — you run it.
 #
 # Run it before `make rebuild-data` / `docker compose up` on any Linux, macOS, or WSL docker host.
@@ -116,7 +116,7 @@ check_var_set AUSMT_DATA_DIR "set AUSMT_DATA_DIR=/your/host/root in $ENV_FILE"
 check_var_set OWNER          "set OWNER=<the GHCR namespace the images were pushed under> in $ENV_FILE"
 
 if [ "$PROFILE" = "gateway" ]; then
-  # Softened to :- in compose (C33) — the app/runner fail-close instead — but you STILL need them
+  # Softened to :- in compose - the app/runner fail-close instead - but you STILL need them
   # to actually run the gateway. Preflight is where you catch that early.
   check_var_len AUSMT_SUBMIT_KEY 16 "generate one: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"  then set AUSMT_SUBMIT_KEY in $ENV_FILE"
   check_var_set AUSMT_CODE_DIR "set AUSMT_CODE_DIR=<this checkout's path> in $ENV_FILE (gw-runner mounts \$AUSMT_CODE_DIR/gateway)"
@@ -135,8 +135,8 @@ if [ "$PROFILE" = "gateway" ]; then
     warn "AUSMT_GIT_CREDS_DIR is not set — curator publish push fails (=> PUBLISH_FAILED) until set" "set AUSMT_GIT_CREDS_DIR=/path/to/git-creds in $ENV_FILE (see README 'Curator publish credentials')"
   fi
 
-  # Numeric-knob range check (deploy review section 5). Lane J added fail_closed_startup range checks
-  # (gateway/config.py::_RANGES, 15 numeric knobs) enforced only AT GATEWAY CONTAINER START, so a
+  # Numeric-knob range check. The fail_closed_startup range checks
+  # (gateway/config.py::_RANGES, 15 numeric knobs) are enforced only AT GATEWAY CONTAINER START, so a
   # zeroed/out-of-range override in .env crash-loops the gateway and no preflight leg names it. Catch it
   # HERE, before `docker compose up`. Single source of truth: shell out to python importing the SAME
   # gateway.config._RANGES the app enforces (not a restated copy of the floors), validating the current
@@ -218,7 +218,7 @@ else
     fail "$SURVEYS does not exist" "git clone <ausmt-surveys-url> '$SURVEYS'"
   fi
 
-  # Untracked-survey-dir guard (incident 2026-07-11) — a hand-inspection catch for the same drift the
+  # Untracked-survey-dir guard: a hand-inspection catch for the same drift the
   # reconcile agent now refuses on. The engine build enumerates the FILESYSTEM under surveys-live/
   # surveys/ (Makefile rebuild-data passes --surveys …/surveys/surveys), NOT git — so a leftover
   # UNTRACKED survey dir (a `test-2026` left on the box) is SERVED even though `git rm`/pushes can never
@@ -247,7 +247,7 @@ else
     fi
   fi
 
-  # C43 S2b-i: the shared-group publish permissions time-bomb (incident 2026-07-11). The gateway
+  # The shared-group publish permissions time-bomb. The gateway
   # publishes into surveys-live as uid 10002; WITHOUT `core.sharedRepository=group`, git creates new
   # .git/objects dirs that are NOT group-writable, so the operator (in the shared group) eventually
   # cannot `git pull`/gc — the checkout silently rots behind origin. Catch the drift EARLY: any entry
@@ -259,8 +259,8 @@ else
     offender=$(find "$SURVEYS/.git" ! -perm -020 -print 2>/dev/null | head -n 1)
     # Read the config FILE directly, not via `git -C` repo discovery: discovery fails on a repo
     # git considers dubious (preflight under sudo sees an operator-owned checkout) and on minimal
-    # .git trees, silently turning a hardened PASS into a WARN (post-merge CI red 2026-07-11 —
-    # this check's first ubuntu execution; it skips on Windows dev boxes).
+    # .git trees, silently turning a hardened PASS into a WARN (seen on ubuntu CI;
+    # the check skips on Windows dev boxes).
     shared=$(git config --file "$SURVEYS/.git/config" --get core.sharedRepository 2>/dev/null || true)
     if [ -n "$offender" ]; then
       fail "$SURVEYS/.git has entries WITHOUT group-write (e.g. $offender) — a gateway publish (uid 10002) creates foreign-owned, non-g+w object dirs and eventually locks the operator out of 'git pull' (incident 2026-07-11)" "git -C '$SURVEYS' config core.sharedRepository group && sudo chgrp -R 10002 '$SURVEYS/.git' && sudo chmod -R g+rwX '$SURVEYS/.git'   (see deploy/README.md 'surveys-live must be writable by uid 10002')"

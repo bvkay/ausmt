@@ -362,7 +362,8 @@ def test_datacite_has_no_isnewversionof_without_a_prior_minted_release(tmp_path)
 
 
 def test_datacite_chains_isnewversionof_to_the_last_minted_release(tmp_path):
-    """Q1 is minted, Q2 is not; Q3 must chain past the un-minted Q2 to Q1's real DOI."""
+    """The first quarter is minted and the second is not; the third must chain past the un-minted
+    second to the first quarter's real DOI."""
     root = _data_root(tmp_path)
     assert _cut(root, "2026-Q1") == 0
     assert cr.main(["--data", str(root), "--tag", "2026-Q1", "--doi", "10.5555/rel-q1"]) == 0

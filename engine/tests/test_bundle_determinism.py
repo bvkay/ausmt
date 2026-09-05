@@ -1,7 +1,7 @@
 """The published bundle digests are cross-build invariants: same inputs in, same bytes out.
 
 The manifest publishes a SHA-256 for every served file and every bundle, and the download reference
-invites a consumer to check one against a previously published one. That is only meaningful if
+invites a consumer to check one against an earlier published one. That is only meaningful if
 identical inputs and identical code produce identical bytes, so this module pins BOTH halves of the
 claim for the per-survey EMTF-XML zip (the one product the project cannot A/B across builds any
 other way) alongside the EDI zip that already held it:
@@ -12,7 +12,7 @@ other way) alongside the EDI zip that already held it:
 The second half is what stops the first from being satisfied by a constant. A writer that emitted the
 same bytes regardless of input would pass a reproducibility test and publish a useless digest.
 
-The XML zip's members carry the one field that used to break this: mt_metadata assigns
+The XML zip's members carry the one field that can break this: mt_metadata assigns
 Provenance.create_time = now() inside to_xml(), so an untouched canonical XML re-stamped the build
 clock and both the per-station XML row and the whole zip's digest churned on every rebuild. The
 served value is now the date the source document declares (ingest.normalize._pin_create_time), so it
@@ -58,7 +58,7 @@ def _make_survey(root, edis):
 
 
 def _build(surveys, out):
-    """A full, cache-blind build. The C18 cache is deliberately NOT used: a warm build is trivially
+    """A full, cache-blind build. The cache is deliberately NOT used: a warm build is trivially
     byte-identical to the build that populated it, so a cached comparison could not see this defect
     (it is why the defect survived). INDEPENDENT full builds are the baseline here."""
     rc = build_portal.main([

@@ -1,4 +1,4 @@
-"""Ops-hardening config pins (O1 admin socket, O2 boot-ordering drop-in).
+"""Ops-hardening config pins (admin socket, boot-ordering drop-in).
 
 Pure text + path resolution over the shipped files, so these RUN everywhere (no docker/systemd/sh
 needed) and never trip the CI skip tripwire. They pin the config-side decisions the runbook documents:
@@ -24,7 +24,7 @@ def _noncomment_lines(text: str) -> list[str]:
 
 
 def test_frontdoor_admin_is_a_unix_socket_not_a_tcp_port():
-    """O1: the edge must reach `caddy reload` via an admin endpoint on a UNIX SOCKET (admin unix//...),
+    """The edge must reach `caddy reload` via an admin endpoint on a UNIX SOCKET (admin unix//...),
     NOT a TCP port and NOT `admin off`. A unix socket opens no network port (honouring the original
     no-extra-listening-port posture) while still letting install-frontdoor.sh reload the running config.
     FAILS IF the admin block reverts to `admin off` (reload could never work) or binds a TCP address
@@ -35,7 +35,7 @@ def test_frontdoor_admin_is_a_unix_socket_not_a_tcp_port():
     assert len(admin_lines) == 1, f"exactly one admin directive expected: {admin_lines}"
     admin = admin_lines[0]
     assert admin != "admin off", (
-        "admin is off -- `caddy reload` cannot work, so the O1 in-place reload degrades to a restart on "
+        "admin is off -- `caddy reload` cannot work, so the in-place reload degrades to a restart on "
         "every deploy. Use a unix socket instead.")
     assert re.match(r"^admin\s+unix//", admin), (
         f"admin must be on a unix socket (admin unix//...), got: {admin!r}")
@@ -45,7 +45,7 @@ def test_frontdoor_admin_is_a_unix_socket_not_a_tcp_port():
 
 
 def test_boot_ordering_dropin_orders_docker_after_tailscaled():
-    """O2: the docker.service drop-in must order the daemon AFTER tailscaled so the front-door container
+    """The docker.service drop-in must order the daemon AFTER tailscaled so the front-door container
     never starts before the tailnet resolver (the post-reboot 502 incident). FAILS IF the drop-in is
     missing the After=tailscaled.service ordering, or hard-Requires tailscaled (which would make a
     tailnet-less box unbootable -- Wants= is the intended soft dependency)."""

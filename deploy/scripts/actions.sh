@@ -1,40 +1,40 @@
 #!/bin/sh
-# AusMT curator-workbench ACTIONS agent (C43 Stage 2b-ii, record D8/D9). POSIX sh — one pass, timer-
+# AusMT curator-workbench ACTIONS agent. POSIX sh, one pass, timer-
 # driven (deploy/systemd/ausmt-actions.timer fires it every ~2 min). It is the HOST-SIDE half of the
-# privileged-action lane: the gateway (which has NO shell, NO docker socket, NO site-data mount — the
-# C40 trust boundary) writes an INTENT FILE into the shared gateway state dir; THIS agent, running as
+# privileged-action split: the gateway (which has NO shell, NO docker socket, NO site-data mount: the
+# trust boundary) writes an INTENT FILE into the shared gateway state dir; THIS agent, running as
 # the operator uid that owns the code checkout and can drive `docker compose`, scans the state dir and
 # executes a FIXED RECIPE for each recognised intent. The gateway can only ASK; the host decides and
-# acts. (design C43 D8 "operations floor / actions"; D9 "request-file hardening spec".)
+# acts.
 #
-# THE D9 HARDENING (frozen — implemented in full here; the gateway-side checks are UX only, THIS is the
+# THE HARDENING (frozen - implemented in full here; the gateway-side checks are UX only, THIS is the
 # real gate):
-#   D9.1 Fixed-enum intents only. A closed allow-list of intent FILENAMES (update/backup/rollback/
-#        restore .request). An unknown file in the state dir is IGNORED and audited, never executed.
-#   D9.2 Host-side validation is the real gate. The rollback build id is validated against the REAL
-#        retained-build inventory (site-data/builds/); the restore snapshot id against the REAL
-#        snapshot list (backups/); ids must match a strict [A-Za-z0-9TZ._-] charset AND resolve to an
-#        actual inventory entry BEFORE any use. No attacker-controllable string ever reaches a shell:
-#        the recipes are fixed command sequences with allow-listed arguments only.
-#   D9.3 Single-flight + rate limit. A host-side flock serialises the agent (one action at a time); at
-#        most ONE privileged intent is executed per invocation (fixed priority), so two recipes can
-#        never run concurrently. A per-kind cooldown refuses (and audits) a repeat request inside the
-#        rate-limit window.
-#   D9.4 Audit line per action — append-only actions-audit.log in the state dir carrying the intent
-#        kind, the id (rollback/restore only), the requesting curator NAME, and the outcome.
-#   D9.5 Typed confirmation for restore — the snapshot id the curator typed is carried in the intent
-#        and re-checked here against the real snapshot list; a mismatch aborts (audited refused).
-#   D9.6 update.request + restore.request are flagged for the pre-NCI hostile re-audit (see README).
+#   * Fixed-enum intents only. A closed allow-list of intent FILENAMES (update/backup/rollback/
+#     restore .request). An unknown file in the state dir is IGNORED and audited, never executed.
+#   * Host-side validation is the real gate. The rollback build id is validated against the REAL
+#     retained-build inventory (site-data/builds/); the restore snapshot id against the REAL
+#     snapshot list (backups/); ids must match a strict [A-Za-z0-9TZ._-] charset AND resolve to an
+#     actual inventory entry BEFORE any use. No attacker-controllable string ever reaches a shell:
+#     the recipes are fixed command sequences with allow-listed arguments only.
+#   * Single-flight + rate limit. A host-side flock serialises the agent (one action at a time); at
+#     most ONE privileged intent is executed per invocation (fixed priority), so two recipes can
+#     never run concurrently. A per-kind cooldown refuses (and audits) a repeat request inside the
+#     rate-limit window.
+#   * Audit line per action: append-only actions-audit.log in the state dir carrying the intent
+#     kind, the id (rollback/restore only), the requesting curator NAME, and the outcome.
+#   * Typed confirmation for restore: the snapshot id the curator typed is carried in the intent
+#     and re-checked here against the real snapshot list; a mismatch aborts (audited refused).
+#   * update.request and restore.request are flagged for the pre-NCI hostile re-audit (see README).
 #
-# THE UPDATE RECIPE IS THE ONE BOUNDED C40 EXCEPTION (record D8, owner-ruled): `git pull --ff-only` on
-# the code checkout + `docker compose pull` + `up -d` — the standing refresh recipe, NOTHING
-# parameterised from the intent. Trust analysis (record D8): the recipe can only deploy what branch-
+# THE UPDATE RECIPE IS THE ONE BOUNDED EXCEPTION to the no-privileged-action rule:
+# `git pull --ff-only` on the code checkout + `docker compose pull` + `up -d`, the standing refresh
+# recipe, with NOTHING parameterised from the intent. The recipe can only deploy what branch-
 # protected main already built and published, i.e. the same bytes an operator deploys by hand. The
 # intent's CONTENT is read ONLY for the audit's `by=` field (the requesting curator) — never for a
 # command argument (the "update fixed-recipe" pin proves this by construction + a hostile-content pin).
 #
 # RECIPES (fixed; nothing parameterised except the two validated ids):
-#   update    git -C CODE pull --ff-only ; COMPOSE pull ; COMPOSE up -d          (the C40 exception)
+#   update    git -C CODE pull --ff-only; COMPOSE pull; COMPOSE up -d            (the bounded exception)
 #   backup    invoke deploy/backup.sh                                            (existing snapshot)
 #   rollback  atomic `current` symlink repoint to the named RETAINED build; write rollback.pin so the
 #             reconcile tick does NOT auto-revert while the manual pin stands. NEVER rebuilds.
@@ -99,10 +99,10 @@ BACKUP_CMD="${AUSMT_ACTIONS_BACKUP:-${CODE_DIR:+$CODE_DIR/deploy/backup.sh}}"
 DRILL_CMD="${AUSMT_ACTIONS_DRILL:-${CODE_DIR:+$CODE_DIR/deploy/scripts/restore-drill.sh}}"
 RATELIMIT_S="${AUSMT_ACTIONS_RATELIMIT_S:-30}"
 
-# The four privileged intent files (fixed enum, D9.1). Ordered by PRIORITY — the agent executes the
-# FIRST pending one per invocation (single-flight, D9.3): a destructive restore before a rollback
+# The four privileged intent files (the fixed enum). Ordered by PRIORITY: the agent executes the
+# FIRST pending one per invocation (single-flight): a destructive restore before a rollback
 # before an update before a backup. rebuild.request + pause.flag are NOT in this set (reconcile owns
-# them); any OTHER *.request in the state dir is UNKNOWN => ignored + audited (D9.1).
+# them); any OTHER *.request in the state dir is UNKNOWN => ignored + audited.
 INTENT_UPDATE="update.request"
 INTENT_BACKUP="backup.request"
 INTENT_ROLLBACK="rollback.request"
@@ -112,7 +112,7 @@ now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 now_epoch() { date -u +%s 2>/dev/null || date +%s; }
 
 # compose <args...>: run `docker compose` against THIS deployment's compose file. Uses `-f <file>`
-# (NOT `-C <dir>` — compose has no -C flag; that was a real-box breakage the shim masked, S2). `-f`
+# (NOT `-C <dir>` - compose has no -C flag; that was a real-box breakage the shim masked). `-f`
 # also anchors the project directory to the file's parent, so .env loads from deploy/ regardless of
 # the CWD (the systemd unit sets WorkingDirectory, but a manual run must work too). No fragile
 # `|| bare` fallback — a compose error surfaces honestly.
@@ -150,8 +150,8 @@ PYEOF
 }
 
 # _scrub <value>: return the value stripped of EVERYTHING that could forge an audit line under a
-# compromised gateway (D9, S4). `LC_ALL=C tr -dc '[:print:]'` keeps ONLY ASCII printable bytes 0x20-
-# 0x7E — dropping all C0/C1 control chars (\n\r\t\v\f) AND every byte of a multibyte UTF-8 sequence,
+# compromised gateway. `LC_ALL=C tr -dc '[:print:]'` keeps ONLY ASCII printable bytes 0x20-
+# 0x7E - dropping all C0/C1 control chars (\n\r\t\v\f) AND every byte of a multibyte UTF-8 sequence,
 # so unicode line separators U+2028/U+2029 (which the gateway's splitlines-free reader also ignores)
 # cannot survive. Then drop `=` so an attacker-controlled `by`/`id` can never inject a `key=value`
 # token (e.g. a forged `outcome=ok`). Capped at 120 chars.
@@ -159,7 +159,7 @@ _scrub() {
   printf '%s' "$1" | LC_ALL=C tr -dc '[:print:]' | tr -d '=' | cut -c1-120
 }
 
-# audit <kind> <by> <id> <outcome>: append ONE line to the state-dir audit log (D9.4). The
+# audit <kind> <by> <id> <outcome>: append ONE line to the state-dir audit log. The
 # host-computed `outcome=` is written FIRST so a forged token in the attacker-controlled `by`/`id`
 # fields can never PRECEDE the real outcome (defence-in-depth over the _scrub above). We hold the
 # flock, and a single short append is atomic on POSIX. The log is group-readable (0644) so the
@@ -177,7 +177,7 @@ audit() {
   chmod 0644 "$AUDIT_LOG" 2>/dev/null || true
 }
 
-# valid_id: 0 (true) iff the id is non-empty, matches the strict [A-Za-z0-9TZ._-] charset (D9.2), and
+# valid_id: 0 (true) iff the id is non-empty, matches the strict [A-Za-z0-9TZ._-] charset, and
 # is not a path-traversal token. This is a CHARSET pre-filter — the REAL gate is inventory membership
 # (in_inventory below), so even a charset pass cannot escape the enumerated builds/backups roots.
 valid_id() {
@@ -203,7 +203,7 @@ in_inventory() {
   return 1
 }
 
-# rate_limited <kind>: 0 (true) iff <kind> ran less than RATELIMIT_S seconds ago (D9.3 repeat-request
+# rate_limited <kind>: 0 (true) iff <kind> ran less than RATELIMIT_S seconds ago (the repeat-request
 # refusal). Reads the per-kind last-exec epoch from LAST_FILE ("<kind> <epoch>" lines). RATELIMIT_S=0
 # disables. record_ran stamps it after a recipe runs.
 rate_limited() {
@@ -228,13 +228,14 @@ record_ran() {
 
 # ---- the recipes --------------------------------------------------------------------------------
 
-# recipe_update: THE ONE BOUNDED C40 EXCEPTION (record D8). git pull --ff-only on the code checkout,
-# then compose pull + up -d. NOTHING here is derived from the intent — the command sequence is
-# constant (the "update fixed-recipe" pin asserts this by construction). Returns the recipe rc.
+# recipe_update: THE ONE BOUNDED EXCEPTION to the no-privileged-action rule. git pull --ff-only on
+# the code checkout, then compose pull + up -d. NOTHING here is derived from the intent - the command
+# sequence is constant (the "update fixed-recipe" pin asserts this by construction). Returns the
+# recipe rc.
 recipe_update() {
   [ -n "$CODE_DIR" ] || { printf 'actions: update needs AUSMT_CODE_DIR (the code checkout)\n' >&2; return 1; }
   [ -e "$CODE_DIR/.git" ] || { printf 'actions: update: %s is not a git checkout\n' "$CODE_DIR" >&2; return 1; }
-  # git DOES take -C (it is a git checkout); compose does NOT — it goes through compose() (`-f`, S2).
+  # git DOES take -C (it is a git checkout); compose does NOT - it goes through compose() (`-f`).
   # shellcheck disable=SC2086 -- GIT_CMD may be multi-word (default `git`/a test shim).
   $GIT_CMD -C "$CODE_DIR" pull --ff-only || return 1
   compose pull || return 1
@@ -249,10 +250,10 @@ recipe_backup() {
   $BACKUP_CMD
 }
 
-# recipe_rollback <build_id>: atomic `current` symlink repoint to a RETAINED build (record D8; the
-# "rollback-repoints" pin). NEVER rebuilds — it only moves the pointer. The id is already charset- +
-# inventory-validated by the caller. Writes rollback.pin so the reconcile tick does NOT auto-revert
-# while the manual pin stands (record D13 rollback-repoints).
+# recipe_rollback <build_id>: atomic `current` symlink repoint to a RETAINED build (the
+# "rollback-repoints" pin). NEVER rebuilds; it only moves the pointer. The id is already charset-
+# and inventory-validated by the caller. Writes rollback.pin so the reconcile tick does NOT auto-revert
+# while the manual pin stands (rollback-repoints).
 recipe_rollback() {
   _bid="$1"; _by="$2"
   _target="$BUILDS_DIR/$_bid"
@@ -286,13 +287,13 @@ PYEOF
   return 0
 }
 
-# recipe_restore <snapshot_id> <by>: the guarded, drill-first DB restore (record D8, owner-ruled). In
+# recipe_restore <snapshot_id> <by>: the guarded, drill-first DB restore. In
 # ORDER: stop the gateway container -> DRILL the snapshot FIRST (a failing drill ABORTS with the live
 # DB byte-untouched, then the gateway is restarted) -> swap the DB -> restart. Returns 0 on a completed
 # swap, 1 on any failure; sets $RESTORE_OUTCOME to a human phrase for the audit line.
 RESTORE_OUTCOME=""
 
-# _gateway_start / _gateway_stop: bring the gateway container down/up via compose (`-f`, S2). Best-
+# _gateway_start / _gateway_stop: bring the gateway container down/up via compose (`-f`). Best-
 # effort — a shim records the call in tests; a real failure to restart is bounded by compose's own
 # `restart: unless-stopped`.
 _gateway_stop()  { compose --profile gateway stop gateway 2>/dev/null || true; }
@@ -309,8 +310,8 @@ recipe_restore() {
     return 1
   fi
   # 1. Stop the gateway so nothing writes the live DB during the sequence. From HERE ON the gateway is
-  #    DOWN, so EVERY exit path below MUST restart it (S3: the sole ops surface must never be left down,
-  #    including on a disk/inode-exhaustion mktemp failure — that was the shipped bug).
+  #    DOWN, so EVERY exit path below MUST restart it: the sole ops surface must never be left down,
+  #    including on a disk/inode-exhaustion mktemp failure.
   _gateway_stop
   # 2. DRILL FIRST. A failing drill ABORTS — the live DB is never touched (the "drill-fail aborts
   #    untouched" pin: live DB byte-identical after). Restart on the way out.
@@ -354,7 +355,7 @@ recipe_restore() {
 # Fixed priority. Consume the intent FIRST (rm — at-most-once, so a failed/hostile recipe never loops),
 # validate, execute, audit. Returns the pass exit code (0 clean / 1 recipe-failed).
 process_one() {
-  # Warn (and audit) any UNKNOWN *.request the gateway should never have written (D9.1) — but do NOT
+  # Warn (and audit) any UNKNOWN *.request the gateway should never have written, but do NOT
   # touch pause.flag or rebuild.request (reconcile owns those). Best-effort visibility.
   for _f in "$STATE_DIR"/*.request; do
     [ -f "$_f" ] || continue
@@ -425,7 +426,7 @@ process_one() {
 }
 
 # ----- lock + run --------------------------------------------------------------------------------
-# flock the whole pass on fd 9 (single-flight, D9.3): if a concurrent run holds it, exit 0 — the other
+# flock the whole pass on fd 9 (single-flight): if a concurrent run holds it, exit 0; the other
 # run owns this tick, and NO second recipe starts (two privileged recipes can never run at once). On a
 # host without flock(1) the pass runs bare (WARN): the one-privileged-intent-per-invocation structure
 # above still guarantees no two recipes run within a single invocation, and the timer cadence bounds

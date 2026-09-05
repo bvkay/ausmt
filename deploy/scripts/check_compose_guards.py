@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""C33 compose-guard proof (semantic).
+"""Compose-guard proof (semantic).
 
-This is NOT a substitute for `docker compose config` — the repo's CI
+This is NOT a substitute for `docker compose config`: the repo's CI
 (.github/workflows/deploy-images.yml) runs the real thing on every push, and an operator with the
 compose CLI should run `docker compose -f compose.yaml config` themselves. This script exists so the
-C33 `${VAR:?}`->`${VAR:-}` guard change can be proven *deterministically* on a box where the docker
+`${VAR:?}` and `${VAR:-}` guards can be proven *deterministically* on a box where the docker
 compose CLI is not installed, by implementing compose's documented variable-interpolation rules and
 reporting which variables would ABORT config for a given environment.
 
@@ -19,13 +19,13 @@ It reproduces exactly these Compose interpolation forms
     ${VAR:+repl}      -> `repl` if set AND non-empty, else ""
     ${VAR+repl}       -> `repl` if set, else ""
 
-`docker compose config` fails iff at least one `:?`/`?` guard trips for the given environment (that
-is precisely the "required variable is missing" error the 2026-07-06 deploy hit). So: enumerate the
-guards in the file, evaluate them against a supplied environment, and report every abort.
+`docker compose config` fails iff at least one `:?`/`?` guard trips for the given environment,
+which is the "required variable is missing" abort an operator sees. So: enumerate the guards in
+the file, evaluate them against a supplied environment, and report every abort.
 
 Usage:
     python3 check_compose_guards.py <compose.yaml> KEY=VALUE [KEY=VALUE ...]
-    python3 check_compose_guards.py --self-test        # runs the C33 assertions, exits non-zero on fail
+    python3 check_compose_guards.py --self-test        # runs the guard assertions, exits non-zero on fail
 
 Exit code: 0 if config would resolve (no guard trips), 1 if any guard trips (or a self-test fails).
 """
@@ -35,8 +35,9 @@ import re
 import sys
 from pathlib import Path
 
-# ${ NAME [ (:?) (- | ? | +) WORD ] }  — the op group captures an optional leading ':' plus one of
-# -/?/+; WORD runs (non-greedy in effect, [^}]) to the matching '}'. Bare ${NAME} => op/word empty.
+# `${ NAME [ (:?) (- | ? | +) WORD ] }`: the op group captures an optional leading ':' plus one of
+# -/?/+; WORD runs (non-greedy in effect, `[^}]`) to the matching '}'. Bare `${NAME}` leaves op and
+# word empty.
 _TOKEN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:?[-?+])?([^}]*)\}")
 
 
@@ -117,13 +118,15 @@ def _parse_env_args(args: list[str]) -> dict[str, str]:
 
 
 def _self_test() -> int:
-    """C33 assertions. Fails if the guard-scoping regressed."""
+    """The guard-scoping assertions. Fails if the guard scoping is wrong in either direction: a
+    base-config guard that trips for portal-only operation, or an always-required variable that has
+    lost its guard."""
     here = Path(__file__).resolve().parent
     compose = (here.parent / "compose.yaml").read_text(encoding="utf-8")
     failures: list[str] = []
 
     # (1) With ONLY the two always-required vars set, the base config must resolve (no guard trips).
-    #     This is the C33 fix: portal-only operation needs only AUSMT_DATA_DIR + OWNER.
+    #     Portal-only operation needs only AUSMT_DATA_DIR and the OWNER variable.
     minimal = {"AUSMT_DATA_DIR": "/srv/ausmt", "OWNER": "someowner"}
     trips = find_guard_trips(compose, minimal)
     if trips:
@@ -133,7 +136,8 @@ def _self_test() -> int:
         )
 
     # (2) The two always-required vars MUST still be guarded (removing them must still abort). Prove
-    #     the guard scoping did not throw the baby out — AUSMT_DATA_DIR and OWNER stay :?.
+    #     the guard scoping did not throw the baby out: the AUSMT_DATA_DIR and OWNER variables
+    #     stay :?.
     for required in ("AUSMT_DATA_DIR", "OWNER"):
         env = dict(minimal)
         del env[required]
@@ -145,15 +149,15 @@ def _self_test() -> int:
     for softened in ("AUSMT_SUBMIT_KEY", "AUSMT_CODE_DIR"):
         trips = find_guard_trips(compose, minimal)
         if any(t.var == softened for t in trips):
-            failures.append(f"FAIL: {softened} still trips a :? guard (C33 wanted :- default)")
+            failures.append(f"FAIL: {softened} still trips a :? guard (it must resolve from a :- default)")
 
     if failures:
         print("\n".join(failures))
         return 1
-    print("C33 compose-guard self-test PASS:")
+    print("compose-guard self-test PASS:")
     print("  - base config resolves with only AUSMT_DATA_DIR + OWNER set (no guard trips)")
     print("  - AUSMT_DATA_DIR and OWNER remain hard :? guards (still abort when unset)")
-    print("  - AUSMT_SUBMIT_KEY and AUSMT_CODE_DIR are no longer hard guards (softened to :-)")
+    print("  - AUSMT_SUBMIT_KEY and AUSMT_CODE_DIR resolve from a :- default (they never abort)")
     return 0
 
 

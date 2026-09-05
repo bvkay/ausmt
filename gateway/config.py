@@ -1,11 +1,11 @@
-"""Gateway config — env only, no config files (design §7).
+"""Gateway config - env only, no config files.
 
 The submit key is a SECRET: it is compared with hmac.compare_digest and is never logged.
-`Config.redacted_items()` is the ONLY sanctioned way to print config at startup — it drops the
+`Config.redacted_items()` is the ONLY sanctioned way to print config at startup - it drops the
 key entirely rather than masking it, so a formatting slip can never leak even a prefix.
 
 fail_closed_startup() is called before the app binds a port: an unset or short key aborts the
-process (design §3 — the server refuses to start). This is a startup guard, not a request-path
+process (the server refuses to start). This is a startup guard, not a request-path
 check, so the failure is loud and early rather than a 500 on first upload.
 """
 from __future__ import annotations
@@ -14,11 +14,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-# Minimum submit-key length (design §3). Shorter keys are refused at startup, not accepted-then-weak.
+# Minimum submit-key length. Shorter keys are refused at startup, not accepted-then-weak.
 _MIN_KEY_LEN = 16
 
-# Default max upload size, MB (design §7). The SINGLE SOURCE for this default (M2, code-health review
-# §6): the runner imports it for its extraction byte cap rather than carrying its own 250 literal, so
+# Default max upload size, MB. The SINGLE SOURCE for this default: the runner imports it for its
+# extraction byte cap rather than carrying its own 250 literal, so
 # the two can never silently drift (they must agree — the runner's cap derives from the gateway's
 # upload-time 4x-total rule). Overridable per-deployment via AUSMT_MAX_UPLOAD_MB.
 DEFAULT_MAX_UPLOAD_MB = 250
@@ -34,7 +34,7 @@ class Config:
     job_timeout_s: int
     clamd_host: str
     clamd_port: int
-    # C11 curator config (design §2/§6). curator_keys is the RAW `name:key,name:key` string; it is
+    # Curator config. curator_keys is the RAW `name:key,name:key` string; it is
     # parsed (and its fail-closed check applied) in curator_auth, not here — config stays a dumb
     # env carrier. It is a SECRET and is dropped from redacted_items() below, never logged.
     curator_keys: str = ""
@@ -42,11 +42,11 @@ class Config:
     session_ttl_s: int = 12 * 3600
     login_max_attempts: int = 5
     login_window_s: int = 300
-    # C31 metadata editor: how long the gateway's edit seam polls jobs/edit/done/ for the gw-runner's
+    # Metadata editor: how long the gateway's edit seam polls jobs/edit/done/ for the gw-runner's
     # result before surfacing a retryable error to the curator. Bounded by design — the gw-runner may
     # be mid-validation of a long submission job (its loop is single-threaded).
     edit_timeout_s: int = 120
-    # Self-serve key issuance (K1-K3). The public POST /gateway/request-key mints an email_verified
+    # Self-serve key issuance. The public POST /gateway/request-key mints an email_verified
     # uploader key and mails it. These are all SECONDARY to the operator-issued path (which stays the
     # env AUSMT_SUBMIT_KEY + curator-issued DB keys); every value has a working default so a deploy
     # that does not configure SMTP simply runs with issuance disabled (the endpoint still 202s).
@@ -87,7 +87,7 @@ class Config:
         relay or a localhost submission port is legitimate)."""
         return bool(self.smtp_host.strip() and self.mail_from.strip())
 
-    # Directory layout under data_dir (design §1 host tree). These are the gateway's view; the
+    # Directory layout under data_dir (host tree). These are the gateway's view; the
     # runner sees incoming ro / quarantine rw / jobs rw under its own mount at the same relative
     # names, so the runner recomputes them from its own AUSMT_GW_DATA and never trusts a path
     # handed to it in a job file beyond confirming containment.
@@ -112,8 +112,8 @@ class Config:
         return self.state_dir / "gateway.sqlite"
 
     def redacted_items(self) -> list[tuple[str, str]]:
-        """Config for the startup log — submit_key AND curator_keys intentionally DROPPED (design
-        §6: never masked, dropped, so a formatting slip cannot leak even a prefix). The curator-count
+        """Config for the startup log: submit_key AND curator_keys are intentionally DROPPED, never
+        masked, so a formatting slip cannot leak even a prefix. The curator-count
         is logged instead of the keys so the operator can confirm curators are configured without the
         secrets appearing anywhere in the log stream."""
         curators_configured = len([p for p in self.curator_keys.split(",") if p.strip()])
@@ -191,9 +191,9 @@ def operator_env_vars() -> tuple[str, ...]:
     """The operator-facing AUSMT_* env vars the compose gateway service MUST forward from .env into the
     container (the .env->app bridge). DERIVED, never hand-listed: it records every key load_config()
     actually reads and drops the container-fixed paths above, so a knob newly added to load_config is
-    required in compose AUTOMATICALLY. That closes the H1 drift CLASS - the regression pin can no longer
-    restate a stale copy of config's env surface and stay green while a var is silently dropped (the
-    2026-07-24 mail-var incident). Returned in first-read order, de-duplicated."""
+    required in compose AUTOMATICALLY. That closes the drift CLASS: the regression pin cannot restate a
+    stale copy of config's env surface and stay green while a var is silently dropped. Returned in
+    first-read order, de-duplicated."""
     seen: dict[str, None] = {}
 
     class _Recorder(dict):
@@ -211,7 +211,7 @@ def operator_env_vars() -> tuple[str, ...]:
 # Numeric knobs whose zero or negative value is never a legitimate operator intent, as
 # (field, env var, minimum, maximum). Each one fails INVISIBLY at runtime if it is allowed through:
 # max_upload_mb=0 is a universal 413, max_inflight=0 a universal 429, session_ttl_s=0 an infinite
-# login bounce (total curator lockout), and a zeroed K1 daily cap disables self-serve issuance behind
+# login bounce (total curator lockout), and a zeroed daily cap disables self-serve issuance behind
 # its by-design neutral 202 - while /gateway/healthz, the compose healthcheck and the portal probe all
 # keep reporting green. Issuance is disabled by leaving SMTP unconfigured (mail_configured, which the
 # startup log states), never by zeroing a cap. Ports are checked at both ends: 0 and 65536 are not
@@ -236,7 +236,7 @@ _RANGES: tuple[tuple[str, str, int, int], ...] = (
 
 
 def fail_closed_startup(cfg: Config) -> None:
-    """Refuse to start on a missing/short submit key (design §3) or an out-of-range numeric knob
+    """Refuse to start on a missing/short submit key or an out-of-range numeric knob
     (_RANGES). Raises SystemExit, so the port is never bound and there is no window where the gateway
     accepts uploads with a weak key or serves a wall of 413/429 while its health surfaces read green.
     The key is checked FIRST so a deploy that is both key-less and mis-tuned names the secret."""

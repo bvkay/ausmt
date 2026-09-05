@@ -1,11 +1,11 @@
-"""C31 metadata-editor gateway-flow tests (design §3.2-§3.8). Driven through the real HTTP surface
-(httpx in-process) with the C31 edit seam injected in-process (conftest.inproc_edit_runner) and the
-publish git seam faked (conftest.FakeGit) — the same injected-seam discipline as the C10 clamd and
-C11 git tests. Proven-failing-first where a behaviour change is the deliverable.
+"""Metadata-editor gateway-flow tests. Driven through the real HTTP surface
+(httpx in-process) with the edit seam injected in-process (conftest.inproc_edit_runner) and the
+publish git seam faked (conftest.FakeGit) - the same injected-seam discipline as the clamd and
+git tests. Proven-failing-first where a behaviour change is the deliverable.
 
-The load-bearing guarantees proved here: the §0.6 hash pin (stale/tampered hash ⇒ 409, nothing
-committed), the validator-FAIL server-side refusal (§0.4/§3.3), session+CSRF on every route (§3.6),
-hostile-value inertness (§3.7), and the §3.8 source assertion that the gateway package carries no
+The load-bearing guarantees proved here: the hash pin (stale/tampered hash ⇒ 409, nothing
+committed), the validator-FAIL server-side refusal, session+CSRF on every route,
+hostile-value inertness, and the source assertion that the gateway package carries no
 yaml/ruamel import.
 """
 from __future__ import annotations
@@ -32,7 +32,7 @@ async def _preview(client, slug, csrf, **fields):
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.6 session / CSRF on every route
+# session / CSRF on every route
 # --------------------------------------------------------------------------------------------------
 def test_edit_routes_require_session(tmp_path):
     async def _body():
@@ -87,7 +87,7 @@ def test_confirm_rejects_bad_csrf_no_commit(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# §1 the happy path (open -> preview -> confirm -> commit)
+# the happy path (open -> preview -> confirm -> commit)
 # --------------------------------------------------------------------------------------------------
 def test_full_edit_flow_commits_and_preserves_fidelity(tmp_path):
     async def _body():
@@ -139,7 +139,7 @@ def test_full_edit_flow_commits_and_preserves_fidelity(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.6 access.level flip round-trips into the yaml
+# access.level flip round-trips into the yaml
 # --------------------------------------------------------------------------------------------------
 def test_access_level_flip_lands_in_yaml(tmp_path):
     async def _body():
@@ -162,14 +162,14 @@ def test_access_level_flip_lands_in_yaml(tmp_path):
             assert r.status_code == 200
             after = (pkg / "survey.yaml").read_text(encoding="utf-8")
             assert "level: embargoed" in after
-            # FIX 3: the ISO date is double-quoted (a bare 2027-01-01 would be retyped to
+            # FIX 3: the ISO date is double-quoted (a bare `2027-01-01` would be retyped to
             # datetime.date by the PyYAML readers downstream).
             assert 'embargo_until: "2027-01-01"' in after
     run(_body())
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.3 validator FAIL blocks confirm (server-side 409)
+# validator FAIL blocks confirm (server-side 409)
 # --------------------------------------------------------------------------------------------------
 def test_validator_fail_shows_fail_and_confirm_409(tmp_path):
     # A validator FAIL on the patched yaml ⇒ the preview shows FAIL and NO confirm button, AND a
@@ -196,8 +196,8 @@ def test_validator_fail_shows_fail_and_confirm_409(tmp_path):
                                         "note": "x"}, follow_redirects=False)
             assert r.status_code == 409
             # No MUTATING git — the FAIL guard is upstream of any commit. (The preview render now
-            # reads surveys-live HEAD via `rev-parse --short HEAD` for the C43 drift chip, a benign
-            # read the queue page already does.) ALLOWLIST, not denylist (review F1): the FAIL path
+            # reads surveys-live HEAD via `rev-parse --short HEAD` for the drift chip, a benign
+            # read the queue page already does.) ALLOWLIST, not denylist: the FAIL path
             # may make ONLY the two benign READS `status` and `rev-parse`; assert every recorded verb
             # is one of those two. A denylist would silently pass a NEW mutating verb (worktree add,
             # stash, tag, mv, apply) the moment FakeGit models it and nobody extends the list — the
@@ -208,10 +208,10 @@ def test_validator_fail_shows_fail_and_confirm_409(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.4 hash pinning: tampered/stale hash ⇒ 409, nothing committed
+# hash pinning: tampered/stale hash ⇒ 409, nothing committed
 # --------------------------------------------------------------------------------------------------
 def test_stale_hash_confirm_409_no_commit(tmp_path):
-    # proven-failing-first: without the §0.6 re-hash a stale preview would commit whatever bytes the
+    # proven-failing-first: without the re-hash a stale preview would commit whatever bytes the
     # re-run merge produced, silently publishing content the curator never saw.
     async def _body():
         surveys_live = tmp_path / "surveys-live"
@@ -232,7 +232,7 @@ def test_stale_hash_confirm_409_no_commit(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.5 git push fails ⇒ rollback, curator sees error, nothing pushed
+# git push fails ⇒ rollback, curator sees error, nothing pushed
 # --------------------------------------------------------------------------------------------------
 def test_push_failure_rolls_back(tmp_path):
     async def _body():
@@ -283,7 +283,7 @@ def test_preflight_dirty_tree_refuses(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# graceful 500 (this lane): an OSError below the PublishError layer inside _commit_edit returns a clean,
+# Graceful 500 (this module): an OSError below the PublishError layer inside _commit_edit returns a clean,
 # actionable 500 instead of an uncaught exception / raw stack trace, and nothing commits.
 # --------------------------------------------------------------------------------------------------
 def test_commit_edit_oserror_returns_clean_500(tmp_path):
@@ -314,7 +314,7 @@ def test_commit_edit_oserror_returns_clean_500(tmp_path):
 
 
 def test_commit_edit_oserror_inside_publish_rolls_surveys_live_back(tmp_path, monkeypatch):
-    """Lane H / G5 at the app seam. The test above replaces _commit_edit_blocking wholesale, so it never
+    """App-seam rollback parity. The test above replaces _commit_edit_blocking wholesale, so it never
     enters publish.commit_metadata_edit and never asks whether the working tree was restored. This drives
     the REAL blocking commit with a failing survey.yaml write. FAILS IF the OSError escapes publish.py:
     write_bytes truncates before it writes, so surveys-live is left with a half-written survey.yaml and
@@ -349,7 +349,7 @@ def test_commit_edit_oserror_inside_publish_rolls_surveys_live_back(tmp_path, mo
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.7 hostile field values render inert
+# hostile field values render inert
 # --------------------------------------------------------------------------------------------------
 def test_xss_in_edit_renders_inert(tmp_path):
     async def _body():
@@ -370,7 +370,7 @@ def test_xss_in_edit_renders_inert(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.2 no-op edit refused through the gateway
+# no-op edit refused through the gateway
 # --------------------------------------------------------------------------------------------------
 def test_noop_edit_refused_via_gateway(tmp_path):
     async def _body():
@@ -403,12 +403,12 @@ def test_unknown_slug_404(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.8 the gateway package never gains a yaml/ruamel import (the C10 house rule, pinned)
+# the gateway package never gains a yaml/ruamel import (house rule, pinned)
 # --------------------------------------------------------------------------------------------------
 def test_gateway_package_has_no_yaml_import():
     # Scan every gateway/*.py EXCEPT gateway/runner/ (the runner runs in the engine image, where yaml
     # lives by design). A yaml/ruamel import appearing in the gateway PROCESS's modules would break
-    # the C10/C31 §0.1 house rule that the gateway never parses survey content.
+    # the house rule that the gateway never parses survey content.
     # FAILS IF any gateway (non-runner) module imports yaml or ruamel.
     import gateway
     root = Path(gateway.__file__).parent
@@ -445,7 +445,7 @@ def test_curator_queue_links_to_editor(tmp_path):
 # exact ModuleNotFoundError ship-blocker the review caught).
 # --------------------------------------------------------------------------------------------------
 def test_default_seam_flows_through_the_file_queue(tmp_path):
-    # proven failing 2026-07-06 (pre-fix HEAD): the default seam spawned
+    # Proven failing (pre-fix HEAD): the default seam spawned
     # `sys.executable -m gateway.runner.edit` — in deployment that child runs on the GATEWAY image's
     # Python, which has no ruamel, so every real edit 500'd. Here the app is built with
     # edit_runner=None (the DEFAULT seam) and a background thread runs the runner's claim/process
@@ -521,7 +521,7 @@ def test_edit_runner_down_times_out_with_5xx_not_hang(tmp_path):
 
 
 def test_gateway_process_never_imports_ruamel_or_yaml():
-    # The executable half of the §3.8 pin (review FIX 1): importing the gateway's ENTIRE process
+    # The executable half of the pin (review FIX 1): importing the gateway's ENTIRE process
     # surface (app + every module it pulls) must not load ruamel or yaml — the gateway image ships
     # neither, so any such import is a production ModuleNotFoundError. Run in a CLEAN subprocess so
     # this test's own environment (where the harness legitimately imports gateway.runner.edit)

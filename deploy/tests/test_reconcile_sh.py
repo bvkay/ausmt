@@ -1,4 +1,4 @@
-"""C40 serve-reconcile host agent (deploy/scripts/reconcile.sh) — decision-logic tests.
+"""Serve-reconcile host agent (deploy/scripts/reconcile.sh) - decision-logic tests.
 
 The reconcile agent is POSIX sh, so it is tested as a BLACK BOX through `sh` over a fake data tree
 built under tmp_path: a real git origin + a tracking surveys-live checkout, a fabricated served
@@ -8,8 +8,7 @@ NEXT read sees the corpus advance. Every assertion is an INDEPENDENT OBSERVABLE 
 invocation-marker file, the request file's existence, the status JSON's action, the process exit
 code, the log file), never the script's own self-report.
 
-Each test names its failure criterion in the docstring (Invariant 10). The cases (design C40 §3/§4,
-brief note 6c):
+Each test names its failure criterion in the docstring (Invariant 10). The cases:
   noop         head == built, no request  -> shim NOT invoked, action=noop, exit 0
   drift        head != built              -> shim invoked, action=rebuilt, log written + pruned, exit 0
   request      head == built + request    -> shim invoked, request consumed, action=rebuilt, exit 0
@@ -19,7 +18,7 @@ brief note 6c):
   lock-held    a concurrent run holds flock -> second run exits 0, status untouched  (needs flock)
 
 WINDOWS: there is no flock(1) here, so the lock-held case skipif's on its absence and is NOTED in the
-report; ALL other cases run on this machine (the brief's requirement) — reconcile.sh runs bare
+report; ALL other cases run on this machine - reconcile.sh runs bare
 (without the lock) when flock is missing, which does not change any non-lock decision.
 """
 from __future__ import annotations
@@ -72,7 +71,7 @@ def _make_tree(tmp_path: Path, *, source_commit: str | None, build_id: str = "bi
 
     # build.json lives at the BUILD ROOT (current/build.json): the engine writes `out/build.json`
     # and Caddy's handle_path strips the /data URL prefix before the filesystem. The first install
-    # (2026-07-08) failed because BOTH the script and this fixture assumed current/data/build.json —
+    # failed because BOTH the script and this fixture assumed current/data/build.json -
     # a self-consistent test that validated the script against its own wrong assumption. The layout
     # here is now pinned to the ENGINE's write site by test_build_json_path_matches_engine_layout.
     site = data / "site-data" / "current"
@@ -158,8 +157,7 @@ def _commit_tracked_survey(tree: dict, name: str = "tracked-survey") -> None:
 
 
 def _leave_untracked_survey(tree: dict, name: str = "test-2026") -> Path:
-    """Leave an UNTRACKED survey dir under surveys-live/surveys/<name>/ (the incident-2026-07-11 leftover:
-    never `git add`ed, so a push can never remove it, yet the filesystem-enumerating build serves it)."""
+    """Leave an UNTRACKED survey dir under surveys-live/surveys/<name>/."""
     d = tree["surveys"] / "surveys" / name
     d.mkdir(parents=True, exist_ok=True)
     (d / "survey.yaml").write_text("version: 1\n", encoding="utf-8")
@@ -167,18 +165,18 @@ def _leave_untracked_survey(tree: dict, name: str = "test-2026") -> Path:
 
 
 # --------------------------------------------------------------------------------------------------
-# Untracked-survey-dir guard (#15, incident 2026-07-11). The build enumerates the FILESYSTEM under
+# Untracked-survey-dir guard. The build enumerates the FILESYSTEM under
 # surveys/, so a leftover UNTRACKED dir is served though git can never remove it. reconcile.sh must
 # REFUSE the rebuild and record a distinct, dir-naming refusal state. RED-then-green pins.
 # --------------------------------------------------------------------------------------------------
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_untracked_survey_dir_refuses_rebuild(tmp_path):
-    """surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is NOT
-    invoked (no build), the status action is 'untracked_blocked' naming the offending dir, and the
-    script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway (shim marker appears — the
-    exact 2026-07-11 'served for a day' bug), or the refusal state does not name the dir, or it exits 0
-    and hides the misconfiguration."""
+    """surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is
+    NOT invoked (no build), the status action is 'untracked_blocked' naming the offending dir, and
+    the script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway (the shim marker
+    appears), or the refusal state does not name the dir, or it exits 0 and hides the
+    misconfiguration."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")  # built != HEAD => would otherwise rebuild
     _commit_tracked_survey(tree)
     _leave_untracked_survey(tree, "test-2026")
@@ -196,7 +194,7 @@ def test_untracked_survey_dir_refuses_rebuild(tmp_path):
 def test_clean_survey_tree_still_rebuilds(tmp_path):
     """A surveys/ tree with ONLY tracked survey dirs (no untracked leftovers) + drift => the guard is
     transparent and the rebuild proceeds exactly as before. FAILS IF: the guard false-positives on a
-    clean tree and blocks a legitimate rebuild (a regression to the C40 reconcile behaviour)."""
+    clean tree and blocks a legitimate rebuild (a regression to the reconcile behaviour)."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     _commit_tracked_survey(tree)  # tracked only — nothing untracked under surveys/
     r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
@@ -317,7 +315,7 @@ def test_sync_failed_when_diverged(tmp_path):
     """A surveys-live that cannot fast-forward (diverged local commit vs origin) => the shim is NOT
     invoked, status action=sync_failed, exit 0. FAILS IF: the script BUILDS from a state it could not
     sync (shim marker appears), or the action is not sync_failed, or it exits non-zero and flaps the
-    timer. This is the §4 'never build from a state we cannot fast-forward to' guarantee."""
+    timer. This is the 'never build from a state we cannot fast-forward to' guarantee."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     surveys = tree["surveys"]
     # Diverge: origin gets a commit, local gets a DIFFERENT commit on top of the shared base -> a
@@ -401,7 +399,7 @@ def test_ff_pull_advances_then_rebuilds(tmp_path):
 
 
 def test_build_json_path_matches_engine_layout():
-    """CROSS-ARTIFACT PIN (the 2026-07-08 incident): the script's BUILD_JSON path and the engine's
+    """CROSS-ARTIFACT PIN: the script's BUILD_JSON path and the engine's
     write site must agree. The engine writes build.json at the BUILD ROOT (`out / "build.json"` in
     build_portal.py); Caddy's handle_path strips /data before the filesystem, so the /data/build.json
     URL maps to that same root file. FAILS IF: the script re-grows a data/ segment, or the engine
@@ -410,10 +408,10 @@ def test_build_json_path_matches_engine_layout():
     assert 'BUILD_JSON="$SITE_DATA/current/build.json"' in script, \
         "reconcile.sh must read build.json at the build ROOT (current/build.json)"
     assert "current/data/build.json" not in script, \
-        "the phantom data/ segment is the exact 2026-07-08 rebuild-loop bug"
+        "the phantom data/ segment is the rebuild-loop bug"
     engine_src = (_REPO / "engine" / "extract" / "build_portal.py").read_text(encoding="utf-8")
     assert '(out / "build.json")' in engine_src, \
-        "engine no longer writes build.json at the build root — update reconcile.sh AND this pin"
+        "engine no longer writes build.json at the build root - update reconcile.sh AND this pin"
 
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
@@ -468,7 +466,7 @@ def test_loop_guard_rearmed_by_request_and_by_head_change(tmp_path):
 def test_missing_data_dir_fails_early(tmp_path):
     """An AUSMT_DATA_DIR that does not exist (unmounted volume / .env typo) => rc=1 with one loud
     message, BEFORE any tree is fabricated. FAILS IF: the script mkdir-ps a phantom tree and settles
-    into quiet sync_failed forever (review L4)."""
+    into quiet sync_failed forever."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     r = _run(tree, env_extra={"AUSMT_DATA_DIR": str(tmp_path / "not-mounted")})
     assert r.returncode == 1
@@ -480,10 +478,9 @@ def test_missing_data_dir_fails_early(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="directory write-deny not enforceable via chmod on Windows")
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_log_dir_exists_but_unwritable_fails_before_building(tmp_path):
-    """logs/ EXISTS but is not writable (an ownership regression — `mkdir -p` alone would pass) =>
+    """logs/ EXISTS but is not writable (an ownership regression - `mkdir -p` alone would pass) =>
     fail before invoking the build, action=failed, rc=1, with the ownership-prep hint. FAILS IF: the
-    writability probe is dropped and the failure only surfaces at the build redirect with no hint
-    (review L1)."""
+    writability probe is dropped and the failure only surfaces at the build redirect with no hint."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     logs_dir = tree["data"] / "site-data" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -504,7 +501,7 @@ def test_log_dir_exists_but_unwritable_fails_before_building(tmp_path):
 def test_state_dir_unwritable_fails_early_and_loud(tmp_path):
     """An unwritable gateway state dir (the missing one-time ownership prep) => the run fails EARLY
     with one actionable message and rc=1, BEFORE any sync/build. FAILS IF: the pass half-runs (shim
-    invoked) or exits 0, hiding the misconfiguration (the 2026-07-08 scattered-errors symptom)."""
+    invoked) or exits 0, hiding the misconfiguration."""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     state = tree["state"]
     state.chmod(0o555)
@@ -541,7 +538,7 @@ def test_log_dir_uncreatable_fails_before_building(tmp_path):
 def test_lock_held_second_run_is_silent_noop(tmp_path):
     """A second reconcile run while the lock is held exits 0 WITHOUT touching the status file. FAILS
     IF: two runs both build (lock not honoured), or the second run rewrites/creates the status file.
-    (skipif: no flock on this Windows dev box — noted in the C40 report; the deploy host has flock.)"""
+    (skipif: no flock on this Windows dev box - noted in the report; the deploy host has flock.)"""
     tree = _make_tree(tmp_path, source_commit="deadbeef")
     lock = Path(tree["env"]["AUSMT_RECONCILE_LOCK"])
     # Hold the lock in a separate flock process for the duration of the second run.
@@ -564,8 +561,8 @@ def test_lock_held_second_run_is_silent_noop(tmp_path):
 def test_status_file_readable_by_gateway_uid(tmp_path):
     """The status file must be group/other-readable: its CONSUMER is the gateway container (uid
     10002) reading through the shared state dir, not the operator who wrote it. FAILS IF: the
-    symlink-safe mktemp write ships its 0600 default again (the 2026-07-08 panel regression — the
-    file existed but the panel said 'no reconcile status yet')."""
+    symlink-safe mktemp write ships its 0600 default again, so the file exists and the panel still
+    reports no reconcile status."""
     tree = _make_tree(tmp_path, source_commit="placeholder")
     head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
     (tree["site"] / "build.json").write_text(json.dumps(
@@ -579,7 +576,7 @@ def test_status_file_readable_by_gateway_uid(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# C43 Stage 2b-ii: PAUSE auto-rebuild + ROLLBACK PIN (record D8/D13). A fresh pause.flag suppresses the
+# Stage 2b-ii: PAUSE auto-rebuild + ROLLBACK PIN. A fresh pause.flag suppresses the
 # drift rebuild; a STALE flag (older than the expiry) is IGNORED (auto-expires); a rollback.pin holds
 # reconcile off an auto-revert until an explicit rebuild.request moves forward. RED-then-green pins:
 # each proves it can fail (the paused/pinned case does NOT rebuild; the expired/explicit case DOES).
@@ -587,7 +584,7 @@ def test_status_file_readable_by_gateway_uid(tmp_path):
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_fresh_pause_flag_suppresses_drift_rebuild(tmp_path):
-    """PAUSE PIN (record D8/D13). With a FRESH pause.flag and drift (no rebuild.request), reconcile does
+    """PAUSE PIN. With a FRESH pause.flag and drift (no rebuild.request), reconcile does
     NOT rebuild — action=paused, the make shim is NOT invoked, and the status exposes paused=true.
     FAILS IF a fresh pause still rebuilds on drift. Non-vacuous: the expiry test below (stale flag)
     DOES rebuild, so the flag — not a broken build path — is what suppresses it."""
@@ -600,12 +597,12 @@ def test_fresh_pause_flag_suppresses_drift_rebuild(tmp_path):
     assert not tree["marker"].exists(), "a fresh pause.flag must SUPPRESS the drift rebuild (shim not run)"
     st = _status(tree)
     assert st and st.get("action") == "paused", f"expected action=paused, got {st}"
-    assert st.get("paused") is True, "reconcile status must expose the pause state (record D9.7)"
+    assert st.get("paused") is True, "reconcile status must expose the pause state"
 
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_stale_pause_flag_is_expired_and_rebuilds(tmp_path):
-    """PAUSE-EXPIRY PIN (record D13). A pause.flag OLDER than the expiry window is IGNORED — reconcile
+    """PAUSE-EXPIRY PIN. A pause.flag OLDER than the expiry window is IGNORED - reconcile
     treats auto-rebuild as ACTIVE and rebuilds on drift. FAILS IF a stale pause flag still suppresses
     the rebuild (proven against a never-expire implementation). The flag's mtime is set 7 h old with a
     6 h expiry."""
@@ -627,7 +624,7 @@ def test_stale_pause_flag_is_expired_and_rebuilds(tmp_path):
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_rollback_pin_holds_reconcile_off_auto_revert(tmp_path):
-    """ROLLBACK-REPOINTS PIN (reconcile side, record D13). While a rollback.pin stands, reconcile must
+    """ROLLBACK-REPOINTS PIN (reconcile side). While a rollback.pin stands, reconcile must
     NOT auto-rebuild on drift (which would revert the manual rollback) — action=pinned, shim not run.
     FAILS IF a pinned rollback is silently reverted by the next tick."""
     tree = _make_tree(tmp_path, source_commit="aaaaaaa")     # served older build => drift vs HEAD
@@ -646,7 +643,7 @@ def test_rollback_pin_holds_reconcile_off_auto_revert(tmp_path):
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_explicit_rebuild_request_clears_rollback_pin(tmp_path):
     """A rollback.pin does NOT freeze serving forever: an explicit rebuild.request is a deliberate
-    MOVE-FORWARD that clears the pin and rebuilds (record D13). FAILS IF a rebuild.request is ignored
+    MOVE-FORWARD that clears the pin and rebuilds. FAILS IF a rebuild.request is ignored
     while pinned, or the pin survives the deliberate rebuild."""
     tree = _make_tree(tmp_path, source_commit="aaaaaaa")
     _advance_head(tree)
@@ -664,7 +661,7 @@ def test_explicit_rebuild_request_clears_rollback_pin(tmp_path):
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_force_full_rebuild_flag_sets_cache_refresh(tmp_path):
-    """FORCE-FULL PIN (record D8, C43 S2b-ii). A rebuild.request carrying `full: true` makes reconcile
+    """FORCE-FULL PIN. A rebuild.request carrying `full: true` makes reconcile
     run the build in cache-REFRESH mode (AUSMT_BUILD_CACHE_MODE=refresh in the make environment); a
     plain request (no flag) leaves it at the default (empty => Makefile rw). FAILS IF the full flag does
     not reach the build's cache mode, or a plain request forces refresh. Observed via a make shim that
@@ -693,7 +690,7 @@ def test_force_full_rebuild_flag_sets_cache_refresh(tmp_path):
 
 
 # ===================================================================================================
-# 2026-08-11 incident: systemd's TimeoutStartSec SIGTERMed a 60-minute-plus rebuild once an hour.
+# Incident: systemd's TimeoutStartSec SIGTERMed a 60-minute-plus rebuild once an hour.
 # The script had no signal handler and the Makefile prunes only after a SUCCESSFUL swap, so every
 # killed attempt (a) wrote no status, leaving the curator panel showing the last CLEAN outcome and the
 # loop guard unarmed, and (b) abandoned its half-written builds/<ts> forever.
@@ -724,8 +721,8 @@ def _seed_builds(tree: dict, names: list[str], served: str) -> Path:
 
 def test_prune_runs_on_entry_even_when_the_pass_fails(tmp_path):
     """PRUNE-ON-ENTRY. Stale build dirs are collected at the START of every pass, so a RUN OF FAILURES
-    cannot leak disk — the exact 2026-08-11 shape, where an hourly killed rebuild left ~0.5 GB behind
-    each time and the Makefile's own prune (inside the swap step) was never reached.
+    cannot leak disk - the failure shape where an hourly killed rebuild left ~0.5 GB behind each
+    time and the Makefile's own prune (inside the swap step) was never reached.
     FAILS IF a failing pass leaves more than KEEP_BUILDS build dirs behind, or prunes nothing at all."""
     tree = _make_tree(tmp_path, source_commit="aaaaaaa")
     _advance_head(tree)
@@ -756,7 +753,7 @@ def test_prune_never_deletes_the_build_being_served(tmp_path):
 
     _run(tree, env_extra={"SHIM_FAIL": "1", "AUSMT_RECONCILE_KEEP_BUILDS": "2"})
     left = sorted(p.name for p in bdir.iterdir() if p.is_dir())
-    assert served in left, f"the SERVED build {served} was pruned — left={left}"
+    assert served in left, f"the SERVED build {served} was pruned - left={left}"
     expected = sorted([served] + names[-2:])              # served + the 2 newest
     assert left == expected, f"served + KEEP_BUILDS=2 newest expected {expected}, got {left}"
 
@@ -785,7 +782,7 @@ def test_sigterm_mid_build_records_failed_status(tmp_path):
     """SIGNAL TRAP. A pass killed mid-build (systemd TimeoutStartSec, or an operator stop) must still
     write reconcile-status.json with action=failed, naming the log and saying it was terminated.
     Without it the panel keeps showing the last clean outcome and the loop guard never arms, which is
-    how the 2026-08-11 hourly retry loop stayed invisible for hours.
+    how the hourly retry loop stayed invisible for hours.
     FAILS IF no status is written, if the action is not `failed`, or if the detail does not say the run
     was terminated. Driven through a shell wrapper so a REAL SIGTERM is delivered on this box too,
     rather than skipping to CI."""
@@ -824,7 +821,7 @@ def test_sigterm_mid_build_records_failed_status(tmp_path):
     assert "TimeoutStartSec" in tail, "the detail must point at the likely cause (the unit's timeout)"
 
 
-# ---- kernel OOM kill named by name (incident 2026-08-15) --------------------------------------------
+# ---- kernel OOM kill named by name ------------------------------------------------------------------
 # The engine build was OOM-killed by the kernel five nights running and every one reached the operator
 # as "rebuild FAILED, see log tail" while the cause sat in `journalctl -k`. A failed rebuild must ask
 # the kernel journal for ITS OWN build window and, when a kill is there, say so by name. Driven through

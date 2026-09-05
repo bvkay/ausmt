@@ -1,10 +1,10 @@
 "use strict";
-// C25-V3 portal frame-line driver (Invariant 10). Boots the REAL portal modules in jsdom and drives
-// the reader-facing frame line the station drawer shows when the engine served impedances AS STORED in
+// Portal frame-line driver (Invariant 10). Boots the REAL portal modules in jsdom and drives the
+// reader-facing frame line the station drawer shows when the engine served impedances AS STORED in
 // a declared acquisition frame (the engine never de-rotates under frame policy v3). It asserts:
 //   * frameLineText() (PURE, DOM-free) renders the terse honest line for a non-zero declared angle,
-//     stays SILENT for a zero/absent angle or a null frame, and appends the V3-B "mixes declared
-//     frames" clause only when the survey carries the mixed-frames note;
+//     stays SILENT for a zero/absent angle or a null frame, and appends the "mixes declared frames"
+//     clause only when the survey carries the mixed-frames note;
 //   * frameLineText() NEVER emits markup (it interpolates only a validated number + fixed strings), so
 //     even a hostile survey_frame_note cannot inject a tag;
 //   * loadStationFrameLine() fetches the per-station station.json, injects the line via textContent,
@@ -76,7 +76,7 @@ ok(A.line({}) === "", "a frame with no declared angle and no mixed note must pro
 ok(A.line(null) === "", "a null frame must produce NO line");
 ok(A.line({ frame_served: "declared-zero", declared_azimuth_deg: 0 }) === "", "declared-zero => no line");
 
-// --- frameLineText: F2 divergent tipper frame (field present ONLY when divergent) ------------------
+// --- frameLineText: divergent tipper frame (field present ONLY when divergent) ---------------------
 const tipOnly = A.line({ declared_azimuth_deg: 0, tipper_declared_azimuth_deg: -60 });
 ok(/Tipper served in its own declared -60° frame/.test(tipOnly),
   "case d (TROT=-60, ZROT=0) must show the tipper frame line: " + tipOnly);
@@ -95,7 +95,7 @@ ok(!/Tipper/.test(A.line({ declared_azimuth_deg: 8 })),
 ok(!/Tipper/.test(A.line({ declared_azimuth_deg: 8, tipper_declared_azimuth_deg: "<img>" })),
   "a non-numeric tipper field must be ignored, never rendered");
 
-// --- frameLineText: V3-B mixed-frames note ---------------------------------------------------------
+// --- frameLineText: mixed-frames note --------------------------------------------------------------
 const MIX = "frame: mixed declared frames across stations: 8°…20° — each station is served in its own frame";
 const mixed0 = A.line({ declared_azimuth_deg: 0, survey_frame_note: MIX });
 ok(/mixes declared acquisition frames across stations/.test(mixed0),
@@ -113,9 +113,9 @@ for (const f of [{ declared_azimuth_deg: 0, survey_frame_note: hostile },
 }
 
 // --- fileWrittenByText: the lineage's file-WRITER cell (PURE) --------------------------------------
-// The station drawer used to publish the EDI HEAD's program stamp under the heading "Processing software",
-// which told the reader Geotools/WinGLink/MTpy processed the data when those tools only WROTE the file.
-// The writer now has its own row, and a known exporter is annotated so the distinction is legible.
+// The EDI HEAD's program stamp must NOT be published as "Processing software": Geotools, WinGLink and
+// MTpy only WROTE the file, and a reader told otherwise reads them as having processed the data. The
+// writer has its own row, and a known exporter is annotated so the distinction is legible.
 ok(A.fwb({ name: "Geotools", version: "4.0.5.12583" }) === "Geotools 4.0.5.12583 (database/file export)",
   "a known writer must render with its version and the export annotation: " + A.fwb({ name: "Geotools", version: "4.0.5.12583" }));
 ok(A.fwb({ name: "WINGLINK EDI", version: "1.0.22" }).indexOf("(database/file export)") > 0,
@@ -166,7 +166,7 @@ A.load(s).then(function () {
       "a stale async fetch overwrote another station's writer cell: '" + fwbCell() + "'");
 
     // a withheld / missing station.json (fetch !ok) yields no line, no throw. Its OWN station id, so it
-    // exercises the not-ok path rather than reading back the -60° line cached for A01 above.
+    // exercises the not-ok path rather than reading back the -60° line cached for station id A01.
     win.__fetchDoc = null;
     const missing = { i: 2, id: "C03", survey: "Demo Survey", slug: "demo", ausmt_id: "au.demo.C03" };
     const el3 = makeFrameline(missing.ausmt_id);

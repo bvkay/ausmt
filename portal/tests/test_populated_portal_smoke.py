@@ -33,7 +33,7 @@ def test_populated_portal_value_binding(tmp_path):
                 "p3d": 10, "gd": 0, "ellip": 0.15, "skew": 3.1, "mre": 0.02, "decades": 5.0}
     cat_row = [cat_vals[c] for c in COLS["catalogue"]]
     sci_row = [sci_vals[c] for c in COLS["sci"]]
-    # tf entry: 18 arrays in TF_COLUMNS order (C20). Built by NAME and projected through COLS["tf"] so
+    # tf entry: 18 arrays in TF_COLUMNS order. Built by NAME and projected through COLS["tf"] so
     # it self-follows the contract; the smoke test asserts on catalogue/sci/build values, not tf columns.
     tf_vals = {"periods": [0.01, 1000.0], "rho_xy": [1.0, 2.0], "rho_yx": [3.0, 4.0],
                "phs_xy": [10.0, 20.0], "phs_yx_adj": [30.0, 40.0], "tip_mag": [0.1, 0.2],
@@ -50,7 +50,7 @@ def test_populated_portal_value_binding(tmp_path):
     (data / "tf.json").write_text(json.dumps([tf_row]))
     (data / "surveys.json").write_text(json.dumps(
         {"Demo Survey": {"slug": "demo", "org": "X", "country": "Australia", "lic": "CC-BY-4.0"}}))
-    # C12: build.json — a KNOWN, distinctive build_id/generated so the footer's VALUE binding
+    # build.json - a KNOWN, distinctive build_id/generated so the footer's VALUE binding
     # (BUILDID -> buildIdText()) can be asserted against the source, not just "didn't crash".
     (data / "build.json").write_text(json.dumps(
         {"build_id": "eng1234-src5678-2026-07-05T01:02:03+00:00",
@@ -77,32 +77,32 @@ def test_populated_portal_value_binding(tmp_path):
     assert st["q"] == 4.2, st                          # sc[SC.q]
     assert st["dim"] == "2-D", st                      # sc[SC.dim]
 
-    # (b) exports.js CSV row for ST0 — value-binds the EXPORT call site. UX8 (W3b, owner directive) DROPPED
-    # six columns from the station CSV (quality, quality_basis, remote_ref, dimensionality, software, file),
-    # leaving a lean identity/geometry/rights row of 19 columns. Column order per the exports.js header:
+    # (b) exports.js CSV row - value-binds the EXPORT call site. The station CSV DROPS six columns
+    # (quality, quality_basis, remote_ref, dimensionality, software, file), leaving a lean
+    # identity/geometry/rights row of 19 columns. Column order per the exports.js header:
     #   0 ausmt_id 1 station 2 country 3 organisation 4 survey 5 lat 6 lon 7 type 8 components 9 n_periods
     #   10 period_min_s 11 period_max_s 12 source_doi 13 timeseries_collection_doi 14 survey_version
     #   15 collection 16 license 17 license_url 18 attribution
     me = re.search(r"^EXPORT0 (\[.*\])\s*$", out, re.M)
     assert me, "smoke.js did not emit EXPORT0 (CSV row):\n" + out
     ex = json.loads(me.group(1))
-    assert len(ex) == 19, ("expected 19 CSV columns after the W3b drop, got %d: %r" % (len(ex), ex))
+    assert len(ex) == 19, ("expected 19 CSV columns after the drop, got %d: %r" % (len(ex), ex))
     assert ex[12] == "", ex                             # source_doi (Demo Survey has no DOI)
     assert ex[13] == "10.25914/mtjg-jp22", ex           # timeseries_collection_doi <- TS_COLLECTION.doi
-    # C6: the licence column travels with the exported row (sourced from SMETA[survey].lic). A
+    # The licence column travels with the exported row (sourced from SMETA[survey].lic). A
     # wrong/missing SMETA.lic deref (or dropping the column) makes this FAIL, not just crash.
     assert ex[16] == "CC-BY-4.0", ex                    # license        <- SMETA["Demo Survey"].lic
-    # C46: the deed URL (resolved via the canonical LICENSES.urls table, not a startsWith guess) and the
+    # The deed URL (resolved via the canonical LICENSES.urls table, not a startsWith guess) and the
     # rendered attribution line ride at the END so rights travel with a shared CSV. Demo Survey declares
     # no attribution.statement and no dates, so the attribution falls back to the org with no year.
     assert ex[17] == "https://creativecommons.org/licenses/by/4.0/", ex  # license_url <- canonical table
     assert ex[18] == "X", ex                            # attribution <- org (no statement/date)
-    # W3b DROP is real (not just reordered): the six removed values are absent from the row. sc[SC.q]=4.2,
+    # DROP is real (not just reordered): the six removed values are absent from the row. sc[SC.q]=4.2,
     # sc[SC.sw]="BIRRP", sc[SC.dim]="2-D" and the file "ST1.edi" would all be present pre-drop.
     for gone in (4.2, "BIRRP", "2-D", "ST1.edi", "error"):
         assert gone not in ex, ("dropped CSV field %r still present: %r" % (gone, ex))
 
-    # (c) C12: the footer's build-id text is a pure function of BUILDID (loaded from build.json) —
+    # (c) the footer's build-id text is a pure function of BUILDID (loaded from build.json) - 
     # value-binds main.js's buildIdText() against the KNOWN fixture build_id/generated above, so a
     # wrong slice/format (or a dropped build.json fetch) fails here, not just "no crash".
     mb = re.search(r"^BUILDID_TEXT (\".*\")\s*$", out, re.M)
@@ -120,7 +120,7 @@ def test_populated_portal_value_binding(tmp_path):
     assert ",-30.5,135.25," in line, "lat/lon must serialise as bare numbers: " + line
     assert "'-30.5" not in line, "negative latitude must not carry the injection apostrophe: " + line
 
-    # csvCell directly: numbers pass through; a hostile leading = (or a non-numeric leading -) is
+    # csvCell directly: numbers pass through; a hostile leading `=` (or a non-numeric leading `-`) is
     # still neutralised.
     mc = re.search(r"^CSVCELL (\[.*\])\s*$", out, re.M)
     assert mc, "smoke.js did not emit CSVCELL:\n" + out

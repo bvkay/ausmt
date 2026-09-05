@@ -1,4 +1,4 @@
-"""§2a/§2b (identifiers design — the related-identifiers model): survey.yaml -> SMETA must carry the
+"""The related-identifiers model: survey.yaml -> SMETA must carry the
 top-level related_identifiers list (typed-core keys only) and the survey/platform-level
 identifiers.instrument_pid, and mtcat_document must federate related_identifiers when present.
 
@@ -35,7 +35,7 @@ def test_related_identifiers_of_serves_typed_core_only():
 
 
 def test_related_identifiers_of_emits_identifies_verbatim_when_present():
-    """D-L1 (SPEC §9): a row's `identifies` (WHAT it points at, NCI Table 1 level) is emitted VERBATIM
+    """A row's `identifies` (WHAT it points at, NCI Table 1 level) is emitted VERBATIM
     into SMETA alongside the four typed-core keys — the drawer/files-tab key off it. FAILS IF the
     recognised-key allowlist was not extended and identifies is dropped."""
     y = {**_MIN, "related_identifiers": [
@@ -81,7 +81,7 @@ def test_smeta_related_identifiers_empty_when_absent():
     assert sm["related_identifiers"] == []
 
 
-# --- §2b: identifiers.instrument_pid (survey/platform-level; distinct from per-instrument pid) -----
+# --- identifiers.instrument_pid (survey/platform-level; distinct from per-instrument pid) ----------
 
 def test_instrument_pid_of_verbatim():
     y = {**_MIN, "identifiers": {"instrument_pid": "10.82388/bt6orvhn"}}
@@ -124,7 +124,7 @@ def test_mtcat_emits_related_identifiers_when_present():
 
 
 def test_mtcat_carries_identifies_when_present():
-    """mtcat federates the SMETA related_identifiers verbatim, so D-L1's identifies rides along."""
+    """mtcat federates the SMETA related_identifiers verbatim, so identifies rides along."""
     y = {**_MIN, "related_identifiers": [
         {"identifier": "10.25914/sv5r-zw68", "identifies": "raw_packed", "identifier_type": "DOI",
          "relation": "IsDerivedFrom", "custodian": "NCI"}]}

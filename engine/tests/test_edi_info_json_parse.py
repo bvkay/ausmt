@@ -1,6 +1,6 @@
 """The >INFO JSON trailing-delimiter defect in mt_metadata 1.0.9, and the parse-only fallback.
 
-WHY THIS EXISTS (measured 2026-08-08 against the GSSA Western Gawler 2023 delivery, a Zonge job of
+WHY THIS EXISTS (measured against the GSSA Western Gawler 2023 delivery, a Zonge job of
 312 EDIs). mt_metadata 1.0.9 cannot read 246 of them. The data is fine; the reader is wrong, and it
 is wrong in three composing steps:
 
@@ -165,8 +165,8 @@ def test_normalisation_touches_only_the_info_block():
 def test_normalisation_is_a_noop_for_a_file_without_the_defect():
     """No trailing delimiters in >INFO => the bytes come back IDENTICAL. This is the property guard
     3 of the retry rests on (`if fixed == raw: raise`), so it is asserted as IDENTITY -- the earlier
-    idempotence form reduced to `raw == raw` on this fixture and would have stayed green even if
-    normalisation had started rewriting files that do not carry the defect."""
+    idempotence form reduces to `raw == raw` on this fixture and would stay green even if
+    normalisation started rewriting files that do not carry the defect."""
     m = _mtm()
     raw = NODECL.read_bytes()
     assert m.normalise_info_json_delimiters(raw) == raw, \
@@ -318,7 +318,7 @@ def test_garbage_edi_still_fails(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------
-# 4. THE MOST IMPORTANT TEST IN THE LANE -- the normalised copy can never be served or hashed
+# 4. THE MOST IMPORTANT TEST HERE -- the normalised copy can never be served or hashed
 # --------------------------------------------------------------------------------------------
 
 def test_source_file_bytes_are_untouched_by_a_fallback_parse():
@@ -356,7 +356,7 @@ def test_no_temp_artifact_survives_the_fallback_parse(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------
-# 5. THE LANE'S CENTRAL CLAIM, end to end through a REAL build: a station that needed the fallback
+# 5. THE CENTRAL CLAIM, end to end through a REAL build: a station that needed the fallback
 #    still serves the custodian's bytes, and the sha256 integrity gate still passes on it.
 #    If the normalised copy could ever be served, AusMT's no-editing guarantee for third-party data
 #    would be void; these tests are the proof that it cannot.
@@ -531,7 +531,8 @@ def test_the_canonical_xml_carries_the_declination_the_custodian_wrote(tmp_path)
 
 
 def test_normalize_leaves_the_source_bytes_untouched(tmp_path):
-    """D1 through the SECOND seam too: normalize() reads the custodian's file, never rewrites it."""
+    """The never-edit rule through the SECOND seam too: normalize() reads the custodian's file, never
+    rewrites it."""
     from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
     before = hashlib.sha256(DECL.read_bytes()).hexdigest()
     normalize(DECL, tmp_path / "xml", survey_id="declfix", station_id="1039")

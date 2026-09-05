@@ -6,8 +6,8 @@
 #   ANY check FAIL -> ping   $AUSMT_ALERT_URL/fail       with the failure summary as the body,
 #                     then EXIT NONZERO so the failure is also journal-visible on the box.
 #
-# WHY A DEAD-MAN PING AND NOT A BOX-SENT EMAIL (design decision 2026-07-10, do not relitigate):
-#   * The SERVICE routes the email (to the curator — ben@auscope.org.au today). The box holds NO SMTP
+# WHY A DEAD-MAN PING AND NOT A BOX-SENT EMAIL:
+#   * The SERVICE routes the email (to the curator). The box holds NO SMTP
 #     credentials and NO recipient config, so changing who is alerted is a DASHBOARD change at the
 #     service — zero repo edits, zero box edits, nothing to redeploy.
 #   * A fully DEAD box (power/network/kernel) can never send its own "I am dead" email. The monitoring
@@ -18,7 +18,7 @@
 #     runbook step at the service (deploy/README.md "Alerting").
 #
 # SILENT-STALL MODES THIS CATCHES (all real or design-known):
-#   * gw-runner crash-loop  -> "submissions stuck at SCANNED" (the 2026-07-06 incident) — the runner
+#   * gw-runner crash-loop  -> "submissions stuck at SCANNED" (a known incident): the runner
 #     has NO compose healthcheck by design, so a not-running / restart-looping runner is caught here by
 #     STATE, the only observable compose exposes for it.
 #   * a service down / unhealthy (portal, gateway, clamd have healthchecks; a failed rebuild leaves the
@@ -66,26 +66,26 @@ BACKUP_MAX_H="${AUSMT_ALERT_BACKUP_MAX_H:-26}"
 DRILL_MAX_H="${AUSMT_ALERT_DRILL_MAX_H:-192}"
 COMPOSE_CMD="${AUSMT_ALERT_COMPOSE:-docker compose}"
 CURL_CMD="${AUSMT_ALERT_CURL:-curl}"
-# C43 S2b-ii (record D9.7): a curator pause of auto-rebuild that is active or slow-re-armed past this
+# A curator pause of auto-rebuild that is active or slow-re-armed past this
 # CUMULATIVE threshold flips the ops-floor Freshness/Serve card amber AND fails a check here — so an
 # authenticated attacker (stolen session / curator-page XSS) cannot silently keep serving frozen
 # forever by re-arming the pause once per expiry window (which would slip a single-flag age check).
 PAUSE_MAX_H="${AUSMT_ALERT_PAUSE_MAX_H:-24}"
-# S5(a): the alarm must key on the SAME freshness reconcile honours — an EXPIRED pause.flag reconcile
+# The alarm must key on the SAME freshness reconcile honours: an EXPIRED pause.flag reconcile
 # IGNORES is NOT freezing serving, so it must not alarm (and does not extend the cumulative span). Kept
 # in step with reconcile's AUSMT_RECONCILE_PAUSE_EXPIRY_MIN (default 6 h).
 PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"
-# S5(b): a standing rollback.pin freezes auto-rebuild with NO expiry — give it the same persistent-
+# A standing rollback.pin freezes auto-rebuild with NO expiry, so it takes the same persistent-
 # freeze visibility as a pause: a pin held continuously past this many hours raises an ops fact + fails.
 PIN_MAX_H="${AUSMT_ALERT_PIN_MAX_H:-$PAUSE_MAX_H}"
 
-# C43 S2b-i: this timer is ALSO the ops-status.json writer (record D8/D15). Its cadence (the systemd
+# This timer is ALSO the ops-status.json writer. Its cadence (the systemd
 # ausmt-alert.timer period, ~15 min) is the staleness clock the curator ops floor reads: a file older
 # than ~2 periods flips every dependent card STALE. Override only if you retimed the unit.
 TIMER_PERIOD_MIN="${AUSMT_ALERT_PERIOD_MIN:-15}"
 # The gateway state dir (10002-owned, group-writable to the operator — the same shared-group prep the
 # reconcile agent uses) is where reconcile-status.json AND ops-status.json live. Empty when
-# AUSMT_DATA_DIR is unset (we then skip the ops-status write, loudly, rather than write into /).
+# AUSMT_DATA_DIR is unset (we then skip the ops-status write, loudly, rather than write into `/`).
 DATA_DIR_ROOT="${AUSMT_DATA_DIR:-}"
 STATE_DIR="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/gateway/state}"
 OPS_STATUS_FILE="${STATE_DIR:+$STATE_DIR/ops-status.json}"
@@ -95,7 +95,7 @@ SITE_DATA="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/site-data}"
 # these globals as each check runs so the ops writer reuses them (one `docker compose ps`, one `df`).
 OPS_PS_JSON=""
 OPS_DISK_PCT=""
-# C43 S2b-ii persistent-pause tracking (record D9.7). check_pause computes these ONCE (carrying the
+# Persistent-pause tracking. check_pause computes these ONCE (carrying the
 # continuous-span first_seen forward from the previous ops-status.json) so BOTH the fail-ping and the
 # ops-status.json pause fact use the same verdict.
 OPS_PAUSE_ACTIVE=0
@@ -103,7 +103,7 @@ OPS_PAUSE_PAUSED_AT=""
 OPS_PAUSE_FIRST_SEEN=""
 OPS_PAUSE_CUMULATIVE_H=""
 OPS_PAUSE_PERSISTENT=0
-# S5(b): rollback-pin persistent-freeze tracking, parallel to the pause block above.
+# Rollback-pin persistent-freeze tracking, parallel to the pause block above.
 OPS_PIN_ACTIVE=0
 OPS_PIN_BUILD=""
 OPS_PIN_FIRST_SEEN=""
@@ -113,7 +113,7 @@ OPS_PIN_PERSISTENT=0
 # The four long-running compose services this box monitors. build-runner is EXCLUDED on purpose: it is
 # a one-shot job (compose profile "jobs") that is SUPPOSED to be absent between builds, so "not running"
 # is its normal state — alerting on it would fire constantly. gw-runner IS included: it is long-running
-# and its silent death is the headline failure mode (2026-07-06). Kept in sync with compose.yaml.
+# and its silent death is the headline failure mode. Kept in sync with compose.yaml.
 MONITORED_SERVICES="portal gateway clamd gw-runner"
 # The services that HAVE a compose healthcheck (compose.yaml). gw-runner deliberately does NOT (see its
 # comment there), so an EMPTY Health for gw-runner is expected, not a fault — we never fail it on Health,
@@ -158,7 +158,7 @@ done
 #   compose emits either a JSON ARRAY or newline-delimited objects depending on the compose version;
 #   the python reader below tolerates both. Field names (Service, State, Health, RestartCount) are the
 #   compose ps schema. A "restarting" State is the exact crash-loop signal for the healthcheck-less
-#   gw-runner (README §4 "submissions stuck at SCANNED").
+#   gw-runner ("submissions stuck at SCANNED").
 # --------------------------------------------------------------------------------------------------
 check_services() {
   code_dir="${AUSMT_CODE_DIR:-}"
@@ -307,11 +307,11 @@ check_disk() {
 #     * the file is missing (the reconcile timer is not running / never wrote one) — WARN-class only on
 #       a fresh install; here we treat absence as a fail because on a configured box the timer must run,
 #     * last_run is older than AUSMT_ALERT_RECONCILE_MAX_MIN (the timer stalled), OR
-#     * action == "failed" (a build/verify failure — the C40 fail-closed state), OR
+#     * action == "failed" (a build/verify failure - the fail-closed state), OR
 #     * action == "untracked_blocked" (the reconcile agent REFUSED to rebuild because surveys-live has
-#       untracked survey dirs the build would serve — incident 2026-07-11; needs an operator, no self-heal).
+#       untracked survey dirs the build would serve; needs an operator, no self-heal).
 #   noop/rebuilt/sync_failed are all healthy timer outcomes (they exit 0) and do NOT fail here — a
-#   sync_failed is an operator-visible panel state, not a monitoring alert (README §4).
+#   sync_failed is an operator-visible panel state, not a monitoring alert.
 # --------------------------------------------------------------------------------------------------
 check_reconcile() {
   data_dir="${AUSMT_DATA_DIR:-}"
@@ -343,9 +343,9 @@ last_run = doc.get("last_run")
 
 if action == "failed":
     if doc.get("oom_kill") is True:
-        # reconcile.sh found a kernel out-of-memory kill inside the failed build window (incident
-        # 2026-08-15: five nights of "rebuild FAILED" whose cause was in the kernel journal). Name it,
-        # so the dead-man ping tells the operator what to do (RAM/swap) instead of "see log tail".
+        # reconcile.sh found a kernel out-of-memory kill inside the failed build window. Name it, so
+        # the dead-man ping tells the operator what to do (RAM/swap) rather than "see log tail": the
+        # cause of a run of "rebuild FAILED" nights otherwise sits unread in the kernel journal.
         # NOTE: no apostrophes or backticks in this heredoc (it sits inside a $(...) substitution and
         # the POSIX sh on macOS cannot parse them there).
         print(f"action=failed - the build was KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY (OOM kill in "
@@ -356,7 +356,7 @@ if action == "failed":
 
 if action == "untracked_blocked":
     # The reconcile agent REFUSED to rebuild: surveys-live has untracked survey dirs the build would
-    # SERVE though git cannot remove them (incident 2026-07-11). This needs an operator and does not
+    # SERVE though git cannot remove them. This needs an operator and does not
     # self-heal, so it is an ALERT (unlike sync_failed, which is a transient panel state). The offending
     # names are carried in log_tail — surface them so the dead-man ping names the dir(s).
     detail = doc.get("log_tail") or "untracked survey dir(s) present"
@@ -443,7 +443,7 @@ check_backup() {
 }
 
 # --------------------------------------------------------------------------------------------------
-# Check e (C43 S2b-ii): PERSISTENT-PAUSE alarm (record D9.7).
+# Check e: PERSISTENT-PAUSE alarm.
 #   The curator can pause auto-rebuild (pause.flag; reconcile auto-expires it after 6 h). A single
 #   pause is fine. The threat is a SLOW RE-ARM — re-writing the flag once per expiry window keeps
 #   auto-rebuild dead forever while every INDIVIDUAL flag stays "fresh" (a single-flag age check would
@@ -457,8 +457,8 @@ check_pause() {
   [ -n "$data_dir" ] || return 0            # AUSMT_DATA_DIR gaps are already reported by other checks
   pause_flag="$data_dir/gateway/state/pause.flag"
   [ -f "$pause_flag" ] || return 0          # no pause => nothing to track (globals stay at defaults)
-  # S5(a): key on the SAME freshness reconcile honours. An EXPIRED flag (mtime older than the expiry)
-  # is IGNORED by reconcile — it is NOT freezing serving, so it must not alarm and must NOT extend the
+  # Key on the SAME freshness reconcile honours. An EXPIRED flag (mtime older than the expiry)
+  # is IGNORED by reconcile: it is NOT freezing serving, so it must not alarm and must NOT extend the
   # cumulative span (leave the globals at their defaults => active=0 => the carried span resets).
   if [ -n "$(find "$pause_flag" -maxdepth 0 -mmin "+$PAUSE_EXPIRY_MIN" 2>/dev/null)" ]; then
     return 0
@@ -528,7 +528,7 @@ PYEOF
 }
 
 # --------------------------------------------------------------------------------------------------
-# Check f (C43 S2b-ii, S5(b)): PERSISTENT ROLLBACK-PIN alarm.
+# Check f: PERSISTENT ROLLBACK-PIN alarm.
 #   A "serve this build" rollback writes rollback.pin, which reconcile respects INDEFINITELY (no
 #   expiry) — a curator who rolls back and forgets freezes the box on an old build silently. Give the
 #   pin the SAME persistent-freeze visibility as a pause: carry a continuous first_seen forward while
@@ -601,8 +601,8 @@ PYEOF
 }
 
 # --------------------------------------------------------------------------------------------------
-# C43 S2b-i: write ops-status.json for the curator ops floor (record D8/D15). SEPARATE from the ping:
-# it runs every pass — INCLUDING when alerting is unconfigured — because the ops floor must reflect
+# Write ops-status.json for the curator ops floor. SEPARATE from the ping:
+# it runs every pass, INCLUDING when alerting is unconfigured, because the ops floor must reflect
 # box state before (and independently of) the external dead-man monitor being wired. Atomic (mktemp +
 # chmod 0644 + mv, the reconcile.sh posture) so the gateway container (uid 10002, group-shared state
 # dir) never reads a half-written file and can always read a complete one. Best-effort: ANY failure
@@ -612,14 +612,14 @@ PYEOF
 #   * freshness: code checkout AND surveys-live, each local short HEAD vs its last-fetched tracking
 #     ref (@{u}). NO fetch here (a network side effect in the alert timer is itself a failure mode,
 #     and a fetch that cannot reach origin is exactly the reconcile sync-strip's job) — so this
-#     reflects the last SUCCESSFUL fetch; behind => the card's row goes amber. (Record D15: the two
+#     reflects the last SUCCESSFUL fetch; behind => the card's row goes amber. (The two
 #     signals are complementary — the sync strip catches "cannot reach origin", freshness catches
 #     "reached it, but the checkout is behind".)
 #   * reconcile sync state: action + a sync_failed STREAK (count + since), derived by carrying the
-#     previous ops-status.json forward — so a 4-hour hidden sync_failed (incident 2026-07-11) reads
+#     previous ops-status.json forward, so a 4-hour hidden sync_failed reads
 #     as "failing for N ticks since T", not a silent single line.
 #   * retained-build inventory: each site-data/builds/<ts> dir's build.json (id/engine/source) +
-#     build_report.json (stations) + build_provenance.json `cache` block (the C18-A4 forensics:
+#     build_report.json (stations) + build_provenance.json `cache` block (the cache forensics:
 #     salt_fp / write_errors / read_errors) + a serving marker (== current symlink target).
 #   * log tail: the newest site-data/logs/*.build.log, last 60 lines, copied into the file (the
 #     gateway has no site-data mount — this is how a shell-less curator reads build forensics).
@@ -759,7 +759,7 @@ def _age_h(path):
     except OSError:
         return None
 newest = snaps[0] if snaps else None
-# The snapshot table (B5): newest-first {name, age_hours}, capped (retention is ~14 on the box).
+# The snapshot table: newest-first {name, age_hours}, capped (retention is ~14 on the box).
 snap_list = [{"name": name, "age_hours": _age_h(d)} for name, d in snaps[:30]]
 drill = _load(os.path.join(backups_dir, "latest-drill.json")) if backups_dir else None
 backups = {"newest": newest[0] if newest else None,
@@ -827,7 +827,7 @@ def _fresh(sha_env, origin_env):
 freshness = {"code": _fresh("AUSMT_OPS_CODE_SHA", "AUSMT_OPS_CODE_ORIGIN"),
              "surveys_live": _fresh("AUSMT_OPS_SL_SHA", "AUSMT_OPS_SL_ORIGIN")}
 
-# ---- retained-build inventory + the C18-A4 cache forensics (build_provenance.json `cache`) ----
+# ---- retained-build inventory + the cache forensics (build_provenance.json `cache`) ----
 site_data = os.environ.get("AUSMT_OPS_SITE_DATA") or ""
 builds = []
 serving_dir = None
@@ -866,7 +866,7 @@ if site_data:
                 # for a pre-fix report. Lifted so the ops floor can show the trend build over build.
                 "peak_rss_mib": _peak if isinstance(_peak, (int, float)) else None,
                 "serving": (name == serving_dir),
-                # C18-A4 cache forensics live in build_provenance.json's top-level `cache` block —
+                # Cache forensics live in build_provenance.json's top-level `cache` block - 
                 # NOT in build.json/build_report.json (verified against build_portal.py). Render what
                 # exists; absent keys (a non-incremental build) stay null.
                 "cache": {"enabled": cache.get("enabled"), "mode": cache.get("mode"),
@@ -890,7 +890,7 @@ if site_data:
         except OSError:
             pass
 
-# ---- pause state (C43 S2b-ii, record D9.7): active + the continuous-span persistence verdict ----
+# ---- pause state: active + the continuous-span persistence verdict ----
 def _f(name):
     v = os.environ.get(name, "")
     return v if v else None
@@ -902,7 +902,7 @@ pause = {"active": os.environ.get("AUSMT_OPS_PAUSE_ACTIVE", "") == "1",
                               else None),
          "persistent": os.environ.get("AUSMT_OPS_PAUSE_PERSISTENT", "") == "1",
          "max_hours": int(os.environ.get("AUSMT_OPS_PAUSE_MAX_H") or 24)}
-# S5(b): rollback-pin persistent-freeze fact, parallel to pause.
+# The rollback-pin persistent-freeze fact, parallel to pause.
 pin = {"active": os.environ.get("AUSMT_OPS_PIN_ACTIVE", "") == "1",
        "pinned_build": _f("AUSMT_OPS_PIN_BUILD"),
        "first_seen": _f("AUSMT_OPS_PIN_FIRST_SEEN"),
@@ -912,7 +912,7 @@ pin = {"active": os.environ.get("AUSMT_OPS_PIN_ACTIVE", "") == "1",
        "persistent": os.environ.get("AUSMT_OPS_PIN_PERSISTENT", "") == "1",
        "max_hours": int(os.environ.get("AUSMT_OPS_PIN_MAX_H") or 24)}
 
-# ---- pending privileged intents + the actions audit tail (C43 S2b-ii, record D8/D9). Read-only
+# ---- pending privileged intents + the actions audit tail. Read-only
 #      surfacing so the serve screen shows what is queued/in-flight and the recent action outcomes;
 #      the gateway has no other view of the host actions agent's work. ----
 state_dir = os.environ.get("AUSMT_OPS_STATE_DIR") or ""
@@ -965,7 +965,7 @@ check_pin
 SUMMARY="$(printf '%s' "$FAILURES" | sed '/^$/d')"
 
 # --------------------------------------------------------------------------------------------------
-# C43 S2b-i: write the ops-status.json for the curator ops floor — EVERY pass, BEFORE the ping and
+# Write the ops-status.json for the curator ops floor on EVERY pass, BEFORE the ping and
 # BEFORE the not-configured short-circuit, so the floor reflects box state even on a box whose
 # external monitor is not yet wired. Best-effort: it never changes the pass's exit code.
 #   arg1 = checks_ok (1 when the summary is empty), arg2 = alert_installed (1 when a URL is set).

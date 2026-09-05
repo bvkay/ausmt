@@ -15,8 +15,8 @@ result is deterministic - never a hex value. That is the exact defect this parit
 
 WHY THE ENGINE HALF LIVES HERE rather than in engine/tests. Same reason test_type_palette_separability.py
 carries the _TYPE_COL parity: portal-ci runs on portal/** AND on engine/extract/_pages.py (see
-.github/workflows/portal-ci.yml), so a change to either half fires this lane. The engine lane triggers on
-engine/** alone and cannot see a state.js edit.
+.github/workflows/portal-ci.yml), so a change to either half fires this module.
+The engine workflow triggers on engine/** alone and cannot see a state.js edit.
 
 The rule is EXECUTED, not re-implemented: the two definitions are lifted out of _pages.py's source text and
 run, so a constant edited there changes what this test computes. _pages.py cannot simply be imported - it
@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TEST_JS = Path(__file__).resolve().parent / "collection_colours.test.js"
 PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
-# The three member counts contract C7 names: 8 is the last count the shared palette covers, 9 is the first
+# The three member counts the contract names: 8 is the last count the shared palette covers, 9 is the first
 # that must fall through to the ramp, 14 is a real AusLAMP-scale collection. These are the SAME literals
 # collection_colours.test.js carries for the JS side; the two lists are the parity.
 EXPECTED = {
@@ -88,8 +88,9 @@ def test_the_engine_half_of_the_parity_carries_the_same_vectors():
 def test_the_engine_ramp_gives_every_member_its_own_colour():
     """The property the vectors above are a witness for, asserted well past the palette's eight.
 
-    The eight-entry palette used to cycle, so the ninth member took the first member's colour and a legend
-    could not tell two surveys apart. Distinctness is what the ramp buys; the vectors pin WHICH colours.
+    The eight-entry palette must not cycle: when it did, the ninth member took the first member's
+    colour and a legend could not tell two surveys apart. Distinctness is what the ramp buys; the
+    vectors pin WHICH colours.
     """
     member_colours = _engine_member_colours()
     for n in (9, 12, 14, 20, 33):

@@ -1,4 +1,4 @@
-"""IDCONS D4 (identifier-consolidation, SPEC §5.4): the portal renders a RESERVED identifier HONESTLY —
+"""Identifier consolidation: the portal renders a RESERVED identifier HONESTLY -
 plain text + a muted "(reserved, not yet active)" note, NEVER an anchor — at every metadata-DOI link
 surface, while `ok` / `unknown` render as links exactly as today.
 
@@ -9,8 +9,8 @@ carries ONE ok, ONE reserved, and ONE unknown identifier so all three code paths
 The resolution facets (doi_resolution / ts_pid_resolution / related_identifiers[].resolution) are exactly
 what build_portal.apply_pid_resolution attaches from the pid_status.json cache. Skips without Node (CI has it).
 
-SURFACE NOTE (survey-drawer lane, ruling 4, 2026-08-18): the identifiersHtml rollup - the "Dataset DOI",
-"Related identifiers:" and "Platform/instrument PID:" rows - no longer renders on the SURVEY story, which is
+SURFACE NOTE: the identifiersHtml rollup - the "Dataset DOI",
+"Related identifiers:" and "Platform/instrument PID:" rows - does not render on the SURVEY story, which is
 now a six-slot data-level tile grid. That rollup is unchanged and still renders on the STATION drawer
 (its "Identifiers & instruments" expander), so the per-row resolution pins below assert against `station`.
 The pins that concern the SURVEY surface assert the same honesty on the new grid, which routes every
@@ -53,7 +53,7 @@ def test_ok_dataset_doi_still_links(tmp_path):
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_unknown_dataset_doi_links_as_today(tmp_path):
     """No resolution facet (no cache / no entry) -> links as today, byte-for-byte. FAILS IF the absence of
-    a cache changes the served rendering (the backward-compatibility contract, SPEC §5.3)."""
+    a cache changes the served rendering (the backward-compatibility contract)."""
     extra = {"doi": "10.25914/unknown-doi"}   # no doi_resolution key at all
     station, _story, _card = _render(tmp_path, extra)
     assert 'href="https://doi.org/10.25914/unknown-doi"' in station, \
@@ -79,7 +79,7 @@ def test_reserved_related_identifier_renders_as_text(tmp_path):
     # the live sibling row: still a doi.org anchor
     assert 'href="https://doi.org/10.25914/live-rel"' in station, \
         "an ok related identifier stopped linking:\n" + station
-    # SURVEY GRID (ruling 4): neither row carries an `identifies`, so both land as EXTRA tiles below the six
+    # SURVEY GRID: neither row carries an `identifies`, so both land as EXTRA tiles below the six
     # fixed slots - never dropped. The same reserved-vs-ok split must hold there, and a reserved tile must
     # carry no click ACTION either (data-prod would route its url into window.open).
     assert 'href="https://doi.org/10.25914/reserved-rel"' not in story, \
@@ -105,7 +105,7 @@ def test_reserved_ts_pid_collection_renders_as_text(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_sweep_no_reserved_identifier_is_ever_an_anchor(tmp_path):
-    """IDCONS D4 SWEEP (SPEC §5.4): the load-bearing honesty guard. A single survey carries a RESERVED
+    """RESERVED-IDENTIFIER SWEEP: the load-bearing honesty guard. A single survey carries a RESERVED
     identifier in EVERY metadata-DOI slot at once — the flat dataset DOI (engine fallback), the survey
     collection PID (ts_pid), and a typed related_identifiers DOI row — plus a citation. Across ALL three
     rendered surfaces (station drawer, survey story, survey card), NO anchor's href may point at any
@@ -138,7 +138,7 @@ def test_sweep_no_reserved_identifier_is_ever_an_anchor(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_maturity_doi_star_honest_about_reserved(tmp_path):
-    """IDCONS D4 (task 3d): the 'DOI' maturity star must NOT light green off a DOI that only 404s at
+    """The 'DOI' maturity star must NOT light green off a DOI that only 404s at
     doi.org. A survey whose ONLY dataset DOI is reserved shows the star hollow with the honest note
     'reserved (not yet active)'; an ok / unknown DOI lights it 'minted' as before. FAILS RED against the
     pre-fix model, which lit the star off any m.doi regardless of resolution."""
@@ -161,7 +161,7 @@ def test_maturity_doi_star_honest_about_reserved(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_maturity_ts_star_keys_off_derived_from_row(tmp_path):
-    """IDCONS D1 (task 3d): 'Time series: linked' now lights off a typed IsDerivedFrom relation (the new
+    """'Time series: linked' now lights off a typed IsDerivedFrom relation (the new
     home of the collection PID), not only the retired ts_pid / availability flag. A curator survey whose
     only time-series link is a typed IsDerivedFrom row (m.ts unset, no ts_pid) still reads 'linked'."""
     extra = {"related_identifiers": [

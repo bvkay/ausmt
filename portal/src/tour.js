@@ -1,38 +1,16 @@
 "use strict";
-// tour.js - the guided spotlight tour. Classic script, zero dependencies, loaded LAST so it may call
-// setView()/openStation()/setSidebarMode() and the rest of the app's seams; nothing else depends on it,
-// so a missing or broken tour.js must never break the app (main.js guards its entry point with typeof).
-//
-// Constraints this file has to keep:
-//   * The tour NEVER auto-starts. It opens from the welcome popup's button or the ?tour=1 entry only.
-//   * A step whose target element is absent renders CENTRED with no spotlight rather than crashing or
-//     silently skipping, so an empty corpus, a filtered-out demo or a build without an optional control
-//     still walks end to end.
-//   * Nothing is persisted. The tour is stateless between visits and re-runnable from either entry.
-//   * Every step's enter() establishes its COMPLETE state from either direction and is idempotent:
-//     entering a step twice is a no-op the second time. Backward navigation is therefore correct by
-//     construction rather than by a per-step undo.
-//   * The map is the tour's whole subject. No step leaves the map view: the Surveys and Collections navs
-//     are spotlighted where they sit and never clicked, so the tour has no view of its own to undo and a
-//     reader is never carried somewhere the copy did not say they were going.
-//   * Shared state belongs to a GROUP of steps, not to one step: the group's cleanup runs when the walk
-//     crosses the group boundary, never on a move inside it. There are two: the BROWSE steps own the
-//     rail's browse mode, and the SELECT steps own the select mode and the demo rectangle and selection.
-//   * stopTour() from ANY step restores the visitor's pre-tour snapshot. Nothing the tour did leaks.
-//   * The step counter is computed from the deck. No step count is ever written as a literal.
+// tour.js - the guided spotlight tour, a classic script loaded LAST so it may call the app's seams while
+// nothing depends on it. Every constraint the deck keeps is stated once in the docs. See docs: portal internals, tour.js.
 
-// The demo survey the copy and the demo steps prefer, and the size below which a survey is too small to
-// make the selection demo read. Both are preferences, not requirements: _tourDemoSurvey degrades to the
-// largest positioned survey and then to nothing, because a corpus without the preferred survey (the test
-// fixture, an empty portal, any future corpus) must still walk.
+// The demo survey the copy prefers and the size below which a survey is too small for the demo. Both are
+// preferences: the resolver degrades to the largest positioned survey, then to nothing. See docs: portal internals, tour.js.
 const TOUR_DEMO_SLUG="vulcan-2022",TOUR_DEMO_MIN=5;
 // The station id the drawer steps prefer within the demo survey. A preference, not a requirement: a
 // survey without it opens on its first positioned station instead.
 const TOUR_DEMO_STATION="A1";
 
-// The deck. `sel` is a static selector, so it can be pinned and so a step spotlights the same element
-// whichever way the walk arrives at it. `text` is the copy verbatim; {survey} and {n} are resolved at
-// render from the loaded corpus, never written into the source.
+// The deck: `sel` is a static selector so a step spotlights the same element from either direction, and
+// `text` is the copy verbatim with {survey} and {n} resolved at render. See docs: portal internals, tour.js.
 const TOUR_STEPS=[
   {sel:"#map",
    text:"Every dot is an MT station. Click one to see its transfer function.",
@@ -76,15 +54,12 @@ const TOUR_STEPS=[
 ];
 
 // The SELECT group: the steps that share the select rail mode, the demo rectangle and the demo selection.
-// The group owns that state, so it is established on entering ANY member and cleaned up only when the
-// walk leaves the group in either direction (or the tour stops). A per-step exit hook cannot express this:
-// it would tear the shared state down on every move inside the group and rebuild it on the next arrival.
+// The group owns that state, established on entering any member and cleaned up only when the walk leaves. See docs: portal internals, tour.js.
 const _TOUR_SELECT_GROUP=[6,7,8,9];
 function _tourInSelectGroup(i){return _TOUR_SELECT_GROUP.indexOf(i)>=0;}
 
-// Overlay dim. Single source of truth, applied inline by _tourLayout: on a targeted step it colours the
-// spot's box-shadow (the backdrop stays transparent so the cutout shows the element fully); on a
-// no-target step it colours the centred backdrop directly.
+// Overlay dim, applied inline by _tourLayout: a targeted step colours the spot's box-shadow (the backdrop
+// stays transparent); a no-target step colours the centred backdrop.
 const TOUR_DIM=0.78;
 
 let _tourStep=-1,_tourEls=null;
@@ -94,11 +69,9 @@ let _tourOpened={drawer:false,hash:null};
 // The demo subjects resolved once per run (the corpus cannot change mid-run) and cleared on stop.
 let _tourDemoSv=undefined;
 
-// ---- demo resolution -------------------------------------------------------------------------------
-// Every step that would otherwise name a survey resolves one from the corpus that is actually loaded.
-// Preference order: the preferred slug when it has positioned stations, else the first survey large
-// enough for the selection demo to read, else the largest positioned survey, else nothing. The last
-// case is a real state (an empty portal), and the steps that use it render centred with no demo.
+// ---- demo resolution ----
+// Every step that would otherwise name a survey resolves one from the loaded corpus: the preferred slug,
+// else the first survey large enough for the demo, else the largest positioned survey, else nothing. See docs: portal internals, tour.js.
 function _tourDemoSurvey(){
   if(_tourDemoSv!==undefined)return _tourDemoSv;
   _tourDemoSv=null;
@@ -111,10 +84,8 @@ function _tourDemoSurvey(){
   let best=null;surveys.forEach(sv=>{if((pos[sv]||0)>0&&(best===null||pos[sv]>pos[best]))best=sv;});
   _tourDemoSv=best;return _tourDemoSv;
 }
-// The station the drawer steps open, as an index into ST. Resolved from the CORPUS, not from the filtered
-// map: the demo survey's preferred station where it exists, else that survey's first positioned station,
-// else the first visible station so a corpus with no positioned survey still shows a drawer. -1 = nothing
-// to open, which is the empty-corpus state and renders the step centred with no spotlight.
+// The station the drawer steps open, an index into ST resolved from the CORPUS, not the filtered map: the
+// preferred station, else the first positioned, else the first visible, else -1. See docs: portal internals, tour.js.
 let _tourDemoIdx=undefined;
 function _tourDemoStation(){
   if(_tourDemoIdx!==undefined)return _tourDemoIdx;
@@ -129,11 +100,8 @@ function _tourDemoStation(){
   if(typeof visible!=="undefined"&&visible.length)_tourDemoIdx=visible[0].i;
   return _tourDemoIdx;
 }
-// The count the selection-demo copy prints: whatever the demo rectangle actually took. Never a literal.
-// Once the demo has been applied that is the live selection. BEFORE it is applied the rectangle's bounds
-// are already known, and its membership is the same number the apply will produce, so the copy states it
-// from the first frame rather than counting up from a zero that is only true while the shape is still
-// being drawn.
+// The count the selection-demo copy prints: whatever the demo rectangle actually took, never a literal.
+// Before the demo is applied the rectangle's membership is the same number. See docs: portal internals, tour.js.
 function _tourDemoCount(){
   if(!_tourSel.created&&_tourSel.bounds)return _tourRectMembers(_tourSel.bounds).length;
   return (typeof selected!=="undefined")?selected.size:0;
@@ -151,7 +119,7 @@ function _tourTarget(step){
   return (step&&step.sel)?document.querySelector(step.sel):null;
 }
 
-// ---- enter hooks -----------------------------------------------------------------------------------
+// ---- enter hooks ----
 // The bare view switch, without the map steps' extra housekeeping below. The drawer steps use this one:
 // they are ABOUT the drawer, so they must not close it on arrival.
 function _tourMapView(){
@@ -164,28 +132,20 @@ function _tourCloseOwnDrawer(){
   _tourOpened.drawer=false;
   if(typeof closeDrawer==="function")closeDrawer();
 }
-// Map-view steps. No step of the deck leaves the map, so the view switch has one job: a visitor who
-// started the tour from the Surveys or Collections view, where the map-only targets are display:none and
-// every step would fall back to a centred card. The drawer close is the same job in the other axis:
-// stepping back from the drawer steps must leave the map these steps are describing unobstructed, and a
-// step that only looked right because the previous step happened to leave the drawer shut is exactly the
-// failure the walk pins exist to catch.
+// Map-view steps: no step leaves the map, so the view switch only serves a visitor who started elsewhere.
+// The drawer close keeps the map unobstructed when stepping back. See docs: portal internals, tour.js.
 function _tourEnterMapView(){
   _tourMapView();
   _tourCloseOwnDrawer();
 }
-// The opening step. The map housekeeping above, plus Advanced search CLOSED. The step AFTER this one is
-// the step that opens the accordion, so an opening step that merely inherits it reads one way arriving
-// forward from the start and another way arriving backward from step 2, and every step of this deck has
-// to establish its complete state from either direction. The visitor's own accordion is in the pre-tour
-// snapshot and comes back on close.
+// The opening step: the map housekeeping above plus Advanced search CLOSED, so it reads the same arriving
+// forward or backward. The visitor's own accordion is in the snapshot. See docs: portal internals, tour.js.
 function _tourEnterOpening(){
   _tourEnterMapView();
   const adv=document.getElementById("advSearch");if(adv)adv.open=false;
 }
-// The BROWSE group: the rail steps whose targets live in the rail's Browse pane, which is hidden when the
-// visitor left the rail in Select mode. Their own mode is group state on the same terms as the select
-// steps': established on entering any member, restored at the boundary.
+// The BROWSE group: the rail steps whose targets live in the rail's Browse pane, hidden when the visitor
+// left the rail in Select mode. Their mode is group state on the same terms as the select steps'.
 const _TOUR_BROWSE_GROUP=[1,2,3];
 function _tourInBrowseGroup(i){return _TOUR_BROWSE_GROUP.indexOf(i)>=0;}
 let _tourBrowse={mode:null};
@@ -206,9 +166,7 @@ function _tourEnterFilters(){
   const adv=document.getElementById("advSearch");if(adv)adv.open=true;
 }
 // The select group's shared state: the rail mode, the demo rectangle and the demo selection. The visitor's
-// own mode is captured ONCE on entering the group and restored when the walk leaves it, so a move inside
-// the group never touches it. `created` records whether the tour made a selection of its own, so the
-// teardown clears the demo and never a selection the visitor brought with them.
+// mode is captured on entering and restored on leaving; `created` marks the tour's own selection. See docs: portal internals, tour.js.
 let _tourSel={mode:null,created:false,bounds:null,dimmed:false};
 function _tourEnterSelectMode(){
   if(typeof setSidebarMode!=="function"||typeof sidebarMode==="undefined")return;
@@ -225,9 +183,8 @@ function _tourLeaveSelectGroup(){
   if(_tourMapMoved&&_tourSnap){_tourFitBounds(_tourSnap.bounds);_tourMapMoved=false;}
   _tourSel={mode:null,created:false,bounds:null,dimmed:false};
 }
-// The selection demo needs an unobstructed map, so the group closes an open drawer on arrival. Whose
-// drawer it was does not matter: the pre-tour snapshot puts a visitor's own drawer back on close, and
-// stepping BACK re-opens the tour's own through the drawer step's idempotent enter.
+// The selection demo needs an unobstructed map, so the group closes an open drawer on arrival. The
+// snapshot puts a visitor's own drawer back on close; stepping BACK re-opens the tour's own.
 function _tourEnterSelbox(){
   _tourEnterMapView();
   const dr=document.getElementById("drawer");
@@ -236,25 +193,15 @@ function _tourEnterSelbox(){
   _tourEnterSelectMode();
 }
 
-// ---- the selection demo ----------------------------------------------------------------------------
-// The demo shows selection happening: frame the demo survey, move a cursor to the Draw rectangle button,
-// grow a rectangle over the survey, and leave the stations inside it selected. Constraints:
-//   * No dependency and no asset. The cursor is an inline glyph and the preview is a Leaflet layer.
-//   * The demo never ARMS the real draw handler. A handler armed and never completed would swallow the
-//     visitor's next map click; the button is lit for the beat the cursor presses it and nothing more.
-//   * The end state is applied through the same seam a hand-drawn shape uses, so the selection, the rail
-//     mode and the toast are the app's own behaviour rather than a second implementation of it.
-//   * Reduced motion, and any environment with no frame clock to rely on, take the INSTANT path straight
-//     to that end state. The animation is decoration over a result that stands without it.
-//   * Every frame and timer is registered, so an interrupt cancels all of them: no loop may outlive the
-//     step that started it.
+// ---- the selection demo ----
+// The demo frames the demo survey, grows a rectangle over it and leaves the stations inside selected. It
+// never arms the real draw handler; every frame and timer is registered. See docs: portal internals, tour.js.
 const TOUR_RECT_PAD=0.1,TOUR_RECT_MIN_PAD=0.01;      // rectangle padding: 10 percent of span, with a floor
 // How far inside the margin that would first admit a neighbour the chosen margin sits. Containment is
 // inclusive, so the admitting margin is itself unusable and a fraction of a hair below it is the answer.
 const TOUR_RECT_GAP=0.99;
-// Phase durations. The whole demo is about two seconds, which is long enough to read as an action and
-// short enough that a reader does not start reaching for Next. The fit wait is an upper bound only: it
-// resolves on the map's own moveend, which on a large jump is immediate.
+// Phase durations: the whole demo is about two seconds, long enough to read as an action and short enough
+// not to invite Next. The fit wait resolves on the map's own moveend. See docs: portal internals, tour.js.
 const TOUR_ANIM={fit:450,glide:420,press:110,grow:780,fade:120};
 const TOUR_RECT_STYLE={color:"#EF7256",weight:2};                                  // matches a hand-drawn shape
 const TOUR_PREVIEW_STYLE={color:"#EF7256",weight:2,dashArray:"6 5",fill:false};    // the growing outline
@@ -289,19 +236,8 @@ function _tourInstant(){
   if(typeof window!=="undefined"&&window.AUSMT_TOUR_INSTANT===true)return true;
   try{return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){return false;}
 }
-// The margin the rectangle is padded by, as a fraction of the demo survey's extent. TOUR_RECT_PAD is the
-// most it can be and the floor is the least; between them it is the LARGEST fraction that admits no station
-// of any OTHER survey. The step frames one survey and says every station inside the rectangle is selected,
-// so a margin that reaches the sites of the survey next door leaves the sentence true and the reading
-// wrong. Stations are weighed as the membership weighs them, over what is VISIBLE: a station a filter has
-// taken off the map is not one the rectangle can select.
-//
-// Each station enters at the margin where BOTH axes stop keeping it out, so its own admitting margin is the
-// larger of the two; an axis the floor already covers cannot exclude it at any margin, and an axis with no
-// span can only ever be widened by the floor. The smallest of those is the first margin that would take a
-// neighbour, and the chosen one sits just inside it. Where that is the floor itself, the floor stands and
-// the rectangle keeps the neighbour: shrinking further would drop the demo survey's own sites, and the copy
-// prints the membership, so what it says is still what the map shows.
+// The rectangle's margin, as a fraction of the demo survey's extent: the largest fraction up to
+// TOUR_RECT_PAD that admits no station of any other survey, never below the floor. See docs: portal internals, tour.js.
 function _tourRectMargin(sv,south,north,west,east){
   if(typeof visible==="undefined")return TOUR_RECT_PAD;
   const h=north-south,w=east-west;
@@ -316,9 +252,8 @@ function _tourRectMargin(sv,south,north,west,east){
   });
   return Math.min(TOUR_RECT_PAD,first*TOUR_RECT_GAP);
 }
-// The demo rectangle: the demo survey's positioned extent, padded so every one of its stations is inside
-// rather than on the edge. The floor keeps a single-station or single-line survey from producing a
-// degenerate box no station can be strictly inside.
+// The demo rectangle: the demo survey's positioned extent, padded so every station is inside rather than
+// on the edge. The floor keeps a one-station or one-line survey from producing a degenerate box.
 function _tourDemoBounds(){
   const sv=_tourDemoSurvey();
   if(!sv||typeof ST==="undefined")return null;
@@ -344,11 +279,8 @@ function _tourFocusDemo(){
   focusSurvey(sv);
   _tourMapMoved=true;_tourSel.dimmed=true;
 }
-// The end state, applied the way a completed draw applies one: the shape replaces any previous shape,
-// refresh() re-derives the selection from it, and the rail surfaces the exports the selection enabled.
-// The demo's selection IS the rectangle's membership: where no shape layer carried the rectangle, the
-// same membership is applied directly, so the count the copy prints is always the rectangle's contents
-// and never a lower number from a shape the map did not take.
+// The end state, applied the way a completed draw applies one. The demo's selection IS the rectangle's
+// membership, applied directly where no shape layer carried it. See docs: portal internals, tour.js.
 function _tourApplyDemo(b){
   if(!b)return;
   try{
@@ -371,7 +303,7 @@ function _tourApplyDemo(b){
   if(typeof toast==="function"&&typeof drawSelectionMsg==="function")
     toast(drawSelectionMsg(_tourDemoCount(),"rectangle"));
 }
-// ---- the animation ---------------------------------------------------------------------------------
+// ---- the animation ----
 function _tourFrames(ms,onFrame,onDone){
   const start=_tourNow(),seq=_tourAnim.seq;
   const tick=()=>{
@@ -524,10 +456,8 @@ function _tourEnterSelectDownload(){
   _tourFocusDemo();
   _tourApplyDemo(b);
 }
-// Find demo. Save the visitor's own query, type the demo query and dispatch a REAL bubbling input event
-// so the live wiring in filters.js (refresh() + renderFind()) filters the map and renders the actual
-// dropdown: the demo is the real code path, not a mock. Exit restores the saved value the same way and
-// hides the dropdown, matching the click-away behaviour.
+// Find demo: save the visitor's query, type the demo query and dispatch a real input event so the live
+// wiring filters the map. Exit restores the saved value and hides the dropdown. See docs: portal internals, tour.js.
 let _tourFindPrev=null;              // visitor's Find value before the demo; null = nothing to restore
 function _tourEnterFindDemo(){
   _tourEnterFilters();
@@ -545,10 +475,8 @@ function _tourExitFindDemo(){
   const fr=document.getElementById("findResults");
   if(fr){fr.style.display="none";fr.innerHTML="";}   // dropdown closed even when a query was restored
 }
-// Tree browse demo. Save the tree scroll AND the expand/collapse state, expand the demo survey's
-// ancestors through the same treeSetCollapsed API the disclosure carets use (a collapsed rail must never
-// hide the demo), then bring the row into view. No checkbox is touched. Exit puts back the saved
-// scrollTop and the saved collapse set on all three ways out.
+// Tree browse demo: save the tree scroll and collapse state, expand the demo survey's ancestors and bring
+// the row into view. Exit restores both on every way out; no checkbox is touched. See docs: portal internals, tour.js.
 let _tourTreePrev=null;              // {scrollTop,collapsed[]} before the demo; null = nothing to restore
 let _tourTreeTarget=null;            // resolved survey label; null = none resolved
 function _tourEnterTreeDemo(){
@@ -580,11 +508,8 @@ function _tourExitTreeDemo(){
   }
   _tourTreePrev=null;
 }
-// The station-drawer steps open the demo station's drawer, the same as clicking its marker. Idempotent:
-// arriving with that station already open opens nothing, so stepping back from the Files step neither
-// rewrites the hash nor throws away the reader's scroll position. Opening a station resets the drawer to
-// its default panel, so the tab is (re-)selected here in both cases and this step is the Response tab's
-// establishing step in either direction.
+// The station-drawer steps open the demo station's drawer idempotently: arriving with it open opens nothing.
+// The tab is re-selected in both cases, so this step establishes the Response tab. See docs: portal internals, tour.js.
 function _tourEnterStation(){
   _tourMapView();
   const i=_tourDemoStation();
@@ -617,21 +542,16 @@ function _tourEnterFiles(){
 function _tourExitFiles(){
   _tourSelectTab("response");
 }
-// The closing step: land back on the map with the drawer the tour opened closed and a tour-changed hash
-// put back. The visitor's collapsed rail is NOT restored here: it belongs to the pre-tour snapshot, so a
-// reader who steps BACK off this step still has a rail to read.
+// The closing step: back on the map, the tour's drawer closed and a tour-changed hash put back. The
+// visitor's collapsed rail belongs to the snapshot, so a reader who steps BACK still has a rail to read.
 function _tourEnterFinal(){
   _tourCloseOwnDrawer();
   if(_tourOpened.hash!==null){history.replaceState(null,"",location.pathname+location.search+_tourOpened.hash);_tourOpened.hash=null;}
   _tourMapView();
 }
-// ---- the pre-tour snapshot -------------------------------------------------------------------------
-// The tour navigates, opens drawers, switches rail modes, draws a shape and makes a selection. Undoing
-// "only what the tour opened" cannot express that: it can restore a drawer and a hash, but it has nothing
-// to say about a selection a filter change silently dropped or a map frame a fit moved. So the visitor's
-// workspace is snapshotted ONCE at startTour and put back whole on stop, from any step. The snapshot is
-// the authority; the group teardowns below exist for the boundaries the walk crosses while the tour is
-// still running.
+// ---- the pre-tour snapshot ----
+// The visitor's workspace is snapshotted ONCE at startTour and put back whole on stop, from any step. The
+// group teardowns cover only the boundaries crossed while the tour runs. See docs: portal internals, tour.js.
 let _tourSnap=null;
 let _tourMapMoved=false;             // whether the tour itself moved the map frame
 
@@ -670,9 +590,8 @@ function _tourTakeSnapshot(){
   };
   _tourMapMoved=false;
 }
-// Put the visitor's own drawer back. A subject is re-opened through the same seam that opened it first,
-// so the drawer's contents are re-rendered rather than restored from stale markup; the active tab is
-// re-selected afterwards because opening a station resets it to the default panel.
+// Put the visitor's own drawer back through the seam that opened it first, so its contents are
+// re-rendered rather than restored from stale markup; the tab is re-selected afterwards.
 function _tourRestoreDrawer(s){
   const dr=document.getElementById("drawer");
   const open=!!(dr&&dr.classList.contains("open"));
@@ -688,9 +607,8 @@ function _tourRestoreDrawer(s){
   else if(sub.kind==="survey"&&typeof openSurvey==="function")openSurvey(sub.sv);
   if(s.drawerTab&&typeof selectDrawerTab==="function")selectDrawerTab(s.drawerTab);
 }
-// Restore order is load bearing: the query first (it drives refresh(), which re-derives the selection),
-// then the tree, then the shapes and the selection, then the view (which closes any open drawer), then
-// the drawer, and the hash LAST because opening or closing a drawer rewrites it.
+// Restore order is load bearing: the query first (it drives refresh()), then the tree, the shapes and
+// the selection, the view (which closes any drawer), the drawer, and the hash LAST.
 function _tourRestoreSnapshot(){
   const s=_tourSnap;
   if(!s)return;
@@ -728,10 +646,9 @@ function _tourRestoreSnapshot(){
 function _tourBuild(){
   const backdrop=document.createElement("div");backdrop.className="tourbackdrop";backdrop.id="tourBackdrop";
   const spot=document.createElement("div");spot.className="tourspot";spot.id="tourSpot";
-  // The LEADER is an SVG overlay spanning the viewport; a line + arrowhead connect the centred card to
-  // the spotlight. Its z-order sits BETWEEN the spot (which carries the dim) and the card, so the line
-  // reads over the dim and the card stays on top. The line element is held directly rather than looked
-  // up, so it is robust in a DOM that does not render SVG; the arrowhead marker is cosmetics.
+  // The LEADER is an SVG overlay spanning the viewport: a line and arrowhead connect the centred card to the
+  // spotlight, layered between the spot and the card. The line element is held directly, so a DOM that does
+  // not render SVG cannot break it. See docs: portal internals, tour.js.
   const SVGNS="http://www.w3.org/2000/svg";
   const leader=document.createElementNS(SVGNS,"svg");
   leader.setAttribute("class","tourleader");leader.id="tourLeader";leader.setAttribute("aria-hidden","true");
@@ -761,25 +678,14 @@ function _tourBuild(){
 // A viewport change re-runs only the LAYOUT, never the step's enter hook (which would re-run a demo).
 function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 
-// SETTLE-UNTIL-STABLE re-layout. Some steps' enter hooks trigger layout changes on their OWN target that
-// keep going after _tourLayout first measures it. The station-drawer step is the worst case: openStation
-// renders synchronously, then adds .open, which SLIDES the drawer in over a CSS transform transition so
-// its left travels; then an async station.json fetch injects the frame line and reflows its HEIGHT; then
-// a deferred map re-fit can reflow the map column under it. A single transitionend re-measure fires after
-// the slide only and leaves the spotlight on a stale early box. So after entering a step, POLL the target
-// rect each animation frame; on ANY change, position OR size (a size-only observer misses the slide,
-// which MOVES the box), re-run _tourLayout; stop once the rect has held stable for _TOUR_SETTLE_STABLE_MS
-// or after a hard _TOUR_SETTLE_CAP_MS. General, not a per-step special case: a static target reads stable
-// on the first frame and the watcher stands down immediately. The transitionend hook is kept as a cheap
-// extra nudge but is not relied on alone. The watcher is ATTACHED on arrival and DETACHED on EVERY
-// departure, so no poll loop or listener leaks past the step or the tour. _tourLayoutRuns is bumped by
-// _tourLayout purely so a driver can observe re-runs.
+// SETTLE-UNTIL-STABLE re-layout: the target rect is polled each frame and _tourLayout re-run on any change
+// until it holds stable or the cap passes. Detached on every departure. See docs: portal internals, tour.js.
 const _TOUR_SETTLE_STABLE_MS=200,_TOUR_SETTLE_CAP_MS=2000;   // quiet window the rect must hold; hard cap
 let _tourSettleEl=null;                 // element the current step's watcher tracks; null = none attached
 let _tourSettleRAF=0;                   // pending frame handle for the poll; 0 = none scheduled
 let _tourLayoutRuns=0;                  // observability: total _tourLayout calls this session
 function _tourNow(){return (typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();}
-// Compact position+size signature of an element's box; null when the element is gone. Captures BOTH a
+// Compact position+size signature of an element's box; null when the element is absent. Captures BOTH a
 // slide's travel and an async inject's height growth, so any reflow that moves OR resizes shows up.
 function _tourRectKey(el){
   if(!el)return null;
@@ -822,11 +728,8 @@ function _tourKeydown(e){
   else if(e.key==="ArrowLeft"){_tourPrev();}
 }
 
-// The tour card is CENTRED for EVERY step. This PURE fn returns the card's fixed-position box. Base = the
-// viewport centre. OVERLAP RULE: when a target rect would sit under the centred card, nudge the card by
-// the MINIMAL vertical offset so it clears the target by _TOUR_CLEAR, deterministically DOWNWARD when
-// that still fits the viewport (bottom margin _TOUR_M), else UPWARD. No DOM, so the geometry is testable
-// on synthetic rects in a DOM with no layout engine.
+// The tour card is CENTRED for EVERY step; this PURE fn returns its box. A card that would cover its target
+// is nudged by the minimal vertical offset, downward when that fits, else upward. See docs: portal internals, tour.js.
 const _TOUR_M=8,_TOUR_CLEAR=16;   // viewport margin; target->card clearance on an overlap nudge
 function _tourCardBox(cardW,cardH,vpW,vpH,targetRect){
   const M=_TOUR_M,CLEAR=_TOUR_CLEAR;
@@ -844,10 +747,8 @@ function _tourCardBox(cardW,cardH,vpW,vpH,targetRect){
   }
   return{left,top,right:left+cardW,bottom:top+cardH,nudged:top!==baseTop};
 }
-// Geometry of the LEADER from the centred card to the spotlight. PURE: the endpoints are the boundary
-// points where the card-centre to spot-centre axis crosses each rect, so the line leaves the card edge
-// nearest the target and lands on the spot edge nearest the card. visible is false when suppressed: the
-// map steps (where the spotlight over the map IS the cue) and the no-target fallback.
+// Geometry of the LEADER from the centred card to the spotlight, PURE: the endpoints are where the
+// centre-to-centre axis crosses each rect. visible is false on the map steps and the no-target fallback. See docs: portal internals, tour.js.
 function _tourLeader(cardBox,spotBox,suppressed){
   if(suppressed)return{x1:0,y1:0,x2:0,y2:0,visible:false};
   const ccx=(cardBox.left+cardBox.right)/2,ccy=(cardBox.top+cardBox.bottom)/2;
@@ -862,24 +763,19 @@ function _tourLeader(cardBox,spotBox,suppressed){
   const[x2,y2]=edge(scx,scy,(spotBox.right-spotBox.left)/2,(spotBox.bottom-spotBox.top)/2,-dx,-dy);
   return{x1,y1,x2,y2,visible:true};
 }
-// The containers whose content SCROLLS. A target inside one of them can sit outside the part of it that is
-// on screen, and a spotlight measured there lands on empty space while the copy talks about a control the
-// reader cannot see. The containers themselves are not in this class: scrolling a scroller into view moves
-// the page it sits on, not the content inside it.
+// The containers whose content SCROLLS: a target inside one can sit outside its visible part, and a spotlight
+// measured there lands on empty space. The containers themselves are not in this class. See docs: portal internals, tour.js.
 const TOUR_SCROLLERS="aside.filters,#drawer,.tree";
-// Bring a target inside a scroller into view, so what the layout measures next is where the element ends
-// up. "nearest" is the smallest scroll that makes it visible, so a target already on screen does not move
-// and the reader's position in the rail is disturbed no more than the step requires. Guarded: a headless
-// DOM has no scrollIntoView, and the resolution the step depends on is asserted separately from this.
+// Bring a target inside a scroller into view before the layout measures it; "nearest" is the smallest scroll
+// that makes it visible. Guarded, since a headless DOM has no scrollIntoView. See docs: portal internals, tour.js.
 function _tourScrollIntoView(el){
   if(!el||!el.parentElement||typeof el.parentElement.closest!=="function")return;
   if(!el.parentElement.closest(TOUR_SCROLLERS))return;
   if(typeof el.scrollIntoView!=="function")return;
   try{el.scrollIntoView({block:"nearest"});}catch(e){}
 }
-// Arrival at a step: run its enter hook (which may switch view / open a drawer and so change the target
-// rect), bring the target into view where it lives in something that scrolls, THEN lay the spotlight +
-// card out. Split from _tourLayout so a resize re-lays-out WITHOUT re-firing the enter hook.
+// Arrival at a step: run its enter hook, bring the target into view where it lives in a scroller, THEN
+// lay the spotlight and card out. Split from _tourLayout so a resize never re-fires the enter hook.
 function _tourPosition(){
   const step=TOUR_STEPS[_tourStep];
   if(typeof step.enter==="function")step.enter();
@@ -970,9 +866,8 @@ function startTour(){
   _tourBrowse={mode:null};
   _tourDemoSv=undefined;_tourDemoIdx=undefined;   // resolve the demo subjects afresh against the loaded corpus
   _tourTakeSnapshot();                 // the workspace the visitor is handed back on close, from any step
-  // A COLLAPSED rail hides every child but the collapse button, so the rail steps would spotlight nothing
-  // and narrate controls that are not on screen. Expand it for the run; the snapshot above already holds
-  // the visitor's own choice, so the restore puts it back.
+  // A COLLAPSED rail hides every child but the collapse button, so the rail steps would spotlight nothing.
+  // Expand it for the run; the snapshot holds the visitor's own choice and the restore puts it back.
   const _sb=document.querySelector("aside.filters");
   if(_sb&&_sb.classList.contains("collapsed")&&typeof setSidebarCollapsed==="function")setSidebarCollapsed(false);
   _tourEls=_tourBuild();

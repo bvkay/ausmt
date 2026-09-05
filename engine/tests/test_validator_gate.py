@@ -1,11 +1,11 @@
-"""C8: the survey validator gate must fail CLOSED, not open (CONTEXT: the sibling ausmt-surveys
+"""The survey validator gate must fail CLOSED, not open (CONTEXT: the sibling ausmt-surveys
 pytest suite never ran in CI, so a fail-open validator merged untested — see
 maintainer/ and build-products.yml). Three invariants pinned here:
   (a) --surveys without --no-validate and an unresolvable validator => main() returns non-zero
       (pre-fix this printed a WARNING and proceeded -- captured below as the pre-change evidence).
   (b) AUSMT_VALIDATOR_PATH pointing at the real ausmt-surveys/_validation resolves and is used.
   (c) --no-validate still builds (the explicit, documented opt-out survives).
-Stack-less lane: no mt_metadata needed (validator resolution is stdlib-only import plumbing).
+Stack-less workflow: no mt_metadata needed (validator resolution is stdlib-only import plumbing).
 """
 import sys
 from pathlib import Path
@@ -18,12 +18,11 @@ sys.path.insert(0, str(REPO / "extract"))
 sys.path.insert(0, str(REPO))
 import build_portal  # noqa: E402
 
-# C35b/D3 (review F7) + amendment D3.1 (2026-07-07, real-CI red on the engine image build): the
-# validator resolves via the FOUR-arm environment enumeration recorded in
-# maintainer/C35b-GitTruthDesign.md §D3.1. The validator is stdlib-only import plumbing here
+# The resolution rule: the validator resolves via the FOUR-arm environment enumeration recorded in
+# maintainer/C35b-GitTruthDesign.md. The validator is stdlib-only import plumbing here
 # (_load_validator imports the module, no mt_metadata), so the vendored copy resolves in the
-# stack-less engine lane too. Every probe anchors off ONE root, _repo_root() — no second path
-# convention — and _repo_root() is the monkeypatch seam the D3.1 falsifiability tests use.
+# stack-less engine workflow too. Every probe anchors off ONE root, _repo_root() - no second path
+# convention - and _repo_root() is the monkeypatch seam the falsifiability tests use.
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
                               "(designed topology; vendored oracle lives in gateway/tests)")
@@ -31,7 +30,7 @@ IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: gateway tree not shipped "
 
 def _repo_root() -> Path:
     """The repo root this checkout provides: engine/'s parent (= the monorepo root on a checkout;
-    /app in the engine image, whose Dockerfile COPYs engine/ only). Module-level so the D3.1
+    /app in the engine image, whose Dockerfile COPYs engine/ only). Module-level so the
     falsifiability tests can monkeypatch it to a scratch topology."""
     return REPO.parent
 
@@ -45,14 +44,14 @@ def _vendored_validator_dir() -> Path:
 
 
 def _resolve_validator_dir() -> Path:
-    """D3.1 resolution:
+    """The four-arm resolution:
       (i)   sibling ausmt-surveys checkout -> use it (LIVE cross-repo pair, dev box);
       (ii)  else the committed vendored copy -> use it (PINNED contract, CI / fresh clones);
       (iii) else if the gateway package tree ITSELF is absent from the repo root -> SKIP: this is the
             engine image's designed topology (engine/ only, no /app/gateway — see engine.Dockerfile);
             the vendored oracle lives in gateway/tests, a tree the image never ships, so there is
             nothing to drift. On every monorepo checkout <root>/gateway exists, so this arm is
-            UNREACHABLE there — fail-not-skip is preserved everywhere the F7 finding applied;
+            UNREACHABLE there - fail-not-skip is preserved everywhere the finding applied;
       (iv)  else (gateway tree present but the vendored fixture missing) -> FAIL: broken checkout."""
     import os
     sibling = _sibling_validator_dir()
@@ -81,7 +80,7 @@ def _empty_surveys(tmp_path):
 
 def test_unresolvable_validator_fails_closed(tmp_path, monkeypatch):
     """No --no-validate + validator can't be found => non-zero exit (fail CLOSED). This is the
-    behaviour the C8 contract changes; pre-fix, build_portal proceeded with only a stderr WARNING
+    behaviour the contract changes; pre-fix, build_portal proceeded with only a stderr WARNING
     and returned 0 (captured verbatim in the implementation report, not re-asserted here since the
     old behaviour is being replaced, not kept as a branch)."""
     monkeypatch.setattr(build_portal, "_load_validator", lambda: None)
@@ -113,11 +112,11 @@ def test_no_validate_still_builds(tmp_path):
 
 def test_env_var_path_resolves_real_validator(tmp_path, monkeypatch):
     """AUSMT_VALIDATOR_PATH pointing at a real validator dir resolves and is used (both the directory
-    form and the direct-file form are accepted). C35b/D3 + D3.1 (review F7): resolution is the four-arm
+    form and the direct-file form are accepted). Resolution is the four-arm
     enumeration in _resolve_validator_dir — sibling, else vendored, else SKIP only in the engine
     image's gateway-less topology (arm iii, unreachable on any monorepo checkout), else FAIL (a true
     broken checkout, arm iv)."""
-    validator_dir = _resolve_validator_dir()  # skips ONLY in the engine-image topology (D3.1 iii)
+    validator_dir = _resolve_validator_dir()  # skips ONLY in the engine-image topology (arm iii)
     monkeypatch.setenv("AUSMT_VALIDATOR_PATH", str(validator_dir))
     v = build_portal._load_validator()
     assert v is not None and hasattr(v, "validate"), "env-var directory form did not resolve"
@@ -132,15 +131,15 @@ def test_env_var_path_resolves_real_validator(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------------
-# C35b/D3.1 falsifiability — both new arms of the environment enumeration must be reachable and
+# Falsifiability: both arms (iii) and (iv) of the environment enumeration must be reachable and
 # distinct (Invariant 10: a skip arm that could swallow a real broken checkout would be vacuous).
 # _repo_root() is the seam: point it at a scratch topology, never at the real tree.
 # --------------------------------------------------------------------------------------------------
 def test_d31_image_topology_skips_with_exact_reason(tmp_path, monkeypatch):
-    """D3.1 arm (iii) — falsifiability (a): a scratch root shaped like the ENGINE IMAGE (/app: an
-    engine tree, NO gateway dir, no sibling beside it) must SKIP with the exact D3.1 reason string,
-    NOT fail. FAILS IF the resolver raises AssertionError (the pre-D3.1 image-build red) or skips with
-    a different reason (the tripwire allow-list matches this exact substring)."""
+    """Arm (iii), falsifiability (a): a scratch root shaped like the ENGINE IMAGE (/app: an
+    engine tree, NO gateway dir, no sibling beside it) must SKIP with the exact allow-listed
+    reason string, NOT fail. FAILS IF the resolver raises AssertionError or skips with a different
+    reason (the tripwire allow-list matches this exact substring)."""
     root = tmp_path / "app"
     (root / "engine" / "tests").mkdir(parents=True)
     monkeypatch.setattr(sys.modules[__name__], "_repo_root", lambda: root)
@@ -151,8 +150,8 @@ def test_d31_image_topology_skips_with_exact_reason(tmp_path, monkeypatch):
 
 
 def test_d31_gateway_present_vendored_missing_fails(tmp_path, monkeypatch):
-    """D3.1 arm (iv) — falsifiability (b): a scratch MONOREPO root (gateway/ present) whose vendored
-    fixture is missing must FAIL (broken checkout) — the skip arm must NOT swallow it. FAILS IF the
+    """Arm (iv), falsifiability (b): a scratch MONOREPO root (gateway/ present) whose vendored
+    fixture is missing must FAIL (broken checkout): the skip arm must NOT swallow it. FAILS IF the
     resolver skips (or returns) instead of raising."""
     root = tmp_path / "repo"
     (root / "engine" / "tests").mkdir(parents=True)

@@ -1,7 +1,7 @@
-"""MTCAT 2.0: the ratified schema DESCRIBES what the portal serves, and CONSTRAINS it.
+"""MTCAT 2.0: the schema DESCRIBES what the portal serves, and CONSTRAINS it.
 
-Successor to the retired v1.2 acceptance module. MTCAT 2.0 is a MAJOR version (owner ruling:
-correctness over compatibility while the ecosystem is nascent); its breaking list is small and
+Successor to the retired v1.2 acceptance module. MTCAT 2.0 is a MAJOR version (correctness over
+compatibility while the ecosystem is nascent); its breaking list is small and
 deliberate: null-as-undeclared removed (one defined null: the paired withheld station
 coordinates), the empty-array state for formats removed (minItems 1), sources[]/changes removed,
 and the top-level library-version keys removed. 2.0 also adds description, subjects[],
@@ -17,7 +17,7 @@ Two halves, as before:
      constraining it are not the same act, and only the second one catches a bad build.
 
 The RED set keeps every 1.2-era case whose constraint survives into 2.0 and adds the 2.0 cases
-from the ratified fixture suite (AusMT_2026/schemas-draft/run-fixture-suite.py): subject rows
+from the executable fixture suite (AusMT_2026/schemas-draft/run-fixture-suite.py): subject rows
 without a scheme, duplicate/empty/non-positive sample rates, has_time_series false, unknown
 coordinates_state, the withheld-footprint leak, empty formats/subjects arrays, identifier-less
 relationship rows, half-null coordinate pairs, and a malformed generated_at (which requires
@@ -155,7 +155,7 @@ CORPUS_SHAPED = {
                 {"name": "AusMT", "name_type": "organisation", "role": "HostingInstitution"},
             ],
             # discovery is universal, distribution is not: the footprint and station rows are
-            # public while the bytes are withheld. 2.0 OMITS formats here (owner finding 62): an
+            # public while the bytes are withheld. 2.0 OMITS formats here: an
             # empty list would falsely assert that no formats are KNOWN for the withheld holdings.
         },
     ],
@@ -189,11 +189,11 @@ CORPUS_SHAPED = {
 
 
 def test_schema_self_identifies_as_the_versioned_immutable_uri():
-    """The ratified $id policy (final walk-through s49): the canonical identifier is the
+    """The $id policy (final walk-through s49): the canonical identifier is the
     VERSION-SPECIFIC immutable URI under /data/schemas/mtcat/<version>/; the unversioned
     /data/mtcat.schema.json remains the latest-convenience route (portal.schema_url still names
-    it, and the build serves BOTH). This supersedes the 1.2-era unversioned-$id ruling; the pin
-    that used to forbid a versioned $id now requires it."""
+    it, and the build serves BOTH). This supersedes the 1.2-era unversioned-$id rule; the pin
+    that forbade a versioned $id requires it."""
     want = f"https://ausmt.auscope.org.au/data/schemas/mtcat/{SCHEMA_VERSION}/mtcat.schema.json"
     assert SCHEMA["$id"] == want, f"$id must be the versioned immutable URI {want}; got {SCHEMA['$id']}"
     assert SCHEMA["title"].startswith(f"MTCAT v{SCHEMA_VERSION}:")
@@ -202,7 +202,7 @@ def test_schema_self_identifies_as_the_versioned_immutable_uri():
 
 
 def test_no_version_string_in_any_field_description():
-    """The ratified editorial gate: ZERO version strings in field descriptions (the schema text
+    """The editorial gate: ZERO version strings in field descriptions (the schema text
     must be timeless; the version lives in the title/$id alone)."""
     offenders = []
 
@@ -261,7 +261,7 @@ def _mutate(path, value):
 
 
 # One mutation per constraint. The 1.2-era cases whose constraints survive are kept; the 2.0 cases
-# are ported from the ratified fixture suite (T5/T6/T7/T9/T10/T10b/T30a-b/T34a/T34c and friends).
+# are ported from the fixture suite.
 RED_CASES = [
     # ---- derived discovery facets ---------------------------------------------------------------
     (("surveys", 0, "n_stations"), "3",
@@ -431,7 +431,7 @@ def test_red_cases_are_non_vacuous():
 
 
 def test_withheld_coordinates_state_forbids_bbox_and_centroid():
-    """T30c: a withheld coordinates_state with a bbox/centroid present is a FOOTPRINT LEAK - the
+    """A withheld coordinates_state with a bbox/centroid present is a FOOTPRINT LEAK - the
     schema's if/then makes it invalid (the error lands on the bbox/centroid keys, which is why
     this is not a RED_CASES row: the error path is not the mutated path)."""
     v = _validator()
@@ -445,7 +445,7 @@ def test_withheld_coordinates_state_forbids_bbox_and_centroid():
 
 
 def test_generalised_survey_with_full_coordinates_is_valid():
-    """T38b: the state is public, the reason is private - a generalised survey still publishes
+    """The state is public, the reason is private - a generalised survey still publishes
     (generalised) coordinates, so full-looking positions with state generalised are legal."""
     doc = copy.deepcopy(CORPUS_SHAPED)
     doc["surveys"][0]["coordinates_state"] = "generalised"
@@ -453,7 +453,7 @@ def test_generalised_survey_with_full_coordinates_is_valid():
 
 
 def test_both_null_position_with_declared_state_is_valid():
-    """T34b: the one defined null - a station whose position is not published carries BOTH
+    """The one defined null - a station whose position is not published carries BOTH
     latitude and longitude as null and the document stays valid."""
     doc = copy.deepcopy(CORPUS_SHAPED)
     doc["stations"][0]["latitude"] = None
@@ -463,7 +463,7 @@ def test_both_null_position_with_declared_state_is_valid():
 
 
 def test_has_metadata_relation_with_scheme_accepted():
-    """T8: the widened relation vocabulary accepts HasMetadata plus a scheme token (the future
+    """The widened relation vocabulary accepts HasMetadata plus a scheme token (the future
     survey-metadata document is the genuine target; AusMT emits no such row TODAY, which
     test_mtcat20_emission pins from the emitter side)."""
     doc = copy.deepcopy(CORPUS_SHAPED)
@@ -473,7 +473,7 @@ def test_has_metadata_relation_with_scheme_accepted():
 
 
 def test_policy_transition_open_to_embargoed_still_validates():
-    """T38c/T38d: an access-policy transition neither breaks validation nor alters identity."""
+    """An access-policy transition neither breaks validation nor alters identity."""
     doc = copy.deepcopy(CORPUS_SHAPED)
     sv = doc["surveys"][0]
     sv["access"] = "embargoed"
@@ -485,8 +485,8 @@ def test_policy_transition_open_to_embargoed_still_validates():
 
 
 def test_access_description_names_no_phantom_level():
-    """The schema is SERVED, so a wrong sentence in it is a published wrong claim. The ratified
-    2.0 access description names the three well-known values and deliberately does NOT enum-pin
+    """The schema is SERVED, so a wrong sentence in it is a published wrong claim. The 2.0 access
+    description names the three well-known values and deliberately does NOT enum-pin
     (an unrecognised value means a withheld survey, not a broken document). Both halves survive
     from the 1.2 gate: the named values must equal the producer's ACCESS_LEVELS set-for-set, and
     NO description anywhere in the schema may name the phantom 'legacy' level."""

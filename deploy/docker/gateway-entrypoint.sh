@@ -1,5 +1,5 @@
 #!/bin/sh
-# AusMT gateway entrypoint (incident 2026-07-11). This is the process-spawn seam for the gateway image
+# AusMT gateway entrypoint. This is the process-spawn seam for the gateway image
 # (gateway.Dockerfile ENTRYPOINT); it sets the umask ONCE, then execs the real gateway so uvicorn AND
 # every subprocess the gateway spawns (its `git` publish invocations) inherit it.
 #

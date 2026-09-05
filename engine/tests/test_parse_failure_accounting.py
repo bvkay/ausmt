@@ -1,6 +1,6 @@
 """Honest drop accounting: a source file the reader cannot read is a DROPPED STATION on the record.
 
-Every neighbouring drop path in `process_edis` writes a structured record - the C25 convention-gate
+Every neighbouring drop path in `process_edis` writes a structured record - the convention-gate
 skip, the station with no recoverable coordinates or periods, the MTH5 read failure. The EDI parse
 failure did not: it printed a line to stderr and continued, so a station could vanish from an
 otherwise green build with nothing in build_report.json to name it. On the AusMT GDS staging that
@@ -45,7 +45,7 @@ _NUM = re.compile(r"-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?")
 def _conjugated(text):
     """The in-repo clean station with every imaginary Z block negated, i.e. Z -> conj(Z).
 
-    A coherent quadrant flip in BOTH off-diagonals is exactly what C25's sign-convention gate
+    A coherent quadrant flip in BOTH off-diagonals is exactly what the sign-convention gate
     refuses to serve (the e^{+iwt} against e^{-iwt} sense), so this is the smallest honest fixture
     for a GATE drop, as opposed to the unreadable-file drop above. Only the four imaginary data
     blocks are rewritten: the header and the rotation blocks are untouched, so the frame gate ahead
@@ -260,7 +260,7 @@ WORKFLOW = REPO.parent / ".github" / "workflows" / "build-products.yml"
 
 @pytest.mark.skipif(not WORKFLOW.is_file(),
                     reason="engine image build: workflow tree not shipped "
-                           "(designed topology; the CI guards are pinned from checkout lanes)")
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
 def test_this_file_is_in_the_pr_gate_subset():
     """Rule 8: the PR gate enumerates test files BY NAME, and this file carries the assertions the
     two deploy gates read, so it has to run on the pull request that changes them."""

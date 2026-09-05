@@ -35,7 +35,8 @@ def test_aggregate_all_stations_share_one_note():
 
 
 def test_aggregate_note_on_one_of_two():
-    """A on both, B on one -> two entries in first-appearance order. A: all 2. B: count 1, stations=[S1]."""
+    """A on both, B on one -> two entries in first-appearance order. A: all 2.
+    B: count 1, `stations=["S1"]`."""
     notes = {"S1": ["A", "B"], "S2": ["A"]}
     entries = bp.aggregate_conditioning(notes)
     assert [e["note"] for e in entries] == ["A", "B"]
@@ -45,15 +46,15 @@ def test_aggregate_note_on_one_of_two():
 
 
 def test_aggregate_ccmt_outlier_records_except_complement():
-    """The ccmt-2017 shape: 28 stations, 27 share a note, ONE (CC07) lacks it. The small side is the
+    """The ccmt-2017 shape: 28 stations, 27 share a note, and station CC07 lacks it. The small side is the
     single absentee, so the entry records except=['CC07'] (NOT stations=[27 ids]) and count=27."""
-    ids = [f"CC{n:02d}" for n in range(1, 29)]  # CC01..CC28
+    ids = [f"CC{n:02d}" for n in range(1, 29)]  # the station ids CC01..CC28
     notes = {sid: (["shared"] if sid != "CC07" else ["outlier"]) for sid in ids}
     entries = bp.aggregate_conditioning(notes)
     shared = next(e for e in entries if e["note"] == "shared")
     assert shared["count"] == 27
     assert shared["except"] == ["CC07"], "the single absentee is the small side to enumerate"
-    assert shared["stations"] is None, "27 carriers is too many to list — use the complement"
+    assert shared["stations"] is None, "27 carriers is too many to list - use the complement"
     outlier = next(e for e in entries if e["note"] == "outlier")
     assert outlier["count"] == 1 and outlier["stations"] == ["CC07"]
 
@@ -123,7 +124,7 @@ def test_aggregate_all_carriers_above_enum_limit_has_null_both_sides():
     stations=None AND except=None — the count equalling the survey total tells the story. FAILS IF:
     the empty absentee list slips through the small-complement branch as except=[] (empty array,
     truthy in JS), which rendered '[all except: ]' on every fleet-wide note in the first production
-    panel view (2026-07-08)."""
+    panel view."""
     n = bp.CONDITIONING_ENUM_LIMIT + 2
     notes = {f"S{i}": ["A"] for i in range(n)}
     entries = bp.aggregate_conditioning(notes)

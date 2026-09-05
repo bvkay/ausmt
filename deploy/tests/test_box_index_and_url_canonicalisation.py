@@ -13,7 +13,7 @@ Three defects, all box-side, all proven here against a real Caddy over the SHIPP
   * `redir /index.html / 301` dropped the query, so about.html's /index.html?tour=1 - the only
     documented entry point to the guided tour outside the intro panel - never started the tour.
 
-The two listeners carry near-duplicate copies of the reader directives by design (the C47 bridge
+The two listeners carry near-duplicate copies of the reader directives by design (the bridge
 pin enforces the no-drift rule), so every source pin below runs against BOTH, and the two
 renditions of the new block are compared to each other directly.
 """
@@ -95,7 +95,7 @@ def test_both_listeners_preserve_the_query_on_the_index_html_redirect():
 
 
 def test_the_two_listeners_do_not_drift_on_the_new_directives():
-    """The C47 no-drift rule applied to this lane's own edit: the reader directives are a
+    """The no-drift rule applied to this module's own edit: the reader directives are a
     deliberate near-duplicate across the two listeners, so a fix applied to one and not the other
     would leave the public path (via :8081) behaving differently from the tailnet one. FAILS IF the
     two renditions of the canonicalisation block differ by so much as a byte."""

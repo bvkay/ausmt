@@ -1,7 +1,7 @@
 """contract/brand.json is the ONE source of truth for the AusMT mark, and the tool is the only author.
 
 The brief asks for a canonical dot-grid Australia used at every size and on both backgrounds, in one
-declared palette. The failure mode that ruling exists to prevent is the ordinary one: a second geometry
+declared palette. The failure mode that rule exists to prevent is the ordinary one: a second geometry
 appears for the favicon, a third for the app icon, someone nudges a hex in an SVG, and six months later
 no two AusMT marks are the same shape. So the geometry, the palette and the colour mapping are computed
 ONCE by portal/tools/gen_brand.py, written to contract/brand.json, and every export is a rendering of
@@ -14,14 +14,14 @@ that file. These pins hold that arrangement:
     rasterised, not the first two: the coastline carries islands as well as the mainland and
     Tasmania, and a ring this pin skipped would be land the mark could omit without failing.
   * Tasmania survives the rasterisation. It is three dots at this pitch, close enough to the count a
-    coarser lattice would round away, and an Australia without Tasmania is a defect the owner would
+    coarser lattice would round away, and an Australia without Tasmania is a defect a reader would
     see before anyone else.
   * the palette is FOUR declared hex stops with their derivation recorded, and every dot colour is the
     ramp evaluated at that dot's own column. No dot may carry a colour off the ramp.
   * the radius is a declared function of output size (the favicon sheet's size-adaptive rule), stated
     as ordered bands, so the 16 px render can be fuller than the presentation render without a second
     geometry existing anywhere.
-  * the typography block records the ruling itself: the web/SVG wordmark renders in the site's system
+  * the typography block records the rule itself: the web/SVG wordmark renders in the site's system
     UI stack, and the bundled face is a DETERMINISTIC RASTER SUBSTITUTE, never the AusMT typeface.
   * the bundled face ships its OFL text and a provenance note whose recorded digests are CHECKED
     against the bytes beside them, so the note's own replacement procedure enforces itself.
@@ -148,7 +148,7 @@ def test_the_dot_radius_is_a_declared_function_of_output_size():
 
 def test_the_typography_block_states_the_ruling_not_just_the_font():
     """FAILS IF brand.json stops recording that the web/SVG wordmark is the SITE's system UI stack and
-    that the bundled face is only a deterministic raster substitute. The ruling is binding on how the
+    that the bundled face is only a deterministic raster substitute. The rule is binding on how the
     brand is described, so the machine-readable truth has to carry it, not just a comment in a tool."""
     typo = _doc()["typography"]
     assert typo["web_font_stack"] == "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif", \

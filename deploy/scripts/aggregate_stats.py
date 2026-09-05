@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""C45 usage-analytics aggregator (record D4/D5 — the C45-impl lane).
+"""Usage-analytics aggregator.
 
 A host-side, STDLIB-ONLY daily job (deploy/systemd/ausmt-stats.timer fires it) that folds the Caddy
 access log into a cumulative `stats.json` the workbench Analytics screen reads. It is the same
@@ -22,7 +22,7 @@ WHAT IT DOES, once a day:
     downloads is reported, because curl/wget/python-requests are the clients the published API examples
     hand people. The UA is read transiently and never stored;
   * counts portal VISITS as `/data/catalogue.json` fetches (one per SPA boot — the only
-    server-observable visit proxy, record D3);
+    server-observable visit proxy);
   * counts API-CONSUMER requests as fetches of the four DOCUMENTED machine-readable entry points the
     portal SPA never fetches for itself (`/data/products/manifest.json`, `/data/mtcat.json`,
     `/data/mtcat.schema.json`, `/data/stations.geojson`). This is a PATH-CLASS signal only: nothing new
@@ -40,7 +40,7 @@ WHAT IT DOES, once a day:
     or otherwise, is ever retained. Days folded before this existed carry no `networks` key at all
     (absent, not zero) and the screen renders them as unavailable;
   * resolves each request's MASKED client address (IPv4 /24, IPv6 /48 — already truncated at the
-    edge by Caddy, record D2) to a country via the db-ip "IP to Country Lite" CSV using a stdlib
+    edge by Caddy) to a country via the db-ip "IP to Country Lite" CSV using a stdlib
     bisect. A missing/unreadable CSV degrades every lookup to `unknown` — it never crashes;
   * for a request that resolves to AUSTRALIA, and ONLY when the compact AU state table is present,
     takes a second-level lookup to a STATE/TERRITORY code and counts it beneath the AU country row.
@@ -68,7 +68,7 @@ RETENTION (aggregates only -- the RAW log keeps its own untouched ~7-day Caddy r
     It is the answer to "the aggregates are all we keep, so keep enough of them": pure counts at day
     grain, with NO geography at any grain finer than the month. See the archive section below.
 
-WHAT IT NEVER WRITES (record D2/D6, the leak pin enforces it): an address (masked or not) and a
+WHAT IT NEVER WRITES (the leak pin enforces it): an address (masked or not) and a
 user-agent string never reach stats.json. Only aggregates leave the pipeline — counts + dailies.
 
 Config (env; every path derives from AUSMT_DATA_DIR, each overridable for tests):
@@ -102,7 +102,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 # The daily aggregation cadence, in minutes — stamped into stats.json as the staleness clock the
-# gateway reads (serve_state.ops_status_stale: stale past ~2 periods => ~2 days, record D4).
+# gateway reads (serve_state.ops_status_stale: stale past ~2 periods => ~2 days).
 TIMER_PERIOD_MIN = 1440
 
 # The stats.json schema version. v2 adds: per-survey volume, per-dataset volume, the station-file vs
@@ -124,11 +124,11 @@ SCHEMA_VERSION = 2
 DEFAULT_DAILY_KEEP_DAYS = 92
 
 # The served download families (path prefixes under /data/) and the visit proxy. `h5` was excluded here
-# for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer (record D1).
-# The engine produces per-station MTH5 files there since the tier-1 lane (owner ruling 2026-08-02), so
-# the exclusion had to go with it. It is worth naming why the interlock matters: an excluded family
+# for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer.
+# The engine produces per-station MTH5 files there now, so the exclusion had to go. It is worth
+# naming why the interlock matters: an excluded family
 # classifies as `ignore`, and an ignored path is absent from `unattributed` as well, so every
-# station-h5 download would have vanished from the analytics rather than surfacing as build/serve skew.
+# station-h5 download would vanish from the analytics rather than surfacing as build/serve skew.
 # Silent absence, not undercounting. Pinned in deploy/tests/test_aggregate_stats.py.
 _DOWNLOAD_FAMILIES = ("edi", "xml", "h5", "bundles")
 _DATA_PREFIX = "/data/"
@@ -136,8 +136,8 @@ _VISIT_PATH = "/data/catalogue.json"
 
 # The RELEASE tier. A cut release freezes the citable copy of each bundle under
 # /data/releases/<tag>/bundles/<file>, and that frozen copy is the one a paper's DOI resolves to. It
-# used to classify as `ignore`, so the archival download produced no analytics at all while its
-# mutable twin under /data/bundles/ was counted: exactly the wrong way round for a custodian report.
+# must NOT classify as `ignore`, or the archival download produces no analytics at all while its
+# mutable twin under /data/bundles/ is counted: exactly the wrong way round for a custodian report.
 # It is a download here, attributed by bundle FILENAME against the live manifest (see
 # _release_bundle_row). The small release metadata documents (releases.json, release.json,
 # datacite.json, mtcat.json under /data/releases/) stay UNCOUNTED for now: they are discovery reads
@@ -146,7 +146,7 @@ _VISIT_PATH = "/data/catalogue.json"
 _RELEASE_FAMILY = "releases"
 _RELEASE_BUNDLE_SEGMENT = "bundles"
 
-# The TIME-SERIES HAND-OFF namespace (THREDDS lane, owner ruling R3/R5, namespace record D12).
+# The TIME-SERIES HAND-OFF namespace.
 # /go/ts/<survey>/<station>/<level> is a front-door TERMINAL route: it answers 302 with the one NCI
 # THREDDS fileServer URL for that file and never reaches this box, so the only trace it leaves is the
 # front door's own masked log line, which is what this fold reads. Exactly three segments below the
@@ -162,7 +162,7 @@ _HANDOFF_STATUS = 302
 # deploy/tests holds the two together, exactly as one holds the bulk flag to the portal's own token).
 # It is what by_destination is keyed on: the host of the access_url the build emits for a row. That
 # host's cardinality is 1 today, thredds.nci.org.au being the canonical route, which is precisely when
-# a missing breakdown is cheap to add and expensive to add retroactively (record D16).
+# a missing breakdown is cheap to add and expensive to add retroactively.
 _TS_ACCESS_PREFIX = "https://thredds.nci.org.au/thredds/fileServer/"
 
 # The licence sidecar build_portal writes beside every survey MTH5 (bundles/<slug>-tf.LICENSE.txt).
@@ -183,7 +183,7 @@ _LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
 # What is left is the documents About points a programmatic reader at. mtcat.schema.json is the `$id`
 # the MTCAT document declares (engine/schema/mtcat.schema.json), so every validator and every harvester
 # that resolves the schema fetches it: the cleanest machine-consumer signal the corpus has, and the one
-# that was counted nowhere. stations.geojson (owner ruling 2026-08-02) is the corpus as a vector layer:
+# that was counted nowhere. stations.geojson is the corpus as a vector layer:
 # a GIS user adds it as a layer straight from the URL and the SPA never fetches it, so it belongs on
 # this line for the same reason -- and without it every QGIS reader of the corpus would count nowhere,
 # because a `.geojson` at the data root is in no download family and would fall through to `ignore`.
@@ -211,7 +211,7 @@ _API_MIRROR_PREFIX = _DATA_PREFIX + "products/"
 _API_MIRROR_PATHS = tuple(_API_MIRROR_PREFIX + p[len(_DATA_PREFIX):] for p in _API_PATHS
                           if not p.startswith(_API_MIRROR_PREFIX))
 
-# The BULK-EXPORT LABEL (owner ruling 2026-08-01). The portal's THREE selection exports over a map
+# The BULK-EXPORT LABEL. The portal's THREE selection exports over a map
 # selection (portal/src/exports.js SEL_ZIP_BUTTONS: the EDI, EMTF XML and MTH5 zips) each mark every file
 # fetch they issue with this exact query token. It is the ONE thing in this pipeline the portal
 # deliberately puts INTO the log; everything else here is read from what the server was already writing.
@@ -235,7 +235,7 @@ _SELECT_BULK_FLAG = "sel=bulk"
 _SELECT_SINGLE = "single"
 _SELECT_BULK = "bulk"
 
-# CLIENT CLASSES (record D2: "user-agent for bot filtering only" -- read transiently, NEVER stored).
+# CLIENT CLASSES ("user-agent for bot filtering only" -- read transiently, NEVER stored).
 # The old binary was bot-or-human, which put curl, wget and python-requests on the bot side. Those are
 # the exact clients the public API documentation hands people, so scripted scientific use was invisible
 # and the API-requests figure degenerated toward a footer-click counter. Three classes now:
@@ -284,7 +284,7 @@ def _run_datetime() -> dt.datetime:
 
 
 # --------------------------------------------------------------------------------------------------
-# Geo lookup: a stdlib bisect over a flat `start,end,VALUE` range CSV (record D2: no maxminddb, no
+# Geo lookup: a stdlib bisect over a flat `start,end,VALUE` range CSV (no maxminddb, no
 # geoipupdate, no MaxMind EULA custody). Two tables ride this one shape:
 #   * GeoIP     - the db-ip "IP to Country Lite" CSV (start,end,CC), covering the whole internet;
 #   * AuStates  - the compact AU-only state table deploy/scripts/prep_au_states.py distils from the
@@ -296,7 +296,7 @@ def _run_datetime() -> dt.datetime:
 class _RangeTable:
     """A sorted per-IP-version range table over a `start,end,VALUE` CSV. Construct via `load(path)`; an
     absent, unreadable, empty or malformed CSV yields an EMPTY table whose every lookup misses; the
-    aggregator still completes (record D6 country pin). Ranges are stored per IP-version as parallel
+    aggregator still completes (country pin). Ranges are stored per IP-version as parallel
     sorted lists (starts[] for the bisect, plus (start,end,value) records) so a lookup is one bisect +
     one bounds check. Comment rows (a leading '#') and short rows are skipped."""
 
@@ -394,7 +394,7 @@ class AuStates(_RangeTable):
     """AU STATE lookup for a (masked) address, over the compact table deploy/scripts/prep_au_states.py
     distils from the db-ip "IP to City Lite" CSV.
 
-    WHY STATE, AND WHY NOT CITY -- a ratified design decision, recorded here so it is not casually
+    WHY STATE, AND WHY NOT CITY -- a design decision, recorded here so it is not casually
     "improved" into a city breakdown later:
       * the address resolved here was ALREADY TRUNCATED at the edge (IPv4 /24, IPv6 /48). A /24 prefix
         does not place a request in a city reliably -- mobile carrier and CGNAT pools routinely serve a
@@ -418,7 +418,7 @@ class AuStates(_RangeTable):
 
 
 # --------------------------------------------------------------------------------------------------
-# Manifest reverse map: the download-URL -> dataset resolver (record D1 — manifest.json is the
+# Manifest reverse map: the download-URL -> dataset resolver (manifest.json is the
 # authoritative reverse map). Keys are the manifest's portal-relative urls (e.g. 'edi/slug/A1.edi');
 # tier=nci rows carry ABSOLUTE urls that never match a /data path, so they self-exclude harmlessly.
 # --------------------------------------------------------------------------------------------------
@@ -680,7 +680,7 @@ def _handoff_row(ts_access: dict, rel: str) -> dict | None:
     direction that would be ambiguous.
 
     A no-match is DRIFT, not a crash: the table lives on the front door and the data on the box, so a
-    302 can arrive for a route the served index no longer publishes. It is counted in the hand-off
+    302 can arrive for a route the served index does not publish. It is counted in the hand-off
     family's own unattributed bucket, exactly as an unknown download path is counted in that family's,
     and never dropped."""
     if not isinstance(ts_access, dict):
@@ -750,7 +750,7 @@ def _empty_handoffs(*, geo: bool = False) -> dict:
 
     `geo` adds the by-country map, and it is added at the CUMULATIVE and CALENDAR-MONTH grains ONLY.
     That is the one line that must not move (see _count_geo): a named country on a named day is a
-    smaller cell than the named-state-in-a-named-month the owner already ruled out, so no day row and
+    smaller cell than the named-state-in-a-named-month the small-cell rule excludes, so no day row and
     no archive line carries one."""
     out = {"requests": 0, "bytes": 0, "unattributed": 0,
            "by_survey": {}, "by_level": {}, "by_destination": {}}
@@ -809,10 +809,10 @@ def _empty_month(month: str) -> dict:
     only), so the screen can say which months carry partial detail instead of implying a real zero;
     `geo_days` counts the days that actually contributed a country, which is what makes the forward-only
     country seam MACHINE-visible rather than a matter of reading the prose beside the table;
-    `networks_peak` is the largest distinct-network count any of its folded days saw. That figure used
-    to live on daily rows ONLY, so it expired with the 92-day window and could never reach a quarterly
-    report, which is exactly the horizon a funding report asks about. It accumulates as each day folds
-    and is never recomputed from a tail that is about to be pruned.
+    `networks_peak` is the largest distinct-network count any of its folded days saw. That figure on
+    daily rows alone expires with the 92-day window and can never reach a quarterly report, which is
+    exactly the horizon a funding report asks about. It accumulates as each day folds and is never
+    recomputed from a tail that is about to be pruned.
 
     `detail_days` counts the days folded with THIS fold's dimensions in place, and it exists because
     there are TWO forward-only seams in this file rather than one. `seeded_days` marks the first
@@ -839,7 +839,7 @@ def _as_int(v, default: int = 0) -> int:
 
 
 def _next_day(date_str) -> str | None:
-    """The ISO day after `date_str`, or None if it is not an ISO date. Used to stamp `detail_since` when
+    """The ISO day after `date_str`, or None if it is not an ISO date. It stamps `detail_since` when
     a v1 file is upgraded: the richer dimensions begin the day AFTER that file's fold watermark."""
     if not isinstance(date_str, str):
         return None
@@ -1080,7 +1080,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     Only dates d with last_folded_date < d < run_dt.date() are folded (a strictly-earlier complete
     day), so the CURRENT (partial) day is never counted and re-runs never double-count. `run_dt.date()`
     becomes the new last_folded_date, so a day rotated away before it could be folded is simply skipped
-    (record D4: losing a raw log loses nothing already folded, and nothing not-yet-folded is re-read).
+    (losing a raw log loses nothing already folded, and nothing not-yet-folded is re-read).
 
     Each counted request lands in THREE places at once: the cumulative totals, its day row, and its
     calendar-month rollup. Accumulating the month AS THE DAY FOLDS (rather than summing the daily tail
@@ -1218,13 +1218,13 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             day["api_requests"] = _as_int(day.get("api_requests")) + 1
             month["api_requests"] += 1
             arc["api"] += 1
-            # The API line used to be the one counted class with no geography, so any reach claim built
-            # from the country table silently excluded programmatic consumers.
+            # The API line is a counted class WITH geography: leaving it out makes any reach claim
+            # built from the country table silently exclude programmatic consumers.
             _count_geo(geoip, au_states, rec["address"], countries, by_country_detail, by_state,
                        by_state_detail, month, metric="api")
             geo_days_seen[date] = date[:7]
         elif kind == "handoff":
-            # THE HAND-OFF, and the join is the whole of it (record D4). The log line says WHICH route
+            # THE HAND-OFF, and the join is the whole of it. The log line says WHICH route
             # was asked for and nothing else that matters: its `size` is the redirect body and the
             # Location it sent is not logged at all. So the size and the destination host come from the
             # served, register-derived index, and a route that index does not publish is drift -- one
@@ -1361,7 +1361,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 geo_days_seen[date] = date[:7]
 
     # Distinct-network counts for the days folded in THIS run. Only the SIZE of each set is written --
-    # the masked addresses themselves never leave memory (record D2/D6). The month keeps the PEAK of
+    # the masked addresses themselves never leave memory. The month keeps the PEAK of
     # those counts, so the reach proxy survives the pruning of the daily rows it was derived from.
     for date, nets in networks_seen.items():
         row = daily_index.get(date)
@@ -1632,8 +1632,8 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 
 
 # --------------------------------------------------------------------------------------------------
-# The APPEND-ONLY DAILY ARCHIVE (owner ruling 2026-07-30: capture maximal non-geo granularity at day
-# grain now, so a report nobody has asked for yet can still be derived later).
+# The APPEND-ONLY DAILY ARCHIVE: capture maximal non-geo granularity at day
+# grain now, so a report nobody has asked for yet can still be derived later.
 #
 # WHY IT EXISTS. The raw log rotates in about a week and the daily rows in stats.json roll off after 92
 # days, so today the only permanent record is the calendar-month rollup. Every question finer than a
@@ -1645,10 +1645,10 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 # not rewritten: a day is appended once, when it folds, and the fold watermark guarantees that happens
 # exactly once. Nothing here is ever backfilled.
 #
-# THE GEO BOUNDARY, which is the one line that must not move. The owner's ratified exclusion of
+# THE GEO BOUNDARY, which is the one line that must not move. The exclusion of
 # day-by-state data generalises: NO country and NO state below month grain, rendered OR archived. A
 # named country on a named day is a smaller cell than a named state on a named month, and the
-# small-cell argument that ruled out a city column rules it out too. So these rows carry counts,
+# small-cell argument that excludes a city column excludes it too. So these rows carry counts,
 # volumes, formats, kinds, client classes, surveys, datasets and collections, and no geography at all.
 # The leak sweep is extended over the archive for the same reason it covers stats.json.
 # --------------------------------------------------------------------------------------------------
@@ -1732,11 +1732,11 @@ def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
     The two globs are DISJOINT by construction (`access*.json` cannot match a name ending `.json.gz`),
     so no archive is read twice.
 
-    Tolerant, as the whole file is (record D6 retention pin): a missing dir, an unreadable file, or a
+    Tolerant, as the whole file is (retention pin): a missing dir, an unreadable file, or a
     truncated/non-gzip archive contributes no lines from THAT file and never raises.
 
-    TOLERANT IS NOT SILENT, and the difference cost real days. On 2026-07-30 the box's own access.json
-    was root:root 0600, every open raised, and this function swallowed it: the fold ran for days on the
+    TOLERANT IS NOT SILENT, and the difference cost real days. The box's own access.json was
+    root:root 0600, every open raised, and this function swallowed it: the fold ran for days on the
     shipped front-door file alone and produced a plausible, complete-looking stats.json the whole time.
     A file that the glob MATCHED but that could not be OPENED is an operational fault, so it is named
     on stderr and recorded in `skipped` (an optional list the caller passes to get the count into the

@@ -1,4 +1,4 @@
-"""Config-driven plain-text mail sender for the self-serve key path (K3). stdlib smtplib ONLY — no
+"""Config-driven plain-text mail sender for the self-serve key path. stdlib smtplib ONLY - no
 new dependency, no third-party mail client. The gateway house style is stdlib-lean and fail-closed;
 this module keeps that: a send is best-effort, every failure is logged WITHOUT the key, and the
 caller (the request-key endpoint) still returns the neutral 202 whatever happens here.
@@ -23,7 +23,7 @@ from email.utils import formatdate, make_msgid
 
 logger = logging.getLogger("ausmt.gateway.mailer")
 
-# Syntactic email check (K1). Deliberately conservative and stdlib-only: one @, no whitespace, a dot
+# Syntactic email check. Deliberately conservative and stdlib-only: one @, no whitespace, a dot
 # in the domain. This is a FORMAT gate, not a deliverability or existence check (the endpoint never
 # reveals whether an address exists — that is the whole anti-enumeration point). It only needs to
 # reject obvious junk before an address reaches the rate-limit store and the mailer.
@@ -40,7 +40,7 @@ def is_syntactic_email(email: str) -> bool:
 
 
 def _build_message(cfg, *, to_email: str, key: str, expires_utc: str, allowance: int) -> EmailMessage:
-    """The plain-text issued-key email (K3): what the key is, its expiry and allowance, the submit
+    """The plain-text issued-key email: what the key is, its expiry and allowance, the submit
     page link, a one-line what-happens-next, and Reply-To set to the From address. No em dashes in any
     user-facing string (house rule). Kept as a pure builder so a test can assert the body without a
     live SMTP server."""

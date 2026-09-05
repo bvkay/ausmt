@@ -7,7 +7,7 @@
 -r requirements.txt
 
 pytest==8.2.0
-pytest-xdist==3.8.0   # parallel test runs: both CI engine lanes run `pytest -n 4` (4-vCPU runners).
+pytest-xdist==3.8.0   # parallel test runs: both CI engine workflows run `pytest -n 4` (4-vCPU runners).
                       # Installed -c the lock everywhere it matters (engine.Dockerfile, build-products.yml),
                       # so its one dependency (execnet) can never move the science stack.
 jsonschema>=4    # mtcat.schema.json validation in tests

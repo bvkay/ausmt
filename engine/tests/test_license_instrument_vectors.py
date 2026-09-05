@@ -1,4 +1,4 @@
-"""C46-W2: pin _license_text.license_instrument_text against the shared vector file that the JS mirror
+"""Pin _license_text.license_instrument_text against the shared vector file that the JS mirror
 (portal/src/exports.js licenseInstrumentText) also consumes, so the two implementations of the licence
 INSTRUMENT text cannot drift. Each vector's `expected` is this leaf's own output (the single-source
 oracle); portal/tests/license_text_vectors.test.js asserts the JS mirror reproduces the SAME bytes.
@@ -40,7 +40,7 @@ def test_instrument_matches_shared_vectors():
 
 
 def test_vectors_cover_the_new_rendering_classes():
-    # Non-vacuity guard: the file must exercise the classes the C46 additions exist FOR. FAILS if any is
+    # Non-vacuity guard: the file must exercise the classes the additions exist FOR. FAILS if any is
     # missing — a file of only none/attribution vectors would be a hollow oracle.
     kinds = " ".join(v["kind"] for v in _load()["vectors"])
     for needed in ("none", "generic", "ga_derivative", "ga_attribution", "supersession", "changes",
@@ -50,7 +50,7 @@ def test_vectors_cover_the_new_rendering_classes():
 
 def test_expected_strings_carry_the_distinctive_wording():
     # Non-vacuity of the EXPECTED strings themselves (independent of the render): the ga-derivative
-    # vector must literally carry GA's derivative wording + supersession + the §3(a) clause; the
+    # vector must literally carry GA's derivative wording + supersession + the CC-BY §3(a) clause; the
     # ga-attribution (no-changes) vector must carry the © line and NO changes clause. So a vector file
     # of trivial cases can't masquerade as coverage.
     by = {v["name"]: v["expected"] for v in _load()["vectors"]}
@@ -64,7 +64,7 @@ def test_expected_strings_carry_the_distinctive_wording():
     # asserted by the byte-for-byte vector match on both mirrors. Year is the retrieved year (2016).
     assert "Commonwealth of Australia (Geoscience Australia) 2016" in att
     assert "AusMT serves derived renditions" not in att
-    # C46-W3a: the GA profile's s.5 DISCLAIMER renders as the final Source-datasets paragraph — even in
+    # The GA profile's s.5 DISCLAIMER renders as the final Source-datasets paragraph - even in
     # the no-changes vector, and even when a source supplies a verbatim statement; a generic-only source
     # never carries it. This is the mutation target for the disclaimer render (flip a word and it reds).
     assert "Geoscience Australia has not evaluated the data" in att
@@ -77,6 +77,6 @@ def test_expected_strings_carry_the_distinctive_wording():
 
 def test_none_path_vector_is_byte_stable():
     # The frozen-pin spine: the none-of-the-new vector equals a fresh None-path render (no sources, no
-    # changes) — i.e. the pre-C46 instrument bytes. FAILS if the None-path ever shifts.
+    # changes) - i.e. the instrument bytes as they stood before those additions. FAILS if the None-path ever shifts.
     v = next(x for x in _load()["vectors"] if x["kind"] == "none")
     assert v["expected"] == lt.license_instrument_text(v["lic"], v["licensor"], v["year"])

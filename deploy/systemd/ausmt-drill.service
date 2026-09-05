@@ -4,7 +4,7 @@
 # dashboard's "drill" field. It NEVER touches the live DB (the drill works on a mktemp copy that is
 # removed on exit).
 #
-# WHY THIS UNIT EXISTS (section-5 review, 2026-08-26): a backup that has never been restored is a
+# WHY THIS UNIT EXISTS: a backup that has never been restored is a
 # hypothesis, not a backup. The drill script has always existed and always worked, but nothing ran it
 # and nothing recorded its answer, so "restorable" was permanently unproven while "backup present and
 # fresh" showed green. Presence is not restorability, and only this unit closes that gap.

@@ -1,13 +1,13 @@
-"""MTCAT 2.0 invariant suite: the ratified fixture checks, ported into the engine tests.
+"""MTCAT 2.0 invariant suite: the fixture checks, ported into the engine tests.
 
 PERMANENT TEST STAGE (final pre-freeze review section 39): this suite runs on every later emitter
 change, forever - a future feature can never silently break identity, migration, ordering or the
 zero-null/zero-empty posture. Sources:
 
-  * AusMT_2026/schemas-draft/run-fixture-suite.py - the ratified executable fixture suite. Its
+  * AusMT_2026/schemas-draft/run-fixture-suite.py - the executable fixture suite, whose
     migrate_12_to_20() IS the 1.2 -> 2.0 emitter-change specification and is carried here
-    VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example (T3/T4) and a
-    corpus-shaped 1.2 migration input (T2a/T2b).
+    VERBATIM; the committed fixtures (tests/fixtures/mtcat20/) are the spec example and a
+    corpus-shaped 1.2 migration input.
   * the schema-level accept/reject checks live in test_mtcat_schema_v20.py; the emitter-behaviour
     checks live in test_mtcat20_emission.py. THIS module owns the migration transform, the
     reference invariant implementations (counts, ordering, rollups, coordinate-state consistency),
@@ -26,8 +26,8 @@ Three layers:
      migrate_12_to_20(baseline) must equal the built document after stripping the new-in-2.0 keys
      (surveys[].description/subjects/sample_rates_hz/coordinates_state, plus the THREDDS projection
      pair stations[].has_time_series / surveys[].n_stations_time_series_verified) and
-     portal.{version,generated_at}. No CI lane has a corpus, so these skip there (allow-listed in
-     ci_check_skips.py); they are the lane's full-corpus proof harness and stay runnable forever.
+     portal.{version,generated_at}. No CI workflow has a corpus, so these skip there (allow-listed in
+     ci_check_skips.py); they are the module's full-corpus proof harness and stay runnable forever.
 """
 import copy
 import json
@@ -63,7 +63,7 @@ def _validator():
     return jsonschema.Draft7Validator(SCHEMA, format_checker=fc)
 
 
-# ---------------------------------------------------------------- the ratified transform (verbatim)
+# ---------------------------------------------------------------- the transform (verbatim)
 
 def migrate_12_to_20(doc):
     """The 1.2 -> 2.0 migration transform; doubles as the emitter-change spec.
@@ -82,7 +82,7 @@ def migrate_12_to_20(doc):
     for sv in out.get('surveys', []):
         for row in sv.pop('sources', None) or []:
             # sources rows MAP to relationship rows (spec 6.9); statement/licence/retrieved
-            # detail moves to survey-metadata - the lane must capture it, so its presence
+            # detail moves to survey-metadata - the workflow must capture it, so its presence
             # here is a hard stop, not a silent deletion. Live corpus: zero occurrences.
             if any(row.get(k) for k in ('statement', 'licence', 'retrieved', 'profile')):
                 raise NotImplementedError(
@@ -111,7 +111,7 @@ def migrate_12_to_20(doc):
 # ---------------------------------------------------------------- reference invariant implementations
 
 def count_invariant(survey, stations):
-    """T35: n_stations_time_series_verified equals the count of has_time_series true rows."""
+    """n_stations_time_series_verified equals the count of has_time_series true rows."""
     n = survey.get('n_stations_time_series_verified')
     if n is None:
         return True
@@ -146,7 +146,7 @@ def projection_shape_ok(doc):
 
 
 def ordering_ok(sv):
-    """T36: period and year bounds are ordered wherever both exist."""
+    """Period and year bounds are ordered wherever both exist."""
     a, b = sv.get('period_min_s'), sv.get('period_max_s')
     if a is not None and b is not None and a > b:
         return False
@@ -157,7 +157,7 @@ def ordering_ok(sv):
 
 
 def collection_rollups_ok(doc):
-    """T37: every collection's counts equal its members' facts."""
+    """Every collection's counts equal its members' facts."""
     for c in doc.get('collections', []):
         members = [sv for sv in doc['surveys'] if sv.get('collection_id') == c['collection_id']]
         if c.get('n_surveys') is not None and c['n_surveys'] != len(members):
@@ -169,7 +169,7 @@ def collection_rollups_ok(doc):
 
 
 def coord_state_consistent(survey, stations):
-    """T38a: a withheld coordinates_state means every station position is unpublished."""
+    """A withheld coordinates_state means every station position is unpublished."""
     st_rows = [x for x in stations if x.get('survey_id') == survey['survey_id']]
     if survey.get('coordinates_state') == 'withheld':
         return all(x.get('latitude') is None and x.get('longitude') is None for x in st_rows)
@@ -270,7 +270,7 @@ def _document_invariants(doc):
 # ---------------------------------------------------------------- layer 1: fixtures
 
 def test_spec_example_validates_and_holds_its_invariants():
-    """T3 + T4: the interchange spec's worked example validates against the ratified schema and
+    """The interchange spec's worked example validates against the schema and
     passes every reference invariant (in-bbox stations, represented bands, ordered periods,
     unique sorted rates, reconciling counts)."""
     errs = list(_validator().iter_errors(SPEC_DOC))
@@ -279,7 +279,7 @@ def test_spec_example_validates_and_holds_its_invariants():
 
 
 def test_migration_input_is_really_a_break_and_migrates_clean():
-    """T2a + T2b: the corpus-shaped 1.2 fixture does NOT validate raw against the 2.0 schema (the
+    """The corpus-shaped 1.2 fixture does NOT validate raw against the 2.0 schema (the
     break is real: nulls-as-undeclared, empty formats, legacy blocks), and migrate_12_to_20 over
     it DOES validate, with zero nulls (outside the defined pair), zero empties, and every
     reference invariant holding."""
@@ -317,11 +317,11 @@ def test_migration_hard_stops_on_rights_content_in_a_sources_row():
 
 
 def test_reference_checks_actually_detect_violations():
-    """Guard on the guards (the ratified suite's Txxb pattern): each reference implementation must
+    """Guard on the guards (the suite's Txxb pattern): each reference implementation must
     CATCH a planted violation, or a green scan proves nothing."""
     assert not count_invariant({"survey_id": "s", "n_stations_time_series_verified": 7,
                                 "n_stations": 9}, SPEC_DOC["stations"])
-    assert not projection_shape_ok(SPEC_DOC), "the ratified example satisfies the projection shape"
+    assert not projection_shape_ok(SPEC_DOC), "the spec example satisfies the projection shape"
     false_flag = copy.deepcopy(SPEC_DOC)
     false_flag["stations"][0]["has_time_series"] = False
     assert any("not the literal true" in v for v in projection_shape_ok(false_flag))
@@ -427,7 +427,7 @@ def _strip_new_keys(doc):
     migrated 1.2 document exactly. The THREDDS projection pair is new-in-2.0 too and, unlike the rest
     of this list, is now genuinely EMITTED - migrate_12_to_20 only deletes and moves, so a 1.2
     baseline can never carry it, and leaving it in would read every projected station as a residual
-    diff. Those are the framing invariant's TWO ratified exceptions and this is where they are
+    diff. Those are the framing invariant's TWO exceptions and this is where they are
     normalised away; their SHAPE is pinned by projection_shape_ok, not waived."""
     out = copy.deepcopy(doc)
     for sv in out.get("surveys", []):
@@ -453,7 +453,7 @@ def test_corpus_build_validates_and_scans_clean():
     # THE PROJECTION AT CORPUS SCALE. Its shape is a reference invariant above, so what is left for
     # a built TREE to witness is the one thing a document alone cannot: a station the build ROUTED
     # carries the flag. The containment is deliberately ONE-directional - a withheld, embargoed or
-    # pending station keeps its flag while serving no route (R13, CONTRACT:126-132), so the reverse
+    # pending station keeps its flag while serving no route (CONTRACT:126-132), so the reverse
     # would be false by design. ts_access.json is emitted only when non-empty, and a corpus whose
     # register is all withheld or all pending flags stations while publishing none, so its absence
     # is a legitimate state rather than a missing artifact.
@@ -471,7 +471,7 @@ def test_corpus_emitter_equivalence_dict_test():
     """THE framing proof: migrate_12_to_20(previous-build mtcat.json) equals the new build's
     document after stripping the new-in-2.0 keys and portal.{version,generated_at}. Dict
     equality, not eyeballing; any residual diff is a finding. With the THREDDS projection live the
-    normaliser carries its TWO ratified exceptions, which is what makes the framing invariant
+    normaliser carries its TWO exceptions, which is what makes the framing invariant
     measurable on a register-carrying corpus instead of only on a registerless one."""
     baseline = json.loads(Path(CORPUS_BASELINE).read_text(encoding="utf-8"))
     new_doc = json.loads((Path(CORPUS_DATA) / "mtcat.json").read_text(encoding="utf-8"))

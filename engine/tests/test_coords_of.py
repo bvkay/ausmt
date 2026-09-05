@@ -1,4 +1,4 @@
-"""coords_of() — the light coordinate read for AusLAMP state-bucketing / QC, built from only the
+"""coords_of() - the light coordinate read for AusLAMP state-bucketing / QC, built from only the
 KEPT coord helpers (read_norm/grab/parse_angle/info_coords). Dependency-free; runs in the core suite.
 
 Also covers the Phoenix DATAID / processing-note helpers (parse_dataid, proc_note) that the
@@ -41,7 +41,7 @@ def test_proc_note_extracts_remote_and_cleans():
 
 
 def test_proc_note_redacts_email():
-    # C3 (PII scrub): a real operator email in the raw >INFO free text (this has happened in
+    # A real operator email in the raw >INFO free text (this has happened in
     # committed sample data, e.g. a curator's institutional address) must never survive into the
     # returned note, which build_portal writes verbatim into the PUBLIC station.json
     # processing.note (not licence-gated). Conservative regex; only the email token is replaced,

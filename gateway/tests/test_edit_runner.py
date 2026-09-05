@@ -1,10 +1,10 @@
-"""C31 runner-side edit tests (design §3.1/§3.2 + adversarial-review fixes). These exercise
+"""Runner-side edit tests. These exercise
 gateway.runner.edit DIRECTLY — the same in-suite-reaches-the-runner pattern as test_runner.py.
 ruamel.yaml is a runner (engine-image) dependency; these tests run wherever ruamel is installed
-(the ausmt env locally; the engine lock in CI's full lane).
+(the ausmt env locally; the engine lock in CI's full workflow).
 
 Load-bearing tests here:
-  - the §3.1 round-trip fidelity proof (comments + unknown key byte-identical across an edit);
+  - the round-trip fidelity proof (comments + unknown key byte-identical across an edit);
   - review FIX 3, the parser differential (patched "on"/"no"/"12:34:56" must re-read as STRINGS
     under PyYAML safe_load — the reader the validator and build_portal use);
   - review FIX 2, scratch containment (nothing the merge does may touch the surveys tree);
@@ -27,7 +27,7 @@ from gateway.runner.runner import RunnerConfig
 # quirks that no YAML round-tripper preserves (manual intra-flow-map column alignment, and a
 # pre-existing unquoted `LEMI (LC ISR, Lviv)` flow value whose internal comma any conformant parser —
 # ruamel AND the PyYAML the validator uses — splits into a spurious key). See the residual note in
-# edit._yaml() and the C31 report.
+# edit._yaml() and the report.
 EXEMPLAR = """\
 schema_version: "0.2"
 slug: demo-survey-2026
@@ -92,7 +92,7 @@ def _merge(cfg: RunnerConfig, slug: str = "demo-survey-2026", **overrides) -> di
 
 
 # --------------------------------------------------------------------------------------------------
-# §0.2 / §3.1 round-trip fidelity
+# round-trip fidelity
 # --------------------------------------------------------------------------------------------------
 def test_noop_round_trip_is_byte_identical():
     # The floor the whole design rests on: loading and re-emitting an UNEDITED well-formed
@@ -103,10 +103,10 @@ def test_noop_round_trip_is_byte_identical():
 
 
 def test_round_trip_fidelity_edit_touches_only_field_version_notes(tmp_path):
-    # §3.1: edit ONE field (region); the emitted diff touches ONLY region + version + the appended
+    # edit ONE field (region); the emitted diff touches ONLY region + version + the appended
     # release_notes entry. The comment lines and the unknown custom key are byte-identical.
-    # proven-failing 2026-07-06 (design phase): with ruamel defaults the no-op diff already showed
-    # spurious null->empty and re-wrap changes — the tuned _yaml() config is what makes this hold.
+    # Proven-failing (design phase): with ruamel defaults the no-op diff already showed
+    # spurious null->empty and re-wrap changes - the tuned _yaml() config is what makes this hold.
     _write_package(tmp_path / "surveys-live")
     result = _merge(_cfg(tmp_path))
     assert result["ok"] is True
@@ -143,16 +143,16 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# [FC-4] C43 Stage-1 diff-minimality pins (record D13). The editor submits WHOLE sections as plain
-# JSON dicts; the pre-C43 apply_patch replaced the section's CommentedMap wholesale, so editing ONE
+# Stage-1 diff-minimality pins. The editor submits WHOLE sections as plain
+# JSON dicts; the pre-fix apply_patch replaced the section's CommentedMap wholesale, so editing ONE
 # sub-field re-emitted every sibling line and dropped intra-section comments. These pin the surgical
-# in-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter 2026-07-10 (a
-# single organisation.ror edit rewrote organisation.name and lost its trailing comment); see the C43
+# in-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter (a
+# single organisation.ror edit rewrote organisation.name and lost its trailing comment); see the
 # report's red-then-green evidence.
 # --------------------------------------------------------------------------------------------------
 
 # A survey whose sections carry INTRA-section comments — the exact fidelity the wholesale replace
-# destroyed. It deliberately carries every shape the FC-4 diff pins need to exercise:
+# destroyed. It deliberately carries every shape the diff pins need to exercise:
 #   * organisation — a map with a standalone leading comment (before `ror`), an inline trailing
 #     comment (on `name`), and a DELETABLE sub-key (`legacy_code`, removed via the advanced-JSON path);
 #   * processing — a map that carries BOTH a nested map-in-map (`software.name`/`software.version`,
@@ -191,15 +191,15 @@ custom_local_note: "keep me byte-for-byte"
 
 
 def test_single_field_edit_diff_touches_only_that_field(tmp_path):
-    """[FC-4] DIFF-MINIMALITY PIN (record D13). Change ONE sub-field of a map section
+    """DIFF-MINIMALITY PIN. Change ONE sub-field of a map section
     (organisation.ror null -> a URL) and the emitted survey.yaml diff must touch ONLY that field's
     line(s) plus the managed version/release_notes — never the untouched sibling (organisation.name)
     and never its comment. FAILS IF editing one sub-field re-emits a sibling line or strips an
-    intra-section comment (the pre-C43 wholesale-replace behaviour, proven RED 2026-07-10)."""
+    intra-section comment (the wholesale-replace behaviour, proven RED)."""
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
     # A pure single-field edit: submit the WHOLE organisation section back with only `ror` changed
     # (name + legacy_code carried through unchanged, so nothing is deleted — the add/delete case is
-    # test_editing_section_a_never_rewrites_section_b_bytes / the F3 pins below).
+    # test_editing_section_a_never_rewrites_section_b_bytes / the pins below).
     result = _merge(_cfg(tmp_path),
                     patch={"organisation": {"name": "University of Example",
                                             "ror": "https://ror.org/03yghzc09",
@@ -226,17 +226,17 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
 
 
 def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
-    """[FC-4] PER-SECTION PATCH PIN (record D13). Submitting a change to section A (organisation)
-    that BOTH adds a sub-key AND deletes a sub-key (via the advanced-JSON path — the section is
+    """PER-SECTION PATCH PIN. Submitting a change to section A (organisation)
+    that BOTH adds a sub-key AND deletes a sub-key (via the advanced-JSON path - the section is
     submitted without `legacy_code`, so _merge_map_into's deletion loop drops it) must leave section
-    B (lead_investigator) byte-for-byte identical — every one of its lines, comment included, survives
+    B (lead_investigator) byte-for-byte identical - every one of its lines, comment included, survives
     with no +/- diff line.
 
-    Review F2: the PREVIOUS form of this test submitted only a scalar change and asserted section B
-    was untouched — but the pre-C43 wholesale emitter ALSO never touched a sibling SECTION (it
+    The PREVIOUS form of this test submitted only a scalar change and asserted section B
+    was untouched - but the pre-fix wholesale emitter ALSO never touched a sibling SECTION (it
     rebuilt only the edited section's node), so that assertion passed against every implementation
     that ever existed and could not fail (Invariant 10). The add+delete here goes through the exact
-    deletion loop whose failability was PROVEN by mutation (evidence in the C43 fix-round report):
+    deletion loop whose failability was PROVEN by mutation (evidence in the fix-round report):
     pointing that loop at the ROOT document instead of the section node makes it delete top-level
     keys, which rewrites section B and reds this test. That mutation is evidence only, reverted, never
     committed. FAILS IF an add+delete in one section disturbs a sibling section's bytes."""
@@ -275,13 +275,13 @@ def _body_diff_lines(diff: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------------------------------
-# [FC-4] F3 diff pins on the REAL emitted diff. Each pins one guarantee of the surgical map merge AND
-# is failable by a NAMED mutation (temporary, evidence captured in the C43 fix-round report, reverted
+# Diff pins on the REAL emitted diff. Each pins one guarantee of the surgical map merge AND
+# is failable by a NAMED mutation (temporary, evidence captured in the fix-round report, reverted
 # — never committed): a pin nothing can fail is not a pin (Invariant 10). The mutation for each is
 # stated in its docstring so a future reader can reproduce the red.
 # --------------------------------------------------------------------------------------------------
 def test_added_subkey_with_ambiguous_value_is_quoted_no_sibling_moves(tmp_path):
-    """F3(a). Adding a sub-key whose value is FIX-3-ambiguous ('NO', a YAML-1.1 bool) must emit it
+    """Adding a sub-key whose value is one PyYAML would retype ('NO', a YAML-1.1 bool) must emit it
     DOUBLE-QUOTED (so the PyYAML readers downstream read the string 'NO', not False) AND move no
     sibling line. Failable by bypassing quote_ambiguous on the added-key branch of _merge_map_into
     (`node[subkey] = new_val` instead of `= quote_ambiguous(new_val)`): the added value then emits
@@ -313,8 +313,8 @@ def test_added_subkey_with_ambiguous_value_is_quoted_no_sibling_moves(tmp_path):
 
 
 def test_deleting_subkey_removes_only_that_line_neighbours_byte_stable(tmp_path):
-    """F3(b). Deleting a sub-key (advanced-JSON: the section is submitted without `legacy_code`)
-    removes ONLY that key's line; its neighbours' comments stay byte-stable. Failable via the F2
+    """Deleting a sub-key (advanced-JSON: the section is submitted without `legacy_code`)
+    removes ONLY that key's line; its neighbours' comments stay byte-stable. Failable via the same
     mutation (deletion loop iterating the root document rather than the section node) — which deletes
     the wrong nodes and rewrites neighbouring lines; proven RED in the fix-round report."""
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
@@ -345,7 +345,7 @@ def test_deleting_subkey_removes_only_that_line_neighbours_byte_stable(tmp_path)
 
 
 def test_editing_nested_map_leaf_leaves_untouched_nested_leaf_comment(tmp_path):
-    """F3(c). Editing ONE leaf of a nested map-in-map (processing.software.name) must leave the
+    """Editing ONE leaf of a nested map-in-map (processing.software.name) must leave the
     UNTOUCHED nested leaf (processing.software.version) and its comment byte-stable. Failable by
     making the recursion replace the nested map wholesale (e.g. `node[subkey] = quote_ambiguous(
     new_val)` for a dict new_val instead of recursing) — which re-emits the whole software block and
@@ -372,7 +372,7 @@ def test_editing_nested_map_leaf_leaves_untouched_nested_leaf_comment(tmp_path):
 
 
 def test_scalar_edit_in_section_with_list_member_leaves_list_block_stable(tmp_path):
-    """F3(d). A scalar edit in a map section that ALSO carries a list-valued member (processing.steps)
+    """A scalar edit in a map section that ALSO carries a list-valued member (processing.steps)
     must leave the list block byte-stable — the list is not reassigned just because a sibling scalar
     changed. Failable by forcing list reassignment on an unchanged list (e.g. dropping the
     `_plain(old_val) == new_val` short-circuit so an equal list is reassigned via quote_ambiguous and
@@ -400,11 +400,11 @@ def test_scalar_edit_in_section_with_list_member_leaves_list_block_stable(tmp_pa
 
 
 # --------------------------------------------------------------------------------------------------
-# C42 coordinate-privacy: the Metadata-tab access edit must PRESERVE access.coordinate_overrides
+# Coordinate-privacy: the Metadata-tab access edit must PRESERVE access.coordinate_overrides
 # end-to-end (build_section_patch -> apply_patch on a ruamel doc — the reviewer's exact leak path).
 # --------------------------------------------------------------------------------------------------
 def test_access_edit_preserves_coordinate_overrides_end_to_end():
-    """C42 LEAK PIN, end-to-end (RED on pre-fix HEAD dfa5bab): assemble the patch a Metadata-tab access
+    """LEAK PIN, end-to-end (RED on pre-fix HEAD dfa5bab): assemble the patch a Metadata-tab access
     edit posts (change ONLY embargo_until; NO s_access_coordinate_overrides field — that form never
     renders it) via editor_form.build_section_patch, then apply it to a REAL ruamel round-trip doc via
     apply_patch. The withheld/generalised stations must survive in the emitted YAML. Before the fix the
@@ -429,7 +429,7 @@ def test_access_edit_preserves_coordinate_overrides_end_to_end():
     edit.apply_patch(data, patch)
     out_yaml = edit._dump_bytes(data).decode("utf-8")
     assert "coordinate_overrides" in out_yaml, \
-        "an embargo-only access edit deleted coordinate_overrides in the emitted YAML (C42 leak)"
+        "an embargo-only access edit deleted coordinate_overrides in the emitted YAML"
     assert data["access"]["coordinate_overrides"]["SITE1"] == "withheld"
     assert data["access"]["coordinate_overrides"]["SITE2"] == "generalised"
     assert str(data["access"]["embargo_until"]) == "2027-06-30"
@@ -439,11 +439,11 @@ def test_access_edit_preserves_coordinate_overrides_end_to_end():
 # review FIX 3: the parser differential (ruamel emits, PyYAML reads)
 # --------------------------------------------------------------------------------------------------
 def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
-    # proven failing 2026-07-06 (pre-fix HEAD 4f4e999..a31fc8e): patched region "on" emitted as bare
+    # Proven failing (pre-fix HEAD 4f4e999..a31fc8e): patched region "on" emitted as bare
     # `region: on` -> PyYAML safe_load read True (bool); name "no" -> False; abstract "12:34:56" ->
     # 45296 (YAML-1.1 sexagesimal int). ruamel's own re-read kept them strings, so the diff, the
-    # §0.6 sha pin, and the confirm re-run all agreed and NO guard fired — the portal would have
-    # served a bool/int the curator never wrote. FAILS IF quote_ambiguous stops quoting the
+    # sha pin, and the confirm re-run all agreed and NO guard fired, so the portal would serve
+    # a bool/int the curator never wrote. FAILS IF quote_ambiguous stops quoting the
     # YAML-1.1-retypeable tokens.
     import base64
 
@@ -467,11 +467,11 @@ def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
 
 
 def test_patched_ambiguous_map_keys_reread_as_strings_under_pyyaml(tmp_path):
-    # Re-review finding (2026-07-06): quote_ambiguous recursed only over dict VALUES, so a curator-
+    # quote_ambiguous recursed only over dict VALUES, so a curator-
     # supplied ambiguous KEY in a JSON-edited map ('on'/'no'/'12:34:56') emitted bare and PyYAML
     # retyped it (key True / False / 45296) while ruamel's re-read kept it a string — the same
     # differential as FIX 3, one axis over, with diff/sha-pin/confirm all self-consistently blind.
-    # proven failing 2026-07-06 on pre-fix HEAD 0b7d386 (evidence in the fix commit).
+    # Proven failing on pre-fix HEAD 0b7d386 (evidence in the fix commit).
     # FAILS IF the dict branch stops applying the quoting oracle to keys.
     import base64
 
@@ -516,7 +516,7 @@ def test_needs_quoting_semantics():
 # review FIX 2: scratch containment — nothing the merge does may touch the surveys tree
 # --------------------------------------------------------------------------------------------------
 def test_merge_scratch_never_touches_surveys_tree(tmp_path):
-    # proven failing 2026-07-06 (pre-fix HEAD): during validation the scratch copy lived at
+    # Proven failing (pre-fix HEAD): during validation the scratch copy lived at
     # surveys-live/surveys/_edit_patched/** (6 paths created inside the live tree; a concurrent
     # publish's `git add surveys` would stage them, and a leaked scratch would dirty every later
     # publish preflight — and the gw-runner's /srv/surveys mount is READ-ONLY, so it would also have
@@ -568,7 +568,7 @@ def test_scratch_under_surveys_tree_is_refused(tmp_path):
 
 
 def test_trailing_newline_slug_refused_at_edit_gate(tmp_path):
-    # Task #18: the single-slug edit gate uses FULLMATCH, not match — an anchored `$` matches before
+    # The single-slug edit gate uses FULLMATCH, not match - an anchored `$` matches before
     # a trailing newline, so `.match` let "slug\n" through and it became a path component. Proven
     # failing first against .match, where it reached "survey.yaml not found under demo-survey-2026\n".
     _write_package(tmp_path / "surveys-live")
@@ -578,13 +578,13 @@ def test_trailing_newline_slug_refused_at_edit_gate(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# §3.2 semver + no-op gates
+# semver + no-op gates
 # --------------------------------------------------------------------------------------------------
 def test_non_semver_current_version_refused(tmp_path):
-    # The semver-greater gate (C31 §0.3) fires when the CURRENT version is not strict semver: the
+    # The semver-greater gate fires when the CURRENT version is not strict semver: the
     # bump cannot be proven greater, so the merge refuses (fail closed) with a fix-it-via-PR hint.
-    # (The explicit version override was removed per review FIX 6, so lower/equal targets are no
-    # longer constructible through the interface; the comparator itself is pinned below.)
+    # The interface carries no explicit version override, so a lower or equal target is not
+    # constructible through it; the comparator itself is pinned below.
     _write_package(tmp_path / "surveys-live",
                    yaml_text=EXEMPLAR.replace("version: 1.0.0", "version: v2022-final"))
     with pytest.raises(edit.EditError) as exc:
@@ -600,7 +600,7 @@ def test_missing_bump_refused(tmp_path):
 
 
 def test_noop_edit_refused(tmp_path):
-    # §3.2: submitting the SAME values (no content change) is refused outright.
+    # submitting the SAME values (no content change) is refused outright.
     _write_package(tmp_path / "surveys-live")
     with pytest.raises(edit.EditError) as exc:
         _merge(_cfg(tmp_path), patch={"region": "South Australia"})
@@ -618,7 +618,7 @@ def test_valid_patch_bump_appends_release_note(tmp_path):
 
 
 def test_semver_helpers():
-    # §3.2 comparator semantics: lower/equal/non-semver are all NOT greater (the merge-side gate).
+    # comparator semantics: lower/equal/non-semver are all NOT greater (the merge-side gate).
     assert edit.parse_semver("1.2.3") == (1, 2, 3)
     assert edit.parse_semver("1.2") is None
     assert edit.parse_semver("1.2.x") is None
@@ -760,7 +760,7 @@ access:
 custom_note: "unknown key survives"
 """
 
-# C35b/D3 (review F7): resolve the validator UNCONDITIONALLY — sibling if present, else the committed
+# Resolve the validator UNCONDITIONALLY - sibling if present, else the committed
 # vendored pinned copy; require_validator_dir() FAILS (never skips) if neither is present.
 from gateway.tests.conftest import require_validator_dir  # noqa: E402
 
@@ -791,8 +791,8 @@ def test_merge_runs_the_real_validator(tmp_path):
 
 def test_merge_real_validator_flags_fail(tmp_path):
     # The real validator FAILs an out-of-enum access.level (a required, enumerated field), and the
-    # merge reports has_fail=True — the signal the gateway turns into a confirm 409 (§0.4).
-    # C35b/D3 (review F7): UNCONDITIONAL — sibling-or-vendored, FAILS if neither present.
+    # merge reports has_fail=True - the signal the gateway turns into a confirm 409.
+    # UNCONDITIONAL - sibling-or-vendored, FAILS if neither present.
     pkg = _write_package(tmp_path / "surveys-live", slug="intg-survey-2026",
                          yaml_text=_VALID_PACKAGE_YAML)
     (pkg / "transfer_functions" / "edi" / "S01.edi").write_text(

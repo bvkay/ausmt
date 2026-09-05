@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
-"""CI skip tripwire (code-health review M5).
+"""CI skip tripwire.
 
 The engine suite gates the release, but ~20 of its files `pytest.importorskip("mt_metadata")`/
 `("mth5")` at module top. If the pinned lock ever silently stopped installing that stack, those files
-would ALL skip and the release gate would go green over a hollowed-out suite. No lane accounted for
+would ALL skip and the release gate would go green over a hollowed-out suite. No workflow accounted for
 that. This tripwire does: it reads a `pytest -q -rs ...` report on stdin and FAILS if any skip's reason
-is not on the allow-list below. It is deliberately tiny — a tripwire, not a framework.
+is not on the allow-list below. It is deliberately tiny - a tripwire, not a framework.
 
-The allow-list is the set of skips that are LEGITIMATE in the CI engine lanes, where the mt_metadata/
+The allow-list is the set of skips that are LEGITIMATE in the CI engine workflows, where the mt_metadata/
 mth5 stack IS installed (pinned lock / engine image) but the sibling ausmt-surveys checkout is NOT
-present. Both engine lanes (build-products.yml and deploy-images.yml's engine-full-tests) share this
+present. Both engine workflows (build-products.yml and deploy-images.yml's engine-full-tests) share this
 exact environment, so the allow-list is the same for both:
 
   * "sibling ausmt-surveys/_validation not present"
-        engine/tests/test_validator_gate.py::test_env_var_path_resolves_real_validator — the only test
-        gated purely on a sibling ausmt-surveys checkout, which neither engine CI lane has (the private
+        engine/tests/test_validator_gate.py::test_env_var_path_resolves_real_validator - the only test
+        gated purely on a sibling ausmt-surveys checkout, which neither engine CI workflow has (the private
         repo is not cross-checked-out here; see build-products.yml's --no-validate note and
         engine.Dockerfile's `ENV AUSMT_VALIDATOR_PATH` block, which explains that the validator
         arrives at RUNTIME on a bind mount and is never baked into the image). LEGITIMATE: it is a
         dev-box-only cross-repo integration check.
-        Empirically confirmed (C35a verification): with the stack present and no sibling checkout, this
+        Empirically confirmed: with the stack present and no sibling checkout, this
         is the ONE and ONLY skip the engine suite produces; every mt_metadata/mth5/yaml/jsonschema/
         _mth5 importorskip RUNS (all of those deps ARE in the CI lock / image).
 
 A skip whose reason contains "mt_metadata not installed" / "mth5 not installed" / "could not import
 'mt_metadata'" / "mth5/mt_metadata not installed" / "could not import 'yaml'" etc. is NOT on the list
-on purpose: in these lanes those deps are present, so such a skip means the lock/image silently dropped
-a core dependency — the exact failure this tripwire exists to catch.
+on purpose: in these workflows those deps are present, so such a skip means the lock/image silently dropped
+a core dependency - the exact failure this tripwire exists to catch.
 
 Two independent checks (either one FAILS the tripwire):
   1. every parsed skip's reason must be on the allow-list; and
@@ -37,16 +37,17 @@ Two independent checks (either one FAILS the tripwire):
      instead of quietly ignoring an unaccounted skip and passing green (Invariant 10: a check that
      cannot see part of its own input must not report PASS over it).
 
-Usage (from the engine/ cwd, both lanes):
-    pytest -q -rs tests | tee /tmp/pytest.out ; python tests/ci_check_skips.py < /tmp/pytest.out
+Usage (from the engine/ cwd, both workflows):
+    pytest -q -rs tests | tee /tmp/pytest.out; python tests/ci_check_skips.py < /tmp/pytest.out
 
-C35b/D5: a repeatable --allow flag lets a DIFFERENT lane supply its own allow-list. Passing --allow at
+A repeatable --allow flag lets a DIFFERENT workflow supply its own allow-list. Passing --allow at
 least once (even `--allow ""`) REPLACES the built-in list entirely; passing it zero times keeps today's
-behaviour (the engine built-in list below). The gateway lane pipes its report through this with a
-single `--allow ""` — i.e. NO substantive allow entries — so after D3 (which made the validator oracles
-run via the vendored copy) the gateway suite's ONE legitimate skip (the mt_metadata-needing engine-
-preview oracle) is the only entry it allows; every other skip fails the lane:
-    pytest -q -rs gateway/tests | python engine/tests/ci_check_skips.py \
+behaviour (the engine built-in list below). The gateway workflow runs gateway/tests AND deploy/tests
+in one report and pipes it through this with a single --allow - i.e. one substantive allow entry - so,
+with the validator oracles running via the vendored copy and every deploy dependency present on the
+runner, the ONE legitimate skip (the mt_metadata-needing engine-preview oracle) is the only entry it
+allows; every other skip, from either tree, fails the workflow:
+    pytest -q -rs gateway/tests deploy/tests | python engine/tests/ci_check_skips.py \
         --allow "real engine stack / sample survey / validator not present"
 
 Exit 0 iff every parsed skip matches an allow-list entry AND the parsed count equals pytest's own
@@ -58,55 +59,55 @@ import argparse
 import re
 import sys
 
-# The ENGINE lanes' built-in allow-list. Each entry is a substring that must appear in a skip's reason
-# for that skip to be allowed. Add an entry ONLY with a comment saying which test/lane produces it and
+# The ENGINE workflows' built-in allow-list. Each entry is a substring that must appear in a skip's reason
+# for that skip to be allowed. Add an entry ONLY with a comment saying which test/workflow produces it and
 # why it is legitimate.
 #
-# C35b/D3 note: test_validator_gate.py::test_env_var_path_resolves_real_validator NO LONGER skips —
-# D3 made it resolve to the committed vendored validator when the sibling is absent, so it RUNS in the
-# engine lanes too. This entry is therefore DEFENSIVE now (it matches a skip the current suite does not
-# emit); it is retained per the C35b/D5 amendment so an older checkout or a re-introduced sibling-gated
+# Note: test_validator_gate.py::test_env_var_path_resolves_real_validator does NOT skip: it
+# resolves to the committed vendored validator when the sibling is absent, so it RUNS in the
+# engine workflows too. This entry is therefore DEFENSIVE now (it matches a skip the current suite does not
+# emit); it is retained so an older checkout or a re-introduced sibling-gated
 # skip stays allow-listed, and the accounting check below catches any genuinely unaccounted skip.
 ALLOWED_SKIP_REASON_SUBSTRINGS = [
-    "sibling ausmt-surveys/_validation not present",  # test_validator_gate.py — pre-D3 sibling gate (now defensive)
-    # C35b/D3.1: test_validator_gate.py's oracle skips (exact reason below) when the gateway package
-    # tree itself is absent from the repo root — legitimately reachable ONLY in the engine-image lanes
+    "sibling ausmt-surveys/_validation not present",  # test_validator_gate.py - sibling gate (now defensive)
+    # test_validator_gate.py's oracle skips (exact reason below) when the gateway package
+    # tree itself is absent from the repo root - legitimately reachable ONLY in the engine-image workflows
     # (the engine image COPYs engine/ only, so /app/gateway never exists: deploy-images' in-image
-    # engine-full-tests run — the sole remaining engine-image pytest since C39 dropped the
-    # in-Dockerfile duplicate — pipes through THIS tripwire). INERT on every checkout lane: a
-    # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the oracle
-    # (D3.1 arm iv), never skips.
-    "engine image build: gateway tree not shipped",   # test_validator_gate.py — D3.1 arm (iii), image lanes only
+    # engine-full-tests run, the sole remaining engine-image pytest now that no in-Dockerfile
+    # duplicate stands beside it, pipes through THIS tripwire). INERT on every checkout workflow: a
+    # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the
+    # oracle, never skips.
+    "engine image build: gateway tree not shipped",   # test_validator_gate.py, image builds only
     # test_mtcat_version_parity.py, the SAME designed-topology class as the entry above, for the
     # other tree the engine image does not ship. The MTCAT schema version has one source (the schema
     # title) and that module reads it back off every surface that restates it; four of those surfaces
-    # are portal files (portal.config.yaml, config.js, data/mtcat.json, tools/gen_config.py) plus
-    # version.js's sentinel, and engine.Dockerfile COPYs contract/ + engine/ and exactly one portal
-    # file (the generated portal/src/contract.js), so in the image lane those five do not exist. The
+    # are portal files (portal.config.yaml, config.js, data/mtcat.json, tools/gen_config.py), and
+    # engine.Dockerfile COPYs contract/ + engine/ and exactly one portal file (the generated
+    # portal/src/contract.js), so in the image workflow those four do not exist. The
     # three tests that read them skip with the exact reason below; the ENGINE-side statements (schema
     # title, contract parser, generated _contract constant, the real build's emitted portal block,
     # build_portal.py's own literal guard) keep ASSERTING in the image, so the release gate still
-    # proves the image's internal coherence. INERT on the checkout lanes: build-products.yml checks
-    # out the whole monorepo and its path filter names all five portal files, so there these tests RUN
+    # proves the image's internal coherence. INERT on the checkout workflows: build-products.yml checks
+    # out the whole monorepo and its path filter names all four portal files, so there these tests RUN
     # (a checkout missing one of them fails the read rather than skipping; the guard opens as soon as
     # any pinned portal file is present).
-    "engine image build: portal tree not shipped",    # test_mtcat_version_parity.py, image lanes only
+    "engine image build: portal tree not shipped",    # test_mtcat_version_parity.py, image builds only
     # test_mtcat_version_parity.py again, the SAME designed-topology class, for the docs tree: the
-    # ratified MTCAT 2.0 version machinery added a pin on the docs current-version display
+    # MTCAT 2.0 version machinery added a pin on the docs current-version display
     # (docs/docs/reference/index.md), and engine.Dockerfile does not COPY docs/ either, so in the
-    # image lane that one test skips with the exact reason below. INERT on checkout lanes, where the
+    # image workflow that one test skips with the exact reason below. INERT on checkout workflows, where the
     # docs tree is always present and the pin asserts.
-    "engine image build: docs tree not shipped",      # test_mtcat_version_parity.py docs pin, image lanes only
-    # C25: test_convention_gates_realdata.py — the real-corpus convention-gate pins (the three
+    "engine image build: docs tree not shipped",      # test_mtcat_version_parity.py docs pin, image builds only
+    # test_convention_gates_realdata.py - the real-corpus convention-gate pins (the three
     # named USArray negative controls, the ccmt-2017 de-rotation acceptance, the AusLAMP-SA
     # custodian-twin proof) run only where the .audit/realdata harness exists (the dev box; the
-    # corpus is not in the repo and not in any CI lane). Same dev-box-only class as the
+    # corpus is not in the repo and not in any CI workflow). Same dev-box-only class as the
     # sibling-validator skip above. The synthetic gate pins in test_convention_gates.py RUN
     # everywhere — this entry never excuses those.
     "realdata corpus not present (AUSMT_REALDATA unset)",
     # test_edi_preflight.py's corpus-scale arm re-proves the predictor-versus-engine agreement over a
     # real directory of EDIs (the Western Gawler delivery, or the ausmt-surveys corpus) by running the
-    # REAL mt_metadata reader per file and diffing it against the prediction. No CI lane can supply
+    # REAL mt_metadata reader per file and diffing it against the prediction. No CI workflow can supply
     # that input: build-products.yml checks out this monorepo only, and pointing the arm at the sibling
     # corpus would need the private-repo secret, which is unavailable on fork PRs. Same dev-box-only
     # class as the two entries above. The invariant is NOT unguarded in CI as a result: the 21
@@ -115,17 +116,17 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     "set AUSMT_PREFLIGHT_CORPUS to a directory of EDIs",
     # test_url_registry.py's real-build arm re-runs the slug/id freeze check against an actual BUILT
     # data tree (mtcat.json), named by AUSMT_URL_REGISTRY_DATA - a built corpus exists on the dev box
-    # and on the deployed box, never in a CI engine lane (the lanes build no corpus). Same
+    # and on the deployed box, never in a CI engine workflow (the workflows build no corpus). Same
     # dev-box-only class as the three entries above. The freeze invariant is NOT unguarded in CI:
     # the fixture tests in the same module prove the checker's fail/pass/refuse behaviour on every
     # run, and the committed registry file itself is validated structurally; this entry excuses the
-    # real-corpus leg only. (Added when the path-URL contract lane's first CI run tripped this
+    # real-corpus leg only. (Added when the path-URL contract module's first CI run tripped this
     # tripwire on the new skip - the tripwire working exactly as designed.)
     "AUSMT_URL_REGISTRY_DATA does not name a built data dir",
     # test_mtcat20_invariants.py's corpus arms: the zero-null/zero-empty + reference-invariant
     # scans over a REAL full-corpus build (AUSMT_MTCAT20_DATA) and the 1.2 -> 2.0 emitter
     # equivalence dict-test against a pre-2.0 baseline document (AUSMT_MTCAT20_BASELINE). A built
-    # corpus exists on the dev box and the deployed box, never in a CI engine lane (the lanes
+    # corpus exists on the dev box and the deployed box, never in a CI engine workflow (the workflows
     # build no corpus). Same dev-box-only class as the entries above; the invariants are NOT
     # unguarded in CI - the same checks run against the committed fixtures and a real build of the
     # vendored fixture surveys on every run; these arms extend the identical assertions to corpus
@@ -148,14 +149,14 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     "AUSMT_STATION_DATA does not name a built corpus data dir",
     # test_station_invariants.py's two CI-guard pins read .github/workflows/build-products.yml, which
     # the engine image does not ship (engine.Dockerfile COPYs contract/ + engine/ and one portal file).
-    # Same designed-topology class as the portal/docs entries above; INERT on every checkout lane,
+    # Same designed-topology class as the portal/docs entries above; INERT on every checkout workflow,
     # where the workflow is always present and both pins assert.
     "engine image build: workflow tree not shipped",
 ]
 
 # `pytest -rs` prints one line per DISTINCT (location, reason): "SKIPPED [N] path:line: <reason>",
 # where N is how many skips aggregated onto it (two tests skipping through one shared helper, e.g.
-# the D3.1 validator seam, share the helper's location and land as [2]). The count is summed, never
+# the validator-resolution seam, share the helper's location and land as [2]). The count is summed, never
 # the lines, or an aggregated line undercounts against pytest's total. The location token
 # (path:line) is a single run of non-whitespace, so a GREEDY `\S+` captures it whole — including the
 # trailing `:line` — and backtracks to the last `:` before the reason. Both CI (ubuntu, `/`) and a
@@ -171,21 +172,21 @@ _SUMMARY_SKIPPED = re.compile(r"\b(\d+)\s+skipped\b")
 
 
 def _resolve_allow_list(allow_args: list[str] | None) -> list[str]:
-    """The allow-list to enforce (C35b/D5). If --allow was passed at least once, it REPLACES the
+    """The allow-list to enforce. If --allow was passed at least once, it REPLACES the
     built-in list entirely (empty-string entries are dropped, so a single `--allow ""` yields an EMPTY
-    allow-list — every skip fails); if it was never passed, use the engine built-in list."""
+    allow-list - every skip fails); if it was never passed, use the engine built-in list."""
     if allow_args is None:
         return list(ALLOWED_SKIP_REASON_SUBSTRINGS)
     return [a for a in allow_args if a]
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="CI skip tripwire (M5/C35b-D5).")
+    parser = argparse.ArgumentParser(description="CI skip tripwire.")
     parser.add_argument(
         "--allow", action="append", default=None, metavar="SUBSTRING",
-        help="allow-list entry (repeatable); passing it at least once REPLACES the built-in engine "
-             "list. `--allow \"\"` yields an EMPTY allow-list so ANY skip fails (the gateway lane, minus "
-             "its one legitimate skip passed explicitly). Omit entirely to keep the engine built-in list.")
+        help="allow-list entry (repeatable); passing it at least once REPLACES the engine's own "
+             "built-in list. `--allow \"\"` yields an EMPTY allow-list so ANY skip fails (the gateway "
+             "workflow passes its one legitimate skip explicitly). Omit entirely to keep the built-in list.")
     args = parser.parse_args(argv)
     allow_list = _resolve_allow_list(args.allow)
 
@@ -224,11 +225,11 @@ def main(argv: list[str] | None = None) -> int:
         for u in unexpected:
             print(f"  UNEXPECTED SKIP: {u}")
         print("\nAllow-list in effect (add an entry with a justifying comment if a new skip is "
-              "legitimate; this lane's list came from --allow if given, else the engine built-in):")
+              "legitimate; this run's list came from --allow if given, else the engine built-in):")
         for s in allow_list:
             print(f"  - {s!r}")
         if not allow_list:
-            print("  (empty — this lane allows NO skips)")
+            print("  (empty: this run allows NO skips)")
 
     if parsed_skips != reported_skips:
         failed = True

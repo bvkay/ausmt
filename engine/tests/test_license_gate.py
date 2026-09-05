@@ -1,7 +1,7 @@
-"""C6 licence instrument hardening (Invariant 10).
+"""Licence instrument hardening (Invariant 10).
 
-The pre-C6 gate was `redistributable() = s.startswith("CC") or s in {PUBLIC DOMAIN, CC0, ODBL, ODC-BY}`
-— so a TYPO'd 'CC-BY-4.O' (letter O) or any 'CC-nonsense' redistributed. C6 replaces the prefix test with
+A prefix gate, `redistributable() = s.startswith("CC") or s in {PUBLIC DOMAIN, CC0, ODBL, ODC-BY}`,
+redistributes a TYPO'd 'CC-BY-4.O' (letter O) or any 'CC-nonsense'. The instrument replaces it with
 an EXACT, case-insensitive-after-trim/whitespace/de-alias match against contract/licenses.json.
 
 NON-VACUOUS failure criteria (each fails against the OLD prefix gate or a broken emitter):
@@ -28,7 +28,7 @@ import build_portal as bp        # noqa: E402
 
 
 def test_typo_license_is_not_redistributable():
-    # The exact defect C6 closes: a single-character typo (letter O for zero 0) used to pass startswith('CC').
+    # The exact defect the gate closes: a single-character typo (letter O for zero 0) once passed startswith('CC').
     assert not bp.redistributable("CC-BY-4.O"), "a typo'd CC id must NOT be redistributable (was the prefix hole)"
     assert not bp.redistributable("CC-nonsense"), "arbitrary 'CC…' free text must NOT be redistributable"
     assert not bp.redistributable("CC BY 4.0 or whatever"), "extra words must NOT match"
@@ -42,7 +42,7 @@ def test_case_insensitive_exact_match():
 
 def test_legacy_bare_aliases_redistribute():
     # Legacy survey.yaml values that predate the -X.Y suffix convention, mapped via licenses.json aliases.
-    assert bp.redistributable("CC0"), "bare CC0 alias -> CC0-1.0"
+    assert bp.redistributable("CC0"), "the bare CC0 licence alias resolves to CC0-1.0"
     assert bp.redistributable("CC-BY"), "bare CC-BY alias -> CC-BY-4.0"
     assert bp.redistributable("odbl"), "bare ODBL alias (case-insensitive) -> ODBL-1.0"
 

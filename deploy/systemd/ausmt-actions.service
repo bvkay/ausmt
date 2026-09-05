@@ -1,7 +1,7 @@
-# AusMT curator-workbench ACTIONS agent (C43 Stage 2b-ii, record D8/D9). A oneshot unit the
+# AusMT curator-workbench ACTIONS agent (Stage 2b-ii). A oneshot unit the
 # ausmt-actions.timer fires every ~2 min: it scans the gateway state dir for privileged INTENT files
 # the curator wrote through the workbench (update / backup / rollback / restore) and executes a FIXED
-# recipe for each — the host-side half of the C40 request-file pattern (the gateway has no shell,
+# recipe for each - the host-side half of the request-file pattern (the gateway has no shell,
 # docker socket, or site-data mount). See deploy/README.md "Curator actions (privileged host agent)".
 #
 # INSTALL — replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (there is no %-spec
@@ -11,8 +11,8 @@
 #   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /srv/ausmt/code/deploy/.env)
 # The script reads AUSMT_DATA_DIR + AUSMT_CODE_DIR from the EnvironmentFile (.env), like reconcile.sh.
 #
-# PRE-NCI SECURITY GATE (record D9.6): the update + restore recipes are flagged for the pre-NCI
-# hostile re-audit — do NOT enable this timer on an internet-facing deployment before that audit
+# PRE-NCI SECURITY GATE: the update + restore recipes are flagged for the pre-NCI
+# hostile re-audit; do NOT enable this timer on an internet-facing deployment before that audit
 # passes. On the current tailnet-fronted box it is curator-authenticated, CSRF-bound, single-flight
 # locked, and every action is audited (gateway/state/actions-audit.log).
 

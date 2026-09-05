@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Station-id override for third-party released data (owner ruling 2026-08-08).
+"""Station-id override for third-party released data.
 
-AusMT serves third-party released data BYTE-IDENTICAL (D1), so a station whose contractor numbering
+AusMT serves third-party released data BYTE-IDENTICAL, so a station whose contractor numbering
 is not a usable public identifier cannot be renamed by editing its EDI. The custodian declares the
 id AusMT should publish in survey.yaml instead, keyed by the SOURCE FILE the record is parsed from:
 
@@ -16,7 +16,7 @@ A map value may instead be a mapping, carrying the custodian's own provenance fo
 alongside the optional published id (see PROVENANCE_KEYS below). The provenance travels in AusMT's
 own records only; the source file is never rewritten.
 
-Semantics, all fail-closed (the refuse-to-serve posture the C25 convention gates and the C42
+Semantics, all fail-closed (the refuse-to-serve posture the convention gates and the
 coordinate policy already take):
 
   * an ABSENT block leaves the EDI DATAID authoritative for every station, exactly as before. The
@@ -55,7 +55,7 @@ import re
 from pathlib import Path
 from typing import NamedTuple
 
-# The `source` enum. Only filename-keyed maps exist in this lane; the enum is declared as a tuple so
+# The `source` enum. Only filename-keyed maps exist in this module; the enum is declared as a tuple so
 # a future key ('dataid', 'raw_recording') is an addition here rather than a shape change.
 STATION_ID_SOURCES = ("filename",)
 
@@ -94,17 +94,17 @@ class StationIds(NamedTuple):
 # acceptable only when safe_component would return it unchanged. safe_component keeps
 # [A-Za-z0-9._-], neutralises '..', strips leading dots/dashes and never returns empty; the pattern
 # plus the two guards below are that exact post-condition, checked as a PREDICATE so an id the
-# sanitiser would mangle FAILS LOUDLY instead of being silently rewritten (owner's ids are not ours
+# sanitiser would mangle FAILS LOUDLY instead of being silently rewritten (a custodian's ids are not ours
 # to mangle). tests/test_station_ids.py pins the two in agreement over the shared safe_component
 # vector fixture, so they cannot drift apart.
 _SAFE_ID = re.compile(r"\A[A-Za-z0-9._-]+\Z")
 
 # ...INTERSECTED with a length bound. safe_component has none, so a declared id of 300 legal
-# characters used to pass validation and then reach the filesystem as this station's product
+# characters would pass validation and then reach the filesystem as this station's product
 # DIRECTORY name: ENAMETOOLONG, raised out of the per-survey emission, and the WHOLE corpus build
-# died with no catalogue.json written at all. A bound here turns that into an ordinary
+# would die with no catalogue.json written at all. A bound here turns that into an ordinary
 # survey-granularity StationIdError like every other charset violation. 96 is far beyond any real
-# station identifier (the owner's own RD18 scheme peaks at 13) and leaves ample room inside the
+# station identifier (the RD18 scheme peaks at 13) and leaves ample room inside the
 # 255-byte filesystem component limit for the product suffixes appended to it.
 MAX_STATION_ID_LEN = 96
 
@@ -208,7 +208,7 @@ def parse_station_ids(block) -> StationIds:
     a mapping-form value, a value that declares nothing (null or an empty mapping), a value outside
     the published-id charset or longer than MAX_STATION_ID_LEN, or two keys mapping to the SAME
     published id. Key EXISTENCE is validated separately by validate_station_ids, against the package's
-    real files (the same split the C42 coordinate policy uses: enum shape at discovery, identity
+    real files (the same split the coordinate policy uses: enum shape at discovery, identity
     against reality in the build loop)."""
     if block in (None, "", {}):
         return StationIds(STATION_ID_SOURCES[0], {}, {})

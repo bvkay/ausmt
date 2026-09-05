@@ -32,13 +32,13 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   "csvCellFn:v=>csvCell(v)," +
   "citeTxtProbe:()=>citeLine({au:AU_PROBE,yr:\"2019\",ti:\"T\",pb:\"P\"},\"10.1/x\")," +
   "bibProbe:()=>bibtex(\"k\",{au:AU_PROBE,ti:\"A & B\",yr:\"2019\",pb:\"P\"},\"10.1/x\")," +
-  // C12: buildIdText() is a pure function of BUILDID (set by boot() from build.json) — exposing it
+  // buildIdText() is a pure function of BUILDID (set by boot() from build.json) - exposing it
   // lets a test assert the footer VALUE binding without a real DOM (getElementById stubs below return
   // a fresh throwaway object per call, so nothing written to el.textContent would be observable).
   // Two-phase boot: boot() returns as soon as the FIRST-PAINT products (catalogue/surveys + the small
   // optionals) are in; tf.json / sci.json / manifest.json hydrate behind it. hydrationDone settles once all
   // three have landed AND their late-render work has run, so this smoke test can keep asserting against the
-  // fully-hydrated state a single-phase boot used to hand it.
+  // fully-hydrated state a single-phase boot would hand it in one go.
   "hydrationDone:()=>HYDRATION_DONE," +
   "buildIdText:()=>buildIdText()};";
 
@@ -95,7 +95,7 @@ ctx.globalThis = ctx; ctx.self = ctx; vm.createContext(ctx); vm.runInContext(cod
   try {
     await A.boot();
     await A.hydrationDone();     // two-phase boot: let tf/sci/manifest land before asserting on them
-    // C12: printed regardless of empty/populated (build.json is independent of station count) so a
+    // Printed regardless of empty/populated (build.json is independent of station count) so a
     // wrapper test can assert the footer's build-id VALUE binding either way.
     console.log("BUILDID_TEXT " + JSON.stringify(A.buildIdText()));
     if (A.nST() === 0) {

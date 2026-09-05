@@ -1,8 +1,8 @@
 """Deploy preflight (deploy/scripts/preflight.sh) — the shared-group permissions time-bomb check.
 
-C43 S2b-i (B7): preflight gained a gateway-profile check that catches the incident-2026-07-11
-lockout BEFORE it happens — a `surveys-live/.git` whose entries have lost the group-write bit means
-the gateway (uid 10002) is creating foreign-owned, non-g+w object dirs the operator can no longer
+Preflight carries a gateway-profile check that catches the shared-group
+lockout BEFORE it happens - a `surveys-live/.git` whose entries have lost the group-write bit means
+the gateway (uid 10002) is creating foreign-owned, non-g+w object dirs the operator cannot
 `git pull`/gc, so the checkout silently rots behind GitHub.
 
 Tested as a BLACK BOX through `sh` over a fabricated data tree: preflight does many other checks
@@ -11,7 +11,7 @@ FAIL/PASS line in stdout (an independent observable), never the overall exit cod
 failure criterion (Invariant 10).
 
 POSIX mode bits: the whole file skips on Windows (no meaningful group-write bit — the existing
-reconcile/backup suites use the same platform reason). On the gateway-ci ubuntu lane it RUNS with
+reconcile/backup suites use the same platform reason). On the gateway-ci ubuntu workflow it RUNS with
 nothing skipped, so the skip-tripwire needs no allow-list entry. git is NOT required: the fixtures
 build a bare `.git/` dir by hand and set `core.sharedRepository` via `.git/config` text, so the pin
 drives the perm-bit logic without a git binary.
@@ -72,12 +72,13 @@ def _make_tree(tmp_path: Path, *, git_entries_group_writable: bool,
 def _run_preflight(data_dir: Path) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["AUSMT_DATA_DIR"] = str(data_dir)
-    # OWNER etc. are unset — the other sections FAIL harmlessly; we only read the .git-perm line.
+    # The OWNER variable and its siblings are unset - the other sections FAIL harmlessly; we only
+    # read the .git-perm line.
     return subprocess.run([_SH, str(_SCRIPT), "gateway"], capture_output=True, text=True, env=env)
 
 
 def test_preflight_reds_on_non_group_writable_git(tmp_path):
-    """RED PIN (B7). A surveys-live/.git with a non-group-writable object dir must make gateway-profile
+    """RED PIN. A surveys-live/.git with a non-group-writable object dir must make gateway-profile
     preflight FAIL with the incident-naming line — a gateway publish would lock the operator out of
     `git pull`. FAILS IF: the check passes an un-hardened .git (the shipped-blind state), or the FAIL
     line does not name the missing group-write."""
@@ -85,13 +86,13 @@ def test_preflight_reds_on_non_group_writable_git(tmp_path):
     r = _run_preflight(data)
     out = r.stdout + r.stderr
     assert _FAIL_NEEDLE in out, (
-        f"preflight did not flag the non-g+w .git (incident lock-out) — output:\n{out}")
+        f"preflight did not flag the non-g+w .git (incident lock-out) - output:\n{out}")
     assert "FAIL" in out and "core.sharedRepository group" in out, (
-        f"the FAIL must carry the exact fix command — output:\n{out}")
+        f"the FAIL must carry the exact fix command - output:\n{out}")
 
 
 def test_preflight_passes_on_group_writable_shared_repo_git(tmp_path):
-    """GREEN PIN (B7). A surveys-live/.git that is fully group-writable with core.sharedRepository=group
+    """GREEN PIN. A surveys-live/.git that is fully group-writable with core.sharedRepository=group
     must PASS the shared-group check (the FAIL line absent). Proves the red pin above is non-vacuous —
     the same code path returns PASS once the model is in place. FAILS IF: a correctly-hardened .git
     still trips the g+w FAIL."""
@@ -99,6 +100,6 @@ def test_preflight_passes_on_group_writable_shared_repo_git(tmp_path):
     r = _run_preflight(data)
     out = r.stdout + r.stderr
     assert _FAIL_NEEDLE not in out, (
-        f"a fully group-writable .git must not trip the g+w FAIL — output:\n{out}")
+        f"a fully group-writable .git must not trip the g+w FAIL - output:\n{out}")
     assert _PASS_NEEDLE in out, (
-        f"the shared-group PASS line must render for a hardened .git — output:\n{out}")
+        f"the shared-group PASS line must render for a hardened .git - output:\n{out}")

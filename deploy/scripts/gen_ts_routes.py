@@ -10,10 +10,10 @@ whose `default ""` is what 404s every path the table does not name.
     python deploy/scripts/gen_ts_routes.py --write    # (re)write the table from the registers
     python deploy/scripts/gen_ts_routes.py --check    # gate: exit 1 if the table is out of sync
 
-An NCI urlPath cannot be derived from a route path (D15: the state segment is not in the id), so
-resolution needs a lookup, and a committed one makes R5 membership greppable in review. Membership
-is `_tsproject.route_rows()`, imported, never restated: the flag is projected for withheld
-stations too (R13), so suppression lives here, in resolution, and the table renders from the same
+An NCI urlPath cannot be derived from a route path (the state segment is not in the id), so
+resolution needs a lookup, and a committed one makes membership greppable in review. Membership is
+`_tsproject.route_rows()`, imported, never restated: the flag is projected for withheld stations
+too, so suppression lives here, in resolution, and the table renders from the same
 predicate as ts_access.json - key sets equal by construction.
 
 The survey serve verdict is the one restated seam (build_portal pulls the mt_metadata stack; see
@@ -25,9 +25,9 @@ coordinate-policy change) touches no path gateway-ci watches: ausmt-surveys fire
 what re-runs this gate against the new registers. doctor-box.sh's ts-route key-set parity leg is the
 post-publication backstop on the box. An absent register root STOPS rather than passing vacuously.
 
-A survey this reader cannot resolve drops ITS OWN routes only, recorded as an `# UNRESOLVED` line:
-failing the whole generation left the previously committed table serving routes the build had
-already suppressed.
+A survey this reader cannot resolve drops ITS OWN routes only, recorded as an `# UNRESOLVED` line.
+Failing the whole generation leaves the committed table serving routes the build has already
+suppressed.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ SURVEYS_DEFAULT = ROOT.parent / "ausmt-surveys" / "surveys"
 # The engine seams this table must not have a second opinion about. Both are stdlib-only modules;
 # build_portal itself is NOT imported (it pulls mt_metadata/mth5, which a deploy tool must not need).
 sys.path.insert(0, str(ROOT / "engine" / "extract"))
-import _coordaccess as coordacc      # noqa: E402  (the C42 per-station coordinate gate)
+import _coordaccess as coordacc      # noqa: E402  (the per-station coordinate gate)
 import _stationcheck as stcheck      # noqa: E402  (the route prefix, the ENCODER, the encoded-route rule)
 import _tsindex as tsindex           # noqa: E402  (the register reader and its closed vocabularies)
 import _tsproject as tsproject       # noqa: E402  (THE projection: who gets a route)
@@ -189,11 +189,10 @@ def render(rows, unresolved=None) -> str:
     """The committed file: banner, one UNRESOLVED comment per dropped survey, one `"key" "value"`
     line per route. No date (a churning header fails --check on quiet days) and no host (it lives
     once, in the Caddyfile's redir target). The UNRESOLVED lines are in the FILE because membership
-    is the R5 decision: a change belongs in a human-readable diff and a `--check` that reds."""
+    is the access decision: a change belongs in a human-readable diff and a `--check` that reds."""
     unresolved = unresolved or {}
     head = (f"# {BANNER}\n"
-            f"# {len(rows)} route(s): open access + review:verified only (R5); level2 never routes "
-            f"(D19).\n")
+            f"# {len(rows)} route(s): open access + review:verified only; level2 never routes.\n")
     for pkg in sorted(unresolved):
         head += f"# UNRESOLVED {pkg}: {_reason_line(unresolved[pkg])}\n"
     return head + "".join(f'"{key}" "{value}"\n' for key, value in rows)

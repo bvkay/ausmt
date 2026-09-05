@@ -1,13 +1,13 @@
-"""runs[] on the promoted station.json: the D2 gate, the D9 channel rule, and the run ids.
+"""runs[] on the promoted station.json: the run gate, the channel rule, and the run ids.
 
-A run is an ACQUISITION, so a run may be published only where a source states one. D2: a station
+A run is an ACQUISITION, so a run may be published only where a source states one. A station
 gets runs[] when its own >INFO asserts a source run id or a real acquisition fact, and never from
 the placeholder run mt_metadata instantiates for every file it reads. The identifier comes from the
 persistent per-survey run-id store in the surveys package (`run-ids.yaml`), assigned once and never
 regenerated: where the store has no row the station publishes no runs at all, because the emitter is
 not allowed to invent an id at build time.
 
-D9 decides which channels ride the run: a channel enters channels[] only when corroborated beyond
+The channel rule decides which channels ride the run: a channel enters channels[] only when corroborated beyond
 DEFINEMEAS alone, which here means the >INFO names it or the transfer function measured it. A source
 assertion CONTRADICTING the channel list wins over both, and the corpus fixture for that is
 newer-volcanic-province-2019's A1.edi, which states that its HZ/RX/RY channel declarations are
@@ -44,7 +44,7 @@ def _facts(name):
     return rf.run_facts((RUNFACTS / f"{name}.info").read_text(encoding="utf-8"))
 
 
-# ---- the D2 gate --------------------------------------------------------------------------------
+# ---- the run-facts gate -------------------------------------------------------------------------
 
 def test_a_station_asserting_no_acquisition_fact_publishes_no_runs():
     """The Geotools survey header states nothing, so there is no run to publish and no id to look
@@ -111,7 +111,7 @@ def test_a_window_with_no_start_is_not_published_at_all():
     assert "time_period" not in runs[0]
 
 
-# ---- D9: which channels ride the run ------------------------------------------------------------
+# ---- which channels ride the run ----------------------------------------------------------------
 
 def test_the_channel_list_is_corroborated_never_taken_from_definemeas():
     """The >INFO names four channels and the transfer function measured an impedance; DEFINEMEAS is
@@ -121,7 +121,7 @@ def test_the_channel_list_is_corroborated_never_taken_from_definemeas():
 
 
 def test_a_source_note_contradicting_the_channel_list_wins():
-    """D9's exclusion rule and its corpus fixture: A1.edi's own caveat removes HZ/RX/RY even when
+    """The channel exclusion rule and its corpus fixture: station A1.edi's own caveat removes HZ/RX/RY even when
     the transfer function carries a tipper, which would otherwise corroborate hz."""
     runs, _notes = bp.station_runs(_facts("enriched-dotted"), {"A1": ["A1_001"]}, "A1", "ZT")
     assert "hz" not in [c["component"] for c in runs[0]["channels"]]
@@ -136,7 +136,7 @@ def test_a_tipper_corroborates_hz_where_no_note_excludes_it():
 
 
 def test_remote_reference_channels_never_enter_the_run():
-    """D9: the rr* channels are governed by the presence rule, not by corroboration. They are
+    """The rr* channels are governed by the presence rule, not by corroboration. They are
     mt_metadata run defaults and no corpus source declares them."""
     facts = _facts("enriched-dotted")
     facts["named_components"] = facts["named_components"] + ["rrhx", "rrhy"]
@@ -217,7 +217,7 @@ def _station(out, slug, station):
 
 
 def test_a_built_station_publishes_its_run_and_validates(tmp_path):
-    """FAILS against the pre-A7 emitter, which published no runs[] at all."""
+    """FAILS against the earlier emitter, which published no runs[] at all."""
     pytest.importorskip("mt_metadata")
     jsonschema = pytest.importorskip("jsonschema")
     out = _build(tmp_path)

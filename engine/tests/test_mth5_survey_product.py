@@ -1,7 +1,7 @@
-"""C32 tier 2 survey MTH5 product (SPEC MTH5-PRODUCT): the survey.yaml -> survey_metadata mapping and
-the INJECTED dataset DOI (SPEC §3.3 / A5), the SPEC §6 blocking round-trip gate (a faithful build
-passes; a corrupted h5 is RED-proven to fail and be withheld), the A2 version-pin recorded on the
-manifest, and the tier-3 (designed-but-disabled, SPEC §2.3 / A4) collection producer + its RAM guard.
+"""Tier 2 survey MTH5 product (MTH5-PRODUCT): the survey.yaml -> survey_metadata mapping and
+the INJECTED dataset DOI, the blocking round-trip gate (a faithful build
+passes; a corrupted h5 is RED-proven to fail and be withheld), the version-pin recorded on the
+manifest, and the tier-3 (designed-but-disabled) collection producer + its RAM guard.
 
 These exercise the producer directly with the vendored two-station example survey; the manifest/embargo/
 coord-access integration of the same producer is covered by test_manifest.py / test_access_gate.py /
@@ -54,7 +54,7 @@ def _open(hp):
 # --------------------------------------------------------------------- metadata mapping + DOI injection
 
 def test_survey_metadata_and_dataset_doi_injected(tmp_path):
-    """SPEC §3.3 / A5: the survey.yaml scholarly fields map onto survey_metadata and the DATASET DOI is
+    """The survey.yaml scholarly fields map onto survey_metadata and the DATASET DOI is
     injected (it is the one field genuinely absent from every EDI). The bare '10.…' DOI is normalised to a
     resolvable URL, and all of it survives the write -> reopen round-trip."""
     rel, hp, n = bp.emit_survey_mth5(_stations(), "example-survey", "Example", tmp_path, smeta=_SMETA)
@@ -77,7 +77,7 @@ def test_survey_metadata_and_dataset_doi_injected(tmp_path):
         m.close_mth5()
 
 
-# CONTRIBUTOR-CREDIT-SPEC (mth5 follow-up): a SMETA carrying the typed credit lists + a real grant id.
+# The contributor-credit model (mth5 follow-up): a SMETA carrying the typed credit lists + a real grant id.
 # project_lead is the lead-most credited party (the ProjectLeader contributor here, ahead of the lead
 # creator), its ORCID belongs in project_lead.url (a full https URL - AuthorPerson has no serialised id),
 # and the grant id rides through funders when the survey declares one.
@@ -93,7 +93,7 @@ _CREDIT_SMETA = {
 
 
 def test_project_lead_url_and_grant_id_round_trip(tmp_path):
-    """CONTRIBUTOR-CREDIT-SPEC: the mth5 survey_metadata carries the lead-most credited party as
+    """The contributor-credit model: the mth5 survey_metadata carries the lead-most credited party as
     project_lead (the ProjectLeader contributor, ahead of the lead creator), its ORCID as a full
     https://orcid.org/<id> project_lead.url, and the grant id in funding_source.grant_id. RED against the
     pre-change producer: it seeded project_lead from the retired credit facet and wrote the ORCID to a non-
@@ -116,7 +116,7 @@ def test_project_lead_url_and_grant_id_round_trip(tmp_path):
 
 
 def test_metadata_thin_survey_still_builds_and_groups(tmp_path):
-    """SPEC caveat 2: a raw/CSV-only survey with no SMETA still builds a valid TF payload; the slug is
+    """Caveat 2: a raw/CSV-only survey with no SMETA still builds a valid TF payload; the slug is
     seeded so stations do NOT collapse into one survey group '0'."""
     rel, hp, n = bp.emit_survey_mth5(_stations(), "thin-survey", "Thin", tmp_path, smeta=None)
     assert n == 2 and hp.exists()
@@ -127,10 +127,10 @@ def test_metadata_thin_survey_still_builds_and_groups(tmp_path):
         m.close_mth5()
 
 
-# --------------------------------------------------------------------- round-trip gate (SPEC §6)
+# --------------------------------------------------------------------- round-trip gate
 
 def test_roundtrip_gate_passes_on_faithful_build(tmp_path):
-    """SPEC §6: a faithful build is lossless — every impedance + coordinate matches its source EDI to
+    """A faithful build is lossless - every impedance + coordinate matches its source EDI to
     float precision (the measured Tumby result was 0.0), the payload is TF-only, and the producer returns
     the bundle."""
     rel, hp, n = bp.emit_survey_mth5(_stations(), "rt", "RT", tmp_path, smeta=None)
@@ -142,7 +142,7 @@ def test_roundtrip_gate_passes_on_faithful_build(tmp_path):
 
 
 def test_roundtrip_gate_RED_on_corrupted_impedance(tmp_path):
-    """RED proof (SPEC §6): a silently-wrong TF — one impedance element mutated after the write — MUST
+    """RED proof: a silently-wrong TF - one impedance element mutated after the write - MUST
     fail the round-trip gate. Without the gate this file would ship byte-clean with a wrong Z."""
     import h5py  # noqa: PLC0415
     rel, hp, n = bp.emit_survey_mth5(_stations(), "red", "RED", tmp_path, smeta=None)
@@ -161,8 +161,8 @@ def test_roundtrip_gate_RED_on_corrupted_impedance(tmp_path):
 
 
 def test_producer_withholds_survey_when_gate_fails(tmp_path, monkeypatch):
-    """SPEC §6: when the round-trip gate fails, the PRODUCER withholds the whole survey — deletes the h5
-    and returns no bundle — so a mismatch never reaches the manifest. Withholds the survey, not the corpus."""
+    """When the round-trip gate fails, the PRODUCER withholds the whole survey - deletes the h5 and
+    returns no bundle - so a mismatch never reaches the manifest. Withholds the survey, not the corpus."""
     monkeypatch.setattr(bp, "mth5_survey_roundtrip_ok",
                         lambda *a, **k: (False, {"checked": 2, "z_max_abs_diff": 9.9,
                                                  "coord_max_abs_diff": 0.0, "tf_only": True,
@@ -175,7 +175,7 @@ def test_producer_withholds_survey_when_gate_fails(tmp_path, monkeypatch):
 # --------------------------------------------------------------------- tier 3 collection (designed, disabled)
 
 def test_collection_producer_groups_members_distinctly(tmp_path):
-    """SPEC §2.3: the tier-3 producer concatenates surveys, each under its OWN survey group keyed by slug,
+    """The tier-3 producer concatenates surveys, each under its OWN survey group keyed by slug,
     so a station id shared across members never collides. Here two members carry the SAME station id and
     must land as two distinct groups, each round-tripping against its own source EDI."""
     edis = example_edis()
@@ -193,7 +193,7 @@ def test_collection_producer_groups_members_distinctly(tmp_path):
 
 
 def test_collection_guard_disabled_by_default_and_ram_capped():
-    """SPEC A4: the tier-3 producer is disabled by construction (collection_h5_enabled default OFF) and,
+    """The tier-3 producer is disabled by construction (collection_h5_enabled default OFF) and,
     when enabled, refuses a build above max_collection_stations so an AusLAMP-national ~6 GiB build cannot
     OOM the host."""
     off = bp.load_flags(None)
@@ -206,10 +206,10 @@ def test_collection_guard_disabled_by_default_and_ram_capped():
     assert capped is False and "max_collection_stations" in why, "over the cap => refused (RAM gate)"
 
 
-# --------------------------------------------------------------------- version pin on the manifest (A2)
+# --------------------------------------------------------------------- version pin on the manifest
 
 def test_manifest_records_mth5_version_pin(tmp_path):
-    """SPEC A2: the download manifest self-declares the mth5 / mt_metadata pin its served bundles were
+    """The download manifest self-declares the mth5 / mt_metadata pin its served bundles were
     written with, so a consumer reads the exact library version beside the artifact's size/sha256."""
     import mt_metadata  # noqa: PLC0415
     import mth5  # noqa: PLC0415

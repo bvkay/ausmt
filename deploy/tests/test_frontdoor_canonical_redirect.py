@@ -1,4 +1,4 @@
-﻿"""Canonical-name ruling (2026-08-18): the front door serves BOTH names, one canonical.
+"""The front door serves BOTH names, one canonical.
 
 `ausmt.auscope.org.au` is the canonical public name; `ausmt.au` is an OPTIONAL legacy name whose only
 job is a permanent (301) redirect to the canonical name with path and query preserved. The redirect is
@@ -85,7 +85,7 @@ def _site_openers(text: str) -> list[str]:
     tracked over non-comment lines with PLACEHOLDER tokens removed first: `{$ENV}` in comments was
     already excluded, and a directive line like `map {http.request.uri} {dest} {` carries balanced
     placeholder braces beside ONE structural opener, so counting raw braces would inflate the depth
-    permanently and hide every later site opener (the path-url contract lane added such lines)."""
+    permanently and hide every later site opener, which is the shape a map directive writes."""
     openers: list[str] = []
     depth = 0
     for raw in text.splitlines():
@@ -95,7 +95,7 @@ def _site_openers(text: str) -> list[str]:
         if depth == 0 and line.endswith("{"):
             addr = line[:-1].strip()
             # A parenthesised address is a SNIPPET definition (e.g. `(box_upstream)`, the
-            # 2026-08-28 shared box transport), not a site block: Caddy expands it at import
+            # shared box transport), not a site block: Caddy expands it at import
             # sites and it binds no listener, so it is not a site opener.
             if addr and not (addr.startswith("(") and addr.endswith(")")):
                 openers.append(addr)
@@ -168,7 +168,7 @@ def test_legacy_redirect_is_permanent_and_preserves_path_and_query():
 
 
 def test_legacy_block_is_redirect_only():
-    """[A3] The legacy block carries NOTHING but the redir: no reverse_proxy (a legacy-name request
+    """The legacy block carries NOTHING but the redir: no reverse_proxy (a legacy-name request
     must never reach the reader wall under the legacy identity), no log (see the analytics pin
     below), no header/HSTS (deliberate: the block is minimal; HSTS is the canonical site's job).
     FAILS IF any directive beyond the single redir appears."""
@@ -197,7 +197,7 @@ def test_only_the_canonical_block_logs():
 
 
 def test_empty_var_rendering_has_exactly_one_site_block():
-    """[A2] The empty-var rendering (the marker range deleted, exactly what install-frontdoor.sh
+    """The empty-var rendering (the marker range deleted, exactly what install-frontdoor.sh
     does when AUSMT_LEGACY_REDIRECT_NAME is unset) must leave a config with EXACTLY ONE site block,
     the canonical one, and no trace of the legacy placeholder. An empty-address block would be a
     Caddy parse error on exactly the deploy that has no legacy name. FAILS IF the strip leaves a
@@ -211,7 +211,7 @@ def test_empty_var_rendering_has_exactly_one_site_block():
 
 
 def test_set_var_rendering_has_both_site_blocks_canonical_first():
-    """[A2] The set-var rendering (the shipped file as-is) carries BOTH site blocks: the canonical
+    """The set-var rendering (the shipped file as-is) carries BOTH site blocks: the canonical
     reader block first, then the legacy redirect block. FAILS IF either address disappears or the
     order flips (the canonical block is the one the bridge tests brace-match first)."""
     openers = _site_openers(_fd_text())
@@ -375,7 +375,7 @@ def _get_noredirect(port: int, path: str, host: str) -> tuple[int, dict]:
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_caddy_validates_both_renderings():
-    """[A2] RUNTIME. A real `caddy validate` accepts BOTH renderings: the set-var rendering (both
+    """RUNTIME. A real `caddy validate` accepts BOTH renderings: the set-var rendering (both
     blocks, placeholders resolved) and the empty-var rendering (legacy block stripped). FAILS IF
     either rendering is rejected."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -392,7 +392,7 @@ def test_caddy_validates_both_renderings():
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_unrendered_file_with_unset_var_is_a_parse_error():
-    """[A2] RED-PROOF, the trap itself. The UNRENDERED template with AUSMT_LEGACY_REDIRECT_NAME
+    """RED-PROOF, the trap itself. The UNRENDERED template with AUSMT_LEGACY_REDIRECT_NAME
     unset leaves a site block with an EMPTY address, and a real Caddy must REJECT it. This is why
     the installer templates: were this to pass, the templating would be decoration. FAILS IF Caddy
     accepts the empty-address block."""

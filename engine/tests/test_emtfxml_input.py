@@ -1,4 +1,4 @@
-"""EMTF XML is a FIRST-CLASS submission input alongside EDI and MTH5 (owner ruling 2026-08-03), so a
+"""EMTF XML is a FIRST-CLASS submission input alongside EDI and MTH5, so a
 station whose transfer function arrives only as EMTF XML must build and serve the FULL product set,
 and a station that has both must resolve to its EDI.
 
@@ -75,7 +75,7 @@ def test_emtfxml_only_survey_builds_and_serves_the_full_product_set(tmp_path):
     """FAILS IF an XML-only survey does not build, or serves less than the full product set: the
     catalogue row, the per-station science products, the canonical re-emitted EMTF XML, a generated
     EDI (mt_metadata writes one from the same TF), the manifest rows for both formats, and membership
-    in both per-survey bundles. This is the ruling's whole point -- 'so all formats are covered'."""
+    in both per-survey bundles. This is the rule's whole point -- 'so all formats are covered'."""
     _package(tmp_path / "surveys", xml_stations=("EXAMPLE01", "EXAMPLE02"))
     rc, out, prod = _build(tmp_path, tmp_path / "surveys")
     assert rc == 0, "an EMTF-XML-only survey must build"
@@ -132,7 +132,7 @@ def test_emtfxml_input_matches_the_edi_input_it_was_written_from(tmp_path):
 
 
 def test_edi_wins_when_one_station_has_both_edi_and_emtfxml(tmp_path):
-    """OWNER PRECEDENCE RULING (2026-08-03): where a station has both, the EDI is the canonical
+    """THE PRECEDENCE RULE: where a station has both, the EDI is the canonical
     source and the XML is kept in the package but NOT ingested.
 
     FAILS IF the XML rendition displaces or duplicates the EDI-sourced station. The package holds
@@ -384,7 +384,7 @@ def test_a_real_round_trip_failure_leaves_no_unverified_bytes_for_an_edi_station
 
 def test_embargoed_emtfxml_survey_serves_no_bytes(tmp_path):
     """EMBARGO INHERITANCE (the reviewer must PROVE it, not accept it). The XML ingest lands in the
-    same station pipeline, so the C1 access gate applies unchanged.
+    same station pipeline, so the access gate applies unchanged.
 
     FAILS IF an embargoed EMTF-XML-only survey serves any byte: no canonical XML, no generated EDI,
     no bundles, no manifest rows, and a WITHHELD station.json carrying no TF-derived science -- while
@@ -409,7 +409,7 @@ def test_embargoed_emtfxml_survey_serves_no_bytes(tmp_path):
 
 
 def test_withheld_coordinate_emtfxml_station_serves_no_coordinates_and_no_bytes(tmp_path):
-    """COORDINATE POLICY INHERITANCE. The C42 per-station byte gate is applied at the emit seam, which
+    """COORDINATE POLICY INHERITANCE. The per-station byte gate is applied at the emit seam, which
     the XML path shares, so a withheld-coordinate station must lose its coordinates AND its bytes --
     an EMTF XML is a full coordinate + elevation bearer, so it is withheld, never redacted.
 
@@ -440,7 +440,7 @@ def test_withheld_coordinate_emtfxml_station_serves_no_coordinates_and_no_bytes(
 
 
 def test_declared_frame_is_read_from_the_file_not_from_a_library_default(tmp_path):
-    """C25 honesty on the XML path. The frame an EMTF XML declares lives in
+    """Honesty on the XML path. The frame an EMTF XML declares lives in
     <Site><Orientation angle_to_geographic_north=...>. mt_metadata 1.0.9's EMTF-XML reader leaves the
     TF's own _rotation_angle at a bare 0 regardless of what the file says, so reading THAT would
     report every station as 'declared-zero' -- a library default asserted as a station fact.
@@ -467,7 +467,7 @@ def test_declared_frame_is_read_from_the_file_not_from_a_library_default(tmp_pat
 
 
 def test_per_period_rotation_declaration_refuses_the_station():
-    """C25 POLICY v3 applies to the XML path too: AusMT serves data AS STORED and never serves a
+    """POLICY v3 applies to the XML path too: AusMT serves data AS STORED and never serves a
     per-period-mixed frame, so the XML frame reader must REFUSE a per-period declaration rather than
     pick one of the angles.
 

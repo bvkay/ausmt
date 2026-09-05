@@ -1,20 +1,20 @@
-"""Serve-state helpers for the C40 curator serve-reconcile panel.
+"""Serve-state helpers for the curator serve-reconcile panel.
 
-The gap C40 closes: `PUBLISHED` means "committed to surveys-live and pushed", NOT "served" — the
-portal keeps serving the old build until a rebuild runs. C40 adds a host-side reconcile timer that
-rebuilds on drift, and this module is the GATEWAY half: the curator's front-door view of that state
+The gap this closes: `PUBLISHED` means "committed to surveys-live and pushed", NOT "served" - the
+portal keeps serving the old build until a rebuild runs. A host-side reconcile timer rebuilds on
+drift, and this module is the GATEWAY half: the curator's front-door view of that state
 (published HEAD vs served build, last reconcile outcome, a pending-rebuild indicator) plus the
 zero-argument "request rebuild" button's write.
 
 Pure-ish functions (filesystem + an injected git runner, no DB, no framework) so the read/write logic
 is unit-testable without the whole app — the same split uploader_keys.py / publish.py use.
 
-TRUST BOUNDARY (design §3): the gateway gains NO new privileges. It reads its OWN state dir
+TRUST BOUNDARY: the gateway gains NO new privileges. It reads its OWN state dir
 (/gw/state, already mounted rw) and runs `git rev-parse` over the surveys-live checkout it ALREADY
 mounts for the publish flow (via the same scrubbed_env the publish git calls use). It does NOT read
 site-data (it has no such mount) — the served build.json/build_report.json are fetched by the BROWSER
 same-origin from Caddy, never by this server. The request file's CONTENT is audit-only: the host
-reconcile agent keys only on the file's EXISTENCE and never parses it (C40 §4 — zero-argument by
+reconcile agent keys only on the file's EXISTENCE and never parses it (zero-argument by
 design), so a compromised gateway can at worst trigger one rebuild per timer tick of the same corpus.
 """
 from __future__ import annotations
@@ -28,21 +28,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # The two state files the reconcile agent and the button share, under the gateway state dir
-# (cfg.state_dir == /gw/state; host: $AUSMT_DATA_DIR/gateway/state). Names fixed by design §3.
+# (cfg.state_dir == /gw/state; host: $AUSMT_DATA_DIR/gateway/state). The two names are fixed:
+# the agent and the button must spell them identically.
 REQUEST_FILENAME = "rebuild.request"
 STATUS_FILENAME = "reconcile-status.json"
-# C43 S2b-i: the ops floor's host-written state file (record D8/D15). Written by the alert timer
+# The ops floor's host-written state file. Written by the alert timer
 # (deploy/scripts/alert.sh) into the SAME state dir, read SERVER-side here (the reconcile-status.json
-# seam — no new mount, C40 intact). The gateway never writes it.
+# seam - no new mount, the existing trust boundary intact). The gateway never writes it.
 OPS_STATUS_FILENAME = "ops-status.json"
-# C45 usage analytics (record D4/D5). The host aggregator (deploy/scripts/aggregate_stats.py, a daily
-# timer) folds the Caddy access log into this cumulative stats.json in the SAME state dir; the Analytics
-# screen reads it SERVER-side (the ops-status.json seam — no new mount, no new privilege, C40 intact).
-# The gateway NEVER writes it. It carries aggregates only — counts + dailies, never an address or a UA.
+# Usage analytics. The host aggregator (deploy/scripts/aggregate_stats.py, a daily timer) folds the
+# Caddy access log into this cumulative stats.json in the SAME state dir; the Analytics screen reads
+# it SERVER-side (the ops-status.json seam - no new mount, no new privilege, the existing trust
+# boundary intact). The gateway NEVER writes it. It carries aggregates only: counts + dailies,
+# never an address or a UA.
 STATS_FILENAME = "stats.json"
 
-# C43 S2b-ii: the privileged INTENT files the gateway WRITES and the host actions agent
-# (deploy/scripts/actions.sh) executes (record D8/D9). Fixed enum — these names MUST match the host
+# The privileged INTENT files the gateway WRITES and the host actions agent
+# (deploy/scripts/actions.sh) executes. Fixed enum - these names MUST match the host
 # agent's allow-list exactly. The gateway only ASKS (writes an intent); the host validates + acts.
 # `rebuild.request` (above) stays existence-keyed for reconcile; these four ride the actions agent.
 INTENT_FILENAMES: dict[str, str] = {
@@ -64,7 +66,7 @@ _INTENT_LOCK = threading.Lock()
 
 class IntentAlreadyPending(Exception):
     """A privileged intent of this kind is already waiting for the host agent to consume it — the
-    single-flight guard (D9.3). The route surfaces this as 'already pending' UX, never a second write
+    single-flight guard. The route surfaces this as 'already pending' UX, never a second write
     (one privileged action of a kind at a time)."""
 
 
@@ -100,9 +102,9 @@ def _atomic_write(state_dir: Path, filename: str, payload: dict) -> Path:
 
 def write_rebuild_request(state_dir: Path, *, requested_by: str, full: bool = False) -> Path:
     """Write {requested_at, requested_by[, full]} to <state_dir>/rebuild.request ATOMICALLY. Idempotent:
-    a second press overwrites the same path (design §3 — "pressing twice = still one file"). The content
-    is AUDIT ONLY for reconcile's existence-keyed consume — EXCEPT the optional `full` boolean (C43
-    S2b-ii Force-full-rebuild): reconcile reads ONLY that one flag and, when true, runs the build in
+    a second press overwrites the same path ("pressing twice = still one file"). The content
+    is AUDIT ONLY for reconcile's existence-keyed consume, EXCEPT the optional `full` boolean (the
+    force-full-rebuild flag): reconcile reads ONLY that one flag and, when true, runs the build in
     cache-REFRESH mode (recompute everything, no cache reuse). A bounded parse: the worst a compromised
     gateway can do is force a full — same corpus, just more expensive.
 
@@ -115,13 +117,13 @@ def write_rebuild_request(state_dir: Path, *, requested_by: str, full: bool = Fa
 
 def write_intent(state_dir: Path, kind: str, *, requested_by: str,
                  extra: dict | None = None, single_flight: bool = True) -> Path:
-    """Write a privileged INTENT file for the host actions agent (record D8/D9). `kind` is one of
+    """Write a privileged INTENT file for the host actions agent. `kind` is one of
     INTENT_FILENAMES (update/backup/rollback/restore); `extra` carries the validated id for the
     parameterised kinds (rollback: {'build_id': ...}; restore: {'snapshot_id': ...}) — the HOST
-    re-validates it against the real inventory (D9.2, gateway-side is UX only). The whole payload is
+    re-validates it against the real inventory (gateway-side is UX only). The whole payload is
     {requested_at, requested_by, **extra}.
 
-    SINGLE-FLIGHT (D9.3): with single_flight True (the default) a pending intent of the SAME kind
+    SINGLE-FLIGHT: with single_flight True (the default) a pending intent of the SAME kind
     raises IntentAlreadyPending — one privileged action of a kind at a time. The check + write are one
     critical section under _INTENT_LOCK so two concurrent requests cannot both pass the check.
     """
@@ -205,8 +207,8 @@ def read_actions_audit_tail(state_dir: Path, *, n: int = 40) -> list[str]:
     an absent log => [].
 
     Splits on '\\n' ONLY (never str.splitlines()): the host already scrubs control + unicode-separator
-    chars from the attacker-controlled fields (actions.sh _scrub, S4), but the gateway must not TRUST
-    that a host file is clean — splitlines() would treat a stray U+2028/U+2029/VT/FF as a line break
+    chars from the attacker-controlled fields (actions.sh _scrub), but the gateway must not TRUST
+    that a host file is clean - splitlines() would treat a stray U+2028/U+2029/VT/FF as a line break
     and could fabricate whole tail entries from one crafted line. Splitting on the host's real
     separator (\\n) keeps a crafted line as ONE rendered entry (later _esc'd, so inert)."""
     p = state_dir / ACTIONS_AUDIT_FILENAME
@@ -261,7 +263,7 @@ def read_ops_status(state_dir: Path) -> dict | None:
 
 
 def read_stats(state_dir: Path) -> dict | None:
-    """Return the parsed stats.json (the C45 usage-analytics aggregates), or None if it is absent (the
+    """Return the parsed stats.json (usage-analytics aggregates), or None if it is absent (the
     aggregator timer is not installed / has not run) or unreadable/malformed. Never raises — mirrors
     read_ops_status: a broken stats file must not 500 the Analytics screen; the caller treats None as
     'no analytics yet' and renders the empty state (never a partial/last-known-good crash)."""
@@ -277,7 +279,7 @@ def read_stats(state_dir: Path) -> dict | None:
 def ops_status_stale(status: dict | None, *, now_epoch: float | None = None,
                      default_period_min: float = 15.0, stale_periods: float = 2.0) -> bool:
     """True when ops-status.json is missing (status None), or older than ~`stale_periods` timer periods
-    — the ops floor then renders explicit STALE cards instead of last-known-good (record D8/D15). A
+    - the ops floor then renders explicit STALE cards instead of last-known-good. A
     missing OR unparseable `generated_at` is STALE (fail loud, never silently fresh). The timer period
     is read from the file's own `timer_period_min` (the writer stamps its cadence); a bad/absent value
     falls back to `default_period_min`. `now_epoch` is injectable so the staleness pin is deterministic.
@@ -300,7 +302,7 @@ def ops_status_stale(status: dict | None, *, now_epoch: float | None = None,
     except (TypeError, ValueError):
         period = default_period_min
     now = time.time() if now_epoch is None else now_epoch
-    # Fail-closed BOTH directions (gate finding 2026-07-11): a FUTURE generated_at (forward clock
+    # Fail-closed BOTH directions: a FUTURE generated_at (forward clock
     # step, then the timer dies) must be STALE too — a negative age is not freshness, it is doubt,
     # and doubt resolves to STALE. Freshness is the narrow band 0 <= age <= threshold.
     age = now - ts
@@ -323,7 +325,7 @@ def read_published_head(git_runner, surveys_live: Path | None) -> PublishedHead:
     the safe.directory GIT_CONFIG_* the compose file already declares applies and no secret leaks to
     git. Returns available=False (never raises) on any failure: an unset surveys_live, a non-checkout,
     or a non-zero git exit. The curator page shows "unavailable" instead of erroring — a missing HEAD
-    is a state to display, not a page fault (design §4: "on failure show 'unavailable', never 500")."""
+    is a state to display, not a page fault ("on failure show 'unavailable', never 500")."""
     if surveys_live is None:
         return PublishedHead(short=None, available=False)
     try:

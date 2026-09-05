@@ -1,6 +1,6 @@
 """THE MTCAT SCHEMA VERSION HAS ONE SOURCE, AND THIS IS THE PIN THAT KEEPS IT THAT WAY.
 
-The version used to be a literal, and a literal reproduces. Three consecutive review rounds each found
+The version must not be a literal, because a literal reproduces. Three separate passes each found
 another hardcoded default: two in build_portal (the no-config/unreadable-config default in
 load_portal_config and the emitter's own p.get fallback), a third in load_portal_config's parsed-config
 branch, and a fourth in portal/tools/gen_config.py still defaulting to "1.0" two schema releases after
@@ -8,13 +8,13 @@ branch, and a fourth in portal/tools/gen_config.py still defaulting to "1.0" two
 asserted that the sites agreed, so each fix left the next one undiscovered until a human happened to
 read it.
 
-SINGLE SOURCE: the MTCAT_VERSION constant in contract/generate.py (the ratified MTCAT 2.0 version
+SINGLE SOURCE: the MTCAT_VERSION constant in contract/generate.py (the MTCAT 2.0 version
 machinery: "the machine-readable version source becomes a constant; the title displays the version;
-it is no longer parsed as the source"). The schema artifact's `title` is a DISPLAY surface generated
+it is not parsed as the source"). The schema artifact's `title` is a DISPLAY surface generated
 from the constant and verified against it; contract/generate.py:mtcat_schema_version() returns the
 constant after that verification and emits MTCAT_SCHEMA_VERSION into engine/extract/_contract.py
 (the same generated-constant mechanism the positional column contract uses, gated by
-`generate.py --check` in both CI lanes), and every former default site reads that constant or calls
+`generate.py --check` in both CI workflows), and every former default site reads that constant or calls
 that function.
 
 THIS MODULE reads the version back off every surface that states one, INDEPENDENTLY of the shared
@@ -31,12 +31,12 @@ agree with itself vacuously), and asserts they are all the same string:
   8. the docs current-version display           (docs/docs/reference/index.md)
   9. a REAL BUILD's emitted mtcat.json portal block (the version a harvester is actually served)
 
-plus TWO class guards: no MAJOR.MINOR literal may sit next to `schema_version` in build_portal.py,
-gen_config.py or version.js ever again, and portal/portal.config.yaml may not re-declare a
+plus TWO class guards: no MAJOR.MINOR literal may sit next to `schema_version` in build_portal.py
+or gen_config.py ever again, and portal/portal.config.yaml may not re-declare a
 schema_version key (the config surface is generated, never hand-stated, since the inversion).
 
 Two surfaces are pinned elsewhere and deliberately not repeated here: about.html's prose statement, in
-portal/tests/test_mtcat_machine_contract.py (the lane that triggers on portal/** and engine/schema/**),
+portal/tests/test_mtcat_machine_contract.py (the workflow that triggers on portal/** and engine/schema/**),
 and the ENGINE's re-used-portal path (a real build against a config that omits the key), in
 test_mtcat.py, which owns build-emission coverage.
 
@@ -44,17 +44,17 @@ TOPOLOGY (why the portal reads are guarded): surfaces 4-7 live in portal/, a tre
 deliberately does not ship. deploy/docker/engine.Dockerfile COPYs contract/ and engine/ plus the one
 generated file portal/src/contract.js (so `generate.py --check` can verify it) and nothing else, and
 deploy-images' engine-full-tests release gate runs THIS suite inside that image, where /app/portal/
-holds that single file and none of the five pinned ones. Those reads therefore sit behind a
+holds that single file and none of the four pinned ones. Those reads therefore sit behind a
 module-level topology check that skips them when no pinned portal file is present. That is the same
 designed-topology skip test_validator_gate.py takes for the absent gateway tree, and its reason is
 allow-listed in tests/ci_check_skips.py the same way. What still asserts IN the image: the schema-title
 authority, the contract parser, the generated engine constant, the real build's emitted portal block,
 and the builder's own literal guard. The image's internal coherence is exactly what the release gate
-exists to prove, and none of that needs portal/. On a checkout all five files exist, so the guard is
+exists to prove, and none of that needs portal/. On a checkout all four files exist, so the guard is
 inert and the pin is not one assertion weaker there; a checkout carrying SOME of them still FAILS on
 the missing read, because a broken tree is not a topology. The portal surfaces are pinned from the
-CHECKOUT lane:
-build-products.yml runs this suite post-checkout and its path filter names all five files (and
+CHECKOUT workflow:
+build-products.yml runs this suite post-checkout and its path filter names all four files (and
 engine/**, so this module's own edits trigger it), on push and on pull_request.
 
 RED-proven: restoring the literal "1.0" default in gen_config.build_config fails
@@ -75,23 +75,23 @@ REPO = ROOT.parent                                  # the ausmt monorepo root
 SCHEMA_FILE = ROOT / "schema" / "mtcat.schema.json"
 BUILDER = ROOT / "extract" / "build_portal.py"
 GEN_CONFIG = REPO / "portal" / "tools" / "gen_config.py"
-VERSION_JS = REPO / "portal" / "version.js"
 PORTAL_CFG = REPO / "portal" / "portal.config.yaml"
 CONFIG_JS = REPO / "portal" / "config.js"
 PLACEHOLDER = REPO / "portal" / "data" / "mtcat.json"
 SURVEYS = HERE / "fixtures"                         # vendored, self-contained (as in test_mtcat.py)
 
 # ---------------------------------------------------------------- which tree is this? (topology)
-# The five portal files this module reads. They all exist on any monorepo checkout and NONE of them
+# The four portal files this module reads. They all exist on any monorepo checkout and NONE of them
 # exists in the engine image, whose Dockerfile COPYs contract/ + engine/ and exactly one portal file
 # (portal/src/contract.js, the generated browser contract that `generate.py --check` verifies). So the
 # presence of the SET is the topology probe, not the presence of portal/ (which the image does have,
 # holding that single unrelated file), and not the presence of any one file (a checkout missing one is
 # BROKEN, and must fail the read, not skip it).
-PORTAL_SURFACES = (PORTAL_CFG, CONFIG_JS, PLACEHOLDER, GEN_CONFIG, VERSION_JS)
+PORTAL_SURFACES = (PORTAL_CFG, CONFIG_JS, PLACEHOLDER, GEN_CONFIG)
 
 IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: portal tree not shipped "
-                              "(designed topology; portal surfaces are pinned from checkout lanes)")
+                              "(designed topology; portal surfaces are pinned from the checkout "
+                              "workflows)")
 
 # Skip ONLY when NOT ONE of them is present: that is the image, where these surfaces do not exist to
 # disagree. Any one of them present means a portal tree is meant to be here, so the guard opens and a
@@ -117,7 +117,7 @@ def _authority() -> str:
 
 def _schema_title_display() -> str:
     """The version the schema artifact DISPLAYS in its title (a generated display surface since the
-    ratified inversion, verified here against the constant like every other surface)."""
+    inversion, verified here against the constant like every other surface)."""
     title = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))["title"]
     m = re.match(r"^MTCAT v(\d+\.\d+):", title)
     assert m, f"the schema must display its version in its title as 'MTCAT v<MAJOR>.<MINOR>: ...'; got {title!r}"
@@ -138,7 +138,7 @@ def _generated_engine_constant() -> str:
 
 def _docs_display() -> str:
     """The docs current-version display: the reference index states which schema version the
-    documentation describes. This surface previously lacked a pin (the version-literal class has
+    documentation describes. This surface lacked a pin (the version-literal class has
     bitten three times); it has one now, so a version bump cannot leave the docs describing the
     previous release."""
     docs_index = REPO / "docs" / "docs" / "reference" / "index.md"
@@ -197,8 +197,8 @@ def test_every_engine_surface_that_states_the_mtcat_version_agrees():
 @portal_surface
 def test_every_portal_surface_that_states_the_mtcat_version_agrees():
     """Statements 5-7, checked against the same authority (the constant, read here even in the
-    image lane's absence of these files, because the authority lives in contract/). Skipped where
-    the portal tree is not shipped; asserted on every checkout lane, which is where these files
+    image's absence of these files, because the authority lives in contract/). Skipped where
+    the portal tree is not shipped; asserted on every checkout workflow, which is where these files
     change."""
     want = _authority()
     _assert_agrees(want, {
@@ -210,9 +210,9 @@ def test_every_portal_surface_that_states_the_mtcat_version_agrees():
 
 @portal_surface
 def test_portal_config_yaml_does_not_redeclare_the_version():
-    """Since the ratified inversion the portal config carries NO schema_version key: the value is
+    """Since the inversion the portal config carries NO schema_version key: the value is
     GENERATED into config.js from the constant, and a re-declared key here would be the duplicated
-    literal returning under its old name (the class that bit three review rounds running)."""
+    literal returning under its old name (the class that bit three passes running)."""
     assert not re.search(r"^\s*schema_version\s*:", PORTAL_CFG.read_text(encoding="utf-8"), flags=re.M), (
         "portal/portal.config.yaml re-declares portal.schema_version; delete the key - the version is "
         "generated from contract/generate.py's MTCAT_VERSION constant, never hand-stated in config")
@@ -223,19 +223,19 @@ DOCS_INDEX = REPO / "docs" / "docs" / "reference" / "index.md"
 
 @pytest.mark.skipif(not DOCS_INDEX.is_file(),
                     reason="engine image build: docs tree not shipped "
-                           "(designed topology; the docs surface is pinned from checkout lanes)")
+                           "(designed topology; the docs surface is pinned from the checkout workflows)")
 def test_docs_current_version_display_agrees():
     """Statement 8: the docs reference index states which schema version the documentation
-    describes. This surface previously had no pin at all; a version bump could leave the whole
+    describes. Without a pin here, a version bump can leave the whole
     reference tree describing the previous release with nothing failing. Skipped only where the
-    docs tree is not shipped (the engine image); asserted on every checkout lane."""
+    docs tree is not shipped (the engine image); asserted on every checkout workflow."""
     want = _authority()
     _assert_agrees(want, {"docs/docs/reference/index.md current-version display": _docs_display()})
 
 
 def test_the_schema_id_is_the_versioned_immutable_uri():
-    """The $id IS a version surface now, and it is pinned like every other one. The ratified MTCAT
-    2.0 $id policy (final walk-through s49) supersedes the 1.2-era unversioned-$id ruling: the
+    """The $id IS a version surface now, and it is pinned like every other one. The MTCAT
+    2.0 $id policy (final walk-through s49) supersedes the 1.2-era unversioned-$id rule: the
     canonical identifier is the version-specific immutable URI under /data/schemas/mtcat/<version>/,
     with the unversioned /data/mtcat.schema.json kept as the latest-convenience route (still what
     portal.schema_url names; the build serves BOTH). The version segment must equal the
@@ -247,10 +247,10 @@ def test_the_schema_id_is_the_versioned_immutable_uri():
 
 
 def _assert_no_version_literal(files):
-    """The CLASS guard, applied to whichever of the three sites this topology ships. Every one of the
+    """The CLASS guard, applied to whichever of the two sites this topology ships. Every one of the
     four defects was the same shape: a MAJOR.MINOR literal parked beside the word schema_version.
     Forbidding the shape is what stops the fifth one, because the four were not found by reading
-    carefully, they were found one per review round."""
+    carefully, they were found one at a time."""
     offenders = {}
     for f in files:
         hits = re.findall(r"schema_version[^\n]{0,60}?[\"']\d+\.\d+[\"']", f.read_text(encoding="utf-8"))
@@ -259,8 +259,7 @@ def _assert_no_version_literal(files):
     assert not offenders, (
         "an MTCAT schema-version literal was reintroduced next to a schema_version default: "
         f"{offenders}. Read it from the single source instead (MTCAT_SCHEMA_VERSION from _contract, "
-        "or contract/generate.py's mtcat_schema_version()); version.js, which cannot read the schema "
-        "from a browser, must state no version at all rather than a stale one.")
+        "or contract/generate.py's mtcat_schema_version()).")
 
 
 def test_the_builder_carries_no_version_literal():
@@ -271,22 +270,9 @@ def test_the_builder_carries_no_version_literal():
 
 @portal_surface
 def test_no_portal_site_carries_a_version_literal():
-    """The other two sites of the same class (gen_config.py held the fourth literal, version.js is the
-    one that cannot derive the value at all), guarded wherever the portal tree is shipped."""
-    _assert_no_version_literal((GEN_CONFIG, VERSION_JS))
-
-
-@portal_surface
-def test_version_js_sentinel_states_no_version_rather_than_a_stale_one():
-    """version.js is the one surface that CANNOT derive the version (no build step, no way to read the
-    schema at render time), so its config-missing sentinel is honest instead: an explicit null, and a
-    label that stops after the schema name. The jsdom driver asserts the rendered chip; this asserts the
-    source, so the sentinel cannot quietly grow a number back in a lane that skips when Node is absent."""
-    src = VERSION_JS.read_text(encoding="utf-8")
-    m = re.search(r"window\.AUSMT_CONFIG\s*\|\|\s*\{([^}]*)\}", src)
-    assert m, "version.js must keep a config-missing sentinel object"
-    assert re.search(r"schema_version:\s*null", m.group(1)), (
-        f"the config-missing sentinel must set schema_version null, not a version; got {{{m.group(1)}}}")
+    """The other site of the same class (gen_config.py held the fourth literal), guarded wherever
+    the portal tree is shipped."""
+    _assert_no_version_literal((GEN_CONFIG,))
 
 
 # ---------------------------------------------------------------- the emitted document

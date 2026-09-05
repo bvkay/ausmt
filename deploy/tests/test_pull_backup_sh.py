@@ -32,7 +32,7 @@ pytestmark = pytest.mark.skipif(_SH is None, reason="no POSIX sh/bash to run pul
 def _shims(tmp_path: Path, *, snapshot="20260708T032000Z", ssh_fail=False, rsync_fail=False) -> dict:
     """Write ssh + rsync + scp shims. The ssh shim, invoked to resolve `latest`, echoes the snapshot
     name (or exits 1 to simulate an unreachable remote). The rsync/scp shims record their argv and
-    fabricate the local destination dir the real copy would have produced."""
+    fabricate the local destination dir the real copy produces."""
     ssh_marker = tmp_path / "ssh.argv"
     rsync_marker = tmp_path / "rsync.argv"
     scp_marker = tmp_path / "scp.argv"

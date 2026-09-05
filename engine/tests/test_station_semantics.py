@@ -1,6 +1,6 @@
 """The station semantic layer: what JSON Schema cannot state, enforced in the build and again by verify.
 
-SCOPE:377-380 asks for emitter-side validation beyond the schema, and the lane contract names the set:
+SCOPE:377-380 asks for emitter-side validation beyond the schema, and the workflow contract names the set:
 referential integrity of a resource's run references, unique run and resource ids, `time_period.start
 <= end`, channel shape per component family, withheld-branch rejection, DOI syntax, and the 1.x pin
 that keeps `distribution.edi_path` and the served EDI resource row stating one path (SCOPE:71-73).
@@ -39,13 +39,13 @@ import _stationcheck as stcheck  # noqa: E402
 import build_portal as bp  # noqa: E402
 
 # A full record carrying every member the semantic layer has an opinion about, so each mutation below
-# differs from a PASSING document by exactly the field under test (the ratified suite's Txxb pattern).
+# differs from a PASSING document by exactly the field under test (the suite's Txxb pattern).
 CLEAN = {
     "schema": "ausmt-station", "version": "0.1", "ausmt_id": "au.example-basin-2024.EB077",
     "station": "EB077", "survey": "Example Basin MT", "survey_id": "example-basin-2024",
     "distribution": {"edi_available": True, "license": "CC-BY-4.0",
                      "edi_path": "edi/example-basin-2024/EB077.edi"},
-    # The dimensionality fold (D1) and two of the eight frozen legitimate nulls, so the null scan's
+    # The dimensionality fold and two of the eight frozen legitimate nulls, so the null scan's
     # SCOPE is provable in both directions: the fold members are covered, the frozen keys are not.
     "diagnostics": {"median_relative_error": 0.03, "remote_reference": True, "tipper_available": True,
                     "completeness_smoothness_diagnostic": {
@@ -146,7 +146,7 @@ def _empty_channel_list(doc):
 
 
 def _null_fold_member(doc):
-    """R2: an `indeterminate` classification has no skew statistic, and the sidecar states that as
+    """An `indeterminate` classification has no skew statistic, and the sidecar states that as
     null. The fold OMITS the member; copying the null across is what this rejects."""
     doc["diagnostics"]["skew_beta_median_deg"] = None
 
@@ -157,7 +157,7 @@ def _archive_row(rid, fmt="zip"):
 
 
 def _archive_row_the_record_put_no_bytes_into(doc):
-    """The C42 shape: the survey builds a survey MTH5, this station's bytes are not in it, and the
+    """The containment shape: the survey builds a survey MTH5, this station's bytes are not in it, and the
     record has no mth5 rendition to prove otherwise."""
     doc["resources"].append(_archive_row("survey-mth5", fmt="mth5"))
 
@@ -221,7 +221,7 @@ def _opendap_service_url(doc):
 
 
 def _time_series_at_level2(doc):
-    """D19 fail-closed. The archive's level_2 tree holds TRANSFER FUNCTIONS, so a level2 row under
+    """Fail-closed. The archive's level_2 tree holds TRANSFER FUNCTIONS, so a level2 row under
     this kind asserts a recorded time series for a station that has none. The emitter routes no such
     row; this makes the exclusion a rule rather than an emitter habit."""
     _ts_row(doc)["processing_level"] = "level2"
@@ -293,7 +293,7 @@ def test_a_clean_full_record_and_a_clean_withheld_stub_have_no_violations():
 
 
 def test_the_null_scan_reaches_the_fold_and_stops_at_the_frozen_keys():
-    """Section 2 scopes the zero-null rule to what this lane ADDS, and the fold is one of those
+    """Section 2 scopes the zero-null rule to what this module ADDS, and the fold is one of those
     additions. The frozen keys beside it carry eight legitimate nulls, so a scan widened to the whole
     document would reject every record the corpus publishes. Both directions in one test, because
     each alone passes for the wrong reason."""
@@ -495,18 +495,18 @@ def test_verify_self_building_runs_the_station_gate(tmp_path):
     verify.py run that builds its own corpus must run the station gate too, or a developer's green
     run means less than the deployment gate's.
 
-    The self-building path passes no --products, so this is also where A4a earns its keep: without the
-    unconditional served-root write there would be no station.json for the gate to read.
+    The self-building path passes no --products, so this is also where the unconditional served-root
+    write earns its keep: without it there would be no station.json for the gate to read.
 
-    AUSMT_VALIDATOR_PATH is pinned through the C35b/D3.1 four-arm seam so the run is hermetic in
-    every lane: sibling checkout on the dev box, the vendored copy on a monorepo CI checkout, and
+    AUSMT_VALIDATOR_PATH is pinned through the four-arm seam so the run is hermetic in
+    every workflow: sibling checkout on the dev box, the vendored copy on a monorepo CI checkout, and
     the engine image's designed topology (no gateway tree shipped) SKIPs with its allow-listed
     reason rather than tripping the never-fall-through error. The gate under proof is the STATION
     gate; the surveys validator's currency is the resync discipline's job, not this test's. And
     the PASS line must count documents: a gate passing on a zero-station build proves only that it
     printed."""
     pytest.importorskip("mt_metadata")
-    from test_validator_gate import _resolve_validator_dir  # noqa: PLC0415 - the D3.1 seam
+    from test_validator_gate import _resolve_validator_dir  # noqa: PLC0415 - the validator seam
     env = dict(os.environ, AUSMT_VALIDATOR_PATH=str(_resolve_validator_dir()))
     v = subprocess.run([sys.executable, str(VERIFY), "--skip-tests", "--surveys",
                         str(_distinct_slug_corpus(tmp_path))],

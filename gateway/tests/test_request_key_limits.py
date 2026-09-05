@@ -1,4 +1,4 @@
-"""G4: the reusable request-body cap for the small-field PUBLIC routes (gateway.upload).
+"""The reusable request-body cap for the small-field PUBLIC routes (gateway.upload).
 
 POST /gateway/submit has a whole module keeping a hostile body off the box; its sibling public route,
 POST /gateway/request-key, reads a body that carries one email address and has no ceiling at any
@@ -120,7 +120,7 @@ def test_small_body_cap_is_generous_but_bounded():
 
 
 def test_route_refuses_oversize_body_mid_stream_and_stays_neutral_202(tmp_path):
-    """G4 wired into the REAL route: POST /gateway/request-key must cap the body AS BYTES ARRIVE and
+    """Wired into the REAL route: POST /gateway/request-key must cap the body AS BYTES ARRIVE and
     still return the byte-identical neutral 202, so the endpoint cannot be turned into a memory
     amplifier (a 128 MB body measured +249 MB peak RSS, HTTP 202) and a too-large body stays
     indistinguishable from a bad one (a 413 here would be an enumeration oracle).

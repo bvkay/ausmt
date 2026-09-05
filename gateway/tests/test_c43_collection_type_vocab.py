@@ -1,6 +1,6 @@
 """The collection type vocabulary, held equal as a SET across every carrier that states it.
 
-Record D5-A A2: `type` is validator-unenforced, so the console's select IS the guardrail. That makes
+The `type` key is validator-unenforced, so the console's select IS the guardrail. That makes
 the vocabulary a contract with no schema behind it, and it is written out in seven places. Adding a
 value to the prose carriers alone left the two gateway tuples short, which is a hard 400 on the
 publish spec path and a select that renders (unset) for a value the corpus legitimately carries: the
@@ -109,7 +109,7 @@ def test_collection_type_vocabulary_is_one_set_across_every_carrier():
 
 # The two gateway tuples are ONE object, not two equal copies: app.py imports the select's tuple, so
 # the write path cannot refuse a value the console offers. FAILS IF app.py restates it (the drift that
-# left the publish spec path 400-ing on a ratified value while every doc said it was legal).
+# left the publish spec path 400-ing on a value while every doc said it was legal).
 def test_app_write_path_uses_the_selects_own_tuple():
     assert app_mod._COLLECTION_TYPE_VOCAB is curatorpage._COLLECTION_TYPE_VOCAB  # noqa: SLF001
 
@@ -122,15 +122,15 @@ def test_hub_lede_names_every_vocabulary_value_but_the_catch_all():
         assert re.search(rf"\b{value}\b", lede), f"the /collections hub lede does not name {value!r}: {lede!r}"
 
 
-# The vocabulary is CLOSED. test_c43_stage3b.py's F4 probe publishes ctype="campaign" and expects a
-# refusal, so this keeps that negative pin non-vacuous: if "campaign" is ever ratified, that probe
+# The vocabulary is CLOSED. test_c43_stage3b.py's probe publishes ctype="campaign" and expects a
+# refusal, so this keeps that negative pin non-vacuous: if "campaign" is ever added to the vocabulary, that probe
 # must move to another out-of-vocab value rather than quietly passing for the wrong reason.
 def test_campaign_stays_out_of_vocab():
     assert "campaign" not in curatorpage._COLLECTION_TYPE_VOCAB  # noqa: SLF001
 
 
 # The vocabulary change has to REACH behaviour, not just the constants: the publish spec gate admits
-# the ratified value, the select marks it selected instead of falling through to (unset), and the
+# the ADDED value, the select marks it selected instead of falling through to (unset), and the
 # dropped value is still refused.
 def test_compilation_passes_the_spec_gate_and_renders_selected():
     op = {"slug": "auslamp-b", "op": "set",
@@ -145,4 +145,4 @@ def test_compilation_passes_the_spec_gate_and_renders_selected():
     html = curatorpage._select_html(  # noqa: SLF001
         "f_type", curatorpage._COLLECTION_TYPE_VOCAB, "compilation", blank_label="(unset)")  # noqa: SLF001
     assert '<option value="compilation" selected>compilation</option>' in html
-    assert '<option value="" selected>' not in html, "a ratified value must not render as (unset)"
+    assert '<option value="" selected>' not in html, "a value in the vocabulary must not render as (unset)"

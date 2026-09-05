@@ -1,7 +1,7 @@
-"""Unit pins for gateway.totp — the RFC 6238 destructive-op second factor (C41 D2 / T1).
+"""Unit pins for gateway.totp - the RFC 6238 destructive-op second factor.
 
 Failure criterion is in each test's docstring (Invariant 10). These are PURE-FUNCTION pins: no app,
-no DB, no git — just the RFC arithmetic + the window/malformed policy verify() must enforce.
+no DB, no git - just the RFC arithmetic + the window/malformed policy verify() must enforce.
 
 The RFC 6238 Appendix B test vectors are the load-bearing correctness pin: an independent, published
 oracle (not a same-author round-trip), so a subtly wrong truncation/counter-packing goes RED against
@@ -64,7 +64,7 @@ def test_generate_secret_roundtrips_and_is_high_entropy():
 
 
 def test_window_edges_accept_prev_and_next_step_but_reject_two_away():
-    """A code from the PREVIOUS or NEXT 30 s step verifies (±1 clock-skew tolerance, D2); a code from
+    """A code from the PREVIOUS or NEXT 30 s step verifies (±1 clock-skew tolerance); a code from
     TWO steps away is REFUSED. FAILS IF the window is wider or narrower than ±1 step. This is the
     mutation-proof for the window bound: shrinking to window=0 makes the ±1 asserts RED; widening to
     window=2 makes the two-away reject RED."""
@@ -109,15 +109,15 @@ def test_wrong_code_is_refused():
 
 
 def test_undecodable_secret_fails_closed():
-    """verify() against a corrupt (undecodable base32) secret returns None, never raises — a damaged
+    """verify() against a corrupt (undecodable base32) secret returns None, never raises - a damaged
     DB row must fail CLOSED (no deletion), not 500. FAILS IF a bad secret raises out of verify."""
     now = 1_700_000_000
     assert totp.verify("000000", "!!!not base32!!!", now) is None
 
 
 def test_empty_or_blank_secret_fails_closed():
-    """verify() against an empty or whitespace-only secret returns None (F2). An empty base32 string
-    decodes to b'' — a VALID HMAC key — so without the empty-secret guard verify() would compute an
+    """verify() against an empty or whitespace-only secret returns None. An empty base32 string
+    decodes to b'' - a VALID HMAC key - so without the empty-secret guard verify() would compute an
     empty-key code and MATCH it. This pin is MUTATION-PROOF: it feeds verify() the exact code an
     empty-key HMAC produces, so removing the guard in _decode_secret makes verify() return the matched
     step (not None) and this goes RED. FAILS IF an empty/blank secret can gate anything."""

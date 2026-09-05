@@ -3,33 +3,32 @@
 PERMANENT TEST STAGE (the MTCAT 2.0 rule, inherited by the second public contract): this suite runs
 on every later emitter change, so a future feature can never silently break the identity chain, the
 projection equivalences, the zero-null / zero-empty posture, the schema routes or the document
-budget. Sources: AusMT_2026/AUSMT-METADATA-INTERFACE-CONTRACT.md (identity, citation and projection
-equivalence contracts), run-fixture-suite.py (T24, T25, T31a/T31b), LANE-CONTRACT-SURVEY-METADATA
-section 2 (the framing invariants).
+budget. The identity, citation and projection-equivalence contracts are pinned here;
+LANE-CONTRACT-SURVEY-METADATA section 2 carries the framing invariants.
 
 Three layers:
 
   1. built layer, vendored fixtures: TWO consecutive real builds over engine/tests/fixtures (the
      vendored surveys). Proves: catalogue.json and surveys.json byte-identical across the two builds
-     (the document rides a side channel and touches neither, D18); mtcat.json dict-equal minus
+     (the document rides a side channel and touches neither); mtcat.json dict-equal minus
      portal.generated_at; every survey-metadata.json validates with format checking, carries no null
      and no empty container, is dict-equal across the two builds minus provenance.generated, and is
      under the 16 KB budget; the schema served at both routes byte-identical to the in-tree artifact
-     and across builds; survey_id == directory component == mtcat surveys[].survey_id (set equality,
-     T24); the doi / raid / organisation projection chains hold (T31 port); no manifest row names the
+     and across builds; survey_id == directory component == mtcat surveys[].survey_id (set
+     equality); the doi / raid / organisation projection chains hold; no manifest row names the
      document; the shared-definition guarantee (subject_row and the relationship core vs the mtcat
      schema, structurally).
-  2. built layer, the 3-survey D8 corpus (open + embargoed + metadata_only, each curating every
-     class): the same proofs on documents that carry every class, plus the C1c discipline (the
+  2. built layer, the 3-survey corpus (open + embargoed + metadata_only, each curating every
+     class): the same proofs on documents that carry every class, plus the extent discipline (the
      curated extent is never station-derived, so no exact station coordinate reaches a non-served
      survey's document) and the projection chains on real emitted values (organisation, raid).
   3. the corpus arm (dev box): when AUSMT_SURVEY_METADATA_DATA names a full-corpus build output dir,
-     the same scans run over the REAL corpus documents. No CI lane has a corpus, so it skips there
-     (allow-listed in ci_check_skips.py); it is the lane's full-corpus proof harness.
+     the same scans run over the REAL corpus documents. No CI workflow has a corpus, so it skips there
+     (allow-listed in ci_check_skips.py); it is the module's full-corpus proof harness.
 
 The chain checkers are TEST-TIME assertions (the validator enforces citation designation at the
 entry gates; the build refuses an undesignated preferred identifier); each is proven non-vacuous
-against a planted violation, the ratified suite's Txxb pattern.
+against a planted violation, the suite's Txxb pattern.
 """
 import copy
 import json
@@ -63,7 +62,7 @@ corpus_arm = pytest.mark.skipif(
 # ---------------------------------------------------------------- reference chain implementations
 
 def doi_chain_ok(mtcat_survey, doc):
-    """T31 (ported): when mtcat emits a doi, it is one of the survey-metadata identifiers[] (scheme
+    """When mtcat emits a doi, it is one of the survey-metadata identifiers[] (scheme
     DOI) AND the preferred citation identifier; a collection / report / file DOI planted as the mtcat
     doi is caught. Vacuously true when mtcat emits no doi."""
     doi = mtcat_survey.get("doi")
@@ -128,13 +127,13 @@ def document_invariants(doc, mtcat_survey=None):
 
 
 def test_reference_checks_actually_detect_violations():
-    """Guard on the guards: each chain checker must CATCH its planted violation (T31b pattern)."""
+    """Guard on the guards: each chain checker must CATCH its planted violation."""
     doc = fixture("t20-synthetic")
     good = copy.deepcopy(doc)
     good["identifiers"].append({"scheme": "DOI", "identifier": "10.99999/example-basin-2024"})
     good["citation"]["preferred_identifier"] = {"scheme": "DOI", "identifier": "10.99999/example-basin-2024"}
-    assert doi_chain_ok({"doi": "10.99999/example-basin-2024"}, good), "T31a: the intact chain holds"
-    assert not doi_chain_ok({"doi": "10.99999/level1-collection"}, doc), "T31b: planted collection DOI caught"
+    assert doi_chain_ok({"doi": "10.99999/example-basin-2024"}, good), "the intact chain holds"
+    assert not doi_chain_ok({"doi": "10.99999/level1-collection"}, doc), "a planted collection DOI is caught"
     assert doi_chain_ok({}, doc), "no mtcat doi: vacuous"
     assert raid_rule_ok({"raid": "https://raid.org/10.99999/example"}, doc)
     assert not raid_rule_ok({}, doc), "one activity but no mtcat raid is a projection gap"
@@ -317,12 +316,12 @@ def _assert_documents_clean(out):
     for slug, doc in docs.items():
         errs = [f"{list(e.path)}: {e.message}" for e in v.iter_errors(doc)]
         assert not errs, f"{slug}: {errs}"
-        assert doc["survey_id"] == slug, "survey_id == directory component (T24)"
+        assert doc["survey_id"] == slug, "survey_id == directory component"
         assert slug in mt, "every document names a catalogued survey"
         assert document_invariants(doc, mt[slug]) == [], (slug, document_invariants(doc, mt[slug]))
         size = len((out / "products" / slug / "survey-metadata.json").read_bytes())
         assert size <= DOCUMENT_BUDGET_BYTES, f"{slug}: {size} bytes exceeds the 16 KB budget"
-    assert set(docs) == set(mt), "document slug set == mtcat surveys[].survey_id (T24, both directions)"
+    assert set(docs) == set(mt), "document slug set == mtcat surveys[].survey_id, both directions"
     return docs
 
 
@@ -339,7 +338,7 @@ def test_built_documents_are_dict_equal_across_builds_minus_generated(built):
 
 def test_catalogue_and_surveys_are_byte_identical_across_builds_and_mtcat_dict_equal(built):
     """The framing proof's shape between two builds of THIS tree: the document rides a side channel
-    and touches neither catalogue.json nor surveys.json (D18), and mtcat is unchanged but for its
+    and touches neither catalogue.json nor surveys.json, and mtcat is unchanged but for its
     wall-clock generated_at."""
     for name in ("catalogue.json", "surveys.json"):
         assert (built[0] / name).read_bytes() == (built[1] / name).read_bytes(), name
@@ -378,14 +377,14 @@ def test_the_mtcat_schema_copy_lines_are_textually_intact():
     assert '(out / "ausmt-survey-metadata.schema.json").write_bytes(_sm_schema_bytes)' in src
 
 
-# ---------------------------------------------------------------- layer 2: the D8 corpus
+# ---------------------------------------------------------------- layer 2: the corpus
 
 def test_d8_corpus_documents_validate_and_hold_every_chain(built_d8):
     docs = _assert_documents_clean(built_d8)
     assert set(docs) == set(_D8_CORPUS)
     mt = {s["survey_id"]: s for s in _mtcat(built_d8)["surveys"]}
     for slug, doc in docs.items():
-        # every class present on open, embargoed and metadata_only alike (D8)
+        # every class present on open, embargoed and metadata_only alike
         for cls in ("identifiers", "activities", "abstract", "subjects", "creators", "contributors",
                     "organisations", "funders", "citation", "acknowledgements", "rights", "extent",
                     "relationships", "attribution", "dates"):
@@ -403,7 +402,7 @@ def test_d8_corpus_documents_validate_and_hold_every_chain(built_d8):
 
 
 def test_d8_no_exact_station_coordinate_reaches_a_non_served_document(built_d8):
-    """C1c: the curated extent is never station-derived, so no exact catalogue coordinate string of a
+    """The curated extent is never station-derived, so no exact catalogue coordinate string of a
     non-served survey appears in its document (the test_access_gate.py sweep, applied here)."""
     sys.path.insert(0, str(ROOT / "extract"))
     from _contract import CATALOGUE_COLUMNS  # noqa: PLC0415

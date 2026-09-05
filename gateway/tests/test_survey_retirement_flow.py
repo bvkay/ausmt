@@ -1,13 +1,13 @@
-"""End-to-end tests for SURVEY RETIREMENT through the curator HTTP surface (C41 D2 / T3+T4+T6), with
+"""End-to-end tests for SURVEY RETIREMENT through the curator HTTP surface, with
 FakeGit at the publish seam. Mirrors test_station_removal_flow.py's structure.
 
 The curator retires a whole survey from the Metadata tab's danger zone: a confirmation page discloses
-exactly what the record D2 lists, then the server gates the POST in order — session, CSRF, the
+exactly what the retirement removes, then the server gates the POST in order - session, CSRF, the
 last-survey guard, the TOTP second factor (enrolled? rate-limited? valid? not-replayed?), the typed
-slug, the required note — and only then git-rm -r's the package in one commit under PUBLISH_LOCK.
+slug, the required note - and only then git-rm -r's the package in one commit under PUBLISH_LOCK.
 
 Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
-The real-git commit/rollback/revert byte-level guarantees are in test_publish_real_git.py (D1.h); here
+The real-git commit/rollback/revert byte-level guarantees are in test_publish_real_git.py; here
 FakeGit proves the flow shape, the gate order, and 'nothing staged' on every refusal.
 """
 from __future__ import annotations
@@ -300,11 +300,11 @@ def test_retire_rate_limit_trips(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# T6 last-survey guard (evidenced: an empty corpus breaks the production build)
+# Last-survey guard (evidenced: an empty corpus breaks the production build)
 # --------------------------------------------------------------------------------------------------
 def test_retire_last_survey_guard_refuses_nothing_staged(tmp_path):
     """With only ONE published survey, retiring it is refused (409) with nothing staged — an empty
-    corpus breaks the next rebuild (T6, evidenced). FAILS IF the last survey can be retired."""
+    corpus breaks the next rebuild (evidenced). FAILS IF the last survey can be retired."""
     async def _body():
         surveys_live = _live_with_surveys(tmp_path, slugs=("only-survey-2026",))
         git = FakeGit()
@@ -327,7 +327,7 @@ def test_retire_last_survey_guard_refuses_nothing_staged(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# confirmation page disclosure (record D2) + CSP
+# confirmation page disclosure + CSP
 # --------------------------------------------------------------------------------------------------
 def test_retire_confirm_page_discloses_record_d2(tmp_path):
     """The confirmation page states the station count, the serving-until-rebuild reality, and the

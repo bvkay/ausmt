@@ -1,12 +1,12 @@
-"""C43 Stage-4 — executable JS pins for the INTERACTIVE per-station coordinate-policy fieldset.
+"""Stage-4 - executable JS pins for the INTERACTIVE per-station coordinate-policy fieldset.
 
-The C43-S2a standing rule requires the stations-panel behaviour to be pinned with EXECUTABLE JS (the
+The standing rule requires the stations-panel behaviour to be pinned with EXECUTABLE JS (the
 functions actually run under node), never a string match alone. This pins the DOM-free CORE of the
 override fieldset — the functions the drill-down radios and the Save button rest on:
 
   * buildOverrideControls — the per-BASE control state, keyed via the base-id surface (baseStationId):
     a variant record collapses to its engine base; a DATAID-with-a-dot record keys by its OWN id
-    (never a file stem, never a dot-guess); variant siblings SHARE one control (D2);
+    (never a file stem, never a dot-guess); variant siblings SHARE one control;
   * assembleOverrideMap — the {BASE_station_id: policy} map to POST: a base at INHERIT emits NO key;
   * overrideMapChanged — the Save no-op guard (an unchanged map must not POST — no phantom version bump).
 
@@ -17,7 +17,7 @@ covered) — so a JS↔engine key/vocab drift can never pass silently.
 
 Reds on pre-change code: buildOverrideControls / assembleOverrideMap / overrideMapChanged did not exist
 in STATIONS_JS (the extraction assert raises), so the interactive fieldset had no drivable core — the
-A2 stop-and-report gap this lane closes.
+stop-and-report gap this module closes.
 """
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def test_js_key_construction_from_base_id_surface(tmp_path):
     its OWN catalogue id ('CP1L04.2'), NEVER the file stem ('ALPHA') and NEVER a dot-stripped guess
     ('CP1L04'); a plain station keys by its own id. Explicit-vs-inherit prefill comes from the current
     survey.yaml map. FAILS IF a fieldset key is a stem, a variant-suffixed id, or a dot-guess (the exact
-    D2 / probe-e keys the engine's validate_overrides forbids)."""
+    probe-e keys the engine's validate_overrides forbids)."""
     tail = ("const c = buildOverrideControls(P.stations, P.baseMap, P.overrides);\n"
             "const out = {};\n"
             "for (const k in c) out[k] = { control: c[k].control, explicit: c[k].explicit, "
@@ -104,11 +104,11 @@ def test_js_key_construction_from_base_id_surface(tmp_path):
 
 
 def test_js_sibling_variants_share_one_control(tmp_path):
-    """EXECUTABLE SIBLING-INVARIANT PIN (D2). The two processing variants of one physical site
+    """EXECUTABLE SIBLING-INVARIANT PIN. The two processing variants of one physical site
     (MBV20.a / MBV20.b) resolve to the SAME base key and therefore ONE control, whose members list
     names both siblings. Setting that control writes a SINGLE base-keyed override that covers all
     variants. FAILS IF a sibling gets its own control (two competing keys) or a variant serves the
-    physical site's true position while its sibling is masked (the variant class fix-round-2 outlawed)."""
+    physical site's true position while its sibling is masked (the outlawed variant class)."""
     tail = ("const c = buildOverrideControls(P.stations, P.baseMap, {});\n"
             "process.stdout.write(JSON.stringify({\n"
             "  keys: Object.keys(c).sort(),\n"
@@ -216,7 +216,7 @@ def test_fieldset_payload_passes_real_engine_parse_and_validate(tmp_path):
     default, overrides = coordacc.parse_coordinate_policy(assembled)
     assert default == "exact"
     assert overrides == payload, (
-        f"engine parsed {overrides!r}, not the JS-assembled {payload!r} — a key/spelling drift would "
+        f"engine parsed {overrides!r}, not the JS-assembled {payload!r} - a key/spelling drift would "
         f"make the per-station policy a silent no-op")
     coordacc.validate_overrides(overrides, records)   # no raise: every key is a real base id
     # each key is EFFECTIVE, and a BASE override (MBV20) covers BOTH variant records.
@@ -242,13 +242,13 @@ def test_fieldset_payload_passes_real_engine_parse_and_validate(tmp_path):
 
 
 def test_js_orphan_override_survives_the_save(tmp_path):
-    """EXECUTABLE ORPHAN-PRESERVATION PIN (G2, section-3 review). A survey.yaml override whose base
+    """EXECUTABLE ORPHAN-PRESERVATION PIN. A survey.yaml override whose base
     id has NO row in the currently served catalogue (the served build lags the package, or the
     station was removed) must survive assembly VERBATIM, as an explicit orphan control - and an
     untouched Save must remain a no-op. The invariant is editor_form.py's own, mirrored client-side:
     a withheld/generalised station must NEVER silently un-mask.
 
-    RED against pre-lane code: buildOverrideControls built controls only from served rows, so
+    RED against earlier code: buildOverrideControls built controls only from served rows, so
     assembleOverrideMap posted a map WITHOUT the stored key (the withhold silently deleted) and
     overrideMapChanged reported 'changed', letting the deletion save even when the curator touched
     nothing."""

@@ -8,18 +8,18 @@
 
 .PHONY: build up down rebuild-data cut-release smoke sync-surveys preflight reconcile refresh-pid-status doctor
 
-# C40: read deploy/.env so `make` targets see the SAME truth `docker compose` does (compose
+# Read deploy/.env so `make` targets see the SAME truth `docker compose` does (compose
 # auto-loads a sibling .env; make does not). `-include` => absent .env is not an error (portal-only /
 # CI `docker compose config` paths never need it). `export` (no args) then forwards every make
 # variable — including the .env ones just read — into each recipe's shell environment, so the
 # reconcile script and the compose calls resolve AUSMT_DATA_DIR/AUSMT_CODE_DIR identically whether
-# invoked from a login shell or the systemd timer (the 2026-07-08 "works interactively, fails from
+# invoked from a login shell or the systemd timer (the "works interactively, fails from
 # the timer" class). The shell-level `:?` guards in the recipes below still fire on an unset/empty
 # value, so this widens where the vars COME FROM without weakening the fail-closed checks.
 -include .env
 export
 
-# Ops-hardening O4: one-screen box health. Runs scripts/doctor-box.sh, which prints a labelled
+# Ops-hardening: one-screen box health. Runs scripts/doctor-box.sh, which prints a labelled
 # PASS/WARN/FAIL line per check (containers, gateway healthz, the reader wall on loopback, surveys-live
 # git/perms/ACL, the reconcile timer, disk, served-vs-published staleness) and EXITS NON-ZERO if any
 # check FAILs, so `make doctor` can gate a script or an alert. Select the gateway checks with
@@ -28,7 +28,7 @@ export
 doctor:
 	PROFILE=$${PROFILE:-portal} sh scripts/doctor-box.sh
 
-# C33: read-only host preflight. Checks docker/compose, required vars for the profile, dir
+# Read-only host preflight. Checks docker/compose, required vars for the profile, dir
 # ownership (10001/10002), images, surveys-live-is-a-git-checkout, and code-checkout freshness —
 # and REPORTS pass/fail with the exact fix command for each fail. It NEVER mutates anything.
 # Select the gateway checks with `make preflight PROFILE=gateway` (default is portal-only).
@@ -47,7 +47,7 @@ up:
 down:
 	docker compose -f compose.yaml down
 
-# C12: the real atomic rebuild pipeline. Build into a FRESH timestamped builds/<ts> dir (never reuse
+# The real atomic rebuild pipeline. Build into a FRESH timestamped builds/<ts> dir (never reuse
 # or overwrite an existing one -- the timestamp is the collision-avoidance), verify that output dir
 # in place (scripts/verify.py --data-dir, run INSIDE the build-runner container so it sees the same
 # /out mount and Python/mt_metadata stack the build itself used), and ONLY on a clean verify swap the
@@ -70,8 +70,8 @@ down:
 # one uid that owns it. The relative symlink target "builds/<ts>" resolves identically inside the
 # container (/out) and inside the portal container (/srv/data), so the swap stays live-atomic.
 #
-# C18: this is the ONE place the incremental build cache is switched ON
-# (--incremental --cache-dir /out/cache --cache-mode $CACHE_MODE, default rw). C43 S2b-ii: a curator
+# This is the ONE place the incremental build cache is switched ON
+# (--incremental --cache-dir /out/cache --cache-mode $CACHE_MODE, default rw). A curator
 # "Force full rebuild" writes rebuild.request with a `full` flag; reconcile.sh reads it and sets
 # AUSMT_BUILD_CACHE_MODE=refresh, so the engine recomputes everything (no cache reuse) for that one
 # build. Unset => rw (today's behaviour, byte-identical). The cache lives at /out/cache -- a SIBLING
@@ -84,10 +84,10 @@ down:
 # deploy-images.yml passes github.sha, so a current image always resolves its engine commit (null
 # commits once seen in the live box's build.json came from a stale pre-GIT_SHA-bake image -- pull a
 # current image and the cache fires). Losing the cache dir costs one slow rebuild, nothing more.
-# C18b (Amendment A3): the verify step passes --surveys (same root the build used) to ARM the
+# The verify step passes --surveys (the same root the build used) to ARM the
 # cache-staleness digest gate -- served-product digest stamps vs live survey.yaml, cache-independent.
-# --survey-h5: tier-2 survey MTH5 bundles, owner-enabled 2026-07-25 (A6).
-# --station-h5: tier-1 per-station MTH5 (h5/<slug>/<station>.h5), owner-enabled 2026-08-02.
+# --survey-h5: tier-2 survey MTH5 bundles.
+# --station-h5: tier-1 per-station MTH5 (h5/<slug>/<station>.h5).
 # --ts-index: the per-survey verified-resource registers, read OFFLINE from the SAME root --surveys
 # names (each register sits beside its survey.yaml). Without it the box publishes no ts_access.json,
 # no has_time_series and no kind=time_series rows, while the front door goes on serving every
@@ -143,7 +143,7 @@ rebuild-data:
 #   3. make rebuild-data            build + verify + atomically swap `current`
 #   4. make cut-release TAG=2026-Q3 NOTE="one line"
 #   5. run the two `git -C .../surveys-live tag ...` commands the tool PRINTS. It never runs git:
-#      tagging pushes to an owner-authenticated remote, which a build container has no business
+#      tagging pushes to an authenticated remote, which a build container has no business
 #      holding a credential for.
 #
 # WHAT IT DOES. Follows `current`, copies that build's mtcat.json / surveys.json / manifest.json and
@@ -172,8 +172,8 @@ rebuild-data:
 # Runs INSIDE the build-runner container (site-data at /out) for the same reason the rebuild-data
 # swap does: site-data is owned by uid 10001, so a host-side write gets Permission denied. Uses
 # --entrypoint python because the image entrypoint is build_portal and this is a different module.
-# --surveys-live is passed the HOST path so the tag commands it prints are the exact commands the
-# owner runs on the box, not container-internal paths.
+# --surveys-live is passed the HOST path so the tag commands it prints are the exact commands run
+# on the box, not container-internal paths.
 cut-release:
 	@set -e; \
 	REL_TAG="$(TAG)"; \
@@ -188,9 +188,9 @@ cut-release:
 	env -u TAG docker compose -f compose.yaml --profile jobs run --rm --entrypoint python \
 	  build-runner -m extract.cut_release "$$@"
 
-# IDCONS D4 (SPEC §5.2): refresh the DOI resolution cache. This is the ONLY thing that HEADs doi.org —
+# Refresh the DOI resolution cache. This is the ONLY thing that HEADs doi.org -
 # the build itself stays OFFLINE and byte-reproducible, consuming /out/cache/pid_status.json if present.
-# Run it EXPLICITLY as part of the release ritual (SPEC §6 step 4), BEFORE `rebuild-data`, so a reserved-
+# Run it EXPLICITLY as part of the release ritual (step 4), BEFORE `rebuild-data`, so a reserved-
 # but-404 DOI (e.g. a freshly-minted NCI PID whose handle mapping is not yet live) renders as plain text
 # rather than a dead link. Network-touching, so it runs OUTSIDE the deterministic build — a stale cache is
 # an accepted cost of an offline build (the curator status chip is the always-live check). Writes into
@@ -215,7 +215,7 @@ smoke:
 sync-surveys:
 	git -C $${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (see .env)}/surveys-live pull --ff-only
 
-# C40: run the serve-reconcile agent ONCE in the foreground (what the systemd timer runs every 15
+# Run the serve-reconcile agent ONCE in the foreground (what the systemd timer runs every 15
 # min — deploy/systemd/ausmt-reconcile.timer). Handy for a manual reconcile or to watch a rebuild
 # decision live. Reads AUSMT_DATA_DIR + AUSMT_CODE_DIR from the environment (the `-include .env` +
 # export above makes .env values visible here). `make reconcile ARGS=--dry-run` prints the decision

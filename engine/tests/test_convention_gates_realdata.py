@@ -1,4 +1,4 @@
-"""C25 convention gates — real-corpus pins (dev-box only; the corpus is not in the repo).
+"""Convention gates - real-corpus pins (dev-box only; the corpus is not in the repo).
 
 Gated on AUSMT_REALDATA pointing at the .audit/realdata harness (and, for the twin pin, a sibling
 ausmt-surveys checkout). In CI these skip with an allow-listed reason (tests/ci_check_skips.py):
@@ -27,12 +27,12 @@ np = pytest.importorskip("numpy")
 _REALDATA = os.environ.get("AUSMT_REALDATA", "")
 pytestmark = pytest.mark.skipif(
     not (_REALDATA and Path(_REALDATA).is_dir()),
-    reason="realdata corpus not present (AUSMT_REALDATA unset) — dev-box-only real-corpus pins")
+    reason="realdata corpus not present (AUSMT_REALDATA unset) - dev-box-only real-corpus pins")
 
 REALDATA = Path(_REALDATA) if _REALDATA else Path(".")
 
 # The three REAL convention-flipped stations (both off-diagonal medians coherently out of
-# quadrant: arg Zxy ~ -140..-124 (Q3), arg Zyx ~ +34..+44 (Q1) — the axis-swap/convention class).
+# quadrant: arg Zxy ~ -140..-124 (Q3), arg Zyx ~ +34..+44 (Q1) - the axis-swap/convention class).
 # Pinned BY NAME per the adjudication: Gate 2 FAILING these is the living proof it can fail.
 NEGATIVE_CONTROLS = [
     "USArray.TTW52.2016.edi",
@@ -76,10 +76,10 @@ def test_no_other_usarray_station_fails():
 
 
 def test_ccmt_uniform_zrot_served_as_stored_v3a():
-    """FAILS IF: a ccmt-2017 station (served survey; survey-uniform ZROT=8, ROTATION=FIX — the V3-A
+    """FAILS IF: a ccmt-2017 station (served survey; survey-uniform ZROT=8, ROTATION=FIX - the
     serve-as-stored case of frame POLICY v3) is ROTATED, or served without the declared angle
-    recorded, or its quadrants break as-stored. Owner ruling 2026-07-11: the engine serves data as
-    stored and reports the frame — it does not de-rotate. (Under v2 this was the R3 record case; v3
+    recorded, or its quadrants break as-stored. The rule: the engine serves data as
+    stored and reports the frame - it does not de-rotate. (Under v2 this was the record case; v3
     records every uniform declaration regardless of magnitude, so the outcome is unchanged here.)"""
     f = _find(REALDATA / "ccmt-2017", "CC01.edi")
     # as-read pt_az (the source acquisition frame)
@@ -101,7 +101,7 @@ def test_ccmt_uniform_zrot_served_as_stored_v3a():
     parsed = bp._parse_one_edi(f)
     assert "skip" not in parsed
     fr = parsed["frame"]
-    assert fr["derotated"] is False, "V3-A: ccmt must be served AS STORED (declared acquisition frame)"
+    assert fr["derotated"] is False, "ccmt must be served AS STORED (declared acquisition frame)"
     assert fr["frame_served"] == "declared-azimuth"
     assert fr["declared_azimuth_deg"] == 8.0
     assert any("declared acquisition frame" in n and "NOT rotated" in n
@@ -117,13 +117,13 @@ def test_ccmt_uniform_zrot_served_as_stored_v3a():
 
 
 def test_auslamp_pax_serve_path_refuses_v3c():
-    """V3-C on real bytes. FAILS IF: a PAX-rotated (per-period ZROT) AusLAMP-SA specimen is SERVED.
-    Under frame POLICY v3 the serve path REFUSES per-period frame mixing — a single served curve
+    """Per-period refusal on real bytes. FAILS IF: a PAX-rotated (per-period ZROT) AusLAMP-SA specimen is SERVED.
+    Under frame POLICY v3 the serve path REFUSES per-period frame mixing - a single served curve
     from period-varying frames is misleading-by-construction.
-    Historical red: v2 de-rotated per period (R1) and served it (disp.action == "derotate")."""
+    Historical red: v2 de-rotated per period and served it (disp.action == "derotate")."""
     spec = REALDATA / "_specimens" / "auslamp-pax"
     if not spec.is_dir():
-        pytest.skip("realdata corpus not present (AUSMT_REALDATA unset) — _specimens/auslamp-pax "
+        pytest.skip("realdata corpus not present (AUSMT_REALDATA unset) - _specimens/auslamp-pax "
                     "twin specimens not found")
     import _ediparse as ep  # noqa: PLC0415
     seen = 0
@@ -134,14 +134,14 @@ def test_auslamp_pax_serve_path_refuses_v3c():
             f"{sp.name}: specimen must carry per-period ZROT (PAX) for this pin to mean anything"
         disp = conv.frame_disposition(ev, tf_s._rotation_angle, conv.z_present_mask(tf_s),
                                       bool(tf_s.has_tipper()), int(tf_s.period.size))
-        assert disp.action == "fail", f"{sp.name}: per-period ZROT must be REFUSED (V3-C), not served"
+        assert disp.action == "fail", f"{sp.name}: per-period ZROT must be REFUSED, not served"
         assert "per-period ZROT" in (disp.fail_reason or ""), sp.name
         assert "re-export in a single coherent frame" in (disp.fail_reason or ""), sp.name
         # the full serve path (build_portal) skips it with the rotation-frame gate
         parsed = bp._parse_one_edi(sp)
         assert "skip" in parsed and parsed["skip"]["gate"] == "rotation-frame", sp.name
         seen += 1
-    assert seen >= 3, "too few PAX specimens found — the refusal pin lost its ground truth"
+    assert seen >= 3, "too few PAX specimens found - the refusal pin lost its ground truth"
 
 
 def test_auslamp_pax_diagnostic_derotation_matches_custodian_twin():
@@ -156,7 +156,7 @@ def test_auslamp_pax_diagnostic_derotation_matches_custodian_twin():
     zero}/ (see its README.txt); _specimens is underscore-prefixed, so discover_work never builds it."""
     spec = REALDATA / "_specimens" / "auslamp-pax"
     if not spec.is_dir():
-        pytest.skip("realdata corpus not present (AUSMT_REALDATA unset) — _specimens/auslamp-pax "
+        pytest.skip("realdata corpus not present (AUSMT_REALDATA unset) - _specimens/auslamp-pax "
                     "twin specimens not found")
     import _ediparse as ep  # noqa: PLC0415
     pairs = 0
@@ -169,10 +169,10 @@ def test_auslamp_pax_diagnostic_derotation_matches_custodian_twin():
         assert ev["zrot"] and len(conv._uniq_eps(conv._mask_sentinels(ev["zrot"]))) > 1, \
             f"{sp.name}: specimen must carry per-period ZROT (PAX) for this pin to mean anything"
         # build the diagnostic per-period disposition BY HAND (the serve path would REFUSE this) —
-        # the same per-period theta_z the retired v2 R1 branch built: mask sentinels, zero-fill gaps.
+        # the same per-period theta_z the retired v2 branch built: mask sentinels, zero-fill gaps.
         zr = conv._mask_sentinels(ev["zrot"])
         if len(zr) != int(tf_s.period.size):
-            pytest.skip(f"{sp.name}: ZROT length {len(zr)} != {int(tf_s.period.size)} periods — "
+            pytest.skip(f"{sp.name}: ZROT length {len(zr)} != {int(tf_s.period.size)} periods - "
                         f"cannot align the diagnostic per-period rotation for this specimen")
         theta_z = [0.0 if v is None else float(v) for v in zr]
         disp = conv.FrameDisposition(action="derotate", theta_z=theta_z, theta_t=None)
@@ -187,4 +187,4 @@ def test_auslamp_pax_diagnostic_derotation_matches_custodian_twin():
             f"{sp.name}: diagnostic de-rotated specimen Z does not match the custodian twin "
             f"(median rel {float(np.median(rel)):.2e})")
         pairs += 1
-    assert pairs >= 3, "too few twin pairs found — the diagnostic-math pin lost its ground truth"
+    assert pairs >= 3, "too few twin pairs found - the diagnostic-math pin lost its ground truth"

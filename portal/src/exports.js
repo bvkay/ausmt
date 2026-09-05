@@ -1,17 +1,14 @@
 "use strict";
-// Scope-following downloads + toast/snackbar. Every download acts on scopeSel() (the selection,
-// else the filtered corpus); paintDownloadRows() owns the Download block's scope line, priced rows
-// and disabled states. Citation/EDI helpers are referenced at click time only.
-// CSV/GeoJSON columns are built from the station object + the positional sci row sc[] (sc[SC.q]=q,
-// sc[SC.qb]=qb, sc[SC.rr]=rr, sc[SC.sw]=sw, sc[SC.dim]=dim) — see the legend in data.js / data-files.md before
-// reordering export columns.
+// Scope-following downloads + toast/snackbar. Every download acts on scopeSel() (the selection, else the
+// filtered corpus); paintDownloadRows() owns the Download block's scope line, priced rows and disabled
+// states. See docs: portal internals, exports.js.
 const sel=()=>ST.filter(s=>selected.has(s.i));
-// Lane B: every download acts on the SCOPE - the selection when one exists, else the filtered
+// Every download acts on the SCOPE - the selection when one exists, else the filtered
 // corpus (filters.js scopeStations; the scope line in the Download block states which). sel() stays
 // for callers that mean the literal selection.
 function scopeSel(){return (typeof scopeStations==="function")?scopeStations():sel();}
-// Bind one control's click handler, tolerating an absent element: an unguarded miss threw at parse
-// time and silently dropped every LATER binding and top-level assignment in this file. A missing id
+// Bind one control's click handler, tolerating an absent element: an unguarded miss throws at parse
+// time and silently drops every LATER binding and top-level assignment in this file. A missing id
 // announces itself in the console instead.
 function bindClick(id,fn){const el=document.getElementById(id);
   if(el)el.onclick=fn;else console.error("export control #"+id+" is missing; handler not bound");}
@@ -31,11 +28,9 @@ function save(n,t,m){const a=document.createElement("a");a.href=URL.createObject
 // as a stall. Every packaging path ends in a completion or nothing-to-package toast, which clears it.
 function toast(m,opts){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";clearTimeout(toast._h);
   toast._h=(opts&&opts.sticky)?null:setTimeout(()=>t.style.display="none",7000);}
-// ---- the hand-off snackbar (owner UX ruling 2026-08-23) ------------------------------------------
-// PROGRESS BELONGS TO THE BROWSER: a hand-off is a 302, the bytes travel browser-to-archive, and
-// CORS forbids fetching the payload in-page. No progress bar, no download panel, no completion
-// claim - the page says only what it handed over. It differs from toast() in exactly one way, which is why it is a second element and not a
-// second use of the first: it can carry ONE action, the wget command for a whole list.
+// ---- the hand-off snackbar ----------------------------------------------------------------------
+// PROGRESS BELONGS TO THE BROWSER: a hand-off is a 302, the bytes travel browser-to-archive, and CORS
+// forbids fetching the payload in-page. See docs: portal internals, exports.js.
 function snack(msg,note,action){
   const el=document.getElementById("snackbar");if(!el)return;
   el.textContent="";
@@ -49,7 +44,7 @@ function snack(msg,note,action){
   clearTimeout(snack._h);
   // An offer with an action gets long enough to reach for it; a plain hand-off note is transient.
   snack._h=setTimeout(()=>{el.classList.add("hidden");el.textContent="";},action?25000:9000);}
-// Above this the wait is worth naming. 5 GB is the owner's threshold; the corpus has single archives
+// Above this the wait is worth naming. 5 GB is the threshold; the corpus has single archives
 // of 9.87 GB, and a reader who clicked expecting a file is owed the warning before the browser goes
 // quiet for a quarter of an hour.
 var HANDOFF_LARGE_BYTES=5*1024*1024*1024;
@@ -58,27 +53,19 @@ function handoffSnack(filename,bytes){
         " ("+(bytes?fmtBigBytes(bytes):"size not stated")+"). Progress appears in your browser's downloads.",
         bytes>=HANDOFF_LARGE_BYTES?"Large file - this may take a while.":null);}
 
-// CSV rows (header + one per station). Derefs the positional sci row sc[SC.q/qb/rr/dim/sw] at THE export
-// call site — extracted from the click handler so it is unit-testable: tests/test_populated_portal_smoke.py
-// value-binds these columns, which is the ONLY coverage of the qb/rr/sw call sites (buildState/drawer
-// don't expose them). Output is unchanged from the inline version.
+// CSV rows (header + one per station). See docs: portal internals, exports.js.
 function csvRows(stations){
-  // C6/C46: `license`, `license_url` (the deed URL keyed off the canonical id) and `attribution` (the
-  // rendered attribution line — the custodian's verbatim statement when declared, else the org(year)
-  // synthesis) travel with the exported rows so the rights don't get stripped when a CSV of the selection
-  // is shared.
-  // UX8 (W3b, owner directive): the station CSV DROPS six columns — quality, quality_basis, remote_ref,
-  // dimensionality, software and file — leaving a lean identity/geometry/rights row. (These derived-screen
-  // and per-station-file fields stay in the GeoJSON export; the smoke test's column value-binds moved to
-  // the reduced set.) The rights columns license/license_url/attribution stay.
+  // `license`, `license_url` (the deed URL keyed off the canonical id) and `attribution`, the
+  // rendered attribution line: the custodian's verbatim statement when declared. See docs: portal
+  // internals, exports.js.
   const rows=[["ausmt_id","station","country","organisation","survey","lat","lon","type","components","n_periods","period_min_s","period_max_s","source_doi","timeseries_collection_doi","survey_version","collection","license","license_url","attribution"]];
   stations.forEach(s=>{const m=SMETA[s.survey]||{};rows.push([s.ausmt_id,s.id,s.country,s.org,s.survey,s.lat,s.lon,s.type,s.comps,s.nper,s.pmin,s.pmax,m.doi||"",TS_COLLECTION.doi,m.version||"",(m.collection||{}).id||"",m.lic||"",licenseUrl(m.lic),attributionLine(m)]);});
   return rows;
 }
-// C46: the licence deed URL for a raw licence string, via the canonical PROFILES/LICENSES tables (never a
+// The licence deed URL for a raw licence string, via the canonical PROFILES/LICENSES tables (never a
 // startsWith guess); "" when the id has no single canonical URL (e.g. PUBLIC DOMAIN) or is unrecognised.
 function licenseUrl(lic){return (LICENSES.urls||{})[canonLic(lic)]||"";}
-// C46: the rendered attribution line for a survey — the custodian's verbatim attribution.statement when
+// The rendered attribution line for a survey - the custodian's verbatim attribution.statement when
 // declared, else the org(year) synthesis (the same default the LICENSE instrument uses when no statement).
 function attributionLine(m){m=m||{};
   const st=((m.attribution||{}).statement||"").toString().trim();
@@ -86,14 +73,9 @@ function attributionLine(m){m=m||{};
   const who=((m.cite&&m.cite.au)||m.org||"").toString().trim();
   const yr=(m.dates?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
   return [who,yr?"("+yr+")":""].filter(Boolean).join(" ").trim();}
-// C6/C46: the LICENSE.txt content that travels inside the client-side bulk-download zip, mirroring the
-// engine's _license_text.license_instrument_text EXACTLY — the two implementations are pinned to a shared
-// vector file (engine/tests/fixtures/license_instrument_vectors.json), consumed by both an engine pytest
-// AND portal/tests/license_text_vectors.test.js, so they cannot drift silently. Deed URLs + attribution
-// PROFILES come from the generated LICENSES/PROFILES tables (contract/*.json), keyed by the canonical id.
-// Signature MIRRORS the Python leaf (lic, licensor, year, attribution, sources, changes) so the shared
-// vectors drive both sides with identical inputs; the m -> (who, yr, attn) derivation lives at the call
-// site below (as it does in build_portal), not inside the renderer.
+// The LICENSE.txt content that travels inside the client-side bulk-download zip, mirroring the engine's
+// _license_text.license_instrument_text EXACTLY - the two implementations are pinned to a shared vector
+// file. See docs: portal internals, exports.js.
 var DEFAULT_CHANGES_SUMMARY = "the deposited transfer functions were regenerated into AusMT's canonical distribution formats, and station coordinates, identifiers and metadata were conditioned for release";
 function canonLic(s){const u=String(s==null?"":s).trim().replace(/\s+/g," ").toUpperCase();
   return ((LICENSES.aliases||{})[u]||u).toUpperCase();}
@@ -118,7 +100,7 @@ function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
     "distributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric",
     "releases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the",
     "terms of that licence"+(url?" ("+url+").":"."),"");
-  // C46 additions (byte-inert when sources + changes are both absent): per-source attribution paragraphs,
+  // The attribution additions (byte-inert when sources + changes are both absent): per-source paragraphs,
   // supersession line(s), then the CC-BY §3(a) changes clause. Order + wording pinned to the Python leaf.
   const srcs=sources||[];
   if(srcs.length){
@@ -140,9 +122,9 @@ function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
     }
     for(const s0 of srcs){const slic=canonLic((s0||{}).licence);
       if(slic&&slic!==cid)L.push("The upstream dataset was obtained under "+slic+"; this AusMT release is published by the custodian under "+cid+".","");}
-    // C46-W3a: each custodian profile's s.5 disclaimer once (dedup, first-seen), the final paragraph(s)
-    // of the Source-datasets block — a profile-level legal notice, so it renders even under a verbatim
-    // statement. Byte-inert when no source's profile carries a disclaimer. Pinned to the Python leaf.
+    // Each custodian profile's s.5 disclaimer once (dedup, first-seen), the final paragraph(s) of the
+    // Source-datasets block - a profile-level legal notice, so it renders even under a verbatim statement.
+    // See docs: portal internals, exports.js.
     const seenDisc=[];
     for(const s0 of srcs){const pk=((s0||{}).profile==null?"":String((s0||{}).profile)).trim()||"generic";
       const disc=((PROFILES[pk]||{}).disclaimer==null?"":String((PROFILES[pk]||{}).disclaimer)).trim();
@@ -158,26 +140,14 @@ bindClick("dlCsv",()=>{track("DownloadGenerated",{format:"csv",n:scopeSel().leng
   save("ausmt-stations-"+tsUTC()+".csv",csvRows(scopeSel()).map(csvRow).join("\r\n"),"text/csv");});
 // Two-phase boot: quality/dimensionality/remote_ref ride each GeoJSON feature and come from sci.json, a
 // PHASE 2 product. An export is a FILE that outlives the page, so it must never carry a value the portal
-// simply had not received yet. AWAIT the gate (already-resolved in the normal case, so the click is
-// unchanged once hydration is done) rather than degrade.
-// If sci.json FAILED, awaiting settles on nothing: sciRow returns [] for every station, and the
-// quality/dimensionality/remote_ref keys would vanish as undefined (JSON.stringify drops them) with no
-// trace of why. remote_ref carries its own per-row guard besides: a station with no usable sci row
-// omits the key rather than claiming false, matching its two siblings. So when the product is not usable the
-// three screening properties are omitted DELIBERATELY and the FILE ITSELF carries the reason: a toast does
-// not travel with the download, and whoever opens this file next has no other way to learn the difference
-// between "not screened" and "the screening data never loaded".
+// simply had not received yet. See docs: portal internals, exports.js.
 const GEO_SCI_UNAVAILABLE="quality, dimensionality and remote_ref are OMITTED from every feature in this file: the screening product (sci.json) could not be loaded in the session that generated it. Their absence records a load failure, NOT a screening outcome.";
 // `quality` is the completeness/smoothness diagnostic (sci.json column q), never a quality ranking; the
-// property keeps the name it shipped under because renaming it would break every saved GIS project
-// joined on it. It screens an impedance, so it is null on a tipper-only station (`components` without
-// `Z`) and on a station whose survey withholds its science, and it is ABSENT rather than null when the
-// screening product failed to load, which is the distinction GEO_SCI_UNAVAILABLE above exists to state.
-// Extracted from the click handler for the same reason csvRows was (see above): the honesty rule now has a
-// branch here, and a branch that only exists inside an onclick is a branch no test can reach.
+// property keeps the name it shipped under because renaming it would break every saved GIS project joined
+// on it. See docs: portal internals, exports.js.
 function geoFeatureCollection(stations,sciOk){
-  return {type:"FeatureCollection",...(sciOk?{}:{note:GEO_SCI_UNAVAILABLE}),features:stations.map(s=>{const sc=sciRow(s.i);return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // C42: a withheld-coord station is an unlocated feature (spec-legal null geometry), never a (0,0)/[null,null] phantom point
-  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,...(sciOk?{quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:sc[SC.rr]==null?undefined:!!sc[SC.rr]}:{}),source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // C6/C46: licence + deed URL + attribution ride each GeoJSON feature
+  return {type:"FeatureCollection",...(sciOk?{}:{note:GEO_SCI_UNAVAILABLE}),features:stations.map(s=>{const sc=sciRow(s.i);return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // A withheld-coord station is an unlocated feature (spec-legal null geometry), never a (0,0)/[null,null] phantom point
+  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,...(sciOk?{quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:sc[SC.rr]==null?undefined:!!sc[SC.rr]}:{}),source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // Licence + deed URL + attribution ride each GeoJSON feature
 }
 bindClick("dlGeo",async()=>{track("DownloadGenerated",{format:"geojson",n:scopeSel().length});
   if(hydrating("sci")){toast("Waiting for the screening data before writing the GeoJSON…");}
@@ -185,12 +155,8 @@ bindClick("dlGeo",async()=>{track("DownloadGenerated",{format:"geojson",n:scopeS
   const sciOk=hydrUsable("sci");
   if(!sciOk)toast("The screening data could not be loaded, so quality, dimensionality and remote reference are left out of this GeoJSON; the file says so.");
   save("ausmt-selection-"+tsUTC()+".geojson",JSON.stringify(geoFeatureCollection(scopeSel(),sciOk),null,1),"application/geo+json");});
-// POINTERS (Lane B, D2): the merged provenance-and-hand-off document, one per scope station. It is
-// the union of the two files it replaces: EVERY station in scope appears (the archive-pointers
-// rule), and stations with verified open files carry actionable levels[] rows (the fetch-list
-// rule), including explicit gap rows where a route could not be built. source_doi is the survey's
-// OWN dataset DOI or null with the reason - never the time-series collection DOI standing in for a
-// TF source archive (the pre-C7 mislabel the EDI zip's gap file already refuses).
+// POINTERS: the merged provenance-and-hand-off document, one per scope station. See docs: portal internals,
+// exports.js.
 var POINTERS_NOTE="AusMT hosts no raw time series and fetches none of them. Each stations[].levels[].url is an AusMT route that answers 302 with the address of the archive holding the file; archive_url_comment records where that route currently points and is for reference only (wget follows the redirect on its own; curl needs -L). A station without levels[] has no file this deployment can route to: request those from the source archive via source_doi/landing, or contact the custodian where none is recorded.";
 bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"pointers",n:st.length});
   if(hydrating("tsaccess")){snack("Waiting for the archive hand-off index…");return;}
@@ -220,20 +186,9 @@ bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"poi
           {label:"Show terminal command",onClick:()=>showWgetDialog(cmds)});}
   else snack("Pointers written for "+rows.length+" station"+(rows.length===1?"":"s")+". None has a time-series file this deployment can route to.");});
 
-// ---- the time-series HAND-OFF list (R7 / D3 / D5) ------------------------------------------------
-// The offer is a POINTER FILE, never a server-built zip or a fourth exportSelectionFormat:
-// AusMT holds none of these bytes, and packaging them would make
-// this portal a proxy for an archive that already serves them properly.
-//
-// PORTAL-GENERATED, not gateway-generated (D5). A fifth public gateway route would touch two
-// independent allowlists, their parity test, both deny-by-default blocks and the route table; the
-// /go/ts/ path shape already carries survey, station and level, which is the whole of what the
-// measurement needs. That is also why nothing here calls track(): the request the reader actually
-// makes is counted at the front door, from the route it names.
-//
-// Each row states the ROUTE, because that is the string to fetch, and the archive's own address
-// alongside as an inert reference (D3) - so the file still names its bytes if AusMT is down, without
-// pretending that address is what you were asked to fetch.
+// ---- the time-series HAND-OFF list ---------------------------------------------------------------
+// The offer is a POINTER FILE, never a server-built zip or a fourth exportSelectionFormat. See docs: portal
+// internals, exports.js.
 var TS_HANDOFF_NOTE="AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. Fetch the urls from your own terminal - the portal's hand-off dialog shows ready-made commands: wget -c (Linux) or curl -L -C - (macOS/Windows) resumes on a re-run.";
 // One station's routable levels, in the vocabulary's own order so two readers' files sort alike.
 // `levels` names the level tokens on the table; empty/null means every level this station has.
@@ -268,42 +223,27 @@ function tsHandoffDocument(stations,levels){
     time_series_collection:{name:TS_COLLECTION.name,doi:TS_COLLECTION.doi,
                             landing:"https://doi.org/"+TS_COLLECTION.doi},
     stations:rows}};}
-// The output PATH for one fetched level: <survey slug>/<level>/<archive basename>. The bare basename is
-// NOT unique - across the corpus a station's level0 and level1_mth5 can carry the same one, and basenames
-// repeat across surveys - so writing by basename alone lets a second product overwrite (or, with curl -C -,
-// RESUME INTO and corrupt) the first. Keying by slug+level is collision-free over every corpus row, and
-// mirrors the selection zips' own survey-slug namespacing (audit M3).
+// The output PATH for one fetched level: <survey slug>/<level>/<archive basename>. See docs: portal
+// internals, exports.js.
 function tsOutPath(r,l){return (r.slug||"survey")+"/"+l.level+"/"+String(l.filename||"download");}
 // POSIX single-quote a token so a register-derived path segment is LITERAL in bash/zsh: inside single
-// quotes $( ), backticks, ", ; and space are all inert, and an embedded ' is close-escape-reopen'd. The
-// filename is the one field taken VERBATIM from third-party ts-index registers with no charset gate
-// upstream, so it is quoted at the client (belt-and-braces; the url is already per-segment encoded).
+// quotes $( ), backticks, ", ; and space are all inert, and an embedded ' is close-escape-reopen'd. See
+// docs: portal internals, exports.js.
 function shq(s){return "'"+String(s==null?"":s).replace(/'/g,"'\\''")+"'";}
 // Windows curl.exe may be pasted into PowerShell OR cmd, which quote INCOMPATIBLY (PowerShell interpolates
 // $()/backtick/$var inside "", cmd expands %VAR%; single quotes are literal text in cmd, not quoting), so
-// no one wrap is both safe and faithful in both. The built path is therefore restricted to a
-// metacharacter-free charset (others -> _), which leaves double quotes inert in either shell. The bytes
-// are unchanged; only the LOCAL name is normalised, and WGET_OS_NOTES.win says so.
+// no one wrap is both safe and faithful in both. See docs: portal internals, exports.js.
 function winSafePath(s){return String(s==null?"":s).replace(/[^A-Za-z0-9._\/-]/g,"_");}
-// The unix form. One `wget` per file, not a single --content-disposition -i - here-doc: the header
-// filename lands in the CURRENT dir, so two files that share a Content-Disposition name would collide and
-// wget silently forks the loser to name.1. -P <slug>/<level> gives each its own directory - wget creates
-// the tree and the collision cannot happen. -c makes a re-run RESUME (a completed file is skipped, a
-// partial continues; the archive serves ranges). -q --show-progress keeps one clean bar per file. Single
-// quotes keep the prefix and the route literal. It fetches the ROUTES, never the archive addresses beside
-// them, because the route is what the front door counts.
+// The unix form. One `wget` per file, not a single --content-disposition -i - here-doc: the header filename
+// lands in the CURRENT dir, so two files that share a Content-Disposition name would collide and wget
+// silently forks the loser to name.1. See docs: portal internals, exports.js.
 function tsWgetCommand(rows){
   const lines=[];(rows||[]).forEach(r=>r.levels.forEach(l=>{
     if(l.url)lines.push("wget -c -q --show-progress --content-disposition -P "+shq((r.slug||"survey")+"/"+l.level)+" "+shq(l.url));}));
   return lines.join("\n");}
 // The curl form, for macOS and Windows: curl is PREINSTALLED on both (Apple ships it; Microsoft ships a
-// real curl.exe on Windows 10+), so neither platform is sent to a third-party binary. Output names are
-// explicit -o paths (which is also what lets -C - resume coexist with names: curl's header-naming -J
-// refuses -C), namespaced by slug+level so no two collide, with --create-dirs building the tree. -L
-// follows the 302s. The name is shell-quoted at the client: single quotes on macOS (POSIX, verbatim), a
-// safe-charset restriction on Windows (curl.exe is pasted into PowerShell or cmd, which quote
-// incompatibly). The url stays double-quoted - it is already per-segment encoded, so it carries no
-// metacharacter. On Windows the exe is named in full: PowerShell aliases bare curl to a different command.
+// real curl.exe on Windows 10+), so neither platform is sent to a third-party binary. See docs: portal
+// internals, exports.js.
 function tsCurlCommand(rows,exe){
   const win=(exe==="curl.exe");
   const parts=[exe+" -L -C - --create-dirs"];
@@ -312,26 +252,11 @@ function tsCurlCommand(rows,exe){
     const p=tsOutPath(r,l),o=win?('"'+winSafePath(p)+'"'):shq(p);
     parts.push("-o "+o+' "'+l.url+'"');}));
   return parts.join(" ");}
-// One level's hand-off for the current scope, from the Download block's time-series rows. The row
-// names its own level, so no hidden chooser state can narrow it (the pre-Lane-B defect: a collapsed
-// accordion's level toggles silently scoped the old Time-series list export).
-//
-// A SMALL scope gets its FILES, not a file about them (owner rulings 2026-08-25): each route is
-// handed to the browser exactly as the drawer's single-station tile hands one, and the browser
-// owns the downloads and their progress (the 2026-08-23 ruling; AusMT still hosts and fetches
-// nothing - the 302s do the pointing). The gate is the TOTAL SIZE, not the file count (owner,
-// same day): up to the gate the browser is the best tool; beyond it the offer is the TERMINAL
-// COMMAND, which is resumable and verifiable at a scale where browser downloads quietly are not.
-// 5 GB, lowered from 10 (owner, 2026-08-26): raw_packed files run 0.2-1.2 GB each, so 10 GB could
-// hand a browser two dozen large transfers at once, which is where the browser stops being the
-// better tool. 5 GB keeps the direct path to a handful of files.
+// One level's hand-off for the current scope, from the Download block's time-series rows. See docs: portal
+// internals, exports.js.
 var TS_DIRECT_MAX_BYTES=5*1024*1024*1024;
-// The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a
-// reader should see what lands on their clipboard. Per-platform tabs, with the DETECTED platform
-// pre-selected (detection only picks the default tab; researchers copy commands for other
-// machines, so all three stay one click away). Guarded binds like every other control.
-// One line per platform: what to run it with, and nothing the shared instructions above already say
-// (owner, 2026-08-26 - the subfolder and resume behaviour is stated once, not three times over).
+// The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a reader
+// should see what lands on their clipboard. See docs: portal internals, exports.js.
 var WGET_OS_NOTES={
   linux:"wget is preinstalled on most Linux distributions.",
   mac:"curl is preinstalled on macOS.",
@@ -363,7 +288,7 @@ function showWgetDialog(cmds){
   if(m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}}
 // The dialog declares aria-modal, so it owes the same three behaviours the welcome popup (its own visual
 // shell) already has: Escape, click-out, and focus back to whatever opened it. Escape is also the reason
-// drawer.js yields to an open #wgetModal - without that, Esc over this dialog closed the drawer BEHIND it.
+// drawer.js yields to an open #wgetModal: otherwise Esc over this dialog would close the drawer BEHIND it.
 let _wgetReturnFocus=null;
 function hideWgetDialog(){
   const m=document.getElementById("wgetModal");if(!m)return;
@@ -416,41 +341,34 @@ async function tsLevelList(tok){
           (built.bytes>=HANDOFF_LARGE_BYTES?"Large download - this may take a while. ":"")+
           "A metadata & citation pack downloads alongside. AusMT only points the way.",act);
     return;}
-  // Over the gate the terminal command IS the offer, so the dialog opens straight away rather than
-  // behind a snackbar action: an intermediate "Show terminal command" step is a click between the
-  // reader and the only thing that can serve them at this size. No standalone list file either -
-  // the metadata pack already carries the same document as handoff.json, so saving it twice put an
-  // unwanted .json at the head of the reader's downloads (owner, 2026-08-26).
+  // Over the gate the terminal command IS the offer, so the dialog opens straight away rather than behind a
+  // snackbar action: an intermediate "Show terminal command" step is a click between the reader and the
+  // only thing that can serve them at this size. See docs: portal internals, exports.js.
   await tsMetadataPack(_fetched,built.doc);
   showWgetDialog(cmds);
   snack("Download list ready - "+built.files+" files, "+fmtBigBytes(built.bytes)+".",
         "Too large to hand a browser at once, so the terminal command is shown instead: it fetches one file at a time and a re-run resumes where it stopped. The metadata & citation pack downloads beside it.",act);}
-// C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
-// pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
-// ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
-// fields (drawer.js apa/bibtex/ris already guard on a falsy doi, d2bc616); emitting placeholder text there
-// would be ingested by reference managers as real bibliographic data — the pre-C22 defect, where
-// AUSMT_SELF.pb carried "(DOI to be minted per release via Zenodo)" into every no-DOI publisher field.
+// The human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the pack SAYS SO
+// explicitly - "[no DOI assigned]" - rather than silently omitting the field, because a reference pack
+// should state the absence. See docs: portal internals, exports.js.
 function citeLine(c,doi){return "  "+apaPlain(c,doi)+(doi?"":"  [no DOI assigned]");}
 // The citation files for a station set, extracted from the click handler so every data download
-// can carry them (owner, 2026-08-25): the selection zips embed these beside LICENSE.txt, and the
+// can carry them: the selection zips embed these beside LICENSE.txt, and the
 // time-series hand-offs travel with a metadata pack. Output is byte-identical to the pack the
-// Citation pack button always built.
+// Citation pack button builds.
 function buildCitationFiles(_scope){
   const svs=[...new Set(_scope.map(s=>s.survey))].sort();const today=new Date().toISOString().slice(0,10);
 
   let txt=["AusMT citation pack — generated "+today,"Stations: "+_scope.length+" across "+svs.length+" survey release(s).","","== Survey source releases =="];let bib="",risT="";
   svs.forEach(sv=>{const m=SMETA[sv]||{};const c=m.cite||AUSMT_SELF;
-    // C46: an EXPLICIT fallback — a survey with no custodian cite block is no longer SILENTLY rendered as
-    // the AusMT brand (the pre-C46 `m.cite||AUSMT_SELF` masquerade). The human line SAYS the custodian
-    // citation is unrecorded and points at the AusMT package citation instead; the .bib/.ris twins keep
-    // the package fallback but under a survey-slug key, never claiming to BE the custodian's own citation.
+    // An EXPLICIT fallback - a survey with no custodian cite block must not be SILENTLY rendered as the
+    // AusMT brand, which a bare `m.cite||AUSMT_SELF` does. See docs: portal internals, exports.js.
     if(m.cite){txt.push(citeLine(c,m.doi));}
     else{txt.push("  "+sv+": custodian citation not recorded — cite the survey package:",citeLine(AUSMT_SELF,m.doi));}
     bib+=bibtex(sv.toLowerCase().replace(/[^a-z0-9]+/g,"_"),c,m.doi)+"\n\n";risT+=ris(c,m.doi)+"\n\n";});
   txt.push("","== Time-series collection ==",citeLine(NCI_CITE,TS_COLLECTION.doi));bib+=bibtex("nci_auscope_mt",NCI_CITE,TS_COLLECTION.doi)+"\n\n";risT+=ris(NCI_CITE,TS_COLLECTION.doi)+"\n\n";
   txt.push("","== Curated catalogue metadata (suggested) ==",citeLine(AUSMT_SELF,null));bib+=bibtex("ausmt_catalogue",AUSMT_SELF,null)+"\n";risT+=ris(AUSMT_SELF,null)+"\n";
-  // C46: source-dataset citations chained — one line per UNIQUE upstream source across the selection
+  // Source-dataset citations chained - one line per UNIQUE upstream source across the selection
   // (identifier + custodian + licence + title), so a derived release credits the dataset it was built from.
   const srcSeen={},srcLines=[];
   svs.forEach(sv=>{((SMETA[sv]||{}).sources||[]).forEach(s=>{if(!s)return;
@@ -458,15 +376,13 @@ function buildCitationFiles(_scope){
     const ident=(s.identifier||"").toString().trim(),cust=(s.custodian||"").toString().trim(),slic=canonLic(s.licence),title=(s.title||"").toString().trim();
     srcLines.push("  "+[ident||"[no identifier]",cust?"— "+cust:"",slic?"("+slic+")":"",title?"["+title+"]":""].filter(Boolean).join(" "));});});
   if(srcLines.length)txt.push("","== Source datasets ==",...srcLines);
-  // C7: organisation ROR(s) — one line per custodian org that declared one, so the acknowledgement can
+  // Organisation ROR(s) - one line per custodian org that declared one, so the acknowledgement can
   // cite the organisation by its persistent identifier, not just its free-text name.
   const rors=[...new Set(svs.map(sv=>{const m=SMETA[sv]||{};return m.org_ror?`${m.org} (ROR: ${m.org_ror})`:null;}).filter(Boolean))];
   txt.push("","== Custodian organisation identifiers ==",...(rors.length?rors.map(r=>"  "+r):["  none recorded"]));
-  // C46: the acknowledgement is DATA-DRIVEN, assembled from the ACTUAL selection — the custodians of
-  // record (attribution.custodian, else the organisation) plus each unique source-dataset attribution
-  // (verbatim statement, else the profile-rendered form). The AusLAMP/AuScope/NCI sentence is included
-  // ONLY when the selection references that archive (a survey's ts_pid or a source pointing at NCI/AuScope
-  // / the collection DOI) — no longer a hardcoded paragraph on every pack.
+  // The acknowledgement is DATA-DRIVEN, assembled from the ACTUAL selection - the custodians of record
+  // (attribution.custodian, else the organisation) plus each unique source-dataset attribution (verbatim
+  // statement, else the profile-rendered form). See docs: portal internals, exports.js.
   const custodians=[...new Set(svs.map(sv=>{const m=SMETA[sv]||{};return ((m.attribution||{}).custodian||m.org||"").toString().trim();}).filter(Boolean))];
   const saSeen={},srcAttrs=[];
   svs.forEach(sv=>{const m=SMETA[sv]||{};const yr=(m.dates?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
@@ -484,10 +400,9 @@ function buildCitationFiles(_scope){
   if(usesNci)ack.push("  AusLAMP is a collaboration between AuScope, Geoscience Australia, state and territory","  geological surveys and university partners, with instruments supplied through the AuScope","  NCRIS program. Time series were accessed from the NCI-AuScope Magnetotelluric Collection","  (doi:"+TS_COLLECTION.doi+").");
   txt.push(...ack);
   return {txt:txt.join("\n"),bib:bib,ris:risT};}
-// Every data download travels with its metadata (owner, 2026-08-25): the citation files, the
-// station table and the geometry for the SAME station set, written beside the data - the C6
-// rights-travel principle extended from LICENSE.txt to citation and context. Awaits the sci gate
-// so the GeoJSON keeps its honesty rules (the omission note when screening never loaded).
+// Every data download travels with its metadata: the citation files, the station table and the geometry for
+// the SAME station set, written beside the data - the licence rights-travel principle extended from
+// LICENSE.txt to citation and context. See docs: portal internals, exports.js.
 async function metadataSidecarInto(zip,stations){
   if(hydrating("sci")){toast("Waiting for the screening data…");}
   await SCI_READY;
@@ -499,26 +414,14 @@ bindClick("dlCite",async()=>{const _scope=scopeSel();track("DownloadGenerated",{
   const c=buildCitationFiles(_scope);
   const z=new JSZip();z.file("CITATIONS.txt",c.txt);z.file("citations.bib",c.bib);z.file("citations.ris",c.ris);
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-citation-pack-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);});
-// The BULK-EXPORT LABEL (owner ruling 2026-08-01). The multi-file export below marks each file fetch it
-// issues with this query flag, so the server-log aggregator can tell a drag-selected bulk export from a
-// single station download. It is a LABEL on a request that already happens: no extra request, no beacon,
-// nothing about who is asking. The flag rides the QUERY and never the path, because the aggregator strips
-// the query before attributing a download, so a flagged and an unflagged fetch of the same file are still
-// one file (see deploy/scripts/aggregate_stats.py: the dedupe key is the query-stripped path).
-//
-// ONLY this flow labels anything. The drawer's own single-station downloads go through drawer.js
-// downloadUrl() and stay unlabelled, which is the whole point: an unlabelled fetch is exactly what
-// "single" means downstream, so leaking the flag onto that path would reclassify every single download
-// as a bulk one. The gate is therefore the CALL SITE, not the shared dataUrl() helper both use.
+// The BULK-EXPORT LABEL. The multi-file export below marks each file fetch it issues with this query flag,
+// so the server-log aggregator can tell a drag-selected bulk export from a single station download. See
+// docs: portal internals, exports.js.
 var SEL_BULK_FLAG="sel=bulk";
 function bulkUrl(u){u=String(u);return u+(u.indexOf("?")>=0?"&":"?")+SEL_BULK_FLAG;}
-// C6/C46: rights travel with the bytes: one LICENSE.txt per included survey, beside that survey's files
-// (same slug namespace). Built entirely from client-side SMETA (no fetch), mirroring the served-zip
-// instrument. The m -> (who, yr, attn) derivation mirrors build_portal's LICENSE.txt call site;
-// sources/changes ride on SMETA when present (dormant until a survey carries an attribution/sources
-// block). Extracted from the EDI flow, byte for byte, when the EMTF XML and MTH5 selection zips arrived:
-// three archives of the same custodian's files must carry the same instrument, and a second copy of this
-// derivation is exactly how they would come to differ. `included` maps survey name -> zip subdirectory.
+// Rights travel with the bytes: one LICENSE.txt per included survey, beside that survey's files (same slug
+// namespace). Built entirely from client-side SMETA (no fetch), mirroring the served-zip instrument. See
+// docs: portal internals, exports.js.
 function writeLicenseFiles(folder,included){
   Object.keys(included).forEach(sv=>{const m=SMETA[sv]||{};
     const who=((m.cite&&m.cite.au)||m.org||"the survey custodian").trim();
@@ -526,18 +429,7 @@ function writeLicenseFiles(folder,included){
     const attn=[who,yr?"("+yr+")":"",(m.cite&&m.cite.ti)||""].filter(Boolean).join(" ").trim()||who;
     folder.file(included[sv]+"LICENSE.txt",licenseInstrumentText(m.lic,who,yr,attn,m.sources||null,m.changes||null));});
 }
-// The SELECTION-ZIP EVENT SHAPE, shared by all three bulk buttons. `format` is what the reader receives
-// and `files` is what is inside it, so the three flows are one comparable series: an operator can ask "how
-// often is a selection taken as an archive" and "which format is asked for" separately, and the answers
-// still add up. They used to disagree: the EDI zip reported format:"zip" while the two derived-format
-// zips reported format:"emtfxml"/"mth5", which put ONE action in two vocabularies. Nothing downstream can
-// tell a naming difference from a behaviour difference, so a chart of "zip exports" silently excluded two
-// of the three buttons and a chart by format double-counted the third against the single-file downloads,
-// which report their own extension through the drawer's dispatchProd.
-// Bounded-concurrency fetch for the bulk zips. Results keep the INPUT order (zip entries stay
-// deterministic across runs) and a failure lands as null in its slot, so per-file accounting is
-// the caller's, unchanged. Six in flight matches a browser's per-host default; the sequential
-// loop this replaces serialised ~300 round trips behind one another.
+// The SELECTION-ZIP EVENT SHAPE, shared by all three bulk buttons. See docs: portal internals, exports.js.
 async function fetchBounded(items,limit,getUrl){
   const out=new Array(items.length);let next=0;
   async function worker(){
@@ -558,7 +450,7 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   let ok=0;const included={};toast("Packaging "+avail.length+" redistributable EDI(s)…",{sticky:true});   // included: survey -> zip subdir
   const ediItems=avail.map(s=>{try{const ea=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).find(a=>a.format==="edi");
     // Namespace the zip entry by survey slug too: a selection can span surveys that reuse an EDI basename
-    // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip (audit M3).
+    // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip.
     return {s,url:bulkUrl(ea?dataUrl(ea.url):dataUrl("edi/"+s.file)),entry:(s.slug?s.slug+"/":"")+s.file};}
     catch(e){return null;}}).filter(Boolean);
   const ediBlobs=await fetchBounded(ediItems,6,it=>it.url);
@@ -567,10 +459,8 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   await metadataSidecarInto(z,chosen);
   if(unavail.length){const lines=["These selected stations are NOT redistributable via AusMT (licence/embargo).",
     "Request them from the source archive, or contact the custodian where no DOI is recorded:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
-    // C7: m.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
-    // when it is absent (TS_COLLECTION is the raw time-series collection, not a TF source archive, and
-    // citing it here would mislabel a different dataset as "the source archive", the pre-C7 defect); so
-    // when no DOI is recorded we state the ACTUAL access reason (embargo vs licence) via withheldReason().
+    // m.doi (the survey's OWN dataset DOI) is the honest TF source archive. See docs: portal internals,
+    // exports.js.
     return m.doi?`${s.id}  (${s.survey})  ->  https://doi.org/${m.doi}`
                 :`${s.id}  (${s.survey})  ->  ${withheldReason(m)}`;}));
     z.file("NOT_INCLUDED_request_from_archive.txt",lines.join("\n"));}
@@ -579,19 +469,9 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-selection-edis-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);
   toast(`Zipped ${ok} EDI(s)`+(unavail.length?`; ${unavail.length} not redistributable (archive pointers included).`:"."));});
 
-// ---- selection exports for the two AusMT-derived formats (owner ask 2026-08-04) ------------------
-// A reader who has drawn a box around forty stations can take their EDIs in one click. AusMT also serves
-// a per-station EMTF XML and a per-station MTH5, and until now the only way to collect those over a
-// selection was forty visits to forty drawers. These two flows are the EDI flow over a different format:
-// same per-station manifest rows, same bulk label on every fetch, same LICENSE.txt beside the bytes.
-//
-// One thing genuinely differs, and it drives the honesty rules below. An EDI is the custodian's own file,
-// so "is it served here?" is a LICENCE question (s.ediAvail) with a legacy flat path to fall back on. A
-// derived file exists only where the build produced one: eight surveys have no served XML at all, and a
-// coordinate-generalised or withheld station gets neither format. So availability here is simply "does
-// this station have a manifest row of this format", there is no fallback path to guess at, and a
-// selection will routinely contain stations that must be skipped. Skipping them quietly would hand back
-// an archive of 31 files for 40 stations with nothing to say which nine went missing or why.
+// ---- selection exports for the two AusMT-derived formats -----------------------------------------
+// A reader who has drawn a box around forty stations can take their EDIs in one click. See docs: portal
+// internals, exports.js.
 var SEL_FORMATS={
   emtfxml:{label:"EMTF XML",folder:"ausmt_emtf_xml",stem:"ausmt-selection-emtf-xml-",
            note:"No EMTF XML is served for these selected stations."},
@@ -605,19 +485,8 @@ function selArtifact(s,fmt){
 // The three selection zips, in the order the panel renders them: element id, button base label, and the
 // manifest `format` each one packages.
 var SEL_ZIP_BUTTONS=[["dlZip","EDI (zip)","edi","dlZipMeta"],["dlZipXml","EMTF XML (zip)","emtfxml","dlZipXmlMeta"],["dlZipH5","MTH5 (zip)","mth5","dlZipH5Meta"]];
-// Size honesty (owner, 2026-08-04): each zip button states what THIS selection would cost before it is
-// clicked, so nobody starts a multi-hundred-megabyte MTH5 pull to find out. It counts only the rows the
-// export will actually fetch, so it is the estimate for the archive that will arrive, not for the
-// selection: an EDI whose station has no manifest row (the legacy flat path) contributes no size, which
-// is why every figure is prefixed "~". No manifest, no figure: a total of 0 would render "~0 B", a claim
-// that the selection costs nothing, when the truth is that nothing is known yet.
-//
-// This runs on EVERY KEYSTROKE (filters.js refresh() calls it after re-filtering), so it is a hot path and
-// is written as ONE pass over the selection that sums all three formats at once, reading each station's
-// rows through the manifest index (data.js mfFileIndex) rather than rescanning files[] per station per
-// format. It used to be three passes, each doing a linear scan of the whole manifest per station: 670ms
-// per repaint at 3000 selected stations against a 9000-row manifest, on the input path. It is now ~0.3ms
-// there, and flat in the manifest size.
+// Size honesty: each zip button states what THIS selection would cost before it is clicked, so nobody
+// starts a multi-hundred-megabyte MTH5 pull to find out. See docs: portal internals, exports.js.
 function paintL2Rows(st){
   const known=(typeof MANIFEST!=="undefined"&&!!MANIFEST);
   // Object.create(null), so a manifest row whose `format` happens to name an Object.prototype member
@@ -633,10 +502,9 @@ function paintL2Rows(st){
   const nEdi=st.filter(s=>s.ediAvail).length;
   SEL_ZIP_BUTTONS.forEach(([id,base,fmt,metaId])=>{
     const b=document.getElementById(id),meta=document.getElementById(metaId);
-    // Enablement is what the flow can PACKAGE: the EDI zip has the licence predicate (plus a legacy
-    // flat path a station may resolve through with no manifest row); the derived formats exist only
-    // as manifest rows. Sizes claim nothing without a manifest ("~0 B" would price the scope at
-    // free when the truth is unknown).
+    // Enablement is what the flow can PACKAGE: the EDI zip has the licence predicate and a legacy
+    // flat path, while the derived formats exist only as manifest rows. Sizes claim nothing without
+    // a manifest, because "~0 B" would price the scope at free when the truth is unknown.
     const can=fmt==="edi"?nEdi>0:(known&&count[fmt]>0);
     const c=fmt==="edi"?nEdi:count[fmt];
     const n=(known&&st.length)?total[fmt]:null;
@@ -655,10 +523,8 @@ function _tileState(b,state){
   if(d){d.classList.toggle("hollow",state==="none");
     d.style.background=state==="ok"?"var(--ok)":(state==="wait"?"var(--unk)":"transparent");}
 }
-// The time-series rows: one per level token, priced over the scope, action = that level's fetch
-// list. Two-phase honesty carries over from the retired chooser: in flight is busy-and-disabled
-// with the pending hint; a settled-empty deployment says so in the note (a curation state, never a
-// load error); membership in ts_access.json is the access decision (R5).
+// The time-series rows: one per level token, priced over the scope, action = that level's fetch list. See
+// docs: portal internals, exports.js.
 function paintTsRows(st){
   const seg=document.getElementById("tsSeg");if(!seg||!seg.querySelectorAll)return;
   if(!seg.children.length&&typeof TS_LEVELS!=="undefined")TS_LEVELS.forEach(([tok,label,gloss])=>{
@@ -718,18 +584,14 @@ async function exportSelectionFormat(fmt){
   let ok=0;const included={},failed=[];toast("Packaging "+have.length+" "+C.label+" file(s)…",{sticky:true});
   const fmtItems=have.map(s=>{const a=selArtifact(s,fmt);
     // Namespace the zip entry by survey slug, exactly as the EDI zip does: a selection can span surveys
-    // that reuse a station id, which would otherwise overwrite each other inside the archive (audit M3).
+    // that reuse a station id, which would otherwise overwrite each other inside the archive.
     return {s,url:bulkUrl(dataUrl(a.url)),entry:(s.slug?s.slug+"/":"")+a.url.split("/").pop()};});
   const fmtBlobs=await fetchBounded(fmtItems,6,it=>it.url);
   fmtItems.forEach((it,i)=>{if(fmtBlobs[i]){f.file(it.entry,fmtBlobs[i]);ok++;included[it.s.survey]=it.s.slug?it.s.slug+"/":"";}
     else{failed.push(it.s);}});
   writeLicenseFiles(f,included);
   await metadataSidecarInto(z,chosen);
-  // The gap file. A station can be absent from this archive for two DIFFERENT reasons and they are not
-  // interchangeable: its survey is not redistributable here at all (licence/embargo, the same wording and
-  // the same archive pointers the EDI zip writes), or the survey IS served but this format was never
-  // produced for that station. A third list records files that were served but did not come back, which
-  // is a transport failure and not a statement about the corpus at all.
+  // The gap file. See docs: portal internals, exports.js.
   const notServed=missing.filter(s=>!s.ediAvail),noFile=missing.filter(s=>s.ediAvail);
   if(missing.length||failed.length){
     const lines=[`${C.label} selection export: stations NOT included`,""];

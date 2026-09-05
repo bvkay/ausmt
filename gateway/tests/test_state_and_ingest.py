@@ -1,4 +1,4 @@
-"""State machine + done-file ingest (design §2/§5/§8). The property: only legal transitions are
+"""State machine + done-file ingest. The property: only legal transitions are
 possible, and every transition writes exactly one audit row. Ingest of a forged/unknown done-file
 is logged and ignored (no transition).
 
@@ -33,7 +33,7 @@ def _seed_received(database) -> str:
 def test_illegal_transition_refused_no_row(tmp_path):
     # RECEIVED -> VALIDATED is not in states.ALLOWED (must pass through SCANNED). The DB must refuse
     # AND leave the audit log untouched.
-    # proven failing 2026-07-05: an early transition() wrote the row before checking legality —
+    # Proven failing: an early transition() wrote the row before checking legality -
     # transitions count went 1 -> 2 on the illegal move.
     database = _fresh_db(tmp_path)
     sid = _seed_received(database)
@@ -69,8 +69,8 @@ def test_terminal_state_cannot_transition(tmp_path):
 
 
 def test_allowed_set_matches_state_diagram():
-    # Guard against silent widening of the state machine: the exact legal set is frozen (C10 §2 +
-    # C11 §1). If a future change adds a transition, it must be reflected HERE deliberately.
+    # Guard against silent widening of the state machine: the exact legal set is frozen. If a
+    # future change adds a transition, it must be reflected HERE deliberately.
     assert states.ALLOWED == frozenset({
         (states.RECEIVED, states.SCANNED),
         (states.RECEIVED, states.REJECTED_AV),
@@ -86,9 +86,9 @@ def test_allowed_set_matches_state_diagram():
 
 
 def test_validated_is_no_longer_terminal():
-    # C11 §1: VALIDATED stops being terminal (curator actions reopen it). PUBLISHING/PUBLISH_FAILED
-    # are transient/recoverable, not terminal. proven failing 2026-07-06: with the C10 TERMINAL set
-    # (VALIDATED terminal) a VALIDATED->PUBLISHING approve was refused as an illegal transition.
+    # VALIDATED stops being terminal (curator actions reopen it). PUBLISHING/PUBLISH_FAILED
+    # are transient/recoverable, not terminal. proven failing: with the earlier TERMINAL set
+    # (VALIDATED terminal) a VALIDATED->PUBLISHING curator approve was refused as an illegal transition.
     assert not states.is_terminal(states.VALIDATED)
     assert not states.is_terminal(states.PUBLISHING)
     assert not states.is_terminal(states.PUBLISH_FAILED)
@@ -106,7 +106,7 @@ def _advance_to_scanned(gw, client):
 
 def test_ingest_validated_done_advances_and_sweeps(tmp_path):
     # A SCANNED submission + a 'validated' done-file -> VALIDATED (post-unpack sweep clean).
-    # proven failing 2026-07-05: without _ingest_done wired into poll_once the state stayed SCANNED.
+    # Proven failing: without _ingest_done wired into poll_once the state stayed SCANNED.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, gw, cfg):
             r = await submit_zip(client, good_package_zip())
@@ -133,9 +133,9 @@ def test_ingest_quarantined_done(tmp_path):
 
 
 def test_forged_done_file_ignored(tmp_path):
-    # A done-file with an unknown outcome / unknown submission must NOT drive any transition
-    # (design §8). proven failing 2026-07-05: read_done returned a DoneFile for outcome='approve'
-    # and _apply_done attempted a transition.
+    # A done-file with an unknown outcome / unknown submission must NOT drive any transition.
+    # Proven failing: read_done returned a DoneFile for outcome='approve' and
+    # _apply_done attempted a transition.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, gw, cfg):
             r = await submit_zip(client, good_package_zip())
@@ -157,7 +157,7 @@ def test_forged_done_file_ignored(tmp_path):
 
 def test_post_unpack_sweep_hit_quarantines(tmp_path):
     # A 'validated' done-file but the second clamd sweep hits -> QUARANTINED av_post_unpack.
-    # proven failing 2026-07-05: without the sweep the submission went VALIDATED despite the hit.
+    # Proven failing: without the sweep the submission went VALIDATED despite the hit.
     from gateway import clamd
 
     async def _body():
@@ -182,8 +182,8 @@ def test_post_unpack_sweep_hit_quarantines(tmp_path):
 
 def test_dead_job_requeued_once_then_quarantined(tmp_path):
     # A running-file older than 2x timeout: first dead pass re-queues it (a pending file reappears);
-    # a second dead pass quarantines with 'job died twice' (design §5 crash recovery).
-    # proven failing 2026-07-05: without _requeue_dead the stale running-file was never noticed and
+    # a second dead pass quarantines with 'job died twice' (crash recovery).
+    # Proven failing: without _requeue_dead the stale running-file was never noticed and
     # the submission sat at SCANNED forever.
     import os
 

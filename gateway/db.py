@@ -1,8 +1,8 @@
-"""SQLite index for submissions (design §2). Directories are ground truth; this DB is the queryable
+"""SQLite index for submissions. Directories are ground truth; this DB is the queryable
 index and the audit log. WAL mode; the GATEWAY PROCESS IS THE ONLY WRITER (house rule — the runner
 never touches the DB; it writes done-files that the gateway's poll loop ingests).
 
-This is the ONLY place submitter PII (name/email/orcid) is stored. The PII grep test (design §8)
+This is the ONLY place submitter PII (name/email/orcid) is stored. The PII grep test
 proves it appears nowhere else in the gw/ tree. transition() is the single mutation path for state:
 it refuses illegal moves (states.ALLOWED) so no illegal transition can ever reach the audit log,
 and it writes the transitions row in the SAME connection/commit as the state update so a state
@@ -21,8 +21,8 @@ from pathlib import Path
 from . import states
 
 # ULID would need a dep; a 26-char Crockford-base32 of (48-bit time + 80-bit random) is ULID-shaped
-# and stdlib-only. The id is NOT a secret (the token is — design §2/§3); it is sortable-ish by the
-# time prefix, which is all the design asks of it.
+# and stdlib-only. The id is NOT a secret (the submission token is the secret); it is sortable-ish
+# by the time prefix, which is all the design asks of it.
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
@@ -41,8 +41,8 @@ def new_id(now_ms: int | None = None) -> str:
 
 
 def is_valid_id(value: str) -> bool:
-    """True only for a 26-char string drawn entirely from the Crockford-base32 id charset (design
-    C11 §3). Because that charset contains NO path separators, dots, or spaces, a valid id can never
+    """True only for a 26-char string drawn entirely from the Crockford-base32 id charset.
+    Because that charset contains NO path separators, dots, or spaces, a valid id can never
     form `..`, an absolute path, or a traversal component — this is the load-bearing guard the
     curator/preview routes apply BEFORE any id reaches a filesystem path or a git branch name."""
     return len(value) == 26 and all(c in _ID_CHARS for c in value)
@@ -58,8 +58,8 @@ class UploaderKey:
     secret; the plaintext is shown once at creation and never stored. A revoked key keeps its row
     (audit trail); active == revoked_utc IS NULL.
 
-    `note` (schema v3, C43 D7): a free-text curator annotation (who the key is for, expiry intent).
-    PII CONTAINMENT (D2.5): like every other column here it lives ONLY in this sqlite DB — it never
+    `note` (schema v3): a free-text curator annotation (who the key is for, expiry intent).
+    PII CONTAINMENT: like every other column here it lives ONLY in this sqlite DB and never
     enters a git-bound artifact (survey.yaml, a commit message, the publication ledger). A grep test
     pins its absence from the git-bound tree."""
     id: int
@@ -72,7 +72,7 @@ class UploaderKey:
     revoked_by: str | None
     last_used_utc: str | None
     note: str | None = None
-    # v5 (feat/selfserve-submit-keys): key PROVENANCE and the email_verified extras. `provenance` is
+    # Schema v5: key PROVENANCE and the email_verified extras. `provenance` is
     # 'operator' for every key the env-bootstrap OR a curator issues (the pre-v5 behaviour, and the
     # backfilled DEFAULT for existing rows) and 'email_verified' for a self-serve key minted by the
     # public request-key endpoint. `expires_utc`/`allowance_remaining` are NULL for operator keys (no
@@ -110,7 +110,7 @@ class Submission:
 
 @dataclass(frozen=True)
 class CuratorTotp:
-    """One curator's TOTP enrolment (schema v4, C41 D2). `secret` is the ONLY copy of the base32 TOTP
+    """One curator's TOTP enrolment (schema v4). `secret` is the ONLY copy of the base32 TOTP
     secret (shown once at enrolment, never re-rendered). `enrolled_utc` is NULL while the enrolment is
     PENDING activation and stamped once a valid code has proved the authenticator; `active` therefore
     == enrolled_utc is not None, and ONLY an active enrolment satisfies the survey-deletion gate.
@@ -141,12 +141,12 @@ class SchemaTooNew(Exception):
 
 
 def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
-    """v2 (feat/uploader-key-management): curator-managed uploader keys move the single shared
+    """Schema v2: curator-managed uploader keys move the single shared
     AUSMT_SUBMIT_KEY out of env-only into the DB. Each row is ONE issued key: only its sha256 is
     stored (the plaintext is shown once at creation, never retrievable), plus who/when it was created
     and — when applicable — who/when it was revoked. A revoked row is NEVER deleted (audit trail; the
     created_by/revoked_by columns ARE the audit record for this table, mirroring how the git history
-    is the audit record for C31 edits — no submissions-schema change, no separate audit table).
+    is the audit record for survey edits - no submissions-schema change, no separate audit table).
     IF NOT EXISTS so a re-run on a partially-migrated DB is idempotent."""
     conn.execute(
         """
@@ -166,22 +166,22 @@ def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
-    """v4 (C41 D2 owner amendment): per-curator TOTP secret for the destructive-op second factor. The
+    """Schema v4: per-curator TOTP secret for the destructive-op second factor. The
     DB is already the secrets/PII home (never git, WAL-safe backed up, restore-drilled), so the secret
-    lives here beside the session store — a survey deletion needs a valid TOTP code in addition to the
+    lives here beside the session store - a survey deletion needs a valid TOTP code in addition to the
     curator session.
 
     ONE row per curator (curator_name PK):
-      * secret        — the base32 TOTP secret (the ONLY copy; shown once at enrolment, never re-shown);
-      * enrolled_utc  — NULL while an enrolment is PENDING activation, stamped when a valid code proves
+      * secret - the base32 TOTP secret (the ONLY copy; shown once at enrolment, never re-shown);
+      * enrolled_utc - NULL while an enrolment is PENDING activation, stamped when a valid code proves
                         the authenticator works; `enrolled_utc IS NOT NULL` == the factor is ACTIVE and
-                        satisfies the deletion gate (an unactivated row does NOT — fail-closed);
-      * last_used_step— the highest RFC 6238 time-step already consumed, so a code can never be
+                        satisfies the deletion gate (an unactivated row does NOT - fail-closed);
+      * last_used_step - the highest RFC 6238 time-step already consumed, so a code can never be
                         replayed within or across its window (a deletion needs a step STRICTLY GREATER).
 
-    Additive-only (the C43 lane invariant): a single CREATE TABLE IF NOT EXISTS, no existing column
+    Additive-only, which is the migration invariant: a single CREATE TABLE IF NOT EXISTS, no existing column
     touched, no data migrated. IF NOT EXISTS makes a re-run on a partially-migrated DB idempotent
-    (mirrors v2's rationale). No unenrol/delete method exists by design (record D2, D12 boundary):
+    (mirrors v2's rationale). No unenrol/delete method exists by design:
     lost-authenticator recovery is a console action (delete the row on the box), the same class as
     bootstrap-key rotation."""
     conn.execute(
@@ -197,8 +197,8 @@ def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
-    """v3 (C43 D7): add a free-text `note` column to uploader_keys — a curator annotation (who the key
-    is for, expiry intent). ADDITIVE-ONLY (the C43 lane invariant): a single `ALTER TABLE ... ADD
+    """v3: add a free-text `note` column to uploader_keys - a curator annotation (who the key
+    is for, expiry intent). ADDITIVE-ONLY, the migration invariant: a single `ALTER TABLE ... ADD
     COLUMN note TEXT`, which SQLite applies without rewriting the table and which defaults every
     existing row's note to NULL (rendered as "—"). No existing column is touched, no data migrated.
 
@@ -213,8 +213,8 @@ def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v5_selfserve_keys(conn: sqlite3.Connection) -> None:
-    """v5 (feat/selfserve-submit-keys): a SECOND, self-serve key-issuance path alongside the existing
-    operator-issued keys. Two additive changes, both the C43 lane invariant (no existing column
+    """Schema v5: a SECOND, self-serve key-issuance path alongside the existing
+    operator-issued keys. Two additive changes, both under the migration invariant (no existing column
     touched, no data migrated):
 
     1. uploader_keys gains three columns for key PROVENANCE + the email_verified extras:
@@ -276,7 +276,7 @@ class Database:
         path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False: the DB is touched from the poll-loop task on the event-loop thread
         # AND from the status route, which runs in Starlette's threadpool (declared `def` so a burst
-        # of GET /status does not block the loop — review #9). There is still exactly ONE writer
+        # of GET /status does not block the loop). There is still exactly ONE writer
         # process. `_lock` serialises access across those threads (sqlite connections are not safe
         # for concurrent use even with check_same_thread=False); it is an RLock so a method that
         # calls another locked method (e.g. transition -> get) does not deadlock. A short busy
@@ -406,13 +406,12 @@ class Database:
         return self._row_to_submission(row) if row else None
 
     def find_duplicate_by_sha(self, zip_sha256: str) -> Submission | None:
-        """The submission that already carries these exact zip bytes (duplicate-content 409,
-        design §4.4).
+        """The submission that already carries these exact zip bytes: the duplicate-content 409.
 
-        The rule is about CONTENT, not liveness. It used to match only NON-TERMINAL rows, which
-        meant the guard switched itself off the moment the first copy finished: once a submission
+        The rule is about CONTENT, not liveness. Matching only NON-TERMINAL rows would switch the
+        guard off the moment the first copy finished, so once a submission
         reached PUBLISHED (or QUARANTINED / REJECTED_AV / REJECTED / RETURNED) the identical bytes
-        were accepted again with a fresh 201, a fresh id, a fresh scan + validate + preview cycle
+        would be accepted again with a fresh 201, a fresh id, a fresh scan + validate + preview cycle
         and a second publishable copy of a package the archive already holds. Every terminal state
         makes a resubmit of the SAME bytes pointless or worse: already published, already refused,
         already found infected, or returned for a revision that identical bytes plainly are not.
@@ -443,8 +442,8 @@ class Database:
 
     def count_today(self, day_prefix: str) -> int:
         """Submissions created on the given UTC day (YYYY-MM-DD prefix) for the per-day cap. Not
-        per-key: C10 has a single submit key, so the daily cap is effectively global — the design's
-        per-key wording collapses to this until multi-key issuance (C11+)."""
+        per-key: the deployment has a single submit key, so the daily cap is effectively global - the design's
+        per-key wording collapses to this until multi-key issuance."""
         with self._lock:
             row = self._conn.execute(
                 "SELECT COUNT(*) AS n FROM submissions WHERE created_utc LIKE ?",
@@ -466,7 +465,7 @@ class Database:
             ).fetchall())
 
     def queue(self, states_wanted: tuple[str, ...]) -> list[Submission]:
-        """Submissions in any of `states_wanted`, newest first (design §3 curator queue). ORDER BY
+        """Submissions in any of `states_wanted`, newest first (curator queue). ORDER BY
         the id descending: the id is time-prefixed (ULID-shaped), so descending id == newest first
         without a separate sort key."""
         placeholders = ",".join("?" * len(states_wanted))
@@ -477,11 +476,11 @@ class Database:
             ).fetchall()
         return [self._row_to_submission(r) for r in rows]
 
-    # ---- curator sessions (C11 §2). Server-side store; the raw token lives only in the cookie. ----
+    # ---- curator sessions. Server-side store; the raw token lives only in the cookie. ----
 
     def create_session(self, session_hash: str, curator_name: str, ttl_s: int) -> None:
         """Store a new session row keyed by the sha256 of the raw token (mirrors token_hash: the raw
-        secret is NEVER stored). Absolute expiry (design §6 — not sliding): created + ttl_s."""
+        secret is NEVER stored). Absolute expiry (not sliding): created + ttl_s."""
         now = time.time()
         created = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
         expires = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + ttl_s))
@@ -643,10 +642,10 @@ class Database:
             return cur.rowcount > 0
 
     def set_uploader_key_note(self, key_id: int, *, note: str) -> bool:
-        """Set the free-text `note` on an ACTIVE uploader key (schema v3, C43 D7). Returns True if a
-        row was updated; False for an unknown id OR a REVOKED key — record D7 rules a revoked key a
-        READ-ONLY audit row, so its note is frozen at revocation time (fix-round F6, overruling the
-        earlier 'editable audit context' reading; the `AND revoked_utc IS NULL` guard is the DB-level
+        """Set the free-text `note` on an ACTIVE uploader key (schema v3). Returns True if a
+        row was updated; False for an unknown id OR a REVOKED key: a revoked key is a
+        READ-ONLY audit row, so its note is frozen at revocation time (the
+        `AND revoked_utc IS NULL` guard is the DB-level
         enforcement, belt-and-braces under the route's own state check). An empty string clears the
         note (stored as NULL so the page renders "—"). This never touches key material or the
         active/revoked state. PII containment: writes ONLY this sqlite column, never a git-bound
@@ -659,8 +658,8 @@ class Database:
             return cur.rowcount > 0
 
     def get_uploader_key(self, key_id: int) -> UploaderKey | None:
-        """One uploader key by id (active or revoked), else None — the route-level state check for the
-        F6 revoked-immutability rule reads this before accepting a note update."""
+        """One uploader key by id (active or revoked), else None. The route-level state check for the
+        revoked-immutability rule reads this before accepting a note update."""
         with self._lock:
             row = self._conn.execute(
                 "SELECT * FROM uploader_keys WHERE id = ?", (key_id,)).fetchone()
@@ -714,7 +713,7 @@ class Database:
                 row["allowance_remaining"] if "allowance_remaining" in keys else None),
         )
 
-    # ---- curator TOTP (schema v4 — destructive-op second factor, C41 D2) ------------------------
+    # ---- curator TOTP (schema v4 - destructive-op second factor) ------------------------
 
     def get_totp(self, curator_name: str) -> CuratorTotp | None:
         """The curator's TOTP row (active OR pending), else None. `None` == not enrolled at all; a
@@ -760,7 +759,7 @@ class Database:
         step (or none consumed yet). Returns True iff the step was consumed; False means a REPLAY (the
         step was already used or is older) OR the curator is not actively enrolled. The whole check-and-
         advance is one UPDATE under the lock, so two concurrent deletions cannot both consume the same
-        code — the replay guard is race-free at the DB layer (mirrors transition()'s lock-across-check-
+        code - the replay guard is race-free at the DB layer (mirrors transition()'s lock-across-check-
         then-write rationale)."""
         with self._lock, self._conn:
             cur = self._conn.execute(

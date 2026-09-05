@@ -1,4 +1,4 @@
-"""D-L (identifiers by data level, SPEC §9): the portal labels related-identifier rows by their NCI Table 1
+"""D-L (identifiers by data level): the portal labels related-identifier rows by their NCI Table 1
 DATA LEVEL when `identifies` is present, links each files-tab level row to its level's DOI, and omits the
 station-drawer "Identifiers & instruments" expander entirely when there is nothing to show.
 
@@ -25,15 +25,15 @@ def test_related_block_labels_by_level_when_identifies_present(tmp_path):
         {"identifier": "10.25914/whole", "identifier_type": "DOI", "relation": "IsVariantFormOf",
          "custodian": "GA", "identifies": "entire"}]}
     station, story, _card = _render(tmp_path, extra)
-    # The rollup block moved to the STATION drawer with the survey-drawer lane (ruling 4); it is unchanged.
+    # The rollup block moved to the STATION drawer with the survey drawer; it is unchanged.
     assert "Raw time series: " in station, "the raw_packed row is not labelled by its level:\n" + station
     assert "Collection: " in station, "the collection row is not labelled by its level:\n" + station
     assert "Entire dataset: " in station, "the entire row is not labelled by its level:\n" + station
     # the level label REPLACES the relation label for an identifies row
     assert "Derived from: " not in station, "an identifies row still showed the relation label:\n" + station
-    # ---- SURVEY GRID SLOT MAPPING (ruling 4 + the slot-mapping ruling) -------------------------------
+    # ---- SURVEY GRID SLOT MAPPING --------------------------------------------------------------------
     # collection -> slot 1, raw_packed -> slot 2. This fixture carries BOTH `collection` and `entire`, so
-    # the drawer-polish COLLISION RULE applies (owner, 2026-08-19): `entire` is an ALIAS for the Collection
+    # the drawer-polish COLLISION RULE applies: `entire` is an ALIAS for the Collection
     # slot, but the exact `collection` match wins the slot and `entire` falls to the extra-tile bucket -
     # nothing silently dropped, and the header count tallies the SLOT (2 of 6), never both rows.
     tiles = re.findall(r'<div class="prod[^"]*dl-tile"[^>]*>.*?</div></div>', story, re.S)
@@ -59,11 +59,11 @@ def test_related_block_labels_by_level_when_identifies_present(tmp_path):
         "the collision-losing `entire` row occupies more than one tile (slot AND extra):\n" + story
 
 
-# ---- drawer-polish lane (owner, 2026-08-19): `entire` FILLS the Collection slot ----------------------
+# ---- drawer-polish workflow: `entire` FILLS the Collection slot ----------------------
 # `entire` is the umbrella record - one deposit covering all levels - which is exactly what the Collection
-# slot names. It used to fall through to the extra-tile bucket, so Gawler Phase 2 (its GSSA/SARIG landing
-# page + a level3 models record) read "1 of 6 recorded" with an orphan tile hanging under the grid. These
-# two pins are the owner's stated acceptance shape.
+# slot names. It once fell through to the extra-tile bucket, so Gawler Phase 2 (its GSSA/SARIG
+# landing page + a level3 models record) read "1 of 6 recorded" with an orphan tile hanging under the grid. These
+# two pins are the stated acceptance shape.
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_entire_only_survey_fills_the_collection_slot(tmp_path):
     """Gawler-Phase-2-shaped: an `entire` row and NO `collection` row. The `entire` row FILLS slot 1
@@ -86,7 +86,7 @@ def test_entire_only_survey_fills_the_collection_slot(tmp_path):
         "slot 6 (Level 3) did not take the level3 row:\n" + tiles[5]
     assert "2 of 6 recorded" in story, \
         "the count must read '2 of 6 recorded' once `entire` fills the Collection slot:\n" + story
-    # the orphan is gone: `entire`'s own vocabulary label must no longer head a tile of its own
+    # the orphan is gone: `entire`'s own vocabulary label must not head a tile of its own
     assert "Entire dataset" not in story, \
         "the `entire` row rendered as an extra tile as well as filling the Collection slot:\n" + story
 
@@ -117,7 +117,7 @@ def test_collection_and_entire_collision_gives_the_slot_to_collection(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_data_level_section_header_copy(tmp_path):
-    """Owner-approved wording from the design mockup: the grid's section head reads 'Data at every level:
+    """The wording from the design mockup: the grid's section head reads 'Data at every level:
     N of 6 recorded', not the old 'Persistent identifiers:'. The STATION drawer's own identifiers block
     keeps its name - that surface is explicitly untouched. FAILS (RED before the copy change) IF the survey
     grid still heads 'Persistent identifiers:' or IF the station block loses its heading."""
@@ -150,7 +150,7 @@ def test_legacy_row_without_identifies_falls_back_to_relation_label(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_files_tab_level_row_links_its_identifies_doi(tmp_path):
-    """D-L4: on the files tab, a level row links the related_identifiers DOI whose identifies matches that
+    """On the files tab, a level row links the related_identifiers DOI whose identifies matches that
     level — so a user jumps straight to the DOI for the data level. FAILS IF the level row falls back to
     the collection PID instead of its own level's identifier."""
     extra = {"ts": "ok", "ts_levels": ["raw_packed", "level0", "level1"],
@@ -184,7 +184,7 @@ def test_files_tab_reserved_level_doi_is_inert(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_files_tab_hostile_url_level_doi_is_never_an_open_action(tmp_path):
-    """SCHEME GUARD (D-L4 files tab): a URL-typed related_identifier is relatedIdHref's RAW value, so a
+    """SCHEME GUARD (files tab): a URL-typed related_identifier is relatedIdHref's RAW value, so a
     javascript: identifier that matches a served level would otherwise ride the level row straight into a
     product-tile open action (data-url -> window.open). The tsLevelRow scheme guard admits ONLY http(s),
     so the hostile level DOI yields NO open action on the files-tab level row; it falls through to the
@@ -210,7 +210,7 @@ def test_files_tab_hostile_url_level_doi_is_never_an_open_action(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_zero_identifier_survey_omits_the_identifiers_expander(tmp_path):
-    """Card-lane polish: a survey with no identifiers shows NO 'Identifiers & instruments' expander in the
+    """Card polish: a survey with no identifiers shows NO 'Identifiers & instruments' expander in the
     station drawer (the disclosure is omitted, not rendered empty). FAILS IF the empty expander returns."""
     station, _story, _card = _render(tmp_path, {})   # no doi, no org_ror, no raid, no related_identifiers
     assert "Identifiers &amp; instruments" not in station and "Identifiers & instruments" not in station, \

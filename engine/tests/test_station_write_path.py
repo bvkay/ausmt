@@ -1,4 +1,4 @@
-"""D7: where the promoted station.json is published, and why it lands in BOTH trees.
+"""Where the promoted station.json is published, and why it lands in BOTH trees.
 
 station.json is a public contract served at /data/products/<slug>/<station>/station.json, so it must
 exist at the served root of every build, exactly as survey-metadata.json does. Until the promotion it
@@ -12,7 +12,7 @@ test_emtfxml_input.py, test_processing_lineage.py and gateway/tests/test_c43_sta
 deploy/Makefile makes the two coincide in deployment, so the served path is identical either way. Both
 trees keep their copy, and the two copies are the same bytes.
 
-SCOPE, stated because the asymmetry is deliberate: D7 promotes station.json alone. dimensionality.json
+SCOPE, stated because the asymmetry is deliberate: the promotion covers station.json alone. dimensionality.json
 is served beside it but is not a contract, so it stays where it has always been written, under
 --products. In deployment the two directories are the same one.
 """
@@ -62,7 +62,7 @@ def test_station_json_is_published_in_both_trees_when_products_sits_outside_out(
         doc = json.loads(path.read_text(encoding="utf-8"))
         assert doc["schema"] == "ausmt-station"
 
-    # D7 promotes station.json alone; the dimensionality sidecar keeps its single --products home.
+    # The promotion covers station.json alone; the dimensionality sidecar keeps its single --products home.
     assert list(products.rglob("dimensionality.json")), "the curator tree keeps the sidecar"
     assert not list((out / "products").rglob("dimensionality.json")), (
         "dimensionality.json is not a contract and is not promoted with station.json")

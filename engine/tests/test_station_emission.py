@@ -6,22 +6,22 @@ split the dimensionality call across two surfaces or let a masked position reach
 
 What this module pins, all of it read off documents a REAL build wrote:
 
-  * THE KEY SETS, on both branches (lane contract section 2). The full record carries the fourteen
+  * THE KEY SETS, on both branches (workflow contract section 2). The full record carries the fourteen
     frozen keys, exactly three promotion markers, the new canonical model where the source supports it
     and the one conditional coordinate key; the withheld stub carries the nine frozen keys plus exactly
     three markers and nothing else. These are the pins that make byte-stability enforceable: before the
     promotion nothing forbade a fifteenth key on either branch.
   * the markers themselves: `schema` names the contract, `version` is the generated constant, and
-    `survey_id` is the SLUG (D4), which is what mtcat and survey-metadata.json key on.
-  * D1, the dimensionality fold: `diagnostics` and the sidecar state ONE call, from one computation,
+    `survey_id` is the SLUG, which is what mtcat and survey-metadata.json key on.
+  * the dimensionality fold: `diagnostics` and the sidecar state ONE call, from one computation,
     and the withheld branch gains no `diagnostics` at all, which is what keeps the interpretation
     product out of a record whose science is withheld.
   * the NEW blocks carry no null and no empty container. This is scoped to runs[] and resources[] on
     purpose: the frozen keys carry legitimate nulls (remote_site, coordinate_qc, the frame rotation
     sources), so the survey-metadata document's corpus-wide rule cannot be imported here.
-  * the ratified leak rejections T13, T14 and T28a-d, applied to BUILT withheld stubs rather than to a
+  * the leak rejections, applied to BUILT withheld stubs rather than to a
     hand-written fixture, so what is proven closed is the document the corpus actually publishes.
-  * D11: no non-exact station's true position reaches any published free text. The per-station mask
+  * No non-exact station's true position reaches any published free text. The per-station mask
     withholds a masked station's OWN note; nothing stops ANOTHER station's note naming it, and the
     corpus already publishes remote-station coordinates in notes (WG-1-1, where both stations are
     open, so it is not a leak). This is fail-closed protection ahead of the first survey where it
@@ -49,7 +49,7 @@ from test_station_schema_v01 import validator as schema_validator  # noqa: E402
 import _stationcheck as stcheck  # noqa: E402
 
 # The station.json KEY SET on each branch. Frozen = emitted before the promotion and byte-stable
-# through 1.x; markers = the three ratified additions (D8); new model = the canonical blocks, which are
+# through 1.x; markers = the three additions; new model = the canonical blocks, which are
 # CONDITIONAL because a source that asserts no acquisition fact publishes no runs[]; conditional =
 # coordinate_policy, present only for a non-exact station.
 FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "location", "data",
@@ -117,7 +117,7 @@ def built_open(tmp_path_factory):
 def built_access(tmp_path_factory):
     """One survey per access state, each over the same EDIs: the open control plus the two states that
     emit a withheld stub. Two withheld surveys rather than one because the embargo date is CONDITIONAL
-    (D6) and metadata_only is the branch that carries a null one."""
+    and metadata_only is the branch that carries a null one."""
     pytest.importorskip("mt_metadata")
     root = tmp_path_factory.mktemp("station-emission-access")
     surveys = root / "surveys"
@@ -175,18 +175,18 @@ def test_every_record_opens_with_the_markers_and_survey_id_is_the_slug(built_acc
         slug = key.split("/")[0]
         assert doc["schema"] == "ausmt-station"
         assert doc["version"] == STATION_SCHEMA_VERSION, "version is the generated constant, not a literal"
-        assert doc["survey_id"] == slug, "survey_id is the slug (D4); a display title is not an identifier"
+        assert doc["survey_id"] == slug, "survey_id is the slug; a display title is not an identifier"
         assert doc["survey"] != doc["survey_id"], "the display title stays a separate, legacy surface"
 
 
-# ---------------------------------------------------------------- D1: one call, two surfaces
+# ---------------------------------------------------------------- one call, two surfaces
 
 def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
-    """D1: `diagnostics` gains the call, the method string and the caveat, from the SAME computation the
-    sidecar reads. The sidecar keeps being written byte-unchanged through 1.x (D14), so the two must
+    """`diagnostics` gains the call, the method string and the caveat, from the SAME computation the
+    sidecar reads. The sidecar keeps being written byte-unchanged through 1.x, so the two must
     never be able to disagree.
 
-    R2: what the fold carries is bound to the sidecar; what the sidecar states as null is ABSENT
+    What the fold carries is bound to the sidecar; what the sidecar states as null is ABSENT
     here, never copied across."""
     full, _ = _split(built_open)
     for key, doc in full.items():
@@ -209,7 +209,7 @@ def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
 
 def test_a_withheld_record_gains_no_diagnostics_and_no_sidecar(built_access):
     """The asymmetry the fold could have collapsed: a withheld station has no dimensionality.json, and
-    folding the call in would have given it one under another name."""
+    folding the call in would give it one under another name, which is the collapse this pin refuses."""
     _, withheld = _split(built_access)
     for key, doc in withheld.items():
         assert "diagnostics" not in doc, f"{key}: the interpretation product must stay out of a stub"
@@ -238,10 +238,10 @@ def test_a_withheld_record_publishes_neither_block(built_access):
         assert not set(NEW_MODEL_KEYS) & set(doc), f"{key}: the stub carries {sorted(set(NEW_MODEL_KEYS) & set(doc))}"
 
 
-# ---------------------------------------------------------------- the ratified leak rejections
+# ---------------------------------------------------------------- the leak rejections
 
 def _leaks():
-    """T13, T14 and T28a-d, as mutations of a BUILT stub. Each differs from the emitted document by
+    """The emission vectors, as mutations of a BUILT stub. Each differs from the emitted document by
     exactly the field under test."""
     return [
         ("T13 injected runs[]", lambda d: d.update({"runs": [{"id": "001"}]})),
@@ -275,17 +275,17 @@ def test_built_withheld_stubs_reject_the_ratified_leaks(built_access, why, mutat
         assert stcheck.violations(leaked), f"{key}: the semantic layer accepted {why}"
 
 
-# ---------------------------------------------------------------- D11: no masked position in a note
+# ---------------------------------------------------------------- No masked position in a note
 
 def _coord_fixtures():
-    """The C42 coordinate fixtures and their leak-string generator, reused rather than restated."""
+    """The coordinate fixtures and their leak-string generator, reused rather than restated."""
     import test_coord_access as c42  # noqa: PLC0415
     return c42
 
 
 @pytest.fixture(scope="module")
 def built_masked(tmp_path_factory):
-    """One exact, one generalised and one withheld station in one survey, built by the C42 stager so
+    """One exact, one generalised and one withheld station in one survey, built by the stager so
     the positions are distinctive enough to attribute a hit to a policy class."""
     pytest.importorskip("mt_metadata")
     c42 = _coord_fixtures()
@@ -319,7 +319,7 @@ def _note_hits(out: Path, values):
 
 
 def test_no_non_exact_position_reaches_any_published_note(built_masked):
-    """D11. The coordinate mask is PER STATION: it withholds a masked station's own note, and nothing
+    """The coordinate mask is PER STATION: it withholds a masked station's own note, and nothing
     stops a different station's note from naming it (the corpus already publishes a remote station's
     gps_lat/gps_lon that way, in a pair where both stations are open). Fail-closed, ahead of the first
     survey where that pair is not both-open."""
@@ -357,7 +357,7 @@ def test_the_masked_stations_still_publish_a_record(built_masked):
     assert by_station[c42.HID["id"]]["location"] == {"lat": None, "lon": None}
 
 
-# ---------------------------------------------------------------- C42 x D3: archives are containment
+# ---------------------------------------------------------------- Archives are containment
 
 def test_a_masked_station_advertises_no_archive_it_put_no_bytes_into(built_masked):
     """An `archive` row is a CONTAINMENT claim, and the byte gate decides containment per station: a

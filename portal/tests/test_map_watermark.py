@@ -2,7 +2,7 @@
 
 WHY THE MAP AND NOT THE CHROME. The header's AuScope org-mark left every surface: the relationship
 is stated in words, in the footer and in About's "Who enables AusMT" section, and a symbol repeated
-in a corner said nothing either of those does not. The map is the exception the owner ruled, for a
+in a corner said nothing either of those does not. The map is the one exception, for a
 reason the chrome could not give: it is the surface people screenshot into talks and reports, and a
 screenshot carries no footer with it. A corner mark is attribution that travels with the image.
 
@@ -22,7 +22,7 @@ THE STYLE GUIDE'S RULES, APPLIED AS NUMBERS (AuScope+Style+Guide.pdf, Identity |
     stricter of the two and the contract says to honour it.
   * OPACITY AND TINTING. The guide sets no rule on either, so the mark renders at full opacity and
     in the committed colours. FAILS here if an opacity is introduced.
-  * MINIMUM SIZE. The guide states none, so the ruled 28px to 32px band stands and the mark takes
+  * MINIMUM SIZE. The guide states none, so the specified 28px to 32px band stands and the mark takes
     the top of it, which is what a screenshot needs to stay legible after scaling.
 
 IT CANNOT INTERCEPT ANYTHING. pointer-events:none takes it out of hit testing entirely, which is
@@ -103,7 +103,7 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
     """The geometry, as one literal, and the reasons it is those numbers.
 
     FAILS IF the inset drops below one logo height (the guide's clear space), if the height leaves
-    the ruled 28px to 32px band, if pointer-events:none goes (the mark would then be able to swallow
+    the specified 28px to 32px band, if pointer-events:none goes (the mark can then swallow
     a click meant for the map), or if the narrow-width rule that hides it below 560px goes."""
     text = _text(INDEX)
     assert f".mapmark{{{PLACEMENT}}}" in text, (
@@ -120,7 +120,7 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
     # The clear space, read back off the rule rather than restated: the inset on each edge the mark
     # is near must be at least the mark's own height.
     height = int(re.search(r"height:(\d+)px", PLACEMENT).group(1))
-    assert 28 <= height <= 32, f"the mark's height must sit in the ruled band, got {height}px"
+    assert 28 <= height <= 32, f"the mark's height must sit in the declared band, got {height}px"
     for edge in ("top", "right"):
         inset = int(re.search(edge + r":(\d+)px", PLACEMENT).group(1))
         assert inset >= height, (
@@ -130,7 +130,7 @@ def test_the_placement_honours_the_style_guide_clear_space_and_intercepts_nothin
 
 def test_the_mark_renders_at_full_opacity_and_is_never_tinted():
     """The style guide sets no rule permitting an opacity or a tint on the icon, and the contract
-    ruled full opacity unless it did. FAILS IF an opacity, a filter or a mix-blend-mode is added to
+    requires full opacity unless it does. FAILS IF an opacity, a filter or a mix-blend-mode is added to
     the mark: a faded trademark is a modified trademark, and the whole point of the mark is that it
     survives being screenshotted and rescaled."""
     text = _text(INDEX)
@@ -166,7 +166,7 @@ def test_the_mark_sits_below_leaflets_controls_and_popups():
 
 
 def test_no_other_surface_on_the_site_draws_the_colour_icon():
-    """The ruling is map-only, and every surface that could grow a copy is named. FAILS IF another
+    """The rule is map-only, and every surface that could grow a copy is named. FAILS IF another
     portal document, the engine's pages sheet (which draws the generated collection page's own
     footprint mark) or the SPA's collection scatter starts naming the file.
 

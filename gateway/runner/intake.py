@@ -1,15 +1,15 @@
-"""C34/D1 — intake generation of LICENSE.md and README.md into a submitted package.
+"""Intake generation of LICENSE.md and README.md into a submitted package.
 
 The gw-runner calls generate_intake_files() AFTER safe-extraction and BEFORE the validator runs
 (runner._do_work), so a package that arrived without these files carries them by the time the
 validator checks structure — the two 'LICENSE.md/README.md missing' WARNINGs flip to PASS in the
 SAME run, and the curator reviews/approves the COMPLETE package (approve-what-you-publish).
 
-Design rules (maintainer/C34-IntakeFilesDesign.md D3), all fail-closed:
+Design rules (maintainer/C34-IntakeFilesDesign.md), all fail-closed:
   * LICENSE.md is generated ONLY for a licence id the engine RECOGNISES (recognised()); an
     unrecognised id (typo / 'TBD' / free text / absent) generates nothing and the validator WARNING
     correctly stands. The rights text is the engine's single source (_license_text), byte-shared
-    with the bundle LICENSE.txt so the two can never drift (D2).
+    with the bundle LICENSE.txt so the two can never drift.
   * README.md is a skeleton from survey.yaml: name, organisation, year/dates, abstract, station
     count (cheap — a count of the package's EDI files), citation guidance, licence line. It carries
     NO submitter contact details of any kind — the runner never sees PII (a job file carries only
@@ -22,7 +22,7 @@ STDLIB + PyYAML only (the reader the validator and build_portal use; present on 
 where the runner runs). It imports the engine's _license_text leaf for the rights text — a
 stdlib-only module, so no heavy scientific stack is pulled into the runner. This module is import-
 safe without the engine installed: _license_text is imported LAZILY inside the generator (a bare
-`import gateway.runner.intake` in the stack-less gateway test lane must not require `extract`).
+`import gateway.runner.intake` in the stack-less gateway test run must not require `extract`).
 """
 from __future__ import annotations
 
@@ -49,11 +49,11 @@ _SCALAR_TYPES = (str, int, float, date, datetime)
 
 
 def _import_license_text():
-    """Resolve the engine's stdlib-only _license_text leaf (D2 single source) in whichever context the
+    """Resolve the engine's stdlib-only _license_text leaf (the single source) in whichever context the
     runner runs. On the engine image `extract` is an installed package, so `extract._license_text` is
     the resolvable path; a sibling checkout with engine/extract on sys.path resolves the bare name.
     Returns (license_instrument_text, recognised, redistributable, instrument_params_from_survey). Lazy so
-    a bare import of this module in the stack-less gateway test lane never requires the engine installed."""
+    a bare import of this module in the stack-less gateway test run never requires the engine installed."""
     try:
         from extract._license_text import (license_instrument_text, recognised, redistributable,
                                             instrument_params_from_survey)
@@ -64,7 +64,7 @@ def _import_license_text():
 
 
 def _stamp(now_utc: datetime) -> str:
-    """The machine provenance line both generated files open with (design D3, verbatim). The date is
+    """The machine provenance line both generated files open with, verbatim. The date is
     the UTC calendar date only (no clock time) so the stamp is stable within a day and never leaks a
     sub-day processing timestamp."""
     stamp_date = now_utc.astimezone(timezone.utc).strftime("%Y-%m-%d")
@@ -136,8 +136,8 @@ def _license_of(y: dict) -> str:
 def _station_count(package_root: Path) -> int:
     """A CHEAP station count: the number of one-station transfer-function files under
     transfer_functions/edi/ and transfer_functions/emtfxml/ (EMTF XML is a first-class submission
-    input since the 2026-08-03 ruling, so counting only EDIs would report an XML-only survey as
-    having no stations). Not a parse, just a glob, so it is a best-effort figure the README states
+    input, so counting only EDIs would report an XML-only survey as having no stations). Not a
+    parse, just a glob, so it is a best-effort figure the README states
     honestly ('N stations') and omits when zero/unknown.
 
     It deliberately does NOT de-duplicate a station supplied in both formats, and does not count
@@ -171,9 +171,9 @@ def _read_survey_yaml(package_root: Path) -> dict:
 
 
 def _license_md_body(y: dict, now_utc: datetime) -> str | None:
-    """The LICENSE.md text, or None when the declared licence is NOT recognised (fail-closed D3: an
+    """The LICENSE.md text, or None when the declared licence is NOT recognised (fail-closed: an
     unrecognised id generates nothing so the validator WARNING stands). The rights statement is the
-    engine's single-source license_instrument_text (D2) so LICENSE.md and the bundle LICENSE.txt
+    engine's single-source license_instrument_text so LICENSE.md and the bundle LICENSE.txt
     carry byte-identical rights wording for the same licence id."""
     lic = _license_of(y)
     (license_instrument_text, recognised, redistributable,
@@ -182,7 +182,7 @@ def _license_md_body(y: dict, now_utc: datetime) -> str | None:
         return None
     org = _org_of(y)
     year = _citation_year_of(y)
-    # C46: thread the survey's attribution/sources blocks + a changes descriptor so LICENSE.md carries
+    # Thread the survey's attribution/sources blocks + a changes descriptor so LICENSE.md carries
     # the SAME rights the bundle LICENSE.txt does — both call sites derive them through the shared
     # instrument_params_from_survey helper, so intake and build cannot state divergent attribution.
     # Attribution mirrors the bundle default (custodian + year) when the survey states no explicit
@@ -198,7 +198,7 @@ def _license_md_body(y: dict, now_utc: datetime) -> str | None:
 
 
 def _readme_md_body(y: dict, package_root: Path, now_utc: datetime) -> str:
-    """The README.md skeleton (design D3): name, organisation, year/dates, abstract, station count
+    """The README.md skeleton: name, organisation, year/dates, abstract, station count
     (when cheaply known), citation guidance, licence line. NO submitter contact details — only
     survey.yaml-declared fields are used."""
     name = _name_of(y)
@@ -238,7 +238,7 @@ def _readme_md_body(y: dict, package_root: Path, now_utc: datetime) -> str:
 
 def generate_intake_files(package_root: Path, *, now_utc: datetime | None = None) -> list[str]:
     """Generate LICENSE.md and README.md into `package_root` (the extracted <slug>/ folder) when they
-    are ABSENT, per the C34/D3 rules. Returns the sorted list of filenames actually written (so the
+    are ABSENT, per the rules below. Returns the sorted list of filenames actually written (so the
     caller can log/report exactly what was generated).
 
     Fail-closed and non-destructive:

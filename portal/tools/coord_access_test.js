@@ -1,10 +1,10 @@
 "use strict";
-// C42 lane 3 — portal handles masked coordinates (Invariant 10; every pin states its failure
+// Portal handles masked coordinates (Invariant 10; every pin states its failure
 // criterion). Boots the REAL portal modules in jsdom over ENGINE-BUILT artifacts
 // (tests/fixtures/c42/, produced by tools/gen_c42_fixtures.py — never hand-typed rows) and drives
 // the null-coord (withheld) render/selection/drawer paths plus the honest-counts invariant.
 //
-// GROUND TRUTH (real build; C42 Amendment A1, 2026-07-12): the engine masks the coordinate VALUE AND —
+// GROUND TRUTH: the engine masks the coordinate VALUE AND -
 // for a NON-EXACT station — emits an explicit coordinate-policy MARKER on a boot-loaded artifact:
 //   * withheld    -> catalogue lat/lon = null   (DETECTABLE from the value alone) + coord_policy marker
 //   * generalised -> catalogue lat/lon = the 0.1deg cell (rendered VERBATIM — the record forbids
@@ -23,7 +23,7 @@
 //  4 (selection): inShapes(withheld) is false (excluded from spatial selection — it has no position)
 //    yet the withheld station is findable by id/text and stays in ST.
 //  5 (counts): the survey station count includes the withheld station.
-//  A1 (generalised badge): a generalised station's drawer shows the "position generalised to ~0.1°
+//  Generalised badge: a generalised station's drawer shows the "position generalised to ~0.1°
 //    (custodian policy)" badge beside the masked 0.1deg value, and NEVER its true 6-dp coords; an exact
 //    station shows no such badge.
 // Mirrors tools/frame_line_test.js: load modules in order, stub Leaflet, run in the window scope.
@@ -173,20 +173,20 @@ if (dGen.ok) {
   // the generalised value is rendered VERBATIM (0.1deg cell), never re-rounded or badged-as-exact
   ok(/-32\.9(0*)?\s*,\s*136\.9/.test(dGen.html), "PIN2: generalised drawer must render the masked 0.1deg value verbatim");
   ok(!/coordinates withheld/i.test(dGen.html), "PIN2: a generalised station must not show the withheld line");
-  // A1 BADGE: the "position generalised to ~0.1° (custodian policy)" line renders from the engine marker
+  // BADGE: the "position generalised to ~0.1° (custodian policy)" line renders from the engine marker
   ok(/position generalised to ~0\.1° \(custodian policy\)/.test(dGen.html),
-    "PIN-A1: generalised drawer must show the 'position generalised to ~0.1°' badge (from coord_policy.json)");
-  // A1 LEAK: the badge co-occurs with the ROUNDED cell, NEVER the true 6-dp coords (mirror the leak-sweep
+    "generalised drawer must show the 'position generalised to ~0.1°' badge (from coord_policy.json)");
+  // LEAK: the badge co-occurs with the ROUNDED cell, NEVER the true 6-dp coords (mirror the leak-sweep
   // spirit at the DOM layer — a generalised station's badge is present AND its shown coords are rounded)
   ok(dGen.html.indexOf("32.876543") < 0 && dGen.html.indexOf("136.876543") < 0,
-    "PIN-A1 leak: the generalised station's TRUE coordinates must appear nowhere in the DOM");
+    "the generalised station's TRUE coordinates must appear nowhere in the DOM");
 }
 const dEx = A.openDrawer(iEx);
 ok(dEx.ok, "PIN2: opening the exact drawer must not throw: " + dEx.err);
 if (dEx.ok) {
   ok(/-31\.234567\s*,\s*135\.234567/.test(dEx.html), "PIN2: exact drawer must render the verbatim coordinates");
-  // A1: an exact station must NOT show the generalised badge (the marker is non-exact-only)
-  ok(!/position generalised/i.test(dEx.html), "PIN-A1: an exact station must NOT show the generalised badge");
+  // An exact station must NOT show the generalised badge (the marker is non-exact-only)
+  ok(!/position generalised/i.test(dEx.html), "an exact station must NOT show the generalised badge");
 }
 
 // --- Pin 4: spatial selection excludes withheld, text search still finds it -------------------------

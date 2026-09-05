@@ -1,4 +1,4 @@
-"""Job protocol over the shared jobs/ directory (design §5). Crash-only: every write is tmp+rename
+"""Job protocol over the shared jobs/ directory. Crash-only: every write is tmp+rename
 so a reader never sees a half-written file, and a claim is an atomic same-fs rename (the lock).
 
 Layout under jobs/:  pending/<id>.json  ->  running/<id>.json  ->  done/<id>.json
@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-# done-file outcomes (design §5.4). Anything else is treated as a malformed done-file and ignored
-# with a log line (design §8 forged/unknown-done-file case), never advancing state.
+# done-file outcomes. Anything else is treated as a malformed done-file and ignored
+# with a log line (forged/unknown-done-file case), never advancing state.
 OUTCOME_VALIDATED = "validated"
 OUTCOME_QUARANTINED = "quarantined"
 _VALID_OUTCOMES = frozenset({OUTCOME_VALIDATED, OUTCOME_QUARANTINED})
@@ -57,7 +57,7 @@ def _atomic_write_json(path: Path, obj: dict) -> None:
 
 
 def write_pending(jobs_dir: Path, submission_id: str, zip_path: Path, quarantine_dir: Path) -> Path:
-    """Queue a validate+preview job. Body is ids/paths only — NO PII (design §5)."""
+    """Queue a validate+preview job. Body is ids/paths only - NO PII."""
     ensure_dirs(jobs_dir)
     body = {
         "submission_id": submission_id,
@@ -80,7 +80,7 @@ class DoneFile:
 def read_done(path: Path) -> DoneFile | None:
     """Parse a done-file. Returns None (caller logs + ignores, never transitions) if the file is
     unreadable, not JSON, or carries an outcome outside the known set — a forged/corrupt done-file
-    must not be able to drive a state change (design §8)."""
+    must not be able to drive a state change."""
     try:
         obj = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):

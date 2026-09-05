@@ -1,13 +1,13 @@
-"""C47 public bridge — front-door + box-side two-walls pins + log-shipping pins.
+"""Public bridge - front-door + box-side two-walls pins + log-shipping pins.
 
-The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader — and,
-since the 2026-07-24 owner ruling, the PUBLIC submission subset — to the box's dedicated public-subset
-listener over the tailnet. The Add Survey contribution flow is public (an MT user who clicks Add Survey
-must reach the page and lodge a survey); the curator/admin workbench stays refused. The load-bearing
-properties are public (privacy) and security properties, so — per the standing rule — each is proven
-with a RUNTIME pin against a REAL Caddy driving the SHIPPED directives (the PR #48 real-caddy harness
-pattern), not a config-syntax assertion alone. Where a property can be made to FAIL, a red-proof
-composes a deliberately mis-scoped config and asserts the pin catches it.
+The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader -
+and the PUBLIC submission subset - to the box's dedicated public-subset listener over the tailnet.
+The Add Survey contribution flow is public (an MT user who clicks Add Survey must reach the page and
+lodge a survey); the curator/admin workbench stays refused. The load-bearing properties are public
+(privacy) and security properties, so, per the standing rule, each is proven with a RUNTIME pin
+against a REAL Caddy driving the SHIPPED directives (the PR #48 real-caddy harness pattern), not a
+config-syntax assertion alone. Where a property can be made to FAIL, a red-proof composes a
+deliberately mis-scoped config and asserts the pin catches it.
 
 THE PUBLIC SUBSET (both walls are INDEPENDENT allowlists of exactly this set — read gateway/app.py):
   * GET  /add-survey.html (+ trailing slash) — the contribution page (served by the box reader).
@@ -19,7 +19,7 @@ Every OTHER /gateway path (the entire curator/admin workbench) and any wrong-met
 route is refused — at wall 1 (front door) AND, independently, at wall 2 (the box listener behind the
 port-scoped ACL). A breach needs BOTH walls to widen simultaneously.
 
-Runtime legs run a real Caddy against stub upstreams (C47 deliverable 4):
+Runtime legs run a real Caddy against stub upstreams (deliverable 4):
   (i)    the public reader path-space reaches the box reader (a request reaches the reader stub);
   (ii)   the four public GATEWAY routes traverse frontdoor -> reader -> a GATEWAY stub end-to-end, and
          GET /add-survey.html is served by the reader — method-scoped, red-proven;
@@ -101,7 +101,7 @@ def _brace_match(text: str, open_at: int) -> str:
 def _site_body(caddy_text: str, opener_re: str) -> str:
     """The INNER body (without the outer braces) of the site whose opener matches opener_re. The opener
     regex MUST end at the site's own opening brace, because a `{$ENV}` placeholder in the address line
-    also contains braces — we brace-match from the site brace (m.end()-1), not the first '{'."""
+    also contains braces - we brace-match from the site brace (m.end()-1), not the first '{'."""
     m = re.search(opener_re, caddy_text)
     assert m, f"could not find a site opener matching {opener_re!r}"
     brace_idx = caddy_text.index("{", m.end() - 1)  # the site's own opening brace
@@ -141,9 +141,9 @@ def _run_caddy(cfg_text: str, td: Path, name: str) -> subprocess.Popen:
 def _stub_cfg(port: int, tag: str = "STUB") -> str:
     # A stand-in upstream: echoes the path so a test can prove a request REACHED it. `tag` distinguishes
     # the READER stub (STUB) from the GATEWAY-container stub (GWSTUB) in the end-to-end compositions.
-    # The stub accepts h2c exactly as the real reader listener does (2026-08-28 serve-path tuning:
-    # the front door's box_upstream snippet dials h2c with no h1 fallback, so a stub that only
-    # spoke h1 would 502 every composed end-to-end request).
+    # The stub accepts h2c exactly as the real reader listener does: the front door's box_upstream
+    # snippet dials h2c with no h1 fallback, so a stub that only spoke h1 would 502 every composed
+    # end-to-end request.
     return ("{\n\tadmin off\n\tauto_https off\n\tservers {\n\t\tprotocols h1 h2c\n\t}\n}\n"
             + f":{port} {{\n\trespond \"{tag} {{http.request.uri}}\" 200\n}}\n")
 
@@ -157,7 +157,7 @@ def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
     body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
     logpath = td / "access-frontdoor.json"
     body = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", body)
-    # The site body imports the shipped (box_upstream) snippet (2026-08-28 serve-path tuning), so
+    # The site body imports the shipped (box_upstream) snippet, so
     # the composition carries the snippet definition verbatim and the upstream substitution is
     # applied there: the composed edge then dials the stub through the REAL transport (h2c +
     # keepalive), which is exactly the path production requests take.
@@ -281,8 +281,8 @@ def _stop(proc: subprocess.Popen) -> None:
 # ==================================================================================================
 def test_frontdoor_masked_log_at_the_edge():
     """The front-door access log masks the client address at write time (ip_mask /24 + /48) and deletes
-    every address/credential header — the SAME at-edge guarantee as the box C45 block, now the public
-    analytics feed (C47 invariant c). FAILS IF the mask or any header-delete is missing."""
+    every address/credential header - the SAME at-edge guarantee as the box block, now the public
+    analytics feed (invariant c). FAILS IF the mask or any header-delete is missing."""
     body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
     log = _brace_match(body, body.index("\tlog {"))
     assert re.search(r"request>remote_ip\s+ip_mask", log), "remote_ip must be ip_mask'd at the edge"
@@ -342,7 +342,7 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
         assert cls in classes, f"the deny matcher must be self-complete: {cls!r} missing; got {classes}"
     handle = _brace_match(body, body.index("\thandle @nonpublic {"))
     assert re.search(r"respond\b.*\b404", handle), "the @nonpublic handle must explicitly respond 404"
-    # 2026-08-28 serve-path tuning: the box proxies ride the shared (box_upstream) snippet, so the
+    # Serve-path tuning: the box proxies ride the shared (box_upstream) snippet, so the
     # property splits in two: the site body reaches the box THROUGH the snippet, and the snippet
     # (the one place the transport lives) proxies to the env placeholder.
     assert "import box_upstream" in body, \
@@ -352,16 +352,16 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
 
 
 def test_frontdoor_tls_and_hsts_configured():
-    """C47 invariant d (config level): the public name drives automatic HTTPS (a hostname site address,
+    """Invariant d (config level): the public name drives automatic HTTPS (a hostname site address,
     NO `auto_https off`) so a certificate issues and plain HTTP redirects; and HSTS is set once TLS is
-    in force. The live cert issuance is verified in the owner runbook (needs real DNS + public IP).
+    in force. The live cert issuance is verified in the deploy runbook (needs real DNS + public IP).
     FAILS IF auto_https is disabled or HSTS is absent."""
     text = _fd_text()
     assert "{$AUSMT_PUBLIC_NAME}" in text, "the site address must be the public-name placeholder"
     # No ACTIVE `auto_https off` DIRECTIVE (a comment mentioning it is fine — the header comment warns
     # against adding one). A directive is a line whose first non-whitespace token is the keyword.
     assert not re.search(r"^\s*auto_https\s+off\b", text, re.MULTILINE), \
-        "automatic HTTPS (cert + HTTP->HTTPS redirect) must stay ON — no active `auto_https off` directive"
+        "automatic HTTPS (cert + HTTP->HTTPS redirect) must stay ON - no active `auto_https off` directive"
     assert re.search(r"Strict-Transport-Security", text), "HSTS must be set (public TLS is in force)"
 
 
@@ -376,7 +376,7 @@ def test_box_reader_listener_allows_only_the_public_gateway_subset():
     route loses its method scope, the deny is absent, or a reader/data/root/CSP directive is missing."""
     text = _BOX_CADDY.read_text(encoding="utf-8")
     m = re.search(r"^:8081 \{", text, re.MULTILINE)
-    assert m, "the box Caddyfile must declare the :8081 public-subset listener (C47 wall 2)"
+    assert m, "the box Caddyfile must declare the :8081 public-subset listener"
     block = _brace_match(text, m.start())
 
     # NO blanket gateway routing directive — only the four narrow, method-scoped public matchers proxy.
@@ -423,9 +423,9 @@ def test_box_compose_publishes_reader_listener_loopback_only():
 
 
 # ==================================================================================================
-# Runtime pins — real Caddy against stub upstreams (C47 deliverable 4)
+# Runtime pins - real Caddy against stub upstreams (deliverable 4)
 # ==================================================================================================
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_public_subset_traverses_frontdoor_reader_gateway_end_to_end():
     """(i)+(ii) RUNTIME, the whole bridge. frontdoor -> SHIPPED :8081 reader -> a GATEWAY stub: each of
     the four public gateway routes reaches the GATEWAY stub (200, echoed path) with its correct verb, and
@@ -457,7 +457,7 @@ def test_public_subset_traverses_frontdoor_reader_gateway_end_to_end():
             _stop(fd); _stop(box); _stop(gw)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_wall1_refuses_nonpublic_independently_at_runtime():
     """(iii) RUNTIME, WALL 1 in isolation. The front door reverse-proxies to a FULLY PERMISSIVE echo
     stub (standing in for a box that would serve ANYTHING — i.e. wall 2 effectively removed), so any
@@ -489,7 +489,7 @@ def test_wall1_refuses_nonpublic_independently_at_runtime():
             _stop(fd); _stop(stub)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_wall2_refuses_nonpublic_independently_at_runtime():
     """(iii) RUNTIME, WALL 2 in isolation. The SHIPPED :8081 listener run against a GATEWAY stub, with NO
     front door in front (wall 1 absent): the four public routes proxy to the gateway stub, but every
@@ -526,7 +526,7 @@ def test_wall2_refuses_nonpublic_independently_at_runtime():
             _stop(box); _stop(gw)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_wall1_deny_redproof():
     """(iii) RED-PROOF, wall 1. With the `@nonpublic` deny-by-default REMOVED from the shipped config, a
     curator path falls through the allow handles to the reader catch-all and REACHES the permissive stub
@@ -546,7 +546,7 @@ def test_wall1_deny_redproof():
             _stop(fd); _stop(stub)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_wall1_method_scope_redproof():
     """(iii) RED-PROOF, wall 1 method scope. With `method POST` dropped from the @public_gw_submit allow,
     a GET /gateway/submit now matches the allow and LEAKS to the stub (200) instead of refusing at the
@@ -566,7 +566,7 @@ def test_wall1_method_scope_redproof():
             _stop(fd); _stop(stub)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_wall2_narrow_scope_redproof():
     """(iii) RED-PROOF, wall 2. With the narrow @public_gw_submit allow WIDENED to the whole /gateway
     subtree (any method), a curator path now matches it and LEAKS to the gateway stub (200) — proving the
@@ -587,7 +587,7 @@ def test_wall2_narrow_scope_redproof():
             _stop(box); _stop(gw)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_frontdoor_masks_public_traffic_at_runtime():
     """(iv) RUNTIME. A public request whose peer is 127.0.0.1 and which SENDS X-Forwarded-For:
     203.0.113.7 produces a front-door log line in which the peer is /24-masked (127.0.0.0) and the
@@ -620,7 +620,7 @@ def test_frontdoor_masks_public_traffic_at_runtime():
             _stop(fd); _stop(stub)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_frontdoor_masking_redproof():
     """(iv) RED-PROOF. With the `format filter` (ip_mask + header deletes) replaced by a bare
     `format json`, the SAME request leaks the full peer IP (127.0.0.1) AND the sent XFF (203.0.113.7)
@@ -648,7 +648,7 @@ def test_frontdoor_masking_redproof():
 
 
 # ==================================================================================================
-# CORS on public data — runtime pins (feat/api-cors-geojson-honesty)
+# CORS on public data - runtime pins
 # ==================================================================================================
 def _acao(headers: dict) -> str | None:
     """The Access-Control-Allow-Origin response header value, case-insensitively (urllib's header dict
@@ -659,7 +659,7 @@ def _acao(headers: dict) -> str | None:
     return None
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_reader_data_carries_cors_but_gateway_does_not_at_runtime():
     """(a)+(b) RUNTIME. The SHIPPED :8081 listener serves a /data/*.json response WITH
     Access-Control-Allow-Origin: * (public read-only data is world-readable to browser JS), while the
@@ -687,10 +687,10 @@ def test_reader_data_carries_cors_but_gateway_does_not_at_runtime():
             _stop(proc)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_reader_data_cors_redproof():
     """(a) RED-PROOF. With the /data ACAO header STRIPPED from the shipped :8081 body (the PRE-CHANGE
-    Caddyfile), /data/catalogue.json no longer carries Access-Control-Allow-Origin — proving the added
+    Caddyfile), /data/catalogue.json does not carry Access-Control-Allow-Origin, proving the added
     header is what makes the data world-readable, not incidental. FAILS IF the pre-change config still
     carries ACAO (which would mean the pin proves nothing)."""
     with tempfile.TemporaryDirectory() as td:
@@ -707,7 +707,7 @@ def test_reader_data_cors_redproof():
             _stop(proc)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_data_cors_rides_through_the_frontdoor_at_runtime():
     """(c) RUNTIME. Through the FULL front-door composition — the SHIPPED front-door site body reverse-
     proxying to the SHIPPED :8081 listener as its upstream — a public /data/*.json request comes
@@ -729,7 +729,7 @@ def test_data_cors_rides_through_the_frontdoor_at_runtime():
             _stop(fd); _stop(box)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
 def test_data_cors_frontdoor_redproof():
     """(c) RED-PROOF. With the PRE-CHANGE reader upstream (ACAO stripped from the :8081 /data handler)
     behind the SHIPPED front door, the public-side /data response carries NO ACAO — proving the header
@@ -791,7 +791,7 @@ def test_ship_service_documentation_resolves_to_the_runbook():
 
 
 def test_ship_timer_is_daily_persistent_and_before_the_fold():
-    """The timer fires DAILY, is Persistent, and fires BEFORE the C45 fold (03:35) so each day's public
+    """The timer fires DAILY, is Persistent, and fires BEFORE the fold (03:35) so each day's public
     logs are on the box when the aggregator reads them. FAILS IF it uses a sub-daily interval, drops
     Persistent, or is scheduled at/after 03:35."""
     cal = _lines(_TIMER, "OnCalendar=")
@@ -805,7 +805,7 @@ def test_ship_timer_is_daily_persistent_and_before_the_fold():
         if m:
             hhmm = int(m.group(1)) * 60 + int(m.group(2))
     assert hhmm is not None and hhmm < 3 * 60 + 35, \
-        f"the shipper must fire before the 03:35 C45 fold; got {cal}"
+        f"the shipper must fire before the 03:35 analytics fold; got {cal}"
 
 
 # ==================================================================================================
