@@ -146,7 +146,7 @@ def test_empty_note_refused_every_action(tmp_path):
 
 
 def test_ack_checkbox_shown_for_generic_only_hit(tmp_path):
-    # when the PII block is acknowledgeable (non-submitter address) and there are NO submitter
+    # When the PII block is acknowledgeable (non-submitter address) and there are NO submitter
     # hits, the curator approve form shows the ack_pii checkbox with the confirmation label; the curator Approve button
     # is NOT hard-disabled. Failure criterion: fails if the checkbox/label is absent or the button is
     # disabled. proven failing against the earlier code: no ack_pii control existed and any blocking FAIL

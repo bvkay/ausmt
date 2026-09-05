@@ -44,7 +44,7 @@ def test_portal_interactions(tmp_path):
     # station D1 drives the drawer access-panel test (no plots; verbatim embargo copy). Its curves are
     # withheld at the ENGINE (empty tf series); the fixture mirrors that so the driver sees what ships.
     stations = [
-        # Station A1 carries a site_name that DIFFERS from its displayed id, so the drawer's
+        # Station A1 carries a site_name that DIFFERS from its (sanitised) displayed id, so the drawer's
         # Station summary renders the "site name" row for it (the SA28_2B -> SA282B case).
         {"id": "A1", "survey": "Alpha Survey", "lat": -30.0, "lon": 136.0, "ausmt_id": "au.alpha.A1", "edi_available": 1, "site_name": "A_1"},
         {"id": "A2", "survey": "Alpha Survey", "lat": -31.0, "lon": 137.0, "ausmt_id": "au.alpha.A2", "edi_available": 1},
@@ -62,7 +62,7 @@ def test_portal_interactions(tmp_path):
     #   * tzx_re > 0 (with everything else 0) => REAL Parkinson north = -tzx_re < 0 => arrow points
     #     SOUTH (down) - the sign-mapping check;
     #   * rho + phase errors present => the error bars must render.
-    # Station A2 has NO tipper and NO errors => the "no tipper" state (empty arrow panel) + no bars.
+    # Station A2 has NO tipper and NO errors => the "no tipper" state (empty arrow panel) + no error bars.
     per2 = [0.01, 1000.0]
     zero2 = [None, None]
 

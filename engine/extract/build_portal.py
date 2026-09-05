@@ -5287,6 +5287,7 @@ def _main_build(argv=None):
     # the coordinate mask seam and the deferred station jobs, because the extent follows the post-mask
     # coordinate state, into out/products/<slug>/ (the served root).
     _survey_metadata_jobs: dict = {}
+    # ausmt_ids whose survey is NOT served (embargoed/metadata_only/unrecognised level).
     # The byte gate withholds the BYTES; a second gate additionally withholds the DERIVED DISPLAY
     # products (the thinned tf.json curves + the science-derived sci.json fields) at EMISSION,
     # because for an embargoed dataset the

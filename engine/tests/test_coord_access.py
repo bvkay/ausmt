@@ -1051,7 +1051,7 @@ def test_unit_apply_mask_in_place_and_validates_override_ids():
 
 # =====================================================================================================
 # BASE-STATION-ID SURFACE PINS (base_ids.json - the boot artifact keyed by base id for the
-# stations-panel override fieldset; requires override keys to be BASE ids)
+# stations-panel override fieldset; the override keys must be BASE ids)
 # =====================================================================================================
 
 # One physical station processed by two codes: SAME DATAID (SITE1), two files -> the engine dedups to

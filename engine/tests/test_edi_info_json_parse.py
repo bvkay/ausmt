@@ -1,7 +1,8 @@
 """The >INFO JSON trailing-delimiter defect in mt_metadata 1.0.9, and the parse-only fallback.
 
-WHY THIS EXISTS. mt_metadata 1.0.9 cannot read 246 of them. The data is fine; the reader is wrong,
-and it is wrong in three composing steps:
+WHY THIS EXISTS (measured against the GSSA Western Gawler 2023 delivery, a Zonge job of
+312 EDIs). mt_metadata 1.0.9 cannot read 246 of them. The data is fine; the reader is wrong, and it
+is wrong in three composing steps:
 
   1. `io/tools.py::_validate_edi_lines` strips `"`, `'`, `[` and `]` from EVERY line of the file
      before any section parser runs, so the JSON object member `    "Declination": 5,` arrives at
@@ -164,8 +165,8 @@ def test_normalisation_touches_only_the_info_block():
 def test_normalisation_is_a_noop_for_a_file_without_the_defect():
     """No trailing delimiters in >INFO => the bytes come back IDENTICAL. This is the property guard
     3 of the retry rests on (`if fixed == raw: raise`), so it is asserted as IDENTITY -- the earlier
-    idempotence form reduces to `raw == raw` on this fixture and stays green even where
-    normalisation starts rewriting files that do not carry the defect."""
+    idempotence form reduces to `raw == raw` on this fixture and would stay green even if
+    normalisation started rewriting files that do not carry the defect."""
     m = _mtm()
     raw = NODECL.read_bytes()
     assert m.normalise_info_json_delimiters(raw) == raw, \

@@ -26,7 +26,7 @@ FAILS IF:
 - the legend keys a map object that is not a data type;
 - the radius curve stops being monotone in zoom, breaches its floor/ceiling, or stops rendering EVERY
   data
-  type at the same size;
+  type at the same size (size encodes zoom, colour encodes type);
 - the drawer's own badges are collateral damage.
 """
 import re

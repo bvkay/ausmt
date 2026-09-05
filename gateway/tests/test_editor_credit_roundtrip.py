@@ -181,7 +181,7 @@ def test_people_panel_contributors_save_is_accepted_by_the_runner(tmp_path):
 # (_tools/migrate_credit.py) on a survey carrying legacy principal_investigators (-> two person
 # creators) + lead_investigator (-> one ProjectLeader contributor).
 # The INFERRED-REVIEW note rides its OWN comment line directly ABOVE each `- name:` row (comment-ABOVE) -
-# the format, because an inline comment after a quoted scalar tripped the vendored mini parser.
+# the required format, because an inline comment after a quoted scalar tripped the vendored mini parser.
 # Reproduced literally here so the test carries NO sibling-repo dependency. Captured verbatim by running
 # the migration against a minimal fixture and copying its emitted bytes.
 _SEEDED_YAML = (

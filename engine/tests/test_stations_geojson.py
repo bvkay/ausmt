@@ -6,7 +6,7 @@ FeatureCollection at `/data/stations.geojson`, mirrored under `/data/products/` 
 top-level documents.
 
 The whole risk of this product is that it becomes a SECOND coordinate surface. Every other served
-position passes through the coordinate mask seam; a document that derives its own geometry can disclose a
+position passes through the mask seam; a document that derives its own geometry could disclose a
 position the catalogue withholds and nothing would notice, because a GeoJSON is not something the
 leak sweep's JSON parse reads as a catalogue row. So the pins here are coordinate-access pins first
 and GIS-shape pins second:

@@ -686,7 +686,7 @@ ok(M.normalizeDoi("10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi leaves
 ok(M.normalizeDoi("not a doi at all") === "not a doi at all", "normalizeDoi leaves a non-DOI string untouched");
 ok(M.normalizeDoi("https://example.org/paper") === "https://example.org/paper", "normalizeDoi leaves a NON-doi.org URL untouched (it is not a DOI resolver)");
 ok(M.normalizeDoi("") === "" && M.normalizeDoi(null) === "", "normalizeDoi handles empty / null");
-// wiring: the single publication DOI is folded into per-row publication rows whose .p-doi normalises
+// wiring: the single publication DOI is folded into per-row publication rows whose .p-doi input normalises
 // on blur (via normalizeDoi directly); the funding DOI still uses wireDoiBlur; a related-identifier row
 // normalises ONLY when its type is DOI (a URL-typed row keeps its URL).
 ok(/class="p-doi"/.test(html) && /doiInp\.addEventListener\("blur"/.test(html),

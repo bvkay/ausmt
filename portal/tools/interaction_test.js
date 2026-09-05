@@ -278,9 +278,7 @@ win.open = (...args) => { opened.push(args); return null; };
 const clipboard = [];
 Object.defineProperty(win.navigator, "clipboard", {
   value: { writeText: t => { clipboard.push(String(t)); return Promise.resolve(); } }, configurable: true });
-// version and schema pinned so version.js produces a DETERMINISTIC ver-chip label the footer-chip
-// assertion can pin exactly, rather than a moving
-// default.
+// version and schema pinned so the config the page reads is deterministic rather than a moving default.
 win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", schema_version: "1.0" };
 
 // ---- two-phase boot instrumentation --------------------------------------------------------------
@@ -882,7 +880,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // VER CHIP OFF EVERY SURFACE. The one-footer rule took Releases and About this build out of
   // the footer, and the version chip rode inside the About-this-build popover; it landed in
   // about.html's #build section, and that section is deleted too. NO page on this site carries a
-  // chip, and no page loads the script either; portal/tests/test_about_uniform_chrome.py holds
+  // chip, and no page loads a version script either; portal/tests/test_about_uniform_chrome.py holds
   // both zero-everywhere halves, the chips and the loads, across every document.
   const spaChips = [...doc.querySelectorAll("[data-ver-chip]")];
   ok(spaChips.length === 0,
@@ -1254,13 +1252,13 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   //     per-survey badge panes sat at z 600 over the station canvas at z 400, and adding an L.Path to a
   //     pane makes Leaflet build a full-map-size canvas inside it, which swallowed every click.)
   //
-  // The badges, their panes and the pane guard are gone with the rule, so the invariant is now
+  // The badges, their panes and the pane guard are gone, so the invariant is now
   // STRUCTURAL rather than guarded: no pane is created, and no layer is routed into one. Both
   // halves are asserted, because "the guard was deleted" is only safe while the panes really are
   // absent. SCOPE, so the wording matches what is actually observed: panesMade holds every
   // map.createPane call of the run, and layersAdded every layer the recorded factories produced and
   // the app added (map.js's circleMarkers, markers, polylines and layer groups). Neither is ever
-  // cleared, so a leader tail put into a pane at BOOT is caught here, not just the dots the pass
+  // cleared, so a leader tail put into a pane at BOOT is caught here, not just the dots the preceding pass
   // had painted a moment earlier.
   //
   //     WHAT THIS CANNOT PROVE, and what only a real browser can: that a pointer event reaches the station
@@ -2574,7 +2572,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // into EVERY no-DOI citation's publisher/PB field (the doi=/DO/UR FIELDS were already guarded by
   // d2bc616's `${doi?...:""}` — the leak was the publisher STRING, not the DOI field). A WITH-DOI
   // survey keeps its real DOI in both formats; the NCI/TS-collection entries are BYTE-pinned to their
-  // output; and the human-readable CITATIONS.txt line for a no-DOI entry SAYS
+  // previous output; and the human-readable CITATIONS.txt line for a no-DOI entry SAYS
   // "[no DOI assigned]" explicitly (exports.js citeLine).
   //
   // NOTE (Invariant 10): section U asserts the ASSEMBLY HELPERS (apa/bibtex/ris/citeLine) directly —
@@ -2636,9 +2634,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwV.classList.contains("open"), "the station A1 drawer did not open");
 
-  // (a) FOUR tabs, each role=tab, in the mandated order. The Screening tab is commented out in
-  //     drawer.js pending design review, so the count is 4 and "screening" is absent from the order
-  //     AND the DOM.
+  // (a) FOUR tabs, each role=tab, in the mandated order. No Screening tab renders, so the count is
+  //     4 and "screening" is absent from the order AND the DOM.
   //     FAILS if a tab is missing, mis-roled, reordered, or if the folded-away Overview tab reappears.
   const tabsV = [...drwV.querySelectorAll('[role="tab"]')];
   ok(tabsV.length === 4, "expected 4 role=tab buttons (Overview folded away, Screening hidden), got " + tabsV.length);

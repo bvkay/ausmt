@@ -39,7 +39,7 @@ def test_preview_iframe_is_null_origin_sandboxed(tmp_path):
 
 
 def test_no_unsandboxed_navigation_to_preview(tmp_path):
-    # there must be NO anchor/link that top-level-navigates to the preview
+    # There must be NO anchor/link that top-level-navigates to the preview
     # (that would run submitter JS in the curator origin, escaping the frame). Failure criterion:
     # fails if the detail page contains an <a href> pointing at /preview/. proven failing:
     # the first pass had an "open preview in a new tab" link (a target=_blank same-origin nav).

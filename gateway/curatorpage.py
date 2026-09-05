@@ -5935,7 +5935,7 @@ def _related_identifier_row_html(index, values: dict | None, *, spare: bool = Fa
 
 
 def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """ Group (b) - THIS DATASET ELSEWHERE: the single typed related_identifiers
+    """THIS DATASET ELSEWHERE: the single typed related_identifiers
     list, the ONLY place a dataset-level DOI/PID is edited. Each row leads with the `identifies` level
     <select>; the relation derives from it and is hidden (a legacy relation-only row still edits its
     relation). Acquisition fields sit behind a collapsed per-row disclosure. Field names are identical to

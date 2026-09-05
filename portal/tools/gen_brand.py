@@ -101,7 +101,7 @@ WORDMARK_INK = {"on_dark": "#FFFFFF", "on_light": "#11182D"}
 TAGLINE_INK = {"on_dark": "#C9D4E8", "on_light": "#646979"}
 
 # The colour of a dot is a pure function of its POSITION: t runs 0 at the western-most column to 1 at
-# Left cool, right warm.
+# the eastern-most, and the ramp is evaluated at t. Left cool, right warm.
 T_PRECISION = 6
 
 # SIZE-ADAPTIVE DOT RADIUS, as a ratio of the lattice pitch. The presentation ratio 0.44 is measured

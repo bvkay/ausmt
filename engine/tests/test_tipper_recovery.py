@@ -3,7 +3,7 @@
 Those EDIs label their tipper data blocks plainly (>TXR, >TXI, >TX.VAR ...) while mt_metadata's
 EDI reader accepts ONLY the .EXP-suffixed spellings (_t_labels: txr.exp/txvar.exp/...), so a real
 24-period tipper was discarded wholesale at parse: 36 long-period stations catalogued comps "Z"
-against the recorded statement of fact (the LP sites recorded the vertical field) and against
+against the statement of fact (the LP sites recorded the vertical field) and against
 their own served bytes. The fix is the second application of the normalised-TEMPORARY-copy
 pattern (the >INFO delimiter precedent): when a parsed .edi carries no tipper and the label
 normalisation actually changes the bytes, the file is reparsed once from a conditioned scratch

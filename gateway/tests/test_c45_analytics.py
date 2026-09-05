@@ -1035,7 +1035,7 @@ def test_the_survey_csv_tolerates_rows_written_before_the_country_list():
 
 
 # ==================================================================================================
-# `detail_since` is the v1 -> v2 hinge; the dimensions the counting
+# The SECOND forward-only seam. `detail_since` is the v1 -> v2 hinge; the dimensions the counting
 # work added (client split, within-day dedupe, API geography, per-survey countries, monthly network
 # peak) began months after it. A month folded in between carries a real volume and a real format
 # split beside NONE of those, so the seeded-month degrade above never fires for it and every one of

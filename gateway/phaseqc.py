@@ -32,7 +32,7 @@ from __future__ import annotations
 YX_PRESENTATION_SHIFT_DEG = 180.0
 
 # Expected quadrants (inclusive bounds, degrees). xy is expected in Q1; TRUE yx is expected in
-# quadrant Q3, checked on the (−360, 0] seam-mapped quadrant axis, where Q3 ± slack is one
+# quadrant Q3, checked on the (−360, 0] seam-mapped axis, where the Q3 quadrant ± slack is one
 # contiguous window.
 Q1_LO, Q1_HI = 0.0, 90.0
 Q3_LO, Q3_HI = -180.0, -90.0

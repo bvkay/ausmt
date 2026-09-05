@@ -442,7 +442,7 @@ def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
     # Proven failing (pre-fix HEAD 4f4e999..a31fc8e): patched region "on" emitted as bare
     # `region: on` -> PyYAML safe_load read True (bool); name "no" -> False; abstract "12:34:56" ->
     # 45296 (YAML-1.1 sexagesimal int). ruamel's own re-read kept them strings, so the diff, the
-    # sha pin, and the confirm re-run all agree and NO guard fires, so the portal would serve
+    # sha pin, and the confirm re-run all agreed and NO guard fired, so the portal would serve
     # a bool/int the curator never wrote. FAILS IF quote_ambiguous stops quoting the
     # YAML-1.1-retypeable tokens.
     import base64

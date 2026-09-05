@@ -264,7 +264,7 @@ def test_coordinate_overrides_key_parity_through_real_engine():
     assert default == "exact"
     assert overrides == overrides_in, (
         f"engine parsed overrides {overrides!r}, not the editor-assembled {overrides_in!r}: "
-        f"- a key/spelling drift would make the per-station policy a silent no-op")
+        f"a key/spelling drift would make the per-station policy a silent no-op")
     # every key validates against the REAL records (no raise) ...
     coordacc.validate_overrides(overrides, records)
     # ... and is EFFECTIVE: each key changes at least one record's resolved policy vs the bare default.

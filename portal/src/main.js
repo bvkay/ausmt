@@ -66,7 +66,7 @@ function applyYearRangeHints(){
   if(head)head.textContent="Year range"+(dated?` (${fmtRange(lo,hi)})`:"");   // suffix hidden when no survey is dated
 }
 // ---- "Recently added" -------------------------------------------------------------------------
-// LOCKSTEP RULE, identical to the engine's _survey_latest_date in engine/extract/build_portal.py.
+// LOCKSTEP RULE, kept identical to the engine's _survey_latest_date in engine/extract/build_portal.py.
 // See docs: portal internals, main.js.
 function surveyLatestDate(m){
   const cands=[];
