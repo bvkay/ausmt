@@ -697,8 +697,8 @@ def _vulcan_with_tipper(zrot_deg, trot_deg):
 
 
 def test_divergent_tipper_frame_reported_f2(tmp_path):
-    """FAILS IF: a station whose uniform declared tipper frame
-    DIVERGES from its impedance declared azimuth is refused, rotated, or served with the divergence
+    """The panel case: TROT=-60 against ZROT=0. FAILS IF: a station whose uniform declared tipper
+    frame DIVERGES from its impedance declared azimuth is refused, rotated, or served with the divergence
     UNREPORTED. The doctrine: "if we know any details about the coordinate frame we report it" -
     the divergent tipper frame must land first-class in station.json
     (frame.tipper_declared_azimuth_deg) AND as a frame note (build_report/QA + the portal line).
