@@ -161,8 +161,8 @@ def test_roundtrip_gate_RED_on_corrupted_impedance(tmp_path):
 
 
 def test_producer_withholds_survey_when_gate_fails(tmp_path, monkeypatch):
-    """When the round-trip gate fails, and returns no bundle - so a mismatch never reaches the
-    manifest. Withholds the survey, not the corpus."""
+    """When the round-trip gate fails, the PRODUCER withholds the whole survey - deletes the h5 and
+    returns no bundle - so a mismatch never reaches the manifest. Withholds the survey, not the corpus."""
     monkeypatch.setattr(bp, "mth5_survey_roundtrip_ok",
                         lambda *a, **k: (False, {"checked": 2, "z_max_abs_diff": 9.9,
                                                  "coord_max_abs_diff": 0.0, "tf_only": True,

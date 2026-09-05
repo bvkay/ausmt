@@ -475,7 +475,7 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
     if not changes:
         raise PublishError("guard", "empty collection batch — nothing to commit")
     # ATOMICITY GATE — checked BEFORE any git verb: a single member's validator FAIL blocks the lot with
-    # This is the load-bearing invariant test_c43_stage3b.py proves.
+    # ZERO commits (all-then-commit-all). This is the load-bearing invariant test_c43_stage3b.py proves.
     failed = sorted(str(c.get("slug")) for c in changes if c.get("has_fail"))
     if failed:
         raise PublishError("validator",

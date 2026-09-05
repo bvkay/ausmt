@@ -2643,6 +2643,7 @@ def render_serve_panel(*, published_head, published_available: bool, status: dic
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
     # The button posts to the zero-argument rebuild route. The accidental-click confirm rides the
     # shared data-confirm delegation in CURATOR_UI_JS — never an inline handler: the Caddyfile's
+    # strictPages CSP (script-src 'self') blocks inline handlers,
     # so one here silently never runs (the first-install symptom: the form submitted with no
     # confirm). The server is idempotent regardless, so a blocked
     # confirm was never a safety hole, only a missing courtesy.

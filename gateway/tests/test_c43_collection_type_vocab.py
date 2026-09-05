@@ -129,7 +129,9 @@ def test_campaign_stays_out_of_vocab():
     assert "campaign" not in curatorpage._COLLECTION_TYPE_VOCAB  # noqa: SLF001
 
 
+# The vocabulary change has to REACH behaviour, not just the constants: the publish spec gate admits
 # the ADDED value, the select marks it selected instead of falling through to (unset), and the
+# dropped value is still refused.
 def test_compilation_passes_the_spec_gate_and_renders_selected():
     op = {"slug": "auslamp-b", "op": "set",
           "block": {"id": "australia-legacy-gds", "title": "Australia legacy GDS",

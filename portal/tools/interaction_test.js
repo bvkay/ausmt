@@ -2680,6 +2680,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the Station summary must NOT carry the removed 'Data checks' group");
   ok(ssDetails.innerHTML.indexOf("TF error") < 0, "the removed 'TF error' row must be gone");
   // The "Transfer function / Download" TILE is removed from the Station summary - it duplicated the
+  // Files tab's Level 2 EDI row and blurred the summary-vs-downloads
   // separation. The summary states facts; the Files tab serves bytes. The EDI itself is untouched: it is
   // still offered by the sticky-header action and the Files tab, both asserted below.
   ok(!ssDetails.querySelector(".prodgrid") && !ssDetails.querySelector(".prod"),
@@ -3086,7 +3087,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // BB. THE WORKSPACE CARD. The card field set is reduced; the heavy blocks moved to the survey DETAIL.
   // Each pin states what it fails on. (Alpha's blurb was reset to null in section R.)
   // Under contract section 1 ("Update the BB card-shape pins to the new field set") the abstract
-  // block What stays is what a reader SCANS - identity, where, how much, under what
+  // block leaves the field set. What stays is what a reader SCANS - identity, where, how much, under what
   // licence - plus BOTH actions: the no-buttons rule is a HUB rule, and this is the working view, where
   // Download is the whole point of the grid feeding the download builder.
   doc.getElementById("drawer").classList.remove("open");

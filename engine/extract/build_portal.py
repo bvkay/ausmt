@@ -6236,7 +6236,7 @@ def _main_build(argv=None):
     # The stations-panel override fieldset must key by BASE station id - never a file stem, never a
     # variant-suffixed id (the probe-e discipline). A base id is the record id with its
     # engine-appended processing-variant tag stripped, derivable ONLY via the record's `variant` field
-    # No served/boot artifact exposed that, so the workbench could not
+    # (never dot-guessing). No served/boot artifact exposed that, so the workbench could not
     # construct guaranteed-base keys. Emit a compact map ausmt_id -> base_station_id for the VARIANT
     # stations ONLY (those whose served catalogue id differs from their base) via the SAME
     # base_station_id() the mask seam matches with - one derivation, never a re-derivation. A non-variant

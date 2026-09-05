@@ -64,6 +64,7 @@ def test_sync_check_mode_agrees():
 def test_validator_orcid_checksum_matches_shared_vectors():
     # The validator's orcid_checksum_ok is the THIRD copy of the ISO 7064
     # MOD 11-2 checksum. Drive it over every validator-scoped vector in the SHARED oracle file — the
+    # same file gateway/tests/test_orcid.py and the portal jsdom test consume.
     # FAILS IF the validator's copy diverges from the shared verdicts (the exact drift the shared
     # oracle file closes). The validator's FORMAT
     # contract differs (URL accepted, bare form rejected), so we only assert the vectors whose

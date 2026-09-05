@@ -7,7 +7,8 @@ base ids only, never file stems, never variant-suffixed ids) from the boot-loade
 base_ids.json map, falling back to the station's own catalogue id when absent (a non-variant station is
 its own base; a variant-free corpus has no base_ids.json => empty map => every station its own base).
 
-the workbench had no authoritative base id and could not build a base-keyed fieldset.
+Red on pre-change code: baseStationId does not exist in STATIONS_JS (the extraction assert raises),
+so the workbench has no authoritative base id and cannot build a base-keyed fieldset.
 """
 from __future__ import annotations
 

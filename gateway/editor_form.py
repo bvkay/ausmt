@@ -42,7 +42,7 @@ from . import orcid
 
 # ---- section specifications ---------------------------------------------------------------------
 # Each MAP section: the ordered scalar sub-keys the widget renders. Each LIST section: the per-row
-# These mirror docs/docs/reference/survey-yaml.md exactly - no invented fields.
+# scalar sub-keys. These mirror docs/docs/reference/survey-yaml.md exactly - no invented fields.
 
 # Map sections rendered as labelled inputs. (key, label, placeholder, kind) per sub-field;
 # kind drives the input type / validation: "text" | "doi" | "orcid" | "ror" | "date" | "email".
@@ -298,7 +298,7 @@ LICENSE_REDISTRIBUTABLE = LICENSE_IDS[:13]
 SOURCE_PROFILES = ("ga", "generic")
 
 # The related-identifiers model: the two FROZEN, FAIL-CLOSED vocabularies the
-# RELATION_TYPES is the curated DataCite subset offered as the editor presets;
+# typed relation adds. RELATION_TYPES is the curated DataCite subset offered as the editor presets;
 # IDENTIFIER_TYPES is the small set AusMT records against. Both are BAKED copies — the gateway APP image
 # is content-blind (ships only gateway/, never the surveys validator — see gateway.Dockerfile), so a
 # runtime import of the sibling vocab is impossible; the copies are PINNED byte-for-byte to the surveys

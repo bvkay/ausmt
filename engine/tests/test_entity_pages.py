@@ -1573,7 +1573,7 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
     assert "\u2013" not in page and "\u2014" not in page, "no en/em dashes"
     stn = pages.station_page(doc=docs[0], survey_slug="s", base="https://x.example")
     # No disjunction: the first arm ("5.0 - 100,000.0 s") is what the row printed BEFORE it took the
-    # so accepting it let the station page bypass _fmt_period and print the trailing
+    # shared helper, so accepting it let the station page bypass _fmt_period and print the trailing
     # zeros the shared helper retires while this test stayed green. One helper, one form, one assertion.
     assert "5 - 100,000 s" in stn, \
         f"the station period row must use the shared helper and a spaced hyphen: " \
