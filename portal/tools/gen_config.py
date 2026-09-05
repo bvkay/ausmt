@@ -72,8 +72,9 @@ def build_config(cfg):
 def render(conf):
     body = json.dumps(conf, indent=2)
     return ("// AUTO-GENERATED from portal.config.yaml by tools/gen_config.py: edit the YAML and\n"
-            "// regenerate, never this file. It is the browser-side reflection of the portal\n"
-            "// configuration (branding, version, analytics). See docs: portal internals, config.js.\n"
+            "// regenerate this file, never edit it by hand. It is the browser-side reflection of\n"
+            "// the portal configuration (branding, version, analytics). See docs: portal internals,\n"
+            "// config.js.\n"
             "window.AUSMT_CONFIG = " + body + ";\n")
 
 
