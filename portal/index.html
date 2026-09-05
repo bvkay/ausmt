@@ -430,6 +430,14 @@
   .tourbtns button{font-size:12px;padding:7px 12px}
   .tourbtns .tourprimary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
   .tourbtns .tourprimary:hover{border-color:var(--copper)}
+  /* The selection demo's pointer glyph sits above the spot and the card (3003) because it travels from the
+     map into the rail, and it is out of hit testing so it never intercepts a click meant for a control. */
+  .tourcursor{position:fixed;z-index:3003;width:16px;height:20px;margin:-2px 0 0 -2px;pointer-events:none;
+    opacity:1;transition:opacity .12s ease,transform .12s ease;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}
+  .tourcursor svg{display:block}
+  .tourcursor svg path{fill:var(--copper);stroke:#16110b;stroke-width:1;stroke-linejoin:round}
+  .tourcursor.press{transform:scale(.82)}
+  .tourcursor.out{opacity:0}
 
   /* See docs: portal internals, index.html, filter controls. */
   .fieldnote{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}
@@ -649,17 +657,21 @@
     <h2>Download</h2>
     <div class="dlbox">
       <div class="fieldnote scopeline" id="scopeLine"></div>
-      <!-- The tiles reuse .prod/.pdot/.sechead/.rolechip verbatim: the whole tile is the action, and a level
-           with nothing in scope is .dis with a hollow dot. -->
-      <div class="sechead">Level 2 · transfer functions <span class="rolechip">served by AusMT</span></div>
-      <div class="dltiles">
-        <button type="button" class="prod" id="dlZip" disabled><span class="pdot"></span><div><span class="pname">EDI (zip)</span> <span class="rolechip">source archive</span><small id="dlZipMeta"></small></div></button>
-        <button type="button" class="prod" id="dlZipXml" disabled><span class="pdot"></span><div><span class="pname">EMTF XML (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipXmlMeta"></small></div></button>
-        <button type="button" class="prod" id="dlZipH5" disabled><span class="pdot"></span><div><span class="pname">MTH5 (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipH5Meta"></small></div></button>
+      <!-- The two offers are wrapped so the guided tour can spotlight them separately; each wrapper is a bare
+           block with an id only, so the .dlbox selectors above still reach every child. -->
+      <div id="dlLevel2">
+        <div class="sechead">Level 2 · transfer functions <span class="rolechip">served by AusMT</span></div>
+        <div class="dltiles">
+          <button type="button" class="prod" id="dlZip" disabled><span class="pdot"></span><div><span class="pname">EDI (zip)</span> <span class="rolechip">source archive</span><small id="dlZipMeta"></small></div></button>
+          <button type="button" class="prod" id="dlZipXml" disabled><span class="pdot"></span><div><span class="pname">EMTF XML (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipXmlMeta"></small></div></button>
+          <button type="button" class="prod" id="dlZipH5" disabled><span class="pdot"></span><div><span class="pname">MTH5 (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipH5Meta"></small></div></button>
+        </div>
       </div>
-      <div class="sechead">Time series <span class="rolechip">at NCI, handed off</span></div>
-      <div class="dltiles" id="tsSeg" role="group" aria-label="Time series by level"></div>
-      <div class="fieldnote" id="tsSegNote"></div>
+      <div id="dlTimeSeries">
+        <div class="sechead">Time series <span class="rolechip">at NCI, handed off</span></div>
+        <div class="dltiles" id="tsSeg" role="group" aria-label="Time series by level"></div>
+        <div class="fieldnote" id="tsSegNote"></div>
+      </div>
     </div>
   </section>
   <section data-views="map">

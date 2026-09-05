@@ -170,13 +170,23 @@ function routeFromHash(){
   if(m){const id=decodeURIComponent(m[1]);
     // resolve by the globally-unique ausmt_id (DATAID s.id repeats across surveys); fall back to s.id for old links
     const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);
-    if(s){if(curView!=="map")setView("map");openStation(s.i);}return;}
+    // openStation WRITES this hash, so the browser delivers it straight back as a hashchange a tick later. The
+    // route is idempotent and opens only what is not open, so a re-delivery never rebuilds the drawer under the reader. See docs: portal internals, main.js.
+    if(s){if(curView!=="map")setView("map");
+      const showing=_drawerSubject&&_drawerSubject.kind==="station"&&_drawerSubject.i===s.i&&
+                    drawer.classList&&drawer.classList.contains("open");
+      if(!showing)openStation(s.i);}
+    return;}
   const msv=location.hash.match(/^#\/survey\/(.+)$/);
   if(msv){const slug=decodeURIComponent(msv[1]),sv=SLUG_TO_SURVEY[slug];
-    // The entity page's button for this route is labelled "View all stations on the main map", so the route
-    // must FRAME the survey: openSurvey rewrites the hash and renders but frames nothing, and the setView
-    // above is on the station branch only. See docs: portal internals, main.js.
-    if(sv){openSurvey(sv);focusSurvey(sv);}
+    // The entity page's button for this route says "View all stations on the main map", so openSurvey renders and
+    // focusSurvey frames the survey, called after it so the fit measures the open drawer. Idempotent like the
+    // station branch. See docs: portal internals, main.js.
+    if(sv){
+      const showing=_drawerSubject&&_drawerSubject.kind==="survey"&&_drawerSubject.sv===sv&&
+                    drawer.classList&&drawer.classList.contains("open");
+      if(!showing){openSurvey(sv);focusSurvey(sv);}
+    }
     return;}                                           // unknown slug: fall through, no crash, no view change
   // hash fell through (e.g. browser Back to ''): if a full-width collection detail is showing, restore a tab view
   if(curView==="collection")setView("map");}

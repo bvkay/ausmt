@@ -4590,6 +4590,33 @@ Nothing on the first-paint path awaits these gates, and no consumer can read the
 runInit attaches the UI below, so the later start is invisible everywhere but the network.
 ```
 
+#### openStation WRITES this hash, so the browser delivers it straight back
+
+```text
+openStation WRITES this hash, so the browser delivers it straight back as a hashchange a tick later.
+Re-opening a drawer that is already showing that station rebuilds its whole markup for no new
+information, and the rebuild resets the active tab and the scroll offset under a reader who has just
+moved off the default panel. The route is idempotent instead: it opens what is not open.
+```
+
+#### The entity page's button for this route is labelled "View all stations
+
+```text
+The entity page's button for this route is labelled "View all stations on the main map". Without
+framing, the route would open a drawer over whatever view was showing with the map at its default
+national extent: openSurvey rewrites the hash and renders but frames nothing, and the setView
+above is on the station branch only. focusSurvey is the seam the drawer's own "View on map"
+control uses, so the route delivers the same framing and the same survey dim. Called
+AFTER openSurvey so the fit padding measures the drawer that is actually open.
+Called directly, as filters.js does: focusSurvey is a top-level declaration in drawer.js,
+which index.html loads before this file, so a typeof guard here could never be false and
+would only turn a real regression into a silent no-op.
+Idempotent for the same reason the station branch above is: openSurvey WRITES this hash, so the
+browser hands it straight back. Re-running the route then re-renders the record and, worse, re-frames
+the map, so opening a survey's record from the Surveys grid threw the reader onto the map view a tick
+later. A drawer already showing this survey has nothing to route to.
+```
+
 ## portal/src/map.js
 
 #### Map + layers + markers
@@ -5322,162 +5349,272 @@ qColor as a text colour; it renders a .qvdot swatch beside plain readable text i
 
 ## portal/src/tour.js
 
-#### tour.js - 11-step spotlight tour
+#### tour.js - the guided spotlight tour. Classic script, zero dependencies
 
 ```text
-tour.js - 11-step spotlight tour. Classic script, zero deps,
-loads LAST (after main.js) so it can call setView()/openStation()/other globals, but nothing in
-main.js depends on it (a missing/broken tour.js must never break the intro panel or the app - see
-the typeof guard in main.js).
+tour.js - the guided spotlight tour. Classic script, zero dependencies, loaded LAST so it may call
+setView()/openStation()/setSidebarMode() and the rest of the app's seams; nothing else depends on it,
+so a missing or broken tour.js must never break the app (main.js guards its entry point with typeof).
 
-Behaviour: never auto-starts (only "Take the tour" in the intro panel or the header link fires
-it); steps whose target element is absent (e.g. empty-data state, or an enter action that found
-nothing to open) render centred with no spotlight instead of crashing or silently skipping; Esc
-closes; ArrowRight/ArrowLeft navigate; all controls are real <button>s with aria-labels; nothing is
-persisted - the tour is stateless and re-runnable from either entry point on every visit.
-
-the tour now NAVIGATES - it spotlights the header view buttons and
-actually switches to the Surveys view, then returns to the map at the end, so a first-timer learns
-the app's two views by watching them happen. Enter actions (run when the tour ARRIVES at a step,
-forward or back) make that work in both directions: map-view steps force the map view back (so
-stepping BACK from the Surveys steps re-shows map-only targets like .selbox). _tourOpened records
-ONLY what the tour itself opened (drawer / hash), so stopTour() from ANY step - including
-mid-Surveys - returns to the map and closes only tour-opened drawers, never state the visitor had
-open before starting.
-
-Two DEMO steps after the filter-rail overview - Find (types "AusLAMP"
-with a real input event so the live dropdown + map filter run) and tree browse (scrolls one survey
-row into view; kalkaroo-2022 preferred, first survey otherwise). Demo steps get an EXIT hook, run
-on ALL three ways of leaving a step (Next, Back, and stopTour for close/Esc/Done), so demo state
-(the typed query, the tree scroll) never leaks past the step - the same restore discipline as
-_tourOpened, extended per-step.
-Short step copy - the visible text is the authored deck,
-VERBATIM. Selectors + enter/exit hooks are UNCHANGED (the Find demo still types "AusLAMP", the selbox
-step still switches rail mode, etc. - only the visible copy changed).
+Constraints this file has to keep:
+  * The tour NEVER auto-starts. It opens from the welcome popup's button or the ?tour=1 entry only.
+  * A step whose target element is absent renders CENTRED with no spotlight rather than crashing or
+    silently skipping, so an empty corpus, a filtered-out demo or a build without an optional control
+    still walks end to end.
+  * Nothing is persisted. The tour is stateless between visits and re-runnable from either entry.
+  * Every step's enter() establishes its COMPLETE state from either direction and is idempotent:
+    entering a step twice is a no-op the second time. Backward navigation is therefore correct by
+    construction rather than by a per-step undo.
+  * The map is the tour's whole subject. No step leaves the map view: the Surveys and Collections navs
+    are spotlighted where they sit and never clicked, so the tour has no view of its own to undo and a
+    reader is never carried somewhere the copy did not say they were going.
+  * Shared state belongs to a GROUP of steps, not to one step: the group's cleanup runs when the walk
+    crosses the group boundary, never on a move inside it. There are two: the BROWSE steps own the
+    rail's browse mode, and the SELECT steps own the select mode and the demo rectangle and selection.
+  * stopTour() from ANY step restores the visitor's pre-tour snapshot. Nothing the tour did leaks.
+  * The step counter is computed from the deck. No step count is ever written as a literal.
 ```
 
-#### Surveys-view step enter action
+#### The demo survey the copy and the demo steps prefer, and the size below
 
 ```text
-Surveys-view step enter action. Named by SELECTOR, not by index: a step inserted mid-deck left every
-numbered comment in this file one behind, so the numbers are gone. It actually switches to the Surveys
-view, because the navigation IS the lesson. setView closes any open drawer itself; _tourOpened.drawer
-is left as-is because closeDrawer() is a safe no-op double-close at restore time.
+The demo survey the copy and the demo steps prefer, and the size below which a survey is too small to
+make the selection demo read. Both are preferences, not requirements: _tourDemoSurvey degrades to the
+largest positioned survey and then to nothing, because a corpus without the preferred survey (the test
+fixture, an empty portal, any future corpus) must still walk.
 ```
 
-#### The .selbox step's target lives in the rail's Select & download mode ...
+#### The deck. `sel` is a static selector, so it can be pinned and so a ste
 
 ```text
-The .selbox step's target lives in the rail's Select & download mode pane,
-which is hidden in the default Browse mode (zero rect => the step would fall back to the centred
-no-spotlight card). Enter: force the map view, save the visitor's rail mode, and switch to
-Select & download so the target is visible and spotlit. Exit (Next/Back/close - the same three-path
-discipline as the Find/tree demos): put the saved mode back, so the tour never leaks a mode change.
-Guarded so a build without the mode split degrades to the plain centred-card behaviour, no crash.
+The deck. `sel` is a static selector, so it can be pinned and so a step spotlights the same element
+whichever way the walk arrives at it. `text` is the copy verbatim; {survey} and {n} are resolved at
+render from the loaded corpus, never written into the source.
 ```
 
-#### Find demo
+#### The SELECT group: the steps that share the select rail mode, the demo 
 
 ```text
-Find demo. Enter: save the visitor's own query (restore discipline - only undo what the
-tour did), type "AusLAMP" and dispatch a REAL bubbling input event so the live wiring in filters.js
-(refresh() + renderFind()) filters the map and renders the actual dropdown - the demo is the real
-code path, not a mock. Exit: restore the saved value with another input event (so the filter state
-is genuinely restored) and hide the dropdown, matching the click-away behaviour in filters.js.
+The SELECT group: the steps that share the select rail mode, the demo rectangle and the demo selection.
+The group owns that state, so it is established on entering ANY member and cleaned up only when the
+walk leaves the group in either direction (or the tour stops). A per-step exit hook cannot express this:
+it would tear the shared state down on every move inside the group and rebuild it on the next arrival.
 ```
 
-#### Tree browse demo
+#### demo resolution
 
 ```text
-Tree browse demo. Enter: save the tree scroll AND
-the expand/collapse state, EXPAND the target row's ancestors (country + org, via the same
-treeSetCollapsed API the carets use - a collapsed rail must never hide the demo), then bring the
-row into view - kalkaroo-2022 preferred (via SLUG_TO_SURVEY, the authoritative slug->label map),
-degrading to the FIRST survey present so a data-dependent id can never crash the tour (empty
-portal: no-op, step renders centred per the absent-target pattern). No checkbox is touched. Exit:
-put back the saved scrollTop and the saved collapse set - on all three exit paths (Next/Back/close).
+---- demo resolution -------------------------------------------------------------------------------
+Every step that would otherwise name a survey resolves one from the corpus that is actually loaded.
+Preference order: the preferred slug when it has positioned stations, else the first survey large
+enough for the selection demo to read, else the largest positioned survey, else nothing. The last
+case is a real state (an empty portal), and the steps that use it render centred with no demo.
 ```
 
-#### Station-drawer step enter action: open the first VISIBLE station's ...
+#### The station the drawer steps open, as an index into ST. Resolved from 
 
 ```text
-Station-drawer step enter action: open the first VISIBLE station's drawer (reuse openStation), same
-as clicking its marker - forcing the map view first so it also works stepping back from the Surveys
-steps. No-op (step renders centred, no spotlight) when nothing is visible - e.g. the empty-data
-state or every station filtered out - matching the existing "absent target" pattern below.
+The station the drawer steps open, as an index into ST. Resolved from the CORPUS, not from the filtered
+map: the demo survey's preferred station where it exists, else that survey's first positioned station,
+else the first visible station so a corpus with no positioned survey still shows a drawer. -1 = nothing
+to open, which is the empty-corpus state and renders the step centred with no spotlight.
 ```
 
-#### Final map step enter action (by selector, not index): close whatever ...
+#### The count the selection-demo copy prints: whatever the demo rectangle 
 
 ```text
-Final map step enter action (by selector, not index): close whatever drawer the tour opened and
-land back on the map. The loop's
-closing beat. Uses the same restore path as stopTour() so behaviour is identical whether a visitor
-reaches step 8 by stepping through or jumps back to it.
+The count the selection-demo copy prints: whatever the demo rectangle actually took. Never a literal.
+Once the demo has been applied that is the live selection. BEFORE it is applied the rectangle's bounds
+are already known, and its membership is the same number the apply will produce, so the copy states it
+from the first frame rather than counting up from a zero that is only true while the shape is still
+being drawn.
 ```
 
-#### The LEADER is an SVG overlay spanning the viewport; a line + arrowhead ...
+#### Map-view steps. No step of the deck leaves the map, so the view switch
 
 ```text
-The LEADER is an SVG overlay spanning the viewport; a line + arrowhead connect the centred
-card to the spotlight. Its z-order sits BETWEEN the spot (which carries the dim) and the card (see CSS),
-so the line reads over the dim and the card stays on top. The line element is held directly (not looked
-up) so it is robust in jsdom, which does not render SVG; the arrowhead marker is browser-only cosmetics.
+Map-view steps. No step of the deck leaves the map, so the view switch has one job: a visitor who
+started the tour from the Surveys or Collections view, where the map-only targets are display:none and
+every step would fall back to a centred card. The drawer close is the same job in the other axis:
+stepping back from the drawer steps must leave the map these steps are describing unobstructed, and a
+step that only looked right because the previous step happened to leave the drawer shut is exactly the
+failure the walk pins exist to catch.
 ```
 
-#### SETTLE-UNTIL-STABLE re-layout
+#### The opening step. The map housekeeping above, plus Advanced search CLO
 
 ```text
-SETTLE-UNTIL-STABLE re-layout. Some steps' enter hooks trigger layout changes on their
-OWN target that keep going AFTER _tourLayout first measures it. The station-drawer step (index 4) is the
-worst case: openStation (a) renders the facts panel synchronously, then adds .open, which (b) SLIDES the
-drawer in via a CSS transform transition (index.html: transform translateX(102%) -> none, .16s ease) so its
-getBoundingClientRect().left travels leftward over ~160ms; then (c) an ASYNC station.json fetch injects the
-frame line (drawer.js loadStationFrameLine) and reflows the drawer's HEIGHT; and (d) the deferred map home
-re-fit can reflow the map column under it. The drawer box therefore MOVES and RESIZES several times across
-~1s. A single transitionend re-measure fires after the SLIDE only (stage b) and leaves the spotlight on a
-Stale early box. The robust
-fix: after entering a step, POLL the target rect each animation frame; on ANY change - position OR size (a
-size-only ResizeObserver misses the slide, which MOVES the box) - re-run _tourLayout so the spotlight tracks
-the box; stop once the rect has held STABLE for _TOUR_SETTLE_STABLE_MS, or after a hard _TOUR_SETTLE_CAP_MS.
-General, not a step-5 special case: a static target reads stable on the first frame and the watcher stands
-down immediately; the map steps re-measure an unchanging box harmlessly. The transitionend hook is KEPT as
-a cheap extra nudge (it re-lays-out the instant a transition ends) but is not relied on alone. The
-watcher is ATTACHED on arrival and DETACHED on EVERY departure (Next/Back/close/teardown) - the rAF handle
-is cancelled and the listener removed - so no poll loop or listener leaks past the step or the tour.
-jsdom has no layout engine and its rAF is driver-controllable, so the pin drives synthetic rect changes +
-a stubbed clock through the queue to prove the re-run/stop/detach wiring; the sub-second proof is a browser
-run. _tourLayoutRuns is bumped by _tourLayout purely so the pin (and the browser probe) can observe re-runs.
+The opening step. The map housekeeping above, plus Advanced search CLOSED. The step AFTER this one is
+the step that opens the accordion, so an opening step that merely inherits it reads one way arriving
+forward from the start and another way arriving backward from step 2, and every step of this deck has
+to establish its complete state from either direction. The visitor's own accordion is in the pre-tour
+snapshot and comes back on close.
 ```
 
-#### The tour card is CENTRED for EVERY step (the pattern formerly used only ...
+#### The select group's shared state: the rail mode, the demo rectangle and
 
 ```text
-The tour card is CENTRED for EVERY step (the pattern formerly used only as the no-target
-fallback, now generalised). This PURE fn returns the card's fixed-position box. Base = the viewport
-centre. OVERLAP RULE: when a target rect would sit under the centred card, nudge the card by the MINIMAL
-vertical offset so it clears the target by _TOUR_CLEAR - deterministically DOWNWARD when that still fits
-the viewport (bottom margin _TOUR_M), else UPWARD. No-DOM so the driver pins centred-always + the nudge on
-synthetic rects (jsdom has no layout engine), exactly as the retired _tourPlace was.
+The select group's shared state: the rail mode, the demo rectangle and the demo selection. The visitor's
+own mode is captured ONCE on entering the group and restored when the walk leaves it, so a move inside
+the group never touches it. `created` records whether the tour made a selection of its own, so the
+teardown clears the demo and never a selection the visitor brought with them.
 ```
 
-#### Geometry of the LEADER from the centred card to the spotlight
+#### the selection demo
 
 ```text
-Geometry of the LEADER from the centred card to the spotlight. PURE - the endpoints are the
-boundary points where the card-centre<->spot-centre axis crosses each rect, so the line leaves the card
-edge nearest the target and lands on the spot edge nearest the card (arrowhead at the spot end). visible
-is false when suppressed - the map steps (the spotlight over the map IS the cue) and the no-target
-fallback. No-DOM so the driver pins the endpoints + suppression on synthetic rects.
+---- the selection demo ----------------------------------------------------------------------------
+The demo shows selection happening: frame the demo survey, move a cursor to the Draw rectangle button,
+grow a rectangle over the survey, and leave the stations inside it selected. Constraints:
+  * No dependency and no asset. The cursor is an inline glyph and the preview is a Leaflet layer.
+  * The demo never ARMS the real draw handler. A handler armed and never completed would swallow the
+    visitor's next map click; the button is lit for the beat the cursor presses it and nothing more.
+  * The end state is applied through the same seam a hand-drawn shape uses, so the selection, the rail
+    mode and the toast are the app's own behaviour rather than a second implementation of it.
+  * Reduced motion, and any environment with no frame clock to rely on, take the INSTANT path straight
+    to that end state. The animation is decoration over a result that stands without it.
+  * Every frame and timer is registered, so an interrupt cancels all of them: no loop may outlive the
+    step that started it.
 ```
 
-#### A COLLAPSED rail hides every child but the collapse button, so the rail ...
+#### Phase durations. The whole demo is about two seconds, which is long en
 
 ```text
-A COLLAPSED rail hides every child but the collapse button, so the rail steps (Find, the tree, the
-Select and Download boxes) would spotlight nothing and narrate controls that are not on screen -
-exactly what a returning visitor who collapsed the rail gets from About's ?tour=1 link. Expand it
-for the run and record that WE did, so _tourRestore puts the visitor's own choice back.
+Phase durations. The whole demo is about two seconds, which is long enough to read as an action and
+short enough that a reader does not start reaching for Next. The fit wait is an upper bound only: it
+resolves on the map's own moveend, which on a large jump is immediate.
+```
+
+#### The margin the rectangle is padded by, as a fraction of the demo surve
+
+```text
+The margin the rectangle is padded by, as a fraction of the demo survey's extent. TOUR_RECT_PAD is the
+most it can be and the floor is the least; between them it is the LARGEST fraction that admits no station
+of any OTHER survey. The step frames one survey and says every station inside the rectangle is selected,
+so a margin that reaches the sites of the survey next door leaves the sentence true and the reading
+wrong. Stations are weighed as the membership weighs them, over what is VISIBLE: a station a filter has
+taken off the map is not one the rectangle can select.
+
+Each station enters at the margin where BOTH axes stop keeping it out, so its own admitting margin is the
+larger of the two; an axis the floor already covers cannot exclude it at any margin, and an axis with no
+span can only ever be widened by the floor. The smallest of those is the first margin that would take a
+neighbour, and the chosen one sits just inside it. Where that is the floor itself, the floor stands and
+the rectangle keeps the neighbour: shrinking further would drop the demo survey's own sites, and the copy
+prints the membership, so what it says is still what the map shows.
+```
+
+#### The end state, applied the way a completed draw applies one: the shape
+
+```text
+The end state, applied the way a completed draw applies one: the shape replaces any previous shape,
+refresh() re-derives the selection from it, and the rail surfaces the exports the selection enabled.
+The demo's selection IS the rectangle's membership: where no shape layer carried the rectangle, the
+same membership is applied directly, so the count the copy prints is always the rectangle's contents
+and never a lower number from a shape the map did not take.
+```
+
+#### Find demo. Save the visitor's own query, type the demo query and dispa
+
+```text
+Find demo. Save the visitor's own query, type the demo query and dispatch a REAL bubbling input event
+so the live wiring in filters.js (refresh() + renderFind()) filters the map and renders the actual
+dropdown: the demo is the real code path, not a mock. Exit restores the saved value the same way and
+hides the dropdown, matching the click-away behaviour.
+```
+
+#### Tree browse demo. Save the tree scroll AND the expand/collapse state, 
+
+```text
+Tree browse demo. Save the tree scroll AND the expand/collapse state, expand the demo survey's
+ancestors through the same treeSetCollapsed API the disclosure carets use (a collapsed rail must never
+hide the demo), then bring the row into view. No checkbox is touched. Exit puts back the saved
+scrollTop and the saved collapse set on all three ways out.
+```
+
+#### The station-drawer steps open the demo station's drawer, the same as c
+
+```text
+The station-drawer steps open the demo station's drawer, the same as clicking its marker. Idempotent:
+arriving with that station already open opens nothing, so stepping back from the Files step neither
+rewrites the hash nor throws away the reader's scroll position. Opening a station resets the drawer to
+its default panel, so the tab is (re-)selected here in both cases and this step is the Response tab's
+establishing step in either direction.
+```
+
+#### the pre-tour snapshot
+
+```text
+---- the pre-tour snapshot -------------------------------------------------------------------------
+The tour navigates, opens drawers, switches rail modes, draws a shape and makes a selection. Undoing
+"only what the tour opened" cannot express that: it can restore a drawer and a hash, but it has nothing
+to say about a selection a filter change silently dropped or a map frame a fit moved. So the visitor's
+workspace is snapshotted ONCE at startTour and put back whole on stop, from any step. The snapshot is
+the authority; the group teardowns below exist for the boundaries the walk crosses while the tour is
+still running.
+```
+
+#### The LEADER is an SVG overlay spanning the viewport; a line + arrowhead
+
+```text
+The LEADER is an SVG overlay spanning the viewport; a line + arrowhead connect the centred card to
+the spotlight. Its z-order sits BETWEEN the spot (which carries the dim) and the card, so the line
+reads over the dim and the card stays on top. The line element is held directly rather than looked
+up, so it is robust in a DOM that does not render SVG; the arrowhead marker is cosmetics.
+```
+
+#### SETTLE-UNTIL-STABLE re-layout. Some steps' enter hooks trigger layout 
+
+```text
+SETTLE-UNTIL-STABLE re-layout. Some steps' enter hooks trigger layout changes on their OWN target that
+keep going after _tourLayout first measures it. The station-drawer step is the worst case: openStation
+renders synchronously, then adds .open, which SLIDES the drawer in over a CSS transform transition so
+its left travels; then an async station.json fetch injects the frame line and reflows its HEIGHT; then
+a deferred map re-fit can reflow the map column under it. A single transitionend re-measure fires after
+the slide only and leaves the spotlight on a stale early box. So after entering a step, POLL the target
+rect each animation frame; on ANY change, position OR size (a size-only observer misses the slide,
+which MOVES the box), re-run _tourLayout; stop once the rect has held stable for _TOUR_SETTLE_STABLE_MS
+or after a hard _TOUR_SETTLE_CAP_MS. General, not a per-step special case: a static target reads stable
+on the first frame and the watcher stands down immediately. The transitionend hook is kept as a cheap
+extra nudge but is not relied on alone. The watcher is ATTACHED on arrival and DETACHED on EVERY
+departure, so no poll loop or listener leaks past the step or the tour. _tourLayoutRuns is bumped by
+_tourLayout purely so a driver can observe re-runs.
+```
+
+#### The tour card is CENTRED for EVERY step. This PURE fn returns the card
+
+```text
+The tour card is CENTRED for EVERY step. This PURE fn returns the card's fixed-position box. Base = the
+viewport centre. OVERLAP RULE: when a target rect would sit under the centred card, nudge the card by
+the MINIMAL vertical offset so it clears the target by _TOUR_CLEAR, deterministically DOWNWARD when
+that still fits the viewport (bottom margin _TOUR_M), else UPWARD. No DOM, so the geometry is testable
+on synthetic rects in a DOM with no layout engine.
+```
+
+#### Geometry of the LEADER from the centred card to the spotlight. PURE: t
+
+```text
+Geometry of the LEADER from the centred card to the spotlight. PURE: the endpoints are the boundary
+points where the card-centre to spot-centre axis crosses each rect, so the line leaves the card edge
+nearest the target and lands on the spot edge nearest the card. visible is false when suppressed: the
+map steps (where the spotlight over the map IS the cue) and the no-target fallback.
+```
+
+#### The containers whose content SCROLLS. A target inside one of them can 
+
+```text
+The containers whose content SCROLLS. A target inside one of them can sit outside the part of it that is
+on screen, and a spotlight measured there lands on empty space while the copy talks about a control the
+reader cannot see. The containers themselves are not in this class: scrolling a scroller into view moves
+the page it sits on, not the content inside it.
+```
+
+#### Bring a target inside a scroller into view, so what the layout measure
+
+```text
+Bring a target inside a scroller into view, so what the layout measures next is where the element ends
+up. "nearest" is the smallest scroll that makes it visible, so a target already on screen does not move
+and the reader's position in the rail is disturbed no more than the step requires. Guarded: a headless
+DOM has no scrollIntoView, and the resolution the step depends on is asserted separately from this.
 ```
 
 ## portal/config.js

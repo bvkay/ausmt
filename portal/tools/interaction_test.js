@@ -340,7 +340,22 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // intro-panel + tour hooks, exposed so the driver can assert on internal helpers
   // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro lets the driver
   // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
-  "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +
+  "introSeen,maybeShowIntro,tourStep:()=>_tourStep,tourStepCount:()=>TOUR_STEPS.length," +
+  // The deck's resolved demo subjects. Every step that would otherwise name a survey or a station
+  // resolves one from the corpus that is actually loaded, so these are what the pins compare the
+  // rendered copy and the opened subjects against, never a literal.
+  "tourDemoSurvey:()=>_tourDemoSurvey()," +
+  "tourDemoStation:()=>_tourDemoStation(),startTour,stopTour," +
+  // The selection demo. tourDemoBounds is the padded rectangle the demo draws and tourRectMembers its
+  // membership, so a pin can state the expected selection from the geometry instead of a literal;
+  // tourAnimPending is the animation's own registry of pending frames, timers, cursor and preview layer,
+  // which is what an interrupt has to leave empty.
+  "tourDemoBounds:()=>_tourDemoBounds(),tourRectMembers:(b)=>_tourRectMembers(b)," +
+  "tourAnimPending:()=>_tourAnimPending()," +
+  // The element the current step spotlights, so a walk can assert the target actually resolves to
+  // something on screen rather than trusting the selector string.
+  "tourTargetEl:()=>_tourTarget(TOUR_STEPS[_tourStep])," +
+  "tourStepText:(i)=>_tourText(TOUR_STEPS[i]),tourStepSel:(i)=>TOUR_STEPS[i].sel," +
   // Settle-until-stable re-layout: the drawer step opens a target that keeps reflowing
   // after open (slide, then the async station.json frame-line inject, then a possible map re-fit), so the
   // tour POLLS the target rect each frame and re-runs _tourLayout until it holds stable. tourSettleEl exposes
@@ -397,8 +412,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "focusSurvey,drawerFitOptions,dimStyleFor,setSurveyDim,clearSurveyDim," +
   "dimFocus:()=>_dimFocusSurvey,bgClickShouldClose:_bgClickShouldClose," +
   "surveyDataLevelsHtml,DATA_LEVEL_SLOTS," +
-  // Tree-demo hook: the step's resolved survey label (kalkaroo-2022 preferred, first-survey
-  // degrade) — a REAL observable for the graceful-degrade assertion, not just "didn't crash".
+  // The survey label the browse step actually scrolled to. It follows the DECK's own demo-survey rule
+  // (the preferred slug where the loaded corpus carries it, else the first survey big enough for the
+  // selection demo to read, else the largest positioned one), so this is a real observable for the
+  // graceful-degrade assertion rather than "didn't crash".
   "tourTreeTarget:()=>_tourTreeTarget," +
   // The disclosure-caret API (same functions the carets and the tour step call)
   // plus a collapse-set reader, so the invariant and the tour-restore assertions observe real state.
@@ -507,6 +524,13 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // LAZY arrows so a boot on earlier code still REACHES the section and fails there with a precise
   // message, instead of dying at this api hook with a ReferenceError.
   "dispatchProd:(d)=>dispatchProd(d),selBulkFlag:()=>SEL_BULK_FLAG," +
+  // Drawer SUBJECT + active tab. The tour's pre-tour snapshot has to put a visitor's open drawer back on
+  // the same subject and the same tab, so the pin needs to read both as state rather than infer them from
+  // rendered markup. closeDrawer is exposed so a leg can return the world to a shut drawer without
+  // reaching through a rendered close control.
+  "curDrawerTab:()=>_curDrawerTab,closeDrawer,selectDrawerTab," +
+  "stIndex:(id)=>{const s=ST.find(x=>x.id===id);return s?s.i:-1;}," +
+  "drawerSubject:()=>_drawerSubject?JSON.parse(JSON.stringify(_drawerSubject)):null," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -1326,6 +1350,14 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // FOCUS MANAGEMENT: showing the popup moves focus INTO the dialog.
   ok(introWelcome.contains(doc.activeElement), "showing the welcome popup must move focus into the dialog, active=" + (doc.activeElement && doc.activeElement.id));
 
+  // THE SELECTION DEMO'S INSTANT PATH, for this window only. The driver PARKS requestAnimationFrame (so
+  // the deferred map re-fit can be drained deterministically), which means an animation driven by frames
+  // could never advance here and every tour leg below would hang on a demo that never finishes. The tour
+  // exposes the same instant path reduced motion takes, and this flag selects it, so the legs below assert
+  // the demo's END STATE - which is what they are about. The animation itself is driven in its own fresh
+  // window, whose frame clock is real, with a bounded wait (the selection-demo section).
+  win.AUSMT_TOUR_INSTANT = true;
+
   // CHECKBOX PERSISTENCE MATRIX: dismiss ticked/unticked × close-via {tour, browse, Esc, click-out}.
   // Ticked -> the dismissal PERSISTS (localStorage key set) on every close path; unticked -> it does NOT
   // (the popup may return next visit). Load-bearing: on OLD code there is no such popup at all.
@@ -1492,19 +1524,25 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(/^\d+px$/.test(_tcs.minHeight) && parseInt(_tcs.minHeight, 10) > 0,
     "owner2/size: .tourcard must have a positive min-height (constant box; short steps 7/9 must not shrink), got minHeight=" + JSON.stringify(_tcs.minHeight));
   ok(_tcs.boxSizing === "border-box", "owner2/size: .tourcard must be border-box so the fixed width is the full rendered box, got " + JSON.stringify(_tcs.boxSizing));
-  // CONSTANT CENTRED POSITION: step through ALL 10 steps and capture the card's applied left/top. Every step's
+  // CONSTANT CENTRED POSITION: step through EVERY step and capture the card's applied left/top. Every step's
   // position must be IDENTICAL (the map steps included) — the overlap-nudge is the ONLY documented exception,
-  // and under jsdom's zero rects no target overlaps, so all 10 land on the pure viewport centre. This guards
-  // the "same position on every step" contract (map steps 1/10 must match 2-9).
+  // and under jsdom's zero rects no target overlaps, so all of them land on the pure viewport centre. This
+  // guards the "same position on every step" contract (the map steps must match the rest).
+  // The walk length is READ FROM THE DECK, so a deck change moves this pin by construction instead of
+  // leaving a stale literal to chase; the length itself is pinned once, here, against the shipped deck.
+  const _nSteps = A.tourStepCount();
+  ok(_nSteps === 13, "deck: the tour must carry 13 steps, got " + _nSteps);
   const _posSeen = [];
-  for (let _s = 0; _s < 10; _s++) {
+  for (let _s = 0; _s < _nSteps; _s++) {
     const _c = doc.getElementById("tourCard");
     _posSeen.push(_c.style.left + "|" + _c.style.top);
-    if (_s < 10) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+    if (_s < _nSteps - 1) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
   }
-  ok(A.tourStep() === 10, "owner2/pos: stepping ArrowRight x10 must reach the last step, at " + A.tourStep());
+  ok(A.tourStep() === _nSteps - 1,
+    "owner2/pos: stepping ArrowRight x" + (_nSteps - 1) + " must reach the last step, at " + A.tourStep());
   ok(_posSeen.every(p => p === _posSeen[0]),
-    "owner2/pos: the card's centred position must be IDENTICAL across all 10 steps (map steps included), got " + JSON.stringify(_posSeen));
+    "owner2/pos: the card's centred position must be IDENTICAL across all " + _nSteps +
+    " steps (map steps included), got " + JSON.stringify(_posSeen));
   ok(/px$/.test(_posSeen[0].split("|")[0]) && /px$/.test(_posSeen[0].split("|")[1]),
     "owner2/pos: the constant position must be applied in px, got " + JSON.stringify(_posSeen[0]));
 
@@ -1607,10 +1645,15 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(findBox.value === "", "leaving the Find demo FORWARD did not clear the typed query, got: " + JSON.stringify(findBox.value));
   ok(findRes.style.display === "none", "leaving the Find demo FORWARD did not close the dropdown");
   ok(A.nVisCount() === 5, "leaving the Find demo FORWARD did not restore the filtered map, got " + A.nVisCount());
-  // graceful degrade: kalkaroo-2022 is NOT in this fixture -> the resolved target must be the
-  // FIRST survey present (surveys[] is sorted; "Alpha Survey"), and nothing crashed getting here.
+  // The browse step has no preferred survey of its own. It scrolls to whatever the DECK's demo survey
+  // resolves to, so the tour narrates ONE survey throughout instead of pointing at one here and a
+  // different one in the drawer and selection steps. The fixture carries no survey at the preferred slug,
+  // so the rule degrades to the largest positioned survey.
+  ok(A.tourTreeTarget() === A.tourDemoSurvey(),
+    "the browse step must scroll to the deck's own demo survey, got: " + JSON.stringify(A.tourTreeTarget()) +
+    " against " + JSON.stringify(A.tourDemoSurvey()));
   ok(A.tourTreeTarget() === "Alpha Survey",
-    "tree-browse step must degrade to the first survey when kalkaroo-2022 is absent, got: " + JSON.stringify(A.tourTreeTarget()));
+    "the demo survey must degrade to the largest positioned survey on this fixture, got: " + JSON.stringify(A.tourTreeTarget()));
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));  // BACK -> index 2 (tree exit fires, find re-enters)
   ok(A.tourStep() === 2, "ArrowLeft did not return to the Find demo step, at step " + A.tourStep());
   ok(findBox.value === "AusLAMP", "re-entering the Find demo backwards did not re-type the query");
@@ -1667,7 +1710,12 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // (3) Detach on step change: stepping off the drawer must RELEASE #drawer's watcher (no leak on a persistent element).
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));   // -> tree (index 3)
   ok(A.tourSettleEl() !== "drawer", "settle: stepping off the drawer step must release #drawer's watcher, still on " + JSON.stringify(A.tourSettleEl()));
-  ok(A.tourSettleEl() === "tree", "settle: the watcher must re-attach to the new step's target (#tree), got " + JSON.stringify(A.tourSettleEl()));
+  // The browse step spotlights the rail container that holds BOTH the collections list and the tree, so
+  // the watcher's target is that container and not #tree alone. Read from the deck, so the selector and
+  // the pin cannot drift apart.
+  ok("#" + A.tourSettleEl() === A.tourStepSel(3),
+    "settle: the watcher must re-attach to the browse step's own target " + A.tourStepSel(3) +
+    ", got " + JSON.stringify(A.tourSettleEl()));
   const _runsAfterDetach = A.tourLayoutRuns();
   _dr.left = 999;                                          // mutate the (now-detached) drawer rect...
   _tick();                                                 // ...and fire the STALE drawer frame: the guard must make it a no-op
@@ -1682,6 +1730,537 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(A.tourSettling() === false, "settle: closing the tour must leave no poll frame pending");
   ok(!doc.getElementById("drawer").classList.contains("open"), "Esc from the drawer step did not close the drawer it opened");
   ok(A.curView() === "map", "Esc from the drawer step did not restore the map view");
+
+  // THE WORKSPACE, READ AS FIELDS. Every field a tour step can change, in one shape, so a leak is reported
+  // as the field that moved rather than as one assertion at a time. Shared by the close-from-every-step
+  // matrix and the forward/backward walks.
+  //
+  // Two of the tour's OWN snapshot fields are deliberately absent from this reader: the drawn shapes and
+  // the map bounds. Leaflet is stubbed in this harness, so `drawn` records nothing (eachLayer never calls
+  // back, and hasShapes() is therefore false whatever the tour added) and getBounds/fitBounds are recorded
+  // calls rather than a viewport. Reading either field back here would compare a stub to a stub and pass
+  // whatever the tour did with them, which is worse than not asserting at all. Their restore is proved in
+  // a real browser instead, by the CDP walk over the served corpus.
+  const _layoutNow = () => (doc.querySelector("#layoutSeg button.on") || { dataset: {} }).dataset.layout;
+  const _tourSnapRead = () => ({
+    view: A.curView(),
+    mode: A.sidebarMode(),
+    collapsed: doc.querySelector("aside.filters").classList.contains("collapsed"),
+    layout: _layoutNow(),
+    adv: doc.getElementById("advSearch").open,
+    drawerOpen: doc.getElementById("drawer").classList.contains("open"),
+    drawerSubject: JSON.stringify(A.drawerSubject()),
+    drawerTab: A.curDrawerTab(),
+    hash: win.location.hash,
+    selected: A.selCount(),
+    visible: A.nVisCount(),
+    find: doc.getElementById("find").value,
+    treeCollapsed: A.treeCollapsedKeys().slice().sort().join(","),
+  });
+  const _tourSnapDiff = (want, got) => Object.keys(want)
+    .filter(k => String(want[k]) !== String(got[k]))
+    .map(k => k + ": want " + JSON.stringify(want[k]) + ", got " + JSON.stringify(got[k]));
+
+  // THE DEMO STATION AND THE FILES STEP.
+  // The drawer steps open a RESOLVED demo station rather than "whatever happens to be first on the map":
+  // the demo survey's station A1 where the corpus has one, else that survey's first positioned station. The Files
+  // step then shows the SAME station's Files pane, and stepping back must re-show it on Response WITHOUT
+  // re-opening it - an idempotent enter, because re-opening rewrites the hash and throws away the reader's
+  // scroll position.
+  // The same rule stated on its own terms, away from the tour: a station drawer that is already open on the
+  // routed station is left alone, tab and all.
+  A.openStation(A.stIndex("A1"));
+  A.selectDrawerTab("cite");
+  A.routeFromHash();
+  ok(A.curDrawerTab() === "cite",
+    "route: re-routing to the station the drawer already shows must not re-render it and reset the reader's tab, on " +
+    A.curDrawerTab());
+  A.closeDrawer();
+  // The SURVEY route carries the same defect with a louder symptom: openSurvey writes #/survey/<slug>, and
+  // routing that hash back re-opens the record AND frames its stations on the map, so opening a survey's
+  // record from the Surveys grid threw the reader onto the map view a tick later.
+  A.setView("surveys");
+  A.openSurvey(A.tourDemoSurvey());
+  A.routeFromHash();
+  ok(A.curView() === "surveys",
+    "route: re-routing to the survey the drawer already shows must not re-frame the map, on " + A.curView());
+  A.closeDrawer();
+  A.setView("map");
+
+  const _demoSv = A.tourDemoSurvey();
+  ok(_demoSv === "Alpha Survey",
+    "demo: the fixture corpus carries no survey at the preferred size, so the demo survey must degrade to " +
+    "the largest positioned survey, got " + JSON.stringify(_demoSv));
+  ok(typeof A.tourDemoStation === "function" && A.tourDemoStation() === A.stIndex("A1"),
+    "demo: the demo station must resolve to the demo survey's station A1, got " +
+    (typeof A.tourDemoStation === "function" ? A.tourDemoStation() : "no resolver"));
+  const _stepTo = (n) => { doc.getElementById("welcomeTour").click();
+    for (let k = 0; k < n; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); };
+  const _arrow = (key) => win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key }));
+
+  // DISCRIMINATION: with the demo survey filtered OFF the map, the first visible station is not station A1.
+  // The drawer step must still open the demo station, because the demo is resolved from the CORPUS and not
+  // from whatever survives the current filters.
+  const _alphaBox = surveyBoxes.find(b => b.value === "Alpha Survey");
+  _alphaBox.checked = false; fire(_alphaBox, "change");
+  ok(A.nVisCount() > 0 && A.visIds()[0] !== "A1",
+    "demo setup: filtering the demo survey off the map must change which station is first visible, got " +
+    JSON.stringify(A.visIds()));
+  _stepTo(4);
+  ok(A.tourStep() === 4, "demo: could not reach the drawer step, at " + A.tourStep());
+  ok(JSON.stringify(A.drawerSubject()) === JSON.stringify({ kind: "station", i: A.stIndex("A1") }),
+    "demo: the drawer step must open the RESOLVED demo station even when it is filtered off the map, got " +
+    JSON.stringify(A.drawerSubject()));
+  _arrow("Escape");
+  _alphaBox.checked = true; fire(_alphaBox, "change");
+  ok(A.nVisCount() === 5, "demo cleanup: the tree must be back to all five stations, got " + A.nVisCount());
+
+  // THE FILES STEP: same station, Files tab, no re-open in either direction.
+  _stepTo(4);
+  ok(A.curDrawerTab() === "response", "demo: the drawer step must open on the Response tab, got " + A.curDrawerTab());
+  const _hashAtDrawer = win.location.hash;
+  ok(/#\/station\//.test(_hashAtDrawer), "demo: the drawer step must address the station it opened, got " + _hashAtDrawer);
+  _arrow("ArrowRight");
+  ok(A.tourStep() === 5, "files: could not reach the Files step, at " + A.tourStep());
+  ok(A.tourStepSel(5) === "#dp-files", "files: the Files step must spotlight the Files pane, got " + A.tourStepSel(5));
+  ok(A.curDrawerTab() === "files", "files: the Files step did not switch the drawer to the Files tab, on " + A.curDrawerTab());
+  ok(doc.getElementById("dp-files") && doc.getElementById("dp-files").hidden === false,
+    "files: the Files pane must be showing on its own step");
+  ok(doc.getElementById("dt-files").getAttribute("aria-selected") === "true",
+    "files: the Files tab button must read as selected");
+  ok(win.location.hash === _hashAtDrawer,
+    "files: the Files step must not re-open the station; the hash moved to " + win.location.hash);
+  // The hash the drawer itself wrote arrives back as a hashchange a tick later, and routing it must not
+  // re-render a drawer that is already showing that station: the re-render resets the tab (and the scroll)
+  // under a reader who has just moved off the default panel. Driven through the route directly, because the
+  // event's timing is the browser's business and the defect is the route's.
+  A.routeFromHash();
+  ok(A.curDrawerTab() === "files",
+    "files: routing the hash the drawer itself wrote must not reset the tab, on " + A.curDrawerTab());
+  ok(doc.getElementById("dp-files").hidden === false,
+    "files: routing that hash must leave the Files pane showing");
+  // BACK: step 5 re-enters, re-shows Response, and still does not re-open.
+  _arrow("ArrowLeft");
+  ok(A.tourStep() === 4, "files: ArrowLeft did not return to the drawer step, at " + A.tourStep());
+  ok(A.curDrawerTab() === "response", "files: stepping BACK to the drawer step must re-show Response, on " + A.curDrawerTab());
+  ok(JSON.stringify(A.drawerSubject()) === JSON.stringify({ kind: "station", i: A.stIndex("A1") }),
+    "files: stepping back must keep the same station open, got " + JSON.stringify(A.drawerSubject()));
+  ok(win.location.hash === _hashAtDrawer, "files: stepping back must not re-open the station");
+  // FORWARD out of the Files step: Response again, and the select group closes the drawer for the demo map.
+  _arrow("ArrowRight"); _arrow("ArrowRight");
+  ok(A.tourStep() === 6, "files: could not step forward off the Files step, at " + A.tourStep());
+  ok(A.curDrawerTab() === "response", "files: leaving the Files step FORWARD must return the drawer to Response");
+  ok(!doc.getElementById("drawer").classList.contains("open"),
+    "files: the select steps must close the drawer so the demo map is unobstructed");
+  _arrow("Escape");
+  ok(A.tourStep() === -1, "files: could not close the tour after the Files-step checks");
+
+  // THE TOUR'S DRAWER STARTS AT STEP 5 AND NOT ONE STEP EARLIER. The first four steps are about the
+  // map, the filter rail, Find and the browse tree. None of them is about the drawer, so none of them may
+  // touch one, and the reader this matters to is the one who was already reading a station when they
+  // started the tour: their drawer, on their own tab, has to still be there four steps in. It is also what
+  // makes the closing step's "close what this run opened" honest - the tour can only claim to have opened
+  // a drawer from the station step on.
+  A.setSidebarMode("browse");
+  doc.getElementById("clearSel").click();
+  A.openStation(A.stIndex("A2"));
+  A.selectDrawerTab("cite");
+  const _ownDrawer = JSON.stringify(A.drawerSubject());
+  doc.getElementById("welcomeTour").click();
+  for (let i = 0; i <= 3; i++) {
+    ok(A.tourStep() === i, "own drawer: the walk is at " + A.tourStep() + ", expected " + i);
+    ok(doc.getElementById("drawer").classList.contains("open"),
+      "own drawer: step " + i + " closed a drawer the tour did not open");
+    ok(JSON.stringify(A.drawerSubject()) === _ownDrawer,
+      "own drawer: step " + i + " changed the visitor's subject to " + JSON.stringify(A.drawerSubject()));
+    ok(A.curDrawerTab() === "cite",
+      "own drawer: step " + i + " moved the visitor off their own tab, now on " + A.curDrawerTab());
+    _arrow("ArrowRight");
+  }
+  ok(A.tourStep() === 4, "own drawer: could not reach the station step, at " + A.tourStep());
+  ok(JSON.stringify(A.drawerSubject()) === JSON.stringify({ kind: "station", i: A.stIndex("A1") }),
+    "own drawer: the station step is the first step with a drawer of the tour's own, got " +
+    JSON.stringify(A.drawerSubject()));
+  ok(A.curDrawerTab() === "response",
+    "own drawer: the station step must establish the Response tab, on " + A.curDrawerTab());
+  _arrow("Escape");
+  ok(JSON.stringify(A.drawerSubject()) === _ownDrawer && A.curDrawerTab() === "cite",
+    "own drawer: closing must hand the visitor's own drawer and tab back, got " +
+    JSON.stringify(A.drawerSubject()) + " on " + A.curDrawerTab());
+  A.closeDrawer();
+
+  // THE SELECTION DEMO. The demo zooms to the demo survey,
+  // draws a rectangle over it and selects what falls inside. Three properties are pinned.
+  //
+  // (1) THE INSTANT PATH. Reduced motion, and any environment with no frame clock to rely on, skip straight
+  //     to the end state. That is the path the walk pins drive, so it has to be complete on its own: the
+  //     rectangle applied through the same seam a hand-drawn shape uses, the selection equal to the
+  //     rectangle's membership, and the copy printing the count that selection actually has.
+  // (2) THE ANIMATED PATH reaches the SAME end state. Driven in a fresh window with a real frame clock and
+  //     a bounded wait, so a demo that never completes fails instead of hanging.
+  // (3) A CANCEL mid-animation leaves nothing behind: no pending frame, no pending timer, no cursor glyph
+  //     and no preview layer. Interrupting the tour must not leave a loop running against a torn-down step.
+  const _demoBounds = A.tourDemoBounds();
+  ok(_demoBounds && _demoBounds.south < _demoBounds.north && _demoBounds.west < _demoBounds.east,
+    "demo: the demo survey must yield a padded rectangle, got " + JSON.stringify(_demoBounds));
+  const _wantMembers = A.tourRectMembers(_demoBounds).slice().sort();
+  ok(_wantMembers.length === 2,
+    "demo: the fixture's demo survey has two positioned stations, so the padded rectangle must take both, got " +
+    JSON.stringify(_wantMembers));
+  doc.getElementById("clearSel").click();
+  _stepTo(7);
+  ok(A.tourStep() === 7, "demo: could not reach the selection-demo step, at " + A.tourStep());
+  ok(A.selCount() === _wantMembers.length,
+    "demo: the instant path must leave the rectangle's membership selected, got " + A.selCount() +
+    " against " + JSON.stringify(_wantMembers));
+  ok(A.sidebarMode() === "select", "demo: the demo must leave the rail in Select & download");
+  const _demoCopy = doc.getElementById("tourText").textContent;
+  ok(_demoCopy.indexOf(A.tourDemoSurvey()) >= 0,
+    "demo: the copy must name the RESOLVED survey, got " + JSON.stringify(_demoCopy));
+  ok(_demoCopy.indexOf("- " + _wantMembers.length + " here") >= 0,
+    "demo: the copy must print the count the selection actually has, got " + JSON.stringify(_demoCopy));
+  ok(_demoCopy.indexOf("{") < 0, "demo: no placeholder may survive into the rendered copy, got " + JSON.stringify(_demoCopy));
+  // IDEMPOTENCE: leaving the step and returning must not re-run the demo or change the end state.
+  _arrow("ArrowRight"); _arrow("ArrowLeft");
+  ok(A.tourStep() === 7 && A.selCount() === _wantMembers.length,
+    "demo: re-entering the demo step must be a no-op, selection is now " + A.selCount());
+  // The download steps RE-CREATE the demo without animation when they are reached with none present.
+  _arrow("Escape");
+  _stepTo(9);
+  ok(A.tourStep() === 9 && A.selCount() === _wantMembers.length,
+    "demo: arriving at the time-series step must ensure the demo selection, got " + A.selCount());
+  // OUTSIDE the group the demo is gone: the group owns it, and the boundary is where it is cleared.
+  _arrow("ArrowRight");
+  ok(A.tourStep() === 10 && A.selCount() === 0,
+    "demo: leaving the select group must clear the demo selection, got " + A.selCount());
+  _arrow("Escape");
+
+  // (2) + (3): a fresh window, whose frame clock is the real one (the driver's own is parked so the
+  // deferred map re-fit can be observed) and whose tour therefore takes the ANIMATED path.
+  const animWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html?tour=1");
+  const animA = animWin.__api;
+  ok(animA.tourStep() === 0, "demo/anim: ?tour=1 did not start the tour, at " + animA.tourStep());
+  for (let k = 0; k < 7; k++) animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  ok(animA.tourStep() === 7, "demo/anim: could not reach the selection-demo step, at " + animA.tourStep());
+  const _animT0 = Date.now();
+  ok(animA.tourAnimPending().running === true,
+    "demo/anim: the demo must be running with a frame or timer pending, got " + JSON.stringify(animA.tourAnimPending()));
+  const _wantAnim = animA.tourRectMembers(animA.tourDemoBounds()).length;
+  // The count is a fact about the RECTANGLE, and the rectangle's bounds are known before it is drawn. The
+  // copy must therefore state it from the first frame: counting up from a zero that is only true while the
+  // shape is still growing tells the reader the demo selected nothing for as long as it runs.
+  ok(animWin.document.getElementById("tourText").textContent.indexOf("- " + _wantAnim + " here") >= 0,
+    "demo/anim: the copy must state the rectangle's count while the animation is still running, got " +
+    JSON.stringify(animWin.document.getElementById("tourText").textContent));
+  const _deadline = Date.now() + 8000;
+  while (animA.selCount() !== _wantAnim && Date.now() < _deadline) await new Promise(r => setTimeout(r, 40));
+  const _animMs = Date.now() - _animT0;                  // the demo's real end-to-end cost on this machine
+  ok(animA.selCount() === _wantAnim,
+    "demo/anim: the animated path must reach the same end state within the bound, selection is " + animA.selCount());
+  ok(animA.tourStepText(7).indexOf("- " + _wantAnim + " here") >= 0,
+    "demo/anim: the copy must print the animated demo's own count, got " + JSON.stringify(animA.tourStepText(7)));
+  // (3) CANCEL: restart, reach the demo step and step away immediately.
+  animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "Escape" }));
+  animA.startTour();
+  for (let k = 0; k < 7; k++) animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  ok(animA.tourAnimPending().running === true, "demo/cancel: setup must catch the demo mid-flight");
+  animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "ArrowLeft" }));
+  const _pend = animA.tourAnimPending();
+  ok(_pend.raf === false && _pend.timers === 0 && _pend.cursor === false && _pend.layer === false,
+    "demo/cancel: stepping away mid-animation must leave no frame, timer, cursor or preview layer, got " +
+    JSON.stringify(_pend));
+  ok(!animWin.document.getElementById("tourCursor"),
+    "demo/cancel: the cursor glyph must be removed from the document when the animation is cancelled");
+  // Read in the same tick as the interrupt, that registry proves too little: a cancel that emptied the
+  // arrays without stopping what they held reads exactly as clean as one that stopped everything. So the
+  // registry is read AGAIN after twice the demo's own duration, by which time any frame or timer
+  // the cancel failed to stop has had every chance to fire and re-arm the phase after it. The destination
+  // step's own state is read with it, because the loudest way a survivor announces itself is not a dirty
+  // registry at all: it is the demo's rectangle and selection landing on a step that never asked for them.
+  // The sequence bump is the defence this pin proves: a callback that survives cancellation, checks the
+  // sequence and returns is harmless by design, so a cancel that keeps the sequence bump but forgets
+  // its timer handles passes here, and that is the intended reading, not a gap.
+  const _afterCancel = { step: animA.tourStep(), sel: animA.selCount() };
+  await new Promise(r => setTimeout(r, Math.max(1200, _animMs * 2 + 400)));
+  const _late = animA.tourAnimPending();
+  ok(_late.raf === false && _late.timers === 0 && _late.cursor === false && _late.layer === false,
+    "demo/cancel: a frame or timer the cancel dropped instead of stopping has re-armed the animation, got " +
+    JSON.stringify(_late));
+  ok(!animWin.document.getElementById("tourCursor"),
+    "demo/cancel: the cancelled animation put its cursor glyph back into the document");
+  ok(animA.tourStep() === _afterCancel.step && animA.selCount() === _afterCancel.sel,
+    "demo/cancel: a surviving timer applied the demo to the step the walk moved to; step " +
+    animA.tourStep() + "/" + _afterCancel.step + ", selection " + animA.selCount() + "/" + _afterCancel.sel);
+  animWin.document.dispatchEvent(new animWin.KeyboardEvent("keydown", { key: "Escape" }));
+  ok(animA.tourAnimPending().running === false, "demo/cancel: closing the tour must leave nothing pending");
+
+  // (1b) REDUCED MOTION is the other half of the instant gate, and it is a real reader setting rather than a
+  // harness flag, so it is driven as one: a fresh window whose matchMedia answers the reduce query. The demo
+  // must reach its end state with NOTHING scheduled - a reader who has asked for no motion must not be given
+  // a two-second animation with the frames merely stripped out.
+  const rmWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html", w => {
+    w.matchMedia = q => ({ matches: /prefers-reduced-motion/.test(q), media: q,
+      addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+  });
+  const rmA = rmWin.__api;
+  rmA.startTour();
+  for (let k = 0; k < 7; k++) rmWin.document.dispatchEvent(new rmWin.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  ok(rmA.tourStep() === 7, "demo/reduced-motion: could not reach the selection-demo step, at " + rmA.tourStep());
+  const _wantRm = rmA.tourRectMembers(rmA.tourDemoBounds()).length;
+  ok(rmA.selCount() === _wantRm,
+    "demo/reduced-motion: the end state must be present without waiting for anything, selection is " + rmA.selCount());
+  ok(rmA.tourAnimPending().running === false,
+    "demo/reduced-motion: no frame or timer may be scheduled, got " + JSON.stringify(rmA.tourAnimPending()));
+  ok(!rmWin.document.getElementById("tourCursor"),
+    "demo/reduced-motion: no cursor glyph may be created when the motion was declined");
+  rmWin.document.dispatchEvent(new rmWin.KeyboardEvent("keydown", { key: "Escape" }));
+
+  // (1d) THE RECTANGLE'S NEIGHBOURS. The copy says every station inside the rectangle is selected, and a
+  // reader looking at ONE survey framed on the map reads that number as that survey's own. A margin wide
+  // enough to reach the sites of the survey next door makes the sentence true and the reading wrong. So the
+  // margin is the LARGEST one, up to the full pad and never below the floor, that admits no station of any
+  // other survey. Where even the floor admits one, the rectangle keeps it and the copy prints the membership
+  // it actually has: a rectangle drawn on the map whose stated count is not its contents is the worse
+  // failure of the two. Both branches are driven on a corpus doctored ONE station at a time, so the geometry
+  // is the only thing that differs from the fixture the rest of this file drives.
+  const _nbCSv = win.CAT_COLUMNS.indexOf("survey"), _nbCLat = win.CAT_COLUMNS.indexOf("lat"),
+    _nbCLon = win.CAT_COLUMNS.indexOf("lon"), _nbCId = win.CAT_COLUMNS.indexOf("id");
+  const _nbSv = A.tourDemoSurvey();
+  const _nbLats = DATAMAP["data/catalogue.json"].filter(r => r[_nbCSv] === _nbSv).map(r => r[_nbCLat]);
+  const _nbS = Math.min(..._nbLats), _nbN = Math.max(..._nbLats);
+  // Plant one station of ANOTHER survey at a chosen latitude, in the middle of the demo survey's longitude
+  // range so the latitude alone decides whether the rectangle takes it. Row ORDER is preserved, so the
+  // parallel tf/sci products still line up with the catalogue they are indexed against.
+  const _nbPlant = (lat) => {
+    const cat = JSON.parse(JSON.stringify(DATAMAP["data/catalogue.json"]));
+    const row = cat.find(r => r[_nbCSv] !== _nbSv && r[_nbCLat] !== null);
+    row[_nbCLat] = lat; row[_nbCLon] = (_demoBounds.west + _demoBounds.east) / 2;
+    return { map: Object.assign({}, DATAMAP, { "data/catalogue.json": cat }),
+      id: row[_nbCId], survey: row[_nbCSv], lat: lat };
+  };
+  const _nbInstant = w => { w.AUSMT_TOUR_INSTANT = true; };
+  const _nbToDemo = (w) => { w.__api.startTour();
+    for (let k = 0; k < 7; k++) w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "ArrowRight" })); };
+
+  // BAND: a neighbour between the demo survey's own northern edge and the fully padded edge. The full pad
+  // takes it; a margin that stops short of it does not, and the count stays the survey's own.
+  const _nbBand = _nbPlant((_nbN + _demoBounds.north) / 2);
+  const _bandWin = await bootFreshWindow(_nbBand.map, "http://localhost/index.html", _nbInstant);
+  const _bandA = _bandWin.__api;
+  ok(_bandA.tourDemoSurvey() === _nbSv,
+    "neighbours/band: setup, the doctored corpus must still resolve the same demo survey, got " + _bandA.tourDemoSurvey());
+  ok(_bandA.visIds().indexOf(_nbBand.id) >= 0,
+    "neighbours/band: setup, the planted station must be ON the map, or there is nothing for the rectangle to exclude");
+  const _bandB = _bandA.tourDemoBounds();
+  ok(_bandB.north < _nbBand.lat,
+    "neighbours/band: the rectangle must stop short of the neighbour; its north edge is " + _bandB.north +
+    " and the neighbour sits at " + _nbBand.lat);
+  ok(_bandB.south <= _nbS && _bandB.north >= _nbN,
+    "neighbours/band: the rectangle must still contain the demo survey's own extent, got " + JSON.stringify(_bandB));
+  ok(_bandA.tourRectMembers(_bandB).length === _nbLats.length,
+    "neighbours/band: the rectangle must take the demo survey's own stations and nothing else, got " +
+    _bandA.tourRectMembers(_bandB).length + " against " + _nbLats.length);
+  _nbToDemo(_bandWin);
+  ok(_bandA.selCount() === _nbLats.length,
+    "neighbours/band: the demo must leave the survey's own stations selected, got " + _bandA.selCount());
+  ok(_bandWin.document.getElementById("tourText").textContent.indexOf("- " + _nbLats.length + " here") >= 0,
+    "neighbours/band: the copy must print the survey's own count, got " +
+    JSON.stringify(_bandWin.document.getElementById("tourText").textContent));
+  _bandWin.document.dispatchEvent(new _bandWin.KeyboardEvent("keydown", { key: "Escape" }));
+
+  // FLOOR: a neighbour INSIDE the demo survey's own extent. No margin excludes it, so the smallest rectangle
+  // the rule allows is the one that stands, and what it took is what the copy says.
+  const _nbInside = _nbPlant((_nbS + _nbN) / 2);
+  const _insideWin = await bootFreshWindow(_nbInside.map, "http://localhost/index.html", _nbInstant);
+  const _insideA = _insideWin.__api;
+  ok(_insideA.tourDemoSurvey() === _nbSv,
+    "neighbours/floor: setup, the doctored corpus must still resolve the same demo survey, got " + _insideA.tourDemoSurvey());
+  const _insideB = _insideA.tourDemoBounds();
+  ok(_insideB.north - _nbN < _demoBounds.north - _nbN,
+    "neighbours/floor: a rectangle that cannot exclude the neighbour must still shrink to the smallest the " +
+    "rule allows; its margin is " + (_insideB.north - _nbN) + " against the full " + (_demoBounds.north - _nbN));
+  ok(_insideA.tourRectMembers(_insideB).length === _nbLats.length + 1,
+    "neighbours/floor: the rectangle takes the neighbour it cannot exclude, got " +
+    _insideA.tourRectMembers(_insideB).length);
+  _nbToDemo(_insideWin);
+  ok(_insideA.selCount() === _nbLats.length + 1,
+    "neighbours/floor: the selection must be the rectangle's whole membership, got " + _insideA.selCount());
+  ok(_insideWin.document.getElementById("tourText").textContent.indexOf("- " + (_nbLats.length + 1) + " here") >= 0,
+    "neighbours/floor: the copy must print the membership the rectangle actually has, got " +
+    JSON.stringify(_insideWin.document.getElementById("tourText").textContent));
+  _insideWin.document.dispatchEvent(new _insideWin.KeyboardEvent("keydown", { key: "Escape" }));
+
+  // THE DOWNLOAD BLOCK, SPLIT IN TWO. One step over the whole block would
+  // say one sentence about four different things: zips AusMT serves and lists
+  // NCI holds are not the same offer and do not arrive the same way. The block is spotlit in two parts,
+  // which needs two wrappers to point at. They are MARKUP ONLY: no class, no inline style and no rule of
+  // their own, so the block renders unchanged.
+  const _dl2 = doc.getElementById("dlLevel2"), _dlTs = doc.getElementById("dlTimeSeries");
+  ok(_dl2 && _dlTs, "download split: both wrappers must exist (#dlLevel2, #dlTimeSeries)");
+  ok(_dl2.closest(".dlbox") && _dlTs.closest(".dlbox"),
+    "download split: both wrappers must live inside the download block, not beside it");
+  ok(_dl2.querySelector(".sechead") && /Level 2/.test(_dl2.querySelector(".sechead").textContent),
+    "download split: the Level 2 wrapper must carry the Level 2 heading");
+  ["dlZip", "dlZipXml", "dlZipH5"].forEach(id => ok(_dl2.querySelector("#" + id),
+    "download split: #" + id + " must sit inside the Level 2 wrapper"));
+  ok(!_dl2.querySelector("#tsSeg"), "download split: the time-series rows must NOT sit inside the Level 2 wrapper");
+  ok(_dlTs.querySelector(".sechead") && /Time series/.test(_dlTs.querySelector(".sechead").textContent),
+    "download split: the time-series wrapper must carry the Time series heading");
+  ok(_dlTs.querySelector("#tsSeg") && _dlTs.querySelector("#tsSegNote"),
+    "download split: the time-series rows and their note must sit inside the time-series wrapper");
+  ["class", "style"].forEach(a => ok(!_dl2.getAttribute(a) && !_dlTs.getAttribute(a),
+    "download split: the wrappers are markup only; a " + a + " attribute would change the block's rendering"));
+  ok(!/#dlLevel2|#dlTimeSeries/.test(_sheet),
+    "download split: no stylesheet rule may name the wrappers; they exist to be pointed at, not to style");
+  ok(A.tourStepSel(8) === "#dlLevel2" && A.tourStepSel(9) === "#dlTimeSeries",
+    "download split: the two download steps must point at one wrapper each, got " +
+    JSON.stringify([A.tourStepSel(8), A.tourStepSel(9)]));
+
+  // THE WALK, BOTH DIRECTIONS. Every step's enter() has to establish its COMPLETE state from either
+  // direction, which is a claim about the whole deck and cannot be checked one step at a time: the failures
+  // it exists to catch are the ones where a step is only correct because of what the PREVIOUS step happened
+  // to leave behind. So the whole deck is walked forward and then backward, its length read from the deck
+  // itself, and at every arrival, in both directions, the same predicates are checked against the same
+  // table: the view, the rail mode, the drawer's subject and tab, the selection, the card layout, and that
+  // the step's own target resolves to something on screen.
+  //
+  // jsdom has no layout engine, so "the target has a non-zero rect" is checked here as "the target resolves
+  // and nothing between it and the body is hidden" - which is the CAUSE of a zero rect for every step in
+  // this deck (a view that is not showing, a rail pane in the other mode, a drawer tab panel that is not
+  // the active one). The measured-rect half of that proof is a browser run.
+  const _visibleTarget = (el) => {
+    if (!el) return false;
+    for (let n = el; n && n !== doc.body; n = n.parentElement) {
+      if (n.classList && n.classList.contains("hidden")) return false;
+      if (n.style && n.style.display === "none") return false;
+      if (n.hasAttribute && n.hasAttribute("hidden")) return false;
+    }
+    return true;
+  };
+  // A CLEAN pre-tour state, so the predicates below read as the deck's own doing and not as a baseline
+  // showing through. (The snapshot matrix above is where a distinctive baseline is exercised.)
+  A.closeDrawer();
+  A.setSidebarMode("browse");
+  doc.querySelector('#layoutSeg [data-layout="cards"]').click();
+  doc.getElementById("clearSel").click();
+  doc.getElementById("advSearch").open = false;
+  const _walkBase = _tourSnapRead();
+  const _walkSel = A.tourRectMembers(A.tourDemoBounds()).length;
+  ok(_walkSel > 0, "walk setup: the demo rectangle must take at least one station, got " + _walkSel);
+  // The expectation table. Written as ranges, so it states the GROUPS rather than restating each step.
+  // Step 6 is the one entry whose expectation is direction-dependent, and deliberately so. It opens the
+  // select group, and its own picture is an UNSELECTED map ("draw an area, or take everything that passes
+  // the filters"), so it creates no demo: arriving forward there is nothing selected yet. Arriving
+  // backward the group still owns the demo the next step made, and clearing it here would be a group
+  // teardown performed inside the group, which is exactly what the group discipline exists to prevent.
+  // The map view and the visitor's card layout are CONSTANTS across the whole walk, and that is the point:
+  // the two nav steps spotlight the Surveys and Collections buttons without pressing them, so no step of
+  // the deck navigates and no step touches the Surveys grid's layout control.
+  //
+  // Advanced search is in the table because the accordion is exactly where a direction bug hides. The
+  // filter step opens it and no later step closes it, so from step 2 on it is open whichever way the walk
+  // arrived. Step 1 is the one that has to say so itself: inherit the accordion from whichever neighbour
+  // the walk came from and the opening step reads one way forward and another way backward.
+  const _expect = (i, dir) => ({
+    view: "map",
+    adv: i !== 0,
+    mode: (i >= 1 && i <= 3) ? "browse" : ((i >= 6 && i <= 9) ? "select" : _walkBase.mode),
+    drawer: (i === 4 || i === 5) ? "station" : "closed",
+    tab: i === 5 ? "files" : (i === 4 ? "response" : null),
+    selected: (i >= 7 && i <= 9) ? _walkSel : (i === 6 ? (dir === "back" ? _walkSel : 0) : 0),
+    layout: _walkBase.layout,
+  });
+  const _checkStep = (i, dir) => {
+    const e = _expect(i, dir), at = "walk/" + dir + " step " + i;
+    ok(A.tourStep() === i, at + ": the walk is at " + A.tourStep());
+    ok(A.curView() === e.view, at + ": view must be " + e.view + ", on " + A.curView());
+    ok(A.sidebarMode() === e.mode, at + ": rail mode must be " + e.mode + ", on " + A.sidebarMode());
+    ok(doc.getElementById("advSearch").open === e.adv,
+      at + ": Advanced search must be " + (e.adv ? "open" : "closed") +
+      ", it is " + (doc.getElementById("advSearch").open ? "open" : "closed"));
+    const open = doc.getElementById("drawer").classList.contains("open");
+    if (e.drawer === "closed") {
+      ok(!open, at + ": the drawer must be closed, subject " + JSON.stringify(A.drawerSubject()));
+    } else {
+      const want = { kind: "station", i: A.stIndex("A1") };
+      ok(open, at + ": the drawer must be open on the " + e.drawer);
+      ok(JSON.stringify(A.drawerSubject()) === JSON.stringify(want),
+        at + ": drawer subject must be " + JSON.stringify(want) + ", got " + JSON.stringify(A.drawerSubject()));
+    }
+    if (e.tab) ok(A.curDrawerTab() === e.tab, at + ": drawer tab must be " + e.tab + ", on " + A.curDrawerTab());
+    ok(A.selCount() === e.selected, at + ": selection must be " + e.selected + ", got " + A.selCount());
+    ok(_layoutNow() === e.layout, at + ": card layout must be " + e.layout + ", on " + _layoutNow());
+    ok(_visibleTarget(A.tourTargetEl()),
+      at + ": the target " + A.tourStepSel(i) + " must resolve to an element that is on screen");
+    ok(doc.getElementById("tourStepLabel").textContent === "Step " + (i + 1) + " of " + A.tourStepCount(),
+      at + ": the label must read the computed position, got " + doc.getElementById("tourStepLabel").textContent);
+    ok(doc.getElementById("tourText").textContent.indexOf("{") < 0,
+      at + ": no placeholder may survive into the rendered copy, got " + doc.getElementById("tourText").textContent);
+  };
+  const _last = A.tourStepCount() - 1;
+  // FORWARD, first step to last.
+  doc.getElementById("welcomeTour").click();
+  for (let i = 0; i <= _last; i++) { _checkStep(i, "fwd"); if (i < _last) _arrow("ArrowRight"); }
+  ok(doc.getElementById("tourNext").textContent === "Done", "walk/fwd: the last step's advance control must read Done");
+  ok(doc.getElementById("tourBack").disabled === false, "walk/fwd: Back must be live on the last step");
+  _arrow("Escape");
+  ok(_tourSnapDiff(_walkBase, _tourSnapRead()).length === 0,
+    "walk/fwd: closing after the forward walk did not restore the baseline: " +
+    _tourSnapDiff(_walkBase, _tourSnapRead()).join("; "));
+  // BACKWARD, last step to first. The same table, so a step that is only correct arriving forward
+  // fails here.
+  doc.getElementById("welcomeTour").click();
+  for (let k = 0; k < _last; k++) _arrow("ArrowRight");
+  for (let i = _last; i >= 0; i--) { _checkStep(i, "back"); if (i > 0) _arrow("ArrowLeft"); }
+  ok(doc.getElementById("tourBack").disabled === true, "walk/back: Back must be disabled on the first step");
+  ok(doc.getElementById("tourNext").textContent === "Next", "walk/back: the advance control must read Next off the last step");
+  _arrow("Escape");
+  ok(_tourSnapDiff(_walkBase, _tourSnapRead()).length === 0,
+    "walk/back: closing after the backward walk did not restore the baseline: " +
+    _tourSnapDiff(_walkBase, _tourSnapRead()).join("; "));
+
+  // TARGETS THAT LIVE IN A SCROLLING CONTAINER. The rail and the drawer scroll, and a step whose target
+  // has scrolled out of its container's visible area is measured where it is not: the spotlight clamps onto
+  // empty space and the reader is shown nothing while the copy talks about a control they cannot see. The
+  // tree step already brought its row into view; the rule is general, so every target that sits inside a
+  // scrolling container is brought into view before it is measured, and no other target is touched.
+  //
+  // jsdom has no layout engine, so what is pinned here is the CALL: which targets get one and which do not
+  // is the whole rule, and it is checked at every step in BOTH directions, because a step that only scrolls
+  // when the walk arrives forward is exactly the failure the rule is for. The measured half of the proof is
+  // a browser run at a viewport small enough to push the rail's lower controls out of sight.
+  const _svWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html", _nbInstant);
+  const _svA = _svWin.__api, _svDoc = _svWin.document;
+  let _svCalls = [];
+  _svWin.Element.prototype.scrollIntoView = function (opts) { _svCalls.push({ el: this, opts: opts }); };
+  const _svArrow = (key) => _svDoc.dispatchEvent(new _svWin.KeyboardEvent("keydown", { key }));
+  // The deck's targets that sit INSIDE one of the two scrolling containers, written out rather than derived,
+  // so this states the expectation instead of re-running the rule the code follows. A container is not on
+  // the list: scrolling a scroller into view scrolls the page it sits on, not the scroller's own content.
+  const _svInside = ["#find", "#browseMode", "#dp-files", ".selbox", "#dlLevel2", "#dlTimeSeries"];
+  const _svCheck = (i, dir) => {
+    const sel = _svA.tourStepSel(i), at = "scroll/" + dir + " step " + i + " (" + sel + ")";
+    const target = _svA.tourTargetEl();
+    ok(target, at + ": the target must resolve, or this step proves nothing about scrolling it");
+    const hit = _svCalls.filter(c => c.el === target);
+    if (_svInside.indexOf(sel) >= 0) {
+      ok(hit.length === 1,
+        at + ": a target inside a scrolling container must be brought into view exactly once on arrival, got " +
+        hit.length + " calls");
+      ok(hit.length === 1 && hit[0].opts && hit[0].opts.block === "nearest",
+        at + ": the scroll must be the minimal one that makes the target visible, got " +
+        JSON.stringify(hit.length === 1 ? hit[0].opts : null));
+    } else {
+      ok(hit.length === 0,
+        at + ": a target outside every scrolling container must not be scrolled, got " + hit.length + " calls");
+    }
+  };
+  const _svLast = _svA.tourStepCount() - 1;
+  _svCalls = []; _svA.startTour(); _svCheck(0, "fwd");
+  for (let i = 1; i <= _svLast; i++) { _svCalls = []; _svArrow("ArrowRight"); _svCheck(i, "fwd"); }
+  for (let i = _svLast - 1; i >= 0; i--) { _svCalls = []; _svArrow("ArrowLeft"); _svCheck(i, "back"); }
+  _svArrow("Escape");
+  ok(_svA.tourStep() === -1, "scroll: the walk must close cleanly, at " + _svA.tourStep());
 
   // The tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
@@ -1723,32 +2302,98 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // an unhidden pane is exactly what gives .selbox a nonzero rect and thus its spotlight), and leaving
   // it must restore the visitor's prior mode on ALL exit paths (forward, back, close) — the same
   // three-path restore discipline the Find/tree demo steps pin above.
+  // The select steps are a GROUP of four (selbox, the selection demo, Level 2, time series), and the rail
+  // mode belongs to the GROUP rather than to any one of them: it is captured on entering the group and
+  // restored only when the walk leaves it. So a move INSIDE the group must not restore the visitor's mode,
+  // and the restore is asserted at the group boundary rather than after any single step.
+  const _SELG = [6, 7, 8, 9];
   A.setSidebarMode("browse");
   doc.getElementById("welcomeTour").click();                              // step index 0
-  for (let k = 0; k < 5; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); // -> index 5 (.selbox)
-  ok(A.tourStep() === 5, "tour: ArrowRight x5 did not reach the selbox step, at step " + A.tourStep());
-  ok(A.sidebarMode() === "select", "tour: the selbox step did not switch the rail to Select & export");
+  for (let k = 0; k < _SELG[0]; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  ok(A.tourStep() === _SELG[0], "tour select group: ArrowRight x" + _SELG[0] + " did not reach the selbox step, at step " + A.tourStep());
+  ok(A.tourStepSel(_SELG[0]) === ".selbox", "tour select group: the select group must open on .selbox, got " + A.tourStepSel(_SELG[0]));
+  ok(A.sidebarMode() === "select", "tour select group: the selbox step did not switch the rail to Select & download");
   ok(!doc.getElementById("selectMode").classList.contains("hidden"),
     "tour: the Select pane (the selbox target's mode container) is still hidden on the selbox step");
   ok(!doc.querySelector(".selbox").closest("section").classList.contains("hidden"),
-    "tour: the selbox's own section is hidden on the selbox step (map view not forced?)");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD -> index 6 (.dlbox)
-  ok(A.tourStep() === 6, "tour: could not step forward off the selbox step");
-  ok(A.sidebarMode() === "select",
-    "tour: the Download step lives in the same Select pane and must keep the mode");
+    "tour select group: the selbox's own section is hidden on the selbox step (map view not forced?)");
+  // Every remaining member of the group keeps the mode: the group owns it, so no move inside it restores.
+  for (let k = 1; k < _SELG.length; k++) {
+    win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+    ok(A.tourStep() === _SELG[k], "tour select group: could not step forward to select-group step " + _SELG[k] + ", at " + A.tourStep());
+    ok(A.sidebarMode() === "select",
+      "tour select group: step " + _SELG[k] + " lives in the same Select pane and must keep the mode");
+  }
   ok(!doc.querySelector(".dlbox").closest("section").classList.contains("hidden"),
-    "tour: the Download block's section is hidden on its own step");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD exit -> index 7
-  ok(A.tourStep() === 7, "tour: could not step forward off the Download step");
-  ok(A.sidebarMode() === "browse", "tour: leaving the Select-pane steps did not restore the Browse mode");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK -> index 6 again
-  ok(A.tourStep() === 6 && A.sidebarMode() === "select",
-    "tour: re-entering the Download step backwards did not re-switch the mode");
+    "tour select group: the Download block's section is hidden on the download steps");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD out of the group
+  ok(A.tourStep() === _SELG[_SELG.length - 1] + 1, "tour select group: could not step forward off the last select-group step");
+  ok(A.sidebarMode() === "browse", "tour select group: leaving the select group did not restore the Browse mode");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK into the group
+  ok(A.tourStep() === _SELG[_SELG.length - 1] && A.sidebarMode() === "select",
+    "tour select group: re-entering the select group backwards did not re-switch the mode");
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));       // CLOSE from the step
-  ok(A.tourStep() === -1, "tour: Esc from the Download step did not close the tour");
-  ok(A.sidebarMode() === "browse", "tour: mid-tour close did not restore the Browse mode");
+  ok(A.tourStep() === -1, "tour select group: Esc from a select-group step did not close the tour");
+  ok(A.sidebarMode() === "browse", "tour select group: mid-tour close did not restore the Browse mode");
 
-  // I. EMPTY-STATE fixture: the welcome POPUP must still show on first visit (it explains the
+  // THE PRE-TOUR SNAPSHOT. The tour opens drawers, switches rail modes, draws a shape and makes a
+  // selection. Closing it from ANY step must hand the visitor back exactly the workspace they had, field
+  // for field: nothing the tour did may leak. That is stronger than "undo only what the tour opened",
+  // which can put back a drawer, a hash and a collapsed rail and has nothing to say about a selection a
+  // filter change silently dropped or a map frame a fit moved.
+  //
+  // Driven as a MATRIX: a distinctive pre-tour state is built, its every field read, and then for EVERY step
+  // the tour is opened, walked to that step and closed - so a step that establishes state without a
+  // corresponding restore fails at the step that introduced it, not at whichever step happens to run last.
+  // Walk to `step` from a fresh tour and close with Esc. Returns the state the visitor is handed back.
+  const _tourCloseFrom = (step) => {
+    doc.getElementById("welcomeTour").click();
+    for (let k = 0; k < step; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+    ok(A.tourStep() === step, "snapshot: could not walk to step " + step + ", at " + A.tourStep());
+    win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
+    ok(A.tourStep() === -1, "snapshot: Esc from step " + step + " did not close the tour");
+    return _tourSnapRead();
+  };
+
+  // BASELINE A: a working map session. Select & download mode, Advanced search open, the compact card
+  // layout chosen, and a live selection with no drawn shape - every one of which a tour step overwrites.
+  A.setSidebarMode("select");
+  doc.getElementById("advSearch").open = true;
+  doc.querySelector('#layoutSeg [data-layout="compact"]').click();
+  doc.getElementById("selAll").click();
+  const _baseA = _tourSnapRead();
+  ok(_baseA.mode === "select" && _baseA.adv === true && _baseA.layout === "compact" && _baseA.selected > 0,
+    "snapshot setup A: the pre-tour state must be distinctive, got " + JSON.stringify(_baseA));
+  for (let s = 0; s < A.tourStepCount(); s++) {
+    const back = _tourCloseFrom(s);
+    ok(_tourSnapDiff(_baseA, back).length === 0,
+      "snapshot A: closing from step " + s + " did not restore the visitor's workspace: " +
+      _tourSnapDiff(_baseA, back).join("; "));
+  }
+
+  // BASELINE B: a reading session. Browse mode, a station drawer open on a NON-default tab, the cards
+  // layout, no selection. The tour opens its own station on the Response tab and closes the drawer for the
+  // selection demo, so both the subject and the tab have to come back.
+  doc.getElementById("clearSel").click();
+  A.setSidebarMode("browse");
+  doc.getElementById("advSearch").open = false;
+  doc.querySelector('#layoutSeg [data-layout="cards"]').click();
+  A.openStation(A.stIndex("A1"));
+  A.selectDrawerTab("cite");
+  const _baseB = _tourSnapRead();
+  ok(_baseB.drawerOpen === true && _baseB.drawerTab === "cite" && _baseB.mode === "browse" &&
+     _baseB.layout === "cards" && _baseB.selected === 0,
+    "snapshot setup B: the pre-tour state must be distinctive, got " + JSON.stringify(_baseB));
+  for (let s = 0; s < A.tourStepCount(); s++) {
+    const back = _tourCloseFrom(s);
+    ok(_tourSnapDiff(_baseB, back).length === 0,
+      "snapshot B: closing from step " + s + " did not restore the visitor's reading state: " +
+      _tourSnapDiff(_baseB, back).join("; "));
+  }
+  A.closeDrawer();                                   // hand the world back to the sections below
+  ok(!doc.getElementById("drawer").classList.contains("open"), "snapshot: could not shut the drawer after the matrix");
+
+  // EMPTY-STATE fixture: the welcome POPUP must still show on first visit (it explains the
   // portal even before any survey exists) and boot must not crash. A fresh window/localStorage so "first
   // visit" is genuine.
   const emptyWin = await bootFreshWindow({
@@ -4941,7 +5586,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     ok(!selectedBy(s, false), "LINKCSS: the muted state text must not be painted the link accent");
   });
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-off-the-SPA, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse demo-survey-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-off-the-SPA, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
