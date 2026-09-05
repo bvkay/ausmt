@@ -579,7 +579,7 @@ def test_list_rows_assemble_and_blank_rows_dropped():
 
 def test_list_partial_row_kept_with_nulls():
     """A partially-filled row is kept with the empty sub-fields as null. FAILS IF a partial row is
-    dropped (losing curator input). IDCONS instruments[].pid is RETIRED from the row widgets, so a
+    dropped (losing curator input). The instruments[].pid sub-key is RETIRED from the row widgets, so a
     stray l_instruments_0_pid input is IGNORED - the assembled row carries only the modelled sub-keys."""
     form = {
         "l_instruments_0_manufacturer": "Phoenix",

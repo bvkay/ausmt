@@ -351,8 +351,8 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "tourSettleEl:()=>_tourSettleEl&&_tourSettleEl.id,tourLayoutRuns:()=>_tourLayoutRuns," +
   "tourSettling:()=>_tourSettleRAF!==0," +   // whether a poll frame is still pending (true=watching, false=stood down/detached)
   // Welcome-popup helpers: showWelcome/closeWelcome drive the first-visit modal directly (the
-  // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). the
-  // side-picking _tourPlace is retired for a CENTRED card + a LEADER to the spotlight. _tourCardBox is the
+  // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). The side-picking
+  // _tourPlace is retired for a CENTRED card + a LEADER to the spotlight. _tourCardBox is the
   // PURE centred-card box (with the overlap nudge) and _tourLeader the PURE leader geometry (endpoints +
   // suppression) - both unit-tested with synthetic rects since jsdom has no layout engine. TOUR_DIM is
   // the overlay alpha (the load-bearing 'increased dim' value).
@@ -2947,7 +2947,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("clearSel").click();
   A.setSidebarMode("browse");
 
-  // X. the draw-created selection toast + its pure formatter. drawSelectionMsg pins
+  // X. The draw-created selection toast + its pure formatter. drawSelectionMsg pins
   // the exact copy (singular/plural, the word 'stations' — never 'sites' — and the shape word).
   // onDrawCreated fires the toast with the freshly computed count and auto-switches to Select.
   ok(A.drawSelectionMsg(2, "polygon") === "2 stations selected within polygon",
@@ -3042,7 +3042,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!aside.classList.contains("collapsed"), "a second click did not expand the rail");
   ok(win.localStorage.getItem("ausmt_sidebar_collapsed") === "0", "expanded state was not persisted");
 
-  // AA. the static map legend: a coloured dot per data type and nothing else, the dots
+  // AA. The static map legend: a coloured dot per data type and nothing else, the dots
   // reading the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (a hard-coded hex would fail).
   const legend = doc.getElementById("mapLegend");
   ok(legend, "#mapLegend was not built");

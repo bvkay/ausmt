@@ -6,7 +6,7 @@ round-trip for every served station, even when a one-line survey.yaml edit chang
 those stations. This module is a content-addressed cache of the two expensive per-station products
 so an incremental rebuild skips the parse and the round-trip for unchanged stations.
 
-The invariants this module upholds:
+Design: maintainer/C18-BuildCacheDesign.md. The invariants this module upholds:
 
   * The cache may only ever change build SPEED, never output bytes. `scripts/verify.py` stays full,
     byte-re-hashing and cache-blind; a warm build is byte-identical to the build that populated its

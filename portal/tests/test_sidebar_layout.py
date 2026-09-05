@@ -5,16 +5,16 @@ STYLE + DOM-order assertions parsed from index.html. Each states its failure cri
 non-vacuous against a source that carries the exact thing it forbids:
 
   * tree flex-fill/scroll: the base .tree rule must flex-grow and scroll internally, with NO fixed
-    height and NO resize handle. Pre-it was `height:300px;max-height:60vh;resize:vertical` and had no
+    height and NO resize handle. In the old CSS it is `height:300px;max-height:60vh;resize:vertical` with no
     `flex:` — so this rule FAILS on the old CSS.
   * Flex chain: #browseMode and #treeSection must carry `min-height:0` (so the tree can shrink below
-    its content and scroll instead of pushing the rail into an outer scrollbar). Pre-neither selector
+    its content and scroll instead of pushing the rail into an outer scrollbar). In the old CSS neither selector
     existed — FAILS on the old CSS.
   * Collapse anchored bottom: #sidebarCollapse must be the LAST child of <aside class="filters">
-    (after both mode panes) and .railcollapse must carry `margin-top:auto`. Pre-the button was the
+    (after both mode panes) and .railcollapse must carry `margin-top:auto`. In the old markup the button was the
     FIRST child and had no margin-top — FAILS on the old markup/CSS.
   * Collections above the tree: #collGroup must appear BEFORE #treeSection/#tree in source order.
-    Pre-there was no #collGroup at all - FAILS on the old markup.
+    In the old markup there was no #collGroup at all - FAILS on it.
 """
 import re
 from pathlib import Path
@@ -84,7 +84,7 @@ def test_browse_and_tree_flex_chain_has_min_height_zero():
 
 def test_collapse_control_is_last_child_of_the_rail():
     # FAILS if #sidebarCollapse is not the LAST element in the rail (i.e. anchored below both mode panes).
-    # Non-vacuous: pre-the button was the FIRST child, ahead of #modeSeg.
+    # Non-vacuous: in the old markup the button was the FIRST child, ahead of #modeSeg.
     aside = _aside_block(_html())
     i_btn = aside.find('id="sidebarCollapse"')
     i_sel = aside.find('id="selectMode"')
@@ -110,7 +110,7 @@ def test_collapse_control_css_anchors_to_bottom():
 
 def test_collections_block_is_above_the_tree_in_source():
     # Complements the runtime driver pin (interaction_test.js): statically, #collGroup must appear
-    # BEFORE #treeSection/#tree. Non-vacuous: pre-there was no #collGroup element at all.
+    # BEFORE #treeSection/#tree. Non-vacuous: in the old markup there was no #collGroup element at all.
     html = _html()
     i_cg = html.find('id="collGroup"')
     i_ts = html.find('id="treeSection"')

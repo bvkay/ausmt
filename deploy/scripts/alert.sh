@@ -890,7 +890,7 @@ if site_data:
         except OSError:
             pass
 
-# ---- pause state (7): active + the continuous-span persistence verdict ----
+# ---- pause state: active + the continuous-span persistence verdict ----
 def _f(name):
     v = os.environ.get(name, "")
     return v if v else None

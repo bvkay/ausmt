@@ -30,7 +30,7 @@ from gateway.tests.conftest import (
 
 def test_mint_key_shape_and_hash_is_sha256():
     """A minted key carries the ausmt_up_ prefix and hashes to the sha256 hex digest of its own bytes
-    (the only stored form). Fails if the prefix or the hash function drifts token pattern."""
+    (the only stored form). Fails if the prefix or the hash function drifts from the token pattern."""
     key = uploader_keys.mint_key()
     assert key.startswith("ausmt_up_")
     assert uploader_keys.key_hash(key) == hashlib.sha256(key.encode("utf-8")).hexdigest()

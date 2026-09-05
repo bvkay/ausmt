@@ -6010,7 +6010,7 @@ def _time_series_levels_group(fields: dict, submitted: dict | None, err_map: dic
 
 
 def _identifiers_and_pids_inner(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """the ONE consolidated "Identifiers & PIDs" editor content, three groups:
+    """The ONE consolidated "Identifiers & PIDs" editor content, three groups:
     (a) THIS SURVEY (read-only ausmt id + project RAiD), (b) THIS DATASET ELSEWHERE (the typed
     related_identifiers list — the sole dataset-PID editor), (c) INSTRUMENT (the survey/platform PID).
     SIDEBARMERGE folds a fourth group (d) TIME SERIES LEVELS AVAILABLE here from the retired
@@ -6268,7 +6268,7 @@ def _hub_overview_body(slug: str) -> str:
     """The Overview & QA tab body (scaffold). Every value is populated BROWSER-side by
     survey-hub.js from /data/build_report.json filtered to THIS survey (data-survey-slug). The
     server renders only the scaffold + loading placeholders - it has no site-data mount, so it
-    cannot read the served corpus (the serve-panel constraint). the data-citation-email
+    cannot read the served corpus (the serve-panel constraint). The data-citation-email
     scaffold attribute and the metadata info row it fed are gone with the heuristic behind them.
     The section sub-lines carry the mockup's framing copy."""
     return (
@@ -6412,7 +6412,7 @@ def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
 def _toc_state_hint(section: str, fields: dict) -> str:
     """The TOC state hint: render-time facts only: entry COUNTS for list sections, and
     the access level / collection id values. A section with nothing derivable gets no hint (never a
-    placeholder). the citation-email issue chip is gone with the heuristic that produced it."""
+    placeholder). The citation-email issue chip is gone with the heuristic that produced it."""
     from . import editor_form
     val = fields.get(section)
     if section in editor_form.LIST_SECTIONS and isinstance(val, list) and val:

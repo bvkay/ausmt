@@ -608,9 +608,9 @@ def test_formats_key_never_appears_empty():
 def test_self_check_validates_the_bytes_that_ship_not_the_object_in_memory():
     """LAYER 3 of the unquoted-date bug family (LAYERS 1 and 2 are in
     test_json_date_robustness.py). PyYAML implicit-types a bare ISO date, so survey.yaml
-    `declared_date:` unquoted puts a datetime.date into the attribution block, which
+    `declared_date: 2026-07-25` unquoted puts a datetime.date into the attribution block, which
     SMETA and mtcat_document pass through VERBATIM. _jdump's default hook ISO-formats it on the
-    way out, so the SERVED mtcat.json holds the string "" and is conformant. The
+    way out, so the SERVED mtcat.json holds the string "2026-07-25" and is conformant. The
     product self-check must therefore validate the SERIALISED bytes, not the in-memory object."""
     bp = _bp()
     pytest.importorskip("jsonschema")

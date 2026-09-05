@@ -232,7 +232,7 @@ def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
     B (lead_investigator) byte-for-byte identical - every one of its lines, comment included, survives
     with no +/- diff line.
 
-    Review the PREVIOUS form of this test submitted only a scalar change and asserted section B
+    The PREVIOUS form of this test submitted only a scalar change and asserted section B
     was untouched - but the wholesale emitter ALSO never touched a sibling SECTION (it
     rebuilt only the edited section's node), so that assertion passed against every implementation
     that ever existed and could not fail (Invariant 10). The add+delete here goes through the exact
@@ -276,7 +276,7 @@ def _body_diff_lines(diff: str) -> list[str]:
 
 # --------------------------------------------------------------------------------------------------
 # [FC-4] diff pins on the REAL emitted diff. Each pins one guarantee of the surgical map merge AND
-# is failable by a NAMED mutation (temporary, evidence captured fix-round report, reverted
+# is failable by a NAMED mutation (temporary, evidence captured in the fix-round report, reverted
 # — never committed): a pin nothing can fail is not a pin (Invariant 10). The mutation for each is
 # stated in its docstring so a future reader can reproduce the red.
 # --------------------------------------------------------------------------------------------------

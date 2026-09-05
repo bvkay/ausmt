@@ -4,7 +4,7 @@
 //
 // WHY A MIRROR EXISTS AT ALL. The engine and the deploy generator now CALL one encoder; JavaScript
 // cannot, because it has no quote(url_path, safe="/"). encodeURIComponent is NOT that function on
-// its own - it eats `/` and it leaves !'* alone where Python escapes them - so data.js spells the
+// its own - it eats `/` and it leaves !'()* alone where Python escapes them - so data.js spells the
 // safe set out, and only a shared vector file can say the two agree. Corrupt one vector and exactly
 // that vector reds on BOTH sides.
 //

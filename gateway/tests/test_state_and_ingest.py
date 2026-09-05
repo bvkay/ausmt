@@ -134,7 +134,7 @@ def test_ingest_quarantined_done(tmp_path):
 
 def test_forged_done_file_ignored(tmp_path):
     # A done-file with an unknown outcome / unknown submission must NOT drive any transition.
-    # Proven failing: read_done returned a DoneFile for outcome='curator approve' and
+    # Proven failing: read_done returned a DoneFile for outcome='approve' and
     # _apply_done attempted a transition.
     async def _body():
         async with app_client(tmp_path, scanner=scanner_clean()) as (client, _app, gw, cfg):

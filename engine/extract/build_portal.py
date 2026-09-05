@@ -5277,7 +5277,7 @@ def _main_build(argv=None):
     _ts_rows: dict = {}
     # survey-metadata.json (the second public contract): ONE job per survey, keyed by label like
     # surveys_meta (so the document set equals mtcat's surveys[] by construction), capturing the raw
-    # survey.yaml side channel, the SMETA entry and the survey's serve state (seam). Emitted after
+    # survey.yaml side channel, the SMETA entry and the survey's serve state. Emitted after
     # the coordinate mask seam and the deferred station jobs, because the extent follows the post-mask
     # coordinate state, into out/products/<slug>/ (the served root).
     _survey_metadata_jobs: dict = {}
@@ -5820,7 +5820,7 @@ def _main_build(argv=None):
                 # a withheld station's exact lat/lon/elev inside the h5 while every JSON surface was
                 # correctly null (the leak-sweep's HDF5 leg pins this). Filter to the byte-gated
                 # exact-only set (the same per-station predicate as the EDI copy loop above): the
-                # non-exact contribution is WITHHELD from the bundle - never rewritten (posture).
+                # non-exact contribution is WITHHELD from the bundle, never rewritten.
                 # ...and by derived_rendition_withheld, for the same re-read reason one format
                 # over: an impedance-masked station contributes no TF to the bundle either.
                 _h5_stations = [(p, r) for (p, r) in stations

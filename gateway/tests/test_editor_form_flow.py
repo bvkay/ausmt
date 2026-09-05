@@ -27,7 +27,7 @@ from gateway.tests.conftest import (
 # a map with a null (organisation.ror), repeatable publications (dict form) / funding / instruments,
 # a full identifiers map, time_series with a levels list, access, processing, collection, and a care
 # block (advanced-JSON-only section). An unknown key + a comment prove the round-trip fidelity is
-# unbroken by the widget rework. it ALSO keeps the two RETIRED flat credit keys on disk, which
+# unbroken by the widget rework. It ALSO keeps the two RETIRED flat credit keys on disk, which
 # the editor now models with nothing - so this fixture doubles as the pre-migration-corpus tolerance
 # proof (they must round-trip byte-clean through every unchanged submit).
 RICH_SURVEY = """\
@@ -482,7 +482,7 @@ def test_bad_orcid_renders_field_error_on_form(tmp_path):
 
 def test_bad_doi_renders_field_error_on_form(tmp_path):
     """A publication DOI without a '10.' prefix re-renders the form with a per-field error. FAILS IF a
-    non-DOI is accepted into a DOI field. (retired the identifiers.dataset_doi input; the
+    non-DOI is accepted into a DOI field. (The identifiers.dataset_doi input is retired; the
     per-field DOI validation is now exercised through a still-modelled DOI field - publications[].doi.)"""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
