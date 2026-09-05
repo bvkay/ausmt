@@ -39,7 +39,7 @@ OPS_STATUS_FILENAME = "ops-status.json"
 # Usage analytics. The host aggregator (deploy/scripts/aggregate_stats.py, a daily timer) folds the
 # Caddy access log into this cumulative stats.json in the SAME state dir; the Analytics screen reads
 # it SERVER-side (the ops-status.json seam - no new mount, no new privilege, the existing trust
-# boundary intact). The gateway NEVER writes it. It carries aggregates only — counts + dailies,
+# boundary intact). The gateway NEVER writes it. It carries aggregates only: counts + dailies,
 # never an address or a UA.
 STATS_FILENAME = "stats.json"
 

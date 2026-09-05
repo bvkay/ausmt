@@ -361,7 +361,7 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
     (build_portal.py discover_work), safe_component is idempotent, and the hub route 404s unless an
     on-disk <slug>/survey.yaml package exists — so no non-fixed-point slug is reachable. The literal
     every-validate_slug-legal-slug form of the gate is FALSE (a legal slug may contain '..', which
-    safe_component collapses to '-': 108 of 4920 legal probes transform); such a slug fails EMPTY (zero rows — the honest no-stations message), never WRONG (a sibling's rows).
+    safe_component collapses to '-': 108 of 4920 legal probes transform); such a slug fails EMPTY (zero rows, the honest no-stations message), never WRONG (a sibling's rows).
     FAILS IF the engine's slug normalisation drifts so a produced slug is not a fixed point
     (the prefix join would then silently blank that survey's Stations tab), or a fixture-tree
     package declares a non-fixed-point slug."""

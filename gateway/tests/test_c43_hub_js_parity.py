@@ -830,7 +830,7 @@ def _phase_driver(body: str) -> str:
 def test_combined_phase_plan_mapper_from_real_corpus(warn_report, tmp_path):
     """COMBINED-PHASE-PLAN PIN (engine truth). The pure combinedPhasePlan, driven in Node with the
     tf rows the REAL engine emitted, produces: (1) the φxy series verbatim (stored = true) and the
-    φyx series UNWRAPPED to true phase (stored − 180, re-wrapped — trueYx); (2) per-point flags +
+    φyx series UNWRAPPED to true phase (stored − 180, re-wrapped, as trueYx); (2) per-point flags +
     median verdicts MATCHING phaseqc.classify_series (the parity-tested seam the plot dots use);
     (3) TWO BANDS, each owned by one component, on the ±180 axis - quadrant Q1 belongs to xy,
     quadrant Q3 (plus the +170..+180 seam continuation) to yx, and NO band crosses 0, so the two

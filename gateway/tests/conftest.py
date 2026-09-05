@@ -25,7 +25,7 @@ from gateway.config import Config
 # Validator-oracle resolution.
 # The cross-repo validator oracles (test_runner.py, test_edit_runner.py) do NOT skipif on a sibling
 # ausmt-surveys checkout that no CI has, which would silently revert the suite to same-author mocks.
-# They resolve UNCONDITIONALLY: the SIBLING checkout when present (dev box — tests the LIVE cross-repo pair),
+# They resolve UNCONDITIONALLY: the SIBLING checkout when present (dev box, testing the LIVE cross-repo pair),
 # else the VENDORED pinned copy (CI / fresh clones — tests the PINNED contract). "Neither present" is a
 # broken checkout (the vendored copy is committed), so the oracle FAILS rather than skips.
 # The validator is dependency-light (stdlib + optional yaml/mt_metadata) so the vendored copy RUNS in

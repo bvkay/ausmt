@@ -82,7 +82,7 @@ def in_quadrant_xy(phs_xy: float | None) -> bool | None:
 
 def in_quadrant_yx(stored_phs_yx_adj: float | None) -> bool | None:
     """True iff the TRUE φyx (after unwrapping the +180 shift from the stored t[4]) is within
-    quadrant Q3 widened by the slack, judged on the seam-mapped (−360, 0] axis (−180−slack … −90+slack — the
+    quadrant Q3 widened by the slack, judged on the seam-mapped (−360, 0] axis (−180−slack … −90+slack, the
     engine gate's yx band; a true value of +175 maps to −185, within slack of the −180 edge). None =>
     no flag. Reading the stored value directly is the bug the φyx-unwrap pin catches."""
     true_yx = true_phi_yx(stored_phs_yx_adj)

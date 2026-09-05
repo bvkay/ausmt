@@ -6438,7 +6438,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     up four sections pay four merge jobs, four version bumps, four release notes, four diff previews
     and four confirms. The sections are <section> blocks inside ONE form: a single Save assembles a
     combined patch across every section (editor_form.build_section_patch already iterates EVERY
-    widget section and assembles whichever widgets + o_<section> snapshots the form carries — that
+    widget section and assembles whichever widgets + o_<section> snapshots the form carries, and that
     is exactly what the merged Core fields / Identifiers & PIDs forms already relied on, now taken
     to its conclusion), and the UNCHANGED preview/confirm path gives ONE version bump, ONE release
     note, ONE diff, ONE content-hash confirm. The no-clobber promise is preserved by the same
