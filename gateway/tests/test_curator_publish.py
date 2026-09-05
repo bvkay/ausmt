@@ -337,7 +337,7 @@ def test_slug_charset_validation():
 # Every behaviour change below is proven-failing-first against the pre-fix code (evidence in the report).
 # --------------------------------------------------------------------------------------------------
 def test_generic_email_without_ack_refuses_approve_409(tmp_path):
-    # a generic (non-submitter) email in the package, NO ack => approve 409 listing the PII
+    # A generic (non-submitter) email in the package, NO ack => approve 409 listing the PII
     # reason (the CURRENT hard-block behaviour, now pinned as an explicit regression). Failure
     # criterion: fails if the curator approve is not 409, or the reason does not mention the PII check, or the
     # submission left VALIDATED, or any git ran.

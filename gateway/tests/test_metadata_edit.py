@@ -314,7 +314,7 @@ def test_commit_edit_oserror_returns_clean_500(tmp_path):
 
 
 def test_commit_edit_oserror_inside_publish_rolls_surveys_live_back(tmp_path, monkeypatch):
-    """The source-assertion rule at the app seam. The test above replaces _commit_edit_blocking wholesale, so it never
+    """Rollback parity at the app seam. The test above replaces _commit_edit_blocking wholesale, so it never
     enters publish.commit_metadata_edit and never asks whether the working tree was restored. This drives
     the REAL blocking commit with a failing survey.yaml write. FAILS IF the OSError escapes publish.py:
     write_bytes truncates before it writes, so surveys-live is left with a half-written survey.yaml and

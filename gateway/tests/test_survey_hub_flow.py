@@ -353,7 +353,7 @@ def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
 
 
 def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
-    """the HUB Metadata tab (the sidebar editor the curator actually uses) renders
+    """The HUB Metadata tab (the sidebar editor the curator actually uses) renders
     the identifier surface as ONE consolidated 'Identifiers & PIDs' section, exactly like the full form.
     The sidebar/TOC shows a SINGLE entry (no standalone 'Related identifiers' section), the consolidated
     form carries BOTH the identifiers map widgets (project_raid) AND the typed related_identifiers list
@@ -395,7 +395,7 @@ def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
 
 
 def test_hub_consolidated_section_round_trips_both_groups(tmp_path):
-    """a SINGLE post of the consolidated 'Identifiers & PIDs' hub section round-trips BOTH the
+    """A SINGLE post of the consolidated 'Identifiers & PIDs' hub section round-trips BOTH the
     identifiers MAP fields (project_raid) AND the related_identifiers LIST rows: build_section_patch
     iterates every widget section and assembles whichever widgets are present, so one form carrying both
     groups produces a patch touching both keys. FAILS IF the combined section post drops either group."""

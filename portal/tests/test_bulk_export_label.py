@@ -11,7 +11,7 @@ in deploy/tests (which gates deploy/** and gateway/**). Whichever side is edited
 
 The disclosure is pinned in the same module for the same reason: the flag is the ONE thing the portal
 deliberately puts into the access log, the public analytics page is where that is disclosed, and
-docs/docs/** triggers this module. A change that adds a label without disclosing it, or removes the
+docs/docs/** triggers this workflow. A change that adds a label without disclosing it, or removes the
 disclosure while the label stays, fails here.
 
 Pure stdlib + a regex over committed sources. No Node, no network, no skip.

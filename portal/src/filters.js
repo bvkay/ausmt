@@ -5,9 +5,7 @@ const tree=document.getElementById("tree");
 // The empty-state selection hint is OWNED by the markup (#selHint's default text in index.html);
 // read once at load so the copy lives in one place. updateSel restores it when a selection clears.
 const SEL_HINT_EMPTY=(document.getElementById("selHint")||{textContent:""}).textContent;
-let findActive=-1;   // index of the keyboard-highlighted Find option (-1 = none). Declared
-                     // up here so renderFind() (which resets it) is never in its temporal dead zone. See
-                     // docs: portal internals, filters.js.
+let findActive=-1;   // Index of the keyboard-highlighted Find option (-1 = none). Declared up here so renderFind() (which resets it) is never in its temporal dead zone. See docs: portal internals, filters.js.
 function passesYearWindow(yearLo,yearHi){
   const fromEl=document.getElementById("yearFrom"),toEl=document.getElementById("yearTo");
   if(!fromEl||!toEl)return true;                      // filter UI not present (e.g. a bare fixture) -> no-op
@@ -177,7 +175,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
   Object.keys(hier).sort().forEach(country=>{
     const cc=document.createElement("label");cc.className="country";
     cc.innerHTML=`<input type="checkbox" data-country="${escAttr(country)}" checked>${esc(country)}<span class="flag">${esc(CC[country]||"")}</span>`;
-    cc.insertBefore(_caret("c:"+country),cc.firstChild);   // disclosure caret ahead of the checkbox
+    cc.insertBefore(_caret("c:"+country),cc.firstChild);   // Disclosure caret ahead of the checkbox
     tree.appendChild(cc);
     Object.keys(hier[country]).sort().forEach(org=>{
       const okey=country+"||"+org;   // org names can repeat across countries - namespace the toggle key

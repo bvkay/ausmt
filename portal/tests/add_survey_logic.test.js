@@ -397,7 +397,7 @@ ok(qM.length === 1 && qM[0].id === "https://ror.org/028g18b61" && qM[0].name ===
 ok(M.rorMatchesFromResponse({ items: [{ id: null, names: [] }] }).length === 0,
    "drops un-nameable / un-identifiable items (never shows 'undefined')");
 
-// ---- (PII scrub): the packaged submission .zip must NOT embed submitter email/ORCID ----
+// ---- PII scrub: the packaged submission .zip must NOT embed submitter email/ORCID ----
 const pkgBlock = html.slice(html.indexOf("async function buildPackage"), html.indexOf('$("btnPackage").onclick'));
 ok(!/submitter:\{[^}]*email:\s*meta\.uploader_email/.test(pkgBlock), "MANIFEST submitter block does NOT write uploader_email");
 ok(!/submitter:\{[^}]*orcid:\s*meta\.uploader_orcid/.test(pkgBlock), "MANIFEST submitter block does NOT write uploader_orcid");

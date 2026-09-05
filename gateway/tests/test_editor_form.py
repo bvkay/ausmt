@@ -714,7 +714,7 @@ def _write_survey(folder: Path, meta: dict) -> None:
     (folder / "LICENSE.md").write_text("# Licence\n\n**CC-BY-4.0**\n", encoding="utf-8")
 
 
-# the acquisition fields (title/licence/retrieved/statement/profile) that would otherwise live
+# The acquisition fields (title/licence/retrieved/statement/profile) that would otherwise live
 # on a sources[] row now ride a related_identifiers row (identifies: entire). Same SOURCE_KEYS allow-list
 # at the validator, so the key-parity pin now feeds the merged row.
 _C46_FORM = {

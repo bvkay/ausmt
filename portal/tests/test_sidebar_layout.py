@@ -4,7 +4,7 @@ jsdom does no layout, so the runtime interaction driver cannot observe scroll ge
 STYLE + DOM-order assertions parsed from index.html. Each states its failure criterion, and each is proven
 non-vacuous against a source that carries the exact thing it forbids:
 
-  * tree flex-fill/scroll: the base .tree rule must flex-grow and scroll internally, with NO fixed
+  * Tree flex-fill/scroll: the base .tree rule must flex-grow and scroll internally, with NO fixed
     height and NO resize handle. In the old CSS it was `height:300px;max-height:60vh;resize:vertical`
     with no
     `flex:` — so this rule FAILS on the old CSS.

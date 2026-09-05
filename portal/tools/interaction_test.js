@@ -881,9 +881,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // VER CHIP OFF EVERY SURFACE. The one-footer rule took Releases and About this build out of
   // the footer, and the version chip rode inside the About-this-build popover; it landed in
-  // about.html's #build section, and that section is deleted too. NO page on this site carries
-  // a chip, and portal/tests/test_about_uniform_chrome.py holds the other half: every page
-  // script the tree ships is loaded by at least one page.
+  // about.html's #build section, and that section is deleted too. NO page on this site carries a
+  // chip, and no page loads the script either; portal/tests/test_about_uniform_chrome.py holds
+  // both zero-everywhere halves, the chips and the loads, across every document.
   const spaChips = [...doc.querySelectorAll("[data-ver-chip]")];
   ok(spaChips.length === 0,
     "the SPA carries no version chip: it left with the About-this-build popover, found " + spaChips.length);
@@ -2678,8 +2678,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok([...ssDetails.querySelectorAll(".ssg-h")].every(h => h.textContent !== "Data checks"),
     "the Station summary must NOT carry the removed 'Data checks' group");
   ok(ssDetails.innerHTML.indexOf("TF error") < 0, "the removed 'TF error' row must be gone");
-  // IN THE SURVEY DRAWER: the "Transfer function / Download" TILE is removed from the
-  // Station summary - it duplicated the Files tab's Level 2 EDI row and blurred the summary-vs-downloads
+  // The "Transfer function / Download" TILE is removed from the Station summary - it duplicated the
   // separation. The summary states facts; the Files tab serves bytes. The EDI itself is untouched: it is
   // still offered by the sticky-header action and the Files tab, both asserted below.
   ok(!ssDetails.querySelector(".prodgrid") && !ssDetails.querySelector(".prod"),
@@ -4401,7 +4400,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok([...legB.querySelectorAll(".legrow")].every(r => r.classList.contains("legtype")),
     "dots only: every legend row must be a data-type toggle, got " +
     JSON.stringify([...legB.querySelectorAll(".legrow")].map(r => r.className)));
-  // Affordance copy, in the slot a 'Legend' title stands in elsewhere (the box has no desktop title).
+  // Affordance copy, in place of where a 'Legend' title would go (the box has no desktop title).
   const legHint = legB.querySelector(".leghint");
   ok(legHint && /click a type to show or hide it/i.test(legHint.textContent),
     "LEG: the legend must carry the muted hint 'Click a type to show or hide it'");

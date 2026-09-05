@@ -364,9 +364,9 @@ function buildLegend(){
     `title="Show or hide ${label} stations on the map"><span class="dot" style="background:var(${v})"></span>${label}</button>`).join("");
   const small=typeof window!=="undefined"&&window.innerWidth<=760;   // body defaults collapsed on small widths
   const el=document.createElement("div");el.id="mapLegend";el.className="maplegend";
-  // The hint takes the slot a "Legend" title stands in elsewhere (the box carries no desktop title; the
-  // "Legend" button above is the small-width collapse control only), so the affordance is stated once,
-  // where the eye lands first, without a heading the desktop layout does not have.
+  // The hint takes the slot a "Legend" title would take (the box carries no desktop title; the
+  // "Legend" button above is the small-width collapse control only), so the affordance is stated
+  // once, where the eye lands first, without adding a heading the desktop layout does not have.
   el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+
     `<div class="maplegend-body"><div class="leghint">Click a type to show or hide it</div>${rows}</div>`;
   host.appendChild(el);

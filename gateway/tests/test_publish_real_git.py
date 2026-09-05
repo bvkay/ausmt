@@ -212,7 +212,7 @@ def test_real_git_no_submitter_pii_in_tree_or_message(tmp_path, hermetic_git_env
 
 
 def test_real_git_preflight_refuses_dirty_tree(tmp_path, hermetic_git_env):
-    # a genuinely dirty surveys-live checkout => preflight ABORT, PUBLISH_FAILED, nothing
+    # A genuinely dirty surveys-live checkout => preflight ABORT, PUBLISH_FAILED, nothing
     # staged. FAILS IF the publish proceeds on a dirty tree.
     env = hermetic_git_env
 
@@ -442,7 +442,7 @@ def test_real_git_station_removal_deletes_edis_and_pushes(tmp_path, hermetic_git
 
 
 def test_real_git_station_removal_rollback_on_push_reject(tmp_path, hermetic_git_env):
-    # a pre-receive reject rolls surveys-live back byte-for-byte: the git-rm'd EDI is
+    # A pre-receive reject rolls surveys-live back byte-for-byte: the git-rm'd EDI is
     # RESTORED, the yaml reverts, the ref/branch are the pre-state, the tree is clean. FAILS IF the
     # removal survives a rejected push (a half-removal in the publication ledger).
     env = hermetic_git_env
@@ -521,7 +521,7 @@ def test_real_git_survey_retirement_removes_package_and_pushes(tmp_path, hermeti
 
 
 def test_real_git_survey_retirement_rollback_on_push_reject(tmp_path, hermetic_git_env):
-    # a pre-receive reject rolls surveys-live back byte-for-byte: the WHOLE retired package
+    # A pre-receive reject rolls surveys-live back byte-for-byte: the WHOLE retired package
     # is restored, the ref/branch are the pre-state, the tree is clean. FAILS IF a rejected retirement
     # leaves the package removed (a half-retired publication ledger).
     env = hermetic_git_env

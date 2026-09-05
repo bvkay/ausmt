@@ -5793,7 +5793,7 @@ def _people_credit_inner(slug: str, fields: dict, submitted: dict | None, err_ma
     template), and ONE collapsed advanced raw-JSON escape per underlying list (creators, contributors)
     plus their o_<list> round-trip anchors.
 
-    the legacy-retirement notice and its Convert action are GONE (the migration deleted the
+    The legacy-retirement notice and its Convert action are GONE (the migration deleted the
     two retired flat credit keys corpus-wide and nothing reads them), and so is the citation-author email
     heuristic that read them."""
     heading = ['<h2>People &amp; credit</h2>']

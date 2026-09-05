@@ -390,8 +390,8 @@ def test_a_single_row_hub_counts_in_the_singular():
 
 
 def test_a_many_row_hub_still_counts_in_the_plural():
-    """The other side of the same pin: the singular branch must not swallow the plural form the
-    emitted copy names ("27 surveys &#183; 2,625 stations")."""
+    """The other side of the same pin: the singular branch must not swallow the plural form
+    ("27 surveys &#183; 2,625 stations")."""
     pages = _pages_module()
     rows = _synthetic_rows(n_surveys=27, n_stations=2625)
     sv = pages.surveys_index_page(rows=rows, base=BASE)
@@ -989,8 +989,8 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
 
 
 def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
-    """Brand-assets workflow. This tier shipped no icon link at all, so every entity page asked for
-    /favicon.ico and got a 404 on every visit. FAILS IF a page kind loses either link, or if either
+    """This tier shipped no icon link at all, so every entity page asked for /favicon.ico and got a
+    404 on every visit. FAILS IF a page kind loses either link, or if either
     href stops being a same-origin portal path (an absolute URL here would be an external fetch on
     2,655 documents, which is exactly what this tier forbids)."""
     for rel in _kinds(built):

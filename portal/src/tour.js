@@ -91,7 +91,7 @@ function _tourEnterTreeDemo(){
                   (typeof surveys!=="undefined"&&surveys.length?surveys[0]:null);
   if(!_tourTreeTarget)return;
   const box=[...tr.querySelectorAll('input[value]')].find(c=>c.value===_tourTreeTarget);
-  if(box&&typeof treeSetCollapsed==="function"){                                 // the ancestors must be expanded
+  if(box&&typeof treeSetCollapsed==="function"){                                 // The ancestors must be expanded
     treeSetCollapsed("c:"+box.dataset.country,false);
     treeSetCollapsed("o:"+box.dataset.org,false);
   }
@@ -355,10 +355,10 @@ function startTour(){
 }
 function stopTour(){
   if(_tourStep<0)return;
-  _tourExitCurrent();                  // a demo step's cleanup runs on mid-tour close too
+  _tourExitCurrent();                  // A demo step's cleanup runs on mid-tour close too
   _tourStep=-1;
   document.removeEventListener("keydown",_tourKeydown);
-  window.removeEventListener("resize",_tourOnResize);   // stop tracking the viewport once the tour closes
+  window.removeEventListener("resize",_tourOnResize);   // Stop tracking the viewport once the tour closes
   _tourRestore();                      // Done/Esc/close from ANY step: restore only what the tour itself changed
   if(_tourEls){
     _tourEls.backdrop.remove();_tourEls.spot.remove();_tourEls.leader.remove();_tourEls.card.remove();

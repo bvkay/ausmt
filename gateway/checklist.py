@@ -46,8 +46,8 @@ class Check:
 class Checklist:
     checks: list[Check]
     # File names (relative to the scanned root) where a GENERIC (non-submitter) email
-    # matched. Curator-only, file names ONLY (never an address). It renders the classified list
-    # and builds the acknowledge audit reason. Empty unless the PII check is acknowledgeable.
+    # matched. Curator-only, file names ONLY (never an address). Read to render the classified list
+    # and to build the acknowledge audit reason. Empty unless the PII check is acknowledgeable.
     pii_generic_files: tuple[str, ...] = ()
 
     def _blocking_fails(self) -> list[Check]:

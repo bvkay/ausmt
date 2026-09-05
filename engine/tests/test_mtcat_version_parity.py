@@ -44,17 +44,17 @@ TOPOLOGY (why the portal reads are guarded): surfaces 4-7 live in portal/, a tre
 deliberately does not ship. deploy/docker/engine.Dockerfile COPYs contract/ and engine/ plus the one
 generated file portal/src/contract.js (so `generate.py --check` can verify it) and nothing else, and
 deploy-images' engine-full-tests release gate runs THIS suite inside that image, where /app/portal/
-holds that single file and none of the five pinned ones. Those reads therefore sit behind a
+holds that single file and none of the four pinned ones. Those reads therefore sit behind a
 module-level topology check that skips them when no pinned portal file is present. That is the same
 designed-topology skip test_validator_gate.py takes for the absent gateway tree, and its reason is
 allow-listed in tests/ci_check_skips.py the same way. What still asserts IN the image: the schema-title
 authority, the contract parser, the generated engine constant, the real build's emitted portal block,
 and the builder's own literal guard. The image's internal coherence is exactly what the release gate
-exists to prove, and none of that needs portal/. On a checkout all five files exist, so the guard is
+exists to prove, and none of that needs portal/. On a checkout all four files exist, so the guard is
 inert and the pin is not one assertion weaker there; a checkout carrying SOME of them still FAILS on
 the missing read, because a broken tree is not a topology. The portal surfaces are pinned from the
 CHECKOUT workflow:
-build-products.yml runs this suite post-checkout and its path filter names all five files (and
+build-products.yml runs this suite post-checkout and its path filter names all four files (and
 engine/**, so this module's own edits trigger it), on push and on pull_request.
 
 RED-proven: restoring the literal "1.0" default in gen_config.build_config fails
@@ -247,7 +247,7 @@ def test_the_schema_id_is_the_versioned_immutable_uri():
 
 
 def _assert_no_version_literal(files):
-    """The CLASS guard, applied to whichever of the three sites this topology ships. Every one of the
+    """The CLASS guard, applied to whichever of the two sites this topology ships. Every one of the
     four defects was the same shape: a MAJOR.MINOR literal parked beside the word schema_version.
     Forbidding the shape is what stops the fifth one, because the four were not found by reading
     carefully, they were found one at a time."""

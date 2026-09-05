@@ -150,13 +150,13 @@ function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeo
 // collection framing - is left untouched). Split out so the no-fight-with-user decision is unit-testable.
 function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
-  if(!hasPosition(s))return;   // a withheld-coordinate station has no position - no (0,0) phantom marker, no crash
+  if(!hasPosition(s))return;   // A withheld-coordinate station has no position - no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z),weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
-  s.marker._survey=s.survey;   // the per-survey cluster facade buckets markers by this stamp
+  s.marker._survey=s.survey;   // The per-survey cluster facade buckets markers by this stamp
   // A marker click OPENS that station and must never ALSO read as a background click that closes the
   // drawer. See docs: portal internals, map.js.
   s.marker.options.bubblingMouseEvents=false;
-  s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // hover shows station + survey only
+  s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // Hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
   // Home frame once data is in: re-fit to the FIXED Australia box (AU_HOME_BOUNDS), NOT the tight
   // positioned-station extent. See docs: portal internals, map.js.

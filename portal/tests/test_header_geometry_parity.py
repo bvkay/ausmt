@@ -321,7 +321,7 @@ def test_no_chrome_page_is_exempt_from_the_identity_mark():
     """The guard over the per-surface identity pin above: it may not be hollowed out by skipping a
     page. FAILS IF any discovered chrome page is missing the AusMT mark that opens its header.
 
-    It must not hold BOTH marks on a page. One of the two is absent from every header, so what is
+    It once held BOTH marks on every page. One of the two is gone from every header, so what is
     left to hold is the one that remains, and the withdrawal of the other is pinned below rather
     than folded in here: a page that lost its identity and a page that grew a parent mark back are
     different defects and read better as different failures."""

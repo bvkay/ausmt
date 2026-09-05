@@ -118,7 +118,7 @@ jobs:
       #   tests/test_mtcat20_emission.py      the 2.0 emitter semantics (migrate_12_to_20 at source)
       #   tests/test_mtcat20_invariants.py    the invariant suite (schema, scans, rollups)
       #   tests/test_mtcat_version_parity.py  the same-PR portal-surface pin: the reason this
-      #                                       workflow watches the five portal paths at all
+      #                                       workflow watches the four portal paths at all
       #   tests/test_survey_metadata_version_parity.py  the survey-metadata version single-source pin
       #   tests/test_survey_metadata_schema_v01.py      the 0.1 schema that constrains survey-metadata.json
       #   tests/test_survey_metadata_emission.py        the survey-metadata emitter semantics, the hard stop

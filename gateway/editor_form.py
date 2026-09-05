@@ -209,8 +209,8 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # OPTIONAL keys on a related_identifiers row (an upstream dataset AusMT obtained is just another typed
     # row, identifies: entire). The `sources` LIST_SECTIONS registration is GONE, so build_section_patch
     # never assembles the key — a legacy sources[] on disk is byte-preserved (never entered into any
-    # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine keeps reading
-    # sources[], so nothing served changes.
+    # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine still
+    # reads sources[], so nothing served changes yet.
     #
     # related_identifiers is the single typed list of provenance relations to identifiers AusMT does
     # NOT own.

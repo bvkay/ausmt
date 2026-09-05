@@ -19,8 +19,9 @@ DETERMINISTICALLY (the test_convention_gates manipulation, reimplemented as pure
 Node dependency posture: pure `node`, no jsdom/npm (the extracted functions are DOM-free by
 design); node absence is deliberately NOT allow-listed (the workflow must red, not hollow out).
 Engine posture: the real engine stack (mt_metadata + the sample survey) is absent in the
-stackless gateway CI workflow - those pins skip there with EXACTLY the module's one allow-listed
-tripwire reason and RUN on the dev box + the engine/build workflows (ubuntu). Nothing here is
+stackless gateway CI workflow - stackless gateway CI workflow - those pins skip there with EXACTLY
+the suite's one allow-listed and RUN on the dev box + the engine/build workflows (ubuntu). Nothing
+here is
 ubuntu-ONLY: every test that can run on this Windows dev box does.
 
 Failure criterion is in each test's docstring (Invariant 10).
@@ -831,9 +832,10 @@ def test_combined_phase_plan_mapper_from_real_corpus(warn_report, tmp_path):
     tf rows the REAL engine emitted, produces: (1) the φxy series verbatim (stored = true) and the
     φyx series UNWRAPPED to true phase (stored − 180, re-wrapped — trueYx); (2) per-point flags +
     median verdicts MATCHING phaseqc.classify_series (the parity-tested seam the plot dots use);
-    (3) TWO bands span the ±180 axis - quadrant Q1 belongs to xy, quadrant Q3 (plus the +170..+180
-    seam continuation) to yx, and NO band crosses 0 (the two quadrants stay separate).
-    phaseVerdictParts yields BOTH component verdicts, in order, with the out flag = median-out.
+    (3) TWO BANDS, each owned by one component, on the ±180 axis - quadrant Q1 belongs to xy,
+    quadrant Q3 (plus the +170..+180 seam continuation) to yx, and NO band crosses 0, so the two
+    quadrants stay separately owned. phaseVerdictParts yields BOTH component verdicts, in order,
+    with the out flag = median-out.
 
     MUTATION-PROOFS (each reds this pin): dropping the yx unwrap (reading yx RAW) — non-vacuous because
     a warn station's stored φyx differs from its true φyx by ~180 (assertion (1)); MERGING the two

@@ -259,7 +259,7 @@ def test_docs_document_the_manifest_flow():
     sub = _docs_sub("manifest.json", "jq -r")
     assert "/data/manifest.json" in sub, "the per-station pattern starts at the download index"
     assert "/data/products/manifest.json" not in sub, (
-        "the products/ mirror of the manifest is not a public surface; the download "
+        "the products/ mirror of the manifest is retired; the download "
         "index is /data/manifest.json")
     assert "sha256" in sub, "the per-station pattern must tell the reader to verify the sha256"
     for fmt in ("`edi`", "`emtfxml`"):
