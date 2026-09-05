@@ -152,8 +152,11 @@ ICON_FILES = {
 
 
 def _version(href):
-    """The eight hex digits an icon href's version query must carry, from the file's own bytes."""
-    return hashlib.sha256(ICON_FILES[href].read_bytes()).hexdigest()[:8]
+    """The generator's own picture hash of the COMMITTED file the href names."""
+    ns = _tool_namespace()
+    return ns["picture_digest"](href, (ROOT / href.lstrip("/")).read_bytes())
+
+
 
 
 def _icon_block(sep="\n"):
@@ -205,16 +208,17 @@ def test_the_generated_pages_link_the_same_versioned_block_same_origin():
 
 
 def test_the_version_query_is_the_hash_of_the_file_it_names():
-    """FAILS IF a version query stops being the hash of the bytes actually served at that path. A
-    query that is any other token still busts a cache once and then lies: the next regeneration leaves
-    it unchanged and the stale icon comes back."""
+    """FAILS IF a version query stops being the picture hash of the file actually served at that path,
+    read back from the committed bytes. A query that is any other token still busts a cache once and
+    then lies: the next regeneration leaves it unchanged and the stale icon comes back. The hash is of
+    the decoded picture, not the encoding, so CI and a checkout agree whatever their PNG encoder does."""
     for name in SHIPPED_PAGES + ("_pages.py",):
         text = (PAGES_PY if name == "_pages.py" else ROOT / name).read_text(encoding="utf-8")
         for href, ver in re.findall(
                 r'<link rel="(?:icon|apple-touch-icon)" href="([^"?]+)\?v=([^"]+)"', text):
             assert href in ICON_FILES, f"{name}: {href} is not one of the three declared icons"
             assert ver == _version(href), (
-                f"{name}: {href} carries v={ver}, but that file's bytes hash to {_version(href)}")
+                f"{name}: {href} carries v={ver}, but that file's picture hashes to {_version(href)}")
 
 
 def test_the_drift_gate_fails_on_a_stale_version_query():

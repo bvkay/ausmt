@@ -620,8 +620,8 @@ ICO_SIZES = (16, 32, 48)
 
 # THE ICON HREFS EVERY SURFACE LINKS, and the version query that keeps them fresh. /vendor/* is served
 # with a thirty day cache, so a regenerated icon under an unchanged URL is answered from that cache and
-# the old mark stays in the tab; the query is the file's own content hash, so the URL moves exactly when
-# the bytes do and never otherwise. The surfaces are the six shipped documents and the emitter that
+# the old mark stays in the tab; the query is the hash of the icon's PICTURE (its decoded frames, or an
+# SVG's text), so the URL moves exactly when the mark does and never with a PNG encoder. The surfaces are the six shipped documents and the emitter that
 # writes the head of every generated page.
 ICON_VERSION_DIGITS = 8
 ICON_LINKED_SOURCES = ("portal/index.html", "portal/about.html", "portal/add-survey.html",
@@ -641,10 +641,30 @@ def icon_payloads():
             f"/vendor/brand/ausmt-icon-{APPLE_TOUCH_ICON_PX}.png": buf.getvalue()}
 
 
+def picture_digest(href, data):
+    """The content hash of what a browser DRAWS from `data`: an SVG's text, or a raster's decoded frames.
+
+    Hashing the encoded bytes would move every icon URL whenever a PNG encoder changed, which differs
+    between Python builds for the same picture and so cannot agree between a checkout and CI; the picture
+    is the same everywhere and moves exactly when the mark does."""
+    Image, _, _ = _pillow()
+    h = hashlib.sha256()
+    if href.endswith(".svg"):
+        h.update(data)
+        return h.hexdigest()[:ICON_VERSION_DIGITS]
+    with Image.open(io.BytesIO(data)) as im:
+        sizes = sorted(s[0] for s in im.info["sizes"]) if href.endswith(".ico") else [im.size[0]]
+        for size in sizes:
+            if href.endswith(".ico"):
+                im.size = (size, size)
+            h.update(f"{size}x{size}:".encode("ascii"))
+            h.update(im.convert("RGBA").tobytes())
+    return h.hexdigest()[:ICON_VERSION_DIGITS]
+
+
 def icon_versions():
     """{href: the version query digits for that file}."""
-    return {href: hashlib.sha256(data).hexdigest()[:ICON_VERSION_DIGITS]
-            for href, data in icon_payloads().items()}
+    return {href: picture_digest(href, data) for href, data in icon_payloads().items()}
 
 
 def stamped(text, versions=None):

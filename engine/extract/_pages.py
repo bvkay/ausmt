@@ -830,9 +830,9 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         # The version query on each href is that file's own content hash, written here by
         # portal/tools/gen_brand.py: /vendor/* carries a thirty day cache, so a regenerated icon under
         # an unchanged URL is answered from that cache.
-        '<link rel="icon" href="/favicon.ico?v=2640ae07" sizes="any">\n'
+        '<link rel="icon" href="/favicon.ico?v=9eada153" sizes="any">\n'
         '<link rel="icon" href="/vendor/favicon.svg?v=62401780" type="image/svg+xml">\n'
-        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png?v=a2c6d429">\n'
+        '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png?v=1daba2b5">\n'
         f"{og}"
         f"{ld}"
         f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n"
