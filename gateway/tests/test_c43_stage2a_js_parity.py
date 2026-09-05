@@ -203,7 +203,7 @@ process.stdout.write(JSON.stringify(out));
         {"mode": "xy", "values": [10.0, 45.0, 95.0, -5.0, 200.0, None]},
         # xy: median beyond band+slack (coherent wrong quadrant).
         {"mode": "xy", "values": [-120.0, -130.0, -140.0]},
-        # yx: healthy third-quadrant cluster (stored values for true -135/-100/-170).
+        # yx: healthy Q3 quadrant cluster (stored values for true -135/-100/-170).
         {"mode": "yx", "values": [_stored_for_true_yx(t) for t in (-135.0, -100.0, -170.0)]},
         # yx: SEAM-STRADDLING cluster — true values -179, -178, +179 (stored 1.0, 2.0, -1.0). A naive
         # (-180,180] median would average across the seam; the engine's (-360,0] mapping keeps it sane.

@@ -17,7 +17,7 @@ GATE 1, rotation/frame guard. mt_metadata 1.0.9 RECORDS rotation but never compe
     rotation metadata. The raw-text evidence parse below is therefore load-bearing, not advisory.
 So the gate reads BOTH sources — the TF's _rotation_angle AND a cheap lexical parse of the source
 EDI (ZROT/TROT blocks, SPECTRA ROTSPEC attributes, HMEAS azimuths) — cross-checks them, and
-applies the frame policy below. The engine NEVER rotates served data - DETECTION stays,
+applies the frame POLICY v3 below. The engine NEVER rotates served data - DETECTION stays,
 CORRECTION goes:
   * Arm A - survey-uniform declared angle (ANY magnitude): serve AS STORED, record the angle
     (frame_served="declared-azimuth", declared_azimuth_deg) + a note. The archive respects
@@ -47,8 +47,8 @@ geographic north per the EDI convention, but de facto geomagnetic/acquisition no
 compass-referenced surveys without declination stamps. Field values say "declared-zero" /
 "declared-azimuth"; nothing here asserts absolute geographic where the file does not prove it.
 
-GATE 2 - sign-convention quadrant check. Under e^{+iωt} with x=north/y=east, arg(Zxy) lies in the
-first quadrant (0..90°) and arg(Zyx) in the third quadrant (-180..-90°). Per station the gate takes
+GATE 2 - sign-convention quadrant check. Under e^{+iωt} with x=north/y=east, arg(Zxy) lies in Q1
+(0..90°) and arg(Zyx) in Q3 (-180..-90°). Per station the gate takes
 the MEDIAN phase of each off-diagonal over the mid-band periods (central 60%, after masking
 absent/degenerate values) and:
   * BOTH medians coherently in wrong quadrants -> FAIL (a pure convention/frame flip: conjugation
@@ -59,7 +59,7 @@ absent/degenerate values) and:
   * fewer than CONVENTION_MIN_PERIODS usable mid-band periods -> an explicit "insufficient data"
     note — degenerate/masked data must never manufacture a convention verdict.
 LIMIT (state it, don't discover it): Gate 2 is BLIND to ±90° frame rotations by construction — a
-±90° rotation maps Zxy'=-Zyx / Zyx'=-Zxy, which preserves the Q1/Q3 quadrant structure (verified survey-wide,
+±90° rotation maps Zxy'=-Zyx / Zyx'=-Zxy, which preserves the Q1/Q3 structure (verified survey-wide,
 n=7835 periods). Gate 2 checks the SIGN CONVENTION only; frames are Gate 1's job.
 
 All thresholds are single-sourced here; tests and build_portal import them — never re-declare.

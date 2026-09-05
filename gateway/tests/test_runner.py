@@ -418,7 +418,7 @@ def _assert_engine_surveys_level(cmd) -> None:
 def _emulate_real_validator(cmd, report: dict) -> None:
     """Behave like the REAL validate_survey.py from inside a fake _run_subprocess: write `report` to
     the --json FILE the argv names (stdout carries only human [LEVEL] lines). Crucially, this ASSERTS
-    the argv shape first — [python, .../validate_survey.py, <existing folder positional>, --json,
+    the argv shape first - [python, .../validate_survey.py, <existing folder positional>, --json,
     <report file>] - so no mocked test can ever again mask an argv regression (the ship-blocker: the
     folder was passed as the --json VALUE with no positional, argparse exited 2, and every real
     submission quarantined while the stdout-JSON fakes kept the suite green).

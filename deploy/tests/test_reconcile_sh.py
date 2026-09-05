@@ -172,7 +172,7 @@ def _leave_untracked_survey(tree: dict, name: str = "test-2026") -> Path:
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_untracked_survey_dir_refuses_rebuild(tmp_path):
-    """Surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is
+    """surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is
     NOT invoked (no build), the status action is 'untracked_blocked' naming the offending dir, and
     the script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway (the shim marker
     appears), or the refusal state does not name the dir, or it exits 0 and hides the

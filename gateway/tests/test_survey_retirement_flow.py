@@ -4,7 +4,7 @@ FakeGit at the publish seam. Mirrors test_station_removal_flow.py's structure.
 The curator retires a whole survey from the Metadata tab's danger zone: a confirmation page discloses
 exactly what the retirement removes, then the server gates the POST in order - session, CSRF, the
 last-survey guard, the TOTP second factor (enrolled? rate-limited? valid? not-replayed?), the typed
-slug, the required note — and only then git-rm -r's the package in one commit under PUBLISH_LOCK.
+slug, the required note - and only then git-rm -r's the package in one commit under PUBLISH_LOCK.
 
 Failure criterion is in each test's docstring (Invariant 10). Async bodies run under conftest.run().
 The real-git commit/rollback/revert byte-level guarantees are in test_publish_real_git.py; here

@@ -459,7 +459,7 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   await metadataSidecarInto(z,chosen);
   if(unavail.length){const lines=["These selected stations are NOT redistributable via AusMT (licence/embargo).",
     "Request them from the source archive, or contact the custodian where no DOI is recorded:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
-    // M.doi (the survey's OWN dataset DOI) is the honest TF source archive. See docs: portal internals,
+    // m.doi (the survey's OWN dataset DOI) is the honest TF source archive. See docs: portal internals,
     // exports.js.
     return m.doi?`${s.id}  (${s.survey})  ->  https://doi.org/${m.doi}`
                 :`${s.id}  (${s.survey})  ->  ${withheldReason(m)}`;}));

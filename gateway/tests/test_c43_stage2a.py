@@ -77,7 +77,7 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
     STORED t[4] near 0…90 (because engine _edi_tf stores phs_yx_adj = true + 180, re-wrapped). The
     workbench MUST subtract the shift and classify the TRUE phase - so a station whose true phase
     sits in the third quadrant classifies IN-quadrant. FAILS IF the workbench reads the stored value
-    as the true phase (then a stored 45° would look like the first quadrant, and against the third
+    as the true phase (then a stored 45° would look like the first quadrant, and against quadrant Q3
     it would read as OUT - the mis-classification this pin catches).
 
     NON-VACUOUS: for true φyx = −135°, stored t[4] = +45°. in_quadrant_yx(+45°) must be True (it
@@ -93,7 +93,7 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
 
 
 def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():
-    """The converse: a station whose TRUE φyx is beyond the third-quadrant band by MORE than the
+    """The converse: a station whose TRUE φyx is beyond the Q3 quadrant band by MORE than the
     slack (a genuinely wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (a
     stored −135 would then read as in-quadrant, hiding the real wrong-quadrant station) or the slack
     edge is wrong (−79.9 is 10.1° outside the band => OUT; −80.0 is exactly at the slack edge =>

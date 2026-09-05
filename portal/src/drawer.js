@@ -1199,7 +1199,7 @@ function miniScatter(ss){
 // There is no "Related surveys" section and no relatedSurveys() scorer. See docs: portal internals,
 // drawer.js.
 function surveySummary(ss,m){
-  // This table carries no "dimensionality mix" row: dimensionality is inferable from the phase
+  // This table carries no "dimensionality mix (screening only)" row: dimensionality is inferable from the phase
   // tensor and skew. See docs: portal internals, drawer.js.
   const sciGate=hydrGate("sci","processing details");
   const typeCount={}, swCount={}; let tipper=0, rr=0, rrKnown=0, pmin=Infinity, pmax=-Infinity;

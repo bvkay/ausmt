@@ -1,5 +1,5 @@
 """MTCAT 2.0 emission semantics, implemented at the source (the migrate_12_to_20
-transform IS the emitter-change specification).
+transform IS the emitter-change specification; AusMT_2026/schemas-draft/run-fixture-suite.py).
 
 The 2.0 breaking list, each pinned here against the real emitter:
 

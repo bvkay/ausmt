@@ -2257,7 +2257,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // N. RECENTLY ADDED: ONE surface (the surveys-view #recentStrip; the map-rail
   // #recentSide is deleted). The strip's DISPLAY rule is a 30-day window ending at the BUILD day
-  // (generated `2020-01-15`) capped at 3, so of the fixture's dated surveys only Beta (latest
+  // (build.json generated `2020-01-15`) capped at 3, so of the fixture's dated surveys only Beta (latest
   // `2019-12-31`) qualifies; Alpha (`2012-05-01`) is outside it and Gamma/Delta are undated. surveyLatestDate itself stays lockstep with the engine's feed rule.
   const recents = A.recentlyAdded();
   ok(recents.length === 1 && recents[0].sv === "Beta Survey",

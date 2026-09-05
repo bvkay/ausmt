@@ -86,7 +86,7 @@ def test_populated_portal_value_binding(tmp_path):
     me = re.search(r"^EXPORT0 (\[.*\])\s*$", out, re.M)
     assert me, "smoke.js did not emit EXPORT0 (CSV row):\n" + out
     ex = json.loads(me.group(1))
-    assert len(ex) == 19, ("expected 19 CSV columns after the W3b drop, got %d: %r" % (len(ex), ex))
+    assert len(ex) == 19, ("expected 19 CSV columns after the drop, got %d: %r" % (len(ex), ex))
     assert ex[12] == "", ex                             # source_doi (Demo Survey has no DOI)
     assert ex[13] == "10.25914/mtjg-jp22", ex           # timeseries_collection_doi <- TS_COLLECTION.doi
     # The licence column travels with the exported row (sourced from SMETA[survey].lic). A

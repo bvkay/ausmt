@@ -2244,10 +2244,10 @@ optionals sequentially would stack five round trips on top of that wait. The dot
 transfer functions, and the optionals must not wait on each other.
 ```
 
-#### Build.json (build_id/engine_commit/source_commit/generated), optional ...
+#### build.json (build_id/engine_commit/source_commit/generated), optional ...
 
 ```text
-Build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence
+build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence
 (older builds predate it); the footer only renders the "data build …" line when this resolves.
 No skew-handshake check here yet (comparing this against a contract hash the portal itself
 carries); that waits on the contract-hash plumbing.
@@ -2956,10 +2956,10 @@ the reader exactly where they were (same scroll offset, same tab), so the only v
 section that was showing a loading state filling in.
 ```
 
-#### Sc[SC.dim] (dimensionality) is not surfaced in the drawer screening ...
+#### sc[SC.dim] (dimensionality) is not surfaced in the drawer screening ...
 
 ```text
-Sc[SC.dim] (dimensionality) is not surfaced in the drawer screening grid: it is inferable from the
+sc[SC.dim] (dimensionality) is not surfaced in the drawer screening grid: it is inferable from the
 phase tensor + skew, which are shown (strike/|β|/3-D-periods line below). The sc.json field itself
 carries it either way, and the map's colour-by-dim mode reads s.dim, so `dim` is deliberately not
 destructured here.
@@ -3917,10 +3917,10 @@ the caller's, unchanged. Six in flight matches a browser's per-host default; the
 loop this replaces serialised ~300 round trips behind one another.
 ```
 
-#### M.doi (the survey's OWN dataset DOI) is the honest TF source archive
+#### m.doi (the survey's OWN dataset DOI) is the honest TF source archive
 
 ```text
-M.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
+m.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
 when it is absent (TS_COLLECTION is the raw time-series collection, not a TF source archive, and
 citing it here would mislabel a different dataset as "the source archive", the earlier defect); so
 when no DOI is recorded we state the ACTUAL access reason (embargo vs licence) via withheldReason().
@@ -5149,7 +5149,7 @@ it was fatal and the portal blanked), so this state is reachable and has to be a
 The set of survey SLUGS that belong to the `auslamp` collection, built once at boot
 (buildAuslampSet, main.js) from COLL[auslamp].surveys (which holds survey LABELS) resolved through
 SMETA[label].slug. Empty when collections.json is absent or has no auslamp collection, in which case
-IsAuslampSurvey() returns false for everything. NO MAP PATH READS IT since the dots-only
+isAuslampSurvey() returns false for everything. NO MAP PATH READS IT since the dots-only
 Its one consumer was the badge rule's never-collapse privilege, and nothing collapses now. Kept
 because it is collection membership rather than map furniture; retiring it is a separate decision.
 ```
@@ -5321,10 +5321,10 @@ qColor as a text colour; it renders a .qvdot swatch beside plain readable text i
 
 ## portal/src/tour.js
 
-#### Tour.js - 11-step spotlight tour
+#### tour.js - 11-step spotlight tour
 
 ```text
-Tour.js - 11-step spotlight tour. Classic script, zero deps,
+tour.js - 11-step spotlight tour. Classic script, zero deps,
 loads LAST (after main.js) so it can call setView()/openStation()/other globals, but nothing in
 main.js depends on it (a missing/broken tour.js must never break the intro panel or the app - see
 the typeof guard in main.js).

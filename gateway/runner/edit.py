@@ -19,7 +19,7 @@ containers. The runner resolves the package from its own AUSMT_SURVEYS_ROOT (mir
 that the runner recomputes paths from its own env and never trusts one handed to it in a job file).
 
 Two job kinds:
-  read  — load surveys/<slug>/survey.yaml, return the editable subset as JSON + current version.
+  read  - load surveys/<slug>/survey.yaml, return the editable subset as JSON + current version.
   merge - ruamel round-trip load, apply the field patch, enforce the semver + no-op rules,
           append the release note, run the REAL validator on a scratch copy of the patched package
           (scratch lives under jobs/edit/scratch/, NEVER under the surveys tree — review FIX 2),
