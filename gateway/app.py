@@ -3136,7 +3136,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
                                       csrf_token: str = Form(default="")):
         return gw.handle_security_rotate(request, code, csrf_token)
 
-    # ---- serve-reconcile: the curator "request rebuild" button. Session + CSRF (checked in the
+    # ---- Serve-reconcile: the curator "request rebuild" button. Session + CSRF (checked in the
     # handler); writes the zero-argument rebuild.request the host reconcile agent consumes. `def`
     # (not async) — a tiny atomic file write, no await, consistent with the other simple POSTs.
     @app.post("/gateway/curator/rebuild")

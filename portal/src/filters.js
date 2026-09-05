@@ -200,7 +200,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
       refresh();});});
   tree.querySelectorAll('input[data-org]').forEach(inp=>{if(inp.hasAttribute("value"))return;
     inp.addEventListener("change",()=>{tree.querySelectorAll('input[data-org]').forEach(c=>{if(c.hasAttribute("value")&&c.dataset.org===inp.dataset.org)c.checked=inp.checked;});refresh();});});
-  applyTreeVisibility();   // default = everything expanded; normalises caret glyphs on (re)build
+  applyTreeVisibility();   // Default = everything expanded; normalises caret glyphs on (re)build
 }
 
 // static control wiring (registrations only; functions resolved at event time)

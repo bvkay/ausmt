@@ -679,7 +679,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // The ts_access-driven surfaces are inert-and-disabled, never live over data that has not
   // arrived: a live Download row would price the scope off routes that are not here, and a live
-  // level filter would hide every station over them. (colour-by is retired; the Data
+  // level filter would hide every station over them. (Colour-by is retired; the Data
   // available dropdown and the Download block's time-series rows are the gated surfaces.)
   const _tsBtns = () => [...doc.getElementById("tsSeg").querySelectorAll("button")];
   ok(_tsBtns().length === 4,
@@ -2906,7 +2906,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the embargoed station's station.json line must survive (it is emitted as a withheld stub)");
   drwV.classList.remove("open");
 
-  // W. rail Browse / Select & export mode. Default is Browse; the toggle swaps the two
+  // W. Rail Browse / Select & export mode. Default is Browse; the toggle swaps the two
   // panes with EVERY existing element id intact; drawing a selection or 'Select all filtered' auto-switches
   // to Select & export.
   const modeSeg = doc.getElementById("modeSeg"), browseMode = doc.getElementById("browseMode"), selectMode = doc.getElementById("selectMode");
@@ -3008,7 +3008,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   doc.getElementById("clearSel").click();
   A.setSidebarMode("browse");
 
-  // Y. scope rule: downloads are never hidden behind a selection - with nothing selected they
+  // Y. Scope rule: downloads are never hidden behind a selection - with nothing selected they
   // act on the FILTERED CORPUS and the scope line says so; a selection re-scopes them. The old
   // hidden-row/empty-hint pair is retired with the behaviour it described.
   const exportBtns = doc.getElementById("exportBtns");

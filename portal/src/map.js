@@ -95,7 +95,7 @@ if(_drawPoly)_drawPoly.onclick=()=>armDraw("polygon");
 // All LPMT renders the flagship teal (TYPE_COL.LPMT) in type mode whatever its AusLAMP membership:
 // every colour mode is membership-blind. See docs: portal internals, map.js.
 function markerColor(s){return TYPE_COL[s.type]||"#999";}
-function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // withheld-coord stations have no marker
+function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // Withheld-coord stations have no marker
 // ---- the survey FOCUS DIM -------------------------------------------------------- "View on map" with a
 // survey open frames that survey while the rest of the catalogue STAYS ON THE MAP, dimmed. See docs: portal
 // internals, map.js.
@@ -220,7 +220,7 @@ function hull(points){const pts=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);if
   for(const p of pts.reverse()){while(hi.length>=2&&cr(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p);}
   return lo.slice(0,-1).concat(hi.slice(0,-1));}
 const footprints=L.featureGroup();
-function buildFootprints(){const by={};ST.forEach(s=>{if(!hasPosition(s))return;(by[s.survey]=by[s.survey]||[]).push([s.lon,s.lat]);});   // skip withheld-coord stations (no hull vertex)
+function buildFootprints(){const by={};ST.forEach(s=>{if(!hasPosition(s))return;(by[s.survey]=by[s.survey]||[]).push([s.lon,s.lat]);});   // Skip withheld-coord stations (no hull vertex)
  Object.entries(by).forEach(([sv,pts],k)=>{const h=hull(pts);if(h.length<3)return;
    L.polygon(h.map(p=>[p[1],p[0]]),{color:Object.values(TYPE_COL)[k%4],weight:1.4,fillOpacity:.04,interactive:false}).bindTooltip(esc(sv)).addTo(footprints);});}
 const userLayers={};

@@ -797,7 +797,7 @@ function closeDrawer(){const wasOpen=drawer.classList.contains&&drawer.classList
   // The survey focus dim is a VIEW state owned by the open drawer, so it lifts with it.
   // Opacity only, never a layer rebuild, so nothing reloads on close.
   if(typeof clearSurveyDim==="function")clearSurveyDim();
-  if(wasOpen)_restoreDrawerFocus();}               // return focus to the invoking element (only if it was open)
+  if(wasOpen)_restoreDrawerFocus();}               // Return focus to the invoking element (only if it was open)
 async function fetchEdi(file,avail,survey){
   // This EDI isn't redistributable here. Its dataset DOI (m.doi), when the survey has one, is the TF source
   // archive and is safe to open. See docs: portal internals, drawer.js.
@@ -1555,7 +1555,7 @@ document.addEventListener("click",e=>{
   else if(act==="expand"){e.preventDefault();if(typeof openStationModal==="function"&&_curTf&&_curStation)openStationModal(stationModalHeader(_curStation,SMETA[_curStation.survey]||{}),_curTf);}
   else if(act==="collection"){e.preventDefault();location.hash="#/collection/"+encodeURIComponent(el.dataset.coll);}
   else if(act==="collidx"){e.preventDefault();if(location.hash.indexOf("#/collection/")===0)history.replaceState(null,"",location.pathname+location.search);setView("collections");}
-  else if(act==="collmap"){e.preventDefault();if(typeof viewCollectionOnMap==="function")viewCollectionOnMap(el.dataset.coll);}   // switch to map + fitBounds to the collection
+  else if(act==="collmap"){e.preventDefault();if(typeof viewCollectionOnMap==="function")viewCollectionOnMap(el.dataset.coll);}   // Switch to map + fitBounds to the collection
   else if(act==="focus")focusSurvey(sv);
   else if(act==="select")selectSurvey(sv);
   else if(act==="doi"&&doi)window.open(escUrl("https://doi.org/"+doi),"_blank","noopener,noreferrer");   // NOT encodeURIComponent - it %2F-escapes the DOI slash -> doi.org 404; escUrl still blocks scheme injection

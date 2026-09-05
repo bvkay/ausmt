@@ -7615,7 +7615,7 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
     created (by/when), last used, submission count, a free-text NOTE (sqlite only, never git), and
     status (active/revoked with when/by). A revoked row STAYS listed for the audit trail — there is no
     delete — and its note becomes read-only (audit context, not an editable field). The plaintext key
-    is NEVER shown here (displayed exactly once at creation). deltas over the v2 page:
+    is NEVER shown here (displayed exactly once at creation). The deltas over the v2 page:
       * per-key free-text note (who it's for / expiry intent), edited inline via a tiny POST form;
       * submission count per key from the audit trail (`submission_counts` name->count);
       * an explicit UNUSED-KEY NUDGE — an active key that has never been used is badged 'never used'

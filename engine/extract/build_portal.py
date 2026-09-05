@@ -1781,7 +1781,7 @@ def survey_meta_from_yaml(y: dict) -> dict:
         "pubs": _publications_of(y),
         "blurb": y.get("abstract"),
         "ts": "ok" if (y.get("time_series", {}) or {}).get("levels_available") else "unk",
-        "ts_pid": _ts_pid_of(y),              # survey-specific raw-TS collection PID (None => deployment default)
+        "ts_pid": _ts_pid_of(y),              # Survey-specific raw-TS collection PID (None => deployment default)
         "edi": "ok",
         "mth5": "unk",
         "access": acc,                       # SMETA key; normalised ACCESS_LEVELS: open|metadata_only|embargoed

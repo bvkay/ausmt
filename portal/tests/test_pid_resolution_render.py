@@ -138,7 +138,7 @@ def test_sweep_no_reserved_identifier_is_ever_an_anchor(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_maturity_doi_star_honest_about_reserved(tmp_path):
-    """ (task 3d): the 'DOI' maturity star must NOT light green off a DOI that only 404s at
+    """The 'DOI' maturity star must NOT light green off a DOI that only 404s at
     doi.org. A survey whose ONLY dataset DOI is reserved shows the star hollow with the honest note
     'reserved (not yet active)'; an ok / unknown DOI lights it 'minted' as before. FAILS RED against the
     pre-fix model, which lit the star off any m.doi regardless of resolution."""
@@ -161,7 +161,7 @@ def test_maturity_doi_star_honest_about_reserved(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_maturity_ts_star_keys_off_derived_from_row(tmp_path):
-    """ (task 3d): 'Time series: linked' now lights off a typed IsDerivedFrom relation (the new
+    """'Time series: linked' now lights off a typed IsDerivedFrom relation (the new
     home of the collection PID), not only the retired ts_pid / availability flag. A curator survey whose
     only time-series link is a typed IsDerivedFrom row (m.ts unset, no ts_pid) still reads 'linked'."""
     extra = {"related_identifiers": [

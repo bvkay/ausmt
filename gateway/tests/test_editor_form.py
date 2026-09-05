@@ -399,7 +399,7 @@ def test_coordinate_overrides_malformed_payload_rejected():
                              **_snap("access", {"level": "open"})}, "access")
 
 
-# ---- coordinate-privacy: an ordinary access edit must PRESERVE the overrides map --------------
+# ---- Coordinate-privacy: an ordinary access edit must PRESERVE the overrides map --------------
 #
 # The Metadata-tab per-section access form models only the four access scalars (level / coordinates /
 # embargo_until / contact) — it does NOT render s_access_coordinate_overrides. So an ordinary access
@@ -998,7 +998,7 @@ def test_relation_auto_derives_from_identifies_server_side():
 
 
 def test_legacy_relation_row_without_identifies_is_preserved():
-    """back-compat: a legacy row that carries an explicit relation but NO identifies keeps its relation
+    """Back-compat: a legacy row that carries an explicit relation but NO identifies keeps its relation
     exactly (no derivation, no identifies key introduced) — an unchanged submit round-trips to _OMIT. FAILS
     IF the merge clobbers a legacy relation or sprays a null identifies onto the row."""
     legacy = [{"identifier": "10.25914/legacy", "identifier_type": "DOI", "relation": "Cites",

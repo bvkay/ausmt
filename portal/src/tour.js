@@ -169,7 +169,7 @@ function _tourBuild(){
   document.getElementById("tourNext").onclick=_tourNext;
   document.getElementById("tourClose").onclick=stopTour;
   document.addEventListener("keydown",_tourKeydown);
-  window.addEventListener("resize",_tourOnResize);                     // re-centre + redraw the leader on resize
+  window.addEventListener("resize",_tourOnResize);                     // Re-centre + redraw the leader on resize
   return{backdrop,spot,leader,line,card};
 }
 // Re-run only the LAYOUT (not the step's enter hook) when the viewport changes while the tour is open -
@@ -342,7 +342,7 @@ function startTour(){
   if(_tourStep>=0)return;              // already running
   if(!TOUR_STEPS.length)return;
   _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
-  _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;   // demo state: fresh every run
+  _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;   // Demo state: fresh every run
   // A COLLAPSED rail hides every child but the collapse button, so the rail steps (Find, the tree,
   // the Select and Download boxes) would spotlight nothing. Expand it for the run and record that WE
   // did, so _tourRestore puts the visitor's own choice back. See docs: portal internals, tour.js.
