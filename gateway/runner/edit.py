@@ -1245,8 +1245,7 @@ def _validate_patched(package_root: Path, new_bytes: bytes, validator_path: str,
     lives under jobs/edit/scratch/<job-id>/ - NEVER under the surveys tree. Per-job dir = no
     collision between concurrent previews (review FIX 5). Returns the validator report; an
     unconfigured validator path yields an empty (non-failing) report so unit tests without a real
-    validator still exercise the merge path. an unconfigured validator path yields an empty (non-failing) report so unit
-    tests without a real validator still exercise the merge path."""
+    validator still exercise the merge path."""
     if not validator_path:
         return {"items": []}
     if scratch_dir.exists():

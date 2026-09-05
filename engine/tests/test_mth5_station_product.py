@@ -37,9 +37,7 @@ SCHEMA = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encodin
 sys.path.insert(0, str(ROOT / "extract"))
 # The coordinate-access module's engine-produced coordinate fixtures (one EDI per station,
 # distinctive positions) and its survey.yaml writer. Reused so the byte gate is exercised against
-# the SAME fixture shape the coordinate-access workflow proves the gate on. Reused so the byte gate
-# is exercised against the SAME fixture shape the
-# coordinate-access workflow proves the gate on.
+# the SAME fixture shape the coordinate-access workflow proves the gate on.
 from test_coord_access import EXACT, GEN, HID, _stage_survey, _sweep_h5_for_non_exact   # noqa: E402
 
 
@@ -155,7 +153,6 @@ def test_a_non_exact_station_is_byte_gated_out_of_tier_one(tmp_path):
     # a byte-string search: a search for b"-33.555551" inside an HDF5 file is the check the
     # coordinate-access module documents as structurally blind, because an IEEE-754 double has no
     # decimal spelling in the container.
-    # in the container.
     hits = _sweep_h5_for_non_exact(out)
     assert not hits, "a byte-gated station's position reached a per-station MTH5:\n" + "\n".join(
         f"  {f}: {h}" for f, h in hits)

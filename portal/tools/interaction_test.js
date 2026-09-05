@@ -3710,9 +3710,6 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // download index, and must NOT advertise dimensionality.json (served alongside station.json, not a
   // contract), surveys.json (no contract) or the retired products/manifest.json twin.
   // tests/test_drawer_api_endpoints.py pins the same rows against fixtures.
-  // So the expander lists station.json + the download index, and must NOT advertise dimensionality.json
-  // (served alongside station.json, not a contract), surveys.json (no contract) or the retired
-  // products/manifest.json twin. tests/test_drawer_api_endpoints.py pins the same rows against fixtures.
   ok(!/dimensionality\.json/.test(matP.textContent),
     "the API expander must not advertise dimensionality.json (served alongside station.json; not a contract)");
   ok(/\/data\/manifest\.json/.test(matP.textContent),

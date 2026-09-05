@@ -1077,12 +1077,9 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
 # from the RAW survey.yaml (a discovery side channel; SMETA and surveys.json are untouched). The
 # emitter never invents a curated fact: every class is verbatim from survey.yaml when present and
 # ABSENT otherwise (open-world; no nulls, no empty containers, no library defaults as assertions).
-# the canonical public metadata of one survey dataset/release, generated from the RAW survey.yaml
-# (a discovery side channel; SMETA and surveys.json are untouched). The emitter never invents a
-# curated fact: every class is verbatim from survey.yaml when present and ABSENT otherwise (open-world;
-# no nulls, no empty containers, no library defaults as assertions). Discovery is universal, so a
-# non-served (embargoed / metadata_only) survey emits every curated class exactly as mtcat does;
-# the only policy seam is the coordinate policy (a withheld state omits the curated extent). ----------
+# Discovery is universal, so a non-served (embargoed / metadata_only) survey emits every curated
+# class exactly as mtcat does; the only policy seam is the coordinate policy (a withheld state
+# omits the curated extent). ----------
 
 # The identifies -> DataCite relation derivation: the SAME table the surveys
 # validator (validate_survey.IDENTIFIES_RELATION) and the gateway editor (gateway/editor_form.py) carry.
@@ -1443,9 +1440,6 @@ def _org_of(y: dict):
 # from those keys and deleted them, so nothing reads them anywhere in the engine; a survey that still
 # carries them (a pre-migration corpus) is simply ignored, never served. creators[]/contributors[] are
 # the credit surface (_creators_of/_contributors_of).
-# corpus migration seeded creators[]/contributors[] from those keys and deleted them, so nothing reads
-# them anywhere in the engine; a survey that still carries them (a pre-migration corpus) is simply
-# ignored, never served. creators[]/contributors[] are the credit surface (_creators_of/_contributors_of).
 
 
 # The contributor-credit model: the two typed credit lists passed through to SMETA VERBATIM from

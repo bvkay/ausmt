@@ -226,7 +226,6 @@ def test_generator_honours_a_per_station_coordinate_override_and_keeps_generatin
     main() would then write nothing, so a single override anywhere would leave the whole table
     un-regenerable while the committed one went on resolving the station the mask had just
     withheld. Suppression that cannot be published is not suppression.
-    that cannot be published is not suppression.
 
     The override keys the BASE station id and this reader holds no variant tag, so it resolves
     through _coordaccess's own conservative resolver - it drops every station the build drops and

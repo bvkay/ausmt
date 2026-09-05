@@ -3074,8 +3074,7 @@ def _builds_table(ops, ops_stale: bool, generated_at, *, csrf_token: str = "",
         href = "/gateway/curator/serve/build/" + _esc(d)
         is_serving = bool(b.get("serving"))
         serving = f'<span class="pill" style="background:{_PALETTE["ok"]}">serving</span>' if is_serving else ""
-        # "serve this build…" = rollback (a link to the typed-id confirm page). The currently
-        # serving build offers no rollback-to-itself. The
+        # "serve this build…" = rollback (a link to the typed-id confirm page). The
         # currently-serving build offers no rollback-to-itself. rollback is a repoint, never a rebuild.
         act = ""
         if actions and d and not is_serving:
