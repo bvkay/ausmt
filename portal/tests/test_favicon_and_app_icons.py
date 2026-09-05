@@ -21,7 +21,6 @@ dark browser chrome without a second variant.
 NO WEB MANIFEST this module (architect default): 192 and 512 are generated and served so a manifest can
 be added later, but an installable PWA is its own decision and its own rule.
 """
-import hashlib
 import json
 import re
 import subprocess
@@ -133,7 +132,10 @@ def test_the_raster_icons_are_generated_from_named_constants():
     plain = Image.new("RGBA", (size, size), NAVY)
     plain.alpha_composite(mark, ((size - mark.width) // 2, (size - mark.height) // 2))
     disc = ns["raster_icon"](size).convert("RGBA")
-    mean = lambda im: sum(sum(p[:3]) for p in im.getdata()) / (size * size)
+
+    def mean(im):
+        return sum(sum(p[:3]) for p in im.getdata()) / (size * size)
+
     assert mean(disc) > mean(plain) * 1.03, \
         "the mark on the disc must render brighter than the same mark composited without the lift"
 
