@@ -2355,7 +2355,7 @@ _UTC_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):\d{2}Z$")
 
 def short_utc(ts: str) -> str:
     """The display form of a stored UTC timestamp: the canonical db shape renders as
-    ' 07:49' (date + minutes - operator resolution; the full ISO rides in the cell's
+    '2026-07-08 07:49' (date + minutes - operator resolution; the full ISO rides in the cell's
     title attribute at the call site). VERBATIM fallback: any other shape is returned unchanged,
     never mangled or emptied - the build-id shortener posture (audit data is sacred)."""
     m = _UTC_TS_RE.match(ts or "")
@@ -6390,9 +6390,9 @@ def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
     for c in commits:
         body = c.get("body") or ""
         note_html = f'<div class="k" style="white-space:pre-wrap">{_esc(body)}</div>' if body else ""
-        # Density: When and Author are MERGED into a
-        # single 'When · by' column, values verbatim from the
-        # history read-job, no reformatting. No behaviour change.
+        # Density: When and Author are MERGED into the single 'When · by' column
+        # ('2026-07-10 · ben'), values verbatim from the history read-job, no
+        # reformatting. No behaviour change.
         when_by = " · ".join(x for x in (c.get("date") or "", c.get("author") or "") if x)
         rows.append(
             "<tr>"

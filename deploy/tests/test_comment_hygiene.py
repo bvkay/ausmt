@@ -468,8 +468,12 @@ class Rule:
             return True
         return False
 
-    def hits(self, text):
-        return [m for m in self.pattern.finditer(text) if not self.excused(text, m)]
+    def hits(self, text, context=None):
+        """Detection reads `text`, which may have its literals blanked; an exemption reads the
+        comment as WRITTEN, because blanking a literal must not take away the word that says
+        what a token means."""
+        context = text if context is None else context
+        return [m for m in self.pattern.finditer(text) if not self.excused(context, m)]
 
 
 RULES = (
@@ -798,8 +802,11 @@ def _inside_a_corpus_id(text, start, stop):
     return any(CORPUS_ID.match(seg) for seg in re.split(r"[-_.]", run))
 
 
-def work_item_tags(text):
-    """Every work-item tag in a bare comment, as (match, tag)."""
+def work_item_tags(text, context=None):
+    """Every work-item tag in a bare comment, as (match, tag). `context` is the comment as WRITTEN:
+    the exemptions read the words a reader sees, so blanking a literal never takes away the noun
+    that identifies a token's meaning."""
+    context = text if context is None else context
     found = []
     for match in TAG_PATTERN.finditer(text):
         group = next(name for name in _TAG_GROUPS if match.group(name))
@@ -813,7 +820,7 @@ def work_item_tags(text):
                 or _inside_a_route(text, start, stop)
                 or _inside_a_quoted_literal(text, start, stop)):
             continue
-        window = text[max(0, start - WINDOW):stop + WINDOW]
+        window = context[max(0, start - WINDOW):stop + WINDOW]
         parts = [part.strip() for part in re.split(r"[/,]", tag)]
         # A token joined by a hyphen to a LETTER before it is a COMPOUND label ("D-L1", "C35b-D5"),
         # which is the shape a clause or a work item takes and never the shape of the id an
@@ -824,7 +831,7 @@ def work_item_tags(text):
             continue
         if not compound and all(
                 any(token.match(part)
-                    and near.search(text if meaning in TAG_CONTEXT_IS_THE_WHOLE_RUN else window)
+                    and near.search(context if meaning in TAG_CONTEXT_IS_THE_WHOLE_RUN else window)
                     for meaning, token, near in TAG_NOT_A_TAG)
                 for part in parts):
             continue
@@ -984,10 +991,12 @@ def paths_outside_this_repository(text):
 def labels_for(comment, cite_contract=False):
     """Every way one comment breaks the rule, as sorted labels."""
     text = flattened(bare(comment))
-    found = {rule.label for rule in RULES if rule.hits(text)}
+    data = literals_are_data(text)
+    found = {rule.label for rule in RULES
+             if rule.hits(text if rule.label in RULES_THAT_READ_INSIDE_A_LITERAL else data, text)}
     if not cite_contract and CONTRACT_CITATION.hits(text):
         found.add(CONTRACT_CITATION.label)
-    if work_item_tags(text):
+    if work_item_tags(data, text):
         found.add("work-item identifier")
     if paths_outside_this_repository(text):
         found.add("a path outside this repository")
@@ -1056,6 +1065,69 @@ def offences(files, cite_contract=False, root=None):
 # first, and a bracket or a punctuation mark the prose is NAMING sits inside a
 # quoted run and is blanked before the shape is read.
 QUOTED_RUN = re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|(?<![\w'])'[^'\n]{1,60}'(?!\w)")
+
+# A LITERAL IS DATA. A run inside backticks or quotes is a value the code emits, a key a document
+# carries, a token a validator compares against or a file the corpus publishes, and a comment
+# quoting one is NAMING that datum rather than writing prose about it. A rule that edits inside the
+# run makes the sentence lie about its own subject: emptying `declared_date: 2026-07-25` leaves a
+# docstring telling a reader the served document holds "", four lines above the code that sets that
+# date, and rewriting outcome='approve' names a token gateway/jobs.py rejects. So the vocabulary
+# rules, the date rule and the tag rule read AROUND such a run.
+#
+# A SENTENCE INSIDE QUOTES IS NOT DATA. A quoted decision is the audit trail the rule exists to
+# remove and quoting must not launder it, so the blindness reaches only a run that is not a
+# sentence: fewer than three ordinary English words. The placeholder and unowned-marker rules and
+# the commented-out-code test read the run whatever its shape, because a switched-off
+# <script src="https://YOUR-..."> is precisely what a template placeholder looks like.
+SENTENCE_WORD = re.compile(r"\A[a-z][a-z-]+\Z")
+SENTENCE_WORDS = 3
+RULES_THAT_READ_INSIDE_A_LITERAL = ("placeholder", "unowned marker")
+# A bare run of symbol characters is a literal with no quotes around it: a safe set written !'()*
+# is the specification of a language built-in, and dropping two characters from it states a false
+# fact. A rule of one repeated character is a banner, so a run must use two distinct symbols.
+SYMBOL_RUN = re.compile(r"[!#$%&*+/<=>?@^~|\\'\"()\[\]{}]{3,}")
+
+
+def literal_is_data(run):
+    """True when a quoted run is a value rather than a sentence someone said."""
+    words = [word.strip(".,;:!?()[]{}<>\"'`") for word in run.split()]
+    return sum(1 for word in words if SENTENCE_WORD.match(word)) < SENTENCE_WORDS
+
+
+def literals_are_data(text):
+    """The comment with every DATA run blanked to a character no rule can match, offsets kept so a
+    reported position still stands. A run that is ONLY a work-item tag is still a tag: quoting is
+    not an exemption, which is the same line the tag rule's own quoted-run test draws."""
+    out = list(text)
+    for match in QUOTED_RUN.finditer(text):
+        inner = match.group(0)[1:-1]
+        if not inner.strip() or not literal_is_data(inner):
+            continue
+        if TAG_PATTERN.fullmatch(inner.strip()):
+            continue
+        for i in range(match.start() + 1, match.end() - 1):
+            out[i] = "\x00"
+    return "".join(out)
+
+
+def literal_runs(text):
+    """Every run of DATA one comment quotes, in order: the inside of a matched backtick, double
+    quote or apostrophe pair, and every bare symbol run standing outside one. It is what a reader
+    would copy out of the comment and paste into the code, and what the two-tree guard holds equal
+    against origin/main: a sweep may rewrite the prose around a literal, never the literal."""
+    runs, spans = [], []
+    for match in QUOTED_RUN.finditer(text):
+        inner = match.group(0)[1:-1]
+        if inner.strip():
+            runs.append(inner)
+        spans.append(match.span())
+    for match in SYMBOL_RUN.finditer(text):
+        if len(set(match.group(0))) < 2:
+            continue
+        if any(a <= match.start() and match.end() <= b for a, b in spans):
+            continue
+        runs.append(match.group(0))
+    return runs
 # "2)" opening a line is a list marker; "(-180, 180]" is an interval; a row of a
 # definition table carries its colon in a column of its own.
 ENUMERATOR = re.compile(r"^[ \t]*(?:\d{1,2}|[a-z])\)")
@@ -2556,3 +2628,31 @@ def test_a_skip_reason_held_in_a_constant_is_still_read(tmp_path):
                  'def test_a():\n    pass\n', encoding="utf-8")
     hits = message_offences([f])
     assert hits and "wave identifier" in hits[0], hits
+
+
+def test_a_quoted_literal_is_data_and_a_quoted_sentence_is_not():
+    """A run inside backticks or quotes is a value the code emits or a token it compares against,
+    and a rule that edits inside one makes the sentence lie about its own subject: emptying the
+    date out of `declared_date: 2026-07-25` left a docstring saying the served document holds "",
+    four lines above the code that sets that date. So the vocabulary rules, the date rule and the
+    tag rule read AROUND such a run, while the placeholder rule and the commented-out-code test
+    read it whatever its shape. A quoted SENTENCE is not data: quoting a decision must not launder
+    it, and a run that is only a work-item tag is still a tag."""
+    blind = ('the SERVED mtcat.json holds the string "2026-07-25" and is conformant',
+             "read_done returned a DoneFile for outcome='approve'",
+             "a survey.yaml carrying `embargo_until: 2027-02-01` loads a datetime.date")
+    for text in blind:
+        assert labels_for("# " + text) == [], (text, labels_for("# " + text))
+
+    seeing = (("reviewed on 2026-07-25 by the team", "dated note"),
+              ('the note said "all the curator pages should be ruled on by the owner"', "ruling language"),
+              ("see `D5` for the shape", "work-item identifier"),
+              ('a switched-off <script src="https://YOUR-HOST/x.js"></script>', "placeholder"))
+    for text, label in seeing:
+        assert label in labels_for("# " + text), (text, labels_for("# " + text))
+
+    # The runs the two-tree guard holds equal: a quoted value, and a bare symbol run that carries
+    # no quotes at all. A rule of one repeated character is a banner rather than a literal.
+    assert literal_runs("it eats `/` and it leaves !'()* alone") == ["/", "!'()*"]
+    assert literal_runs("it eats `/` and it leaves !'* alone") == ["/", "!'*"]
+    assert literal_runs("===== THE WORKSPACE CARD ======") == []

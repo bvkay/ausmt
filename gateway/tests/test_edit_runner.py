@@ -697,7 +697,8 @@ def test_process_edit_job_writes_done_result(tmp_path):
 
 def test_process_edit_job_read_with_unquoted_embargo_date_writes_iso(tmp_path):
     """LIVE-crash pin (RED pre-fix: `TypeError: Object of type date is not JSON serializable` at
-    jobs._atomic_write_json). A published survey.yaml carrying an UNQUOTED ISO embargo loads that field as a datetime.date; the read job's
+    jobs._atomic_write_json). A published survey.yaml carrying an UNQUOTED ISO embargo
+    (`access.embargo_until: 2027-02-01`) loads that field as a datetime.date; the read job's
     editable_subset carries it into the result dict, and writing the done-file crash-looped the runner
     — the job never completed, was re-claimed on restart, and blocked ALL metadata reads. After the fix
     the done-file writer ISO-formats the date, so the job completes and the date round-trips as a

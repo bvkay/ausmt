@@ -802,7 +802,7 @@ def test_done_file_atomic_no_partial(tmp_path):
 
 def test_atomic_write_json_serialises_dates(tmp_path):
     """Regression pin (RED pre-fix: `TypeError: Object of type date is not JSON serializable`). A
-    survey.yaml with an unquoted ISO date loads that field as a
+    survey.yaml with an unquoted ISO date (`embargo_until: 2027-02-01`) loads that field as a
     datetime.date, which flows into an edit-job RESULT dict; a plain json.dump crashes the
     done-file write, crash-looping the runner and blocking every metadata read. The encoder ISO-formats
     date/datetime (nested too — the real embargo lives under result['fields']['access']) and the result

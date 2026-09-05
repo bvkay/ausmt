@@ -299,7 +299,10 @@ def _needs_quoting(s: str) -> bool:
 
 def quote_ambiguous(value):
     """Recursively wrap curator-supplied strings that PyYAML would retype in DoubleQuotedScalarString
-    so ruamel emits them quoted.
+    so ruamel emits them quoted. Emitted UNQUOTED, a patched `region: on` / `name: no` /
+    `abstract: 12:34:56` is read back by PyYAML safe_load as True / False / 45296 while ruamel's
+    own re-read keeps it a string, so the diff, the sha pin and the confirm re-run all agree and
+    no guard fires.
 
     KEYS pass through the same oracle as values. No non-str-key rejection path is
     added: the patch arrives via json.loads, whose object keys are ALWAYS str, so a non-str key is
@@ -829,7 +832,7 @@ _COLLECTION_STATUS_VOCAB = frozenset({"active", "completed", "archived"})
 
 def _json_scalar(v):
     """Coerce a YAML-loaded scalar to a JSON-serialisable value: str/int/float/bool/None pass through;
-    anything else (a ruamel date/timestamp, e.g. an unquoted `last_updated:` value) becomes its
+    anything else (a ruamel date/timestamp, e.g. an unquoted `last_updated: 2026-06-15`) becomes its
     str(). The done-file writer (jobs._atomic_write_json) uses a plain json.dump with no default=, so a
     date object would raise; this keeps the whole result JSON-safe (matching how the engine's
     collections.json stringifies the same date)."""

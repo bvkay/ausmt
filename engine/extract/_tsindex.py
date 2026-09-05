@@ -8,7 +8,7 @@
               url_path: "my80/.../SA104A.zip"  # the archive's own string, stored VERBATIM
               filename: "SA104A.zip"
               bytes: 1042000000
-              verified: "YYYY-MM-DD"        # the day the crawler read a 200, and the day the
+              verified: "2026-08-24"         # the day the crawler read a 200, and the day the
               match_method: rule:sa-pad      #   published fieldnote names
               review: verified               # only `verified` ever projects
 

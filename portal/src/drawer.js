@@ -1212,7 +1212,7 @@ function surveySummary(ss,m){
   const types=Object.keys(typeCount).sort().map(t=>`${t} ${typeCount[t]}`).join(" · ")||"-";
   const software=m.software||Object.keys(swCount).sort((a,b)=>swCount[b]-swCount[a])[0]||"not recorded";
   const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"-";
-  // Embargoed surveys append the embargo date to the access cell; any other
+  // Embargoed surveys append the embargo date to the access cell ("embargoed until 2027-02-01"); any other
   // access state (or an embargo with no date) renders the bare level as before.
   const _acc=m.access||"open";
   const _accTxt=(_acc==="embargoed"&&m.embargo_until)?"embargoed until "+esc(String(m.embargo_until)):esc(_acc);

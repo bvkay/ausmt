@@ -162,7 +162,7 @@ def lib_versions() -> dict:
 
 def _json_default(obj):
     """json.dumps `default=` hook for EVERY product emit (surveys.json, mtcat, catalogue, products,
-    ...). A survey.yaml that carries an UNQUOTED ISO date
+    ...). A survey.yaml that carries an UNQUOTED ISO date (e.g. `attribution.declared_date: 2026-07-25`)
     is implicit-typed by PyYAML safe_load into a datetime.date, which survey_meta_from_yaml threads
     VERBATIM into SMETA — plain json.dumps could not serialise it and the whole build CRASHED at the
     first emit site (Object of type date is not JSON serializable), quarantining every survey with it.

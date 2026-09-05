@@ -394,7 +394,7 @@ def test_chip_and_qa_card_share_one_flag_definition(warn_report, tmp_path):
 def test_conditioning_scope_all_n_form(warn_report, tmp_path):
     """CONDITIONING-TABLE PIN. The scope cell renders the mockup's 'all N' form when every served
     station carries the note (the fixture's lineage notes are survey-wide), never a bare count
-    with a redundant enumeration. FAILS IF the all-N form regresses to '6 (station A1, CP1B10, …)' or
+    with a redundant enumeration. FAILS IF the all-N form regresses to '6 (A1, CP1B10, …)' or
     the count does not match the engine's."""
     got = _run_plan(tmp_path, warn_report)
     survey = warn_report["survey"]

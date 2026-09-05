@@ -19,8 +19,9 @@ It reproduces exactly these Compose interpolation forms
     ${VAR:+repl}      -> `repl` if set AND non-empty, else ""
     ${VAR+repl}       -> `repl` if set, else ""
 
-`docker compose config` fails iff at least one `:?`/`?` guard trips for the given environment. So: enumerate the
-guards in the file, evaluate them against a supplied environment, and report every abort.
+`docker compose config` fails iff at least one `:?`/`?` guard trips for the given environment,
+which is the "required variable is missing" abort an operator sees. So: enumerate the guards in
+the file, evaluate them against a supplied environment, and report every abort.
 
 Usage:
     python3 check_compose_guards.py <compose.yaml> KEY=VALUE [KEY=VALUE ...]
