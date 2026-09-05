@@ -611,7 +611,7 @@ function stationSummaryDetails(s,m,sc){
     ["tipper",s.comps.includes("T")?"yes":"no"],
     ["remote reference",sciGate||(sc[SC.rr]?"yes":"not recorded")]]);
   // No "Data checks" group renders here: the TF error is not shown to readers. SC.mre and
-  // DATA_CHECKS_LABEL stay defined because the column index and the label are part of the sc.json
+  // DATA_CHECKS_LABEL stay defined because the column index and the label are part of the sci.json
   // vocabulary, which the products keep whether or not this surface renders.
   const proc=_ssGroup("Processing",[
     ["software",sciGate||(sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI")],

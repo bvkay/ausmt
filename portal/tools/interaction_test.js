@@ -2356,7 +2356,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   //    SURVEY drawer (openSurvey -> identifiersHtml): each instrument's registry pid from the additive
   //    instruments[] list renders as a REAL clickable <a href>, and the hostile instrument pid
   //    (javascript:alert(1)) must be neutralised by the escUrl guard (rewritten to the safe handle host), so
-  //    NO href carries a javascript: scheme. The legacy "Survey PID" (m.pid) ROW is not displayed - 
+  //    NO href carries a javascript: scheme. The legacy "Survey PID" (m.pid) ROW is not displayed -
   //    never minted, it reads "not recorded" on every real survey - so the drawer must NOT render a
   //    "Survey PID" label nor the m.pid handle link (the field is still served; only the row is gone).
   const dpid = doc.getElementById("drawer");
@@ -2523,7 +2523,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // always-shown <div class="plot"> blocks. The empty-svg absence guard is preserved: an UNCOLLECTED panel
   // stays ABSENT (no empty box). This section RED-proves the swap: on the old <details> markup the
   // `div.plot[data-plot=...]` selectors below find nothing.
-  //   station A1 (tipper + pt): both blocks shown, as divs, with no <details>; sublines + expand kept.
+  //   station A1 (tipper + pt): both blocks shown, as divs, with no <details>; sublines + the
+  //   expand affordance kept.
   //   station A2 (pt, no tipper): pt block shown, arrow block ABSENT (empty-svg guard, no empty box).
   //   station D1 (embargoed, neither collected): neither block renders.
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();

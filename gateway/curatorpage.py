@@ -3074,7 +3074,8 @@ def _builds_table(ops, ops_stale: bool, generated_at, *, csrf_token: str = "",
         href = "/gateway/curator/serve/build/" + _esc(d)
         is_serving = bool(b.get("serving"))
         serving = f'<span class="pill" style="background:{_PALETTE["ok"]}">serving</span>' if is_serving else ""
-        # "serve this build…" = rollback (a link to the typed-id confirm page). The
+        # "serve this build…" = rollback (a link to the typed-id confirm page). The currently
+        # serving build offers no rollback-to-itself. The
         # currently-serving build offers no rollback-to-itself. rollback is a repoint, never a rebuild.
         act = ""
         if actions and d and not is_serving:
@@ -5208,7 +5209,7 @@ def _org_roles_widget(section: str, index, label: str, value, submitted: dict | 
     """organisations[<i>].roles as a PER-ROW checkbox group (c_<section>_<i>_<role>) over the
     ORG_ROLES_ORDERED vocabulary. A list-valued sub-field has no scalar input, and the group is the
     honest control: an organisation is often several things at once. Fail-closed by construction
-    (only tokens are offered; the assembler REFUSES any other token in the POST). After a validation
+    (only ORG_ROLES_ORDERED tokens are offered; the assembler REFUSES any other token in the POST). After a validation
     error the ticks come from `submitted` so the curator's selection survives the round trip."""
     from . import editor_form
     prefix = f"c_{section}_{index}_"
