@@ -301,7 +301,7 @@ def test_served_flag_withholds_no_class(monkeypatch):
     assert "formats" not in held_doc and "distribution" not in held_doc
 
 
-# ---------------------------------------------------------------- markers never leak
+# ---------------------------------------------------------------- Markers never leak
 
 MARKED_YAML = """\
 slug: marked-survey

@@ -275,7 +275,7 @@ def test_built_withheld_stubs_reject_the_ratified_leaks(built_access, why, mutat
         assert stcheck.violations(leaked), f"{key}: the semantic layer accepted {why}"
 
 
-# ---------------------------------------------------------------- no masked position in a note
+# ---------------------------------------------------------------- No masked position in a note
 
 def _coord_fixtures():
     """The coordinate fixtures and their leak-string generator, reused rather than restated."""
@@ -357,7 +357,7 @@ def test_the_masked_stations_still_publish_a_record(built_masked):
     assert by_station[c42.HID["id"]]["location"] == {"lat": None, "lon": None}
 
 
-# ---------------------------------------------------------------- archives are containment
+# ---------------------------------------------------------------- Archives are containment
 
 def test_a_masked_station_advertises_no_archive_it_put_no_bytes_into(built_masked):
     """An `archive` row is a CONTAINMENT claim, and the byte gate decides containment per station: a

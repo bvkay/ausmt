@@ -378,7 +378,6 @@ check_ts_routes() {
 	#     from the repo table, so the pin cannot rot when the corpus moves).
 	#   * a route the table does NOT name 404s. That is the closed-world property: the map's `default ""`
 	#     is the suppression, so a path outside it must produce no Location at all.
-	#     suppression, so a path outside it must produce no Location at all.
 	#   * any survey the generator could not resolve is recorded in the table as `# UNRESOLVED`, and
 	#     its hand-offs are OFFLINE. Dropping one survey's routes is the safe direction (they 404),
 	#     which is exactly why it must not pass unremarked on the edge that serves them.
