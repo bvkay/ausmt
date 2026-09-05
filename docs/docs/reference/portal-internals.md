@@ -4291,7 +4291,7 @@ without re-deriving precision client-side (forbidden by the record). Tolerant of
 
 ```text
 slug -> survey label, for the #/survey/<slug> route (the published /surveys/<slug> path URLs;
-the sitemap now emits 301 into this route at the front door under the path-URL contract).
+the sitemap emits 301 into this route at the front door under the path-URL contract).
 ausmt_id is
 au.<slug>.<station> - mirrors the engine's own slug_of derivation in extract/build_portal.py
 rather than re-slugifying the label, so it stays correct even if a label's slugification is

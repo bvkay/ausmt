@@ -1340,8 +1340,8 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
   if(!rehydrate)_rememberDrawerOpener();              // Capture the invoking element before the rewrite
   // The survey drawer OWNS its route, as openStation does: opening survey B over
-  // survey A must replace #/survey/<A> in the address bar, just as the close path clears it, one step
-  // further along. See docs: portal internals, drawer.js.
+  // survey A must replace #/survey/<A> in the address bar, just as the close path clears it. See docs:
+  // portal internals, drawer.js.
   if(!rehydrate&&m.slug)location.hash="#/survey/"+encodeURIComponent(m.slug);
   _drawerSubject={kind:"survey",sv};                  // what rehydrateOpenDrawer re-renders when a gate settles
   // Section order - (1) title+description, (2) geographic footprint, (3) station count + period-range
