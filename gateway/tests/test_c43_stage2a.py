@@ -7,7 +7,7 @@ Pins here:
     the +180 presentation shift on t[4] is inverted before classifying - a station whose TRUE phase
     sits in the third quadrant (stored t[4] near 0…90) classifies IN-quadrant; reading the stored
     value as true phase mis-classifies it.
-  * [FC-2] LAG LABEL: with served ≠ published the Stations panel carries the publish-pending label.
+  * LAG LABEL: with served ≠ published the Stations panel carries the publish-pending label.
   * CSP SWEEP extended to every NEW Stage-2a renderer/JS constant + rendered surface.
   * HISTORY READ-ONLY: the history-job argv carries only the read-only `log` verb (allowlist assertion).
   * QUARANTINE CONTAINMENT: a traversal attempt 404s; a real package file serves with the safe
@@ -200,7 +200,7 @@ def test_combined_phase_plot_supersedes_separate_plots_source():
 
 
 # ==================================================================================================
-# [FC-2] lag label on the Stations panel
+# The lag label on the Stations panel
 # ==================================================================================================
 def _hub_survey(tmp_path):
     surveys_live = tmp_path / "surveys-live"
@@ -211,7 +211,7 @@ def _hub_survey(tmp_path):
 
 
 def test_fc2_lag_label_rendered_when_served_differs_from_published(tmp_path):
-    """[FC-2] LAG-LABEL PIN. The Stations tab carries the server-rendered published HEAD in
+    """LAG-LABEL PIN. The Stations tab carries the server-rendered published HEAD in
     data-published-head; the stations JS compares it to the served build's source_commit and renders
     the 'facts from build … — publish pending' label ON THE PANEL. This pin proves the label MACHINERY
     is present: the panel scaffold carries the published HEAD hook AND the JS carries the publish-
@@ -239,11 +239,11 @@ def test_fc2_lag_label_rendered_when_served_differs_from_published(tmp_path):
             m = re.search(r'<div id="survey-stations"[^>]*>', r.text)
             assert m, "the survey-stations panel scaffold must render"
             assert 'data-published-head="pub1234"' in m.group(0), (
-                "the stations panel itself must carry the [FC-2] published-HEAD hook")
+                "the stations panel itself must carry the published-HEAD hook")
             assert 'src="/gateway/curator/stations.js"' in r.text
-        # The JS carries the [FC-2] label + the lag comparison (served source_commit vs published HEAD).
+        # The JS carries the lag label + the lag comparison (served source_commit vs published HEAD).
         js = curatorpage.STATIONS_JS
-        assert "publish pending" in js, "the [FC-2] publish-pending label must be in the stations JS"
+        assert "publish pending" in js, "the publish-pending label must be in the stations JS"
         assert "lagPending" in js and "publishedHead" in js, "the served-vs-published lag compare"
     run(_body())
 

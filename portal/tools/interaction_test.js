@@ -338,7 +338,7 @@ let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).
 code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFind," +
   "curView:()=>curView,nST:()=>ST.length,visIds:()=>visible.map(s=>s.id)," +
   "visSurveys:()=>[...new Set(visible.map(s=>s.survey))]," +
-  // intro-panel + tour hooks (UX-A) - exposed so the driver can assert on internal helpers
+  // intro-panel + tour hooks, exposed so the driver can assert on internal helpers
   // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro lets the driver
   // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
   "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +

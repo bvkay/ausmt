@@ -387,7 +387,7 @@ def apply_patch(data, patch: dict) -> list[str]:
     None (which re-emits as `null`). Assigned strings pass through quote_ambiguous (FIX 3) so a
     YAML-1.1-retypeable token is emitted quoted.
 
-    [FC-4] DIFF-MINIMAL MAP MERGE (Stage 1): when the OLD value is a round-trip mapping and the
+    DIFF-MINIMAL MAP MERGE (Stage 1): when the OLD value is a round-trip mapping and the
     NEW value is a dict, the two are merged SURGICALLY into the existing node (_merge_map_into) —
     only the sub-keys whose leaf value actually changed are reassigned, so every UNCHANGED sub-key
     keeps its original comment, quoting, and position and produces NO diff line. The previous

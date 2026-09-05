@@ -143,7 +143,7 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
-# [FC-4] Stage-1 diff-minimality pins. The editor submits WHOLE sections as plain
+# Stage-1 diff-minimality pins. The editor submits WHOLE sections as plain
 # JSON dicts; the apply_patch replaced the section's CommentedMap wholesale, so editing ONE
 # sub-field re-emitted every sibling line and dropped intra-section comments. These pin the surgical
 # in-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter (a
@@ -152,7 +152,7 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 # --------------------------------------------------------------------------------------------------
 
 # A survey whose sections carry INTRA-section comments — the exact fidelity the wholesale replace
-# destroyed. It deliberately carries every shape the FC-4 diff pins need to exercise:
+# destroyed. It deliberately carries every shape the diff pins need to exercise:
 #   * organisation — a map with a standalone leading comment (before `ror`), an inline trailing
 #     comment (on `name`), and a DELETABLE sub-key (`legacy_code`, removed via the advanced-JSON path);
 #   * processing — a map that carries BOTH a nested map-in-map (`software.name`/`software.version`,
@@ -191,7 +191,7 @@ custom_local_note: "keep me byte-for-byte"
 
 
 def test_single_field_edit_diff_touches_only_that_field(tmp_path):
-    """[FC-4] DIFF-MINIMALITY PIN. Change ONE sub-field of a map section
+    """DIFF-MINIMALITY PIN. Change ONE sub-field of a map section
     (organisation.ror null -> a URL) and the emitted survey.yaml diff must touch ONLY that field's
     line(s) plus the managed version/release_notes — never the untouched sibling (organisation.name)
     and never its comment. FAILS IF editing one sub-field re-emits a sibling line or strips an
@@ -226,7 +226,7 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
 
 
 def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
-    """[FC-4] PER-SECTION PATCH PIN. Submitting a change to section A (organisation)
+    """PER-SECTION PATCH PIN. Submitting a change to section A (organisation)
     that BOTH adds a sub-key AND deletes a sub-key (via the advanced-JSON path - the section is
     submitted without `legacy_code`, so _merge_map_into's deletion loop drops it) must leave section
     B (lead_investigator) byte-for-byte identical - every one of its lines, comment included, survives
@@ -275,13 +275,13 @@ def _body_diff_lines(diff: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------------------------------
-# [FC-4] diff pins on the REAL emitted diff. Each pins one guarantee of the surgical map merge AND
+# Diff pins on the REAL emitted diff. Each pins one guarantee of the surgical map merge AND
 # is failable by a NAMED mutation (temporary, evidence captured in the fix-round report, reverted
 # — never committed): a pin nothing can fail is not a pin (Invariant 10). The mutation for each is
 # stated in its docstring so a future reader can reproduce the red.
 # --------------------------------------------------------------------------------------------------
 def test_added_subkey_with_ambiguous_value_is_quoted_no_sibling_moves(tmp_path):
-    """Adding a sub-key whose value is FIX-3-ambiguous ('NO', a YAML-1.1 bool) must emit it
+    """Adding a sub-key whose value is one PyYAML would retype ('NO', a YAML-1.1 bool) must emit it
     DOUBLE-QUOTED (so the PyYAML readers downstream read the string 'NO', not False) AND move no
     sibling line. Failable by bypassing quote_ambiguous on the added-key branch of _merge_map_into
     (`node[subkey] = new_val` instead of `= quote_ambiguous(new_val)`): the added value then emits

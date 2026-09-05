@@ -619,7 +619,13 @@ CONTRACT_CITATION = Rule(
 # A work item that cites a CLAUSE of the design it belongs to writes the clause after a dot
 # ("D9.1", "T1.2"), and the citation is the same audit trail as the work item alone. The letters
 # are what make it one: an enumeration written 1.1 or 2.3 is a comment numbering its own list.
-_TAG = r"[A-Z]{1,2}\d{1,2}(?:\.\d{1,2})?[a-z]?"
+# A HYPHEN OR A BRACKET IS PUNCTUATION, NOT A DISGUISE. The same work item is written FC-12, [FC-3]
+# and (UX-A) as often as C43, and a shape that reads only letters-then-digits reports a surface
+# clean while sixteen of them stand on it. So the letters may be joined to what follows by a hyphen,
+# and what follows may be a LETTER where a digit is expected. The brackets need no rule of their own:
+# they are not word characters, so the boundaries already read through them.
+_TAG = (r"(?:[A-Z]{1,2}\d{1,2}(?:\.\d{1,2})?[a-z]?"
+        r"|[A-Z]{2,3}-(?:\d{1,2}[a-z]?|[A-Z]))")
 _TAGS = r"%s(?:\s*[/,]\s*%s)*" % (_TAG, _TAG)
 
 TAG_PATTERN = re.compile(r"(?<![\w#])(?P<any>%s)(?![\w]|\.\d)" % _TAGS)
@@ -677,6 +683,29 @@ TAG_NOT_A_TAG = (
      re.compile(r"digest|checksum|hash|manifest|sha\d", re.I)),
     ("a percentile", re.compile(r"^P(?:50|95|99)$"),
      re.compile(r"percentile|median|\btail\b|budget|threshold|profile", re.I)),
+    # THE HYPHENATED SHAPE'S OWN FALSE POSITIVES, measured over a pristine origin/main export: a
+    # character encoding, a hash algorithm, an EMTF estimate section and two published station ids
+    # are the only tokens of that shape in the tree that are not work items.
+    ("a character encoding", re.compile(r"^UTF-\d{1,2}$"),
+     re.compile(r"encod|decod|\bbytes?\b|locale|codec|charset|mojibake|latin-1|ASCII|unicode"
+                r"|\bcode\b|surrogate|\bBMP\b|cp\d{3,4}", re.I)),
+    # A run about hashing names the algorithm once and then uses it as a parameter ("the SHA-1/6/30
+    # defaults"), so this meaning reads the whole run for the reason the licence entry gives.
+    ("a hash algorithm", re.compile(r"^SHA-\d$"),
+     re.compile(r"RFC ?\d{3,4}|Appendix|TOTP|HMAC|authenticator|hash|digest", re.I)),
+    # The per-frequency estimate blocks an EMTF processor writes, named after its own setting.
+    ("an EMTF estimate section", re.compile(r"^XPR-\d{1,2}$"),
+     re.compile(r"EstimationsPerFrequency|solution of record|averaged|_avg|section", re.I)),
+    # Two station ids the corpus publishes with the hyphen in them. The DATAID shape above cannot
+    # see them because it reads no hyphen, and the tokens are named rather than the shape widened:
+    # a shape wide enough to hold them holds every hyphenated work item too.
+    ("a published station id", re.compile(r"^(?:WG|MT)-\d{1,2}[a-z]?$"),
+     re.compile(r"station|corpus|DATAID|\bEDI\b|mt_metadata|distortion|quadrant", re.I)),
+    # The process a container runs as, which the zombie-reaping advice names by number. The word
+    # "pid" is NOT on the list: it stands inside the token, so a window that reads it excuses the
+    # token by its own spelling.
+    ("a process id", re.compile(r"^PID-\d$"),
+     re.compile(r"process|reap|container|parent|zombie|\binit\b", re.I)),
 )
 # ONE MEANING ON THAT TABLE READS THE WHOLE RUN RATHER THAN THE WINDOW. A licence identifier is
 # named by the word licence, license or dedication standing anywhere in the prose that carries it:
@@ -685,7 +714,7 @@ TAG_NOT_A_TAG = (
 # that said "licence" twice and still could not see either, and the licence name was traded for a
 # paraphrase to get the run green. Every other entry keeps the window, because a station id or a
 # quadrant IS its neighbourhood; a licence id is not.
-TAG_CONTEXT_IS_THE_WHOLE_RUN = ("a public-domain dedication",)
+TAG_CONTEXT_IS_THE_WHOLE_RUN = ("a public-domain dedication", "a hash algorithm")
 # A token that IS an id is named by the noun that says so, immediately before it
 # with one space between. The test is on the TOKEN. A window wide enough to hold
 # a sentence excuses any token standing NEAR the word, and on a corpus about
@@ -724,6 +753,12 @@ def _in_character_class(text, start, stop):
     if "]" in inner_before:
         return False
     inner = inner_before + text[start:stop] + inner_after
+    # A GROUP WHOSE WHOLE CONTENT IS THE TOKEN IS A LABEL. "[FC-2]" carries the letter-hyphen-digit
+    # run a character class is told by, so a rule reading the run alone excuses every bracketed work
+    # item in the tree; a real class in prose carries a range, an escape or a second member BESIDES
+    # the token.
+    if inner[1:].strip() == text[start:stop]:
+        return False
     return bool(RANGE_IN_CLASS.search(inner)) and "," not in inner
 
 
@@ -4023,3 +4058,32 @@ def test_a_quoted_literal_is_data_and_a_quoted_sentence_is_not():
     assert literal_runs("it eats `/` and it leaves !'()* alone") == ["/", "!'()*"]
     assert literal_runs("it eats `/` and it leaves !'* alone") == ["/", "!'*"]
     assert literal_runs("===== THE WORKSPACE CARD ======") == []
+
+
+def test_a_hyphen_or_a_bracket_does_not_hide_a_work_item():
+    """The same work item is written FC-12, [FC-3] and (UX-A) as often as C43. A shape that reads
+    only letters-then-digits reported a surface clean while sixteen bracketed ones stood on it, and
+    the bracketed form was excused twice over: the group "[FC-2]" carries the letter-hyphen-digit
+    run a REGEX CHARACTER CLASS is told by, so a group whose whole content is the token is read as
+    a label. Each meaning the widened shape reaches keeps its own entry, and the same token in
+    work-item position without the words that give it that meaning is still caught."""
+    for text in ("[FC-3] the lag label is server-rendered",
+                 "intro-panel hooks (UX-A) exposed to the driver",
+                 "FC-12 diff-minimality holds for a map section",
+                 "the [FC-2] published-HEAD hook"):
+        assert "work-item identifier" in labels_for("# " + text), (text, labels_for("# " + text))
+
+    # A real character class carries a range, an escape or a member besides the token.
+    assert not work_item_tags("the slug matches ^[a-zA-Z0-9-]+$ and nothing else")
+
+    excused = ("node writes UTF-8 and text mode decodes it with the locale codec",
+               "RFC 6238 Appendix B lists the SHA-1 vectors",
+               "the EstimationsPerFrequency setting produced XPR-0 .. XPR-n",
+               "TAS105/MBN09/WG-14 on the real corpus",
+               "a container PID-1 that does not reap")
+    for text in excused:
+        assert not work_item_tags(text), (text, work_item_tags(text))
+    # The same tokens with no meaning beside them are work items again.
+    for token in ("UTF-8", "SHA-1", "XPR-0", "WG-14", "PID-1"):
+        bare_use = "%s is done; the panel now renders the label" % token
+        assert work_item_tags(bare_use), bare_use

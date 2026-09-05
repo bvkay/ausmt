@@ -1008,7 +1008,7 @@ class Gateway:
     def handle_stations_js(self, request: Request) -> Response:
         """GET /gateway/curator/stations.js - the Stage-2a Stations tab's browser-side script (the
         filterable table, drill-down facts panel, hand-built SVG response-curve plots + quadrant
-        verdicts, [FC-2] lag label). Same CSP reason as the other external scripts (script-src 'self'
+        verdicts, the lag label). Same CSP reason as the other external scripts (script-src 'self'
         blocks inline). Session-gated for consistency; the content is a public-repo constant. DEGRADES:
         without it the Stations tab shows only its loading placeholder, the page never breaks."""
         name = self._require_session(request)
@@ -1426,7 +1426,7 @@ class Gateway:
                     commits = result.get("commits") or []
                 else:
                     history_error = result.get("error") or "the history could not be read"
-        # [FC-2] served-vs-published lag label for the Stations panel: computed server-side from the
+        # The served-vs-published lag label for the Stations panel: computed server-side from the
         # published HEAD (the served build id is browser-filled by the stations JS, which compares).
         build_lag = self._build_lag_hint() if tab == "stations" else None
         return self._html(curatorpage.render_survey_hub(
@@ -1740,7 +1740,7 @@ class Gateway:
                                         note, pre)
 
     def _build_lag_hint(self) -> dict:
-        """The server-side half of the Stations [FC-2] lag label: the published surveys-live HEAD (or
+        """The server-side half of the Stations lag label: the published surveys-live HEAD (or
         None). The stations JS fetches /data/build.json browser-side, reads its build_id + source_commit,
         and — when the served source_commit differs from this published HEAD — renders the
         'facts from build <build_id> — publish pending' label ON THE PANEL (not only the drift chip).

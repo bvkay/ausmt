@@ -1920,7 +1920,7 @@ STATIONS_JS = r"""
   // when the products tree is not served (the Frame row says so honestly).
   function factsPanel(cat, sc, station, buildId, lagPending, cls) {
     var panel = el('div', null, 'panel');
-    // [FC-2] lag label ON THE PANEL when served != published (not only the drift chip).
+    // The lag label ON THE PANEL when served != published (not only the drift chip).
     if (lagPending) {
       var lag = el('p', 'facts from build ' + (buildId || '(unknown)') + ' — publish pending', 'sub');
       lag.style.color = '#D9A23B'; lag.style.fontWeight = '600';
@@ -2258,7 +2258,7 @@ STATIONS_JS = r"""
     }
     var buildId = (build && !build.__err && !build.__missing) ? (build.build_id || null) : null;
     var served = (build && !build.__err && !build.__missing) ? (build.source_commit || '') : '';
-    // [FC-2]: lag is pending when the served source_commit differs from the published HEAD (prefix-
+    // Lag is pending when the served source_commit differs from the published HEAD (prefix-
     // tolerant, matching the drift chip). Only judgeable with both sides present.
     var lagPending = false;
     if (publishedHead && served) {
@@ -6290,7 +6290,7 @@ def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str
     filterable station table, drill-down facts panel, hand-built SVG plots, and quadrant verdicts are
     all populated BROWSER-side by stations.js from the served /data corpus (catalogue/sci/tf/build) —
     the serve-panel pattern, zero new gateway privileges. `build_lag` carries the server-rendered
-    published HEAD for the [FC-2] lag label (data-published-head): the JS compares it against the
+    published HEAD for the lag label (data-published-head): the JS compares it against the
     served build's source_commit and, on drift, renders 'facts from build <id> — publish pending' on
     the panel itself. Degrades: without JS the placeholder stays, the page never breaks.
 
@@ -6651,7 +6651,7 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
     when the read-job failed on a non-metadata tab). The Overview + Stations tabs are browser-
     populated from the served /data corpus (the serve-panel pattern, zero new gateway privileges);
     the Metadata tab is the per-section editor; the History tab is server-rendered from the runner
-    history read-job (`commits`). `build_lag` ([FC-2]) carries the served-vs-published label
+    history read-job (`commits`). `build_lag` carries the served-vs-published label
     state the Stations JS renders when served ≠ published. survey-hub.js loads ONCE for every tab
     (header counts + Stations chip are hub-wide); it degrades to the server-rendered scaffold."""
     tab = tab if tab in _HUB_TAB_KEYS else "overview"

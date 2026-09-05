@@ -215,7 +215,7 @@ def test_zombie_kit_names_top_leaker_by_parent(tmp_path):
     assert grouped, f"expected grouped-by-parent lines:\n{r.stdout}"
     assert "4242" in grouped[0], f"the heaviest parent (4242, 2 zombies) must lead:\n{r.stdout}"
     assert "leaky-parent" in grouped[0], "the leaker's command line should be named"
-    assert "init: true" in r.stdout, "the kit must list the container-PID-1 reaping fix"
+    assert "init: true" in r.stdout, "the kit must list the reaping fix for a container init process"
 
 
 def test_unknown_subcommand_exits_2(tmp_path):
