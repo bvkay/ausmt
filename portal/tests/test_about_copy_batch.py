@@ -674,7 +674,7 @@ def test_the_page_and_the_engine_print_one_acknowledgement():
 
     WHY IT LIVES HERE rather than in engine/tests, the same reason the header parity pin's engine
     half does: portal-ci runs on portal/** AND on engine/extract/_pages.py, so an edit to either
-    half fires this module. The engine workflow triggers on engine/** alone and cannot see about.html."""
+    half fires this workflow. The engine workflow triggers on engine/** alone and cannot see about.html."""
     tree = ast.parse(PAGES_PY.read_text(encoding="utf-8"))
     found = [node.value for node in tree.body
              if isinstance(node, ast.Assign)

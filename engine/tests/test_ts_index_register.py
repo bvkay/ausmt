@@ -191,7 +191,7 @@ def test_an_unknown_top_level_key_stops_the_load(tmp_path):
 
 
 def test_a_station_the_survey_does_not_publish_stops_the_load(tmp_path):
-    """The loud failure the workflow contract names: the register states which remote file belongs to
+    """The loud failure the contract names: the register states which remote file belongs to
     which station, so a row nothing in the corpus matches would publish a route under an identifier
     this build never assigned."""
     with pytest.raises(tsindex.TsIndexError) as e:

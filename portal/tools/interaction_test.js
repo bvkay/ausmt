@@ -849,8 +849,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // product is USABLE, which covers pending AND failed. Testing only "pending" was the defect: SCI_READY
   // settles on failure too, so a 404 on sci.json re-enabled the completeness controls, emptied the map at any
   // qMin, painted every marker the "not evaluated" grey and wrote remote_ref:false into an exported file.
-  // Phase 2 is what made a sci.json failure survivable at all (pre-split it rode the required Promise.all and
-  // blanked the portal), so this state is this module's to answer.
+  // Phase 2 is what made a sci.json failure survivable at all (pre-split it rode the required
+  // Promise.all and blanked the portal), so this state is this harness's to answer.
   const _noSci = Object.assign({}, DATAMAP); delete _noSci["data/sci.json"];
   const sciFailWin = await bootFreshWindow(_noSci);
   const sfDoc = sciFailWin.document, sfA = sciFailWin.__api;

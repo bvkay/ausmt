@@ -107,7 +107,7 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
 
 
 def test_the_sitemap_advertises_the_hubs_and_the_static_pages(tmp_path):
-    """The sitemap is the crawler's map of the site, and until this module it carried only the root
+    """The sitemap is the crawler's map of the site, and until this change it carried only the root
     and the entity pages: the two hub pages did not exist, and about/releases/add-survey were
     substantive linked documents that no crawler was pointed at. FAILS IF any of the five is
     missing, or if one of them carries a <lastmod> (none of them has an honest change signal, and
@@ -837,8 +837,8 @@ def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_det
 
 
 def test_the_station_page_renders_the_runs_its_own_document_publishes(tmp_path):
-    """The precondition. station_page printed five facts and never touched
-    doc["runs"], so every deployment window, dipole geometry, logger and coil PID a station record
+    """The precondition for simplifying the survey table. station_page printed five facts and never
+    touched doc["runs"], so every deployment window, dipole geometry, logger and coil PID a station record
     publishes existed on the SURVEY page's wide table and nowhere else. Simplifying that table
     before this lands would delete the metadata from served HTML.
 
@@ -995,7 +995,7 @@ def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations
 
 
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
-    """The entity link graph, all of it at once. Before this module a survey page had NO way back to
+    """The entity link graph, all of it at once. Before this change a survey page had NO way back to
     the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
     site-wide, including the 404 page's own recovery link), and nothing on any survey page named
     the collection it belongs to - so the graph ran collection -> surveys only and the collection

@@ -956,9 +956,9 @@ def _citation_locator(smeta, access_url):
 
     Two rows claiming the same self-identifying scope are not a tie to break. Row order in a curated
     YAML file is not a curation decision, so an ambiguous record promotes nothing and keeps the
-    access route: section 13 rules that an absent preferred citation means AusMT asserts none, which
-    is true and useful, where an arbitrary pick is neither. Naming one target among several is a
-    curation act belonging in a curator-declared preferred identifier (section 12)."""
+    access route: an absent preferred citation means AusMT asserts none, which is true and useful,
+    where an arbitrary pick is neither. Naming one target among several is a curation act belonging
+    in a curator-declared preferred identifier."""
     doi = _doi_url((smeta or {}).get("doi"))
     if doi:
         return doi

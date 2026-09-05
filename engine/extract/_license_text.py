@@ -5,7 +5,7 @@ stdlib-generated table. This is what lets BOTH sides share one implementation of
 
   * build_portal - the bundle LICENSE.txt that travels inside every distributed survey zip
     (`license_instrument_text`), plus the redistribution allow-list gate (`redistributable`); its
-    output stays byte-identical to the in-module version (pinned by
+    output stays byte-identical to the earlier in-module version (pinned by
     tests/test_license_gate.py + tests/test_manifest.py).
   * the gw-runner - the LICENSE.md it writes into a submitted package at intake. The runner
     executes on the ENGINE image, where `extract` is an installed package, so

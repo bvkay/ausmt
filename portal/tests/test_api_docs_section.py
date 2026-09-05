@@ -15,11 +15,11 @@ Three groups of claim are pinned here.
     section-nav strip, and the "API access" card's link into it are asserted together (parsed DOM, so an
     HTML comment cannot pass any of them).
 
-(2) NOTHING IN THE PORTAL TREE ADVERTISES A /api/... PATH. Before the api-docs workflow the station drawer
+(2) NOTHING IN THE PORTAL TREE ADVERTISES A /api/... PATH. Before the API docs landed, the station drawer
     offered a "Read API (planned)" over /api/station/<id>.json, /api/survey/<slug>.json and
     /api/station/<id>/edi. No AusMT deployment has ever served an /api tier: those three paths were
     fiction. This scan FAILS if any such path comes back anywhere in the shipped portal tree. RED-proven:
-    run against origin/main before that module it reports portal/src/drawer.js.
+    run against origin/main before that change, it reports portal/src/drawer.js.
 
 (3) THE DOCS PATTERNS STAY TRUE OF THE ARTIFACTS THEY DESCRIBE. The content assertions are deliberately
     specific about facts that were verified against the live corpus before being written down, because
@@ -376,8 +376,9 @@ def test_bbox_states_the_generalisation_caveat_and_its_contract_fields():
         assert value in frag, f"the prose must name the coordinates_state value {value}"
     # The docs name station.json's coordinate_policy, so an EMITTED record must actually carry it, and
     # only where the position is non-exact (an exact record gaining the key would tell a reader every
-    # position is qualified). Emitted documents rather than emitter source text: this module installs no
-    # engine stack, and a grep for a source literal survives no refactor of the emitter.
+    # A test module installs nothing; the portal suite is what runs without the engine stack:
+    # position is qualified). Emitted documents rather than emitter source text: the portal suite
+    # installs no engine stack, and a grep for a source literal survives no refactor of the emitter.
     def _emitted(station):
         return json.loads((STATION_PRODUCTS / "open-survey" / station / "station.json")
                           .read_text(encoding="utf-8"))
@@ -431,8 +432,9 @@ def test_no_fictional_api_paths_anywhere_in_the_portal_tree():
 
 
 def test_the_scan_actually_looks_at_the_files_that_used_to_carry_the_fiction():
-    """Guards the guard. The scan above passes trivially if its file walk collects nothing, so pin that
-    it reaches both files this module changed."""
+    """A test module changes no files. State what the scan must reach:
+    Guards the guard. The scan above passes trivially if its file walk collects nothing, so pin that
+    it reaches both files the change touched."""
     seen = {p.relative_to(ROOT).as_posix() for p in _shipped_portal_files()}
     for expected in ("src/drawer.js", "about.html", "index.html"):
         assert expected in seen, f"the fictional-path scan must cover {expected}; it walked {sorted(seen)}"

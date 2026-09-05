@@ -5,7 +5,7 @@ At 4px the two read as one cool blob, because the old pair separated mostly by H
 indigo 299 deg) while differing by only 9 L* - and small-mark discrimination is value-driven, not hue
 driven. BBMT moved #5E5ED6 -> #3730B8: a deeper, more saturated blue-indigo that puts a 24.6 L* gap and a
 55.7 C* gap between it and the LP teal, which is deliberately unchanged (teal is the established
-fabric colour across the portal and its atlases).
+fabric colour across the portal and the project's atlases).
 
 THE PALETTE HAS TWO AUTHORITIES, and that is the first thing this file pins. There is no gen_config /
 portal.config.yaml colour flow - that file carries branding, deployment, analytics and feature flags only.

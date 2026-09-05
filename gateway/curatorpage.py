@@ -6078,7 +6078,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     subset. Top-level scalars are inputs/textarea; the structured sections are per-section WIDGETS
     (labelled inputs, an access-level <select>, levels checkboxes, repeatable rows) with a collapsed
     advanced-JSON <details> override each; `care` is advanced-JSON only (nested shape). A version-bump
-    radio group (patch default) + a required release-note box carry the discipline.
+    radio group (patch default) + a required release-note box carry the one-bump-one-note discipline.
     `field_errors` annotates the section(s) that failed validation; `submitted` re-prefills the
     widgets with the curator's typed values after such a failure so nothing is discarded."""
     from . import editor_form
@@ -6534,7 +6534,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     # HUB-SINGLE-SAVE: ONE commit tray for the WHOLE form (bump + required note + Save), pinned to the
     # bottom of the field column so it is reachable from any scroll position. One logical edit, however
     # many sections it spans, is one bump, one release note, one diff, one confirm (the
-    # discipline is unchanged; it does not fire once per section).
+    # one-bump-one-note discipline is unchanged; it fires once per form, not once per section).
     patch_v, minor_v, major_v = (_suggest_bump(cur, k) for k in ("patch", "minor", "major"))
     tray = (
         '<div class="hub-committray panel" id="hub-commit-tray">'

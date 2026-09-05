@@ -970,7 +970,7 @@ def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
 def test_salt_instability_is_observable_via_salt_fp(tmp_path, clean_salt, monkeypatch):
     """Injection companion (Invariant 10: proves the stability observable CAN fail). FAILS IF: an
     engine commit that CHANGES between two in-process builds does not surface as differing salt_fp
-    values plus a full-miss 'warm' build - the exact mechanism, deterministic here."""
+    values plus a full-miss 'warm' build - the exact flake mechanism, deterministic here."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     monkeypatch.setattr(build_portal, "_git_commit_at",

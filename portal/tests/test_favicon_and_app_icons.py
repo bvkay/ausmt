@@ -126,7 +126,7 @@ def test_the_generated_pages_link_both_icons_same_origin():
 def test_no_web_manifest_was_smuggled_in():
     """The architect's default, pinned so it stays a decision rather than a drift. 192 and 512 exist
     for a future manifest; shipping one would make the portal installable to a home screen, which is
-    a product decision the brief has not made. FAILS IF a manifest link appears on any chrome page."""
+    a product decision that has not been made. FAILS IF a manifest link appears on any chrome page."""
     for name in CHROME_PAGES:
         text = (ROOT / name).read_text(encoding="utf-8")
         assert 'rel="manifest"' not in text, (

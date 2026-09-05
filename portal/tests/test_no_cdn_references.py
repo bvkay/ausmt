@@ -6,7 +6,7 @@ with every page load. The libraries are now vendored under portal/vendor/ and re
 path (see portal/vendor/README.md for upstream URLs + sha256 provenance).
 
 Change 6 RETIRED Leaflet.markercluster: proximity clustering was replaced by
-per-survey badges, which the brief then removed in turn (site locations only). The plugin,
+per-survey badges, which were then removed in turn (site locations only). The plugin,
 its stylesheet and both vendored files are gone, so the vendored set below is the THREE remaining
 libraries. tests/test_map_dots.py owns the assertion that no markercluster or badge asset comes back.
 

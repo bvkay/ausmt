@@ -47,8 +47,8 @@ SAMPLE_SURVEYS = ROOT / "data"          # data/sample-survey: two real EDIs, CC-
 SAMPLE_EDIS = sorted((ROOT / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
 sys.path.insert(0, str(ROOT / "extract"))
 import build_portal as bp  # noqa: E402
-# The module's engine-produced fixture writer (one EDI per station, distinctive positions, a
-# survey.yaml). Reused so the synthetic corpora are the SAME shape the coordinate-access tests build.
+# The coordinate-access suite's engine-produced fixture writer (one EDI per station, distinctive
+# positions, a survey.yaml). Reused so the synthetic corpora are the SAME shape those tests build.
 from test_coord_access import _stage_survey  # noqa: E402
 
 # ---- the regression pin's recorded numbers (measured on the fixed engine, macOS, the pinned

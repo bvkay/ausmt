@@ -52,7 +52,7 @@ def _make_package(root: Path, *, survey_yaml: str = _SURVEY_YAML, n_edi: int = 2
                   n_xml: int = 0) -> Path:
     """Build an extracted-package-shaped folder <root>/<slug>/ with survey.yaml, n_edi EDIs and n_xml
     EMTF XMLs, the layout safe_extract produces (package_dir/<slug>/...). EMTF XML is a first-class
-    submission input since the rule, so a package may carry either folder or both."""
+    submission input, so a package may carry either folder or both."""
     pkg = root / "intake-survey-2026"
     (pkg / "transfer_functions" / "edi").mkdir(parents=True)
     (pkg / "survey.yaml").write_text(survey_yaml, encoding="utf-8")

@@ -1,6 +1,6 @@
 """The two tier-3 INDEX pages: /surveys and /collections.
 
-Until this module the portal had no addressable index of any kind. The bare paths 301'd to the SPA
+Until this change the portal had no addressable index of any kind. The bare paths 301'd to the SPA
 root, the SPA's Surveys/Collections controls were buttons that set no hash, and every entity page's
 back-navigation pointed at a hash route that does not exist. So a crawler that reached a survey page
 found no hub above it, and a reader who followed "All surveys" landed on the map.

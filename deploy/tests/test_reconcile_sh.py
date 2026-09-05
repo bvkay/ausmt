@@ -721,8 +721,8 @@ def _seed_builds(tree: dict, names: list[str], served: str) -> Path:
 
 def test_prune_runs_on_entry_even_when_the_pass_fails(tmp_path):
     """PRUNE-ON-ENTRY. Stale build dirs are collected at the START of every pass, so a RUN OF FAILURES
-    cannot leak disk - the exact shape, where an hourly killed rebuild left ~0.5 GB behind
-    each time and the Makefile's own prune (inside the swap step) was never reached.
+    cannot leak disk - the failure shape where an hourly killed rebuild left ~0.5 GB behind each
+    time and the Makefile's own prune (inside the swap step) was never reached.
     FAILS IF a failing pass leaves more than KEEP_BUILDS build dirs behind, or prunes nothing at all."""
     tree = _make_tree(tmp_path, source_commit="aaaaaaa")
     _advance_head(tree)

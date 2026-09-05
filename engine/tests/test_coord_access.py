@@ -94,7 +94,7 @@ def _stage_survey(base, stations, *, declare_policy=True, extent=True, overrides
     edidir.mkdir(parents=True)
     for st in stations:
         # a station dict may carry "file" to decouple the FILE NAME from the DATAID: the station id
-        # derives from DATAID, never the file name, which is probe-e's whole attack class.
+        # derives from DATAID, never the file name - probe-e's whole attack class.
         (edidir / st.get("file", f"{st['id']}.edi")).write_text(_rewrite_edi(src, st), encoding="utf-8")
     lines = [
         'schema_version: "0.1"',
