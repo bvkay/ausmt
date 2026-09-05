@@ -23,6 +23,8 @@ be added later, but an installable PWA is its own decision and its own rule.
 """
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -132,3 +134,87 @@ def test_no_web_manifest_was_smuggled_in():
         assert 'rel="manifest"' not in text, (
             f"{name}: an installable-PWA manifest is its own decision, not a side effect of the "
             "icon work")
+
+
+# THE ROOT ICON. A browser that reads no SVG icon link asks the site root for /favicon.ico by name,
+# so the file has to exist at the root of the portal image and be the same lattice as everything
+# else. It is generated, multi-size, and held by the same drift gate as the other exports.
+FAVICON_ICO = ROOT / "favicon.ico"
+TOOL = ROOT / "tools" / "gen_brand.py"
+ICO_SIZES = (16, 32, 48)
+
+
+def _tool_namespace():
+    """The generator's own constants and renderers, read from its CURRENT source.
+
+    Compiled and run rather than imported for the reason tests/test_brand_exports.py gives: an import
+    is answered from __pycache__ whenever the stamped source mtime matches to the second."""
+    ns = {"__file__": str(TOOL), "__name__": "gen_brand_pin"}
+    exec(compile(TOOL.read_text(encoding="utf-8"), str(TOOL), "exec"), ns)
+    return ns
+
+
+def test_the_root_icon_exists_and_carries_three_sizes():
+    """FAILS IF the portal ships no /favicon.ico, or if the file stops carrying all three entries.
+    A browser that ignores the SVG icon link requests this path by name, and nothing else on the site
+    answers it."""
+    from PIL import Image
+    assert FAVICON_ICO.is_file(), \
+        "portal/favicon.ico must be committed; the portal image serves portal/ at the site root"
+    with Image.open(FAVICON_ICO) as ico:
+        assert ico.format == "ICO", f"the root icon must decode as an ICO, got {ico.format!r}"
+        got = sorted(s[0] for s in ico.info["sizes"])
+        assert got == list(ICO_SIZES), \
+            f"the root icon must carry {list(ICO_SIZES)} px entries, got {got}"
+
+
+def test_every_root_icon_entry_is_the_generated_mark_at_its_own_size():
+    """FAILS IF an entry stops being the lattice the generator renders at that size. Each entry is
+    rendered at its own size, so the 16 px frame carries the small-size radius band rather than a
+    resampled copy of the 48 px one."""
+    from PIL import Image
+    ns = _tool_namespace()
+    with Image.open(FAVICON_ICO) as ico:
+        for size in ICO_SIZES:
+            ico.size = (size, size)
+            assert ico.convert("RGBA").tobytes() == ns["png_mark"](size).convert("RGBA").tobytes(), \
+                f"the {size} px entry is not the generator's mark rendered at {size} px"
+
+
+def test_the_root_icon_is_declared_and_the_drift_gate_compares_it():
+    """FAILS IF the icon is not a declared output, or if the gate lists it without comparing it: a
+    generated file the gate does not compare is a file anyone can hand-edit. The teeth are the
+    perturbation, which is what tells a listing apart from a comparison."""
+    ns = _tool_namespace()
+    assert "portal/favicon.ico" in [row[0] for row in ns["_OUTPUT_INDEX"]], \
+        "portal/favicon.ico must be a declared output, or the gate never looks at it"
+    from PIL import Image
+    original = FAVICON_ICO.read_bytes()
+    try:
+        frames = []
+        with Image.open(FAVICON_ICO) as ico:
+            for size in ICO_SIZES:
+                ico.size = (size, size)
+                frames.append(ico.convert("RGBA"))
+        frames[0].putpixel((0, 0), (255, 0, 0, 255))
+        frames[-1].save(FAVICON_ICO, "ICO", sizes=[(s, s) for s in ICO_SIZES],
+                        append_images=frames[:-1])
+        r = subprocess.run([sys.executable, str(TOOL), "--check"], capture_output=True,
+                           text=True, encoding="utf-8", cwd=str(REPO))
+        assert r.returncode == 1, \
+            f"the gate must fail on a perturbed favicon.ico, it returned {r.returncode}"
+        assert "favicon.ico" in r.stdout + r.stderr, \
+            f"the gate must name the file that drifted:\n{r.stdout}\n{r.stderr}"
+    finally:
+        FAVICON_ICO.write_bytes(original)
+
+
+def test_two_runs_of_the_generator_write_the_same_root_icon():
+    """FAILS IF the icon carries a timestamp or any other per-run byte. A regenerated icon that
+    differs on identical inputs makes every rebuild a spurious diff and defeats the drift gate it is
+    held by."""
+    ns = _tool_namespace()
+    assert ns["ico_bytes"]() == ns["ico_bytes"](), \
+        "two renders of the root icon must be byte-identical"
+    assert FAVICON_ICO.read_bytes() == ns["ico_bytes"](), \
+        "the committed root icon must be the bytes the generator writes today"
