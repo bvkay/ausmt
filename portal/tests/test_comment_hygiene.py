@@ -4087,3 +4087,28 @@ def test_a_hyphen_or_a_bracket_does_not_hide_a_work_item():
     for token in ("UTF-8", "SHA-1", "XPR-0", "WG-14", "PID-1"):
         bare_use = "%s is done; the panel now renders the label" % token
         assert work_item_tags(bare_use), bare_use
+
+def test_the_docs_page_the_pointers_name_opens_no_line_on_a_capital_mid_sentence():
+    """The published page the shipped comments point at is prose moved out of those comments, so
+    it is held to the same shape rule: no line inside a paragraph opens on a capitalised function
+    word that continues the sentence above. Headings and list items are not paragraphs.
+    Content-word capitals stay outside the rule, as they do for comments."""
+    page = ROOT / "docs" / "docs" / "reference" / "portal-internals.md"
+    text = page.read_text(encoding="utf-8")
+    # The moved prose sits inside fenced blocks so the page renders it verbatim, so a fence line
+    # is a paragraph boundary and the lines between fences are read, not skipped.
+    paragraphs, current = [], []
+    for line in text.splitlines():
+        if line.startswith("```") or line.startswith("#") or LIST_MARKER.match(line.strip()) or not line.strip():
+            if current:
+                paragraphs.append("\n".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        paragraphs.append("\n".join(current))
+    found = []
+    for para in paragraphs:
+        for word in capitals_mid_sentence(para, frozenset(), frozenset()):
+            found.append(f"{word!r} in: {para[:80]!r}")
+    assert not found, "a line of the docs page opens on a capital in mid-sentence:\n" + "\n".join(found)

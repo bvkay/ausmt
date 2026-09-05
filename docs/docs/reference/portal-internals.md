@@ -2191,7 +2191,7 @@ the organisation's own host.
 
 ```text
 Analytics no-op shim - EXTERNAL file so no page needs an inline <script> for it (inline script
-On index.html was the only thing forcing CSP 'unsafe-inline' there; extracted so the
+on index.html was the only thing forcing CSP 'unsafe-inline' there; extracted so the
 deployed Caddy policy can be strict script-src 'self' everywhere except add-survey.html, whose
 application code is still one intentional inline block).
 Safe no-op queue so track() calls never error when analytics is disabled (the default).
@@ -2215,7 +2215,7 @@ columns.json regenerates the indices and no consumer can silently lag. Legend (i
   SCI[i]  sc[] = [0 q,1 qb,2 rr,3 sw,4 alg,5 dim,6 p3d,7 gd,8 ellip,9 skew,10 mre,11 decades]
   TFD[i]  t[]  = [0 periods,1 rho_xy,2 rho_yx,3 phs_xy,4 phs_yx_adj,5 tip_mag,6 pt_min,7 pt_max,
                   8 pt_az,9 pt_beta,10 rho_xy_err,11 rho_yx_err,12 phs_xy_err,13 phs_yx_err,
-                  14 tzx_re,15 tzx_im,16 tzy_re,17 tzy_im]   (18 columns; tip_mag kept for compat)
+                  14 tzx_re,15 tzx_im,16 tzy_re,17 tzy_im]   (18 columns; tip_mag kept for compat).
 To change a column: edit contract/columns.json, run `python contract/generate.py`, then data-files.md. APPEND, never reorder.
 Data files are produced by the AusMT engine. By default they are served from the portal's own
 ./data/ directory; a deployment may instead point at a remote base (AUSMT_CONFIG.data_base_url,
@@ -3513,7 +3513,7 @@ Section order - (1) title+description, (2) geographic footprint, (3) station cou
 period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
 (7) publications, (8) identifiers (the rollup), (9) release history. Content is unchanged from before -
 only the order. Acquisition/processing are carried inside the survey-summary table (sections 3/5 share
-That atomic block). Contributors (the credit model) do not trail
+that atomic block). Contributors (the credit model) do not trail
 below Downloads, they sit inside the ATTRIBUTION block directly beneath the attribution box.
 Downloads move up ahead of funding/publications/identifiers; release history moves last.
 ```
@@ -3803,7 +3803,7 @@ accordion's level toggles silently scoped the old Time-series list export).
 
 A SMALL scope gets its FILES, not a file about them: each route is
 handed to the browser exactly as the drawer's single-station tile hands one, and the browser
-Owns the downloads and their progress; AusMT still hosts and fetches nothing, because the
+owns the downloads and their progress; AusMT still hosts and fetches nothing, because the
 302s do the pointing. The gate is the TOTAL SIZE, not the file count: up to the gate the
 browser is the best tool, and beyond it the offer is the TERMINAL
 COMMAND, which is resumable and verifiable at a scale where browser downloads quietly are not.
@@ -3830,7 +3830,7 @@ Over the gate the terminal command IS the offer, so the dialog opens straight aw
 behind a snackbar action: an intermediate "Show terminal command" step is a click between the
 reader and the only thing that can serve them at this size. No standalone list file either -
 the metadata pack already carries the same document as handoff.json, so saving it twice put an
-Unwanted .json at the head of the reader's downloads.
+unwanted .json at the head of the reader's downloads.
 ```
 
 #### The human-readable CITATIONS.txt line for ONE entry
@@ -4167,7 +4167,7 @@ collections (same non-empty gating as the Collections tab). Collections are CROS
 programme can span orgs) so this is NOT a nesting level: the checkbox is a PUSH-ONLY bulk toggle
 with the country/org semantics - on change it sets every MEMBER survey's checkbox (matched by
 LABEL: COLL[cid].surveys holds labels and survey checkboxes use value=<label>) and refreshes. No
-Derived/indeterminate state (country/org don't either). The row is
+derived/indeterminate state (country/org don't either). The row is
 just name + survey count + station count: no nested member list, no caret (per-survey toggling
 lives in the org hierarchy). Org rows/counts below are untouched: member surveys still live under their orgs.
 The Collections group is mounted in its OWN block (#collGroup) ABOVE the country/org/survey
@@ -4200,7 +4200,7 @@ handler body - no routing change, only extracted so Enter can reuse it.
 ```text
 Keyboard path for the Find dropdown. ArrowUp/Down move an active-descendant highlight,
 Enter activates the highlighted option (same activateFindItem as a click), Esc clears the query. No CSS
-Rule is added to index.html for the highlight - the active option is
+rule is added to index.html for the highlight - the active option is
 styled inline to match the existing :hover look (copper fill, dark ink), and un-styled on move-off.
 (findActive is declared at the top of this file to avoid a temporal-dead-zone hazard in renderFind.)
 ```
@@ -4290,8 +4290,8 @@ without re-deriving precision client-side (forbidden by the record). Tolerant of
 #### slug -> survey label, for the #/survey/<slug> route (the published ...
 
 ```text
-slug -> survey label, for the #/survey/<slug> route (the published /surveys/<slug> path URLs
-The sitemap now emits 301 into this route at the front door - path-URL contract;
+slug -> survey label, for the #/survey/<slug> route (the published /surveys/<slug> path URLs;
+the sitemap now emits 301 into this route at the front door under the path-URL contract).
 ausmt_id is
 au.<slug>.<station> - mirrors the engine's own slug_of derivation in extract/build_portal.py
 rather than re-slugifying the label, so it stays correct even if a label's slugification is
@@ -4387,7 +4387,7 @@ on its setTimeout below reclaims the space. openCollectionPage mirrors this on i
 
 ```text
 Only Map switches a view in place. Surveys and
-Collections real links to the served hub pages, and a click handler on a control that is
+Collections are real links to the served hub pages, and a click handler on a control that is
 navigating away would run a view switch the page is about to leave: a visible flash of the wrong
 view on a slow load, and dead work otherwise. setView("surveys"/"collections") stays the way IN to
 the in-app grids for routeFromHash, the tour and the drawer's own back-navigation.
@@ -4730,9 +4730,9 @@ production reconciles via the listeners below.
 ```text
 The LPMT colour split was REMOVED - all LPMT renders the
 flagship teal (TYPE_COL.LPMT) in type mode regardless of AusLAMP membership, and every colour mode
-Is membership-blind. Now the map is dots-only NO map surface carries the AusLAMP/legacy
+is membership-blind. Since the map is dots-only, NO map surface carries the AusLAMP/legacy
 distinction at all: it was last held by the clustering split, which the badge rule inherited and
-Which is now gone.
+which is now gone.
 The colour-by control is retired; markers carry the data-type colour, a
 phase-1 fact (the legend is the surviving colour surface). qColor lives on for the drawer's
 completeness dot.
@@ -5149,8 +5149,8 @@ it was fatal and the portal blanked), so this state is reachable and has to be a
 The set of survey SLUGS that belong to the `auslamp` collection, built once at boot
 (buildAuslampSet, main.js) from COLL[auslamp].surveys (which holds survey LABELS) resolved through
 SMETA[label].slug. Empty when collections.json is absent or has no auslamp collection, in which case
-isAuslampSurvey() returns false for everything. NO MAP PATH READS IT since the dots-only
-Its one consumer was the badge rule's never-collapse privilege, and nothing collapses now. Kept
+isAuslampSurvey() returns false for everything. NO MAP PATH READS IT since the dots-only rule:
+its one consumer was the badge rule's never-collapse privilege, and nothing collapses now. Kept
 because it is collection membership rather than map furniture; retiring it is a separate decision.
 ```
 
