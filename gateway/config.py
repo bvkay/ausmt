@@ -197,7 +197,7 @@ def operator_env_vars() -> tuple[str, ...]:
     seen: dict[str, None] = {}
 
     class _Recorder(dict):
-        # Every env read in load_config goes through .get; record the AUSMT_* names, return the
+        # Every env read in load_config goes through .get(); record the AUSMT_* names, return the
         # caller's default so load_config builds a valid Config off an empty environment.
         def get(self, key, default=None):
             if isinstance(key, str) and key.startswith("AUSMT_"):

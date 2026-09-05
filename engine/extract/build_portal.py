@@ -1675,7 +1675,7 @@ def _related_identifiers_of(y: dict) -> list:
         entry = {"identifier": r.get("identifier"), "identifier_type": r.get("identifier_type"),
                  "relation": r.get("relation"), "custodian": r.get("custodian")}
         if r.get("identifies") not in (None, ""):
-            # "identifies" is the field the drawer and the files tab label a related row by.
+            # "identifies" is the data-level label the drawer and the files tab key off.
             entry["identifies"] = r.get("identifies")
         out.append(entry)
     return out
@@ -2287,7 +2287,8 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                  mask_tipper=False, mask_impedance=False):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
-    mt_metadata is the SOLE engine, and the only extractor on this read path. The TF object is
+    mt_metadata is the SOLE engine: there is no dependency-free regex extractor and no _spectra
+    reader on this read path. The TF object is
     read ONCE and reused for the record, components and processing info;
     the raw EDI text is read once more for the kept coord-QC + processing-metadata helpers. The
     `extractor` param is retained for call-site compatibility and is ignored (mt_metadata is the sole
@@ -3825,7 +3826,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     writes is byte-identical to what a fresh normalize() writes (the round-trip QC gate already ran on
     the miss build that populated it); verify.py re-hashes these bytes cache-blind regardless.
 
-    `derived_edi_dir`: normalize always writes a
+    `derived_edi_dir`: normalize() always writes a
     round-trip-verified derived EDI beside the canonical XML. For an EDI-sourced station that file is
     redundant (the custodian's own EDI is served) and is deleted, exactly as before. For a station
     whose SOURCE is an EMTF XML there is no custodian EDI, so (when this dir is given) the derived

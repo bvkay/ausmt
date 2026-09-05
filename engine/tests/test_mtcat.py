@@ -270,7 +270,7 @@ def test_mtcat_builder_unit():
 
 
 def test_mtcat_builder_emits_org_ror_and_raid_when_declared():
-    """Task 6: mtcat.schema.json gained additive optional survey fields organisation_ror, raid;
+    """mtcat.schema.json gained additive optional survey fields organisation_ror, raid;
     mtcat_document emits them when the survey's SMETA carries org_ror/raid."""
     sys.path.insert(0, str(ROOT / "extract"))
     import build_portal as bp

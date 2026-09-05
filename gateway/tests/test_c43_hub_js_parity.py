@@ -586,7 +586,7 @@ process.stdout.write(JSON.stringify(cases.map(function (c) {
 def test_short_sha_canonical_and_verbatim_fallback(warn_report, tmp_path):
     """TRUNCATED-SHA PIN. A REAL engine-emitted catalogue sha256 truncates to
     'xxxx…yy' (first 4 + last 2, the mockup's inline form; the FULL hash rides the title attr —
-    render pin in the styling file); an odd/short/non-hex value renders VERBATIM (never hide
+    render pin in test_c43_hub_treatment.py); an odd/short/non-hex value renders VERBATIM (never hide
     information — the builddisplay posture), and empty stays empty. FAILS IF the canonical form
     drifts or the fallback truncates an unrecognised shape."""
     cat = _load_corpus(warn_report)["catalogue"]

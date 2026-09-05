@@ -193,8 +193,8 @@ def test_the_two_palette_authorities_agree():
 def test_the_static_pages_draw_the_same_palette_as_the_portal():
     """The THIRD consumer, added once the static entity pages started drawing type-coloured maps.
 
-    This is the pin the BBMT drift proved was missing. The engine's _TYPE_COL kept a superseded hex
-after this file's palette moved, so a
+    This is the pin the BBMT drift proved was missing. The engine's _TYPE_COL kept the superseded
+    #5B54D6 after this file's palette moved BBMT to #3730B8, so a
     reader who opens a survey page and then the same survey in the portal sees two different blues
     for one data type; and while an ENGINE test asserts the stale hex as a literal, applying the
     measured value there fails CI. A palette drift that CI defends is the precise failure a parity

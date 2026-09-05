@@ -88,7 +88,7 @@ def test_capped_body_is_reused_by_the_handler_json_parse():
 
     Scope: upload.read_body_capped's body-cache handover (a starlette internal, pinned here so a
     starlette upgrade that moves the cache fails loudly instead of silently re-reading a consumed
-    stream). FAILS IF a later .json raises or returns something other than the capped body.
+    stream). FAILS IF a later .json() raises or returns something other than the capped body.
     """
     payload = json.dumps({"email": "reuse@example.test"}).encode("utf-8")
     request, _feed = _request([payload])
@@ -101,7 +101,7 @@ def test_capped_body_is_reused_by_the_handler_json_parse():
 
 def test_capped_body_is_reused_by_the_handler_form_parse():
     # The request-key handler accepts BOTH encodings, so the urlencoded branch must survive the cap
-    # too. FAILS IF the capped read leaves .form with a consumed stream.
+    # too. FAILS IF the capped read leaves .form() with a consumed stream.
     payload = b"email=form%40example.test"
     request, _feed = _request([payload], content_type="application/x-www-form-urlencoded")
 

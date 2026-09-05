@@ -31,9 +31,9 @@ from __future__ import annotations
 # workbench SUBTRACTS this to recover the true phase before classifying/plotting.
 YX_PRESENTATION_SHIFT_DEG = 180.0
 
-# Expected quadrants (inclusive bounds, degrees). xy is expected in quadrant Q1; TRUE yx is
-# expected in quadrant Q3 (checked on the (−360, 0] seam-mapped axis, where the Q3 quadrant plus
-# slack is one contiguous window).
+# Expected quadrants (inclusive bounds, degrees). xy is expected in Q1; TRUE yx is expected in
+# quadrant Q3, checked on the (−360, 0] seam-mapped quadrant axis, where Q3 ± slack is one
+# contiguous window.
 Q1_LO, Q1_HI = 0.0, 90.0
 Q3_LO, Q3_HI = -180.0, -90.0
 
@@ -64,7 +64,8 @@ def true_phi_yx(stored_phs_yx_adj: float | None) -> float | None:
 
 
 def _map_yx(true_yx: float) -> float:
-    """The engine gate's wrap-safe yx axis: map a TRUE φyx from (−180, 180] to (−360, 0] so the Q3 quadrant plus slack
+    """The engine gate's wrap-safe yx axis: map a TRUE φyx from (−180, 180] to (−360, 0] so the Q3
+    phase band ± slack
     is one contiguous window and a value/median near ±180 cannot straddle the representation seam
     (mirrors _conventions.convention_check's `b if b <= 0 else b - 360.0`)."""
     return true_yx if true_yx <= 0 else true_yx - 360.0
@@ -80,8 +81,8 @@ def in_quadrant_xy(phs_xy: float | None) -> bool | None:
 
 
 def in_quadrant_yx(stored_phs_yx_adj: float | None) -> bool | None:
-    """True iff the TRUE φyx (after unwrapping the +180 shift from the stored t[4]) is within the third quadrant
-    widened by the slack, judged on the seam-mapped (−360, 0] axis (−180−slack … −90+slack — the
+    """True iff the TRUE φyx (after unwrapping the +180 shift from the stored t[4]) is within
+    quadrant Q3 widened by the slack, judged on the seam-mapped (−360, 0] axis (−180−slack … −90+slack — the
     engine gate's yx band; a true value of +175 maps to −185, within slack of the −180 edge). None =>
     no flag. Reading the stored value directly is the bug the φyx-unwrap pin catches."""
     true_yx = true_phi_yx(stored_phs_yx_adj)
@@ -101,8 +102,8 @@ def _median(vals: list) -> float:
 
 def classify_series(values: list, *, mode: str) -> dict:
     """Classify a whole phase series (a tf column) into per-point flags + the MEDIAN verdict (aligned
-    with the engine rule). `mode` is 'xy' (values are stored=true φxy, expected in the first quadrant) or 'yx'
-    (values are stored phs_yx_adj, unwrapped to true φyx, expected in the third quadrant on the
+    with the engine rule). `mode` is 'xy' (values are stored=true φxy, expected in quadrant Q1) or 'yx'
+    (values are stored phs_yx_adj, unwrapped to true φyx, expected in quadrant Q3 on the
     seam-mapped axis).
 
     Returns {points, any_out, n_classified, median, median_in}:

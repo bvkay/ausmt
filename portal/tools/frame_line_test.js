@@ -166,7 +166,7 @@ A.load(s).then(function () {
       "a stale async fetch overwrote another station's writer cell: '" + fwbCell() + "'");
 
     // a withheld / missing station.json (fetch !ok) yields no line, no throw. Its OWN station id, so it
-    // exercises the not-ok path rather than reading back the -60° line cached above.
+    // exercises the not-ok path rather than reading back the -60° line cached for station id A01.
     win.__fetchDoc = null;
     const missing = { i: 2, id: "C03", survey: "Demo Survey", slug: "demo", ausmt_id: "au.demo.C03" };
     const el3 = makeFrameline(missing.ausmt_id);

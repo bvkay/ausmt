@@ -118,7 +118,8 @@ def test_mtpy_fieldnotes_reads_the_manufacturers_and_the_geometry_only():
 
 
 def test_lemimt_site_reads_the_instrument_and_leaves_the_rate_where_none_is_stated():
-    """The station's SITE line carries no rate token at all, so only the Instrument line qualifies it. A
+    """Station A23's SITE line carries no rate token at all, so only the Instrument line qualifies
+    it. A
     dialect that matched would otherwise invent a rate for 296 stations."""
     d = facts("lemimt-site")
     assert d["dialects"] == ["lemimt-site"]

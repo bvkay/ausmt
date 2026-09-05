@@ -1,8 +1,7 @@
 """Public bridge - front-door + box-side two-walls pins + log-shipping pins.
 
-The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader — and,
-and the PUBLIC submission subset - to the box's dedicated public-subset
-listener over the tailnet. The Add Survey contribution flow is public (an MT user who clicks Add Survey
+The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader -
+and the PUBLIC submission subset - to the box's dedicated public-subset listener over the tailnet. The Add Survey contribution flow is public (an MT user who clicks Add Survey
 must reach the page and lodge a survey); the curator/admin workbench stays refused. The load-bearing
 properties are public (privacy) and security properties, so — per the standing rule — each is proven
 with a RUNTIME pin against a REAL Caddy driving the SHIPPED directives (the PR #48 real-caddy harness

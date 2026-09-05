@@ -27,7 +27,7 @@ from gateway.runner.runner import RunnerConfig
 # quirks that no YAML round-tripper preserves (manual intra-flow-map column alignment, and a
 # pre-existing unquoted `LEMI (LC ISR, Lviv)` flow value whose internal comma any conformant parser —
 # ruamel AND the PyYAML the validator uses — splits into a spurious key). See the residual note in
-# edit._yaml and the report.
+# edit._yaml() and the report.
 EXEMPLAR = """\
 schema_version: "0.2"
 slug: demo-survey-2026

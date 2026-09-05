@@ -101,8 +101,8 @@ def test_a_built_capricorn_shaped_station_carries_the_tipper_everywhere(tmp_path
 
 
 def test_a_channels_recorded_declaration_without_bz_masks_the_tipper_survey_wide(tmp_path):
-    """The curator mechanism for file-borne tipper that was never measured: survey.yaml declares
-    the recorded channels; no vertical coil means any tipper in the released files is a
+    """The declared-channels mechanism for file-borne tipper that was never measured: survey.yaml
+    declares the recorded channels; no vertical coil means any tipper in the released files is a
     processing artifact, masked survey-wide - comps, type derivation and the tf tipper columns -
     while the served source bytes stay untouched. Uses the recovery fixture (a REAL tipper the
     parse now reads), so the mask is proven against live tipper data, not a vacuous absence."""

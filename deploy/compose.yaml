@@ -18,6 +18,7 @@
 #   AUSMT_DATA_DIR  -- host root for persistent state (site-data + surveys-live), e.g. /srv/ausmt
 #   TAG             -- image tag to pull/run (defaults to latest)
 #   OWNER           -- the variable naming the GHCR namespace the images were pushed under
+#                      (see deploy-images.yml)
 
 services:
   portal:

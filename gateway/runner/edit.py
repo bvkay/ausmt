@@ -283,8 +283,8 @@ def _dump_bytes(data) -> bytes:
 def _needs_quoting(s: str) -> bool:
     """True iff emitting `s` as a bare (plain) scalar would NOT read back as the identical string
     under PyYAML safe_load — the reader the validator and build_portal use. Catches the YAML-1.1
-    implicit retypes (on/off/yes/no -> bool, 12:34:56 -> sexagesimal int, an unquoted ISO date ->
-    date, numerics) plus anything structurally unsafe (empty, leading/trailing space, multiline, '#',
+    implicit retypes (on/off/yes/no -> bool, 12:34:56 -> sexagesimal int, `2026-07-06` -> date,
+    numerics) plus anything structurally unsafe (empty, leading/trailing space, multiline, '#',
     ': ', ...). Conservative: quote on any doubt."""
     if s == "" or s != s.strip():
         return True

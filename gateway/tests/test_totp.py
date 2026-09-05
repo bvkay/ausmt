@@ -32,7 +32,7 @@ _RFC_VECTORS = [
 
 
 def test_rfc6238_appendix_b_sha1_vectors():
-    """code_at at the RFC time-step reproduces every RFC 6238 Appendix B SHA-1 vector exactly.
+    """code_at() at the RFC time-step reproduces every RFC 6238 Appendix B SHA-1 vector exactly.
     FAILS IF the HMAC counter packing, dynamic truncation, or modulo is wrong (an independent oracle,
     not a self-consistency check)."""
     for unix_time, expected in _RFC_VECTORS:

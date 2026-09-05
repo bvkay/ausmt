@@ -1,4 +1,4 @@
-"""End-to-end tests for the STRUCTURED metadata-editor form,
+"""End-to-end tests for the STRUCTURED metadata-editor form (the "hostile JSON" rework),
 driven through the real gateway HTTP surface with the in-process edit seam.
 
 The load-bearing test here is the ROUND-TRIP: render the edit form from a real, richly-populated

@@ -420,7 +420,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // Hooks: collScatter (footprint - driven with a stubbed AU_OUTLINE), renderCollections
   // (landing), and openStationById (focus - lets the driver control the invoking element before open).
   "collScatter,memberColours,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
-  // + PURE helpers, exposed so the field->indicator/star mappings are unit-testable
+  // PURE helpers, exposed so the field->indicator/star mappings are unit-testable
   // (jsdom can't run real geometry): screeningIndicators(d) maps scalar inputs to the five indicator
   // states; maturityModel(m,sc) is the star model; licBadgeState/licIsOpen/attributionText are the
   // licence/attribution helpers; setSMETA patches a survey's metadata so the driver can drive the
@@ -537,7 +537,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
 (async () => {
   // Let jsdom finish its document lifecycle BEFORE we run the modules, so main.js's DOMContentLoaded
-  // auto-boot can't double-fire alongside our explicit boot (a second boot re-runs buildTree and
+  // auto-boot can't double-fire alongside our explicit boot() (a second boot re-runs buildTree and
   // appends a duplicate tree). After 'load', the listener main.js registers is too late to fire.
   await new Promise(res => (win.document.readyState === "complete" ? res() : win.addEventListener("load", res, { once: true })));
   vm.runInContext(code, dom.getInternalVMContext());
@@ -683,7 +683,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // available dropdown and the Download block's time-series rows are the gated surfaces.)
   const _tsBtns = () => [...doc.getElementById("tsSeg").querySelectorAll("button")];
   ok(_tsBtns().length === 4,
-    "one Download row per ROUTABLE level token, got " + _tsBtns().length);
+    "one Download row per ROUTABLE level token (level2 opens nothing), got " + _tsBtns().length);
   ok(_tsBtns().every(b => b.disabled),
     "honesty: the time-series Download rows must be disabled while ts_access.json is in flight");
   ok(_tsBtns()[0].getAttribute("aria-busy") === "true",
@@ -703,7 +703,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "honesty: the completeness filter must be INERT while sci.json is in flight; it may never empty the map over values that have not arrived, got " + A.nVisCount());
   A.setQMin(0); A.refresh();
 
-  // Beta Survey (open access, edi_available=0) reaches the ediDescriptor branches Alpha never does: with no
+  // Station B1 (Beta Survey, open access, edi_available=0) reaches the ediDescriptor branches station A1 never does: with no
   // served artifact and no embargo, the ungated function falls through to "EDI (via source archive)", a
   // ROUTING claim that needs the manifest to be true, and headerDownloadBtn's d:null makes the sticky header
   // render nothing, which in that function IS the embargo signal. Both are absence claims about a station
@@ -1154,7 +1154,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "#/survey/<slug> must apply the Option-A focus dim, got: " + JSON.stringify(A.dimFocus()));
   A.closeDrawer();
 
-  // SURVEY-DRAWER HASH CLEANUP. closeDrawer cleared ONLY
+  // SURVEY-DRAWER HASH CLEANUP. closeDrawer() cleared ONLY
   //     "#/station..." - a survey opened by the #/survey/<slug> route left that hash in the address bar
   //     after the drawer shut, so the URL claimed a survey was open when nothing was, Back/reload
   //     re-opened a drawer the reader had deliberately closed, and copying the URL shared a state the
@@ -1170,7 +1170,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.closeDrawer();
   ok(win.location.hash === "", "the station hash cleanup must be PRESERVED, got: " + JSON.stringify(win.location.hash));
 
-  // SURVEY DRAWER: "View on map" - FIT PADDING + OPTION-A DIM. HONESTY NOTE, and it is the
+  // SURVEY-DRAWER: "View on map" - FIT PADDING + VISIBLE-BUT-DIMMED OTHERS. HONESTY NOTE, and it is the
   // important part of this block: Leaflet is STUBBED in this harness (win.L = stub()), so nothing
   // here exercises Leaflet's real projection, hit-testing or pointer capture. What IS proven: the
   // ARGUMENTS the app hands the map (mapCalls records fitBounds with its real options object), and
@@ -2257,9 +2257,8 @@ async function bootFreshWindow(dataMap, url, preBoot) {
 
   // N. RECENTLY ADDED: ONE surface (the surveys-view #recentStrip; the map-rail
   // #recentSide is deleted). The strip's DISPLAY rule is a 30-day window ending at the BUILD day
-  //  capped at 3, so of the fixture's dated surveys only Beta
-  //  qualifies; Alpha is outside it and
-  // Gamma/Delta are undated. surveyLatestDate itself stays lockstep with the engine's feed rule.
+  // (generated `2020-01-15`) capped at 3, so of the fixture's dated surveys only Beta (latest
+  // `2019-12-31`) qualifies; Alpha (`2012-05-01`) is outside it and Gamma/Delta are undated. surveyLatestDate itself stays lockstep with the engine's feed rule.
   const recents = A.recentlyAdded();
   ok(recents.length === 1 && recents[0].sv === "Beta Survey",
     "recentlyAdded() must apply the 30-day build-window: only Beta qualifies, got " + JSON.stringify(recents));
@@ -2408,7 +2407,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // un-scoped tree (the restore hook puts the tree back); mirrors the section-CC tree reset below.
   A.setSidebarMode("browse");
 
-  // THE ABSTRACT LIVES IN THE RECORD, NOT ON THE CARD. Rendering the survey.yaml abstract as
+  // R. THE ABSTRACT LIVES IN THE RECORD, NOT ON THE CARD. Rendering the survey.yaml abstract as
   // a 12px muted italic block on every card makes a grid of cards a wall of prose and pushes the facts a
   // reader scans for below the fold. It is absent from the card and stays where a reader who has chosen
   // a survey meets it: the drawer story view here, and the static survey page,
@@ -2447,7 +2446,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // S. NO DIMENSIONALITY IN THE SCREENING DISPLAYS. It is absent from the station-drawer screening
   // grid, the survey-card stats line and the survey-story table, while the phase-tensor/skew and strike
   // lines stay, because dimensionality is inferable from them.
-  // (a) station drawer: no "Dimensionality" cell. The strike and mean-|B| lines live ONLY in the
+  // (a) station drawer: no "Dimensionality" cell. The strike and mean-|β| lines live ONLY in the
   //     Screening panel, which does not render, so they are absent here too.
   win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
   const drw = doc.getElementById("drawer");
@@ -2466,7 +2465,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(sum.indexOf("tipper availability") >= 0 && sum.indexOf("remote reference") >= 0,
     "survey-story table lost sibling rows that must be KEPT (tipper/remote reference)");
 
-  // TF COMPLETENESS - the induction-arrow panel and the error bars, in the station drawer.
+  // T. TF COMPLETENESS - the induction-arrow panel and the error bars, in the station drawer.
   //   station A1: tzx_re>0 (only), rho+phase errors present -> arrow panel with the Parkinson label, a REAL
   //       arrow pointing SOUTH (Parkinson north = -tzx_re < 0), and error-bar whiskers on ρ/φ.
   //   station A2: no tipper, no errors -> "no tipper" state (no arrow panel) + no bars.
@@ -2497,7 +2496,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(realArrows.every(m => Math.abs(parseFloat(m[3]) - parseFloat(m[1])) < 0.1),
     "SIGN: a REAL arrow with tzy_re=0 must have no east deflection (x2==x1); got " +
     JSON.stringify(realArrows.map(m => [m[1], m[3]])));
-  // (c) ERROR BARS present (rho copper #EF7256 + teal #2E8FA3 whiskers with the .55 opacity).
+  // (c) ERROR BARS present for station A1 (rho copper #EF7256 + teal #2E8FA3 whiskers with the .55 opacity).
   ok(/<line [^>]*stroke="#EF7256" stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML) ||
      /<line [^>]*stroke="#2E8FA3" stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML),
     "error bars did not render for a station WITH errors");
@@ -2573,7 +2572,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // d2bc616's `${doi?...:""}` — the leak was the publisher STRING, not the DOI field). A WITH-DOI
   // survey keeps its real DOI in both formats; the NCI/TS-collection entries are BYTE-pinned to their
   // output; and the human-readable CITATIONS.txt line for a no-DOI entry SAYS
-  // "[no DOI assigned]" explicitly.
+  // "[no DOI assigned]" explicitly (exports.js citeLine).
   //
   // NOTE (Invariant 10): section U asserts the ASSEMBLY HELPERS (apa/bibtex/ris/citeLine) directly —
   // the exact functions the #dlCite click handler feeds into the pack — NOT the zipped file itself:
@@ -2634,8 +2633,9 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwV.classList.contains("open"), "the station A1 drawer did not open");
 
-  // (a) FOUR tabs, each role=tab, in the mandated order. No Screening tab renders, so the count is
-  //     4 and "screening" is absent from the order AND the DOM.
+  // (a) FOUR tabs, each role=tab, in the mandated order. The Screening tab is commented out in
+  //     drawer.js pending design review, so the count is 4 and "screening" is absent from the order
+  //     AND the DOM.
   //     FAILS if a tab is missing, mis-roled, reordered, or if the folded-away Overview tab reappears.
   const tabsV = [...drwV.querySelectorAll('[role="tab"]')];
   ok(tabsV.length === 4, "expected 4 role=tab buttons (Overview folded away, Screening hidden), got " + tabsV.length);
@@ -2717,7 +2717,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // Em-dash sweep on the station drawer's rendered text (all panels render at open, so hidden ones are
   // swept too). A full-document textContent sweep runs at the end of this test.
   ok(drwV.textContent.indexOf("—") < 0,
-    "an em dash (-) rendered in the station drawer text: " +
+    "an em dash (U+2014) rendered in the station drawer text: " +
     JSON.stringify((drwV.textContent.match(/.{0,24}—.{0,24}/) || [""])[0]));
 
   // (d) the sticky-header primary action: Download EDI (open station). No redundant header Cite
@@ -2873,7 +2873,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "a non-tipper station's modal must have NO induction-arrow panel (arrowSvg empty -> panel absent)");
   doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   ok(doc.getElementById("plotmodal") == null, "Esc did not close the station A2 modal");
-  // restore the drawer for the sections that follow (they assume it is the open station).
+  // restore the station A1 drawer for the sections that follow (they assume it is the open station).
   drwV.classList.remove("open");
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwV.classList.contains("open"), "could not restore the station A1 drawer after the modal checks");
@@ -3396,7 +3396,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   const idTiles = [...idGrid.querySelectorAll(".prod")];
   ok(idTiles.length === 6, "Alpha must render exactly the SIX fixed slots (no extras), got: " + idTiles.length);
   // The six slot names, in the canonical Table-1 order. Order is part of the rule: the chain reads
-  // collection -> raw -> the data levels L0 -> L1 -> L2 -> L3 the same way on every survey.
+  // `collection -> raw -> L0 -> L1 -> L2 -> L3` the same way on every survey.
   const SLOTS = ["Collection", "Packed Raw Data", "Level 0", "Level 1", "Level 2", "Level 3"];
   SLOTS.forEach((nm, i) => ok(idTiles[i].textContent.indexOf(nm) === 0,
     "slot " + (i + 1) + " must be '" + nm + "', got: " + JSON.stringify(idTiles[i].textContent.slice(0, 40))));
@@ -4148,7 +4148,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "CVD: the ramp must span a LARGE lightness range (Y gap > 0.5), got " + (_relLum(A.qColor(5)) - _relLum(A.qColor(2))).toFixed(3));
   // (d) drawer render: no Station summary "completeness" row renders, so the .qvdot ramp swatch is
   //     absent from the drawer and the qColor ramp has no rendered surface. The invariant that holds
-  //     here: no element uses a qColor hex as a TEXT colour.
+  //     here: no element uses a qColor hex as a TEXT colour (the style="color:<ramp>" anti-pattern).
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   const rsPanelQ = doc.getElementById("dp-response");
   ok(rsPanelQ.querySelector(".qvdot") == null,
@@ -4165,7 +4165,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.openSurvey("Alpha Survey");
   const _emSweep = (doc.body.textContent || "") + doc.getElementById("drawer").textContent;
   ok(_emSweep.indexOf("—") < 0,
-    "an em dash (-) rendered somewhere in the app: " +
+    "an em dash (U+2014) rendered somewhere in the app: " +
     JSON.stringify((_emSweep.match(/.{0,30}—.{0,30}/) || [""])[0]));
   doc.getElementById("drawer").classList.remove("open");
 
@@ -4208,7 +4208,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the survey drawer's period coverage must read '0.01 - 1,000 s', got: " +
     JSON.stringify((c1sv.match(/period coverage.{0,40}/) || [""])[0]));
   ok(c1sv.indexOf("CC BY 4.0") >= 0, "the survey drawer's licence row must read the human form");
-  // An ABSENT table value renders the plain
+  // U+2013 leaves portal source. An ABSENT table value renders the plain
   // hyphen-minus placeholder, reader-visibly. Alpha's SMETA carries no version, so the survey
   // summary's version row IS the placeholder; and the whole rendered drawer must be free of the
   // en dash (spelt by escape here, since the glyph itself is purged from portal source).
@@ -4271,7 +4271,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(!doc.getElementById("drawer").classList.contains("open"), "D: clicking the scrim must close the drawer");
   ok(scrim.classList.contains("hidden"), "D: closing via the scrim must hide the scrim");
 
-  // XX. SELECTION-STATE ISOLATION. The "select & download this survey" control scoped
+  // XX. STAGE B - SELECTION-STATE ISOLATION. The "select & download this survey" control scoped
   // the shared rail tree to its one survey, which (a) emptied the Surveys catalogue with the rail (the only
   // undo) hidden on that view, and (b) left the map tree stuck scoped. Fix: the catalogue is decoupled from
   // the rail tree, and the control's map scoping is a temporary lens restored on exit.

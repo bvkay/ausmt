@@ -1,7 +1,7 @@
 """EXECUTABLE JS↔Python parity pins for the Stations-tab classification and
 URL construction (modelled on portal/tests/test_interactions.py's node-driver pattern).
 
-WHY EXECUTABLE: the fix round's (JS truncated `%` vs Python floored `%` on negatives - 362 trueYx
+WHY EXECUTABLE: the modulo defect (JS truncated `%` vs Python floored `%` on negatives - 362 trueYx
 mismatches and a verdict flip at stored≈−0.05) SHIPPED PAST the source-string parity pin, which only
 asserted the JS *contains* certain substrings. These pins EXECUTE the extracted JS functions in Node
 and compare against gateway.phaseqc (the authoritative spec) over a boundary-heavy vector set, so a
@@ -358,8 +358,8 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
     POINT: the engine passes every declared slug through safe_component before it enters ausmt_id
     (build_portal.py discover_work), safe_component is idempotent, and the hub route 404s unless an
     on-disk <slug>/survey.yaml package exists — so no non-fixed-point slug is reachable. The literal
-    every-validate_slug-legal-slug form of the gate is FALSE; such
-    a slug fails EMPTY (zero rows — the honest no-stations message), never WRONG (a sibling's rows).
+    every-validate_slug-legal-slug form of the gate is FALSE (a legal slug may contain '..', which
+    safe_component collapses to '-': 108 of 4920 legal probes transform); such a slug fails EMPTY (zero rows — the honest no-stations message), never WRONG (a sibling's rows).
     FAILS IF the engine's slug normalisation drifts so a produced slug is not a fixed point
     (the prefix join would then silently blank that survey's Stations tab), or a fixture-tree
     package declares a non-fixed-point slug."""

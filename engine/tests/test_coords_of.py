@@ -1,4 +1,4 @@
-"""coords_of - the light coordinate read for AusLAMP state-bucketing / QC, built from only the
+"""coords_of() - the light coordinate read for AusLAMP state-bucketing / QC, built from only the
 KEPT coord helpers (read_norm/grab/parse_angle/info_coords). Dependency-free; runs in the core suite.
 
 Also covers the Phoenix DATAID / processing-note helpers (parse_dataid, proc_note) that the

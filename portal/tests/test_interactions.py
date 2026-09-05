@@ -44,7 +44,7 @@ def test_portal_interactions(tmp_path):
     # station D1 drives the drawer access-panel test (no plots; verbatim embargo copy). Its curves are
     # withheld at the ENGINE (empty tf series); the fixture mirrors that so the driver sees what ships.
     stations = [
-        # Carries a site_name that DIFFERS from its (sanitised) displayed id, so the drawer's
+        # Station A1 carries a site_name that DIFFERS from its displayed id, so the drawer's
         # Station summary renders the "site name" row for it (the SA28_2B -> SA282B case).
         {"id": "A1", "survey": "Alpha Survey", "lat": -30.0, "lon": 136.0, "ausmt_id": "au.alpha.A1", "edi_available": 1, "site_name": "A_1"},
         {"id": "A2", "survey": "Alpha Survey", "lat": -31.0, "lon": 137.0, "ausmt_id": "au.alpha.A2", "edi_available": 1},
@@ -150,9 +150,9 @@ def test_portal_interactions(tmp_path):
     (data / "tf.json").write_text(json.dumps(tf))
     (data / "surveys.json").write_text(json.dumps(surveys))
     (data / "collections.json").write_text(json.dumps(collections))
-    # build.json fixes the recently-added window's reference day so the strip is DETERMINISTIC: with
-    # generated, only Beta falls inside the 30-day window; Alpha
-    #  is outside it and undated Gamma/Delta are excluded outright.
+    # build.json fixes the recently-added window's reference day so the strip is DETERMINISTIC:
+    # with generated `2020-01-15`, only Beta (latest `2019-12-31`) falls inside the 30-day window;
+    # Alpha (`2012-05-01`) is outside it and undated Gamma/Delta are excluded outright.
     (data / "build.json").write_text(json.dumps({"build_id": "eng-src-2020", "engine_commit": "eng",
                                                  "source_commit": "src", "generated": "2020-01-15T00:00:00+00:00"}))
 

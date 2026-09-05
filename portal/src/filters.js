@@ -279,7 +279,7 @@ const TS_NONE_HINT="this deployment publishes no download index";
 // The current DOWNLOAD SCOPE: the selection when one exists, else the filtered corpus - exactly what
 // "Select all filtered" would take. See docs: portal internals, filters.js.
 function scopeStations(){return selected.size?ST.filter(s=>selected.has(s.i)):visible;}
-// Rail Browse and Select-and-download mode. Browse (default) is every map filter (find, data type, Data
+// Rail Browse / Select & download mode. Browse (default) is every map filter (find, data type, Data
 // available, year, tree); Select & download is the map-selection box and the Download/Metadata blocks
 // (advanced). See docs: portal internals, filters.js.
 let sidebarMode="browse";

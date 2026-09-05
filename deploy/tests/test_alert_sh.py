@@ -214,7 +214,7 @@ def test_unhealthy_service_pings_fail(tmp_path):
 
 
 def test_crashlooping_gw_runner_pings_fail(tmp_path):
-    """The healthcheck-LESS gw-runner in State=restarting
+    """The healthcheck-LESS gw-runner in State=restarting (the 'stuck at SCANNED' crash-loop)
     => a fail ping naming gw-runner, nonzero exit. This is the headline silent-stall mode; gw-runner has
     no Health, so it must be caught by STATE. FAILS IF: a restarting gw-runner is treated as healthy
     (no fail ping) or the body does not name it."""
@@ -252,8 +252,10 @@ def test_reconcile_action_failed_pings_fail(tmp_path):
 
 
 def test_reconcile_action_failed_oom_kill_pings_fail_naming_the_kernel(tmp_path):
-    """reconcile-status.json with action=failed AND oom_kill=true => the fail ping SAYS the build was KILLED BY
-    THE KERNEL FOR RUNNING OUT OF MEMORY, so the operator's first read names the cause. FAILS IF: the
+    """reconcile-status.json with action=failed AND oom_kill=true (reconcile.sh sets oom_kill from a
+    kernel out-of-memory kill inside the failed build's own window, which is visible only in
+    `journalctl -k`) => the fail ping SAYS the build was KILLED BY THE KERNEL FOR RUNNING OUT OF
+    MEMORY, so the operator's first read names the cause. FAILS IF: the
     ping is the generic 'action=failed' (the incident's silence), or an oom_kill=false status is dressed
     up as an OOM (a false alarm sends an operator shopping for RAM)."""
     tree = _make_tree(tmp_path, reconcile_action="failed")

@@ -4,7 +4,7 @@
 // entity page or in the workspace. The engine owns the reference implementations in
 // engine/extract/_pages.py (_fmt_period, _range, _cc_human/_fmt_licence); portal/src/state.js carries
 // the JS twins. This file pins the twins against the SAME worked examples the engine suite pins the
-// Python leaf against (engine/tests/test_entity_pages.py, the block), written as LITERALS
+// Python leaf against (engine/tests/test_entity_pages.py, the display-grammar block), written as LITERALS
 // on both sides: no cross-runtime import, no generated vector file, so neither suite can be made
 // green by editing the other's source of truth.
 //

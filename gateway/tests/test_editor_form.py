@@ -545,7 +545,7 @@ def test_coordinate_and_level_selects_validate_independently():
 
 def test_time_series_levels_checkboxes():
     """levels_available assembles from the checked c_time_series_levels_available_* boxes in canonical
-    order. FAILS IF checkbox names are not read or order is not canonical. IDCONS collection_pid is
+    order. FAILS IF checkbox names are not read or order is not canonical. The collection_pid field is
     RETIRED from the editor UI, so a stray s_time_series_collection_pid input is IGNORED (not assembled);
     a stored collection_pid instead ROUND-TRIPS verbatim via the unmodelled-key carry-forward."""
     form = {

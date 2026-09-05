@@ -42,7 +42,7 @@ from . import orcid
 
 # ---- section specifications ---------------------------------------------------------------------
 # Each MAP section: the ordered scalar sub-keys the widget renders. Each LIST section: the per-row
-# scalar sub-keys. These mirror docs/docs/reference/survey-yaml.md exactly - no invented fields.
+# These mirror docs/docs/reference/survey-yaml.md exactly - no invented fields.
 
 # Map sections rendered as labelled inputs. (key, label, placeholder, kind) per sub-field;
 # kind drives the input type / validation: "text" | "doi" | "orcid" | "ror" | "date" | "email".

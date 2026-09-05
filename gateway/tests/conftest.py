@@ -53,7 +53,7 @@ def resolve_validator_dir() -> Path | None:
 
 
 def require_validator_dir() -> Path:
-    """resolve_validator_dir or FAIL loudly (never skip). The vendored copy is committed, so a None
+    """resolve_validator_dir() or FAIL loudly (never skip). The vendored copy is committed, so a None
     result means a broken checkout - an assert, not a skip (no more silent same-author-mock fallback)."""
     d = resolve_validator_dir()
     assert d is not None, (
@@ -460,7 +460,8 @@ async def settle_publish(gw, sid, *, tries: int = 800, require: bool = True):
     """Yield control until the background publish task for `sid` leaves PUBLISHING.
 
     require=True (the default) FAILS the test on exhaustion instead of falling through: the old
-    silent 500 ms fall-through made a slow real-git publish read as a fail-closed defect, which trains re-running
+    silent 500 ms fall-through made a slow real-git publish read as a fail-closed defect (RED at
+    'PUBLISHING' == 'PUBLISH_FAILED' under load), which trains re-running
     over investigating. The bound is wall-clock generous (~8 s) because the publish runs real git
     via asyncio.to_thread and the loop must wait for the executor thread's done-callback - a bare
     sleep(0) yields one iteration and misses it, hence the small REAL sleep. The reconciliation

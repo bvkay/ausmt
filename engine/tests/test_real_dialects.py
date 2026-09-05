@@ -1,4 +1,4 @@
-"""Real-world dialect robustness, on the mt_metadata engine (slice-#3d).
+"""Real-world dialect robustness, on the mt_metadata engine.
 
 Three instrument/processing dialects (EDL/BIRRP, LEMI/BIRRP, Phoenix EMpower spectra) must parse and
 yield usable Z/rho under the sole mt_metadata engine — including the Phoenix spectra-section dialect

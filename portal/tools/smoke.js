@@ -35,7 +35,7 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   // buildIdText() is a pure function of BUILDID (set by boot() from build.json) - exposing it
   // lets a test assert the footer VALUE binding without a real DOM (getElementById stubs below return
   // a fresh throwaway object per call, so nothing written to el.textContent would be observable).
-  // Two-phase boot: boot returns as soon as the FIRST-PAINT products (catalogue/surveys + the small
+  // Two-phase boot: boot() returns as soon as the FIRST-PAINT products (catalogue/surveys + the small
   // optionals) are in; tf.json / sci.json / manifest.json hydrate behind it. hydrationDone settles once all
   // three have landed AND their late-render work has run, so this smoke test can keep asserting against the
   // fully-hydrated state a single-phase boot would hand it in one go.

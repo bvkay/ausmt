@@ -543,8 +543,9 @@ def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypat
 
     Proven failing on pre-fix HEAD: survey.yaml was read TWICE per build — metadata at
     discover_work, the cache-key digest at the per-survey loop top, a window spanning every
-    preceding survey's work. The fix
-    derives meta AND digest from ONE read in discovery — coherent by construction. The seam here
+    preceding survey's work (minutes on the production corpus, where build 20260707T002709Z
+    warm-served a stale Olympic Dam citation at hits=3017/misses=0). The fix derives meta AND digest
+    from ONE read in discovery — coherent by construction. The seam here
     (edit fired right after discover_work returns) is fix-agnostic, so this test still fails if a
     loop-time re-read is ever reintroduced."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)          # organisation: Test Org

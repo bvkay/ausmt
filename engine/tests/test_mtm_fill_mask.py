@@ -1,6 +1,6 @@
 """Masked source periods must be GAPS in the tf series, never zeros.
 
-Production incident: the EDI masks 10 of 24 periods with the
+Production incident (TAS120, auslamp-tas): the EDI masks 10 of 24 periods with the
 1.0E+32 missing-data sentinel. mt_metadata converts those fills to EXACT ZEROS on read, which sail
 past _mtm._is_missing's magnitude threshold (>1e8) — so the portal plotted phase=0deg points, rho=0
 points and tipper zero-dips at every masked period ("almost like some parts are masked" — they ARE,
