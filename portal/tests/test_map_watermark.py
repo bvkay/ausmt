@@ -2,7 +2,7 @@
 
 WHY THE MAP AND NOT THE CHROME. The header's AuScope org-mark left every surface: the relationship
 is stated in words, in the footer and in About's "Who enables AusMT" section, and a symbol repeated
-in a corner said nothing either of those does not. The map is the exception the rule is, for a
+in a corner said nothing either of those does not. The map is the one exception, for a
 reason the chrome could not give: it is the surface people screenshot into talks and reports, and a
 screenshot carries no footer with it. A corner mark is attribution that travels with the image.
 

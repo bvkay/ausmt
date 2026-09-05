@@ -1,13 +1,12 @@
 """The map's attribution: on the map, collapsed to one glyph, and following the layer that is drawn.
 
-The brief asked for the corner line off the map. What goes is the LINE and the "Leaflet" flag beside
-it, which is a courtesy to a library; what stays is the credit, because the basemap is OpenStreetMap
+The corner line comes off the map. What goes is the LINE and the "Leaflet" flag beside it, which is a courtesy to a library; what stays is the credit, because the basemap is OpenStreetMap
 data under ODbL and every tile source this site can draw asks for credit of its own. It is met by
 Leaflet's own attribution control, mounted with prefix:false and collapsed behind a small "(i)" that
 opens on hover, on focus and on click.
 
-WHY THE CONTROL AND NOT A LINE IN THE FOOTER, which is what the round before this shipped. Two
-reasons the rule is on, and this module holds the second:
+WHY THE CONTROL AND NOT A LINE IN THE FOOTER. Two reasons stand behind that, and this module holds
+the second:
 
   * the footer is the same box on seven surfaces, and a line only the SPA carried made it a
     different box there. tests/test_footer_regions.py holds that half;
@@ -247,7 +246,7 @@ def test_both_map_documents_declare_the_one_control_rule_set():
 
     THE COLLAPSED STATE IS THE DEFAULT, asserted rather than assumed: the credit is hidden by the
     base rule and revealed by the open state's rule, so a document that failed to load the module
-    shows the glyph and nothing else rather than the line the brief asked to be rid of.
+    shows the glyph and nothing else rather than the line that came off the map.
 
     FAILS if either document's rule set drifts by a character, if a rule is declared twice, if the
     collapsed state stops hiding the text, or if the open state stops showing it."""
