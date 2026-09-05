@@ -109,7 +109,7 @@ function updateCounts(){
   slot.innerHTML=`<b id="nVis">${visible.length}</b> shown · <b id="nSel">${selected.size}</b> selected · <span id="nTot">${ST.length}</span> total`;}
 function refresh(){visible=ST.filter(passes);
   // ONE call paints the visible set into the map's single dot container; map.js owns the layer and this
-  // stays the caller it always was. See docs: portal internals, filters.js.
+  // is the caller. See docs: portal internals, filters.js.
   routeVisibleToLayers();
   if(hasShapes())selected=new Set(visible.filter(inShapes).map(s=>s.i));else selected=new Set([...selected].filter(i=>visible.some(s=>s.i===i)));
   if(curView==="surveys")renderCards();
@@ -129,7 +129,7 @@ function updateSel(){document.getElementById("selBig").textContent=selected.size
   if(typeof paintDownloadRows==="function")paintDownloadRows();
   document.getElementById("selHint").textContent=selected.size?"Downloads below cover exactly these stations, with provenance pointers.":SEL_HINT_EMPTY;}
 
-// Tree disclosure state. Collapse is IN-MEMORY only (no persistence - polish item), keyed "c:<country>" /
+// Tree disclosure state. Collapse is IN-MEMORY only (no persistence), keyed "c:<country>" /
 // "o:<country||org>" / "k:<collection id>" (the || separator is the tree's existing org-namespacing
 // convention). See docs: portal internals, filters.js.
 const _treeCollapsed=new Set();
@@ -192,7 +192,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
         tree.appendChild(l);});});});
   // Country checkbox toggles all its orgs + surveys; org checkbox toggles its surveys. The PARENT
   // checkboxes have NO `value` attribute (surveys do), so identify them with hasAttribute("value") - NOT
-  // .value, which is "on" for a value-less checkbox (the bug that made the country/org toggles no-ops).
+  // .value, which is "on" for a value-less checkbox and would make the country/org toggles no-ops.
   tree.querySelectorAll('input[data-country]').forEach(inp=>{if(inp.hasAttribute("value"))return;
     inp.addEventListener("change",()=>{
       tree.querySelectorAll('input[data-country]').forEach(c=>{if(c.hasAttribute("value")&&c.dataset.country===inp.dataset.country)c.checked=inp.checked;});
@@ -302,8 +302,8 @@ function setSidebarMode(mode){
   // the tile applied. See docs: portal internals, filters.js.
   if(mode==="browse"&&sidebarMode==="select")restoreSelectLens();
   sidebarMode=mode;
-  // No map re-route on a mode switch: the mode was an input to the badge rule (Select expanded every badge
-  // so a lasso could reach the stations) and every station is already its own dot in both modes.
+  // No map re-route on a mode switch: every station is its own dot in both modes, so which
+  // stations are on the map does not depend on the mode.
   const bp=document.getElementById("browseMode"),sp=document.getElementById("selectMode"),seg=document.getElementById("modeSeg");
   if(bp)bp.classList.toggle("hidden",mode!=="browse");
   if(sp)sp.classList.toggle("hidden",mode!=="select");

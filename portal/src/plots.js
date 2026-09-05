@@ -44,7 +44,7 @@ function phaseSvg(t){const per=t[T.periods];if(!per.length)return"";if(!t[T.phs_
    ebars(per,t[T.phs_xy],t[T.phs_xy_err],x,y,"#EF7256",plo,phi)+ebars(per,t[T.phs_yx_adj],t[T.phs_yx_err],x,y,"#2E8FA3",plo,phi)+
    `<path d="${path(per,t[T.phs_xy],x,y)}" fill="none" stroke="#EF7256" stroke-width="1.1"/>`+dots(per,t[T.phs_xy],x,y,"#EF7256")+
    `<path d="${path(per,t[T.phs_yx_adj],x,y)}" fill="none" stroke="#2E8FA3" stroke-width="1.1"/>`+sqs(per,t[T.phs_yx_adj],x,y,"#2E8FA3")+`</svg>`;}
-// Induction-arrow panel - REPLACES the |T|-magnitude plot, rendered below the phase tensor. See docs:
+// Induction-arrow panel, rendered below the phase tensor; there is no |T|-magnitude plot. See docs:
 // portal internals, plots.js.
 const ARROW_UNIT_PX=54;        // pixels per unit |T| (so a |T|=0.5 arrow is 27 px) - the fixed scale
 function arrowHead(x0,y0,x1,y1,c){const dx=x1-x0,dy=y1-y0,L=Math.hypot(dx,dy);if(L<0.5)return"";
@@ -100,7 +100,7 @@ const PLOT_META={
 function responseExpandBtn(){return `<button class="plotexp rspexp" type="button" data-act="expand" aria-label="Expand full response" title="Expand full response">⤢</button>`;}
 const _paxis=`<div class="paxis">period (s) · log scale</div>`;   // x-axis unit, shared by all four plots
 // Always-shown block (all four panels): title row → optional subline → svg → axis unit. No expand control
-// lives inside a plot block any more (the section heading owns the only one).
+// lives inside a plot block (the section heading owns the only one).
 function plotBlock(kind,t){const m=PLOT_META[kind];if(!m)return"";const svg=m.svg(t);if(!svg)return"";
   return `<div class="plot" data-plot="${kind}"><div class="ptitle">${m.title}</div>`+
     (m.sub?`<div class="psubline">${m.sub}</div>`:"")+svg+_paxis+`</div>`;}

@@ -578,8 +578,8 @@
 
 <main>
 <aside class="filters" id="filterPane">
-  <!-- Two-mode segmented control. Every element id below is UNCHANGED, so this is containers plus a
-       mode toggle, not id churn. -->
+  <!-- Two-mode segmented control. Every element id below is shared with filters.js and exports.js, so the control adds
+       containers and a mode toggle only. -->
   <div class="seg" id="modeSeg" data-views="both">
     <button type="button" data-mode="browse" class="on">Browse</button>
     <button type="button" data-mode="select">Select &amp; download</button>
@@ -713,7 +713,7 @@
       <div class="fieldnote disc-yearnote" id="yearRangeNote">Filters on each survey's declared acquisition year(s); surveys with no declared date are hidden once a year is set.</div>
     </div>
     <!-- One wrapping line BELOW the discovery controls, so this reads as a shortcut into the grid rather
-         than a preamble to it. The 30-day build-window rule that decides what it lists is untouched. See
+         than a preamble to it. The 30-day build-window rule decides what it lists. See
          docs: portal internals, index.html. -->
     <div id="recentStrip" class="hidden"></div>
     <div class="cardgrid" id="cardGrid"></div></div>

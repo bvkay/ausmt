@@ -7,8 +7,8 @@ const sel=()=>ST.filter(s=>selected.has(s.i));
 // corpus (filters.js scopeStations; the scope line in the Download block states which). sel() stays
 // for callers that mean the literal selection.
 function scopeSel(){return (typeof scopeStations==="function")?scopeStations():sel();}
-// Bind one control's click handler, tolerating an absent element: an unguarded miss threw at parse
-// time and silently dropped every LATER binding and top-level assignment in this file. A missing id
+// Bind one control's click handler, tolerating an absent element: an unguarded miss throws at parse
+// time and silently drops every LATER binding and top-level assignment in this file. A missing id
 // announces itself in the console instead.
 function bindClick(id,fn){const el=document.getElementById(id);
   if(el)el.onclick=fn;else console.error("export control #"+id+" is missing; handler not bound");}
@@ -288,7 +288,7 @@ function showWgetDialog(cmds){
   if(m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}}
 // The dialog declares aria-modal, so it owes the same three behaviours the welcome popup (its own visual
 // shell) already has: Escape, click-out, and focus back to whatever opened it. Escape is also the reason
-// drawer.js yields to an open #wgetModal - without that, Esc over this dialog closed the drawer BEHIND it.
+// drawer.js yields to an open #wgetModal: otherwise Esc over this dialog would close the drawer BEHIND it.
 let _wgetReturnFocus=null;
 function hideWgetDialog(){
   const m=document.getElementById("wgetModal");if(!m)return;
@@ -355,7 +355,7 @@ function citeLine(c,doi){return "  "+apaPlain(c,doi)+(doi?"":"  [no DOI assigned
 // The citation files for a station set, extracted from the click handler so every data download
 // can carry them: the selection zips embed these beside LICENSE.txt, and the
 // time-series hand-offs travel with a metadata pack. Output is byte-identical to the pack the
-// Citation pack button always built.
+// Citation pack button builds.
 function buildCitationFiles(_scope){
   const svs=[...new Set(_scope.map(s=>s.survey))].sort();const today=new Date().toISOString().slice(0,10);
 

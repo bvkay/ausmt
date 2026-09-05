@@ -141,7 +141,7 @@ function licBadgeState(lic){if(!lic)return "unk";const c=licCanon(lic);
   if((LICENSES.recognised_only||[]).indexOf(c)>=0)return "part";
   return "unk";}
 // The attribution synthesis year: the LAST 4-digit year in the survey's declared dates string, "" when
-// undeclared. Factored out (behaviour unchanged) so the ONE attribution box (attributionBoxHtml) rebuilds
+// undeclared. Factored out so the ONE attribution box (attributionBoxHtml) rebuilds
 // the same "(year)" tail around linked creator names without re-deriving it, and so the two cannot drift.
 function attributionYear(m){return ((m&&m.dates)?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";}
 // The survey-level attribution line - the custodian's verbatim attribution.statement when
@@ -343,8 +343,8 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   const ediSub={n:"EDI",...ediDescriptor(s,m),origin:"source archive"};
   const xmlSub=xml
     ? {n:"EMTF XML",sub:"Download"+(xml.size?" · "+fmtBytes(xml.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:xml.url,name:xml.url.split("/").pop()}}
-    // Honesty fix: the 8 surveys with zero served XML ARE redistributable (the build pipeline failed on
-    // them), so the old "via pipeline / served for redistributable surveys" toast was FALSE. Show the same
+    // A survey with zero served XML may still be redistributable (the build pipeline failed on
+    // it), so no toast may claim it is served via the pipeline. Show the same
     // honest inert not-available sub-line the MTH5 row uses, with no toast overclaim.
     : {n:"EMTF XML",sub:"not currently available",origin:"AusMT-derived",st:"unk",d:null};
   // The Level 2 MTH5 sub-row is THIS STATION's own transfer-function h5: the manifest files[] row with
@@ -492,7 +492,7 @@ function provenanceBox(s){
   ];
   // Titled "AusMT Provenance", not "Processing provenance". Every row below is about the AUSMT PIPELINE's
   // own run (extractor, pipeline version, build date, build commit), not the custodian's MT data
-  // processing, and readers took the old title to mean the latter. See docs: portal internals, drawer.js.
+  // processing, which the title must not suggest. See docs: portal internals, drawer.js.
   return `<details class="prov-d"><summary>AusMT Provenance</summary><table class="meta">`+
     rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")+
     `</table><div class="prov" style="margin-top:6px">Every product traces to its input file, the extractor and version`+
@@ -541,7 +541,7 @@ function loadStationFrameLine(s){
   const url=dataUrl("products/"+encodeURIComponent(slug)+"/"+encodeURIComponent(s.id)+"/station.json");
   // The catch sits on the FETCH, not on the whole chain, so a withheld/offline/file:// station caches its
   // no-line outcome (and is not re-requested) while a throw in the render step below caches nothing and is
-  // simply retried, exactly as before.
+  // simply retried.
   return fetch(url).then(r=>r.ok?r.json():null).catch(()=>null).then(doc=>{   // withheld / offline / file:// => no line
     const facts={line:(doc&&doc.frame)?(frameLineText(doc.frame)||""):"",
                  writer:doc?fileWrittenByText((doc.processing||{}).file_written_by)
@@ -657,8 +657,8 @@ function openStation(i,opts){
   const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}${TYPE_INK[s.type]?";color:"+TYPE_INK[s.type]:""}">${esc(s.type)}</span>`;
   const collChip=(m.collection&&m.collection.id)?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"";
   // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if
-  // neither. This was a verbatim second copy of acqYearText, which is how the station chip could have
-  // kept an en-dash range while the card moved to the spaced hyphen; it now calls the one helper.
+  // neither. Reads acqYearText, the one helper, so the station chip and the card cannot drift in how
+  // they spell a year range.
   const yearTxt=acqYearText(m);
   const yearChip=yearTxt?`<span class="hchip">${yearTxt}</span>`:"";
   const licBadge=badge(licHuman(m.lic)||"licence ?",licBadgeState(m.lic));
@@ -1059,10 +1059,10 @@ function pubsHtml(m){const ps=(m.pubs||[]);
   if(!ps.length)return `<div class="surveymeta"><span class='prov'>No related publications recorded yet; the science pipeline can auto-suggest these from DOIs that cite the dataset.</span></div>`;
   return `<div class="surveymeta">`+ps.map(p=>"• "+pubCite(p)).join("<br><br>")+`</div>`;}
 // Discovery controls for the Surveys view. State lives in this module (the controls are static in
-// index.html; the coordinator/rail filters are untouched). See docs: portal internals, drawer.js.
+// index.html; the coordinator/rail filters are a separate surface). See docs: portal internals, drawer.js.
 let _sortMode="name",_cardLayout="cards";
-// Presence facets. "dl" (Downloadable here) was promoted out of the map rail, where it lived as
-// the Data available dropdown's "tf" option and so could not be asked at all on the Surveys view.
+// Presence facets. "dl" (Downloadable here) is a discovery facet here rather than a map-rail option,
+// so it can be asked on the Surveys view.
 const _facets={lic:false,dl:false};
 const _typeFacets=new Set();                        // selected data-type chips, OR-combined within the group
 const _TYPE_ORDER=["BBMT","LPMT","AMT","GDS"];      // canonical chip order; only corpus-present types render
@@ -1140,8 +1140,8 @@ function clearDiscoveryFilters(){
   _typeFacets.clear();
   const s=document.getElementById("surveySearch");
   if(s&&s.value)s.value="";
-  // The promoted year inputs are this bar's filters now, so Clear filters owes them a reset. Before
-  // the promotion they were the rail's, and a year left in them survived every "Clear filters" click.
+  // The year inputs are this bar's filters, so Clear filters owes them a reset: a year left in
+  // them would otherwise survive every "Clear filters" click.
   ["yearFrom","yearTo"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
   // refresh() re-runs the map predicates (the promoted filters gate those too) and re-renders the grid.
   if(typeof refresh==="function")refresh();else renderCards();
@@ -1213,7 +1213,7 @@ function surveySummary(ss,m){
   const software=m.software||Object.keys(swCount).sort((a,b)=>swCount[b]-swCount[a])[0]||"not recorded";
   const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"-";
   // Embargoed surveys append the embargo date to the access cell ("embargoed until 2027-02-01"); any other
-  // access state (or an embargo with no date) renders the bare level as before.
+  // access state (or an embargo with no date) renders the bare level.
   const _acc=m.access||"open";
   const _accTxt=(_acc==="embargoed"&&m.embargo_until)?"embargoed until "+esc(String(m.embargo_until)):esc(_acc);
   return `<div class="sechead">Survey summary <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(10-second view)</span></div><table class="meta">`+
@@ -1306,8 +1306,8 @@ function surveyDataLevelsHtml(m){
   const extras=rels.filter(r=>taken.indexOf(r)<0).map(r=>{
     const label=(r.identifies&&IDENTIFIES_LABELS[r.identifies])||RELATION_LABELS[r.relation]||(r.relation?String(r.relation):"Related identifier");
     return dataLevelTile(label,"recorded identifier outside the six data levels",r);}).join("");
-  // The project RAiD is a PROJECT identifier, not a data level, so it has no slot - but it was visible in
-  // the block this grid replaces, and dropping it silently would lose a recorded identifier. It rides the
+  // The project RAiD is a PROJECT identifier, not a data level, so it has no slot; it is a recorded
+  // identifier all the same, and dropping it silently would lose it. It rides the
   // same extra-tile mechanism, which is the section's one rule for "recorded, but not one of the six".
   const raidRow=(m.raid&&!String(m.raid).startsWith("TODO"))?{identifier:String(m.raid),identifier_type:"URL"}:null;
   const raid=raidRow?dataLevelTile("Project RAiD","the research activity this survey was acquired under",raidRow):"";
@@ -1339,8 +1339,8 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   const keepScroll=rehydrate?(drawer.scrollTop||0):0;
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
   if(!rehydrate)_rememberDrawerOpener();              // Capture the invoking element before the rewrite
-  // The survey drawer OWNS its route the way openStation always has. Without this, opening survey B over
-  // survey A left #/survey/<A> in the address bar - the same stale-URL defect the close path had, one step
+  // The survey drawer OWNS its route, as openStation does: opening survey B over
+  // survey A must replace #/survey/<A> in the address bar, just as the close path clears it, one step
   // further along. See docs: portal internals, drawer.js.
   if(!rehydrate&&m.slug)location.hash="#/survey/"+encodeURIComponent(m.slug);
   _drawerSubject={kind:"survey",sv};                  // what rehydrateOpenDrawer re-renders when a gate settles
@@ -1443,8 +1443,8 @@ function collScatter(ss,maxW,mark){
   // docs: portal internals, drawer.js.
   const members=[...new Set(ss.filter(hasPosition).map(s=>s.survey))].sort();
   // The SAME ramp the static collection page lays (state.js memberColours, twin of the engine's
-  // _member_colours). The old modulo handed the ninth member the first member's colour, so a
-  // ten-survey collection drew two surveys in one colour and its legend stopped meaning anything.
+  // _member_colours). Every member must get a distinct colour: a modulo over a short palette hands the
+  // ninth member the first's, and a ten-survey legend stops meaning anything.
   const _memberCols=memberColours(members.length);
   const col=sv=>_memberCols[members.indexOf(sv)];
   const dots=ss.filter(hasPosition).map(s=>{const p=proj(s.lon,s.lat);
@@ -1511,18 +1511,18 @@ function dispatchProd(d){
   else if(d.prod==="fetch"&&d.url){track("DownloadGenerated",{format:(d.name||"").split(".").pop()});downloadUrl(dataUrl(d.url),d.name);}
   else if(d.prod==="open"&&d.url){window.open(d.url,"_blank","noopener,noreferrer");
     // A time-series hand-off carries the archive's filename and size, so it can say what it just
-    // handed over. Still UNTRACKED, as required: the request is counted at the front door,
+    // handed over. UNTRACKED by design: the request is counted at the front door,
     // from the /go/ts/ route it names, and a second count here would be a different number.
     if(d.tsname&&typeof handoffSnack==="function")handoffSnack(d.tsname,+d.tsbytes||0);}
   else if(d.prod==="scroll"&&d.sel){const el=document.querySelector(d.sel);if(el){
     // The scroll target (#pt_anchor) lives in the Response tab, with the phase tensor + induction
-    // arrows now always-shown blocks - activate its tab so the scroll actually reveals it.
+    // arrows always-shown blocks there - activate its tab so the scroll actually reveals it.
     const panel=el.closest?el.closest('[role="tabpanel"]'):null;
     if(panel&&panel.dataset&&panel.dataset.tab)selectDrawerTab(panel.dataset.tab);
     if(el.scrollIntoView)el.scrollIntoView({behavior:"smooth"});}}
   else if(d.prod==="toast")toast(d.msg);}
 // Yield to an open plot-expand modal - its own Esc handler (plots.js) closes it, so the drawer must NOT
-// also close underneath it. Otherwise Escape closes the drawer as before. See docs: portal internals,
+// also close underneath it. Otherwise Escape closes the drawer. See docs: portal internals,
 // drawer.js.
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){
   if(typeof document==="undefined"||!document.getElementById)return void closeDrawer();

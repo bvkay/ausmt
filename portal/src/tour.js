@@ -22,7 +22,7 @@ const TOUR_STEPS=[
    enter:_tourEnterMap}
 ];
 
-// Overlay dim, raised from 0.65 to 0.78 (+13pp). Single source of truth, applied inline by
+// Overlay dim 0.78. Single source of truth, applied inline by
 // _tourLayout - on a targeted step it colours the spot's box-shadow (leaving the backdrop transparent so
 // the cutout shows the element fully); on a no-target step it colours the centred backdrop directly.
 const TOUR_DIM=0.78;
@@ -227,8 +227,8 @@ function _tourKeydown(e){
   else if(e.key==="ArrowLeft"){_tourPrev();}
 }
 
-// The tour card is CENTRED for EVERY step (the pattern formerly used only as the no-target fallback, now
-// generalised). This PURE fn returns the card's fixed-position box. See docs: portal internals, tour.js.
+// The tour card is CENTRED for EVERY step. This PURE fn returns the card's fixed-position box. See docs:
+// portal internals, tour.js.
 const _TOUR_M=8,_TOUR_CLEAR=16;   // viewport margin; target->card clearance on an overlap nudge
 function _tourCardBox(cardW,cardH,vpW,vpH,targetRect){
   const M=_TOUR_M,CLEAR=_TOUR_CLEAR;

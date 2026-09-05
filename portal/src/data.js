@@ -16,8 +16,8 @@ function fetchJson(name,opts){return fetch(dataUrl(name),opts).then(r=>{if(!r.ok
 // internals, data.js.
 var FETCH_LOW={priority:"low"};
 // One OPTIONAL product: absence (404 / network / bad JSON) resolves to `fallback` and never rejects. This is
-// the tolerant-of-absence contract build_provenance / collections / build / coord_policy / manifest have
-// always had; it is factored out here only so the five of them can run CONCURRENTLY.
+// the tolerant-of-absence contract build_provenance / collections / build / coord_policy / manifest
+// share, factored out here so the five of them can run CONCURRENTLY.
 function fetchOptional(name,fallback,opts){return fetchJson(name,opts).then(v=>v,()=>fallback);}
 
 // ---- PHASE 1: the first-paint set ---------------------------------------------------------------

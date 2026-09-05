@@ -695,7 +695,7 @@ function organisationsEmit(m){
     if(hit){ roles.forEach(t=>{ if(hit.roles.indexOf(t)<0) hit.roles.push(t); });
              if(!hit.ror) hit.ror=String(r.ror==null?"":r.ror).trim();
              return; }
-    if(!roles.length) return;                      // a named row with no role ticked states nothing and is
+    if(!roles.length) return;                      // A named row with no role ticked states nothing and is
                                                    // dropped like a nameless row. See docs: portal
                                                    // internals, add-survey.html.
     out.push({name:name,ror:String(r.ror==null?"":r.ror).trim(),roles:roles,primary:false,seeded:false});
@@ -1131,7 +1131,7 @@ function rorMatchesFromResponse(data){
 }
 
 // DOI harvest core -- normalizeDoi, looksLikeDoi, parseCrossref, parseDatacite, formatCitation and
-// harvestDoi now live in the SINGLE shared source src/doi_harvest.js (loaded in <head>).
+// harvestDoi live in the SINGLE shared source src/doi_harvest.js (loaded in <head>).
 var _DH = (typeof window !== "undefined" && window.AusmtDoiHarvest) ? window.AusmtDoiHarvest : {};
 var normalizeDoi = _DH.normalizeDoi, looksLikeDoi = _DH.looksLikeDoi, parseCrossref = _DH.parseCrossref,
     parseDatacite = _DH.parseDatacite, formatCitation = _DH.formatCitation, harvestDoi = _DH.harvestDoi;

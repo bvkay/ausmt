@@ -39,7 +39,7 @@ function routeVisibleToLayers(){
   const dots=(typeof visible!=="undefined"?visible:[]).filter(hasPosition);
   dotLayer.clearLayers();
   dots.forEach(s=>{if(s.marker)dotLayer.addLayer(s.marker);});
-  applySurveyDim();          // a re-render must not drop the change-2 focus dim
+  applySurveyDim();          // a re-render must not drop the survey focus dim
   return {dots};
 }
 const drawn=new L.FeatureGroup().addTo(map);
@@ -49,7 +49,7 @@ const drawn=new L.FeatureGroup().addTo(map);
 L.drawLocal.draw.toolbar.buttons.polygon="Draw polygon selection";
 L.drawLocal.draw.toolbar.buttons.rectangle="Draw rectangle selection";
 L.drawLocal.edit.toolbar.buttons.remove="Clear drawn shapes";
-// Kept as a named reference (was an inline `map.addControl(new ...)`) so the SELECTION panel's
+// A named reference, so the SELECTION panel's
 // Draw rectangle/polygon buttons can REUSE this control's own mode handlers - see armDraw below.
 const drawControl=new L.Control.Draw({draw:{polyline:false,circle:false,circlemarker:false,marker:false,
   polygon:{shapeOptions:{color:"#EF7256",weight:2}},rectangle:{shapeOptions:{color:"#EF7256",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}});
@@ -123,8 +123,8 @@ function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
 // Zoom-scaled marker geometry. See docs: portal internals, map.js.
 const DOT_R_FLOOR=1.8, DOT_R_CEIL=6.5, DOT_R_SLOPE=0.5, DOT_R_Z0=4;
 const DOT_R_BASE=2.0;          // at z4 (national): every site dot is ~2px, the AusLAMP LP texture size
-// PURE, and a function of ZOOM ALONE. A caller that still passes a data type is harmless: the argument is
-// not read, so a call site missed in the removal cannot quietly resurrect the per-type split. See docs:
+// PURE, and a function of ZOOM ALONE. A caller that passes a data type is harmless: the argument is
+// not read, so no call site can quietly resurrect a per-type split. See docs:
 // portal internals, map.js.
 function radiusForZoom(z){
   return Math.min(DOT_R_CEIL,Math.max(DOT_R_FLOOR,DOT_R_BASE+DOT_R_SLOPE*((typeof z==="number"?z:DOT_R_Z0)-DOT_R_Z0)));}
@@ -181,7 +181,7 @@ function _mapCorrectHomeFit(){
   if(HOME_BOUNDS)map.fitBounds(HOME_BOUNDS);
   _fitWasDegenerate=false;   // one-shot: the boot repair fires once, then stands down
 }
-// The ACTUAL off-centre-on-load fix. The one-shot corrector above only re-fits when the primary fit was
+// The off-centre-on-load correction proper. The one-shot corrector above only re-fits when the primary fit was
 // DEGENERATE (0x0). See docs: portal internals, map.js.
 function _mapDeferredHomeRefit(){
   map.invalidateSize({animate:false,pan:false});
@@ -235,7 +235,7 @@ function userLayer(name,file,color){const grp=L.featureGroup();grp._loaded=false
       if(src&&map.attributionControl)map.attributionControl.addAttribution(_layerAttribution(name,src));grp._loaded=true;}
     catch(e){toast(`Layer "${name}" not found; place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
   userLayers[name]=grp;return grp;}
-// Layer control hidden pending a decision - overlay definitions (footprints + the user
+// The layer control is not added to the map; overlay definitions (footprints + the user
 // GeoJSON layers) are kept and still constructed; the control is simply NOT added to the map.
 L.control.layers(null,{"Survey footprints":footprints,
   "States / territories":userLayer("States","states.geojson","#8FA3B0"),

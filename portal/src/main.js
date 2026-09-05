@@ -132,9 +132,9 @@ function setView(v){
   document.getElementById("surveysview").style.display=v==="surveys"?"block":"none";
   const _cv=document.getElementById("collectionview");if(_cv)_cv.style.display="none";   // the single-collection detail page
   const _ci=document.getElementById("collectionsview");if(_ci)_ci.style.display=v==="collections"?"block":"none";
-  // matches BOTH top-level filter-rail <section>s and, since the "Screening (advanced)" details wrap
-  // merged a map-only control (colour-by) into an otherwise both-views section, any data-views element
-  // nested inside one (selector kept generic rather than section-only for that one sub-case).
+  // matches BOTH top-level filter-rail <section>s and any data-views element nested inside one, so a
+  // map-only control inside an otherwise both-views section is still switched (the selector is kept
+  // generic rather than section-only for that sub-case).
   document.querySelectorAll('#filterPane [data-views]').forEach(sec=>{
     const a=sec.getAttribute("data-views");sec.classList.toggle("hidden",!(a==="both"||a===v));});
   // The map legend sits over the map, so it belongs to the map view only. (The
@@ -159,9 +159,9 @@ function setView(v){
 document.getElementById("navMap").onclick=()=>setView("map");
 
 function routeFromHash(){
-  // The PLURAL routes. Published HTML has pointed at #/surveys since the entity pages shipped (every survey
-  // page's back-nav, plus 404.html's recovery link) and no branch matched it, so the hash fell through and
-  // the reader stayed on whatever view was showing. See docs: portal internals, main.js.
+  // The PLURAL routes. Published HTML points at #/surveys (every survey
+  // page's back-nav, plus 404.html's recovery link), so a branch must match it: otherwise the hash falls through and
+  // the reader stays on whatever view was showing. See docs: portal internals, main.js.
   if(location.hash==="#/surveys"){setView("surveys");return;}
   if(location.hash==="#/collections"){setView("collections");return;}
   const mc=location.hash.match(/^#\/collection\/(.+)$/);
@@ -257,8 +257,8 @@ function setSidebarCollapsed(collapsed){
   if(typeof MutationObserver!=="undefined"){const mo=new MutationObserver(sync);mo.observe(drawer,{attributes:true,attributeFilter:["class"]});}
 })();
 
-// Load-error copy distinguishes the two real causes rather than always blaming file:// (which was this
-// message's original, pre-container diagnosis). See docs: portal internals, main.js.
+// Load-error copy distinguishes the two real causes rather than blaming file:// alone. See docs: portal
+// internals, main.js.
 function showLoadError(){
   var overFile=(location.protocol==="file:");
   document.getElementById("content").innerHTML = overFile
