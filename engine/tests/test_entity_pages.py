@@ -1929,6 +1929,29 @@ def test_a_collection_names_the_holding_it_belongs_to_and_previews_only_its_reco
     assert "<title>Bare Collection - Australian magnetotelluric data - AusMT</title>" in bare
 
 
+def test_the_collection_record_reaches_the_body_and_the_machine_node_verbatim():
+    """The preview line is a derived summary; the page body and the catalogue node are the record.
+
+    Deriving the preview must not rewrite the source it derives from: a reader and a crawler both
+    read the curator's own text, spacing and line breaks included, while only the one-line preview
+    is collapsed to fit a preview slot.
+
+    FAILS IF the About paragraph or the JSON-LD description ships a normalised copy of the record
+    instead of the record, or if the preview line stops being collapsed to a single line."""
+    pages = _pages_module()
+    raw = "A national  programme.\nIt spans  several states."
+    page = _collection_call(pages, coll={"title": "Test Collection", "description": raw})
+    ld = json.loads(re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>',
+                              page).group(1))
+    assert ld["description"] == raw, \
+        f"the catalogue node carries the record as written, got {ld['description']!r}"
+    assert f'<p class="collprose">{raw}</p>' in page, \
+        "the About paragraph carries the record as written"
+    og = re.search(r'<meta property="og:description" content="([^"]*)">', page).group(1)
+    assert og == "A national programme.", \
+        f"only the preview line is collapsed to one line, got {og!r}"
+
+
 def test_a_survey_preview_line_is_bounded_and_never_cut_inside_a_word(tmp_path):
     """A link preview is one line, and a truncated one that ends mid-word reads as a broken page.
 

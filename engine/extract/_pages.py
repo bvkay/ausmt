@@ -1841,8 +1841,10 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     else.
     """
     title = (coll or {}).get("title") or cid
+    # Only the preview copy is collapsed to one line. The body paragraph and the machine node
+    # carry the record's own text, spacing and line breaks included.
     record_desc = " ".join(str((coll or {}).get("description") or "").split())
-    desc = record_desc or f"{title}: a collection of magnetotelluric surveys on AusMT."
+    desc = (coll or {}).get("description") or f"{title}: a collection of magnetotelluric surveys on AusMT."
     url = f"{base}/collections/{cid}"
     ld = {"@context": "https://schema.org", "@type": "Dataset",
           "name": title, "description": desc, "url": url,
