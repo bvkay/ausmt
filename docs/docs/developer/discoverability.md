@@ -81,6 +81,30 @@ Every engine-written page declares `og:site_name` = `AusMT`, station pages inclu
 lands on those most often, and a preview card that names the wrong site is wrong wherever it is
 shared.
 
+## What a link preview says
+
+Every page that carries the Open Graph set carries `twitter:title`, `twitter:description` and
+`twitter:image` beside `twitter:card`. X, Slack and Teams read those names before falling back to
+`og:*`, and a consumer reading only that namespace found a card type and an image with no title and
+no summary. The mirrors are emitted from the same strings the og tags take, in one block, so a title
+that changes cannot go stale on one surface and not the other.
+
+The collections hub titles itself `Collections - Australian magnetotelluric data - AusMT` and each
+collection page `<name> - Australian magnetotelluric data - AusMT`. Both name the national holding
+the page belongs to, which is what a search result and a preview print. The surveys hub and the
+survey pages keep their own wording, which names the kind of record the page is.
+
+A collection's preview line is its record's FIRST sentence and nothing after it. Where the record
+carries no description the page emits neither description tag, in either vocabulary: `content=""`
+tells a crawler the page has no summary, where a missing tag lets it build one from the document.
+The JSON-LD node keeps a fallback sentence, because a `Dataset` with no description is an invalid
+item to a search engine.
+
+Survey and collection preview lines are bounded at 160 characters, cut at a sentence end where
+whole sentences fit and at a word boundary otherwise, and wear a trailing ellipsis only where
+text was actually dropped. A station's line is one constructed sentence naming the station and
+its survey, so it is carried whole.
+
 ## The sitemap's membership rule
 
 `sitemap.xml` is written at the data root and carries, in this order:
@@ -106,19 +130,22 @@ that the field is emitted only where it is true.
 
 ## Link-preview cards
 
-Three card families, all 1200 by 630 PNGs on one ground, all declared as `og:image` on the page they
-belong to. The ground is the root card artwork's own, so the three families a link preview can land
-on read at one brightness rather than as two slightly different dark blues.
+Four card families, all 1200 by 630 PNGs on one ground, all declared as `og:image` on the page they
+belong to. The ground is the root card artwork's own, so the families a link preview can land on read
+at one brightness rather than as several slightly different dark blues.
 
 | Card | Written to | Served at | Drawn by |
 |---|---|---|---|
 | survey | `pages/og/<slug>.png` | `/data/pages/og/<slug>.png` | `_og_card` |
 | collection | `pages/og/collections/<id>.png` | `/data/pages/og/collections/<id>.png` | `_og_collection_card` |
+| hub | `pages/og/surveys.png`, `pages/og/collections.png` | `/data/pages/og/surveys.png`, `/data/pages/og/collections.png` | `_og_hub_card` |
 | root | not generated per build | `/vendor/social-card.png` | `portal/tools/gen_social_card.py`, hand-run |
 
 The collection cards take a subdirectory of their own: `pages/og/` is flat, and a collection id equal
 to a survey slug would otherwise overwrite that survey's card, silently and only for the pair that
-collided.
+collided. The two hub cards share that flat tree by name, so a survey slugged `surveys` or
+`collections` is refused before the build writes anything: it would replace a hub's card, and the hub
+page would then advertise a survey.
 
 The cards live in the data volume, which is served under `/data/*`. The `pages/` tree has no bare
 route of its own, so `{base}/data/pages/og/...` is the only URL at which a card is reachable; a
@@ -129,12 +156,28 @@ from "is Pillow importable", which is a claim about the environment rather than 
 failed write shipped an `og:image` that resolved to nothing. A card that was drawn but not written
 now fails the build; a page with no card falls back to the root card.
 
+Pillow is required wherever the corpus has surveys, and the build refuses without it. Gated on
+importability alone the loss was silent: every card vanished, every page fell back to the root card
+and the build still returned 0, so the whole preview surface could regress into a deployment with
+nothing failing. A corpus with no surveys draws no card and builds without Pillow, which is what a
+machine that only needs the products needs.
+
 ### What each card shows
 
 The survey card carries the survey's title, its station count and type, its region and years, its
-period band and extent, a footprint panel of its stations and an Australia locator inset. The inset
-is composited at 70 per cent over the footprint it explains, so the stations it covers still show
-through it; only its centre marker, the one mark that says WHERE, is drawn at full strength.
+period band, a footprint panel of its stations and an Australia locator inset. The inset is
+composited at 70 per cent over the footprint it explains, so the stations it covers still show
+through it; only its centre marker, the one mark that says WHERE, is drawn at full strength. The
+footprint's kilometres are a number the survey PAGE carries: on a card they crowd out the period
+band a reader can actually use.
+
+The footprint panel is the same box on every survey card, and the station extent is fitted into it:
+one scale on both axes, so a traverse arrives as a traverse rather than stretched to fill the frame;
+ten per cent of the panel kept clear on every side, so no station sits on the rule; and the whole
+extent centred on both axes. A panel fitted to its own data instead would change the card's
+composition per survey, and an east-west traverse would collapse it to a strip against the top of
+the card with the rest of the frame left empty. What the fit optimises is the viewport and never the
+data: no station is moved, merged, thinned or dropped to make a footprint read better.
 
 The collection card is a preview of the collection page's own map: every member station, coloured by
 member survey in the collections hub's palette and member order, so one survey is the same colour on
@@ -145,6 +188,27 @@ about a third of its width by the clients that show it and the SVG's radius woul
 the dots are drawn opaque, because this card has neither a legend nor a hover, so translucency buys
 nothing and costs contrast. A collection whose members disclose no position at all gets no card,
 rather than a bare coastline that would read as a collection with no coverage.
+
+The collection card's facts are its member and station counts, its type and status, and its temporal
+coverage. The coverage comes from the collection record and from nowhere else: a record still taking
+members has no end year to give, so its coverage runs to the present; a record that makes no such
+claim states its start alone, because a closed range needs an end year the record does not hold and
+the date it was last maintained is not one. A record carrying no start year gets no coverage line.
+
+The hub cards preview a catalogue rather than a place, so their artwork is the site's identity and
+not a map of data: the full pixelated Australia, DRAWN from the same coastline the brand mark is
+derived from on a lattice finer than the mark's, with the palette stops, the ramp positions, the
+clear fraction and the dot radius all read from `contract/brand.json` at draw time. Run at the mark's
+own grid the lattice reproduces that file's dot list cell for cell, which is what makes the card the
+same silhouette at a second resolution rather than a second silhouette; the mark stays the simplified
+figure that has to survive a browser tab. No vendored image is read: the engine image ships no portal
+tree, and a card that reached for one would go blank exactly where the corpus is served.
+
+A hub card's lines are its title, the tagline the brand file declares, and the counts this build
+computed, summed from the same rows the hub page renders from. A corpus that grows renders its own
+numbers, and the artwork is drawn large and resampled down so the dots are round rather than stepped,
+which is also what makes these the heaviest cards the build writes: they carry a declared byte budget
+for that reason.
 
 ### The text column
 
@@ -163,37 +227,75 @@ panel width, because a collection map is read for the SHAPE of a programme's cov
 arrives at about a third of this width in a feed, and the column is whatever that enlarged panel
 leaves at the same air it keeps against the card's own edge.
 
-### The AusMT mark in the corner
+### The left column
 
-The survey and collection cards carry the AusMT mark in the top-left corner, on the same text margin
-the title sits on. The root card does not: its artwork IS the mark, at full size.
+Every generated card carries one column on the text margin, top to bottom: the AusMT lockup, the
+kind label, the title and its facts, the address, the AuScope lockup. The root card carries no
+lockup of its own: its artwork IS the mark, at full size.
 
-The engine draws the corner mark from a small pinned derivative,
+The AusMT lockup is the mark with the word beside it. The word's size, its gap from the mark and its
+ink are read from `contract/brand.json` at draw time and scaled by the mark's height, so the lockup
+on a card and the lockup on every other surface are one set of proportions rather than two that
+happen to agree; no number of the lockup's is restated in the emitter. `contract/` is a sibling of
+`engine/` and the engine image ships it, so the read resolves in the image as well as in a source
+tree.
+
+The kind label names what the reader has landed on before the title does: tracked caps in a muted
+ink, saying SURVEY, COLLECTION, or the plural a hub carries. The card emitters take that word as an
+argument rather than knowing it, so a further card family takes the same column by passing its own.
+
+Below the label the title walks the size ladder, then the facts: the station count and type joined
+by an interpunct, the region and years, the period band. An absent value is skipped rather than
+reserved, and the period band follows the block instead of standing on a slot of its own, so a
+survey that discloses no region closes the gap instead of leaving a hole. The block also has a
+ceiling: the address and the AuScope lockup close the column on fixed lines, and the block keeps a
+declared clear space above the address's own first ink row, measured on the glyphs the face sets
+rather than on the nominal point size.
+
+A value that does not fit is not an absent value, so nothing the survey disclosed is given up to
+make room under that ceiling. The title has a ladder and the block's sizes are declared, so the step
+comes out of the title: under each title step the block closes its leading, and when that is not
+enough the title takes the next step rather than setting a fact line below its declared size. Only
+after the title's whole ladder has run out does the block's type give, which is the last resort that
+still fits everything on the card. The title and the block are therefore chosen together, and the
+last step of both ladders holds the most a card can carry, so the walk always has an answer.
+
+The engine draws the mark from a small pinned derivative,
 `portal/vendor/brand/ausmt-mark-168.png`, emitted by `gen_brand.py` from the same lattice as every
 other brand export and gated by `gen_brand.py --check`. It exists because the engine image ships no
 portal tree and so must carry its own copy of whatever it draws with; the 1024 px mark would put a
 third of a megabyte in that image to be shown at a fraction of the size. 168 is a whole multiple of
 the height the card draws at, so the resample is a clean box rather than an arbitrary ratio.
 
-### The signature row
+### The address and the AuScope lockup
 
-Every card is signed the same way: the AuScope mark, then a gap of half the mark's width, then the
-address `ausmt.auscope.org.au`, all on the card's own text margin. The mark's height is the address's
-line height and it is centred on the address's ink, so the pair reads as one line of type rather than
-as a logo with a caption beside it.
+The address `ausmt.auscope.org.au` closes the block on a line of its own, on the card's text margin,
+in the coral accent read from `contract/brand.json`. It carries no mark beside it: the column
+already opens with one lockup and closes with another, and a third mark on that line reads as a logo
+with a caption.
+
+The AuScope lockup is last, on the same margin, keeping a declared clear space against the card's
+bottom edge so the column ends on one line across every family whatever the block above it does. It
+is the AuScope half of `portal/vendor/auscope-ncris-white.png`, cut at column 1200 of that 1919 by
+325 image and trimmed to its alpha bbox: the columns to the right carry a second organisation's mark
+and a descriptor line that is unreadable at card height, and the site footer already carries the full
+acknowledgement. It is drawn no taller than the AusMT mark above it, which is how the acknowledgement
+is kept from outweighing the resource identity it acknowledges.
 
 The address is set in Inter Bold on all three families. The root card's artwork is set in that face,
-so the generated cards adopting it is what makes the three signature rows one row rather than three
-that happen to say the same thing; the rest of a generated card's type stays in Pillow's bundled
-face, which ships with the library and so cannot go missing.
+so the generated cards adopting it is what makes the three addresses one line rather than three that
+happen to say the same thing; the rest of a generated card's type stays in Pillow's bundled face,
+which ships with the library and so cannot go missing.
 
-The engine ships its own copy of everything it draws with, beside the emitter and pinned
-byte-identical to the portal's copy in tests: `engine/extract/_auscope_mark.png` against
-`portal/vendor/auscope-icon-white.png`, `engine/extract/_ausmt_mark.png` against
+The engine ships its own copy of everything it draws with, beside the emitter and pinned against the
+portal's copy in tests: `engine/extract/_auscope_lockup.png` against the crop of
+`portal/vendor/auscope-ncris-white.png` described above, `engine/extract/_ausmt_mark.png` against
 `portal/vendor/brand/ausmt-mark-168.png`, and `engine/extract/_inter_bold.ttf` against
-`portal/tools/brand_font/Inter-Bold.ttf`, whose Open Font Licence ships beside it. The engine image
-carries no portal tree, so an emitter that reached across to the portal would draw an unsigned card
-in exactly the environment that serves the corpus. These four files are listed under
+`portal/tools/brand_font/Inter-Bold.ttf`, whose Open Font Licence ships beside it. The lockup's pin
+compares DECODED pixels, because a re-encoded crop's bytes move between Pillow builds while its
+picture does not; the other two are byte pins on files nothing re-encodes. The engine image carries
+no portal tree, so an emitter that reached across to the portal would draw an unsigned card in
+exactly the environment that serves the corpus. These four files are listed under
 `[tool.setuptools.package-data]` in `engine/pyproject.toml`: the repository installs the engine
 editable everywhere it runs, so the list declares the intent rather than repairing a live break, but
 a card asset added beside the emitter belongs on it.

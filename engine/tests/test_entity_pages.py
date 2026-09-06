@@ -14,6 +14,7 @@ outputs must agree (every sitemap URL has a page; no orphan pages), so the sitem
 advertise a 404. Without the flag no pages directory exists and the build is byte-identical to an
 earlier build.
 """
+import html
 import json
 import re
 import sys
@@ -1898,6 +1899,97 @@ def test_the_single_line_description_consumers_never_take_the_page_prose(tmp_pat
     assert ld["description"] == long_desc, \
         "the machine record carries the flat discovery description, not the page prose"
     assert "prose" not in json.dumps(ld), "the prose payload is page furniture, not catalogue data"
+
+
+def test_a_collection_names_the_holding_it_belongs_to_and_previews_only_its_record(tmp_path):
+    """The title a reader meets in a search result and the line a link preview prints beside it.
+
+    The title names the national holding the collection sits in. The preview line is the record's
+    own opening sentence: one sentence is what a preview shows, and a record that carries no
+    description gets no line rather than a manufactured one.
+
+    FAILS IF the title drops the national wording, if the preview runs past the first sentence, or
+    if a description-free record ships an invented preview or an empty tag."""
+    pages = _pages_module()
+    page = _prose_collection(pages)
+    assert "<title>Test Collection - Australian magnetotelluric data - AusMT</title>" in page
+    assert ('<meta property="og:title" '
+            'content="Test Collection - Australian magnetotelluric data - AusMT">') in page
+    og = re.search(r'<meta property="og:description" content="([^"]*)">', page).group(1)
+    assert og == "A national programme.", \
+        f"the preview takes the record's first sentence and nothing after it, got {og!r}"
+    meta = re.search(r'<meta name="description" content="([^"]*)">', page).group(1)
+    assert meta == og, "the preview and the meta description must tell one story"
+
+    bare = _collection_call(pages, coll={"title": "Bare Collection"})
+    assert '<meta property="og:description"' not in bare, \
+        "a record with no description ships no preview line, invented or empty"
+    assert '<meta name="description"' not in bare, \
+        "an absent description leaves no empty tag behind"
+    assert "<title>Bare Collection - Australian magnetotelluric data - AusMT</title>" in bare
+
+
+def test_the_collection_record_reaches_the_body_and_the_machine_node_verbatim():
+    """The preview line is a derived summary; the page body and the catalogue node are the record.
+
+    Deriving the preview must not rewrite the source it derives from: a reader and a crawler both
+    read the curator's own text, spacing and line breaks included, while only the one-line preview
+    is collapsed to fit a preview slot.
+
+    FAILS IF the About paragraph or the JSON-LD description ships a normalised copy of the record
+    instead of the record, or if the preview line stops being collapsed to a single line."""
+    pages = _pages_module()
+    raw = "A national  programme.\nIt spans  several states."
+    page = _collection_call(pages, coll={"title": "Test Collection", "description": raw})
+    ld = json.loads(re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>',
+                              page).group(1))
+    assert ld["description"] == raw, \
+        f"the catalogue node carries the record as written, got {ld['description']!r}"
+    assert f'<p class="collprose">{raw}</p>' in page, \
+        "the About paragraph carries the record as written"
+    og = re.search(r'<meta property="og:description" content="([^"]*)">', page).group(1)
+    assert og == "A national programme.", \
+        f"only the preview line is collapsed to one line, got {og!r}"
+
+
+def test_a_survey_preview_line_is_bounded_and_never_cut_inside_a_word(tmp_path):
+    """A link preview is one line, and a truncated one that ends mid-word reads as a broken page.
+
+    FAILS IF the survey preview runs past the cap, cuts inside a word, or wears the ellipsis when
+    it took the whole abstract."""
+    pages = _pages_module()
+    long_blurb = ("This survey occupies the eastern Curnamona province and was acquired to image "
+                  "the lithospheric structure beneath it with broadband and long period "
+                  "instruments recording together across the whole deployment window.")
+    smeta = {"slug": "s", "blurb": long_blurb, "org": "O", "lic": "CC-BY-4.0"}
+    page = pages.survey_page(slug="s", label="S", sm_doc=None, smeta=smeta, station_docs=[],
+                             bundle_rows=[], ts_access=None, base="https://x.example")
+    og = re.search(r'<meta property="og:description" content="([^"]*)">', page).group(1)
+    og = html.unescape(og)
+    assert len(og) <= 160, f"the preview must stay bounded, got {len(og)}"
+    assert og.endswith("..."), "a preview that dropped text must say so"
+    tail = og[:-3].rstrip()
+    assert long_blurb.startswith(tail) and long_blurb[len(tail)] in " .", \
+        f"the cut must fall on a word or sentence boundary, got {og!r}"
+
+    short = pages.survey_page(slug="s", label="S", sm_doc=None,
+                              smeta={"slug": "s", "blurb": "A short abstract.", "org": "O",
+                                     "lic": "CC-BY-4.0"},
+                              station_docs=[], bundle_rows=[], ts_access=None,
+                              base="https://x.example")
+    assert '<meta property="og:description" content="A short abstract.">' in short, \
+        "an abstract inside the cap is carried whole, with no ellipsis"
+
+    # An abstract that overruns only in its LATER sentences is cut at a sentence end, not at the cap.
+    two = pages.survey_page(slug="s", label="S", sm_doc=None,
+                            smeta={"slug": "s", "org": "O", "lic": "CC-BY-4.0",
+                                   "blurb": "One sentence here. " + "A second of some length. " * 8},
+                            station_docs=[], bundle_rows=[], ts_access=None,
+                            base="https://x.example")
+    og2 = html.unescape(
+        re.search(r'<meta property="og:description" content="([^"]*)">', two).group(1))
+    assert og2.endswith(".") and not og2.endswith("..."), \
+        f"a cut that lands on a sentence end wears no ellipsis, got {og2!r}"
 
 
 # ---- collection members are items in their own right -------------------------------------------

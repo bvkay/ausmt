@@ -5,14 +5,18 @@ it is resampled to roughly a third of its width on the way, so what it says has 
 size. These are the properties pinned here, all measured off the rendered PNG rather than read back
 out of the drawing code, so a constant that still looks right cannot hide a card that is wrong.
 
-THE SIGNATURE ROW. The AuScope mark sits left of the ausmt.auscope.org.au address, on the card's
-text margin, at the address's own line height and centred on its ink, so the pair reads as one line
-of type rather than as a logo with a caption beside it. The address is set in Inter Bold, the face
-the hand-made root card's artwork uses, so the three card families sign themselves in one face.
+THE ADDRESS LINE. ausmt.auscope.org.au sits on the card's text margin on a line of its own, in the
+brand's coral accent and in Inter Bold, the face the hand-made root card's artwork uses, so the card
+families sign themselves in one face and one colour.
 
-THE CORNER MARK. Survey and collection cards carry the AusMT mark in the top-left corner, on the
-same text margin the title sits on. The ROOT card does not: that card's artwork is the mark, and a
-second copy of it would read as a duplicate (pinned in portal/tests/test_social_card.py).
+THE AUSCOPE LOCKUP. AuScope's icon with its wordmark, white, sits last in the left column at a
+declared height above the card's bottom edge. It is never taller than the AusMT mark above it, so
+the acknowledgement cannot outweigh the resource identity it acknowledges.
+
+THE AUSMT LOCKUP. Survey and collection cards open their left column with the AusMT mark and the
+word beside it, on the same text margin the title sits on, at the proportions the brand file
+declares. The ROOT card carries no mark: that card's artwork is the mark, and a second copy of it
+would read as a duplicate (pinned in portal/tests/test_social_card.py).
 
 THE TEXT COLUMN. Every card declares the width its text may occupy, and nothing crosses it: the
 title walks the size ladder and wraps, and the fact lines wrap. This is scanned on the pixels of
@@ -24,6 +28,13 @@ surveys has no single place to point at).
 
 THE LOCATOR INSET. On a survey card it is composited at _CARD_INSET_ALPHA rather than painted
 opaque, so the stations it covers still show through it, and only its centre marker stays solid.
+
+THE HUB CARDS. /surveys and /collections carry cards of their own rather than the portal's root
+card. They take the same left column, and their artwork is the full pixelated Australia DRAWN from
+the coastline the brand mark is derived from, on a lattice finer than the mark's, coloured by the
+palette stops the brand file declares. Nothing of the vendored artwork's bytes is read: the engine
+image ships no portal tree, so a card that reached for them would go blank exactly where the corpus
+is served.
 """
 import json
 import re
@@ -41,23 +52,36 @@ sys.path.insert(0, str(REPO / "extract"))
 sys.path.insert(0, str(REPO))
 import build_portal  # noqa: E402
 
+_WORKFLOW = REPO.parent / ".github" / "workflows" / "build-products.yml"
 SAMPLE_EDIS = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
 BASE = "https://ausmt.example.test"
 
-# The bottom-left corner of every card: where the signature row is, and nowhere else on any card.
-_SIG_REGION = (0, 500, 620, 630)
-# The top-left corner, wide enough to catch a mark that drifted off the margin and short enough to
-# stop above the title's own slot. Nothing but the corner mark may put ink here.
-_CORNER_REGION = (0, 0, 300, 100)
+# The AuScope lockup's band, under the address's own. The address's band is read off the emitter
+# (_address_rows) rather than declared here, because a band that names rows the address does not
+# stand on answers for a line it is not measuring. Each is read across the card's left column only,
+# out to the edge the family declares, so the map panel beside them can never answer for either.
+_LOCKUP_ROWS = (535, 630)
+# The top-left corner, wide enough to catch a lockup that drifted off the margin and short enough to
+# stop above the kind label under it. Nothing but the AusMT lockup may put ink here.
+_CORNER_REGION = (0, 0, 400, 110)
 # The card's three text inks. A pixel of any of them past the declared column edge is type that has
 # crossed into the map panel, which is the failure the column rule exists to prevent.
-_TEXT_INKS = ((255, 255, 255), (143, 163, 176), (201, 212, 232))
+_TEXT_INKS = ((255, 255, 255), (143, 163, 176), (201, 212, 232), (150, 165, 195))
+# The block's fact-line inks, so a pin can render the line it is looking for in the ink the card
+# sets it in.
+_MUTED_INK = (143, 163, 176)
+_PERIOD_INK = (201, 212, 232)
 
 
 def _pages_module():
     sys.path.insert(0, str(REPO / "extract"))
     import _pages
     return _pages
+
+
+def _address_rows(pages):
+    """The address's OWN band: the line the emitter sets it on, down to the lockup's band."""
+    return (pages._CARD_WORDMARK_Y, _LOCKUP_ROWS[0])
 
 
 def _survey(tmp_path, slug, name, lat, extra="", region="South Australia"):
@@ -79,7 +103,12 @@ def _survey(tmp_path, slug, name, lat, extra="", region="South Australia"):
 
 @pytest.fixture(scope="module")
 def built(tmp_path_factory):
-    """One corpus whose two surveys are members of one collection, built once with the cards on.
+    """One corpus of three surveys in two collections, built once with the cards on.
+
+    TWO collections, because a card rule proven over one collection cannot be told apart from a
+    special case for that collection's id. The second is a closed compilation rather than an open
+    programme, so the corpus also carries a card for each of the two coverage forms a record can
+    disclose.
 
     The two surveys carry the two text lengths the column rule has to hold, because a scan over
     cards that all fit anyway would stay green with the rule deleted. card-a is the corpus's worst
@@ -87,14 +116,22 @@ def built(tmp_path_factory):
     the top of the size ladder and still overflows it at the bottom, so the title has to step down
     to the smallest size AND wrap; and a region naming three states with a year range, which
     overflows the same column at 29 px, so the fact line has to wrap under it. card-b stays short
-    enough that neither happens, so the scan also covers a card the rule leaves alone."""
+    enough that neither happens, so the scan also covers a card the rule leaves alone. card-c is the
+    TALLEST block the corpus can make: a title that holds two lines above the ladder's last step and
+    a geography line that wraps under it, so the block runs down to the clear space the address
+    keeps and the sweep over that clear space measures a card that comes near it."""
     tmp = tmp_path_factory.mktemp("ogcards")
     coll = ("collection:\n  id: cardcoll\n  title: Card Collection\n  type: programme\n"
-            "  status: active\n")
+            "  status: active\n  start_year: 2013\n")
+    coll_b = ("collection:\n  id: cardcoll-b\n  title: Card Compilation\n  type: compilation\n"
+              "  status: completed\n  start_year: 1966\n")
     surveys = _survey(tmp, "card-a", "AusLAMP Musgraves APY Lands Deployment 2016", "-30.5",
                       coll + "dates: {start: 2016, end: 2018}\n",
                       region="South Australia / Western Australia / Northern Territory")
     _survey(tmp, "card-b", "Card B", "-24.5", coll)
+    _survey(tmp, "card-c", "Hanekup Eastern Queensland 2003", "-22.5",
+            coll_b + "dates: {start: 2003, end: 2003}\n",
+            region="Queensland / Northern Territory")
     out = tmp / "out"
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(out), "--bundle-edi",
                             "--no-validate", "--products", str(out / "products"),
@@ -103,54 +140,179 @@ def built(tmp_path_factory):
     return out
 
 
-def _boxes(path):
-    """(size, mark box, wordmark box) measured from the card's own pixels.
+@pytest.fixture(scope="module")
+def drawn(tmp_path_factory):
+    """One card of each generated family, drawn straight through the emitters.
 
-    The mark is the near-white ink in the signature corner and the wordmark is the coral. Both are
-    read off the rendered file rather than computed from the drawing code, so a change that moves
-    the row fails here even if the constants behind it still look right."""
+    The card's own left column is the same on every card by construction, so the properties of that
+    column are held here rather than over a corpus: these two cards need Pillow and the shipped
+    assets and nothing else, which is what lets the column be held on an interpreter that can draw a
+    card but cannot run an ingest. The corpus is still scanned by the pins whose INPUT varies, the
+    column-edge scan over real survey names among them.
+
+    Each entry is (card, the family's declared column edge, the word the card must name itself with)."""
+    pages = _pages_module()
+    out = tmp_path_factory.mktemp("drawn")
+    for name, kind, title in pages._HUB_CARDS:
+        pages._og_hub_card(out / f"{name}.png", kind=kind, title=title,
+                           lines=pages._HUB_CARD_LINES[name],
+                           counts_line=f"27 {name}" if name == "collections"
+                           else "27 surveys · 2,625 stations")
+    pts = [(129.0 + 0.1 * i, -12.5 - 0.05 * i, "mt") for i in range(40)]
+    pages._og_card(out / "survey.png", kind="SURVEY", title="Vulcan 2022",
+                   subtitle="40 stations · BBMT", region_year="South Australia · 2022",
+                   period_line="0.005 - 10,000 s", points=pts)
+    assert pages._og_collection_card(
+        out / "collection.png", kind="COLLECTION", title="AusLAMP",
+        facts_line="14 surveys · 500 stations", taxonomy_line="PROGRAMME · ACTIVE",
+        coverage_line="2013 - present",
+        member_labels=["A", "B"],
+        member_points={"A": [(133.0, -25.0), (134.0, -26.0)], "B": [(140.0, -30.0)]})
+    return ((out / "survey.png", pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH, "SURVEY"),
+            (out / "collection.png", pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH,
+             "COLLECTION"),
+            (out / "surveys.png", pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH, "SURVEYS"),
+            (out / "collections.png", pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH, "COLLECTIONS"))
+
+
+def _brand():
+    """The brand's declared truth, read here rather than restated, so a pin cannot agree with a
+    card that has drifted from the file both are supposed to follow."""
+    return json.loads((REPO.parent / "contract" / "brand.json").read_text(encoding="utf-8"))
+
+
+def _hex_rgb(value):
+    """'#RRGGBB' as the (r, g, b) a rendered pixel carries."""
+    h = str(value).lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _brand_stop(name):
+    """One palette stop's (r, g, b), from the brand file."""
+    hexes = {stop["name"]: stop["hex"] for stop in _brand()["palette"]["stops"]}
+    return _hex_rgb(hexes[name])
+
+
+def _ink(path, region):
+    """(card size, every non-ground pixel in `region` as (x, y, colour)).
+
+    Read off the rendered file rather than computed from the drawing code, so a change that moves a
+    band fails here even if the constants behind it still look right."""
     from PIL import Image
+    pages = _pages_module()
     with Image.open(path) as im:
         img = im.convert("RGB")
     px = img.load()
-    x0, y0, x1, y1 = _SIG_REGION
-    white, coral = [], []
-    for y in range(y0, min(y1, img.size[1])):
-        for x in range(x0, min(x1, img.size[0])):
-            r, g, b = px[x, y]
-            if min(r, g, b) >= 240:
-                white.append((x, y))
-            elif r >= 190 and g < 150 and b < 140 and r - b >= 60:
-                coral.append((x, y))
-    assert white, f"{path}: no mark ink found in the signature corner"
-    assert coral, f"{path}: no wordmark ink found in the signature corner"
-
-    def box(pts):
-        return (min(p[0] for p in pts), min(p[1] for p in pts),
-                max(p[0] for p in pts), max(p[1] for p in pts))
-    return img.size, box(white), box(coral)
+    x0, y0, x1, y1 = region
+    return img.size, [(x, y, px[x, y])
+                      for y in range(y0, min(y1, img.size[1]))
+                      for x in range(x0, min(x1, img.size[0]))
+                      if px[x, y] != pages._CARD_GROUND]
 
 
-def _assert_signature_row(path, line_h):
-    size, mark, word = _boxes(path)
-    assert size == (1200, 630), f"{path}: a link-preview card is 1200x630, got {size}"
-    assert mark[2] < word[0], \
-        f"{path}: the mark must sit entirely left of the wordmark, mark {mark} wordmark {word}"
-    mark_cy, word_cy = (mark[1] + mark[3]) / 2, (word[1] + word[3]) / 2
-    assert abs(mark_cy - word_cy) <= 2, \
-        f"{path}: the pair must read as one line, centres {mark_cy} and {word_cy}"
-    mark_h = mark[3] - mark[1] + 1
-    assert abs(mark_h - line_h) / line_h <= 0.15, \
-        f"{path}: the mark's height must be the wordmark's line height, got {mark_h} for {line_h}"
-    # The row starts on the card's text margin, like every other line in the left column.
-    assert mark[0] <= _pages_module()._CARD_MARGIN + 2, \
-        f"{path}: the row must start on the text margin, got x={mark[0]}"
+def _box(pts):
+    return (min(p[0] for p in pts), min(p[1] for p in pts),
+            max(p[0] for p in pts), max(p[1] for p in pts))
+
+
+def _line_stamp(pages, text, font, ink, tracking=0):
+    """(the glyphs `text` makes on the card's ground, their offset from the draw origin).
+
+    A PNG holds no strings, so a pin that a card SETS a given line has to look for the glyphs that
+    line makes. The stamp is drawn with the emitter's own face, ink and ground at an integer origin,
+    which is how the card draws it, so a match is exact rather than approximate."""
+    from PIL import Image, ImageDraw
+    ref = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
+    rd = ImageDraw.Draw(ref)
+    if tracking:
+        pages._card_tracked(rd, (pages._CARD_MARGIN, 100), text, font, ink, tracking)
+    else:
+        rd.text((pages._CARD_MARGIN, 100), text, font=font, fill=ink)
+    ground = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
+    from PIL import ImageChops
+    bbox = ImageChops.difference(ref, ground).getbbox()
+    assert bbox, f"the stamp for {text!r} carries no ink"
+    return ref.crop(bbox), (bbox[0], bbox[1] - 100, bbox[2] - bbox[0], bbox[3] - bbox[1])
+
+
+def _sets_line(card_img, stamp, offset, rows):
+    """The y the card sets that line's glyphs on, or None. Scanned over `rows` because the line
+    above it may have wrapped and pushed it down."""
+    dx, dy, w, h = offset
+    want = stamp.tobytes()
+    for y in range(rows[0], rows[1]):
+        if card_img.crop((dx, y + dy, dx + w, y + dy + h)).tobytes() == want:
+            return y
+    return None
 
 
 def _line_h():
     """The address's own line height, from the face the cards actually set the address in."""
     pages = _pages_module()
     return sum(pages._card_address_font(pages._CARD_WORDMARK_SIZE).getmetrics())
+
+
+def _assert_address_line(path, edge):
+    """The address is a line of its own: coral, on the text margin, inside its declared line box,
+    with no other ink sharing its band, and with the block above it stopping the clear space the
+    column declares short of its first row.
+
+    The clear space is measured from the block's OWN last ink row, scanned from the kind label
+    down, because a block that stops one row above the address clears the band and still reads as
+    one run of type with the signature inside it."""
+    pages = _pages_module()
+    band = _address_rows(pages)
+    size, ink = _ink(path, (0, band[0], edge, band[1]))
+    assert size == (1200, 630), f"{path}: a link-preview card is 1200x630, got {size}"
+    assert ink, f"{path}: no address ink in the address band"
+    coral = _brand_stop("coral")
+    assert any(c == coral for _x, _y, c in ink), \
+        f"{path}: the address is set in the brand's coral {coral}, none of it is on the card"
+    box = _box(ink)
+    # The first glyph's own left side bearing is the only slack: the line starts on the margin.
+    assert pages._CARD_MARGIN <= box[0] <= pages._CARD_MARGIN + 2, \
+        f"{path}: the address starts on the text margin, its ink starts at x={box[0]}"
+    _size, above = _ink(path, (0, pages._CARD_KIND_Y, edge, band[0]))
+    block = [y for _x, y, colour in above if colour in _TEXT_INKS]
+    assert block, f"{path}: the card's left column sets no type above the address"
+    assert box[1] - max(block) >= pages._CARD_BLOCK_CLEAR, (
+        f"{path}: the block's last ink row {max(block)} leaves {box[1] - max(block)} px above the "
+        f"address's first at {box[1]}; the column declares {pages._CARD_BLOCK_CLEAR}")
+    assert box[3] <= pages._CARD_WORDMARK_Y + _line_h(), (
+        f"{path}: the address must sit inside its {_line_h()} px line from "
+        f"{pages._CARD_WORDMARK_Y}, its ink reaches y={box[3]}")
+    assert not [p for p in ink if p[2] in _TEXT_INKS], \
+        f"{path}: the block above must not reach into the address band"
+
+
+def _lockup_slot(pages):
+    """The AuScope lockup's declared box, rebuilt from the shipped asset's own aspect."""
+    from PIL import Image
+    with Image.open(pages._CARD_LOCKUP) as im:
+        w = round(pages._CARD_LOCKUP_SIZE * im.width / im.height)
+    top = pages._CARD_SIZE[1] - pages._CARD_LOCKUP_BASE - pages._CARD_LOCKUP_SIZE
+    return (pages._CARD_MARGIN, top, pages._CARD_MARGIN + w - 1,
+            top + pages._CARD_LOCKUP_SIZE - 1)
+
+
+def _assert_auscope_lockup(path, edge):
+    """The lockup is white, sits in its declared bottom-left box, and is never taller than the
+    AusMT mark that opens the column."""
+    pages = _pages_module()
+    assert pages._CARD_LOCKUP_SIZE <= pages._CARD_CORNER_SIZE, (
+        f"the AuScope lockup ({pages._CARD_LOCKUP_SIZE} px) must not stand taller than the AusMT "
+        f"mark ({pages._CARD_CORNER_SIZE} px)")
+    _size, ink = _ink(path, (0, _LOCKUP_ROWS[0], edge, _LOCKUP_ROWS[1]))
+    assert ink, f"{path}: no AuScope lockup ink in its declared band"
+    slot = _lockup_slot(pages)
+    box = _box(ink)
+    assert box[0] == slot[0] and box[1] >= slot[1] and box[2] <= slot[2] and box[3] <= slot[3], \
+        f"{path}: the lockup's ink {box} must fill its declared slot {slot}"
+    assert any(min(c) >= 240 for _x, _y, c in ink), \
+        f"{path}: the lockup is drawn white, nothing in its band is"
+    bleed = [p for p in ink if p[0] < pages._CARD_MARGIN]
+    assert not bleed, \
+        f"{path}: the lockup starts on the text margin, found ink at {bleed[:3]}"
 
 
 def test_the_address_is_set_in_the_pinned_bold_face_at_the_declared_size():
@@ -164,29 +326,47 @@ def test_the_address_is_set_in_the_pinned_bold_face_at_the_declared_size():
     FAILS IF the address falls back to the bundled bitmap face, or the size drifts: either would
     resize the mark beside it and break the row on every card in the corpus at once."""
     pages = _pages_module()
-    assert pages._CARD_WORDMARK_SIZE == 31, \
-        f"the address is set at 31 px, got {pages._CARD_WORDMARK_SIZE}"
+    assert pages._CARD_WORDMARK_SIZE == 34, \
+        f"the address is set at 34 px, got {pages._CARD_WORDMARK_SIZE}"
     assert pages._CARD_ADDRESS_FACE.name == "_inter_bold.ttf", \
         f"the address face is the pinned Inter Bold beside the emitter, got {pages._CARD_ADDRESS_FACE}"
     font = pages._card_address_font(pages._CARD_WORDMARK_SIZE)
     assert Path(font.path) == pages._CARD_ADDRESS_FACE, \
         f"the face must be loaded from {pages._CARD_ADDRESS_FACE}, got {font.path}"
-    assert sum(font.getmetrics()) == 39, \
-        f"the row stands on this face's 39 px line, got {sum(font.getmetrics())}"
+    assert sum(font.getmetrics()) == 42, \
+        f"the line stands on this face's 42 px line, got {sum(font.getmetrics())}"
 
 
-def test_the_engine_carries_the_same_mark_the_portal_serves():
-    """The engine image ships no portal tree, so the cards read the mark from a copy beside the
-    emitter. FAILS IF the two ever differ: one of the two surfaces would then sign itself with an
-    asset the other does not have."""
-    engine_copy = REPO / "extract" / "_auscope_mark.png"
-    portal_copy = REPO.parent / "portal" / "vendor" / "auscope-icon-white.png"
-    assert engine_copy.is_file(), "the emitter must ship the mark it draws"
+def test_the_engine_carries_the_auscope_lockup_the_portal_serves():
+    """The engine image ships no portal tree, so the cards draw the AuScope lockup from a copy
+    beside the emitter. The pin compares PICTURES: the portal file is cropped the same way here and
+    the two RGBA arrays must agree. A byte pin on a re-encoded crop compares one Pillow build's
+    encoder against another's rather than comparing the artwork.
+
+    FAILS IF the shipped crop stops being the AuScope half of the lockup the portal serves, or if an
+    asset no card draws still ships beside the emitter."""
+    pages = _pages_module()
+    engine_copy = REPO / "extract" / "_auscope_lockup.png"
+    portal_copy = REPO.parent / "portal" / "vendor" / "auscope-ncris-white.png"
+    assert engine_copy.is_file(), "the emitter must ship the lockup it draws"
+    assert not (REPO / "extract" / "_auscope_mark.png").exists(), \
+        "an asset no card draws must not ship beside the emitter"
     if not portal_copy.is_file():
         pytest.skip("engine image build: portal tree not shipped "
-                    "(designed topology; the vendored mark is pinned from the checkout workflows)")
-    assert engine_copy.read_bytes() == portal_copy.read_bytes(), \
-        "the engine's mark and the portal's vendored mark must be one asset, byte for byte"
+                    "(designed topology; the vendored lockup is pinned from the checkout workflows)")
+    from PIL import Image
+    with Image.open(portal_copy) as src:
+        full = src.convert("RGBA")
+    assert full.size == (1919, 325), \
+        f"the portal lockup moved off the size the crop was measured on, now {full.size}"
+    cut = full.crop((0, 0, pages._AUSCOPE_CROP_X, full.height))
+    want = cut.crop(cut.getbbox())
+    with Image.open(engine_copy) as im:
+        got = im.convert("RGBA")
+    assert got.size == want.size, \
+        f"the shipped crop is {got.size}, the portal file's own crop is {want.size}"
+    assert got.tobytes() == want.tobytes(), \
+        "the shipped lockup must be the AuScope crop of the portal's lockup, pixel for pixel"
 
 
 @pytest.mark.parametrize("engine_name, portal_rel", [
@@ -212,6 +392,289 @@ def test_the_engine_carries_the_portals_own_card_assets(engine_name, portal_rel)
         f"{engine_name} and {portal_rel} must be one asset, byte for byte"
 
 
+def test_every_card_names_the_kind_of_thing_it_previews(drawn):
+    """The card says what the reader has landed on before the title does: a tracked cap label
+    between the lockup and the title, in its own muted ink.
+
+    The label is read as GLYPHS, drawn here with the emitter's own tracked setter, so a card that
+    labelled a collection SURVEY fails. The pin is checked to discriminate on the same line: no two
+    of the four words make the same stamp, and an entity card must not answer for the plural its hub
+    carries. The band between the lockup and the label is held empty, so a label that drifted up
+    into the lockup's clear space fails here rather than looking tidy."""
+    pages = _pages_module()
+    from PIL import Image
+    font = pages._card_address_font(pages._CARD_KIND_SIZE)
+    stamps = {word: _line_stamp(pages, word, font, pages._CARD_KIND_INK,
+                                pages._CARD_KIND_TRACKING)
+              for word in ("SURVEY", "COLLECTION", "SURVEYS", "COLLECTIONS")}
+    made = {word: stamp.tobytes() for word, (stamp, _o) in stamps.items()}
+    assert len(set(made.values())) == len(made), \
+        "the label pin is vacuous unless the four words make different glyphs"
+    for card, _edge, word in drawn:
+        stamp, offset = stamps[word]
+        with Image.open(card) as im:
+            img = im.convert("RGB")
+        at = _sets_line(img, stamp, offset, (pages._CARD_KIND_Y, pages._CARD_KIND_Y + 1))
+        assert at == pages._CARD_KIND_Y, \
+            f"{card.name}: the label {word} must be set on the card's own label line"
+        # An entity card must not answer for the plural its hub carries. Only this direction can be
+        # held: the singular's glyphs are the plural's own first letters, so a hub card sets them
+        # too, while a card labelled SURVEY sets nothing that reads as SURVEYS.
+        for other in (w for w in stamps if w.startswith(word) and w != word):
+            ostamp, ooffset = stamps[other]
+            assert _sets_line(img, ostamp, ooffset,
+                              (pages._CARD_KIND_Y, pages._CARD_KIND_Y + 1)) is None, \
+                f"{card.name}: a card labelled {word} must not read as {other}"
+        _size, quiet = _ink(card, (0, pages._CARD_CORNER_Y + pages._CARD_CORNER_SIZE + 1,
+                                   400, pages._CARD_KIND_Y))
+        assert not quiet, \
+            f"{card.name}: the lockup's clear space carries ink at {quiet[:3]}"
+
+
+def _survey_cards(built):
+    """The per-survey cards the build wrote.
+
+    The flat og tree also holds the two HUB cards, which are a different family sharing the
+    directory rather than a survey each, so they are named out of this by the emitter's own list."""
+    pages = _pages_module()
+    hubs = {f"{name}.png" for name, _kind, _title in pages._HUB_CARDS}
+    return sorted(p for p in (built / "pages" / "og").glob("*.png") if p.name not in hubs)
+
+
+def test_the_survey_cards_identity_line_counts_stations_and_names_the_type(built):
+    """Level 2 of the block is a count of stations and the instrument type, joined by an
+    interpunct, which is the form a reader can scan at preview size.
+
+    Held on the glyphs the card sets rather than on the string the emitter passed, and the count
+    comes from the fixture corpus's own EDI files rather than from a number written here."""
+    pages = _pages_module()
+    from PIL import Image
+    stamp, offset = _line_stamp(pages, f"{len(SAMPLE_EDIS)} stations", pages._card_font(29),
+                                _MUTED_INK)
+    old_stamp, old_offset = _line_stamp(pages, f"{len(SAMPLE_EDIS)}-station",
+                                        pages._card_font(29), _MUTED_INK)
+    assert stamp.tobytes() != old_stamp.tobytes(), \
+        "the pin is vacuous unless the two forms make different glyphs"
+    cards = _survey_cards(built)
+    assert cards, "the build must render a card per survey"
+    for card in cards:
+        with Image.open(card) as im:
+            img = im.convert("RGB")
+        rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+        assert _sets_line(img, stamp, offset, rows) is not None, \
+            f"{card.name}: the identity line must count stations"
+        assert _sets_line(img, old_stamp, old_offset, rows) is None, \
+            f"{card.name}: the identity line must not compound the count into the type"
+
+
+def test_no_card_sets_the_extent_line(built):
+    """The card lost its extent line: a footprint's kilometres are a number the survey PAGE carries,
+    and on a card they crowd out the period band a reader can actually use.
+
+    FAILS IF any card sets that line again, and the scan is checked to have teeth on the same line
+    against a card drawn with it."""
+    pages = _pages_module()
+    import inspect
+    assert "dims_line" not in inspect.signature(pages._og_card).parameters, \
+        "the card takes no extent line any more"
+    from PIL import Image, ImageDraw
+    stamp, offset = _line_stamp(pages, "about", pages._card_font(26), (201, 212, 232))
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    for card in sorted((built / "pages" / "og").rglob("*.png")):
+        with Image.open(card) as im:
+            img = im.convert("RGB")
+        assert _sets_line(img, stamp, offset, rows) is None, \
+            f"{card.name}: the extent line is set on this card"
+    bad = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
+    ImageDraw.Draw(bad).text((pages._CARD_MARGIN, 300), "about 118 x 22 km",
+                             font=pages._card_font(26), fill=(201, 212, 232))
+    assert _sets_line(bad, stamp, offset, rows) == 300, \
+        "the extent scan is vacuous unless a card that sets that line fails it"
+
+
+def test_a_disclosed_value_is_never_dropped_to_make_room(tmp_path):
+    """A value the card was handed is a value the reader gets, whatever room the block has left.
+
+    The strings are a corpus survey's own: a title that holds two lines, a geography line that wraps
+    and a period band whose page discloses it. Every line is read as GLYPHS off the rendered card in
+    the ink and at the size the card sets it, so a block that made room by discarding its last row,
+    or by stopping a wrapped value after its first line, fails here. The type sizes are the
+    declared ones, because the column closes its leading before it steps its type down.
+
+    The same card drawn without the period band must set none, so the pin cannot be answered by a
+    card that sets every line whether or not it was given one."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    strings = dict(title="Hanekup Eastern Queensland 2003", subtitle="33 stations · GDS",
+                   region_year="Queensland, Northern Territory · 2003")
+    pts = [(140.0 + 0.2 * i, -22.0 - 0.1 * i, "mt") for i in range(33)]
+    card, bare = tmp_path / "disclosed.png", tmp_path / "undisclosed.png"
+    pages._og_card(card, kind="SURVEY", period_line="16 - 1,024 s", points=pts, **strings)
+    pages._og_card(bare, kind="SURVEY", period_line="", points=pts, **strings)
+    with Image.open(card) as im:
+        img = im.convert("RGB")
+    with Image.open(bare) as im:
+        without = im.convert("RGB")
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    wrapped, whole = pages._card_lines(d, strings["region_year"], pages._card_font(29),
+                                       pages._CARD_TEXT_WIDTH, 2)
+    assert whole and len(wrapped) == 2, \
+        f"the pin is vacuous unless its geography line wraps, got {wrapped}"
+    for line in wrapped:
+        stamp, offset = _line_stamp(pages, line, pages._card_font(29), _MUTED_INK)
+        assert _sets_line(img, stamp, offset, rows) is not None, \
+            f"the card must set {line!r}: a wrapped value arrives whole or not at all"
+    stamp, offset = _line_stamp(pages, "16 - 1,024 s", pages._card_font(26), _PERIOD_INK)
+    assert _sets_line(img, stamp, offset, rows) is not None, \
+        "the card must set the period band this survey disclosed"
+    assert _sets_line(without, stamp, offset, rows) is None, \
+        "a card handed no period band must set none"
+    # Every line above arrived at its declared size, so the room came out of the leading; the title
+    # is the step the ladder preferred, so it did not come out of the title either.
+    block = ((strings["subtitle"], 29, _MUTED_INK, 42),
+             (strings["region_year"], 29, _MUTED_INK, 42), ("16 - 1,024 s", 26, _PERIOD_INK, 40))
+    chosen = pages._card_left_column(d, strings["title"], block, pages._CARD_TEXT_WIDTH, 2)
+    assert chosen[:2] == pages._card_title_block(d, strings["title"], pages._CARD_TEXT_WIDTH, 2), \
+        "the column closes its leading before it steps the title down"
+
+
+def test_the_title_takes_the_step_before_the_block_gives_up_its_declared_type():
+    """The title has a ladder and the block's sizes are declared, so when the column cannot hold
+    both, the step comes out of the TITLE and every fact line still arrives at its declared size.
+
+    The case is a title that holds at the step the ladder prefers over a block that overflows under
+    it: the whole column then fits one step further down the title's ladder, at the block's own
+    sizes. FAILS IF the walk offers the block its type ladder under a title step it has not taken
+    yet, which sets the science below the smallest size the card declares while the title keeps a
+    size it was never promised."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    rows = (("56 stations · BBMT", 29, _MUTED_INK, 42),
+            ("South Australia · 2016 - 2018", 29, _MUTED_INK, 42),
+            ("0.000122 - 117,029 s across broadband bands", 26, _PERIOD_INK, 40))
+    title = "Vulcan Deep Crustal Survey"
+    preferred = pages._card_title_block(d, title, pages._CARD_TEXT_WIDTH, 2)
+    assert preferred[0] > pages._CARD_TITLE_SIZES[-1], \
+        f"the pin is vacuous unless the title starts above the ladder's last step, got {preferred}"
+    tight = min(lead for type_scale, lead in pages._CARD_BLOCK_FITS if type_scale == 1.0)
+    y = pages._CARD_TITLE_Y + len(preferred[1]) * round(preferred[0] * 1.18) + 8
+    _under, last = pages._card_lay_block(d, y, pages._CARD_BLOCK_FLOOR, rows,
+                                         pages._CARD_TEXT_WIDTH, 1.0, tight)
+    assert last > pages._card_block_ceiling(), (
+        "the pin is vacuous unless the block overflows at its declared sizes under the title step "
+        f"the ladder prefers; its last ink row {last} already clears {pages._card_block_ceiling()}")
+
+    tsize, tlines, placed = pages._card_left_column(d, title, rows, pages._CARD_TEXT_WIDTH, 2)
+    assert tsize < preferred[0], (
+        f"the title must take the step: it stayed at {preferred[0]} px while the block under it "
+        "had to give up its declared type")
+    assert " ".join(tlines) == title, f"the title must still arrive whole, got {tlines}"
+    declared = {size for _text, size, _ink_, _step in rows}
+    set_at = sorted({font.size for _y, _line, font, _i in placed})
+    assert set(set_at) <= declared, \
+        f"every fact line is set at its declared size, one of {sorted(declared)}; got {set_at}"
+
+
+def test_the_column_has_a_fit_for_the_most_a_card_can_carry():
+    """The column's walk has to have an answer at the bottom of both its ladders, or the rule that
+    no disclosed value is dropped cannot be kept: three fact rows that each wrap to two lines, under
+    a title long enough to take the ladder's own last resort.
+
+    All six lines are placed, and the last of their INK clears the address's own first row by the
+    clear space the column declares. Measured on the glyphs the face sets rather than on the nominal
+    point sizes, because a descender reaches below the size and a fit chosen on the arithmetic alone
+    would print into the address."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    rows = (("3,236 stations · Broadband and long-period magnetotelluric", 29, _MUTED_INK, 42),
+            ("Queensland, Northern Territory and South Australia · 2016 - 2018", 29,
+             _MUTED_INK, 42),
+            ("0.000122 - 117,029 s across broadband and long-period bands", 26, _PERIOD_INK, 40))
+    for text, size, _ink_, _step in rows:
+        lines, whole = pages._card_lines(d, text, pages._card_font(size),
+                                         pages._CARD_TEXT_WIDTH, 2)
+        assert whole and len(lines) == 2, \
+            f"the pin is vacuous unless {text!r} wraps to two whole lines, got {lines}"
+    title = "Hanekup Eastern Queensland 2003"
+    preferred = pages._card_title_block(d, title, pages._CARD_TEXT_WIDTH, 2)
+    assert len(preferred[1]) == 2 and preferred[0] > pages._CARD_TITLE_SIZES[-1], \
+        f"the pin is vacuous unless the title starts above the ladder's last step, got {preferred}"
+    tsize, tlines, placed = pages._card_left_column(d, title, rows, pages._CARD_TEXT_WIDTH, 2)
+    assert tsize in pages._CARD_TITLE_SIZES and len(tlines) <= 2, \
+        f"the title must land on the ladder inside its two lines, got {tsize} on {len(tlines)}"
+    assert tsize < preferred[0], (
+        "the title has to step down when the block under it has no room left at any notch; it "
+        f"stayed at {tsize}")
+    assert " ".join(tlines) == title, f"the title must still arrive whole, got {tlines}"
+    assert len(placed) == 6, \
+        f"every line of every disclosed row must be placed, got {len(placed)} of 6"
+    last = max(y + d.textbbox((0, 0), line, font=font)[3] for y, line, font, _i in placed)
+    assert last <= pages._card_block_ceiling(), (
+        f"the block's last ink row {last} must clear the column's ceiling "
+        f"{pages._card_block_ceiling()}")
+    address_top = d.textbbox((0, pages._CARD_WORDMARK_Y), pages._CARD_WORDMARK,
+                             font=pages._card_address_font(pages._CARD_WORDMARK_SIZE))[1]
+    assert pages._card_block_ceiling() + pages._CARD_BLOCK_CLEAR <= address_top, (
+        f"the ceiling must keep {pages._CARD_BLOCK_CLEAR} px above the address's first ink row "
+        f"{address_top}")
+
+
+def test_the_block_rebalances_when_the_survey_discloses_no_years_and_no_periods(tmp_path):
+    """Absent means absent: a survey with no years and no period band renders a SHORTER block rather
+    than one with holes in it. Measured on the two cards' own ink, so a blank line reserved for an
+    undisclosed value fails here."""
+    pages = _pages_module()
+    pts = [(133.0, -25.0, "mt"), (140.0, -30.0, "mt")]
+    full = tmp_path / "full.png"
+    bare = tmp_path / "bare.png"
+    pages._og_card(full, kind="SURVEY", title="Vulcan", subtitle="2 stations · BBMT",
+                   region_year="South Australia · 2016 - 2018", period_line="0.005 - 6310 s",
+                   points=pts)
+    pages._og_card(bare, kind="SURVEY", title="Vulcan", subtitle="2 stations · BBMT",
+                   region_year="", period_line="", points=pts)
+    band = (0, pages._CARD_TITLE_Y, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH,
+            pages._CARD_WORDMARK_Y)
+    _s, full_ink = _ink(full, band)
+    _s, bare_ink = _ink(bare, band)
+    assert _box(bare_ink)[3] < _box(full_ink)[3], \
+        "a survey that discloses less must render a shorter block"
+    rows = sorted({y for _x, y, _c in bare_ink})
+    runs = [r for r in range(1, len(rows)) if rows[r] - rows[r - 1] > 1]
+    assert len(runs) == 1, (
+        "the shorter block is the title and one fact line with nothing between them, "
+        f"found {len(runs) + 1} bands of ink")
+
+
+def test_the_block_never_reaches_into_the_address_or_the_lockup(drawn, tmp_path):
+    """The two lines that close the column keep their own bands whatever the block above them does.
+
+    FAILS IF a long title plus a wrapped fact line pushes the block down over the address or the
+    lockup; the check has teeth on the same line against a card whose block is drawn past the
+    ceiling."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    for card, edge, _word in drawn:
+        slot = _lockup_slot(pages)
+        for rows in (_address_rows(pages), _LOCKUP_ROWS):
+            _size, ink = _ink(card, (0, rows[0], edge, rows[1]))
+            # The lockup's own slot is the one thing allowed to put white in the lower band.
+            crossed = [p for p in ink if p[2] in _TEXT_INKS
+                       and not (slot[0] <= p[0] <= slot[2] and slot[1] <= p[1] <= slot[3])]
+            assert not crossed, \
+                f"{card.name}: block ink in the band at {rows}, at {crossed[:3]}"
+    bad = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
+    ImageDraw.Draw(bad).text((pages._CARD_MARGIN, _address_rows(pages)[0] + 4), "0.005 - 6310 s",
+                             font=pages._card_font(26), fill=(201, 212, 232))
+    bad.save(tmp_path / "crossed.png", "PNG")
+    _size, ink = _ink(tmp_path / "crossed.png",
+                      (0, _address_rows(pages)[0], 536, _address_rows(pages)[1]))
+    assert [p for p in ink if p[2] in _TEXT_INKS], \
+        "the band scan is vacuous unless a block drawn into it fails"
+
+
 def test_the_generated_cards_stand_on_the_root_cards_ground(built):
     """One ground across all three card families. The root card is hand-made artwork on its own flat
     field, and a generated card a few units off it reads, beside it in a feed, as a near miss rather
@@ -230,7 +693,7 @@ def test_the_generated_cards_stand_on_the_root_cards_ground(built):
                 f"{card.name}: the field at {probe} is {px[probe]}, not {pages._CARD_GROUND}"
 
 
-def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(built):
+def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(drawn):
     """The mark names the site the card belongs to, and it leads rather than trails, so it sits on
     the same text margin the title does with clear space under it.
 
@@ -241,46 +704,279 @@ def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(buil
     between the card edge and the text margin, across the mark's own rows, must be empty, so a mark
     drawn off the margin fails here rather than quietly sitting in the bleed."""
     pages = _pages_module()
-    assert (pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y) == (42, 44), (
-        "the corner mark is drawn 42 px high at y 44, got "
+    assert (pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y) == (52, 44), (
+        "the mark is drawn 52 px high at y 44, got "
         f"{(pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y)}")
     slot = (pages._CARD_MARGIN, pages._CARD_CORNER_Y,
             pages._CARD_MARGIN + pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y
             + pages._CARD_CORNER_SIZE)
-    assert slot == (60, 44, 102, 86), f"the corner slot moved off its declared box, now {slot}"
+    assert slot == (60, 44, 112, 96), f"the mark's slot moved off its declared box, now {slot}"
+    for card, _edge, _word in drawn:
+        _size, ink = _ink(card, _CORNER_REGION)
+        assert ink, f"{card.name}: no lockup ink in the card's top-left corner"
+        mark = _box([p for p in ink if p[0] <= slot[2]])
+        assert (mark[0] >= slot[0] and mark[1] >= slot[1]
+                and mark[2] <= slot[2] and mark[3] <= slot[3]), \
+            f"{card.name}: the mark's ink {mark} must stay inside its slot {slot}"
+        word = [p for p in ink if p[0] > slot[2]]
+        assert word, f"{card.name}: the mark carries no word beside it"
+        wbox = _box(word)
+        assert wbox[1] >= slot[1] and wbox[3] <= slot[3], (
+            f"{card.name}: the word sits inside the mark's own rows {slot[1]} to {slot[3]}, "
+            f"its ink runs {wbox[1]} to {wbox[3]}")
+        bleed = [p for p in ink if p[0] < pages._CARD_MARGIN]
+        assert not bleed, \
+            f"{card.name}: the lockup must start on the text margin, found ink at {bleed[:3]}"
+
+
+def test_the_ausmt_wordmark_is_set_at_the_brand_files_own_proportions(drawn):
+    """The word beside the mark is sized, spaced and inked from the brand file, scaled by the mark's
+    own height. Every number here is READ from that file rather than restated, so a card that drifted
+    from it fails even though both sides still look self-consistent.
+
+    FAILS IF the word's size, its gap from the mark, its ink or its centring on the mark change
+    without the brand file changing with them."""
+    pages = _pages_module()
+    brand = _brand()
+    prop = brand["proportions"]
+    size = round(prop["wordmark_font_size"] * pages._CARD_CORNER_SIZE)
+    gap = round(prop["gap_mark_to_wordmark"] * pages._CARD_CORNER_SIZE)
+    hexed = brand["palette"]["wordmark_ink"]["on_dark"].lstrip("#")
+    want_ink = tuple(int(hexed[i:i + 2], 16) for i in (0, 2, 4))
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    glyphs = d.textbbox((0, 0), brand["brand"], font=pages._card_address_font(size))
+    left = pages._CARD_MARGIN + pages._CARD_CORNER_SIZE + gap + glyphs[0]
+    mark_mid = pages._CARD_CORNER_Y + pages._CARD_CORNER_SIZE / 2
+    edge = pages._CARD_MARGIN + pages._CARD_CORNER_SIZE
+    for card, _cedge, _word in drawn:
+        _size, ink = _ink(card, (edge + 1, 0, _CORNER_REGION[2], _CORNER_REGION[3]))
+        assert ink, f"{card.name}: no word beside the mark"
+        box = _box(ink)
+        assert abs(box[0] - left) <= 1, (
+            f"{card.name}: the word starts {gap} px after the mark, at x {left}; its ink starts "
+            f"at {box[0]}")
+        assert abs((box[3] - box[1] + 1) - (glyphs[3] - glyphs[1])) <= 1, (
+            f"{card.name}: the word is set at {size} px, whose ink stands "
+            f"{glyphs[3] - glyphs[1]} px; this one stands {box[3] - box[1] + 1}")
+        assert abs((box[1] + box[3]) / 2 - mark_mid) <= 2, \
+            f"{card.name}: the word centres on the mark at {mark_mid}, it sits at {(box[1] + box[3]) / 2}"
+        assert any(c == want_ink for _x, _y, c in ink), \
+            f"{card.name}: the word is inked {want_ink}, no pixel of it is"
+
+
+def test_every_card_family_signs_itself_with_the_address_and_the_auscope_lockup(drawn):
+    for card, edge, _word in drawn:
+        _assert_address_line(card, edge)
+        _assert_auscope_lockup(card, edge)
+
+
+def _card_edge(pages, card):
+    """The declared column edge of the family the card at this path belongs to."""
+    width = (pages._COLL_CARD_TEXT_WIDTH if card.parent.name == "collections"
+             else pages._CARD_TEXT_WIDTH)
+    return pages._CARD_MARGIN + width
+
+
+def test_every_card_the_build_writes_signs_itself_and_leaves_the_address_its_line(built):
+    """The same two properties, over the cards the EMITTER wrote rather than over cards this file
+    drew for itself.
+
+    The pair above needs Pillow and the shipped assets and nothing else, which is what lets the
+    column be held on an interpreter that cannot run an ingest; but their blocks are short by
+    construction, and it is a real survey name over a wrapped geography line that pushes a block
+    down towards the lines that close the column. Both are scanned, so neither can answer for the
+    other.
+
+    The clear space between the block's last ink and the address's first is measured too, because a
+    block that stops one row above the address clears the band and still reads as one run of type
+    with the signature under it."""
+    pages = _pages_module()
+    from PIL import Image
     cards = sorted((built / "pages" / "og").rglob("*.png"))
     assert cards, "the build must render cards"
-    from PIL import Image
+    address_top = _address_rows(pages)[0]
     for card in cards:
+        edge = _card_edge(pages, card)
+        _assert_address_line(card, edge)
+        _assert_auscope_lockup(card, edge)
         with Image.open(card) as im:
             px = im.convert("RGB").load()
-        x0, y0, x1, y1 = _CORNER_REGION
-        ink = [(x, y) for y in range(y0, y1) for x in range(x0, x1)
-               if px[x, y] != pages._CARD_GROUND]
-        assert ink, f"{card.name}: no mark ink in the card's top-left corner"
-        box = (min(p[0] for p in ink), min(p[1] for p in ink),
-               max(p[0] for p in ink), max(p[1] for p in ink))
-        assert (box[0] >= slot[0] and box[1] >= slot[1]
-                and box[2] <= slot[2] and box[3] <= slot[3]), \
-            f"{card.name}: the corner mark's ink {box} must stay inside its slot {slot}"
-        bleed = [(x, y) for y in range(slot[1], slot[3]) for x in range(0, pages._CARD_MARGIN)
-                 if px[x, y] != pages._CARD_GROUND]
-        assert not bleed, \
-            f"{card.name}: the corner mark must start on the text margin, found ink at {bleed[:3]}"
+        block = [y for y in range(pages._CARD_KIND_Y, address_top)
+                 for x in range(edge)
+                 if px[x, y] in _TEXT_INKS]
+        assert block, f"{card.name}: the card's left column carries no block ink at all"
+        ink = [(x, y) for y in range(address_top, _LOCKUP_ROWS[0])
+               for x in range(edge) if px[x, y] != pages._CARD_GROUND]
+        gap = min(y for _x, y in ink) - max(block)
+        assert gap >= pages._CARD_BLOCK_CLEAR, (
+            f"{card.name}: the block's last ink row {max(block)} leaves {gap} px above the "
+            f"address's first at {min(y for _x, y in ink)}; the column declares "
+            f"{pages._CARD_BLOCK_CLEAR}")
 
 
-def test_every_survey_card_signs_itself_with_the_mark_and_the_wordmark(built):
-    cards = sorted((built / "pages" / "og").glob("*.png"))
-    assert cards, "the build must render a card per survey"
-    for card in cards:
-        _assert_signature_row(card, _line_h())
+# The survey card's footprint panel: its fill and its rule. They are the panel's own two colours,
+# named here so a scan can find the frame the emitter drew rather than the box it was asked for.
+_PANEL_INKS = ((17, 26, 51), (43, 53, 87))
+# The footprint's dot colour, so a scan can count the stations a card plotted.
+_DOT_INK = (79, 195, 217)
+# Three footprints the viewport rule has to hold at once: an east-west traverse, its north-south
+# mirror, and a compact block. A rule that only centres square footprints passes on the third alone.
+_FOOTPRINTS = {
+    "wide": [(129.0 + 0.25 * i, -12.5 - 0.04 * i, "mt") for i in range(24)],
+    "traverse": [(138.0 + 0.04 * i, -20.0 - 0.25 * i, "mt") for i in range(24)],
+    "compact": [(133.0 + 0.05 * i, -25.0 - 0.05 * j, "mt")
+                for i in range(5) for j in range(5)],
+}
 
 
-def test_every_collection_card_signs_itself_the_same_way(built):
-    cards = sorted((built / "pages" / "og" / "collections").glob("*.png"))
-    assert cards, "the build must render a card per collection"
-    for card in cards:
-        _assert_signature_row(card, _line_h())
+def _survey_card(pages, path, points):
+    """One survey card over `points`, everything else held constant."""
+    pages._og_card(path, kind="SURVEY", title="Panel", subtitle=f"{len(points)} stations · BBMT",
+                   region_year="South Australia · 2022", period_line="0.005 - 10,000 s",
+                   points=points)
+    return path
+
+
+def _drawn_box(path, inks, over):
+    """The bbox of any of `inks` inside `over` on a rendered card."""
+    from PIL import Image
+    with Image.open(path) as im:
+        px = im.convert("RGB").load()
+    pts = [(x, y) for y in range(over[1], over[3]) for x in range(over[0], over[2])
+           if px[x, y] in inks]
+    assert pts, f"{path}: none of {inks} is on the card"
+    return _box(pts)
+
+
+def _blob_count(path, colour):
+    """How many separate runs of exactly `colour` a rendered card carries.
+
+    A count of PIXELS cannot answer whether a card plotted every station it was given; a count of
+    connected marks can, as long as the caller keeps the marks apart."""
+    from PIL import Image
+    with Image.open(path) as im:
+        px = im.convert("RGB").load()
+    w, h = im.size
+    seen, blobs = set(), 0
+    for y0 in range(h):
+        for x0 in range(w):
+            if px[x0, y0] != colour or (x0, y0) in seen:
+                continue
+            blobs += 1
+            stack = [(x0, y0)]
+            seen.add((x0, y0))
+            while stack:
+                x, y = stack.pop()
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if (0 <= nx < w and 0 <= ny < h and (nx, ny) not in seen
+                            and px[nx, ny] == colour):
+                        seen.add((nx, ny))
+                        stack.append((nx, ny))
+    return blobs
+
+
+def _fit_box(pages):
+    """The box the footprint is fitted into: the panel less the padding it keeps on every side."""
+    px0, py0, px1, py1 = pages._CARD_PANEL
+    dx, dy = pages._CARD_PANEL_PAD * (px1 - px0), pages._CARD_PANEL_PAD * (py1 - py0)
+    return (px0 + dx, py0 + dy, px1 - dx, py1 - dy)
+
+
+def test_every_survey_card_draws_the_one_declared_footprint_panel(tmp_path):
+    """The footprint panel is a FIXED box: the same frame on every survey card, whatever shape the
+    survey it previews is.
+
+    A panel that follows its data is a card whose composition changes per survey, and on an
+    east-west traverse it collapses to a strip against the top of the card with the rest of the
+    frame empty. Both the declared box and the frame the emitter actually drew are held, so a pair
+    of constants cannot be changed in step to move the panel while every derived number agrees.
+
+    FAILS IF the panel is fitted to the data instead of the data being fitted to the panel."""
+    pages = _pages_module()
+    px0, py0, px1, py1 = pages._CARD_PANEL
+    inset = pages._CARD_PANEL_INSET
+    frame = (px0 - inset, py0 - inset, px1 + inset, py1 + inset)
+    assert frame == (624, 54, 1166, 576), f"the panel frame's declared box moved, now {frame}"
+    edge = pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH
+    for name, pts in sorted(_FOOTPRINTS.items()):
+        card = _survey_card(pages, tmp_path / f"{name}.png", pts)
+        drawn = _drawn_box(card, _PANEL_INKS, (edge, 0, pages._CARD_SIZE[0], pages._CARD_SIZE[1]))
+        assert drawn == frame, f"{name}: the drawn panel {drawn} must be the declared panel {frame}"
+
+
+def test_the_footprint_is_aspect_fitted_and_centred_inside_its_padding(tmp_path):
+    """The station extent is fitted into the panel at ONE scale, padded on every side and centred
+    on both axes.
+
+    Four properties over the same three shapes. The fit is never distorted: the drawn spans are the
+    geographic spans at a single scale, so a traverse arrives as a traverse. It is padded: nothing
+    reaches into the band the panel keeps clear, which is what stops an edge station from sitting on
+    the frame. It is centred: the footprint's own centre is the panel's centre. And it is MAXIMAL:
+    one axis fills the padded box, so a rule that centred a footprint by shrinking it to a dot
+    cannot pass. The last one is measured on the pixels as well, so the emitter and the fit it
+    declares cannot drift apart.
+
+    FAILS IF the fit anchors a corner, or pads one axis only, or scales the axes separately."""
+    pages = _pages_module()
+    assert 0.08 <= pages._CARD_PANEL_PAD <= 0.15, (
+        f"the panel keeps between 8 and 15 percent of itself clear, it declares "
+        f"{pages._CARD_PANEL_PAD}")
+    px0, py0, px1, py1 = pages._CARD_PANEL
+    fx0, fy0, fx1, fy1 = _fit_box(pages)
+    for name, pts in sorted(_FOOTPRINTS.items()):
+        proj = pages._card_footprint_fit(pts)
+        plotted = [proj(lon, lat) for lon, lat, _t in pts]
+        box = _box(plotted)
+        assert box[0] >= fx0 - 0.5 and box[1] >= fy0 - 0.5, \
+            f"{name}: the footprint {box} reaches into the panel's padding {(fx0, fy0, fx1, fy1)}"
+        assert box[2] <= fx1 + 0.5 and box[3] <= fy1 + 0.5, \
+            f"{name}: the footprint {box} reaches into the panel's padding {(fx0, fy0, fx1, fy1)}"
+        assert abs((box[0] + box[2]) / 2 - (px0 + px1) / 2) < 0.5, \
+            f"{name}: the footprint is not centred across the panel, its box is {box}"
+        assert abs((box[1] + box[3]) / 2 - (py0 + py1) / 2) < 0.5, \
+            f"{name}: the footprint is not centred down the panel, its box is {box}"
+        dlon = max(p[0] for p in pts) - min(p[0] for p in pts)
+        dlat = max(p[1] for p in pts) - min(p[1] for p in pts)
+        assert abs((box[2] - box[0]) * dlat - (box[3] - box[1]) * dlon) < 0.01, (
+            f"{name}: the two axes must share one scale; {dlon} x {dlat} degrees arrived as "
+            f"{box[2] - box[0]} x {box[3] - box[1]} pixels")
+        assert (box[2] - box[0] > fx1 - fx0 - 0.5) or (box[3] - box[1] > fy1 - fy0 - 0.5), (
+            f"{name}: the fit must fill the padded box on one axis, it drew "
+            f"{box[2] - box[0]} x {box[3] - box[1]} inside {fx1 - fx0} x {fy1 - fy0}")
+        card = _survey_card(pages, tmp_path / f"{name}.png", pts)
+        radius = 4
+        ink = _drawn_box(card, (_DOT_INK,), (px0, py0, px1, py1))
+        assert all(abs(a - b) <= 2 for a, b in zip(
+            ink, (box[0] - radius, box[1] - radius, box[2] + radius, box[3] + radius))), (
+            f"{name}: the dots the card drew sit at {ink}, not where its declared fit puts them")
+
+
+def test_the_card_plots_every_station_it_was_given_and_moves_none(tmp_path):
+    """The viewport is optimised, never the data: no station is moved, merged, smoothed away or
+    dropped to make a footprint read better.
+
+    The card is drawn over a station set spread widely enough that every dot stands on its own, so
+    the marks can be counted: there are exactly as many as there were stations, and each one is
+    where the declared fit puts its station. A card that thinned a dense footprint, snapped stations
+    to a grid or dropped an outlier to tighten the fit fails on the count or on the positions.
+
+    FAILS IF the emitter plots anything but the point set it was handed."""
+    pages = _pages_module()
+    pts = [(129.0 + 0.45 * i, -20.0 - 0.05 * (i % 7), "mt") for i in range(24)]
+    card = _survey_card(pages, tmp_path / "plotted.png", pts)
+    assert _blob_count(card, _DOT_INK) == len(pts), (
+        f"the card must plot each of the {len(pts)} stations it was handed as its own mark, it "
+        f"drew {_blob_count(card, _DOT_INK)}")
+    from PIL import Image
+    with Image.open(card) as im:
+        px = im.convert("RGB").load()
+    proj = pages._card_footprint_fit(pts)
+    for lon, lat, _t in pts:
+        x, y = proj(lon, lat)
+        assert px[round(x), round(y)] == _DOT_INK, (
+            f"the station at {lon}, {lat} belongs at {round(x)}, {round(y)}; the card put "
+            f"{px[round(x), round(y)]} there")
 
 
 def _panel_geometry(pages):
@@ -391,8 +1087,8 @@ def _grid_card(pages, path, alpha=None):
     if alpha is not None:
         pages._CARD_INSET_ALPHA = alpha
     try:
-        pages._og_card(path, title="Grid", subtitle="400 stations", region_year="Test",
-                       period_line="period", dims_line="extent", points=pts)
+        pages._og_card(path, kind="SURVEY", title="Grid", subtitle="400 stations",
+                       region_year="Test", period_line="period", points=pts)
     finally:
         pages._CARD_INSET_ALPHA = saved
     return path
@@ -436,16 +1132,34 @@ def test_the_locator_inset_lets_the_footprint_show_through(tmp_path):
         f"showed {opaque[dot_blend]} blended pixels")
 
 
-def _column_overrun(pages, path, edge):
+def _column_inks():
+    """Every ink the left column sets: the block's, plus the AusMT wordmark's and the address's,
+    both read from the brand file the emitter reads them from.
+
+    They are a separate tuple from _TEXT_INKS, which keeps the address's band clear of the block
+    above it: the address's own coral belongs INSIDE that band, while here every one of these inks
+    is type that must stay on the column's side of the edge."""
+    return _TEXT_INKS + (_hex_rgb(_brand()["palette"]["wordmark_ink"]["on_dark"]),
+                         _brand_stop("coral"))
+
+
+def _column_overrun(pages, path, edge, right=None):
     """Every text-ink pixel on a rendered card that sits past the declared column edge.
 
-    The scan runs BELOW the corner mark and ABOVE the signature row, so it answers for the text
-    column and for nothing else; those two rows are pinned by their own tests."""
+    The scan runs the WHOLE column, from the lockup that opens it to the lockup that closes it, so
+    the wordmark and the address are answered for as well as the block between them: each of those
+    is a line that can grow, and a line nothing scans can grow into the map panel.
+
+    `right` stops the scan short of artwork drawn in the brand's own palette: the ramp ends on the
+    accent the address is set in, so on a hub card the gutter between the column and the artwork is
+    the strip that can answer, and a line that crossed the edge starts inside it."""
     from PIL import Image
     with Image.open(path) as im:
         px = im.convert("RGB").load()
-    return [(x, y) for y in range(95, 531) for x in range(edge + 1, pages._CARD_SIZE[0])
-            if px[x, y] in _TEXT_INKS]
+    inks = _column_inks()
+    return [(x, y) for y in range(pages._CARD_CORNER_Y, _LOCKUP_ROWS[1])
+            for x in range(edge + 1, right or pages._CARD_SIZE[0])
+            if px[x, y] in inks]
 
 
 def test_each_card_family_declares_a_column_that_clears_its_map():
@@ -456,7 +1170,7 @@ def test_each_card_family_declares_a_column_that_clears_its_map():
     map panel with the pin still green. What has to be pinned is the AIR each column leaves.
 
     The survey column stops 88 px short of the footprint panel's leftmost edge, which is the gutter
-    the design argues for: a 64 px title beside a bordered panel needs to read as space rather than
+    the design argues for: a 70 px title beside a bordered panel needs to read as space rather than
     as a near miss. The collection column gives up width to the enlarged map and keeps exactly
     _CARD_PANEL_AIR, the same air that panel keeps against the card's own edge."""
     pages = _pages_module()
@@ -479,15 +1193,20 @@ def test_each_card_family_declares_a_column_that_clears_its_map():
 
 def test_no_card_lets_its_text_cross_its_declared_column_edge(built):
     """The column rule, measured rather than argued. A survey name is whatever the survey is called,
-    and the corpus carries names long enough to run a 64 px title clean across the map panel beside
+    and the corpus carries names long enough to run a 70 px title clean across the map panel beside
     it, so the title steps down the ladder and wraps and the fact lines wrap.
 
     Each family is scanned against ITS OWN declared width, because the collection card gives up
     column to its enlarged map."""
     pages = _pages_module()
-    for card in sorted((built / "pages" / "og").glob("*.png")):
+    for card in _survey_cards(built):
         over = _column_overrun(pages, card, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH)
         assert not over, f"{card.name}: text ink past the survey column edge at {over[:3]}"
+    for name, _kind, _title in pages._HUB_CARDS:
+        card = built / "pages" / "og" / f"{name}.png"
+        over = _column_overrun(pages, card, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH,
+                               right=pages._HUB_CARD_BOX[0])
+        assert not over, f"{card.name}: text ink past the hub column edge at {over[:3]}"
     for card in sorted((built / "pages" / "og" / "collections").glob("*.png")):
         over = _column_overrun(pages, card, pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH)
         assert not over, f"{card.name}: text ink past the collection column edge at {over[:3]}"
@@ -501,24 +1220,26 @@ def test_the_column_scan_catches_a_title_that_crosses_the_edge(tmp_path):
     from PIL import Image, ImageDraw
     title = "Southwest Western Australia Array registry code 15"
     img = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
-    ImageDraw.Draw(img).text((pages._CARD_MARGIN, 130), title,
+    ImageDraw.Draw(img).text((pages._CARD_MARGIN, pages._CARD_TITLE_Y), title,
                              font=pages._card_font(pages._CARD_TITLE_SIZES[0]), fill=(255, 255, 255))
     bad = tmp_path / "overrun.png"
     img.save(bad, "PNG")
     over = _column_overrun(pages, bad, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH)
-    assert over, "the column scan must catch a title set at 64 px with no column rule applied"
+    assert over, "the column scan must catch a title set at the top of the ladder with no column rule"
 
 
 def test_the_known_offender_fits_the_column_by_stepping_down_and_wrapping(tmp_path):
-    """The card the column rule was written for. Its title at 64 px and its three-state region line
+    """The card the column rule was written for. Its title at 70 px and its three-state region line
     both once ran across the footprint panel; the title now steps down the ladder to fit on one
     line, and the region wraps to a second rather than crossing the edge."""
     pages = _pages_module()
     from PIL import Image, ImageDraw
     d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    assert pages._CARD_TITLE_SIZES == (70, 57, 48, 40), \
+        f"the title ladder's declared steps moved, now {pages._CARD_TITLE_SIZES}"
     size, lines = pages._card_title_block(d, "Musgraves APY 2016", pages._CARD_TEXT_WIDTH, 2)
     assert lines == ["Musgraves APY 2016"], f"the title must stay on one line, got {lines}"
-    assert size == 44, f"the title steps down to 44 px to hold that line, got {size}"
+    assert size == 48, f"the title steps down to 48 px to hold that line, got {size}"
     region = "South Australia / Western Australia / Northern Territory - 2016 - 2018"
     wrapped, whole = pages._card_lines(d, region, pages._card_font(29), pages._CARD_TEXT_WIDTH, 2)
     assert whole and len(wrapped) == 2, \
@@ -530,7 +1251,9 @@ def test_a_page_only_ever_advertises_a_card_that_was_written(built):
     "is Pillow importable", which is a claim about the environment and not about the file, so a
     failed write shipped an og:image that every link-preview fetcher resolved to a 404."""
     for rel, want in (("surveys/card-a.html", "/data/pages/og/card-a.png"),
-                      ("collections/cardcoll.html", "/data/pages/og/collections/cardcoll.png")):
+                      ("collections/cardcoll.html", "/data/pages/og/collections/cardcoll.png"),
+                      ("surveys/index.html", "/data/pages/og/surveys.png"),
+                      ("collections/index.html", "/data/pages/og/collections.png")):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         m = re.search(r'property="og:image" content="([^"]+)"', page)
         assert m, f"{rel}: og:image required"
@@ -546,10 +1269,95 @@ def test_a_collection_with_no_disclosed_positions_gets_no_card(tmp_path):
     rather than about the map. Nothing is written, and the page falls back to the root card."""
     pages = _pages_module()
     card = tmp_path / "empty.png"
-    wrote = pages._og_collection_card(card, title="Empty", facts_line="0 surveys",
-                                      taxonomy_line="", member_labels=["A"],
-                                      member_points={"A": []})
+    wrote = pages._og_collection_card(card, kind="COLLECTION", title="Empty",
+                                      facts_line="0 surveys", taxonomy_line="",
+                                      coverage_line="",
+                                      member_labels=["A"], member_points={"A": []})
     assert wrote is False and not card.exists(), "no positions means no card at all"
+
+
+def test_every_collection_whose_members_place_them_gets_its_own_card(built):
+    """A card for every collection, and every collection page pointing at its own.
+
+    Nothing in the card path names a collection: the emitter writes a card for each collection whose
+    members disclose a position, and hands the page the URL only once the file is on disk. A corpus
+    that grows another collection therefore grows another card with no line of code added for it,
+    which is why the fixture carries two: a pin over a single collection cannot tell an automatic
+    rule from a special case.
+
+    FAILS IF a collection whose members disclose positions reaches its page with the root card's
+    URL, or if a card is written for a collection no page names."""
+    cards = {p.stem for p in (built / "pages" / "og" / "collections").glob("*.png")}
+    named = {}
+    for page in sorted((built / "pages" / "collections").glob("*.html")):
+        # index.html is the collections HUB, which is not a collection; the emitter refuses a
+        # collection id of "index" for that reason, so the name can never belong to both.
+        if page.stem == "index":
+            continue
+        found = re.search(r'property="og:image" content="([^"]+)"', page.read_text(encoding="utf-8"))
+        assert found, f"{page.name}: a collection page must carry an og:image"
+        named[page.stem] = found.group(1)
+    assert len(named) >= 2, (
+        "the pin cannot tell an automatic rule from a special case over the single collection "
+        f"{sorted(named)}")
+    assert set(named) == cards, (
+        f"every collection page must have its card and every card its page; pages {sorted(named)}, "
+        f"cards {sorted(cards)}")
+    for cid, url in sorted(named.items()):
+        assert url == f"{BASE}/data/pages/og/collections/{cid}.png", \
+            f"{cid}: the page must point at its own card, it points at {url}"
+
+
+def test_the_collection_card_states_the_coverage_its_record_carries(tmp_path):
+    """A collection's temporal coverage comes from the collection record and from nowhere else.
+
+    A record still taking members has no end year to give, so its coverage runs to the present. A
+    record that carries a start year and makes no such claim states the start alone, because a
+    closed range needs an end year the record does not hold and the date it was last maintained is
+    not one. A record with no start year gets no coverage line at all.
+
+    The line is read back as GLYPHS off the rendered card, in the ink and at the size the card sets
+    it, and the card drawn from a record that discloses none must set none, so the pin cannot be
+    answered by a card that sets a line whatever it was given."""
+    pages = _pages_module()
+    assert pages._collection_coverage({"start_year": 2013, "status": "active"}) == "2013 - present"
+    assert pages._collection_coverage({"start_year": 1966, "status": "completed"}) == "from 1966"
+    assert pages._collection_coverage({"start_year": None, "status": "active"}) == ""
+    assert pages._collection_coverage({}) == ""
+    pts = {"A": [(133.0, -25.0), (140.0, -30.0)]}
+    card, bare = tmp_path / "covered.png", tmp_path / "bare.png"
+    for path, coverage in ((card, "2013 - present"), (bare, "")):
+        assert pages._og_collection_card(
+            path, kind="COLLECTION", title="AusLAMP",
+            facts_line="14 surveys · 500 stations", taxonomy_line="PROGRAMME · ACTIVE",
+            coverage_line=coverage, member_labels=["A"], member_points=pts)
+    from PIL import Image
+    with Image.open(card) as im:
+        img = im.convert("RGB")
+    with Image.open(bare) as im:
+        without = im.convert("RGB")
+    stamp, offset = _line_stamp(pages, "2013 - present", pages._card_font(29), _MUTED_INK)
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    assert _sets_line(img, stamp, offset, rows) is not None, \
+        "the card must set the coverage its record carries"
+    assert _sets_line(without, stamp, offset, rows) is None, \
+        "a record that discloses no coverage gets no coverage line"
+
+
+def test_the_built_collection_card_takes_its_coverage_from_its_own_record(built):
+    """The same line, over the card the EMITTER wrote rather than one this file drew: the corpus
+    collection declares an open-ended programme, so its card carries the open-ended range.
+
+    FAILS IF the coverage is assembled from the member surveys' years, or from the date the record
+    was last maintained, rather than read off the collection record itself."""
+    pages = _pages_module()
+    from PIL import Image
+    with Image.open(built / "pages" / "og" / "collections" / "cardcoll.png") as im:
+        img = im.convert("RGB")
+    stamp, offset = _line_stamp(pages, "2013 - present", pages._card_font(29), _MUTED_INK)
+    assert _sets_line(img, stamp, offset,
+                      (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)) is not None, \
+        "the built card must set the coverage its collection record declares"
 
 
 def test_the_collection_card_keeps_the_whole_title_by_stepping_the_type_down(tmp_path):
@@ -558,8 +1366,10 @@ def test_the_collection_card_keeps_the_whole_title_by_stepping_the_type_down(tmp
     pages = _pages_module()
     long_title = "Australian Lithospheric Architecture Magnetotelluric Project"
     card = tmp_path / "long.png"
-    assert pages._og_collection_card(card, title=long_title, facts_line="14 surveys",
-                                     taxonomy_line="programme", member_labels=["A"],
+    assert pages._og_collection_card(card, kind="COLLECTION", title=long_title,
+                                     facts_line="14 surveys", taxonomy_line="programme",
+                                     coverage_line="2013 - present",
+                                     member_labels=["A"],
                                      member_points={"A": [(133.0, -25.0), (140.0, -30.0)]})
     from PIL import ImageDraw, Image
     d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
@@ -579,3 +1389,367 @@ def test_the_cards_are_reachable_at_the_url_the_pages_name(built):
         for url in re.findall(r'property="og:image" content="([^"]+)"', text):
             assert url.startswith(f"{BASE}/data/") or url == f"{BASE}/vendor/social-card.png", \
                 f"{page.name}: og:image must be a served URL, got {url}"
+
+
+# ==================================================================================================
+# The hub cards
+# ==================================================================================================
+
+# The two inks the hub card's own lines are set in: the tagline in the brand file's declared tagline
+# ink, the counts in the block's muted one.
+_TAGLINE_INK = _hex_rgb(_brand()["palette"]["tagline_ink"]["on_dark"])
+
+
+def _hub_cards(built):
+    """The two hub cards the build wrote, as (name, path)."""
+    pages = _pages_module()
+    return [(name, built / "pages" / "og" / f"{name}.png") for name, _k, _t in pages._HUB_CARDS]
+
+
+def test_the_hub_lattice_is_the_brand_marks_own_silhouette_drawn_finer():
+    """The hub artwork is DRAWN from the coastline, on a lattice finer than the mark's.
+
+    The brand keeps the full pixelated Australia and the simplified dot mark as related but
+    different assets, so the card cannot simply enlarge the mark. What is held is that the two come
+    off one construction: run at the mark's own grid, the emitter's lattice reproduces the brand
+    file's dot list cell for cell, and the grid the card actually draws at is finer on both axes.
+
+    FAILS IF the lattice drifts off the coastline the mark is derived from, or the card's grid stops
+    being the finer of the two, either of which makes the hub card a second silhouette rather than
+    the same one at a second resolution."""
+    pages = _pages_module()
+    geom = _brand()["geometry"]
+    cols, rows = pages._HUB_CARD_GRID
+    assert cols > geom["grid"]["cols"] and rows > geom["grid"]["rows"], (
+        f"the hub lattice {(cols, rows)} must be finer than the mark's "
+        f"{(geom['grid']['cols'], geom['grid']['rows'])}")
+    assert list(pages._lattice_cells(geom["grid"]["cols"], geom["grid"]["rows"])) == \
+        [(dot["col"], dot["row"]) for dot in geom["dots"]], \
+        "at the mark's own grid the lattice must be the mark's own dots, cell for cell"
+    assert len(pages._lattice_cells(cols, rows)) > geom["dot_count"], \
+        "a finer lattice over the same coastline carries more cells than the mark does"
+
+
+def test_the_hub_lattice_resolves_tasmania():
+    """The card's lattice is fine enough for Tasmania to keep its shape. On the mark's own grid the
+    island is three cells, and on a lattice three times finer it is a block of sixteen; the card
+    draws at a pitch where it is a figure of its own. FAILS IF the lattice coarsens back to a block."""
+    pages = _pages_module()
+    import _au_outline as au
+    ext = au.EXTENT
+    w, e, s, n = ext["w"], ext["e"], ext["s"], ext["n"]
+    ring = au.COAST[1]
+    lo0, lo1 = min(pt[0] for pt in ring), max(pt[0] for pt in ring)
+    la0, la1 = min(pt[1] for pt in ring), max(pt[1] for pt in ring)
+    cols, rows = pages._HUB_CARD_GRID
+    tasmania = [(c, r) for c, r in pages._lattice_cells(cols, rows)
+                if lo0 <= w + (c + 0.5) * (e - w) / cols <= lo1
+                and la0 <= n - (r + 0.5) * (n - s) / rows <= la1]
+    assert len(tasmania) >= 40, \
+        f"Tasmania is {len(tasmania)} cells on the {cols} x {rows} lattice, a block rather than a shape"
+
+
+def test_the_hub_artwork_edges_hold_few_blends(drawn):
+    """The artwork's edge pixels take a handful of coverage levels, not a continuum. The layer is
+    drawn at twice the size and averaged down, so every edge pixel is one of five blends of a dot's
+    colour with the ground; a smoother filter writes thousands of distinct blends, which the PNG
+    encoder cannot pack and a link-preview fetcher pays for. FAILS IF the resample starts blending."""
+    pages = _pages_module()
+    from PIL import Image
+    for card, _edge, word in drawn:
+        if word not in {kind for _n, kind, _t in pages._HUB_CARDS}:
+            continue
+        with Image.open(card) as im:
+            art = im.convert("RGB").crop(pages._HUB_CARD_BOX)
+        colours = art.getcolors(1 << 20)
+        assert colours is not None and len(colours) <= 1_000, \
+            f"{card.name}: the artwork holds {None if colours is None else len(colours)} colours"
+
+
+def test_the_collections_hub_card_says_what_a_collection_is(drawn):
+    """The collections hub card sets its own two declared lines under the title, and not the
+    surveys hub's tagline: a reader landing on the collections catalogue is told what a collection
+    is, not what the site is. FAILS IF the two hub cards share a line."""
+    pages = _pages_module()
+    from PIL import Image
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    card = next(c for c, _e, word in drawn if word == "COLLECTIONS")
+    with Image.open(card) as im:
+        img = im.convert("RGB")
+    for line in pages._HUB_CARD_LINES["collections"]:
+        stamp, offset = _line_stamp(pages, line, pages._card_font(29), _TAGLINE_INK)
+        assert _sets_line(img, stamp, offset, rows) is not None, \
+            f"the collections hub card must set {line!r}"
+    for line in pages._HUB_CARD_LINES["surveys"]:
+        stamp, offset = _line_stamp(pages, line, pages._card_font(29), _TAGLINE_INK)
+        assert _sets_line(img, stamp, offset, rows) is None, \
+            f"the collections hub card must not set the surveys hub's {line!r}"
+
+
+def test_the_collection_cards_taxonomy_line_is_set_in_capitals(built):
+    """A collection card's type and status line is set in capitals, as the record's two words are
+    a label rather than a sentence: the fixture collection declares a programme that is active and
+    its card reads PROGRAMME · ACTIVE. FAILS IF the emitter passes the record's own case through."""
+    pages = _pages_module()
+    from PIL import Image
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    card = built / "pages" / "og" / "collections" / "cardcoll.png"
+    with Image.open(card) as im:
+        img = im.convert("RGB")
+    stamp, offset = _line_stamp(pages, "PROGRAMME · ACTIVE", pages._card_font(29), _MUTED_INK)
+    assert _sets_line(img, stamp, offset, rows) is not None, \
+        "the collection card must set its type and status in capitals"
+    stamp, offset = _line_stamp(pages, "programme · active", pages._card_font(29), _MUTED_INK)
+    assert _sets_line(img, stamp, offset, rows) is None, \
+        "the collection card must not set the record's lower-case type and status"
+
+
+def test_the_hub_artwork_takes_its_colours_from_the_brand_files_own_ramp():
+    """Every dot's colour is a function of its position on the brand file's declared stops, read at
+    draw time. Held against the file's own mapped hexes rather than against restated colours, so a
+    card that carried its own copy of the ramp fails even while it still looks right."""
+    pages = _pages_module()
+    stops = _brand()["palette"]["stops"]
+    for dot in _brand()["geometry"]["dots"]:
+        assert pages._brand_ramp(dot["t"]) == _hex_rgb(dot["hex"]), (
+            f"the ramp at t={dot['t']} must be the brand file's own {dot['hex']}, "
+            f"it gave {pages._brand_ramp(dot['t'])}")
+    assert pages._brand_ramp(0.0) == _hex_rgb(stops[0]["hex"]), "the ramp starts on the first stop"
+    assert pages._brand_ramp(1.0) == _hex_rgb(stops[-1]["hex"]), "the ramp ends on the last stop"
+    between = pages._brand_ramp((stops[0]["position"] + stops[1]["position"]) / 2)
+    assert between not in {_hex_rgb(s["hex"]) for s in stops}, \
+        f"a position between two stops is a blend of them, this one landed on {between}"
+
+
+def test_the_hub_card_draws_the_pixelated_australia_it_declares(drawn):
+    """The artwork on the rendered card is the lattice the emitter declares: every dot is where the
+    fit puts it, in the colour the ramp gives it, and the whole of it stays inside its declared box.
+
+    The gutter between the text column and that box is swept as well, because the ramp ENDS on the
+    accent the address is set in: artwork bleeding left would be indistinguishable from a line of
+    type that had crossed the column edge, and neither belongs there.
+
+    FAILS IF the artwork is drawn from anything but the declared lattice, or drifts off its box."""
+    pages = _pages_module()
+    from PIL import Image
+    dots = pages._hub_artwork_dots()
+    box = pages._HUB_CARD_BOX
+    for cx, cy, r, _c in dots:
+        assert (box[0] <= cx - r and cx + r <= box[2]
+                and box[1] <= cy - r and cy + r <= box[3]), \
+            f"the dot at {(cx, cy)} reaches outside the artwork's declared box {box}"
+    west = min(dots, key=lambda dot: dot[0])[3]
+    east = max(dots, key=lambda dot: dot[0])[3]
+    stops = _brand()["palette"]["stops"]
+    assert west == _hex_rgb(stops[0]["hex"]) and east == _hex_rgb(stops[-1]["hex"]), (
+        "the ramp runs west to east across the continent: its ends must be the brand file's own "
+        f"first and last stops, they are {west} and {east}")
+    for card, edge, word in drawn:
+        if word not in {kind for _n, kind, _t in pages._HUB_CARDS}:
+            continue
+        with Image.open(card) as im:
+            px = im.convert("RGB").load()
+        for cx, cy, _r, colour in dots:
+            got = px[round(cx), round(cy)]
+            assert max(abs(a - b) for a, b in zip(got, colour)) <= 2, (
+                f"{card.name}: the dot at {(round(cx), round(cy))} is drawn {colour}, "
+                f"the card has {got} there")
+        _size, gutter = _ink(card, (edge + 1, 0, box[0], pages._CARD_SIZE[1]))
+        assert not gutter, \
+            f"{card.name}: the gutter between the column and the artwork carries ink at {gutter[:3]}"
+
+
+def test_a_hub_card_states_the_counts_and_the_tagline_it_is_handed(tmp_path):
+    """A hub card's numbers are the build's own, and the card renders whatever it is handed rather
+    than a figure of its own.
+
+    Two cards drawn from two different corpora set their own counts and NOT each other's, so a
+    hardcoded number fails here; and both set the brand file's tagline on the two lines the card
+    declares, joined it is the file's own sentence, and the wrap that would leave one word on a
+    line of its own is not on the card. All of it is read back as glyphs off the rendered cards."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    tagline = _brand()["tagline"]
+    declared = pages._HUB_CARD_LINES["surveys"]
+    assert " ".join(declared) == tagline, \
+        f"the surveys hub's declared lines must join to the brand file's tagline, got {declared}"
+    orphan_wrap = pages._card_lines(d, tagline, pages._card_font(29), pages._CARD_TEXT_WIDTH, 2)[0]
+    assert list(orphan_wrap) != list(declared), \
+        "the declared break must differ from the wrap that leaves the last word alone"
+    counts = ("58 surveys · 4,182 stations", "3 surveys · 66 stations")
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    cards = []
+    for i, line in enumerate(counts):
+        path = tmp_path / f"hub-{i}.png"
+        pages._og_hub_card(path, kind="SURVEYS", title="Surveys", lines=declared,
+                           counts_line=line)
+        with Image.open(path) as im:
+            cards.append(im.convert("RGB"))
+    for i, img in enumerate(cards):
+        for j, line in enumerate(counts):
+            stamp, offset = _line_stamp(pages, line, pages._card_font(29), _MUTED_INK)
+            found = _sets_line(img, stamp, offset, rows) is not None
+            assert found is (i == j), (
+                f"the card built over corpus {i} must set {counts[i]!r} and no other count; "
+                f"it {'set' if found else 'did not set'} {line!r}")
+        for line in declared:
+            stamp, offset = _line_stamp(pages, line, pages._card_font(29), _TAGLINE_INK)
+            assert _sets_line(img, stamp, offset, rows) is not None, \
+                f"the hub card must set the brand file's tagline on its declared lines, {line!r} is not on it"
+        stamp, offset = _line_stamp(pages, orphan_wrap[0], pages._card_font(29), _TAGLINE_INK)
+        assert _sets_line(img, stamp, offset, rows) is None, \
+            f"the hub card must not set the wrap that orphans the last word, found {orphan_wrap[0]!r}"
+
+
+def test_the_hub_cards_state_the_counts_this_build_computed(built):
+    """The same numbers, over the cards the EMITTER wrote: the fixture corpus's own survey, station
+    and collection counts, derived here from the pages the build wrote rather than written down.
+
+    FAILS IF a hub card states a corpus other than the one that drew it."""
+    pages = _pages_module()
+    from PIL import Image
+    n_surveys = len([p for p in (built / "pages" / "surveys").glob("*.html")
+                     if p.stem != "index"])
+    n_collections = len([p for p in (built / "pages" / "collections").glob("*.html")
+                         if p.stem != "index"])
+    n_stations = n_surveys * len(SAMPLE_EDIS)
+    assert n_surveys > 1 and n_collections > 1, \
+        f"the pin is vacuous unless the corpus has more than one of each, got {n_surveys}"
+    want = {"surveys": f"{n_surveys:,} surveys · {n_stations:,} stations",
+            "collections": f"{n_collections:,} collections"}
+    for name, card in _hub_cards(built):
+        assert card.is_file(), f"the build must write the {name} hub card"
+        with Image.open(card) as im:
+            img = im.convert("RGB")
+        stamp, offset = _line_stamp(pages, want[name], pages._card_font(29), _MUTED_INK)
+        assert _sets_line(img, stamp, offset,
+                          (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)) is not None, \
+            f"{name}: the hub card must state {want[name]!r}, this build's own count"
+
+
+def test_the_hub_cards_are_byte_identical_when_drawn_twice(tmp_path):
+    """Two draws over one input produce one file. A card that carried a timestamp, or that walked a
+    set or an id hash to choose a colour, would differ between two builds of one corpus and every
+    deploy would ship a new card for data that had not changed."""
+    import hashlib
+    pages = _pages_module()
+    for name, kind, title in pages._HUB_CARDS:
+        digests = set()
+        for run in ("first", "second"):
+            path = tmp_path / f"{name}-{run}.png"
+            pages._og_hub_card(path, kind=kind, title=title, lines=pages._HUB_CARD_LINES[name],
+                               counts_line="58 surveys · 4,182 stations")
+            digests.add(hashlib.sha256(path.read_bytes()).hexdigest())
+        assert len(digests) == 1, f"{name}: two draws over one input gave {len(digests)} files"
+
+
+def test_the_survey_and_collection_cards_are_byte_identical_when_drawn_twice(tmp_path):
+    """Two draws over one input produce one file, on the two families the corpus writes most of.
+
+    A card tree is rebuilt on every deploy and re-fetched by the clients that cache it, so a
+    renderer that stamped a time, walked a set, or seeded a colour off an id hash would ship a new
+    byte stream for data that had not changed and would make a diff of two builds unreadable.
+
+    The comparison is proven sensitive on the same line: one station moved, and one member colour
+    more, must each give a different file, so a pin that compared two empty pictures cannot pass."""
+    import hashlib
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    pages = _pages_module()
+    pts = _FOOTPRINTS["wide"]
+    members = {"A": [(133.0, -25.0), (140.0, -30.0)], "B": [(146.0, -35.0)]}
+
+    def survey(name, points):
+        return _survey_card(pages, tmp_path / f"{name}.png", points)
+
+    def collection(name, labels):
+        path = tmp_path / f"{name}.png"
+        assert pages._og_collection_card(
+            path, kind="COLLECTION", title="AusLAMP",
+            facts_line="14 surveys · 500 stations", taxonomy_line="PROGRAMME · ACTIVE",
+            coverage_line="2013 - present", member_labels=labels, member_points=members)
+        return path
+
+    assert digest(survey("s-first", pts)) == digest(survey("s-second", pts)), \
+        "two draws of one survey footprint gave two files"
+    assert digest(collection("c-first", ["A", "B"])) == digest(collection("c-second", ["A", "B"])), \
+        "two draws of one collection membership gave two files"
+    moved = [(lon + 0.5, lat, kind) for lon, lat, kind in pts]
+    assert digest(survey("s-moved", moved)) != digest(survey("s-first", pts)), \
+        "the comparison is vacuous: a survey card did not change when a station did"
+    assert digest(collection("c-one", ["A"])) != digest(collection("c-first", ["A", "B"])), \
+        "the comparison is vacuous: a collection card did not change when its membership did"
+
+
+def test_a_survey_slug_that_would_overwrite_a_hub_card_is_refused(tmp_path):
+    """The hub cards share the flat og tree with the per-survey cards, so a survey slugged like a
+    hub would silently replace that hub's card and the hub page would then advertise a survey.
+
+    The build refuses instead, loudly and before it writes anything."""
+    pages = _pages_module()
+    for name, _kind, _title in pages._HUB_CARDS:
+        with pytest.raises(ValueError) as raised:
+            pages.emit_pages(tmp_path, BASE, surveys_meta={"lbl": {"slug": name}},
+                             survey_docs={}, station_docs={}, collections={},
+                             bundle_formats={}, survey_extent={}, survey_coll={})
+        assert name in str(raised.value), \
+            f"the refusal must name the slug it refused, it said {raised.value}"
+
+
+def test_a_hub_card_stays_inside_the_preview_fetchers_budget(built):
+    """A card is fetched by a crawler on every share, and the hub artwork is a field of resampled
+    edges, which is what a PNG packs down worst. The two hub cards are the heaviest the build
+    writes, so the budget is held on them.
+
+    FAILS IF a finer lattice or a further supersampling step is taken without the weight being
+    looked at: both are worth bytes, and neither is worth an unbounded number of them."""
+    pages = _pages_module()
+    for name, card in _hub_cards(built):
+        assert card.stat().st_size <= pages._HUB_CARD_BUDGET, (
+            f"{name}: the hub card weighs {card.stat().st_size:,} bytes against the "
+            f"{pages._HUB_CARD_BUDGET:,} a preview fetcher is asked to pay")
+
+
+def test_a_build_with_surveys_refuses_to_ship_previews_it_could_not_draw(tmp_path, monkeypatch):
+    """The renderer is a build requirement, not an optional extra.
+
+    Gated on importability alone, a lost Pillow made every card vanish, every page fall back to the
+    portal's hand-made root card and the build still return 0, so the whole preview surface could
+    regress into a deployment without one failing check. A corpus that has surveys to draw now
+    stops the build instead. A corpus with none has no card to draw and still builds: that is the
+    escape hatch a machine without Pillow needs, and it is what the importability gate is for.
+
+    FAILS IF a corpus with surveys builds without its renderer, or if an empty corpus refuses."""
+    pages = _pages_module()
+    monkeypatch.setitem(sys.modules, "PIL", None)
+    assert pages._og_available() is False, "the renderer must actually be out of reach here"
+    with pytest.raises(RuntimeError):
+        pages.emit_pages(tmp_path / "with", BASE, surveys_meta={"S": {"slug": "s"}},
+                         survey_docs={}, station_docs={}, collections={}, bundle_formats={},
+                         survey_extent={}, survey_coll={})
+    n = pages.emit_pages(tmp_path / "without", BASE, surveys_meta={}, survey_docs={},
+                         station_docs={}, collections={}, bundle_formats={}, survey_extent={},
+                         survey_coll={})
+    assert n == 2, f"a corpus with no surveys still writes its two hub pages, got {n}"
+    assert not (tmp_path / "without" / "pages" / "og").exists(), \
+        "no card tree is written where no card can be drawn"
+
+
+@pytest.mark.skipif(not _WORKFLOW.is_file(),
+                    reason="engine image build: workflow tree not shipped "
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
+def test_the_card_pins_run_on_a_pull_request():
+    """The PR gate enumerates its test files by name, so a file that is not listed runs only on a
+    push to main and on the image build. This file holds the whole card surface: the panel
+    geometry, the column, the two lockups, the kind label, the counts the hubs state and the refusal
+    a build makes when it cannot draw. A regression in any of those reaches a reviewer as a rendered
+    card, which is exactly what nobody re-renders while reading a diff."""
+    steps = re.split(r"\n(?=      - name: )", _WORKFLOW.read_text(encoding="utf-8"))
+    subset = [s for s in steps if "PR gate subset" in s.split("\n")[0]]
+    assert len(subset) == 1, [s.split("\n")[0] for s in steps]
+    listed = set(re.findall(r"tests/(test_\w+\.py)", subset[0]))
+    assert Path(__file__).name in listed, \
+        f"{Path(__file__).name} is not in the PR-gate subset, which lists {len(listed)} files"

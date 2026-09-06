@@ -46,7 +46,7 @@ include = ["ausmt_science*", "extract*"]
 # would install an emitter whose marks and address face are simply absent. The repo installs this
 # package editable everywhere it runs, so this declares the intent rather than repairing a live
 # break; a card asset added beside the emitter belongs on this list.
-extract = ["_auscope_mark.png", "_ausmt_mark.png", "_inter_bold.ttf", "_inter_bold_OFL.txt"]
+extract = ["_auscope_lockup.png", "_ausmt_mark.png", "_inter_bold.ttf", "_inter_bold_OFL.txt"]
 
 [tool.ruff]
 line-length = 120

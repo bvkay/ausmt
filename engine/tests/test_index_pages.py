@@ -91,8 +91,8 @@ def test_surveys_index_is_a_document_with_the_hub_chrome(built):
     assert "<title>Surveys - magnetotelluric survey data - AusMT</title>" in page
     assert f'<link rel="canonical" href="{BASE}/surveys">' in page, "canonical must be the bare path"
     assert f'<meta property="og:url" content="{BASE}/surveys">' in page
-    assert f'<meta property="og:image" content="{BASE}/vendor/social-card.png">' in page, \
-        "the index has no per-entity card, so it falls back to the portal's own social card"
+    assert f'<meta property="og:image" content="{BASE}/data/pages/og/surveys.png">' in page, \
+        "the hub carries a card of its own, drawn by this build, not the portal's root card"
     assert '<meta name="robots" content="noindex">' not in page, "the hub page must be indexable"
     m = re.search(r'<meta name="description" content="([^"]+)">', page)
     assert m and m.group(1).endswith("."), "the description must be a structured sentence"
@@ -230,8 +230,11 @@ def test_collections_index_explains_the_concept_and_lists_the_rollup(built):
     """FAILS IF the /collections page loses its chrome, the explanatory sentence that tells a reader
     what a collection IS, or a collection card with its title link, counts and Explore action."""
     page = (built / "pages" / "collections" / "index.html").read_text(encoding="utf-8")
-    assert "<title>Collections - magnetotelluric survey data - AusMT</title>" in page
+    assert "<title>Collections - Australian magnetotelluric data - AusMT</title>" in page, \
+        "the hub names the national holding it indexes, not the record kind"
     assert f'<link rel="canonical" href="{BASE}/collections">' in page
+    assert f'<meta property="og:image" content="{BASE}/data/pages/og/collections.png">' in page, \
+        "the hub carries a card of its own, drawn by this build, not the portal's root card"
     assert '<meta name="robots" content="noindex">' not in page
     assert "<h1>Collections</h1>" in page
     assert ("Collections group related surveys for discovery and exploration. A collection may "
@@ -1219,6 +1222,41 @@ def test_every_page_kind_names_the_site_it_belongs_to(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         assert '<meta property="og:site_name" content="AusMT">' in page, \
             f"{rel}: the page must name the site it belongs to"
+
+
+def test_every_page_kind_states_its_preview_in_the_twitter_vocabulary_too(built):
+    """X/Twitter, Slack and Teams read the twitter:* names before falling back to og:*, and a
+    consumer that reads only the twitter namespace finds a card with an image and no title. The
+    three values are MIRRORS: they are emitted from the same strings the og tags carry, so a title
+    that changes on one surface cannot stay stale on the other.
+
+    FAILS IF a page kind carries og:title, og:description or og:image without its twitter twin, or
+    if a twin differs from the og value by a single character."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        for name in ("title", "description", "image"):
+            og = re.findall(rf'<meta property="og:{name}" content="([^"]*)">', page)
+            tw = re.findall(rf'<meta name="twitter:{name}" content="([^"]*)">', page)
+            assert tw == og, f"{rel}: twitter:{name} must mirror og:{name}, got {tw} vs {og}"
+        assert '<meta name="twitter:card" content="summary_large_image">' in page, \
+            f"{rel}: the card type stays declared"
+
+
+def test_a_page_with_no_description_states_none_in_either_vocabulary(tmp_path):
+    """Absent means absent on both surfaces at once. A page whose record carries no summary must
+    not ship an empty og:description and a populated twitter:description, or the two vocabularies
+    would disagree about whether the page has a summary.
+
+    FAILS IF either description tag survives an absent description, or if one goes and one stays."""
+    pages = _pages_module()
+    page = pages.collection_page(cid="c", coll={"title": "Bare"}, member_slugs=[],
+                                 member_smeta=[], base="https://x.example")
+    assert 'property="og:description"' not in page and 'name="twitter:description"' not in page, \
+        "neither vocabulary states a summary the record does not carry"
+    assert '<meta property="og:title" content="Bare - Australian magnetotelluric data - AusMT">' \
+        in page, "the title is still stated on both surfaces"
+    assert '<meta name="twitter:title" content="Bare - Australian magnetotelluric data - AusMT">' \
+        in page
 
 
 def test_the_indexable_page_kinds_carry_the_trail_back_to_the_root(built):

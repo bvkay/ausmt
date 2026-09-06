@@ -20,9 +20,10 @@ render ONLY the levels the served register carries. NO em/en dashes and NO tick 
 numeric ranges take a spaced hyphen, absent cells are plain hyphens, and availability is stated as
 data (sizes).
 
-Per-survey AND per-collection link-preview cards (og:image) are rendered when Pillow is importable;
-without it every entity page falls back to the portal's root card. Both paths emit the og/twitter
-tags, and a page advertises a card only where the emitter has actually written that file.
+Per-survey AND per-collection link-preview cards (og:image) are rendered with Pillow, which a
+corpus with surveys REQUIRES: the emitter refuses to build one without it rather than shipping
+pages whose previews all fall back to the portal's root card. A corpus with no surveys draws no
+card and builds without it. A page advertises a card only where the emitter has written that file.
 
 Structured data is emitted per page kind: the entity node (Dataset) first where a page has one,
 then a BreadcrumbList matching the visible crumb. Station pages carry neither, because they are
@@ -34,6 +35,7 @@ the spawn workers' build_portal without extra weight.
 from __future__ import annotations
 
 import colorsys
+import functools
 import html
 import json
 import math
@@ -802,6 +804,12 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     # documents would read as thin content at scale and dilute the survey/collection pages that
     # carry the ranking).
     robots = '<meta name="robots" content="noindex">\n' if noindex else ""
+    # An empty description is stated as absence, not as an empty string: a crawler reading
+    # content="" is told the page has no summary, where a missing tag lets it build one from the
+    # document. Every og description below rides the same value, so the two can never disagree.
+    desc_meta = f'<meta name="description" content="{_e(description)}">\n' if description else ""
+    og_desc = f'<meta property="og:description" content="{_e(description)}">\n' if description else ""
+    tw_desc = f'<meta name="twitter:description" content="{_e(description)}">\n' if description else ""
     # Link previews: crawlers resolve nothing relative, so og:url/og:image are absolute.
     image = og_image or (f"{base}/vendor/social-card.png" if base else None)
     og = ""
@@ -812,17 +820,23 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
               # station pages are exactly the ones an inbound link is most likely to land on.
               f'<meta property="og:site_name" content="{_SITE_NAME}">\n'
               f'<meta property="og:title" content="{_e(title)}">\n'
-              f'<meta property="og:description" content="{_e(description)}">\n'
+              f"{og_desc}"
               f'<meta property="og:url" content="{_e(canonical)}">\n'
               f'<meta property="og:image" content="{_e(image)}">\n'
-              f'<meta name="twitter:card" content="summary_large_image">\n')
+              # X, Slack and Teams read the twitter namespace before falling back to og:*, so a
+              # consumer reading only that namespace found an image with no title. The mirrors are
+              # spent from the SAME strings the og tags take, so neither surface can go stale alone.
+              f'<meta name="twitter:card" content="summary_large_image">\n'
+              f'<meta name="twitter:title" content="{_e(title)}">\n'
+              f"{tw_desc}"
+              f'<meta name="twitter:image" content="{_e(image)}">\n')
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
         f"{robots}"
         f"<title>{_e(title)}</title>\n"
-        f'<meta name="description" content="{_e(description)}">\n'
+        f"{desc_meta}"
         f'<link rel="canonical" href="{_e(canonical)}">\n'
         # ICON LINKS. Three same-origin portal paths, absolute because a page served at
         # /surveys/<slug> cannot resolve a relative vendor path, and root-anchored on /favicon.ico
@@ -852,6 +866,18 @@ def _survey_years(sm_doc, smeta):
     if y0 and y1:
         return f"{y0}" if y0 == y1 else _range(y0, y1)
     return str(y0 or y1 or "")
+
+
+def _collection_coverage(coll) -> str:
+    """A collection's temporal coverage, from the collection record's OWN fields.
+
+    A collection still taking members has no end year to give, so its coverage is open-ended; one
+    that makes no such claim states its start alone, because a closed range needs an end year the
+    record does not hold and the date it was last maintained is not one. No start year, no line."""
+    start = (coll or {}).get("start_year")
+    if not start:
+        return ""
+    return _range(start, "present") if (coll or {}).get("status") == "active" else f"from {start}"
 
 
 def _station_points(docs):
@@ -1815,6 +1841,9 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     else.
     """
     title = (coll or {}).get("title") or cid
+    # Only the preview copy is collapsed to one line. The body paragraph and the machine node
+    # carry the record's own text, spacing and line breaks included.
+    record_desc = " ".join(str((coll or {}).get("description") or "").split())
     desc = (coll or {}).get("description") or f"{title}: a collection of magnetotelluric surveys on AusMT."
     url = f"{base}/collections/{cid}"
     ld = {"@context": "https://schema.org", "@type": "Dataset",
@@ -1968,10 +1997,13 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
         + members_section
         + orgs_section
     )
-    return _shell(title=f"{title} - magnetotelluric data - AusMT",
-                  # The meta/og description is a summary of the rollup description, never the
-                  # section prose: the prose is a page-length payload and a link preview is a line.
-                  description=_meta_summary(desc),
+    return _shell(title=f"{title} - Australian magnetotelluric data - AusMT",
+                  # The meta/og description is the RECORD's opening sentence: never the section
+                  # prose, which is a page-length payload, and never the fallback the JSON-LD node
+                  # keeps, because a preview line no curator wrote states curation as fact. A
+                  # record carrying no description ships no line at all.
+                  description=_meta_summary(_first_sentences(record_desc, limit=1,
+                                                             budget=_META_LIMIT)),
                   canonical=url, body=body, base=base,
                   jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"),
                                                  ("collections", "/collections"),
@@ -2079,7 +2111,7 @@ def _hub_catalogue(*, name, description, url, base) -> dict:
             "keywords": _keywords()}
 
 
-def surveys_index_page(*, rows, base, build=None) -> str:
+def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
     the served documents do not already publish and needs no survey-metadata read.
@@ -2144,10 +2176,11 @@ def surveys_index_page(*, rows, base, build=None) -> str:
                   jsonld=[_hub_catalogue(name="AusMT surveys", description=desc, url=url,
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")])],
-                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts)
+                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts,
+                  og_image=og_image)
 
 
-def collections_index_page(*, rows, base, build=None) -> str:
+def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
     """The /collections hub. Rows carry: cid, title, description, n_surveys, n_stations, type,
     status, member_labels, member_points {label: [(lon, lat)]}. ONLY the fields the collections
     rollup actually carries are rendered: a collection whose record declares no type or status
@@ -2186,17 +2219,19 @@ def collections_index_page(*, rows, base, build=None) -> str:
         f'<p class="idxlede">{_COLLECTIONS_LEDE}</p>\n'
         f"{defs}\n"
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
-    return _shell(title="Collections - magnetotelluric survey data - AusMT",
+    return _shell(title="Collections - Australian magnetotelluric data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
                   jsonld=[_hub_catalogue(name="AusMT collections", description=desc, url=url,
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")])],
-                  extra_css=_INDEX_CSS, nav="navCollections", build=build)
+                  extra_css=_INDEX_CSS, nav="navCollections", build=build, og_image=og_image)
 
 
 # --------------------------------------------------------------------------- og cards (Pillow)
 
 def _og_available() -> bool:
+    """Whether the card renderer is reachable. A corpus with surveys REQUIRES it and the emitter
+    refuses without it; this gate is what lets a corpus with no cards to draw still build."""
     try:
         import PIL  # noqa: F401
         return True
@@ -2207,25 +2242,53 @@ def _og_available() -> bool:
 _CARD_SIZE = (1200, 630)
 _CARD_MARGIN = 60                 # the text margin every card's left column sits on
 _CARD_WORDMARK = "ausmt.auscope.org.au"
-_CARD_WORDMARK_Y = 540
-_CARD_WORDMARK_SIZE = 31
-_CARD_TITLE_SIZES = (64, 52, 44, 36)
+_CARD_WORDMARK_Y = 470
+_CARD_WORDMARK_SIZE = 34
+
+# The kind label between the lockup and the title: it names what the reader has landed on before the
+# title does. Tracked caps, in an ink muted enough to sit under the title without competing with it.
+_CARD_KIND_SIZE = 22
+_CARD_KIND_Y = 138
+_CARD_KIND_TRACKING = 2
+_CARD_KIND_INK = (150, 165, 195)
+
+_CARD_TITLE_SIZES = (70, 57, 48, 40)
+_CARD_TITLE_Y = 168
+# Where the block below the title starts when the title leaves room for it, so a card whose title
+# fits on one line keeps the baselines the design was drawn on whatever size that line landed at.
+_CARD_BLOCK_FLOOR = 268
+# The clear space the block keeps above the address's own first ink row. The address and the AuScope
+# lockup close the column on fixed lines, and a block set up against them reads as one run of type
+# rather than as a signature under a block.
+_CARD_BLOCK_CLEAR = 16
+# The block's fit ladder, as (type scale, leading scale) in the order the column gives things up.
+# A value the survey disclosed is never discarded to make room, so the last pair holds the most a
+# card can carry clear of the address and the walk always has an answer.
+_CARD_BLOCK_FITS = ((1.0, 1.0), (1.0, 0.9), (1.0, 0.8),
+                    (0.9, 0.9), (0.9, 0.8), (0.8, 0.8), (0.7, 0.8))
 # The card's flat field: the root card artwork's own ground, so the three families a link preview
 # can land on read at one brightness rather than as two slightly different dark blues.
 _CARD_GROUND = (7, 22, 47)
 # The SURVEY card's text column. It stops well short of the map panel's outset edge, because the
-# gutter between a 64 px title and a bordered panel has to read as space rather than as a near miss;
+# gutter between a 70 px title and a bordered panel has to read as space rather than as a near miss;
 # the ladder above steps the type down inside this width, it does not widen the column.
 _CARD_TEXT_WIDTH = 476
 # The map panel's air: what it keeps against the card's right edge, and the gutter it keeps against
 # the text column. One number, because the two have to read as the same amount of space.
 _CARD_PANEL_AIR = 34
 _CARD_PANEL_INSET = 16            # the panel frame's outset from the map it holds
+# The SURVEY card's footprint panel, as the map box the frame is outset from. It is the same box on
+# every card: a panel fitted to its own data changes the card's composition per survey, and an
+# east-west traverse collapses it to a strip with the rest of the card left empty.
+_CARD_PANEL = (640, 70, 1150, 560)
+# The share of the panel kept clear on every side. A station on the frame reads as a footprint that
+# runs off the card, so the extent is fitted inside this band rather than up against the rule.
+_CARD_PANEL_PAD = 0.10
 
-# The AusMT mark in the card's top-left corner, and the height it is drawn at. It is square, so the
+# The AusMT mark opening the card's left column, and the height it is drawn at. It is square, so the
 # height is the whole geometry; the pinned export is a whole multiple of it (see gen_brand.py), so
 # the resample is a clean box rather than an arbitrary ratio.
-_CARD_CORNER_SIZE = 42
+_CARD_CORNER_SIZE = 52
 _CARD_CORNER_Y = 44
 
 # The Australia locator inset's opacity. The inset covers part of the footprint it is explaining,
@@ -2244,13 +2307,75 @@ _COLL_CARD_MAP_PX = round(_COLL_CARD_MAP_WIDTH * _COLL_CARD_MAP_SCALE)
 _COLL_CARD_TEXT_WIDTH = (_CARD_SIZE[0] - _CARD_PANEL_AIR - 2 * _CARD_PANEL_INSET
                          - _COLL_CARD_MAP_PX - _CARD_PANEL_AIR - _CARD_MARGIN)
 
-# The three assets the cards draw with. They ship BESIDE this module rather than being read from
+# The hub cards, as (the name their card and their reserved slot take, the kind label they carry,
+# the title they set). A survey slugged like one of these would overwrite that hub's card, so the
+# emitter refuses the slug rather than letting a hub page advertise a survey.
+_HUB_CARDS = (("surveys", "SURVEYS", "Surveys"),
+              ("collections", "COLLECTIONS", "Collections"))
+# The line under each hub card's title, as the lines it is set on. The surveys hub sets the brand
+# tagline, broken where the root card breaks it; the join of those two lines must equal the brand
+# file's tagline. The collections hub says what a collection is instead of repeating the tagline.
+_HUB_CARD_LINES = {"surveys": ("Australia's Magnetotelluric", "Data Portal"),
+                   "collections": ("Curated programmes, regions,", "provinces and thematic datasets")}
+# The hub card's artwork lattice, as columns x rows over the drawing extent. It is a whole multiple
+# of the brand mark's own grid, so the card draws the SAME silhouette the mark does at a finer
+# resolution: the mark is a simplified figure that has to survive a browser tab, while a card is
+# read at preview size, where that lattice reads as a logo rather than as the continent. Six times
+# the mark's pitch is the coarsest lattice on which Tasmania keeps its shape rather than a block.
+_HUB_CARD_GRID = (126, 108)
+# The box the lattice is fitted into, centred inside it. It keeps clear of the text column's edge by
+# more than the survey card's panel gutter, because these dots carry no frame to separate them from
+# the type beside them.
+_HUB_CARD_BOX = (600, 30, 1180, 600)
+# The factor the artwork is drawn at before it is resampled down. A disc drawn straight onto the
+# card has hard stepped edges at this radius, and a lattice of them reads as a screen door rather
+# than as the brand's artwork. Every further step costs bytes a link-preview fetcher pays for: the
+# resampled edges are what a PNG compresses worst, and the third step buys no visible roundness.
+_HUB_CARD_SUPERSAMPLE = 2
+# What one card may weigh. Crawlers fetch these on every share, and the artwork is a field of
+# resampled edges, which is the one thing a PNG cannot pack down.
+_HUB_CARD_BUDGET = 300 * 1024
+
+# The AuScope lockup that closes the left column: its drawn height, and the clear space it keeps
+# above the card's bottom edge. It is never taller than the AusMT mark that opens the column, so the
+# acknowledgement cannot outweigh the resource identity it acknowledges.
+_CARD_LOCKUP_SIZE = 46
+_CARD_LOCKUP_BASE = 44
+# Where the shipped lockup is cut out of the wider vendored artwork. The columns to the right of it
+# carry a second organisation's mark and a descriptor line that is unreadable at card height, and a
+# line nobody can read is a line the card should not set.
+_AUSCOPE_CROP_X = 1200
+
+# The assets the cards draw with. They ship BESIDE this module rather than being read from
 # portal/vendor/, because the engine image carries no portal tree: an emitter that reached across to
 # the portal would draw an unsigned card in exactly the environment that serves the corpus. Each is
-# pinned byte-identical to the portal's own copy, so there is still one asset behind each of them.
-_CARD_MARK = Path(__file__).resolve().parent / "_auscope_mark.png"
+# pinned against the portal's own copy, so there is still one asset behind each of them.
+_CARD_LOCKUP = Path(__file__).resolve().parent / "_auscope_lockup.png"
 _CARD_CORNER_MARK = Path(__file__).resolve().parent / "_ausmt_mark.png"
 _CARD_ADDRESS_FACE = Path(__file__).resolve().parent / "_inter_bold.ttf"
+
+# The brand's declared geometry, palette and proportions. contract/ is a SIBLING of engine/ and the
+# engine image ships it, so this resolves in the image as well as in a source tree.
+_BRAND_JSON = Path(__file__).resolve().parents[2] / "contract" / "brand.json"
+
+
+@functools.lru_cache(maxsize=1)
+def _brand() -> dict:
+    """The brand file, read once per process.
+
+    Every number the cards take from it is read HERE at draw time rather than restated as a card
+    literal: a card that carried its own copy of the accent hex or of the wordmark's proportion
+    could drift from every other surface that renders the same brand."""
+    with open(_BRAND_JSON, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _brand_stop(name: str):
+    """One palette stop's (r, g, b), by the name the brand file gives it."""
+    for stop in _brand()["palette"]["stops"]:
+        if stop["name"] == name:
+            return _rgb(stop["hex"])
+    raise KeyError(name)
 
 
 def _rgb(colour):
@@ -2258,6 +2383,69 @@ def _rgb(colour):
     previews can share one declared colour instead of each carrying its own literal."""
     h = str(colour).lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _brand_ramp(t):
+    """The brand's declared stop ramp at `t` in [0, 1], as (r, g, b).
+
+    Linear in sRGB between the two stops `t` falls between, which is what an SVG gradient does and
+    what the established artwork's own blend looks like. The stops and their positions are read from
+    the brand file, so the ramp here and the mark's mapped colours are one declaration."""
+    stops = _brand()["palette"]["stops"]
+    for a, b in zip(stops, stops[1:]):
+        if t <= b["position"] or b is stops[-1]:
+            span = b["position"] - a["position"]
+            u = 0.0 if span == 0 else min(1.0, max(0.0, (t - a["position"]) / span))
+            return tuple(round(x + (y - x) * u)
+                         for x, y in zip(_rgb(a["hex"]), _rgb(b["hex"])))
+    raise ValueError(f"the declared stops do not cover {t}")
+
+
+def _brand_dot_radius(pitch, size_px):
+    """A lattice dot's radius: the brand's declared ratio for an output of `size_px`, times the
+    lattice pitch. Small outputs take fuller dots so the silhouette closes instead of dissolving,
+    which is a band the brand file declares rather than a rule restated here."""
+    bands = _brand()["geometry"]["radius_ratio_by_output_size"]
+    ratio = bands["above"]
+    for band in bands["bands"]:
+        if size_px <= band["max_px"]:
+            ratio = band["ratio"]
+            break
+    return pitch * ratio
+
+
+def _on_land(lon, lat) -> bool:
+    """Whether this coordinate falls inside any coastline ring, by even-odd crossing count.
+
+    EVERY ring is tested, not the mainland alone: the coastline carries Tasmania and the islands,
+    and a ring the lattice skipped would be land the artwork silently left out."""
+    for ring in au.COAST:
+        hit = False
+        j = len(ring) - 1
+        for i, (xi, yi) in enumerate(ring):
+            xj, yj = ring[j]
+            if (yi > lat) != (yj > lat) and lon < xi + (lat - yi) * (xj - xi) / (yj - yi):
+                hit = not hit
+            j = i
+        if hit:
+            return True
+    return False
+
+
+@functools.lru_cache(maxsize=4)
+def _lattice_cells(cols, rows):
+    """[(col, row)] for every cell of a `cols` x `rows` lattice over the drawing extent whose centre
+    falls on land, in reading order.
+
+    This is the construction the brand mark's own dot list comes from: run at the mark's grid it
+    reproduces that list cell for cell, which is what makes the hub card's finer lattice the same
+    silhouette at a second resolution rather than a second silhouette."""
+    ext = au.EXTENT
+    w, e, s, n = ext["w"], ext["e"], ext["s"], ext["n"]
+    return tuple((i, j)
+                 for j in range(rows)
+                 for i in range(cols)
+                 if _on_land(w + (i + 0.5) * (e - w) / cols, n - (j + 0.5) * (n - s) / rows))
 
 
 def _card_mark(path, height):
@@ -2268,35 +2456,43 @@ def _card_mark(path, height):
         return mark.resize((round(height * mark.width / mark.height), height), Image.LANCZOS)
 
 
-def _card_corner_mark(img):
-    """The AusMT mark in the card's top-left corner, on the same text margin the title sits on.
+def _card_ausmt_lockup(img, d):
+    """The AusMT lockup opening the card's left column, on the same text margin the title sits on.
 
-    It leads rather than trails because it names the site the card belongs to, and the clear space
-    below it is larger than the space above, so it reads as a corner mark rather than as the first
-    line of the title block. The ROOT card does not carry it: that card's artwork is the mark."""
+    It leads rather than trails because it names the site the card belongs to. The word's size, its
+    gap from the mark and its ink are read from the brand file and scaled by the mark's height, so
+    the lockup here and the lockup on every other surface are one set of proportions rather than two
+    that happen to agree. The word centres on the mark's INK box, not on its em box, which would pay
+    out a descent this string does not use and sit the word high."""
+    prop = _brand()["proportions"]
     mark = _card_mark(_CARD_CORNER_MARK, _CARD_CORNER_SIZE)
     img.paste(mark, (_CARD_MARGIN, _CARD_CORNER_Y), mark)
+    word = _brand()["brand"]
+    font = _card_address_font(round(prop["wordmark_font_size"] * _CARD_CORNER_SIZE))
+    gap = round(prop["gap_mark_to_wordmark"] * _CARD_CORNER_SIZE)
+    box = d.textbbox((0, 0), word, font=font)
+    d.text((_CARD_MARGIN + mark.width + gap,
+            _CARD_CORNER_Y + round((_CARD_CORNER_SIZE - (box[3] - box[1])) / 2) - box[1]),
+           word, font=font, fill=_rgb(_brand()["palette"]["wordmark_ink"]["on_dark"]))
 
 
-def _card_wordmark_row(img, d, font, ink):
-    """The AuScope mark, a half-mark-width gap, then the address: ONE row on the card's text
-    margin, on every card family this module draws.
+def _card_address_line(d):
+    """The address, on a line of its own on the card's text margin, in the brand's coral accent.
 
-    The mark's height is the address's own line height and it is centred on the address's INK
-    rather than on its em box, so the pair reads as a single line of type. Centring on the em box
-    would pay out the face's descent, which no glyph in this string uses, and sit the mark high."""
-    x0, y0 = _CARD_MARGIN, _CARD_WORDMARK_Y
-    box = d.textbbox((x0, y0), _CARD_WORDMARK, font=font)
-    try:
-        line_h = sum(font.getmetrics())
-    except AttributeError:                # a face that carries no metrics
-        line_h = box[3] - box[1]
-    mark = _card_mark(_CARD_MARK, line_h)
-    # Floor, not round: half of an odd width under banker's rounding is a gap nobody can predict
-    # from the numbers on this line.
-    gap = mark.width // 2
-    img.paste(mark, (x0, round((box[1] + box[3]) / 2 - line_h / 2)), mark)
-    d.text((x0 + mark.width + gap, y0), _CARD_WORDMARK, font=font, fill=ink)
+    It carries no mark beside it: the column already opens with the AusMT lockup and closes with the
+    AuScope one, and a third mark on this line would read as a logo with a caption."""
+    d.text((_CARD_MARGIN, _CARD_WORDMARK_Y), _CARD_WORDMARK,
+           font=_card_address_font(_CARD_WORDMARK_SIZE), fill=_brand_stop("coral"))
+
+
+def _card_auscope_lockup(img):
+    """The AuScope lockup, white, last in the card's left column.
+
+    It sits on the same text margin every line above it does, and its clear space against the card's
+    bottom edge is declared rather than derived, so the column ends on one line across every card
+    family whatever the block above it does."""
+    lockup = _card_mark(_CARD_LOCKUP, _CARD_LOCKUP_SIZE)
+    img.paste(lockup, (_CARD_MARGIN, img.height - _CARD_LOCKUP_BASE - _CARD_LOCKUP_SIZE), lockup)
 
 
 def _card_font(size):
@@ -2344,43 +2540,147 @@ def _card_lines(d, text, font, width, max_lines):
     return lines[:max_lines] or [""], whole
 
 
-def _card_title_block(d, title, width, max_lines):
-    """(size, lines) for a title inside a declared column.
+def _card_title_options(d, title, width, max_lines):
+    """Every (size, lines) the whole title fits in, in the order the design prefers them.
 
     The ladder is walked ONE LINE AT A TIME first, so a title that fits on a single line keeps the
     largest type that holds it; only when the smallest size still overflows does the block wrap, and
-    it then walks the ladder again at each line count up to max_lines. A title that is silently cut
-    is a title the card gets wrong, so truncation is the last resort and it is marked."""
+    it then walks the ladder again at each line count up to max_lines. The whole list is returned
+    rather than the first entry, so the column below can take a later step when the block under the
+    title has no room left. A title that is silently cut is a title the card gets wrong, so
+    truncation is the last option and it is marked."""
+    options = []
     for lines_allowed in range(1, max_lines + 1):
         for size in _CARD_TITLE_SIZES:
             lines, whole = _card_lines(d, title, _card_font(size), width, lines_allowed)
             if whole:
-                return size, lines
+                options.append((size, lines))
     size = _CARD_TITLE_SIZES[-1]
     lines, _ = _card_lines(d, title, _card_font(size), width, max_lines)
-    # Nothing in the ladder fits the whole title, so the last line says so rather than ending
-    # mid-thought on a word the reader cannot tell was the last one.
-    return size, lines[:-1] + [f"{lines[-1]} ..."]
+    return options + [(size, lines[:-1] + [f"{lines[-1]} ..."])]
 
 
-def _card_column(d, y, floor_y, rows, width, ink, step):
-    """Draw wrapped rows down the card's text column and return the y the next block starts at.
+def _card_title_block(d, title, width, max_lines):
+    """(size, lines) for a title inside a declared column: the option the ladder prefers."""
+    return _card_title_options(d, title, width, max_lines)[0]
 
-    Every row wraps inside the DECLARED column rather than running past it, and each block starts at
-    the later of where the block above ended and its own slot, so a card whose text all fits keeps
-    the fixed baselines the design was drawn on and a card whose text wraps pushes what follows down
-    instead of overprinting it."""
+
+@functools.lru_cache(maxsize=1)
+def _card_block_ceiling() -> int:
+    """The row the block's ink may not cross.
+
+    It is the address line's own first ink row less the clear space the column keeps above it, read
+    off the face the address is set in rather than declared, so the block and the line under it
+    cannot drift apart when either of them moves."""
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    top = d.textbbox((0, _CARD_WORDMARK_Y), _CARD_WORDMARK,
+                     font=_card_address_font(_CARD_WORDMARK_SIZE))[1]
+    return top - _CARD_BLOCK_CLEAR
+
+
+def _card_lay_block(d, y, floor_y, rows, width, type_scale, lead_scale):
+    """(each line as (y, text, font, ink), the last row its ink reaches) for one fit notch.
+
+    Every row wraps inside the DECLARED column rather than running past it, and an empty value is
+    skipped rather than reserved, so the block is shorter by exactly what the survey did not
+    disclose: the period band follows whatever fact lines there were rather than standing on a slot
+    of its own, so a survey that discloses no region closes the gap instead of leaving a hole.
+    Every value the caller passes arrives whole, wrapped where it must be: what the notch cannot
+    hold is the caller's answer to give, not this one's."""
     y = max(y, floor_y)
-    for text, size in rows:
+    placed, last = [], y
+    for text, size, ink, step in rows:
         if not text:
             continue
-        for line in _card_lines(d, text, _card_font(size), width, 2)[0]:
-            d.text((_CARD_MARGIN, y), line, font=_card_font(size), fill=ink)
-            y += step
-    return y
+        font = _card_font(max(1, round(size * type_scale)))
+        leading = max(1, round(step * lead_scale))
+        for line in _card_lines(d, text, font, width, 2)[0]:
+            placed.append((y, line, font, ink))
+            last = max(last, y + d.textbbox((0, 0), line, font=font)[3])
+            y += leading
+    return placed, last
 
 
-def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, points):
+def _card_block_fit(d, y, floor_y, rows, width, notches=_CARD_BLOCK_FITS):
+    """(the block's placed lines, the last row its ink reaches) at the largest of `notches` that
+    clears the column's ceiling.
+
+    The measurement is on the glyphs the face sets, not on the nominal point size: a descender
+    reaches below the size, so a block that cleared the arithmetic could still print into the
+    address. When no notch clears it the last one is returned as it stands, because a card that sets
+    every value it was given is worth more than a card that reads tidily by dropping one."""
+    for type_scale, lead_scale in notches:
+        placed, last = _card_lay_block(d, y, floor_y, rows, width, type_scale, lead_scale)
+        if last <= _card_block_ceiling():
+            return placed, last
+    return placed, last
+
+
+def _card_left_column(d, title, rows, width, max_title_lines):
+    """(the title's size, its lines, the block's placed lines) for a card's whole left column.
+
+    The title and the block are chosen TOGETHER, largest title first. The title has a LADDER and the
+    block's sizes are DECLARED, so each title step is offered the block's leading and then gives way
+    to the next step rather than setting a fact line below the size declared for it; the block's
+    type gives only after the title's whole ladder has run out, which is the last resort that keeps
+    every disclosed value on the card. Each block starts at the later of where the title ended and
+    its own slot, so a card whose title fits on one line keeps the baselines the design was drawn
+    on."""
+    options = _card_title_options(d, title, width, max_title_lines)
+    for notches in ([n for n in _CARD_BLOCK_FITS if n[0] == 1.0], _CARD_BLOCK_FITS):
+        for size, lines in options:
+            y = _CARD_TITLE_Y + len(lines) * round(size * 1.18) + 8
+            placed, last = _card_block_fit(d, y, _CARD_BLOCK_FLOOR, rows, width, notches)
+            if last <= _card_block_ceiling():
+                return size, lines, placed
+    return size, lines, placed
+
+
+def _card_tracked(d, xy, text, font, ink, tracking):
+    """One line of type with `tracking` px added between letters, and the x it ends at.
+
+    Caps at label size close up on each other, and a label a reader has to resolve letter by letter
+    at preview width is a label that has failed; the letters are set one at a time because a face
+    carries no tracking of its own."""
+    x, y = xy
+    for ch in text:
+        d.text((x, y), ch, font=font, fill=ink)
+        x += d.textlength(ch, font=font) + tracking
+    return x
+
+
+def _card_kind_label(d, kind):
+    """The word for what the card previews, between the lockup and the title."""
+    _card_tracked(d, (_CARD_MARGIN, _CARD_KIND_Y), kind,
+                  _card_address_font(_CARD_KIND_SIZE), _CARD_KIND_INK, _CARD_KIND_TRACKING)
+
+
+def _card_footprint_fit(points, box=_CARD_PANEL, pad=_CARD_PANEL_PAD):
+    """A (lon, lat) -> (x, y) that fits every one of `points` inside `box`, centred and padded.
+
+    ONE scale carries both axes, so a traverse arrives as a traverse rather than being stretched to
+    fill the panel; the scale is the largest that holds the whole extent inside the padded box, so a
+    compact survey is not shrunk away either. What is optimised is the viewport: no station is moved,
+    merged or dropped to make a footprint read better. An extent with no width or no height still
+    lands in the middle rather than on an edge, which is the single-station case."""
+    x0, y0, x1, y1 = box
+    bw, bh = x1 - x0, y1 - y0
+    lons = [pt[0] for pt in points]
+    lats = [pt[1] for pt in points]
+    lo0, la1 = min(lons), max(lats)
+    dlo, dla = max(lons) - lo0, la1 - min(lats)
+    limits = [side * (1 - 2 * pad) / span
+              for side, span in ((bw, dlo), (bh, dla)) if span > 0]
+    scale = min(limits) if limits else 1.0
+    ox, oy = x0 + (bw - dlo * scale) / 2, y0 + (bh - dla * scale) / 2
+
+    def project(lon, lat):
+        return (ox + (lon - lo0) * scale, oy + (la1 - lat) * scale)
+    return project
+
+
+def _og_card(path, *, kind, title, subtitle, region_year, period_line, points):
     """One 1200x630 link-preview card in the portal card's design language: footprint dots,
     Australia locator inset, the survey's key numbers."""
     from PIL import Image, ImageDraw
@@ -2397,20 +2697,14 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
         lats = [pt[1] for pt in points]
         lo0, lo1 = min(lons), max(lons)
         la0, la1 = min(lats), max(lats)
-        dlo, dla = max(lo1 - lo0, 1e-6), max(la1 - la0, 1e-6)
-        px0, py0, px1, py1 = 640, 70, 1150, 560
-        pw, ph = px1 - px0, py1 - py0
-        if pw * (dla / dlo) > ph:
-            pw = ph / (dla / dlo)
-        else:
-            ph = pw * (dla / dlo)
-        px1, py1 = px0 + pw, py0 + ph
-        d.rounded_rectangle([px0 - 16, py0 - 16, px1 + 16, py1 + 16], radius=12,
+        px0, py0, px1, py1 = _CARD_PANEL
+        d.rounded_rectangle([px0 - _CARD_PANEL_INSET, py0 - _CARD_PANEL_INSET,
+                             px1 + _CARD_PANEL_INSET, py1 + _CARD_PANEL_INSET], radius=12,
                             fill=panel, outline=line, width=2)
         pr = 4 if len(points) <= 60 else (3 if len(points) <= 200 else 2.2)
+        fit = _card_footprint_fit(points)
         for lo, la, _ty in points:
-            x = px0 + (lo - lo0) / dlo * pw
-            y = py0 + (la1 - la) / dla * ph
+            x, y = fit(lo, la)
             d.ellipse([x - pr, y - pr, x + pr, y + pr], fill=cyan)
         # Australia locator inset, bottom-right over the panel. It is drawn on its own layer and
         # composited at _CARD_INSET_ALPHA, because the inset sits over the footprint it is
@@ -2440,25 +2734,27 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
         d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=copper)
         d.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], outline=copper, width=2)
 
-    _card_corner_mark(img)
+    _card_ausmt_lockup(img, d)
+    _card_kind_label(d, kind)
     # The text column, on the declared width. Nothing steps outside it: the title walks the ladder
     # and wraps, and the fact lines wrap, so a long survey name or a three-state region never runs
     # into the footprint panel beside it.
-    tsize, lines = _card_title_block(d, title, _CARD_TEXT_WIDTH, 2)
-    y = 130
+    tsize, lines, block = _card_left_column(
+        d, title, ((subtitle, 29, muted, 42), (region_year, 29, muted, 42),
+                   (period_line, 26, (201, 212, 232), 40)), _CARD_TEXT_WIDTH, 2)
+    y = _CARD_TITLE_Y
     for ln in lines:
         d.text((_CARD_MARGIN, y), ln, font=font(tsize), fill=text)
         y += round(tsize * 1.18)
-    y = _card_column(d, y + 8, 220, ((subtitle, 29), (region_year, 29)),
-                     _CARD_TEXT_WIDTH, muted, 42)
-    _card_column(d, y, 330, ((period_line, 26), (dims_line, 26)),
-                 _CARD_TEXT_WIDTH, (201, 212, 232), 40)
-    _card_wordmark_row(img, d, _card_address_font(_CARD_WORDMARK_SIZE), copper)
+    for by, line, bfont, bink in block:
+        d.text((_CARD_MARGIN, by), line, font=bfont, fill=bink)
+    _card_address_line(d)
+    _card_auscope_lockup(img)
     img.save(path, "PNG", optimize=True)
 
 
-def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels,
-                        member_points) -> bool:
+def _og_collection_card(path, *, kind, title, facts_line, taxonomy_line, coverage_line,
+                        member_labels, member_points) -> bool:
     """One 1200x630 link-preview card per collection: the member-coloured footprint the collections
     hub card draws, at raster scale. Returns whether a card was written.
 
@@ -2488,7 +2784,7 @@ def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels
 
     W, H = _CARD_SIZE
     ink = _CARD_GROUND
-    text, muted, copper = (255, 255, 255), (143, 163, 176), (239, 114, 86)
+    text, muted = (255, 255, 255), (143, 163, 176)
     img = Image.new("RGB", (W, H), ink)
     d = ImageDraw.Draw(img)
 
@@ -2516,19 +2812,92 @@ def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels
         d.ellipse([px0 + x - r, py0 + y - r, px0 + x + r, py0 + y + r], fill=colour)
 
     # ---- the text column, stepped down until the WHOLE title fits ----
-    _card_corner_mark(img)
-    tsize, lines = _card_title_block(d, title, _COLL_CARD_TEXT_WIDTH, 3)
-    y = 130
+    _card_ausmt_lockup(img, d)
+    _card_kind_label(d, kind)
+    # The survey card's own fact slots, at its scale: a single-line title lands on the same
+    # baselines there, so the two families read as one card design. The coverage row ranks with the
+    # two above it; a record disclosing no start year passes none and the block closes up.
+    tsize, lines, block = _card_left_column(
+        d, title, ((facts_line, 29, muted, 42), (taxonomy_line, 29, muted, 42),
+                   (coverage_line, 29, muted, 42)),
+        _COLL_CARD_TEXT_WIDTH, 3)
+    y = _CARD_TITLE_Y
     for ln in lines:
         d.text((_CARD_MARGIN, y), ln, font=_card_font(tsize), fill=text)
         y += round(tsize * 1.18)
-    # The survey card's subtitle and region slots, at its scale: a single-line title lands on the
-    # same two baselines there, so the two families read as one card design.
-    _card_column(d, y + 8, 220, ((facts_line, 29), (taxonomy_line, 29)),
-                 _COLL_CARD_TEXT_WIDTH, muted, 42)
-    _card_wordmark_row(img, d, _card_address_font(_CARD_WORDMARK_SIZE), copper)
+    for by, line, bfont, bink in block:
+        d.text((_CARD_MARGIN, by), line, font=bfont, fill=bink)
+    _card_address_line(d)
+    _card_auscope_lockup(img)
     img.save(path, "PNG", optimize=True)
     return True
+
+
+def _hub_artwork_dots(box=_HUB_CARD_BOX, grid=_HUB_CARD_GRID):
+    """[(cx, cy, radius, (r, g, b))] for the pixelated Australia fitted and centred inside `box`.
+
+    ONE pitch carries both axes, so the silhouette arrives at the coastline's own shape; the clear
+    fraction around it and the dot radius are the brand file's, and each dot's colour is the ramp
+    evaluated at its position across the figure, west to east."""
+    cells = _lattice_cells(*grid)
+    c0 = min(c for c, _r in cells)
+    c1 = max(c for c, _r in cells)
+    r0 = min(r for _c, r in cells)
+    r1 = max(r for _c, r in cells)
+    w, h = c1 - c0 + 1, r1 - r0 + 1
+    pad = _brand()["geometry"]["pad_fraction"]
+    x0, y0, x1, y1 = box
+    pitch = min((x1 - x0) * (1 - 2 * pad) / w, (y1 - y0) * (1 - 2 * pad) / h)
+    ox = x0 + ((x1 - x0) - w * pitch) / 2
+    oy = y0 + ((y1 - y0) - h * pitch) / 2
+    radius = _brand_dot_radius(pitch, round(max(w, h) * pitch))
+    return [(ox + (c - c0 + 0.5) * pitch, oy + (r - r0 + 0.5) * pitch, radius,
+             _brand_ramp(round((c - c0) / (c1 - c0), 6)))
+            for c, r in cells]
+
+
+def _og_hub_card(path, *, kind, title, lines, counts_line):
+    """One 1200x630 link-preview card for a hub page: the card's own left column beside the
+    pixelated Australia the brand is drawn from.
+
+    A hub previews a catalogue rather than a place, so the artwork is the site's identity and not a
+    map of data: it is DRAWN from the coastline and the palette the brand file declares, never read
+    out of a vendored image, because the engine image ships no portal tree and a card that reached
+    for one would go blank exactly where the corpus is served. The counts arrive from the caller,
+    which is the only place that knows what this build published; `lines` are the declared lines
+    under the title, set one per row so no word is left to wrap on its own."""
+    from PIL import Image, ImageDraw
+    W, H = _CARD_SIZE
+    img = Image.new("RGB", (W, H), _CARD_GROUND)
+    # The artwork is drawn large and resampled down: a disc this size drawn straight onto the card
+    # has stepped edges, and a lattice of them reads as a screen door rather than as the artwork.
+    s = _HUB_CARD_SUPERSAMPLE
+    x0, y0, x1, y1 = _HUB_CARD_BOX
+    layer = Image.new("RGB", ((x1 - x0) * s, (y1 - y0) * s), _CARD_GROUND)
+    ld = ImageDraw.Draw(layer)
+    for cx, cy, r, colour in _hub_artwork_dots():
+        dx, dy, dr = (cx - x0) * s, (cy - y0) * s, r * s
+        ld.ellipse([dx - dr, dy - dr, dx + dr, dy + dr], fill=colour)
+    # BOX, not LANCZOS: at this radius the two are indistinguishable, and a box filter leaves each
+    # edge pixel one of five coverage levels, which halves the bytes a link-preview fetcher pays.
+    img.paste(layer.resize((x1 - x0, y1 - y0), Image.BOX), (x0, y0))
+
+    d = ImageDraw.Draw(img)
+    _card_ausmt_lockup(img, d)
+    _card_kind_label(d, kind)
+    ink = _rgb(_brand()["palette"]["tagline_ink"]["on_dark"])
+    rows = tuple((line, 29, ink, 36) for line in tuple(lines)[:-1])
+    rows += ((tuple(lines)[-1], 29, ink, 42), (counts_line, 29, (143, 163, 176), 42))
+    tsize, title_lines, block = _card_left_column(d, title, rows, _CARD_TEXT_WIDTH, 2)
+    y = _CARD_TITLE_Y
+    for ln in title_lines:
+        d.text((_CARD_MARGIN, y), ln, font=_card_font(tsize), fill=(255, 255, 255))
+        y += round(tsize * 1.18)
+    for by, line, bfont, bink in block:
+        d.text((_CARD_MARGIN, by), line, font=bfont, fill=bink)
+    _card_address_line(d)
+    _card_auscope_lockup(img)
+    img.save(path, "PNG", optimize=True)
 
 
 # --------------------------------------------------------------------------- the emitter
@@ -2554,6 +2923,14 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
         raise ValueError(f"survey slug 'index' collides with the surveys index page: {_clash}")
     if "index" in (collections or {}):
         raise ValueError("collection id 'index' collides with the collections index page")
+    # The hub cards sit in the same flat og tree the per-survey cards do, so a survey slugged like a
+    # hub would replace that hub's card and the hub page would then advertise a survey.
+    _hub_names = {name for name, _kind, _title in _HUB_CARDS}
+    _card_clash = sorted(((m or {}).get("slug") or lbl)
+                         for lbl, m in (surveys_meta or {}).items()
+                         if ((m or {}).get("slug") or lbl) in _hub_names)
+    if _card_clash:
+        raise ValueError(f"survey slug collides with a hub card in pages/og/: {_card_clash}")
     slug_by_label = {}
     index_rows = []
     # {slug: the Dataset stub a collection page states for that member}, built in the survey loop
@@ -2577,6 +2954,13 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     sdir.mkdir(parents=True, exist_ok=True)
     ogdir = out / "pages" / "og"
     draw_cards = _og_available()
+    # A missing renderer is a BUILD failure wherever there is a card to draw: gated on
+    # importability alone the loss was silent, every page falling back to the portal's root card
+    # while the build still returned 0. A corpus with no surveys draws no card and still builds.
+    if surveys_meta and not draw_cards:
+        raise RuntimeError("the link-preview card renderer (Pillow) is not importable; a corpus "
+                           "with surveys cannot ship pages whose previews fall back to the "
+                           "portal's root card")
     if draw_cards:
         ogdir.mkdir(parents=True, exist_ok=True)
     for label in sorted(surveys_meta):
@@ -2609,19 +2993,14 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             years = _survey_years(survey_docs.get(slug), smeta)
             period_line = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
                            if pmin is not None and pmax is not None else "")
-            dims = ""
-            if points and len(points) > 1:
-                lons = [pt[0] for pt in points]
-                lats = [pt[1] for pt in points]
-                dkm_x = (max(lons) - min(lons)) * 111 * 0.83
-                dkm_y = (max(lats) - min(lats)) * 111
-                dims = f"about {dkm_x:.0f} x {dkm_y:.0f} km"
             cardpath = ogdir / f"{slug}.png"
-            _og_card(cardpath,
+            _og_card(cardpath, kind="SURVEY",
                      title=((survey_docs.get(slug) or {}).get("title")) or label,
-                     subtitle=f"{len(docs)}-station {tdesc} survey",
+                     # A raster card carries the interpunct as the CHARACTER, never as the entity
+                     # the HTML slots use: nothing here goes through a markup parser.
+                     subtitle=f"{len(docs)} stations · {tdesc}",
                      region_year=" · ".join(x for x in (smeta.get("region"), years) if x),
-                     period_line=period_line, dims_line=dims, points=points)
+                     period_line=period_line, points=points)
             if not cardpath.is_file():
                 raise ValueError(f"survey card {cardpath} was not written; the page must not "
                                  "advertise a card that does not exist")
@@ -2717,15 +3096,16 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             cardpath = cogdir / f"{cid}.png"
             n_st = int(coll.get("n_stations") or 0)
             if _og_collection_card(
-                    cardpath,
+                    cardpath, kind="COLLECTION",
                     title=coll.get("title") or cid,
                     # A raster card carries the interpunct as the CHARACTER, never as the entity
                     # the HTML slots use: nothing here goes through a markup parser.
                     facts_line=" · ".join(x for x in (_plural(len(members), "survey"),
                                                       _plural(n_st, "station") if n_st else "")
                                           if x),
-                    taxonomy_line=" · ".join(str(x) for x in (coll.get("type"),
-                                                              coll.get("status")) if x),
+                    taxonomy_line=" · ".join(str(x).upper() for x in (coll.get("type"),
+                                                                      coll.get("status")) if x),
+                    coverage_line=_collection_coverage(coll),
                     member_labels=[lbl for lbl, _s in members],
                     member_points=member_points):
                 if not cardpath.is_file():
@@ -2753,11 +3133,31 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             "member_labels": [lbl for lbl, _s in members], "member_points": member_points})
 
     # The two HUB pages, last: they are views over the rows the loops above just built, so they
-    # can never advertise a survey or collection this build did not write a page for.
+    # can never advertise a survey or collection this build did not write a page for. Their cards
+    # come first, on the rule the entity cards follow, and their counts are summed from those same
+    # rows rather than stated anywhere: a corpus that grows renders its own numbers.
+    hub_counts = {
+        "surveys": " · ".join(x for x in (
+            _plural(len(index_rows), "survey"),
+            _plural(sum(int(r.get("n_stations") or 0) for r in index_rows), "station")) if x),
+        "collections": _plural(len(coll_index_rows), "collection"),
+    }
+    hub_og: dict = {}
+    if draw_cards:
+        for name, kind, title in _HUB_CARDS:
+            cardpath = ogdir / f"{name}.png"
+            _og_hub_card(cardpath, kind=kind, title=title, lines=_HUB_CARD_LINES[name],
+                         counts_line=hub_counts[name])
+            if not cardpath.is_file():
+                raise ValueError(f"hub card {cardpath} was not written; the page must not "
+                                 "advertise a card that does not exist")
+            hub_og[name] = f"{base}/data/pages/og/{name}.png"
     (sdir / "index.html").write_text(
-        surveys_index_page(rows=index_rows, base=base, build=build), encoding="utf-8")
+        surveys_index_page(rows=index_rows, base=base, build=build,
+                           og_image=hub_og.get("surveys")), encoding="utf-8")
     n += 1
     (cdir / "index.html").write_text(
-        collections_index_page(rows=coll_index_rows, base=base, build=build), encoding="utf-8")
+        collections_index_page(rows=coll_index_rows, base=base, build=build,
+                               og_image=hub_og.get("collections")), encoding="utf-8")
     n += 1
     return n
