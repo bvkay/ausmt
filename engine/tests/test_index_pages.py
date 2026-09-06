@@ -990,26 +990,25 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
 
 # The three icon paths every emitted page links, in the order the head states them. The root icon is
 # first because a browser that reads no SVG icon link asks the site root for that name and takes the
-# first answer it gets. The version query is each file's own content hash, written into this module's
-# source by portal/tools/gen_brand.py and held against the real files by the portal's own pin; what
-# is held HERE is the shape, which is all the engine tree can see.
+# first answer it gets. No href carries a query: the icon URLs are stable by rule and the edge
+# revalidates their bytes; what is held HERE is the shape, which is all the engine tree can see.
 _ICON_PATHS = ("/favicon.ico", "/vendor/favicon.svg", "/vendor/brand/ausmt-icon-180.png")
-_ICON_LINK = re.compile(r'<link rel="(icon|apple-touch-icon)" href="([^"?]+)\?v=([0-9a-f]{8})"')
+_ICON_LINK = re.compile(r'<link rel="(icon|apple-touch-icon)" href="([^"?]+)"')
 
 
 def test_every_page_kind_links_the_favicon_and_the_app_icon(built):
     """Every entity page asks for /favicon.ico on every visit, so the head names it and the site root
-    answers it. FAILS IF a page kind loses a link, states the three in a different order, drops the
-    version query that lets a regenerated icon reach a cached reader, or points an icon at anything
+    answers it. FAILS IF a page kind loses a link, states the three in a different order, gains a
+    query on an icon href, or points an icon at anything
     but a same-origin portal path (an absolute URL here would be an external fetch on 2,655
     documents, which is exactly what this tier forbids)."""
     for rel in _kinds(built):
         head = (built / "pages" / rel).read_text(encoding="utf-8").split("</head>", 1)[0]
         found = _ICON_LINK.findall(head)
-        assert [path for _rel, path, _v in found] == list(_ICON_PATHS), (
-            f"{rel}: the head must link {list(_ICON_PATHS)} in that order, each with a version "
-            f"query; got {found}")
-        assert [rel_ for rel_, _p, _v in found] == ["icon", "icon", "apple-touch-icon"], (
+        assert [path for _rel, path in found] == list(_ICON_PATHS), (
+            f"{rel}: the head must link {list(_ICON_PATHS)} in that order, each without a query; "
+            f"got {found}")
+        assert [rel_ for rel_, _p in found] == ["icon", "icon", "apple-touch-icon"], (
             f"{rel}: the root icon and the SVG are rel=icon and the 180 px app icon is the "
             f"apple-touch-icon; got {found}")
         hrefs = re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', head)

@@ -141,10 +141,9 @@ def test_the_raster_icons_are_generated_from_named_constants():
 
 
 # EVERY SURFACE LINKS THE SAME THREE ICONS, IN THE SAME FORM. The static tier and the emitted pages
-# state one block, root-absolute so a document served at /surveys/<slug> resolves it, and each href
-# carries the eight hex digits its own file's bytes hash to. The version query is what reaches a
-# returning visitor: /vendor/* is served with a thirty day cache, so a regenerated icon under an
-# unchanged URL is answered from that cache and the old mark stays in the tab.
+# state one block, root-absolute so a document served at /surveys/<slug> resolves it, and no href
+# carries a query: a search engine keeps the icon URL it found on the home page, so the URLs stay
+# stable and the edge revalidates the bytes (deploy/docker/caddy/Caddyfile, @iconAssets).
 SHIPPED_PAGES = CHROME_PAGES + ("404.html",)
 ICON_FILES = {
     "/favicon.ico": ROOT / "favicon.ico",
@@ -153,27 +152,21 @@ ICON_FILES = {
 }
 
 
-def _version(href):
-    """The generator's own picture hash of the COMMITTED file the href names."""
-    ns = _tool_namespace()
-    return ns["picture_digest"](href, (ROOT / href.lstrip("/")).read_bytes())
-
-
 
 
 def _icon_block(sep="\n"):
     """The three icon links, in the declared order and form, at today's content hashes."""
     return sep.join((
-        f'<link rel="icon" href="/favicon.ico?v={_version("/favicon.ico")}" sizes="any">',
-        f'<link rel="icon" href="/vendor/favicon.svg?v={_version("/vendor/favicon.svg")}"'
+        '<link rel="icon" href="/favicon.ico" sizes="any">',
+        '<link rel="icon" href="/vendor/favicon.svg"'
         ' type="image/svg+xml">',
         '<link rel="apple-touch-icon" href="/vendor/brand/ausmt-icon-180.png'
-        f'?v={_version("/vendor/brand/ausmt-icon-180.png")}">',
+        '">',
     ))
 
 
 @pytest.mark.parametrize("name", SHIPPED_PAGES)
-def test_every_shipped_page_carries_the_versioned_icon_block(name):
+def test_every_shipped_page_carries_the_stable_icon_block(name):
     """FAILS IF a page loses an icon link, keeps an unversioned href, carries a stale hash, or writes
     the three in a different order or a relative form. 404.html is in scope with the rest: it is the
     document a browser lands on for any unknown path, and a relative href there resolves against that
@@ -193,7 +186,7 @@ def test_no_surface_links_a_mask_icon(name):
     assert "mask-icon" not in text, f"{name}: no surface may link a pinned-tab mask icon"
 
 
-def test_the_generated_pages_link_the_same_versioned_block_same_origin():
+def test_the_generated_pages_link_the_same_stable_block_same_origin():
     """FAILS IF the pages' shell stops emitting the block, emits it anywhere but the portal's own
     origin, or drifts from the static tier's copy. The hrefs are absolute because a page served at
     /surveys/<slug> cannot resolve a relative vendor path."""
@@ -209,38 +202,6 @@ def test_the_generated_pages_link_the_same_versioned_block_same_origin():
             f"an icon href is same-origin only; {href} is not")
 
 
-def test_the_version_query_is_the_hash_of_the_file_it_names():
-    """FAILS IF a version query stops being the picture hash of the file actually served at that path,
-    read back from the committed bytes. A query that is any other token still busts a cache once and
-    then lies: the next regeneration leaves it unchanged and the stale icon comes back. The hash is of
-    the decoded picture, not the encoding, so CI and a checkout agree whatever their PNG encoder does."""
-    for name in SHIPPED_PAGES + ("_pages.py",):
-        text = (PAGES_PY if name == "_pages.py" else ROOT / name).read_text(encoding="utf-8")
-        for href, ver in re.findall(
-                r'<link rel="(?:icon|apple-touch-icon)" href="([^"?]+)\?v=([^"]+)"', text):
-            assert href in ICON_FILES, f"{name}: {href} is not one of the three declared icons"
-            assert ver == _version(href), (
-                f"{name}: {href} carries v={ver}, but that file's picture hashes to {_version(href)}")
-
-
-def test_the_drift_gate_fails_on_a_stale_version_query():
-    """FAILS IF the generator does not own the version queries. A hash written by hand goes stale the
-    first time an icon is regenerated, and the whole point of the query is that it cannot."""
-    target = ROOT / "index.html"
-    original = target.read_bytes()
-    try:
-        target.write_text(
-            original.decode("utf-8").replace(
-                f'/favicon.ico?v={_version("/favicon.ico")}', "/favicon.ico?v=00000000"),
-            encoding="utf-8")
-        r = subprocess.run([sys.executable, str(TOOL), "--check"], capture_output=True,
-                           text=True, encoding="utf-8", cwd=str(REPO))
-        assert r.returncode == 1, \
-            f"the gate must fail on a stale version query, it returned {r.returncode}"
-        assert "index.html" in r.stdout + r.stderr, \
-            f"the gate must name the page that drifted:\n{r.stdout}\n{r.stderr}"
-    finally:
-        target.write_bytes(original)
 
 
 def test_no_web_manifest_was_smuggled_in():
@@ -341,3 +302,13 @@ def test_two_runs_of_the_generator_write_the_same_root_icon():
         "two renders of the root icon must draw the same frames"
     assert picture(FAVICON_ICO.read_bytes()) == picture(ns["ico_bytes"]()), \
         "the committed root icon must draw the frames the generator renders today"
+
+
+@pytest.mark.parametrize("name", SHIPPED_PAGES + ("_pages.py",))
+def test_no_icon_href_carries_a_version_query(name):
+    """A search engine crawls a favicon only when it crawls the home page and keeps the URL it found,
+    so the icon URLs stay stable and the edge revalidates their bytes (deploy/docker/caddy/Caddyfile,
+    @iconAssets). FAILS IF a query string comes back on any icon href on any surface."""
+    text = (PAGES_PY if name == "_pages.py" else ROOT / name).read_text(encoding="utf-8")
+    for href in re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', text):
+        assert "?" not in href, f"{name}: {href} carries a query; icon URLs are stable by rule"

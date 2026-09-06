@@ -62,3 +62,21 @@ def test_both_listeners_force_download_identically():
     first = matchers[0]
     for other in matchers[1:]:
         assert other == first, f"listener matchers diverged: {first} vs {other}"
+
+
+def test_the_icon_urls_are_stable_and_revalidate():
+    """A search engine crawls a favicon only when it crawls the home page and keeps the URL it found,
+    so an icon URL never carries a version query; instead the three icon paths revalidate on every
+    use while the rest of vendor/ keeps its thirty-day cache, on BOTH listeners. FAILS IF the icons
+    fall back under the long-lived vendor rule, or if the root icon stops revalidating."""
+    text = _BOX_CADDY.read_text(encoding="utf-8")
+    vendor_blocks = re.findall(r"@vendorAssets \{(.*?)\n\t\}", text, re.S)
+    assert len(vendor_blocks) == 2, "one long-lived vendor rule per listener"
+    for block in vendor_blocks:
+        assert "not path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png" in block, \
+            "the long-lived vendor rule must exclude the icon paths"
+    assert text.count("@iconAssets path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png") == 2
+    assert text.count('header @iconAssets Cache-Control "no-cache"') == 2
+    for block in re.findall(r"@revalidate \{(.*?)\n\t\}", text, re.S):
+        assert "not path /vendor/*" in block, \
+            "the root icon revalidates under the default rule, which excludes only vendor/, gateway and basemap"
