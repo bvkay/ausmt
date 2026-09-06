@@ -1587,3 +1587,28 @@ def test_a_hub_card_stays_inside_the_preview_fetchers_budget(built):
         assert card.stat().st_size <= pages._HUB_CARD_BUDGET, (
             f"{name}: the hub card weighs {card.stat().st_size:,} bytes against the "
             f"{pages._HUB_CARD_BUDGET:,} a preview fetcher is asked to pay")
+
+
+def test_a_build_with_surveys_refuses_to_ship_previews_it_could_not_draw(tmp_path, monkeypatch):
+    """The renderer is a build requirement, not an optional extra.
+
+    Gated on importability alone, a lost Pillow made every card vanish, every page fall back to the
+    portal's hand-made root card and the build still return 0, so the whole preview surface could
+    regress into a deployment without one failing check. A corpus that has surveys to draw now
+    stops the build instead. A corpus with none has no card to draw and still builds: that is the
+    escape hatch a machine without Pillow needs, and it is what the importability gate is for.
+
+    FAILS IF a corpus with surveys builds without its renderer, or if an empty corpus refuses."""
+    pages = _pages_module()
+    monkeypatch.setitem(sys.modules, "PIL", None)
+    assert pages._og_available() is False, "the renderer must actually be out of reach here"
+    with pytest.raises(RuntimeError):
+        pages.emit_pages(tmp_path / "with", BASE, surveys_meta={"S": {"slug": "s"}},
+                         survey_docs={}, station_docs={}, collections={}, bundle_formats={},
+                         survey_extent={}, survey_coll={})
+    n = pages.emit_pages(tmp_path / "without", BASE, surveys_meta={}, survey_docs={},
+                         station_docs={}, collections={}, bundle_formats={}, survey_extent={},
+                         survey_coll={})
+    assert n == 2, f"a corpus with no surveys still writes its two hub pages, got {n}"
+    assert not (tmp_path / "without" / "pages" / "og").exists(), \
+        "no card tree is written where no card can be drawn"

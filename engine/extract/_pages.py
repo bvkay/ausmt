@@ -20,9 +20,10 @@ render ONLY the levels the served register carries. NO em/en dashes and NO tick 
 numeric ranges take a spaced hyphen, absent cells are plain hyphens, and availability is stated as
 data (sizes).
 
-Per-survey AND per-collection link-preview cards (og:image) are rendered when Pillow is importable;
-without it every entity page falls back to the portal's root card. Both paths emit the og/twitter
-tags, and a page advertises a card only where the emitter has actually written that file.
+Per-survey AND per-collection link-preview cards (og:image) are rendered with Pillow, which a
+corpus with surveys REQUIRES: the emitter refuses to build one without it rather than shipping
+pages whose previews all fall back to the portal's root card. A corpus with no surveys draws no
+card and builds without it. A page advertises a card only where the emitter has written that file.
 
 Structured data is emitted per page kind: the entity node (Dataset) first where a page has one,
 then a BreadcrumbList matching the visible crumb. Station pages carry neither, because they are
@@ -2228,6 +2229,8 @@ def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
 # --------------------------------------------------------------------------- og cards (Pillow)
 
 def _og_available() -> bool:
+    """Whether the card renderer is reachable. A corpus with surveys REQUIRES it and the emitter
+    refuses without it; this gate is what lets a corpus with no cards to draw still build."""
     try:
         import PIL  # noqa: F401
         return True
@@ -2940,6 +2943,15 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     sdir.mkdir(parents=True, exist_ok=True)
     ogdir = out / "pages" / "og"
     draw_cards = _og_available()
+    # A missing renderer is a BUILD failure wherever there is a card to draw. Gated on
+    # importability alone it was silent: every card vanished, every page fell back to the portal's
+    # hand-made root card and the build still returned 0, so the whole preview surface could
+    # regress into a deployment with nothing failing. A corpus with no surveys draws no card and
+    # still builds, which is what a machine without Pillow needs.
+    if surveys_meta and not draw_cards:
+        raise RuntimeError("the link-preview card renderer (Pillow) is not importable; a corpus "
+                           "with surveys cannot ship pages whose previews fall back to the "
+                           "portal's root card")
     if draw_cards:
         ogdir.mkdir(parents=True, exist_ok=True)
     for label in sorted(surveys_meta):
