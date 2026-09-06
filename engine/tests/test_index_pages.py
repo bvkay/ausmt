@@ -1224,6 +1224,41 @@ def test_every_page_kind_names_the_site_it_belongs_to(built):
             f"{rel}: the page must name the site it belongs to"
 
 
+def test_every_page_kind_states_its_preview_in_the_twitter_vocabulary_too(built):
+    """X/Twitter, Slack and Teams read the twitter:* names before falling back to og:*, and a
+    consumer that reads only the twitter namespace finds a card with an image and no title. The
+    three values are MIRRORS: they are emitted from the same strings the og tags carry, so a title
+    that changes on one surface cannot stay stale on the other.
+
+    FAILS IF a page kind carries og:title, og:description or og:image without its twitter twin, or
+    if a twin differs from the og value by a single character."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        for name in ("title", "description", "image"):
+            og = re.findall(rf'<meta property="og:{name}" content="([^"]*)">', page)
+            tw = re.findall(rf'<meta name="twitter:{name}" content="([^"]*)">', page)
+            assert tw == og, f"{rel}: twitter:{name} must mirror og:{name}, got {tw} vs {og}"
+        assert '<meta name="twitter:card" content="summary_large_image">' in page, \
+            f"{rel}: the card type stays declared"
+
+
+def test_a_page_with_no_description_states_none_in_either_vocabulary(tmp_path):
+    """Absent means absent on both surfaces at once. A page whose record carries no summary must
+    not ship an empty og:description and a populated twitter:description, or the two vocabularies
+    would disagree about whether the page has a summary.
+
+    FAILS IF either description tag survives an absent description, or if one goes and one stays."""
+    pages = _pages_module()
+    page = pages.collection_page(cid="c", coll={"title": "Bare"}, member_slugs=[],
+                                 member_smeta=[], base="https://x.example")
+    assert 'property="og:description"' not in page and 'name="twitter:description"' not in page, \
+        "neither vocabulary states a summary the record does not carry"
+    assert '<meta property="og:title" content="Bare - Australian magnetotelluric data - AusMT">' \
+        in page, "the title is still stated on both surfaces"
+    assert '<meta name="twitter:title" content="Bare - Australian magnetotelluric data - AusMT">' \
+        in page
+
+
 def test_the_indexable_page_kinds_carry_the_trail_back_to_the_root(built):
     """A BreadcrumbList is what turns a bare URL in a search result into a labelled path, and the
     entity pages are the ones a reader arrives at cold. The markup matches the VISIBLE crumb word

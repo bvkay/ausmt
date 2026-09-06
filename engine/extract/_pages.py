@@ -808,6 +808,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     # document. Every og description below rides the same value, so the two can never disagree.
     desc_meta = f'<meta name="description" content="{_e(description)}">\n' if description else ""
     og_desc = f'<meta property="og:description" content="{_e(description)}">\n' if description else ""
+    tw_desc = f'<meta name="twitter:description" content="{_e(description)}">\n' if description else ""
     # Link previews: crawlers resolve nothing relative, so og:url/og:image are absolute.
     image = og_image or (f"{base}/vendor/social-card.png" if base else None)
     og = ""
@@ -821,7 +822,14 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
               f"{og_desc}"
               f'<meta property="og:url" content="{_e(canonical)}">\n'
               f'<meta property="og:image" content="{_e(image)}">\n'
-              f'<meta name="twitter:card" content="summary_large_image">\n')
+              # X, Slack and Teams read the twitter namespace before falling back to og:*, and a
+              # consumer that reads only that namespace found an image with no title beside it. The
+              # three mirrors are spent from the SAME strings the og tags above take, in this one
+              # block, so a title or a summary cannot go stale on one surface and not the other.
+              f'<meta name="twitter:card" content="summary_large_image">\n'
+              f'<meta name="twitter:title" content="{_e(title)}">\n'
+              f"{tw_desc}"
+              f'<meta name="twitter:image" content="{_e(image)}">\n')
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
