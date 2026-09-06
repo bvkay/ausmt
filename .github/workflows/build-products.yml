@@ -273,6 +273,7 @@ jobs:
             tests/test_mini_yaml_parity.py \
             tests/test_index_pages.py \
             tests/test_entity_pages.py \
+            tests/test_og_cards.py \
             tests/test_sitemap_lastmod.py \
             tests/test_half_coordinate_guard.py \
             tests/test_coord_resolution_guard.py \

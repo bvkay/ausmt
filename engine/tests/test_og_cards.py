@@ -52,6 +52,7 @@ sys.path.insert(0, str(REPO / "extract"))
 sys.path.insert(0, str(REPO))
 import build_portal  # noqa: E402
 
+_WORKFLOW = REPO.parent / ".github" / "workflows" / "build-products.yml"
 SAMPLE_EDIS = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
 BASE = "https://ausmt.example.test"
 
@@ -1612,3 +1613,20 @@ def test_a_build_with_surveys_refuses_to_ship_previews_it_could_not_draw(tmp_pat
     assert n == 2, f"a corpus with no surveys still writes its two hub pages, got {n}"
     assert not (tmp_path / "without" / "pages" / "og").exists(), \
         "no card tree is written where no card can be drawn"
+
+
+@pytest.mark.skipif(not _WORKFLOW.is_file(),
+                    reason="engine image build: workflow tree not shipped "
+                           "(designed topology; the CI guards are pinned from the checkout workflows)")
+def test_the_card_pins_run_on_a_pull_request():
+    """The PR gate enumerates its test files by name, so a file that is not listed runs only on a
+    push to main and on the image build. This file holds the whole card surface: the panel
+    geometry, the column, the two lockups, the kind label, the counts the hubs state and the refusal
+    a build makes when it cannot draw. A regression in any of those reaches a reviewer as a rendered
+    card, which is exactly what nobody re-renders while reading a diff."""
+    steps = re.split(r"\n(?=      - name: )", _WORKFLOW.read_text(encoding="utf-8"))
+    subset = [s for s in steps if "PR gate subset" in s.split("\n")[0]]
+    assert len(subset) == 1, [s.split("\n")[0] for s in steps]
+    listed = set(re.findall(r"tests/(test_\w+\.py)", subset[0]))
+    assert Path(__file__).name in listed, \
+        f"{Path(__file__).name} is not in the PR-gate subset, which lists {len(listed)} files"
