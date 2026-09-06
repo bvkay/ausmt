@@ -2223,10 +2223,17 @@ _CARD_TITLE_Y = 168
 # Where the block below the title starts when the title leaves room for it, so a card whose title
 # fits on one line keeps the baselines the design was drawn on whatever size that line landed at.
 _CARD_BLOCK_FLOOR = 268
-# The line the block may not cross. The address and the AuScope lockup close the column on fixed
-# lines, and a block that ran into them would set type over type, so a value that does not fit above
-# this line goes unset, on the same rule as a value the survey never disclosed.
-_CARD_BLOCK_CEILING = 452
+# The clear space the block keeps above the address's own first ink row. The address and the AuScope
+# lockup close the column on fixed lines, and a block set up against them reads as one run of type
+# rather than as a signature under a block.
+_CARD_BLOCK_CLEAR = 16
+# The block's fit ladder, as (type scale, leading scale) in the order the column gives things up: a
+# value the survey disclosed is never discarded to make room, so the block closes its leading first
+# and steps its type down only once the leading has nowhere left to go. The last pair holds the most
+# a card can carry (three rows, each wrapped to two lines, under the tallest title the ladder sets)
+# clear of the address, so the walk always has an answer.
+_CARD_BLOCK_FITS = ((1.0, 1.0), (1.0, 0.9), (1.0, 0.8),
+                    (0.9, 0.9), (0.9, 0.8), (0.8, 0.8), (0.7, 0.8))
 # The card's flat field: the root card artwork's own ground, so the three families a link preview
 # can land on read at one brightness rather than as two slightly different dark blues.
 _CARD_GROUND = (7, 22, 47)
@@ -2403,44 +2410,96 @@ def _card_lines(d, text, font, width, max_lines):
     return lines[:max_lines] or [""], whole
 
 
-def _card_title_block(d, title, width, max_lines):
-    """(size, lines) for a title inside a declared column.
+def _card_title_options(d, title, width, max_lines):
+    """Every (size, lines) the whole title fits in, in the order the design prefers them.
 
     The ladder is walked ONE LINE AT A TIME first, so a title that fits on a single line keeps the
     largest type that holds it; only when the smallest size still overflows does the block wrap, and
-    it then walks the ladder again at each line count up to max_lines. A title that is silently cut
-    is a title the card gets wrong, so truncation is the last resort and it is marked."""
+    it then walks the ladder again at each line count up to max_lines. The whole list is returned
+    rather than the first entry, so the column below can take a later step when the block under the
+    title has no room left. A title that is silently cut is a title the card gets wrong, so
+    truncation is the last option and it is marked."""
+    options = []
     for lines_allowed in range(1, max_lines + 1):
         for size in _CARD_TITLE_SIZES:
             lines, whole = _card_lines(d, title, _card_font(size), width, lines_allowed)
             if whole:
-                return size, lines
+                options.append((size, lines))
     size = _CARD_TITLE_SIZES[-1]
     lines, _ = _card_lines(d, title, _card_font(size), width, max_lines)
-    # Nothing in the ladder fits the whole title, so the last line says so rather than ending
-    # mid-thought on a word the reader cannot tell was the last one.
-    return size, lines[:-1] + [f"{lines[-1]} ..."]
+    return options + [(size, lines[:-1] + [f"{lines[-1]} ..."])]
 
 
-def _card_column(d, y, floor_y, rows, width, ink, step):
-    """Draw wrapped rows down the card's text column and return the y the next block starts at.
+def _card_title_block(d, title, width, max_lines):
+    """(size, lines) for a title inside a declared column: the option the ladder prefers."""
+    return _card_title_options(d, title, width, max_lines)[0]
 
-    Every row wraps inside the DECLARED column rather than running past it, and each block starts at
-    the later of where the block above ended and its own slot, so a card whose text all fits keeps
-    the fixed baselines the design was drawn on and a card whose text wraps pushes what follows down
-    instead of overprinting it. An empty value is skipped rather than reserved, so the block is
-    shorter by exactly what the survey did not disclose. Nothing is set past _CARD_BLOCK_CEILING:
-    the two lines that close the column own the space below it."""
+
+@functools.lru_cache(maxsize=1)
+def _card_block_ceiling() -> int:
+    """The row the block's ink may not cross.
+
+    It is the address line's own first ink row less the clear space the column keeps above it, read
+    off the face the address is set in rather than declared, so the block and the line under it
+    cannot drift apart when either of them moves."""
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    top = d.textbbox((0, _CARD_WORDMARK_Y), _CARD_WORDMARK,
+                     font=_card_address_font(_CARD_WORDMARK_SIZE))[1]
+    return top - _CARD_BLOCK_CLEAR
+
+
+def _card_lay_block(d, y, floor_y, rows, width, type_scale, lead_scale):
+    """(each line as (y, text, font, ink), the last row its ink reaches) for one fit notch.
+
+    Every row wraps inside the DECLARED column rather than running past it, and an empty value is
+    skipped rather than reserved, so the block is shorter by exactly what the survey did not
+    disclose. Every value the caller passes arrives whole, wrapped where it must be: what the notch
+    cannot hold is the caller's answer to give, not this one's."""
     y = max(y, floor_y)
-    for text, size in rows:
+    placed, last = [], y
+    for text, size, ink, step in rows:
         if not text:
             continue
-        for line in _card_lines(d, text, _card_font(size), width, 2)[0]:
-            if y + size > _CARD_BLOCK_CEILING:
-                return y
-            d.text((_CARD_MARGIN, y), line, font=_card_font(size), fill=ink)
-            y += step
-    return y
+        font = _card_font(max(1, round(size * type_scale)))
+        leading = max(1, round(step * lead_scale))
+        for line in _card_lines(d, text, font, width, 2)[0]:
+            placed.append((y, line, font, ink))
+            last = max(last, y + d.textbbox((0, 0), line, font=font)[3])
+            y += leading
+    return placed, last
+
+
+def _card_block_fit(d, y, floor_y, rows, width):
+    """(the block's placed lines, the last row its ink reaches) at the largest notch that clears the
+    column's ceiling.
+
+    The measurement is on the glyphs the face sets, not on the nominal point size: a descender
+    reaches below the size, so a block that cleared the arithmetic could still print into the
+    address. When no notch clears it the last one is returned as it stands, because a card that sets
+    every value it was given is worth more than a card that reads tidily by dropping one."""
+    for type_scale, lead_scale in _CARD_BLOCK_FITS:
+        placed, last = _card_lay_block(d, y, floor_y, rows, width, type_scale, lead_scale)
+        if last <= _card_block_ceiling():
+            return placed, last
+    return placed, last
+
+
+def _card_left_column(d, title, rows, width, max_title_lines):
+    """(the title's size, its lines, the block's placed lines) for a card's whole left column.
+
+    The title and the block are chosen TOGETHER, largest title first: a title set as large as it can
+    be while the block below it has nowhere to go would cost the reader a line of science, so the
+    walk offers the block its whole fit ladder under each step of the title's, and the title steps
+    down only when the block has no room left at all. Each block starts at the later of where the
+    title ended and its own slot, so a card whose title fits on one line keeps the baselines the
+    design was drawn on."""
+    for size, lines in _card_title_options(d, title, width, max_title_lines):
+        y = _CARD_TITLE_Y + len(lines) * round(size * 1.18) + 8
+        placed, last = _card_block_fit(d, y, _CARD_BLOCK_FLOOR, rows, width)
+        if last <= _card_block_ceiling():
+            return size, lines, placed
+    return size, lines, placed
 
 
 def _card_tracked(d, xy, text, font, ink, tracking):
@@ -2527,16 +2586,17 @@ def _og_card(path, *, kind, title, subtitle, region_year, period_line, points):
     # The text column, on the declared width. Nothing steps outside it: the title walks the ladder
     # and wraps, and the fact lines wrap, so a long survey name or a three-state region never runs
     # into the footprint panel beside it.
-    tsize, lines = _card_title_block(d, title, _CARD_TEXT_WIDTH, 2)
+    # The period band follows the two fact lines rather than standing on a slot of its own, so a
+    # survey that discloses no region closes the gap instead of leaving a hole in the column.
+    tsize, lines, block = _card_left_column(
+        d, title, ((subtitle, 29, muted, 42), (region_year, 29, muted, 42),
+                   (period_line, 26, (201, 212, 232), 40)), _CARD_TEXT_WIDTH, 2)
     y = _CARD_TITLE_Y
     for ln in lines:
         d.text((_CARD_MARGIN, y), ln, font=font(tsize), fill=text)
         y += round(tsize * 1.18)
-    y = _card_column(d, y + 8, _CARD_BLOCK_FLOOR, ((subtitle, 29), (region_year, 29)),
-                     _CARD_TEXT_WIDTH, muted, 42)
-    # The period band follows the block rather than standing on a slot of its own, so a survey that
-    # discloses no region closes the gap instead of leaving a hole in the column.
-    _card_column(d, y, y, ((period_line, 26),), _CARD_TEXT_WIDTH, (201, 212, 232), 40)
+    for by, line, bfont, bink in block:
+        d.text((_CARD_MARGIN, by), line, font=bfont, fill=bink)
     _card_address_line(d)
     _card_auscope_lockup(img)
     img.save(path, "PNG", optimize=True)
@@ -2603,15 +2663,17 @@ def _og_collection_card(path, *, kind, title, facts_line, taxonomy_line, member_
     # ---- the text column, stepped down until the WHOLE title fits ----
     _card_ausmt_lockup(img, d)
     _card_kind_label(d, kind)
-    tsize, lines = _card_title_block(d, title, _COLL_CARD_TEXT_WIDTH, 3)
+    # The survey card's own two fact slots, at its scale: a single-line title lands on the same two
+    # baselines there, so the two families read as one card design.
+    tsize, lines, block = _card_left_column(
+        d, title, ((facts_line, 29, muted, 42), (taxonomy_line, 29, muted, 42)),
+        _COLL_CARD_TEXT_WIDTH, 3)
     y = _CARD_TITLE_Y
     for ln in lines:
         d.text((_CARD_MARGIN, y), ln, font=_card_font(tsize), fill=text)
         y += round(tsize * 1.18)
-    # The survey card's own two fact slots, at its scale: a single-line title lands on the same two
-    # baselines there, so the two families read as one card design.
-    _card_column(d, y + 8, _CARD_BLOCK_FLOOR, ((facts_line, 29), (taxonomy_line, 29)),
-                 _COLL_CARD_TEXT_WIDTH, muted, 42)
+    for by, line, bfont, bink in block:
+        d.text((_CARD_MARGIN, by), line, font=bfont, fill=bink)
     _card_address_line(d)
     _card_auscope_lockup(img)
     img.save(path, "PNG", optimize=True)

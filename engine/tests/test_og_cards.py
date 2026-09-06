@@ -59,9 +59,10 @@ _CORNER_REGION = (0, 0, 400, 110)
 # The card's three text inks. A pixel of any of them past the declared column edge is type that has
 # crossed into the map panel, which is the failure the column rule exists to prevent.
 _TEXT_INKS = ((255, 255, 255), (143, 163, 176), (201, 212, 232), (150, 165, 195))
-# The block's fact-line ink, so a pin can render the line it is looking for in the ink the card sets
-# it in.
+# The block's fact-line inks, so a pin can render the line it is looking for in the ink the card
+# sets it in.
 _MUTED_INK = (143, 163, 176)
+_PERIOD_INK = (201, 212, 232)
 
 
 def _pages_module():
@@ -390,7 +391,7 @@ def test_the_survey_cards_identity_line_counts_stations_and_names_the_type(built
     for card in cards:
         with Image.open(card) as im:
             img = im.convert("RGB")
-        rows = (pages._CARD_TITLE_Y, pages._CARD_BLOCK_CEILING)
+        rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
         assert _sets_line(img, stamp, offset, rows) is not None, \
             f"{card.name}: the identity line must count stations"
         assert _sets_line(img, old_stamp, old_offset, rows) is None, \
@@ -409,7 +410,7 @@ def test_no_card_sets_the_extent_line(built):
         "the card takes no extent line any more"
     from PIL import Image, ImageDraw
     stamp, offset = _line_stamp(pages, "about", pages._card_font(26), (201, 212, 232))
-    rows = (pages._CARD_TITLE_Y, pages._CARD_BLOCK_CEILING)
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
     for card in sorted((built / "pages" / "og").rglob("*.png")):
         with Image.open(card) as im:
             img = im.convert("RGB")
@@ -420,6 +421,98 @@ def test_no_card_sets_the_extent_line(built):
                              font=pages._card_font(26), fill=(201, 212, 232))
     assert _sets_line(bad, stamp, offset, rows) == 300, \
         "the extent scan is vacuous unless a card that sets that line fails it"
+
+
+def test_a_disclosed_value_is_never_dropped_to_make_room(tmp_path):
+    """A value the card was handed is a value the reader gets, whatever room the block has left.
+
+    The strings are a corpus survey's own: a title that holds two lines, a geography line that wraps
+    and a period band whose page discloses it. Every line is read as GLYPHS off the rendered card in
+    the ink and at the size the card sets it, so a block that made room by discarding its last row,
+    or by stopping a wrapped value after its first line, fails here. The type sizes are the
+    declared ones, because the column closes its leading before it steps its type down.
+
+    The same card drawn without the period band must set none, so the pin cannot be answered by a
+    card that sets every line whether or not it was given one."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    strings = dict(title="Hanekup Eastern Queensland 2003", subtitle="33 stations · GDS",
+                   region_year="Queensland, Northern Territory · 2003")
+    pts = [(140.0 + 0.2 * i, -22.0 - 0.1 * i, "mt") for i in range(33)]
+    card, bare = tmp_path / "disclosed.png", tmp_path / "undisclosed.png"
+    pages._og_card(card, kind="SURVEY", period_line="16 - 1,024 s", points=pts, **strings)
+    pages._og_card(bare, kind="SURVEY", period_line="", points=pts, **strings)
+    with Image.open(card) as im:
+        img = im.convert("RGB")
+    with Image.open(bare) as im:
+        without = im.convert("RGB")
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    wrapped, whole = pages._card_lines(d, strings["region_year"], pages._card_font(29),
+                                       pages._CARD_TEXT_WIDTH, 2)
+    assert whole and len(wrapped) == 2, \
+        f"the pin is vacuous unless its geography line wraps, got {wrapped}"
+    for line in wrapped:
+        stamp, offset = _line_stamp(pages, line, pages._card_font(29), _MUTED_INK)
+        assert _sets_line(img, stamp, offset, rows) is not None, \
+            f"the card must set {line!r}: a wrapped value arrives whole or not at all"
+    stamp, offset = _line_stamp(pages, "16 - 1,024 s", pages._card_font(26), _PERIOD_INK)
+    assert _sets_line(img, stamp, offset, rows) is not None, \
+        "the card must set the period band this survey disclosed"
+    assert _sets_line(without, stamp, offset, rows) is None, \
+        "a card handed no period band must set none"
+    # Every line above arrived at its declared size, so the room came out of the leading; the title
+    # is the step the ladder preferred, so it did not come out of the title either.
+    block = ((strings["subtitle"], 29, _MUTED_INK, 42),
+             (strings["region_year"], 29, _MUTED_INK, 42), ("16 - 1,024 s", 26, _PERIOD_INK, 40))
+    chosen = pages._card_left_column(d, strings["title"], block, pages._CARD_TEXT_WIDTH, 2)
+    assert chosen[:2] == pages._card_title_block(d, strings["title"], pages._CARD_TEXT_WIDTH, 2), \
+        "the column closes its leading before it steps the title down"
+
+
+def test_the_column_has_a_fit_for_the_most_a_card_can_carry():
+    """The column's walk has to have an answer at the bottom of both its ladders, or the rule that
+    no disclosed value is dropped cannot be kept: three fact rows that each wrap to two lines, under
+    a title long enough to take the ladder's own last resort.
+
+    All six lines are placed, and the last of their INK clears the address's own first row by the
+    clear space the column declares. Measured on the glyphs the face sets rather than on the nominal
+    point sizes, because a descender reaches below the size and a fit chosen on the arithmetic alone
+    would print into the address."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    rows = (("3,236 stations · Broadband and long-period magnetotelluric", 29, _MUTED_INK, 42),
+            ("Queensland, Northern Territory and South Australia · 2016 - 2018", 29,
+             _MUTED_INK, 42),
+            ("0.000122 - 117,029 s across broadband and long-period bands", 26, _PERIOD_INK, 40))
+    for text, size, _ink_, _step in rows:
+        lines, whole = pages._card_lines(d, text, pages._card_font(size),
+                                         pages._CARD_TEXT_WIDTH, 2)
+        assert whole and len(lines) == 2, \
+            f"the pin is vacuous unless {text!r} wraps to two whole lines, got {lines}"
+    title = "Hanekup Eastern Queensland 2003"
+    preferred = pages._card_title_block(d, title, pages._CARD_TEXT_WIDTH, 2)
+    assert len(preferred[1]) == 2 and preferred[0] > pages._CARD_TITLE_SIZES[-1], \
+        f"the pin is vacuous unless the title starts above the ladder's last step, got {preferred}"
+    tsize, tlines, placed = pages._card_left_column(d, title, rows, pages._CARD_TEXT_WIDTH, 2)
+    assert tsize in pages._CARD_TITLE_SIZES and len(tlines) <= 2, \
+        f"the title must land on the ladder inside its two lines, got {tsize} on {len(tlines)}"
+    assert tsize < preferred[0], (
+        "the title has to step down when the block under it has no room left at any notch; it "
+        f"stayed at {tsize}")
+    assert " ".join(tlines) == title, f"the title must still arrive whole, got {tlines}"
+    assert len(placed) == 6, \
+        f"every line of every disclosed row must be placed, got {len(placed)} of 6"
+    last = max(y + d.textbbox((0, 0), line, font=font)[3] for y, line, font, _i in placed)
+    assert last <= pages._card_block_ceiling(), (
+        f"the block's last ink row {last} must clear the column's ceiling "
+        f"{pages._card_block_ceiling()}")
+    address_top = d.textbbox((0, pages._CARD_WORDMARK_Y), pages._CARD_WORDMARK,
+                             font=pages._card_address_font(pages._CARD_WORDMARK_SIZE))[1]
+    assert pages._card_block_ceiling() + pages._CARD_BLOCK_CLEAR <= address_top, (
+        f"the ceiling must keep {pages._CARD_BLOCK_CLEAR} px above the address's first ink row "
+        f"{address_top}")
 
 
 def test_the_block_rebalances_when_the_survey_discloses_no_years_and_no_periods(tmp_path):
@@ -436,7 +529,7 @@ def test_the_block_rebalances_when_the_survey_discloses_no_years_and_no_periods(
     pages._og_card(bare, kind="SURVEY", title="Vulcan", subtitle="2 stations · BBMT",
                    region_year="", period_line="", points=pts)
     band = (0, pages._CARD_TITLE_Y, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH,
-            pages._CARD_BLOCK_CEILING)
+            pages._CARD_WORDMARK_Y)
     _s, full_ink = _ink(full, band)
     _s, bare_ink = _ink(bare, band)
     assert _box(bare_ink)[3] < _box(full_ink)[3], \
@@ -731,7 +824,7 @@ def _column_overrun(pages, path, edge):
     from PIL import Image
     with Image.open(path) as im:
         px = im.convert("RGB").load()
-    return [(x, y) for y in range(pages._CARD_KIND_Y, pages._CARD_BLOCK_CEILING)
+    return [(x, y) for y in range(pages._CARD_KIND_Y, pages._CARD_WORDMARK_Y)
             for x in range(edge + 1, pages._CARD_SIZE[0])
             if px[x, y] in _TEXT_INKS]
 
