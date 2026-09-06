@@ -71,8 +71,15 @@
 	# vendor/ is long-lived (those files change only by deliberate upgrade); everything else this
 	# file server emits revalidates on every use (no-cache; the etags already exist and a 304 is
 	# cheap); /gateway is EXCLUDED so proxied FastAPI responses keep their own headers.
-	@vendorAssets path /vendor/*
+	# The icons are the one exception in vendor/: a search engine crawls a favicon only when it crawls the
+	# home page and keeps the URL it found, so the icon URLs stay stable and their bytes revalidate.
+	@vendorAssets {
+		path /vendor/*
+		not path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png
+	}
 	header @vendorAssets Cache-Control "public, max-age=2592000"
+	@iconAssets path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png
+	header @iconAssets Cache-Control "no-cache"
 	@revalidate {
 		not path /vendor/*
 		not path /gateway /gateway/*
@@ -357,8 +364,15 @@
 
 	# ---- Cache policy: identical to :8080's (see the rationale there). This listener is what the
 	# public actually reaches through the front door, so losing it here is losing it everywhere.
-	@vendorAssets path /vendor/*
+	# The icons are the one exception in vendor/: a search engine crawls a favicon only when it crawls the
+	# home page and keeps the URL it found, so the icon URLs stay stable and their bytes revalidate.
+	@vendorAssets {
+		path /vendor/*
+		not path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png
+	}
 	header @vendorAssets Cache-Control "public, max-age=2592000"
+	@iconAssets path /vendor/favicon.svg /vendor/brand/ausmt-icon-*.png
+	header @iconAssets Cache-Control "no-cache"
 	@revalidate {
 		not path /vendor/*
 		not path /gateway /gateway/*
