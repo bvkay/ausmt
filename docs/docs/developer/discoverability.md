@@ -81,6 +81,29 @@ Every engine-written page declares `og:site_name` = `AusMT`, station pages inclu
 lands on those most often, and a preview card that names the wrong site is wrong wherever it is
 shared.
 
+## What a link preview says
+
+Every page that carries the Open Graph set carries `twitter:title`, `twitter:description` and
+`twitter:image` beside `twitter:card`. X, Slack and Teams read those names before falling back to
+`og:*`, and a consumer reading only that namespace found a card type and an image with no title and
+no summary. The mirrors are emitted from the same strings the og tags take, in one block, so a title
+that changes cannot go stale on one surface and not the other.
+
+The collections hub titles itself `Collections - Australian magnetotelluric data - AusMT` and each
+collection page `<name> - Australian magnetotelluric data - AusMT`. Both name the national holding
+the page belongs to, which is what a search result and a preview print. The surveys hub and the
+survey pages keep their own wording, which names the kind of record the page is.
+
+A collection's preview line is its record's FIRST sentence and nothing after it. Where the record
+carries no description the page emits neither description tag, in either vocabulary: `content=""`
+tells a crawler the page has no summary, where a missing tag lets it build one from the document.
+The JSON-LD node keeps a fallback sentence, because a `Dataset` with no description is an invalid
+item to a search engine.
+
+Survey and station preview lines are bounded at 160 characters, cut at a sentence end where whole
+sentences fit and at a word boundary otherwise, and wear a trailing ellipsis only where text was
+actually dropped.
+
 ## The sitemap's membership rule
 
 `sitemap.xml` is written at the data root and carries, in this order:
@@ -131,6 +154,12 @@ A page is handed its card URL only after the file is on disk. The survey pages u
 from "is Pillow importable", which is a claim about the environment rather than about the file, so a
 failed write shipped an `og:image` that resolved to nothing. A card that was drawn but not written
 now fails the build; a page with no card falls back to the root card.
+
+Pillow is required wherever the corpus has surveys, and the build refuses without it. Gated on
+importability alone the loss was silent: every card vanished, every page fell back to the root card
+and the build still returned 0, so the whole preview surface could regress into a deployment with
+nothing failing. A corpus with no surveys draws no card and builds without Pillow, which is what a
+machine that only needs the products needs.
 
 ### What each card shows
 
