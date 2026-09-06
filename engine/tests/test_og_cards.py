@@ -51,14 +51,17 @@ BASE = "https://ausmt.example.test"
 # The address's own band, and the AuScope lockup's band under it. Each is read across the card's
 # left column only, out to the edge the family declares, so the map panel beside them can never
 # answer for either.
-_ADDRESS_ROWS = (440, 534)
+_ADDRESS_ROWS = (452, 534)
 _LOCKUP_ROWS = (535, 630)
 # The top-left corner, wide enough to catch a lockup that drifted off the margin and short enough to
 # stop above the kind label under it. Nothing but the AusMT lockup may put ink here.
 _CORNER_REGION = (0, 0, 400, 110)
 # The card's three text inks. A pixel of any of them past the declared column edge is type that has
 # crossed into the map panel, which is the failure the column rule exists to prevent.
-_TEXT_INKS = ((255, 255, 255), (143, 163, 176), (201, 212, 232))
+_TEXT_INKS = ((255, 255, 255), (143, 163, 176), (201, 212, 232), (150, 165, 195))
+# The block's fact-line ink, so a pin can render the line it is looking for in the ink the card sets
+# it in.
+_MUTED_INK = (143, 163, 176)
 
 
 def _pages_module():
@@ -143,6 +146,37 @@ def _ink(path, region):
 def _box(pts):
     return (min(p[0] for p in pts), min(p[1] for p in pts),
             max(p[0] for p in pts), max(p[1] for p in pts))
+
+
+def _line_stamp(pages, text, font, ink, tracking=0):
+    """(the glyphs `text` makes on the card's ground, their offset from the draw origin).
+
+    A PNG holds no strings, so a pin that a card SETS a given line has to look for the glyphs that
+    line makes. The stamp is drawn with the emitter's own face, ink and ground at an integer origin,
+    which is how the card draws it, so a match is exact rather than approximate."""
+    from PIL import Image, ImageDraw
+    ref = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
+    rd = ImageDraw.Draw(ref)
+    if tracking:
+        pages._card_tracked(rd, (pages._CARD_MARGIN, 100), text, font, ink, tracking)
+    else:
+        rd.text((pages._CARD_MARGIN, 100), text, font=font, fill=ink)
+    ground = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
+    from PIL import ImageChops
+    bbox = ImageChops.difference(ref, ground).getbbox()
+    assert bbox, f"the stamp for {text!r} carries no ink"
+    return ref.crop(bbox), (bbox[0], bbox[1] - 100, bbox[2] - bbox[0], bbox[3] - bbox[1])
+
+
+def _sets_line(card_img, stamp, offset, rows):
+    """The y the card sets that line's glyphs on, or None. Scanned over `rows` because the line
+    above it may have wrapped and pushed it down."""
+    dx, dy, w, h = offset
+    want = stamp.tobytes()
+    for y in range(rows[0], rows[1]):
+        if card_img.crop((dx, y + dy, dx + w, y + dy + h)).tobytes() == want:
+            return y
+    return None
 
 
 def _line_h():
@@ -279,6 +313,145 @@ def test_the_engine_carries_the_portals_own_card_assets(engine_name, portal_rel)
                     "(designed topology; the vendored mark is pinned from the checkout workflows)")
     assert engine_copy.read_bytes() == portal_copy.read_bytes(), \
         f"{engine_name} and {portal_rel} must be one asset, byte for byte"
+
+
+def test_every_card_names_the_kind_of_thing_it_previews(built):
+    """The card says what the reader has landed on before the title does: a tracked cap label
+    between the lockup and the title, in its own muted ink.
+
+    The label is read as GLYPHS, drawn here with the emitter's own tracked setter, so a card that
+    labelled a collection SURVEY fails. The pin is checked to discriminate on the same line: the two
+    words do not make the same stamp. The band between the lockup and the label is held empty, so a
+    label that drifted up into the lockup's clear space fails here rather than looking tidy."""
+    pages = _pages_module()
+    from PIL import Image
+    font = pages._card_address_font(pages._CARD_KIND_SIZE)
+    stamps = {word: _line_stamp(pages, word, font, pages._CARD_KIND_INK,
+                                pages._CARD_KIND_TRACKING)
+              for word in ("SURVEY", "COLLECTION")}
+    assert stamps["SURVEY"][0].tobytes() != stamps["COLLECTION"][0].tobytes(), \
+        "the label pin is vacuous unless the two words make different glyphs"
+    families = ((sorted((built / "pages" / "og").glob("*.png")), "SURVEY"),
+                (sorted((built / "pages" / "og" / "collections").glob("*.png")), "COLLECTION"))
+    for cards, word in families:
+        assert cards, f"the build must render the cards that carry {word}"
+        stamp, offset = stamps[word]
+        for card in cards:
+            with Image.open(card) as im:
+                img = im.convert("RGB")
+            at = _sets_line(img, stamp, offset, (pages._CARD_KIND_Y, pages._CARD_KIND_Y + 1))
+            assert at == pages._CARD_KIND_Y, \
+                f"{card.name}: the label {word} must be set on the card's own label line"
+            _size, quiet = _ink(card, (0, pages._CARD_CORNER_Y + pages._CARD_CORNER_SIZE + 1,
+                                       400, pages._CARD_KIND_Y))
+            assert not quiet, \
+                f"{card.name}: the lockup's clear space carries ink at {quiet[:3]}"
+
+
+def test_the_survey_cards_identity_line_counts_stations_and_names_the_type(built):
+    """Level 2 of the block is a count of stations and the instrument type, joined by an
+    interpunct, which is the form a reader can scan at preview size.
+
+    Held on the glyphs the card sets rather than on the string the emitter passed, and the count
+    comes from the fixture corpus's own EDI files rather than from a number written here."""
+    pages = _pages_module()
+    from PIL import Image
+    stamp, offset = _line_stamp(pages, f"{len(SAMPLE_EDIS)} stations", pages._card_font(29),
+                                _MUTED_INK)
+    old_stamp, old_offset = _line_stamp(pages, f"{len(SAMPLE_EDIS)}-station",
+                                        pages._card_font(29), _MUTED_INK)
+    assert stamp.tobytes() != old_stamp.tobytes(), \
+        "the pin is vacuous unless the two forms make different glyphs"
+    cards = sorted((built / "pages" / "og").glob("*.png"))
+    assert cards, "the build must render a card per survey"
+    for card in cards:
+        with Image.open(card) as im:
+            img = im.convert("RGB")
+        rows = (pages._CARD_TITLE_Y, pages._CARD_BLOCK_CEILING)
+        assert _sets_line(img, stamp, offset, rows) is not None, \
+            f"{card.name}: the identity line must count stations"
+        assert _sets_line(img, old_stamp, old_offset, rows) is None, \
+            f"{card.name}: the identity line must not compound the count into the type"
+
+
+def test_no_card_sets_the_extent_line(built):
+    """The card lost its extent line: a footprint's kilometres are a number the survey PAGE carries,
+    and on a card they crowd out the period band a reader can actually use.
+
+    FAILS IF any card sets that line again, and the scan is checked to have teeth on the same line
+    against a card drawn with it."""
+    pages = _pages_module()
+    import inspect
+    assert "dims_line" not in inspect.signature(pages._og_card).parameters, \
+        "the card takes no extent line any more"
+    from PIL import Image, ImageDraw
+    stamp, offset = _line_stamp(pages, "about", pages._card_font(26), (201, 212, 232))
+    rows = (pages._CARD_TITLE_Y, pages._CARD_BLOCK_CEILING)
+    for card in sorted((built / "pages" / "og").rglob("*.png")):
+        with Image.open(card) as im:
+            img = im.convert("RGB")
+        assert _sets_line(img, stamp, offset, rows) is None, \
+            f"{card.name}: the extent line is set on this card"
+    bad = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
+    ImageDraw.Draw(bad).text((pages._CARD_MARGIN, 300), "about 118 x 22 km",
+                             font=pages._card_font(26), fill=(201, 212, 232))
+    assert _sets_line(bad, stamp, offset, rows) == 300, \
+        "the extent scan is vacuous unless a card that sets that line fails it"
+
+
+def test_the_block_rebalances_when_the_survey_discloses_no_years_and_no_periods(tmp_path):
+    """Absent means absent: a survey with no years and no period band renders a SHORTER block rather
+    than one with holes in it. Measured on the two cards' own ink, so a blank line reserved for an
+    undisclosed value fails here."""
+    pages = _pages_module()
+    pts = [(133.0, -25.0, "mt"), (140.0, -30.0, "mt")]
+    full = tmp_path / "full.png"
+    bare = tmp_path / "bare.png"
+    pages._og_card(full, kind="SURVEY", title="Vulcan", subtitle="2 stations · BBMT",
+                   region_year="South Australia · 2016 - 2018", period_line="0.005 - 6310 s",
+                   points=pts)
+    pages._og_card(bare, kind="SURVEY", title="Vulcan", subtitle="2 stations · BBMT",
+                   region_year="", period_line="", points=pts)
+    band = (0, pages._CARD_TITLE_Y, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH,
+            pages._CARD_BLOCK_CEILING)
+    _s, full_ink = _ink(full, band)
+    _s, bare_ink = _ink(bare, band)
+    assert _box(bare_ink)[3] < _box(full_ink)[3], \
+        "a survey that discloses less must render a shorter block"
+    rows = sorted({y for _x, y, _c in bare_ink})
+    runs = [r for r in range(1, len(rows)) if rows[r] - rows[r - 1] > 1]
+    assert len(runs) == 1, (
+        "the shorter block is the title and one fact line with nothing between them, "
+        f"found {len(runs) + 1} bands of ink")
+
+
+def test_the_block_never_reaches_into_the_address_or_the_lockup(built, tmp_path):
+    """The two lines that close the column keep their own bands whatever the block above them does.
+
+    FAILS IF a long title plus a wrapped fact line pushes the block down over the address or the
+    lockup; the check has teeth on the same line against a card whose block is drawn past the
+    ceiling."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    for card, edge in ([(c, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH)
+                        for c in sorted((built / "pages" / "og").glob("*.png"))]
+                       + [(c, pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH)
+                          for c in sorted((built / "pages" / "og" / "collections").glob("*.png"))]):
+        slot = _lockup_slot(pages)
+        for rows in (_ADDRESS_ROWS, _LOCKUP_ROWS):
+            _size, ink = _ink(card, (0, rows[0], edge, rows[1]))
+            # The lockup's own slot is the one thing allowed to put white in the lower band.
+            crossed = [p for p in ink if p[2] in _TEXT_INKS
+                       and not (slot[0] <= p[0] <= slot[2] and slot[1] <= p[1] <= slot[3])]
+            assert not crossed, \
+                f"{card.name}: block ink in the band at {rows}, at {crossed[:3]}"
+    bad = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
+    ImageDraw.Draw(bad).text((pages._CARD_MARGIN, _ADDRESS_ROWS[0] + 4), "0.005 - 6310 s",
+                             font=pages._card_font(26), fill=(201, 212, 232))
+    bad.save(tmp_path / "crossed.png", "PNG")
+    _size, ink = _ink(tmp_path / "crossed.png", (0, _ADDRESS_ROWS[0], 536, _ADDRESS_ROWS[1]))
+    assert [p for p in ink if p[2] in _TEXT_INKS], \
+        "the band scan is vacuous unless a block drawn into it fails"
 
 
 def test_the_generated_cards_stand_on_the_root_cards_ground(built):
@@ -501,8 +674,8 @@ def _grid_card(pages, path, alpha=None):
     if alpha is not None:
         pages._CARD_INSET_ALPHA = alpha
     try:
-        pages._og_card(path, title="Grid", subtitle="400 stations", region_year="Test",
-                       period_line="period", dims_line="extent", points=pts)
+        pages._og_card(path, kind="SURVEY", title="Grid", subtitle="400 stations",
+                       region_year="Test", period_line="period", points=pts)
     finally:
         pages._CARD_INSET_ALPHA = saved
     return path
@@ -554,7 +727,8 @@ def _column_overrun(pages, path, edge):
     from PIL import Image
     with Image.open(path) as im:
         px = im.convert("RGB").load()
-    return [(x, y) for y in range(95, 531) for x in range(edge + 1, pages._CARD_SIZE[0])
+    return [(x, y) for y in range(pages._CARD_KIND_Y, pages._CARD_BLOCK_CEILING)
+            for x in range(edge + 1, pages._CARD_SIZE[0])
             if px[x, y] in _TEXT_INKS]
 
 
@@ -611,12 +785,12 @@ def test_the_column_scan_catches_a_title_that_crosses_the_edge(tmp_path):
     from PIL import Image, ImageDraw
     title = "Southwest Western Australia Array registry code 15"
     img = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
-    ImageDraw.Draw(img).text((pages._CARD_MARGIN, 130), title,
+    ImageDraw.Draw(img).text((pages._CARD_MARGIN, pages._CARD_TITLE_Y), title,
                              font=pages._card_font(pages._CARD_TITLE_SIZES[0]), fill=(255, 255, 255))
     bad = tmp_path / "overrun.png"
     img.save(bad, "PNG")
     over = _column_overrun(pages, bad, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH)
-    assert over, "the column scan must catch a title set at 64 px with no column rule applied"
+    assert over, "the column scan must catch a title set at the top of the ladder with no column rule"
 
 
 def test_the_known_offender_fits_the_column_by_stepping_down_and_wrapping(tmp_path):
@@ -626,9 +800,11 @@ def test_the_known_offender_fits_the_column_by_stepping_down_and_wrapping(tmp_pa
     pages = _pages_module()
     from PIL import Image, ImageDraw
     d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    assert pages._CARD_TITLE_SIZES == (70, 57, 48, 40), \
+        f"the title ladder's declared steps moved, now {pages._CARD_TITLE_SIZES}"
     size, lines = pages._card_title_block(d, "Musgraves APY 2016", pages._CARD_TEXT_WIDTH, 2)
     assert lines == ["Musgraves APY 2016"], f"the title must stay on one line, got {lines}"
-    assert size == 44, f"the title steps down to 44 px to hold that line, got {size}"
+    assert size == 48, f"the title steps down to 48 px to hold that line, got {size}"
     region = "South Australia / Western Australia / Northern Territory - 2016 - 2018"
     wrapped, whole = pages._card_lines(d, region, pages._card_font(29), pages._CARD_TEXT_WIDTH, 2)
     assert whole and len(wrapped) == 2, \
@@ -656,9 +832,9 @@ def test_a_collection_with_no_disclosed_positions_gets_no_card(tmp_path):
     rather than about the map. Nothing is written, and the page falls back to the root card."""
     pages = _pages_module()
     card = tmp_path / "empty.png"
-    wrote = pages._og_collection_card(card, title="Empty", facts_line="0 surveys",
-                                      taxonomy_line="", member_labels=["A"],
-                                      member_points={"A": []})
+    wrote = pages._og_collection_card(card, kind="COLLECTION", title="Empty",
+                                      facts_line="0 surveys", taxonomy_line="",
+                                      member_labels=["A"], member_points={"A": []})
     assert wrote is False and not card.exists(), "no positions means no card at all"
 
 
@@ -668,8 +844,9 @@ def test_the_collection_card_keeps_the_whole_title_by_stepping_the_type_down(tmp
     pages = _pages_module()
     long_title = "Australian Lithospheric Architecture Magnetotelluric Project"
     card = tmp_path / "long.png"
-    assert pages._og_collection_card(card, title=long_title, facts_line="14 surveys",
-                                     taxonomy_line="programme", member_labels=["A"],
+    assert pages._og_collection_card(card, kind="COLLECTION", title=long_title,
+                                     facts_line="14 surveys", taxonomy_line="programme",
+                                     member_labels=["A"],
                                      member_points={"A": [(133.0, -25.0), (140.0, -30.0)]})
     from PIL import ImageDraw, Image
     d = ImageDraw.Draw(Image.new("RGB", (10, 10)))

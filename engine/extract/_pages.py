@@ -2208,9 +2208,25 @@ def _og_available() -> bool:
 _CARD_SIZE = (1200, 630)
 _CARD_MARGIN = 60                 # the text margin every card's left column sits on
 _CARD_WORDMARK = "ausmt.auscope.org.au"
-_CARD_WORDMARK_Y = 460
+_CARD_WORDMARK_Y = 470
 _CARD_WORDMARK_SIZE = 34
-_CARD_TITLE_SIZES = (64, 52, 44, 36)
+
+# The kind label between the lockup and the title: it names what the reader has landed on before the
+# title does. Tracked caps, in an ink muted enough to sit under the title without competing with it.
+_CARD_KIND_SIZE = 22
+_CARD_KIND_Y = 138
+_CARD_KIND_TRACKING = 2
+_CARD_KIND_INK = (150, 165, 195)
+
+_CARD_TITLE_SIZES = (70, 57, 48, 40)
+_CARD_TITLE_Y = 168
+# Where the block below the title starts when the title leaves room for it, so a card whose title
+# fits on one line keeps the baselines the design was drawn on whatever size that line landed at.
+_CARD_BLOCK_FLOOR = 268
+# The line the block may not cross. The address and the AuScope lockup close the column on fixed
+# lines, and a block that ran into them would set type over type, so a value that does not fit above
+# this line goes unset, on the same rule as a value the survey never disclosed.
+_CARD_BLOCK_CEILING = 452
 # The card's flat field: the root card artwork's own ground, so the three families a link preview
 # can land on read at one brightness rather than as two slightly different dark blues.
 _CARD_GROUND = (7, 22, 47)
@@ -2412,18 +2428,41 @@ def _card_column(d, y, floor_y, rows, width, ink, step):
     Every row wraps inside the DECLARED column rather than running past it, and each block starts at
     the later of where the block above ended and its own slot, so a card whose text all fits keeps
     the fixed baselines the design was drawn on and a card whose text wraps pushes what follows down
-    instead of overprinting it."""
+    instead of overprinting it. An empty value is skipped rather than reserved, so the block is
+    shorter by exactly what the survey did not disclose. Nothing is set past _CARD_BLOCK_CEILING:
+    the two lines that close the column own the space below it."""
     y = max(y, floor_y)
     for text, size in rows:
         if not text:
             continue
         for line in _card_lines(d, text, _card_font(size), width, 2)[0]:
+            if y + size > _CARD_BLOCK_CEILING:
+                return y
             d.text((_CARD_MARGIN, y), line, font=_card_font(size), fill=ink)
             y += step
     return y
 
 
-def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, points):
+def _card_tracked(d, xy, text, font, ink, tracking):
+    """One line of type with `tracking` px added between letters, and the x it ends at.
+
+    Caps at label size close up on each other, and a label a reader has to resolve letter by letter
+    at preview width is a label that has failed; the letters are set one at a time because a face
+    carries no tracking of its own."""
+    x, y = xy
+    for ch in text:
+        d.text((x, y), ch, font=font, fill=ink)
+        x += d.textlength(ch, font=font) + tracking
+    return x
+
+
+def _card_kind_label(d, kind):
+    """The word for what the card previews, between the lockup and the title."""
+    _card_tracked(d, (_CARD_MARGIN, _CARD_KIND_Y), kind,
+                  _card_address_font(_CARD_KIND_SIZE), _CARD_KIND_INK, _CARD_KIND_TRACKING)
+
+
+def _og_card(path, *, kind, title, subtitle, region_year, period_line, points):
     """One 1200x630 link-preview card in the portal card's design language: footprint dots,
     Australia locator inset, the survey's key numbers."""
     from PIL import Image, ImageDraw
@@ -2484,24 +2523,26 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
         d.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], outline=copper, width=2)
 
     _card_ausmt_lockup(img, d)
+    _card_kind_label(d, kind)
     # The text column, on the declared width. Nothing steps outside it: the title walks the ladder
     # and wraps, and the fact lines wrap, so a long survey name or a three-state region never runs
     # into the footprint panel beside it.
     tsize, lines = _card_title_block(d, title, _CARD_TEXT_WIDTH, 2)
-    y = 130
+    y = _CARD_TITLE_Y
     for ln in lines:
         d.text((_CARD_MARGIN, y), ln, font=font(tsize), fill=text)
         y += round(tsize * 1.18)
-    y = _card_column(d, y + 8, 220, ((subtitle, 29), (region_year, 29)),
+    y = _card_column(d, y + 8, _CARD_BLOCK_FLOOR, ((subtitle, 29), (region_year, 29)),
                      _CARD_TEXT_WIDTH, muted, 42)
-    _card_column(d, y, 330, ((period_line, 26), (dims_line, 26)),
-                 _CARD_TEXT_WIDTH, (201, 212, 232), 40)
+    # The period band follows the block rather than standing on a slot of its own, so a survey that
+    # discloses no region closes the gap instead of leaving a hole in the column.
+    _card_column(d, y, y, ((period_line, 26),), _CARD_TEXT_WIDTH, (201, 212, 232), 40)
     _card_address_line(d)
     _card_auscope_lockup(img)
     img.save(path, "PNG", optimize=True)
 
 
-def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels,
+def _og_collection_card(path, *, kind, title, facts_line, taxonomy_line, member_labels,
                         member_points) -> bool:
     """One 1200x630 link-preview card per collection: the member-coloured footprint the collections
     hub card draws, at raster scale. Returns whether a card was written.
@@ -2561,14 +2602,15 @@ def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels
 
     # ---- the text column, stepped down until the WHOLE title fits ----
     _card_ausmt_lockup(img, d)
+    _card_kind_label(d, kind)
     tsize, lines = _card_title_block(d, title, _COLL_CARD_TEXT_WIDTH, 3)
-    y = 130
+    y = _CARD_TITLE_Y
     for ln in lines:
         d.text((_CARD_MARGIN, y), ln, font=_card_font(tsize), fill=text)
         y += round(tsize * 1.18)
-    # The survey card's subtitle and region slots, at its scale: a single-line title lands on the
-    # same two baselines there, so the two families read as one card design.
-    _card_column(d, y + 8, 220, ((facts_line, 29), (taxonomy_line, 29)),
+    # The survey card's own two fact slots, at its scale: a single-line title lands on the same two
+    # baselines there, so the two families read as one card design.
+    _card_column(d, y + 8, _CARD_BLOCK_FLOOR, ((facts_line, 29), (taxonomy_line, 29)),
                  _COLL_CARD_TEXT_WIDTH, muted, 42)
     _card_address_line(d)
     _card_auscope_lockup(img)
@@ -2654,19 +2696,14 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             years = _survey_years(survey_docs.get(slug), smeta)
             period_line = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
                            if pmin is not None and pmax is not None else "")
-            dims = ""
-            if points and len(points) > 1:
-                lons = [pt[0] for pt in points]
-                lats = [pt[1] for pt in points]
-                dkm_x = (max(lons) - min(lons)) * 111 * 0.83
-                dkm_y = (max(lats) - min(lats)) * 111
-                dims = f"about {dkm_x:.0f} x {dkm_y:.0f} km"
             cardpath = ogdir / f"{slug}.png"
-            _og_card(cardpath,
+            _og_card(cardpath, kind="SURVEY",
                      title=((survey_docs.get(slug) or {}).get("title")) or label,
-                     subtitle=f"{len(docs)}-station {tdesc} survey",
+                     # A raster card carries the interpunct as the CHARACTER, never as the entity
+                     # the HTML slots use: nothing here goes through a markup parser.
+                     subtitle=f"{len(docs)} stations · {tdesc}",
                      region_year=" · ".join(x for x in (smeta.get("region"), years) if x),
-                     period_line=period_line, dims_line=dims, points=points)
+                     period_line=period_line, points=points)
             if not cardpath.is_file():
                 raise ValueError(f"survey card {cardpath} was not written; the page must not "
                                  "advertise a card that does not exist")
@@ -2762,7 +2799,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             cardpath = cogdir / f"{cid}.png"
             n_st = int(coll.get("n_stations") or 0)
             if _og_collection_card(
-                    cardpath,
+                    cardpath, kind="COLLECTION",
                     title=coll.get("title") or cid,
                     # A raster card carries the interpunct as the CHARACTER, never as the entity
                     # the HTML slots use: nothing here goes through a markup parser.
