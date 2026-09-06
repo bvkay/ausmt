@@ -931,7 +931,7 @@ def test_each_card_family_declares_a_column_that_clears_its_map():
     map panel with the pin still green. What has to be pinned is the AIR each column leaves.
 
     The survey column stops 88 px short of the footprint panel's leftmost edge, which is the gutter
-    the design argues for: a 64 px title beside a bordered panel needs to read as space rather than
+    the design argues for: a 70 px title beside a bordered panel needs to read as space rather than
     as a near miss. The collection column gives up width to the enlarged map and keeps exactly
     _CARD_PANEL_AIR, the same air that panel keeps against the card's own edge."""
     pages = _pages_module()
@@ -954,7 +954,7 @@ def test_each_card_family_declares_a_column_that_clears_its_map():
 
 def test_no_card_lets_its_text_cross_its_declared_column_edge(built):
     """The column rule, measured rather than argued. A survey name is whatever the survey is called,
-    and the corpus carries names long enough to run a 64 px title clean across the map panel beside
+    and the corpus carries names long enough to run a 70 px title clean across the map panel beside
     it, so the title steps down the ladder and wraps and the fact lines wrap.
 
     Each family is scanned against ITS OWN declared width, because the collection card gives up
@@ -985,7 +985,7 @@ def test_the_column_scan_catches_a_title_that_crosses_the_edge(tmp_path):
 
 
 def test_the_known_offender_fits_the_column_by_stepping_down_and_wrapping(tmp_path):
-    """The card the column rule was written for. Its title at 64 px and its three-state region line
+    """The card the column rule was written for. Its title at 70 px and its three-state region line
     both once ran across the footprint panel; the title now steps down the ladder to fit on one
     line, and the region wraps to a second rather than crossing the edge."""
     pages = _pages_module()

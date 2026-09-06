@@ -2236,7 +2236,7 @@ _CARD_BLOCK_FITS = ((1.0, 1.0), (1.0, 0.9), (1.0, 0.8),
 # can land on read at one brightness rather than as two slightly different dark blues.
 _CARD_GROUND = (7, 22, 47)
 # The SURVEY card's text column. It stops well short of the map panel's outset edge, because the
-# gutter between a 64 px title and a bordered panel has to read as space rather than as a near miss;
+# gutter between a 70 px title and a bordered panel has to read as space rather than as a near miss;
 # the ladder above steps the type down inside this width, it does not widen the column.
 _CARD_TEXT_WIDTH = 476
 # The map panel's air: what it keeps against the card's right edge, and the gutter it keeps against
@@ -2246,8 +2246,7 @@ _CARD_PANEL_INSET = 16            # the panel frame's outset from the map it hol
 
 # The AusMT mark opening the card's left column, and the height it is drawn at. It is square, so the
 # height is the whole geometry; the pinned export is a whole multiple of it (see gen_brand.py), so
-# the resample is a clean box rather than an arbitrary ratio. The word beside it takes its size, its
-# gap and its ink from the brand file at this height, so no number of the lockup's is restated here.
+# the resample is a clean box rather than an arbitrary ratio.
 _CARD_CORNER_SIZE = 52
 _CARD_CORNER_Y = 44
 
@@ -2452,8 +2451,10 @@ def _card_lay_block(d, y, floor_y, rows, width, type_scale, lead_scale):
 
     Every row wraps inside the DECLARED column rather than running past it, and an empty value is
     skipped rather than reserved, so the block is shorter by exactly what the survey did not
-    disclose. Every value the caller passes arrives whole, wrapped where it must be: what the notch
-    cannot hold is the caller's answer to give, not this one's."""
+    disclose: the period band follows whatever fact lines there were rather than standing on a slot
+    of its own, so a survey that discloses no region closes the gap instead of leaving a hole.
+    Every value the caller passes arrives whole, wrapped where it must be: what the notch cannot
+    hold is the caller's answer to give, not this one's."""
     y = max(y, floor_y)
     placed, last = [], y
     for text, size, ink, step in rows:
@@ -2587,8 +2588,6 @@ def _og_card(path, *, kind, title, subtitle, region_year, period_line, points):
     # The text column, on the declared width. Nothing steps outside it: the title walks the ladder
     # and wraps, and the fact lines wrap, so a long survey name or a three-state region never runs
     # into the footprint panel beside it.
-    # The period band follows the two fact lines rather than standing on a slot of its own, so a
-    # survey that discloses no region closes the gap instead of leaving a hole in the column.
     tsize, lines, block = _card_left_column(
         d, title, ((subtitle, 29, muted, 42), (region_year, 29, muted, 42),
                    (period_line, 26, (201, 212, 232), 40)), _CARD_TEXT_WIDTH, 2)
