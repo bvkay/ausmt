@@ -823,10 +823,9 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
               f"{og_desc}"
               f'<meta property="og:url" content="{_e(canonical)}">\n'
               f'<meta property="og:image" content="{_e(image)}">\n'
-              # X, Slack and Teams read the twitter namespace before falling back to og:*, and a
-              # consumer that reads only that namespace found an image with no title beside it. The
-              # three mirrors are spent from the SAME strings the og tags above take, in this one
-              # block, so a title or a summary cannot go stale on one surface and not the other.
+              # X, Slack and Teams read the twitter namespace before falling back to og:*, so a
+              # consumer reading only that namespace found an image with no title. The mirrors are
+              # spent from the SAME strings the og tags take, so neither surface can go stale alone.
               f'<meta name="twitter:card" content="summary_large_image">\n'
               f'<meta name="twitter:title" content="{_e(title)}">\n'
               f"{tw_desc}"
@@ -1997,9 +1996,9 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
         + orgs_section
     )
     return _shell(title=f"{title} - Australian magnetotelluric data - AusMT",
-                  # The meta/og description is the RECORD's opening sentence, never the section
-                  # prose (a page-length payload) and never the fallback sentence the JSON-LD node
-                  # falls back to: a preview line that no curator wrote states curation as fact. A
+                  # The meta/og description is the RECORD's opening sentence: never the section
+                  # prose, which is a page-length payload, and never the fallback the JSON-LD node
+                  # keeps, because a preview line no curator wrote states curation as fact. A
                   # record carrying no description ships no line at all.
                   description=_meta_summary(_first_sentences(record_desc, limit=1,
                                                              budget=_META_LIMIT)),
@@ -2943,11 +2942,9 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     sdir.mkdir(parents=True, exist_ok=True)
     ogdir = out / "pages" / "og"
     draw_cards = _og_available()
-    # A missing renderer is a BUILD failure wherever there is a card to draw. Gated on
-    # importability alone it was silent: every card vanished, every page fell back to the portal's
-    # hand-made root card and the build still returned 0, so the whole preview surface could
-    # regress into a deployment with nothing failing. A corpus with no surveys draws no card and
-    # still builds, which is what a machine without Pillow needs.
+    # A missing renderer is a BUILD failure wherever there is a card to draw: gated on
+    # importability alone the loss was silent, every page falling back to the portal's root card
+    # while the build still returned 0. A corpus with no surveys draws no card and still builds.
     if surveys_meta and not draw_cards:
         raise RuntimeError("the link-preview card renderer (Pillow) is not importable; a corpus "
                            "with surveys cannot ship pages whose previews fall back to the "
