@@ -191,9 +191,11 @@ declared clear space above the address's own first ink row, measured on the glyp
 rather than on the nominal point size.
 
 A value that does not fit is not an absent value, so nothing the survey disclosed is given up to
-make room under that ceiling. The block closes its leading first, steps its type down only once the
-leading has nowhere left to go, and the title steps down its own ladder only when the block has no
-room left at any of those notches. The title and the block are therefore chosen together, and the
+make room under that ceiling. The title has a ladder and the block's sizes are declared, so the step
+comes out of the title: under each title step the block closes its leading, and when that is not
+enough the title takes the next step rather than setting a fact line below its declared size. Only
+after the title's whole ladder has run out does the block's type give, which is the last resort that
+still fits everything on the card. The title and the block are therefore chosen together, and the
 last step of both ladders holds the most a card can carry, so the walk always has an answer.
 
 The engine draws the mark from a small pinned derivative,
