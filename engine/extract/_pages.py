@@ -34,6 +34,7 @@ the spawn workers' build_portal without extra weight.
 from __future__ import annotations
 
 import colorsys
+import functools
 import html
 import json
 import math
@@ -2207,8 +2208,8 @@ def _og_available() -> bool:
 _CARD_SIZE = (1200, 630)
 _CARD_MARGIN = 60                 # the text margin every card's left column sits on
 _CARD_WORDMARK = "ausmt.auscope.org.au"
-_CARD_WORDMARK_Y = 540
-_CARD_WORDMARK_SIZE = 31
+_CARD_WORDMARK_Y = 460
+_CARD_WORDMARK_SIZE = 34
 _CARD_TITLE_SIZES = (64, 52, 44, 36)
 # The card's flat field: the root card artwork's own ground, so the three families a link preview
 # can land on read at one brightness rather than as two slightly different dark blues.
@@ -2222,10 +2223,11 @@ _CARD_TEXT_WIDTH = 476
 _CARD_PANEL_AIR = 34
 _CARD_PANEL_INSET = 16            # the panel frame's outset from the map it holds
 
-# The AusMT mark in the card's top-left corner, and the height it is drawn at. It is square, so the
+# The AusMT mark opening the card's left column, and the height it is drawn at. It is square, so the
 # height is the whole geometry; the pinned export is a whole multiple of it (see gen_brand.py), so
-# the resample is a clean box rather than an arbitrary ratio.
-_CARD_CORNER_SIZE = 42
+# the resample is a clean box rather than an arbitrary ratio. The word beside it takes its size, its
+# gap and its ink from the brand file at this height, so no number of the lockup's is restated here.
+_CARD_CORNER_SIZE = 52
 _CARD_CORNER_Y = 44
 
 # The Australia locator inset's opacity. The inset covers part of the footprint it is explaining,
@@ -2244,13 +2246,46 @@ _COLL_CARD_MAP_PX = round(_COLL_CARD_MAP_WIDTH * _COLL_CARD_MAP_SCALE)
 _COLL_CARD_TEXT_WIDTH = (_CARD_SIZE[0] - _CARD_PANEL_AIR - 2 * _CARD_PANEL_INSET
                          - _COLL_CARD_MAP_PX - _CARD_PANEL_AIR - _CARD_MARGIN)
 
-# The three assets the cards draw with. They ship BESIDE this module rather than being read from
+# The AuScope lockup that closes the left column: its drawn height, and the clear space it keeps
+# above the card's bottom edge. It is never taller than the AusMT mark that opens the column, so the
+# acknowledgement cannot outweigh the resource identity it acknowledges.
+_CARD_LOCKUP_SIZE = 46
+_CARD_LOCKUP_BASE = 44
+# Where the shipped lockup is cut out of the wider vendored artwork. The columns to the right of it
+# carry a second organisation's mark and a descriptor line that is unreadable at card height, and a
+# line nobody can read is a line the card should not set.
+_AUSCOPE_CROP_X = 1200
+
+# The assets the cards draw with. They ship BESIDE this module rather than being read from
 # portal/vendor/, because the engine image carries no portal tree: an emitter that reached across to
 # the portal would draw an unsigned card in exactly the environment that serves the corpus. Each is
-# pinned byte-identical to the portal's own copy, so there is still one asset behind each of them.
-_CARD_MARK = Path(__file__).resolve().parent / "_auscope_mark.png"
+# pinned against the portal's own copy, so there is still one asset behind each of them.
+_CARD_LOCKUP = Path(__file__).resolve().parent / "_auscope_lockup.png"
 _CARD_CORNER_MARK = Path(__file__).resolve().parent / "_ausmt_mark.png"
 _CARD_ADDRESS_FACE = Path(__file__).resolve().parent / "_inter_bold.ttf"
+
+# The brand's declared geometry, palette and proportions. contract/ is a SIBLING of engine/ and the
+# engine image ships it, so this resolves in the image as well as in a source tree.
+_BRAND_JSON = Path(__file__).resolve().parents[2] / "contract" / "brand.json"
+
+
+@functools.lru_cache(maxsize=1)
+def _brand() -> dict:
+    """The brand file, read once per process.
+
+    Every number the cards take from it is read HERE at draw time rather than restated as a card
+    literal: a card that carried its own copy of the accent hex or of the wordmark's proportion
+    could drift from every other surface that renders the same brand."""
+    with open(_BRAND_JSON, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _brand_stop(name: str):
+    """One palette stop's (r, g, b), by the name the brand file gives it."""
+    for stop in _brand()["palette"]["stops"]:
+        if stop["name"] == name:
+            return _rgb(stop["hex"])
+    raise KeyError(name)
 
 
 def _rgb(colour):
@@ -2268,35 +2303,43 @@ def _card_mark(path, height):
         return mark.resize((round(height * mark.width / mark.height), height), Image.LANCZOS)
 
 
-def _card_corner_mark(img):
-    """The AusMT mark in the card's top-left corner, on the same text margin the title sits on.
+def _card_ausmt_lockup(img, d):
+    """The AusMT lockup opening the card's left column, on the same text margin the title sits on.
 
-    It leads rather than trails because it names the site the card belongs to, and the clear space
-    below it is larger than the space above, so it reads as a corner mark rather than as the first
-    line of the title block. The ROOT card does not carry it: that card's artwork is the mark."""
+    It leads rather than trails because it names the site the card belongs to. The word's size, its
+    gap from the mark and its ink are read from the brand file and scaled by the mark's height, so
+    the lockup here and the lockup on every other surface are one set of proportions rather than two
+    that happen to agree. The word centres on the mark's INK box, not on its em box, which would pay
+    out a descent this string does not use and sit the word high."""
+    prop = _brand()["proportions"]
     mark = _card_mark(_CARD_CORNER_MARK, _CARD_CORNER_SIZE)
     img.paste(mark, (_CARD_MARGIN, _CARD_CORNER_Y), mark)
+    word = _brand()["brand"]
+    font = _card_address_font(round(prop["wordmark_font_size"] * _CARD_CORNER_SIZE))
+    gap = round(prop["gap_mark_to_wordmark"] * _CARD_CORNER_SIZE)
+    box = d.textbbox((0, 0), word, font=font)
+    d.text((_CARD_MARGIN + mark.width + gap,
+            _CARD_CORNER_Y + round((_CARD_CORNER_SIZE - (box[3] - box[1])) / 2) - box[1]),
+           word, font=font, fill=_rgb(_brand()["palette"]["wordmark_ink"]["on_dark"]))
 
 
-def _card_wordmark_row(img, d, font, ink):
-    """The AuScope mark, a half-mark-width gap, then the address: ONE row on the card's text
-    margin, on every card family this module draws.
+def _card_address_line(d):
+    """The address, on a line of its own on the card's text margin, in the brand's coral accent.
 
-    The mark's height is the address's own line height and it is centred on the address's INK
-    rather than on its em box, so the pair reads as a single line of type. Centring on the em box
-    would pay out the face's descent, which no glyph in this string uses, and sit the mark high."""
-    x0, y0 = _CARD_MARGIN, _CARD_WORDMARK_Y
-    box = d.textbbox((x0, y0), _CARD_WORDMARK, font=font)
-    try:
-        line_h = sum(font.getmetrics())
-    except AttributeError:                # a face that carries no metrics
-        line_h = box[3] - box[1]
-    mark = _card_mark(_CARD_MARK, line_h)
-    # Floor, not round: half of an odd width under banker's rounding is a gap nobody can predict
-    # from the numbers on this line.
-    gap = mark.width // 2
-    img.paste(mark, (x0, round((box[1] + box[3]) / 2 - line_h / 2)), mark)
-    d.text((x0 + mark.width + gap, y0), _CARD_WORDMARK, font=font, fill=ink)
+    It carries no mark beside it: the column already opens with the AusMT lockup and closes with the
+    AuScope one, and a third mark on this line would read as a logo with a caption."""
+    d.text((_CARD_MARGIN, _CARD_WORDMARK_Y), _CARD_WORDMARK,
+           font=_card_address_font(_CARD_WORDMARK_SIZE), fill=_brand_stop("coral"))
+
+
+def _card_auscope_lockup(img):
+    """The AuScope lockup, white, last in the card's left column.
+
+    It sits on the same text margin every line above it does, and its clear space against the card's
+    bottom edge is declared rather than derived, so the column ends on one line across every card
+    family whatever the block above it does."""
+    lockup = _card_mark(_CARD_LOCKUP, _CARD_LOCKUP_SIZE)
+    img.paste(lockup, (_CARD_MARGIN, img.height - _CARD_LOCKUP_BASE - _CARD_LOCKUP_SIZE), lockup)
 
 
 def _card_font(size):
@@ -2440,7 +2483,7 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
         d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=copper)
         d.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], outline=copper, width=2)
 
-    _card_corner_mark(img)
+    _card_ausmt_lockup(img, d)
     # The text column, on the declared width. Nothing steps outside it: the title walks the ladder
     # and wraps, and the fact lines wrap, so a long survey name or a three-state region never runs
     # into the footprint panel beside it.
@@ -2453,7 +2496,8 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
                      _CARD_TEXT_WIDTH, muted, 42)
     _card_column(d, y, 330, ((period_line, 26), (dims_line, 26)),
                  _CARD_TEXT_WIDTH, (201, 212, 232), 40)
-    _card_wordmark_row(img, d, _card_address_font(_CARD_WORDMARK_SIZE), copper)
+    _card_address_line(d)
+    _card_auscope_lockup(img)
     img.save(path, "PNG", optimize=True)
 
 
@@ -2488,7 +2532,7 @@ def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels
 
     W, H = _CARD_SIZE
     ink = _CARD_GROUND
-    text, muted, copper = (255, 255, 255), (143, 163, 176), (239, 114, 86)
+    text, muted = (255, 255, 255), (143, 163, 176)
     img = Image.new("RGB", (W, H), ink)
     d = ImageDraw.Draw(img)
 
@@ -2516,7 +2560,7 @@ def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels
         d.ellipse([px0 + x - r, py0 + y - r, px0 + x + r, py0 + y + r], fill=colour)
 
     # ---- the text column, stepped down until the WHOLE title fits ----
-    _card_corner_mark(img)
+    _card_ausmt_lockup(img, d)
     tsize, lines = _card_title_block(d, title, _COLL_CARD_TEXT_WIDTH, 3)
     y = 130
     for ln in lines:
@@ -2526,7 +2570,8 @@ def _og_collection_card(path, *, title, facts_line, taxonomy_line, member_labels
     # same two baselines there, so the two families read as one card design.
     _card_column(d, y + 8, 220, ((facts_line, 29), (taxonomy_line, 29)),
                  _COLL_CARD_TEXT_WIDTH, muted, 42)
-    _card_wordmark_row(img, d, _card_address_font(_CARD_WORDMARK_SIZE), copper)
+    _card_address_line(d)
+    _card_auscope_lockup(img)
     img.save(path, "PNG", optimize=True)
     return True
 

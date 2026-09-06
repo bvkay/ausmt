@@ -5,14 +5,18 @@ it is resampled to roughly a third of its width on the way, so what it says has 
 size. These are the properties pinned here, all measured off the rendered PNG rather than read back
 out of the drawing code, so a constant that still looks right cannot hide a card that is wrong.
 
-THE SIGNATURE ROW. The AuScope mark sits left of the ausmt.auscope.org.au address, on the card's
-text margin, at the address's own line height and centred on its ink, so the pair reads as one line
-of type rather than as a logo with a caption beside it. The address is set in Inter Bold, the face
-the hand-made root card's artwork uses, so the three card families sign themselves in one face.
+THE ADDRESS LINE. ausmt.auscope.org.au sits on the card's text margin on a line of its own, in the
+brand's coral accent and in Inter Bold, the face the hand-made root card's artwork uses, so the card
+families sign themselves in one face and one colour.
 
-THE CORNER MARK. Survey and collection cards carry the AusMT mark in the top-left corner, on the
-same text margin the title sits on. The ROOT card does not: that card's artwork is the mark, and a
-second copy of it would read as a duplicate (pinned in portal/tests/test_social_card.py).
+THE AUSCOPE LOCKUP. AuScope's icon with its wordmark, white, sits last in the left column at a
+declared height above the card's bottom edge. It is never taller than the AusMT mark above it, so
+the acknowledgement cannot outweigh the resource identity it acknowledges.
+
+THE AUSMT LOCKUP. Survey and collection cards open their left column with the AusMT mark and the
+word beside it, on the same text margin the title sits on, at the proportions the brand file
+declares. The ROOT card carries no mark: that card's artwork is the mark, and a second copy of it
+would read as a duplicate (pinned in portal/tests/test_social_card.py).
 
 THE TEXT COLUMN. Every card declares the width its text may occupy, and nothing crosses it: the
 title walks the size ladder and wraps, and the fact lines wrap. This is scanned on the pixels of
@@ -44,11 +48,14 @@ import build_portal  # noqa: E402
 SAMPLE_EDIS = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
 BASE = "https://ausmt.example.test"
 
-# The bottom-left corner of every card: where the signature row is, and nowhere else on any card.
-_SIG_REGION = (0, 500, 620, 630)
-# The top-left corner, wide enough to catch a mark that drifted off the margin and short enough to
-# stop above the title's own slot. Nothing but the corner mark may put ink here.
-_CORNER_REGION = (0, 0, 300, 100)
+# The address's own band, and the AuScope lockup's band under it. Each is read across the card's
+# left column only, out to the edge the family declares, so the map panel beside them can never
+# answer for either.
+_ADDRESS_ROWS = (440, 534)
+_LOCKUP_ROWS = (535, 630)
+# The top-left corner, wide enough to catch a lockup that drifted off the margin and short enough to
+# stop above the kind label under it. Nothing but the AusMT lockup may put ink here.
+_CORNER_REGION = (0, 0, 400, 110)
 # The card's three text inks. A pixel of any of them past the declared column edge is type that has
 # crossed into the map panel, which is the failure the column rule exists to prevent.
 _TEXT_INKS = ((255, 255, 255), (143, 163, 176), (201, 212, 232))
@@ -103,54 +110,98 @@ def built(tmp_path_factory):
     return out
 
 
-def _boxes(path):
-    """(size, mark box, wordmark box) measured from the card's own pixels.
+def _brand():
+    """The brand's declared truth, read here rather than restated, so a pin cannot agree with a
+    card that has drifted from the file both are supposed to follow."""
+    return json.loads((REPO.parent / "contract" / "brand.json").read_text(encoding="utf-8"))
 
-    The mark is the near-white ink in the signature corner and the wordmark is the coral. Both are
-    read off the rendered file rather than computed from the drawing code, so a change that moves
-    the row fails here even if the constants behind it still look right."""
+
+def _brand_stop(name):
+    """One palette stop's (r, g, b), from the brand file."""
+    hexes = {stop["name"]: stop["hex"] for stop in _brand()["palette"]["stops"]}
+    h = hexes[name].lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _ink(path, region):
+    """(card size, every non-ground pixel in `region` as (x, y, colour)).
+
+    Read off the rendered file rather than computed from the drawing code, so a change that moves a
+    band fails here even if the constants behind it still look right."""
     from PIL import Image
+    pages = _pages_module()
     with Image.open(path) as im:
         img = im.convert("RGB")
     px = img.load()
-    x0, y0, x1, y1 = _SIG_REGION
-    white, coral = [], []
-    for y in range(y0, min(y1, img.size[1])):
-        for x in range(x0, min(x1, img.size[0])):
-            r, g, b = px[x, y]
-            if min(r, g, b) >= 240:
-                white.append((x, y))
-            elif r >= 190 and g < 150 and b < 140 and r - b >= 60:
-                coral.append((x, y))
-    assert white, f"{path}: no mark ink found in the signature corner"
-    assert coral, f"{path}: no wordmark ink found in the signature corner"
-
-    def box(pts):
-        return (min(p[0] for p in pts), min(p[1] for p in pts),
-                max(p[0] for p in pts), max(p[1] for p in pts))
-    return img.size, box(white), box(coral)
+    x0, y0, x1, y1 = region
+    return img.size, [(x, y, px[x, y])
+                      for y in range(y0, min(y1, img.size[1]))
+                      for x in range(x0, min(x1, img.size[0]))
+                      if px[x, y] != pages._CARD_GROUND]
 
 
-def _assert_signature_row(path, line_h):
-    size, mark, word = _boxes(path)
-    assert size == (1200, 630), f"{path}: a link-preview card is 1200x630, got {size}"
-    assert mark[2] < word[0], \
-        f"{path}: the mark must sit entirely left of the wordmark, mark {mark} wordmark {word}"
-    mark_cy, word_cy = (mark[1] + mark[3]) / 2, (word[1] + word[3]) / 2
-    assert abs(mark_cy - word_cy) <= 2, \
-        f"{path}: the pair must read as one line, centres {mark_cy} and {word_cy}"
-    mark_h = mark[3] - mark[1] + 1
-    assert abs(mark_h - line_h) / line_h <= 0.15, \
-        f"{path}: the mark's height must be the wordmark's line height, got {mark_h} for {line_h}"
-    # The row starts on the card's text margin, like every other line in the left column.
-    assert mark[0] <= _pages_module()._CARD_MARGIN + 2, \
-        f"{path}: the row must start on the text margin, got x={mark[0]}"
+def _box(pts):
+    return (min(p[0] for p in pts), min(p[1] for p in pts),
+            max(p[0] for p in pts), max(p[1] for p in pts))
 
 
 def _line_h():
     """The address's own line height, from the face the cards actually set the address in."""
     pages = _pages_module()
     return sum(pages._card_address_font(pages._CARD_WORDMARK_SIZE).getmetrics())
+
+
+def _assert_address_line(path, edge):
+    """The address is a line of its own: coral, on the text margin, inside its declared line box,
+    and with no other ink sharing its band."""
+    pages = _pages_module()
+    size, ink = _ink(path, (0, _ADDRESS_ROWS[0], edge, _ADDRESS_ROWS[1]))
+    assert size == (1200, 630), f"{path}: a link-preview card is 1200x630, got {size}"
+    assert ink, f"{path}: no address ink in the address band"
+    coral = _brand_stop("coral")
+    assert any(c == coral for _x, _y, c in ink), \
+        f"{path}: the address is set in the brand's coral {coral}, none of it is on the card"
+    box = _box(ink)
+    # The first glyph's own left side bearing is the only slack: the line starts on the margin.
+    assert pages._CARD_MARGIN <= box[0] <= pages._CARD_MARGIN + 2, \
+        f"{path}: the address starts on the text margin, its ink starts at x={box[0]}"
+    assert box[1] >= pages._CARD_WORDMARK_Y, \
+        f"{path}: ink above the address's own line box at y={box[1]}"
+    assert box[3] <= pages._CARD_WORDMARK_Y + _line_h(), (
+        f"{path}: the address must sit inside its {_line_h()} px line from "
+        f"{pages._CARD_WORDMARK_Y}, its ink reaches y={box[3]}")
+    assert not [p for p in ink if p[2] in _TEXT_INKS], \
+        f"{path}: the block above must not reach into the address band"
+
+
+def _lockup_slot(pages):
+    """The AuScope lockup's declared box, rebuilt from the shipped asset's own aspect."""
+    from PIL import Image
+    with Image.open(pages._CARD_LOCKUP) as im:
+        w = round(pages._CARD_LOCKUP_SIZE * im.width / im.height)
+    top = pages._CARD_SIZE[1] - pages._CARD_LOCKUP_BASE - pages._CARD_LOCKUP_SIZE
+    return (pages._CARD_MARGIN, top, pages._CARD_MARGIN + w - 1,
+            top + pages._CARD_LOCKUP_SIZE - 1)
+
+
+def _assert_auscope_lockup(path, edge):
+    """The lockup is white, sits in its declared bottom-left box, and is never taller than the
+    AusMT mark that opens the column."""
+    pages = _pages_module()
+    assert pages._CARD_LOCKUP_SIZE <= pages._CARD_CORNER_SIZE, (
+        f"the AuScope lockup ({pages._CARD_LOCKUP_SIZE} px) must not stand taller than the AusMT "
+        f"mark ({pages._CARD_CORNER_SIZE} px)")
+    _size, ink = _ink(path, (0, _LOCKUP_ROWS[0], edge, _LOCKUP_ROWS[1]))
+    assert ink, f"{path}: no AuScope lockup ink in its declared band"
+    slot = _lockup_slot(pages)
+    box = _box(ink)
+    assert box[0] == slot[0] and box[1] >= slot[1] and box[2] <= slot[2] and box[3] <= slot[3], \
+        f"{path}: the lockup's ink {box} must fill its declared slot {slot}"
+    assert any(min(c) >= 240 for _x, _y, c in ink), \
+        f"{path}: the lockup is drawn white, nothing in its band is"
+    bleed = [p for p in ink if p[0] < pages._CARD_MARGIN]
+    assert not bleed, \
+        f"{path}: the lockup starts on the text margin, found ink at {bleed[:3]}"
 
 
 def test_the_address_is_set_in_the_pinned_bold_face_at_the_declared_size():
@@ -164,29 +215,47 @@ def test_the_address_is_set_in_the_pinned_bold_face_at_the_declared_size():
     FAILS IF the address falls back to the bundled bitmap face, or the size drifts: either would
     resize the mark beside it and break the row on every card in the corpus at once."""
     pages = _pages_module()
-    assert pages._CARD_WORDMARK_SIZE == 31, \
-        f"the address is set at 31 px, got {pages._CARD_WORDMARK_SIZE}"
+    assert pages._CARD_WORDMARK_SIZE == 34, \
+        f"the address is set at 34 px, got {pages._CARD_WORDMARK_SIZE}"
     assert pages._CARD_ADDRESS_FACE.name == "_inter_bold.ttf", \
         f"the address face is the pinned Inter Bold beside the emitter, got {pages._CARD_ADDRESS_FACE}"
     font = pages._card_address_font(pages._CARD_WORDMARK_SIZE)
     assert Path(font.path) == pages._CARD_ADDRESS_FACE, \
         f"the face must be loaded from {pages._CARD_ADDRESS_FACE}, got {font.path}"
-    assert sum(font.getmetrics()) == 39, \
-        f"the row stands on this face's 39 px line, got {sum(font.getmetrics())}"
+    assert sum(font.getmetrics()) == 42, \
+        f"the line stands on this face's 42 px line, got {sum(font.getmetrics())}"
 
 
-def test_the_engine_carries_the_same_mark_the_portal_serves():
-    """The engine image ships no portal tree, so the cards read the mark from a copy beside the
-    emitter. FAILS IF the two ever differ: one of the two surfaces would then sign itself with an
-    asset the other does not have."""
-    engine_copy = REPO / "extract" / "_auscope_mark.png"
-    portal_copy = REPO.parent / "portal" / "vendor" / "auscope-icon-white.png"
-    assert engine_copy.is_file(), "the emitter must ship the mark it draws"
+def test_the_engine_carries_the_auscope_lockup_the_portal_serves():
+    """The engine image ships no portal tree, so the cards draw the AuScope lockup from a copy
+    beside the emitter. The pin compares PICTURES: the portal file is cropped the same way here and
+    the two RGBA arrays must agree. A byte pin on a re-encoded crop compares one Pillow build's
+    encoder against another's rather than comparing the artwork.
+
+    FAILS IF the shipped crop stops being the AuScope half of the lockup the portal serves, or if an
+    asset no card draws still ships beside the emitter."""
+    pages = _pages_module()
+    engine_copy = REPO / "extract" / "_auscope_lockup.png"
+    portal_copy = REPO.parent / "portal" / "vendor" / "auscope-ncris-white.png"
+    assert engine_copy.is_file(), "the emitter must ship the lockup it draws"
+    assert not (REPO / "extract" / "_auscope_mark.png").exists(), \
+        "an asset no card draws must not ship beside the emitter"
     if not portal_copy.is_file():
         pytest.skip("engine image build: portal tree not shipped "
-                    "(designed topology; the vendored mark is pinned from the checkout workflows)")
-    assert engine_copy.read_bytes() == portal_copy.read_bytes(), \
-        "the engine's mark and the portal's vendored mark must be one asset, byte for byte"
+                    "(designed topology; the vendored lockup is pinned from the checkout workflows)")
+    from PIL import Image
+    with Image.open(portal_copy) as src:
+        full = src.convert("RGBA")
+    assert full.size == (1919, 325), \
+        f"the portal lockup moved off the size the crop was measured on, now {full.size}"
+    cut = full.crop((0, 0, pages._AUSCOPE_CROP_X, full.height))
+    want = cut.crop(cut.getbbox())
+    with Image.open(engine_copy) as im:
+        got = im.convert("RGBA")
+    assert got.size == want.size, \
+        f"the shipped crop is {got.size}, the portal file's own crop is {want.size}"
+    assert got.tobytes() == want.tobytes(), \
+        "the shipped lockup must be the AuScope crop of the portal's lockup, pixel for pixel"
 
 
 @pytest.mark.parametrize("engine_name, portal_rel", [
@@ -241,46 +310,87 @@ def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(buil
     between the card edge and the text margin, across the mark's own rows, must be empty, so a mark
     drawn off the margin fails here rather than quietly sitting in the bleed."""
     pages = _pages_module()
-    assert (pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y) == (42, 44), (
-        "the corner mark is drawn 42 px high at y 44, got "
+    assert (pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y) == (52, 44), (
+        "the mark is drawn 52 px high at y 44, got "
         f"{(pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y)}")
     slot = (pages._CARD_MARGIN, pages._CARD_CORNER_Y,
             pages._CARD_MARGIN + pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y
             + pages._CARD_CORNER_SIZE)
-    assert slot == (60, 44, 102, 86), f"the corner slot moved off its declared box, now {slot}"
+    assert slot == (60, 44, 112, 96), f"the mark's slot moved off its declared box, now {slot}"
     cards = sorted((built / "pages" / "og").rglob("*.png"))
     assert cards, "the build must render cards"
-    from PIL import Image
     for card in cards:
-        with Image.open(card) as im:
-            px = im.convert("RGB").load()
-        x0, y0, x1, y1 = _CORNER_REGION
-        ink = [(x, y) for y in range(y0, y1) for x in range(x0, x1)
-               if px[x, y] != pages._CARD_GROUND]
-        assert ink, f"{card.name}: no mark ink in the card's top-left corner"
-        box = (min(p[0] for p in ink), min(p[1] for p in ink),
-               max(p[0] for p in ink), max(p[1] for p in ink))
-        assert (box[0] >= slot[0] and box[1] >= slot[1]
-                and box[2] <= slot[2] and box[3] <= slot[3]), \
-            f"{card.name}: the corner mark's ink {box} must stay inside its slot {slot}"
-        bleed = [(x, y) for y in range(slot[1], slot[3]) for x in range(0, pages._CARD_MARGIN)
-                 if px[x, y] != pages._CARD_GROUND]
+        _size, ink = _ink(card, _CORNER_REGION)
+        assert ink, f"{card.name}: no lockup ink in the card's top-left corner"
+        mark = _box([p for p in ink if p[0] <= slot[2]])
+        assert (mark[0] >= slot[0] and mark[1] >= slot[1]
+                and mark[2] <= slot[2] and mark[3] <= slot[3]), \
+            f"{card.name}: the mark's ink {mark} must stay inside its slot {slot}"
+        word = [p for p in ink if p[0] > slot[2]]
+        assert word, f"{card.name}: the mark carries no word beside it"
+        wbox = _box(word)
+        assert wbox[1] >= slot[1] and wbox[3] <= slot[3], (
+            f"{card.name}: the word sits inside the mark's own rows {slot[1]} to {slot[3]}, "
+            f"its ink runs {wbox[1]} to {wbox[3]}")
+        bleed = [p for p in ink if p[0] < pages._CARD_MARGIN]
         assert not bleed, \
-            f"{card.name}: the corner mark must start on the text margin, found ink at {bleed[:3]}"
+            f"{card.name}: the lockup must start on the text margin, found ink at {bleed[:3]}"
 
 
-def test_every_survey_card_signs_itself_with_the_mark_and_the_wordmark(built):
+def test_the_ausmt_wordmark_is_set_at_the_brand_files_own_proportions(built):
+    """The word beside the mark is sized, spaced and inked from the brand file, scaled by the mark's
+    own height. Every number here is READ from that file rather than restated, so a card that drifted
+    from it fails even though both sides still look self-consistent.
+
+    FAILS IF the word's size, its gap from the mark, its ink or its centring on the mark change
+    without the brand file changing with them."""
+    pages = _pages_module()
+    brand = _brand()
+    prop = brand["proportions"]
+    size = round(prop["wordmark_font_size"] * pages._CARD_CORNER_SIZE)
+    gap = round(prop["gap_mark_to_wordmark"] * pages._CARD_CORNER_SIZE)
+    hexed = brand["palette"]["wordmark_ink"]["on_dark"].lstrip("#")
+    want_ink = tuple(int(hexed[i:i + 2], 16) for i in (0, 2, 4))
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    glyphs = d.textbbox((0, 0), brand["brand"], font=pages._card_address_font(size))
+    left = pages._CARD_MARGIN + pages._CARD_CORNER_SIZE + gap + glyphs[0]
+    mark_mid = pages._CARD_CORNER_Y + pages._CARD_CORNER_SIZE / 2
+    edge = pages._CARD_MARGIN + pages._CARD_CORNER_SIZE
+    for card in sorted((built / "pages" / "og").rglob("*.png")):
+        _size, ink = _ink(card, (edge + 1, 0, _CORNER_REGION[2], _CORNER_REGION[3]))
+        assert ink, f"{card.name}: no word beside the mark"
+        box = _box(ink)
+        assert abs(box[0] - left) <= 1, (
+            f"{card.name}: the word starts {gap} px after the mark, at x {left}; its ink starts "
+            f"at {box[0]}")
+        assert abs((box[3] - box[1] + 1) - (glyphs[3] - glyphs[1])) <= 1, (
+            f"{card.name}: the word is set at {size} px, whose ink stands "
+            f"{glyphs[3] - glyphs[1]} px; this one stands {box[3] - box[1] + 1}")
+        assert abs((box[1] + box[3]) / 2 - mark_mid) <= 2, \
+            f"{card.name}: the word centres on the mark at {mark_mid}, it sits at {(box[1] + box[3]) / 2}"
+        assert any(c == want_ink for _x, _y, c in ink), \
+            f"{card.name}: the word is inked {want_ink}, no pixel of it is"
+
+
+def test_every_survey_card_signs_itself_with_the_address_and_the_auscope_lockup(built):
     cards = sorted((built / "pages" / "og").glob("*.png"))
     assert cards, "the build must render a card per survey"
+    pages = _pages_module()
+    edge = pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH
     for card in cards:
-        _assert_signature_row(card, _line_h())
+        _assert_address_line(card, edge)
+        _assert_auscope_lockup(card, edge)
 
 
 def test_every_collection_card_signs_itself_the_same_way(built):
     cards = sorted((built / "pages" / "og" / "collections").glob("*.png"))
     assert cards, "the build must render a card per collection"
+    pages = _pages_module()
+    edge = pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH
     for card in cards:
-        _assert_signature_row(card, _line_h())
+        _assert_address_line(card, edge)
+        _assert_auscope_lockup(card, edge)
 
 
 def _panel_geometry(pages):
