@@ -157,11 +157,16 @@ def _brand():
     return json.loads((REPO.parent / "contract" / "brand.json").read_text(encoding="utf-8"))
 
 
+def _hex_rgb(value):
+    """'#RRGGBB' as the (r, g, b) a rendered pixel carries."""
+    h = str(value).lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
 def _brand_stop(name):
     """One palette stop's (r, g, b), from the brand file."""
     hexes = {stop["name"]: stop["hex"] for stop in _brand()["palette"]["stops"]}
-    h = hexes[name].lstrip("#")
-    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return _hex_rgb(hexes[name])
 
 
 def _ink(path, region):
@@ -225,7 +230,12 @@ def _line_h():
 
 def _assert_address_line(path, edge):
     """The address is a line of its own: coral, on the text margin, inside its declared line box,
-    and with no other ink sharing its band."""
+    with no other ink sharing its band, and with the block above it stopping the clear space the
+    column declares short of its first row.
+
+    The clear space is measured from the block's OWN last ink row, scanned from the kind label
+    down, because a block that stops one row above the address clears the band and still reads as
+    one run of type with the signature inside it."""
     pages = _pages_module()
     band = _address_rows(pages)
     size, ink = _ink(path, (0, band[0], edge, band[1]))
@@ -238,8 +248,12 @@ def _assert_address_line(path, edge):
     # The first glyph's own left side bearing is the only slack: the line starts on the margin.
     assert pages._CARD_MARGIN <= box[0] <= pages._CARD_MARGIN + 2, \
         f"{path}: the address starts on the text margin, its ink starts at x={box[0]}"
-    assert box[1] >= pages._CARD_WORDMARK_Y, \
-        f"{path}: ink above the address's own line box at y={box[1]}"
+    _size, above = _ink(path, (0, pages._CARD_KIND_Y, edge, band[0]))
+    block = [y for _x, y, colour in above if colour in _TEXT_INKS]
+    assert block, f"{path}: the card's left column sets no type above the address"
+    assert box[1] - max(block) >= pages._CARD_BLOCK_CLEAR, (
+        f"{path}: the block's last ink row {max(block)} leaves {box[1] - max(block)} px above the "
+        f"address's first at {box[1]}; the column declares {pages._CARD_BLOCK_CLEAR}")
     assert box[3] <= pages._CARD_WORDMARK_Y + _line_h(), (
         f"{path}: the address must sit inside its {_line_h()} px line from "
         f"{pages._CARD_WORDMARK_Y}, its ink reaches y={box[3]}")
@@ -910,17 +924,30 @@ def test_the_locator_inset_lets_the_footprint_show_through(tmp_path):
         f"showed {opaque[dot_blend]} blended pixels")
 
 
+def _column_inks():
+    """Every ink the left column sets: the block's, plus the AusMT wordmark's and the address's,
+    both read from the brand file the emitter reads them from.
+
+    They are a separate tuple from _TEXT_INKS, which keeps the address's band clear of the block
+    above it: the address's own coral belongs INSIDE that band, while here every one of these inks
+    is type that must stay on the column's side of the edge."""
+    return _TEXT_INKS + (_hex_rgb(_brand()["palette"]["wordmark_ink"]["on_dark"]),
+                         _brand_stop("coral"))
+
+
 def _column_overrun(pages, path, edge):
     """Every text-ink pixel on a rendered card that sits past the declared column edge.
 
-    The scan runs BELOW the corner mark and ABOVE the signature row, so it answers for the text
-    column and for nothing else; those two rows are pinned by their own tests."""
+    The scan runs the WHOLE column, from the lockup that opens it to the lockup that closes it, so
+    the wordmark and the address are answered for as well as the block between them: each of those
+    is a line that can grow, and a line nothing scans can grow into the map panel."""
     from PIL import Image
     with Image.open(path) as im:
         px = im.convert("RGB").load()
-    return [(x, y) for y in range(pages._CARD_KIND_Y, pages._CARD_WORDMARK_Y)
+    inks = _column_inks()
+    return [(x, y) for y in range(pages._CARD_CORNER_Y, _LOCKUP_ROWS[1])
             for x in range(edge + 1, pages._CARD_SIZE[0])
-            if px[x, y] in _TEXT_INKS]
+            if px[x, y] in inks]
 
 
 def test_each_card_family_declares_a_column_that_clears_its_map():
