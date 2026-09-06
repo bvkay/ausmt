@@ -113,6 +113,33 @@ def built(tmp_path_factory):
     return out
 
 
+@pytest.fixture(scope="module")
+def drawn(tmp_path_factory):
+    """One card of each generated family, drawn straight through the emitters.
+
+    The card's own left column is the same on every card by construction, so the properties of that
+    column are held here rather than over a corpus: these two cards need Pillow and the shipped
+    assets and nothing else, which is what lets the column be held on an interpreter that can draw a
+    card but cannot run an ingest. The corpus is still scanned by the pins whose INPUT varies, the
+    column-edge scan over real survey names among them.
+
+    Each entry is (card, the family's declared column edge, the word the card must name itself with)."""
+    pages = _pages_module()
+    out = tmp_path_factory.mktemp("drawn")
+    pts = [(129.0 + 0.1 * i, -12.5 - 0.05 * i, "mt") for i in range(40)]
+    pages._og_card(out / "survey.png", kind="SURVEY", title="Vulcan 2022",
+                   subtitle="40 stations · BBMT", region_year="South Australia · 2022",
+                   period_line="0.005 - 10,000 s", points=pts)
+    assert pages._og_collection_card(
+        out / "collection.png", kind="COLLECTION", title="AusLAMP",
+        facts_line="14 surveys · 500 stations", taxonomy_line="PROGRAMME · ACTIVE",
+        member_labels=["A", "B"],
+        member_points={"A": [(133.0, -25.0), (134.0, -26.0)], "B": [(140.0, -30.0)]})
+    return ((out / "survey.png", pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH, "SURVEY"),
+            (out / "collection.png", pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH,
+             "COLLECTION"))
+
+
 def _brand():
     """The brand's declared truth, read here rather than restated, so a pin cannot agree with a
     card that has drifted from the file both are supposed to follow."""
@@ -315,7 +342,7 @@ def test_the_engine_carries_the_portals_own_card_assets(engine_name, portal_rel)
         f"{engine_name} and {portal_rel} must be one asset, byte for byte"
 
 
-def test_every_card_names_the_kind_of_thing_it_previews(built):
+def test_every_card_names_the_kind_of_thing_it_previews(drawn):
     """The card says what the reader has landed on before the title does: a tracked cap label
     between the lockup and the title, in its own muted ink.
 
@@ -331,21 +358,17 @@ def test_every_card_names_the_kind_of_thing_it_previews(built):
               for word in ("SURVEY", "COLLECTION")}
     assert stamps["SURVEY"][0].tobytes() != stamps["COLLECTION"][0].tobytes(), \
         "the label pin is vacuous unless the two words make different glyphs"
-    families = ((sorted((built / "pages" / "og").glob("*.png")), "SURVEY"),
-                (sorted((built / "pages" / "og" / "collections").glob("*.png")), "COLLECTION"))
-    for cards, word in families:
-        assert cards, f"the build must render the cards that carry {word}"
+    for card, _edge, word in drawn:
         stamp, offset = stamps[word]
-        for card in cards:
-            with Image.open(card) as im:
-                img = im.convert("RGB")
-            at = _sets_line(img, stamp, offset, (pages._CARD_KIND_Y, pages._CARD_KIND_Y + 1))
-            assert at == pages._CARD_KIND_Y, \
-                f"{card.name}: the label {word} must be set on the card's own label line"
-            _size, quiet = _ink(card, (0, pages._CARD_CORNER_Y + pages._CARD_CORNER_SIZE + 1,
-                                       400, pages._CARD_KIND_Y))
-            assert not quiet, \
-                f"{card.name}: the lockup's clear space carries ink at {quiet[:3]}"
+        with Image.open(card) as im:
+            img = im.convert("RGB")
+        at = _sets_line(img, stamp, offset, (pages._CARD_KIND_Y, pages._CARD_KIND_Y + 1))
+        assert at == pages._CARD_KIND_Y, \
+            f"{card.name}: the label {word} must be set on the card's own label line"
+        _size, quiet = _ink(card, (0, pages._CARD_CORNER_Y + pages._CARD_CORNER_SIZE + 1,
+                                   400, pages._CARD_KIND_Y))
+        assert not quiet, \
+            f"{card.name}: the lockup's clear space carries ink at {quiet[:3]}"
 
 
 def test_the_survey_cards_identity_line_counts_stations_and_names_the_type(built):
@@ -425,7 +448,7 @@ def test_the_block_rebalances_when_the_survey_discloses_no_years_and_no_periods(
         f"found {len(runs) + 1} bands of ink")
 
 
-def test_the_block_never_reaches_into_the_address_or_the_lockup(built, tmp_path):
+def test_the_block_never_reaches_into_the_address_or_the_lockup(drawn, tmp_path):
     """The two lines that close the column keep their own bands whatever the block above them does.
 
     FAILS IF a long title plus a wrapped fact line pushes the block down over the address or the
@@ -433,10 +456,7 @@ def test_the_block_never_reaches_into_the_address_or_the_lockup(built, tmp_path)
     ceiling."""
     pages = _pages_module()
     from PIL import Image, ImageDraw
-    for card, edge in ([(c, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH)
-                        for c in sorted((built / "pages" / "og").glob("*.png"))]
-                       + [(c, pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH)
-                          for c in sorted((built / "pages" / "og" / "collections").glob("*.png"))]):
+    for card, edge, _word in drawn:
         slot = _lockup_slot(pages)
         for rows in (_ADDRESS_ROWS, _LOCKUP_ROWS):
             _size, ink = _ink(card, (0, rows[0], edge, rows[1]))
@@ -472,7 +492,7 @@ def test_the_generated_cards_stand_on_the_root_cards_ground(built):
                 f"{card.name}: the field at {probe} is {px[probe]}, not {pages._CARD_GROUND}"
 
 
-def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(built):
+def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(drawn):
     """The mark names the site the card belongs to, and it leads rather than trails, so it sits on
     the same text margin the title does with clear space under it.
 
@@ -490,9 +510,7 @@ def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(buil
             pages._CARD_MARGIN + pages._CARD_CORNER_SIZE, pages._CARD_CORNER_Y
             + pages._CARD_CORNER_SIZE)
     assert slot == (60, 44, 112, 96), f"the mark's slot moved off its declared box, now {slot}"
-    cards = sorted((built / "pages" / "og").rglob("*.png"))
-    assert cards, "the build must render cards"
-    for card in cards:
+    for card, _edge, _word in drawn:
         _size, ink = _ink(card, _CORNER_REGION)
         assert ink, f"{card.name}: no lockup ink in the card's top-left corner"
         mark = _box([p for p in ink if p[0] <= slot[2]])
@@ -510,7 +528,7 @@ def test_every_generated_card_carries_the_ausmt_mark_in_its_top_left_corner(buil
             f"{card.name}: the lockup must start on the text margin, found ink at {bleed[:3]}"
 
 
-def test_the_ausmt_wordmark_is_set_at_the_brand_files_own_proportions(built):
+def test_the_ausmt_wordmark_is_set_at_the_brand_files_own_proportions(drawn):
     """The word beside the mark is sized, spaced and inked from the brand file, scaled by the mark's
     own height. Every number here is READ from that file rather than restated, so a card that drifted
     from it fails even though both sides still look self-consistent.
@@ -530,7 +548,7 @@ def test_the_ausmt_wordmark_is_set_at_the_brand_files_own_proportions(built):
     left = pages._CARD_MARGIN + pages._CARD_CORNER_SIZE + gap + glyphs[0]
     mark_mid = pages._CARD_CORNER_Y + pages._CARD_CORNER_SIZE / 2
     edge = pages._CARD_MARGIN + pages._CARD_CORNER_SIZE
-    for card in sorted((built / "pages" / "og").rglob("*.png")):
+    for card, _cedge, _word in drawn:
         _size, ink = _ink(card, (edge + 1, 0, _CORNER_REGION[2], _CORNER_REGION[3]))
         assert ink, f"{card.name}: no word beside the mark"
         box = _box(ink)
@@ -546,22 +564,8 @@ def test_the_ausmt_wordmark_is_set_at_the_brand_files_own_proportions(built):
             f"{card.name}: the word is inked {want_ink}, no pixel of it is"
 
 
-def test_every_survey_card_signs_itself_with_the_address_and_the_auscope_lockup(built):
-    cards = sorted((built / "pages" / "og").glob("*.png"))
-    assert cards, "the build must render a card per survey"
-    pages = _pages_module()
-    edge = pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH
-    for card in cards:
-        _assert_address_line(card, edge)
-        _assert_auscope_lockup(card, edge)
-
-
-def test_every_collection_card_signs_itself_the_same_way(built):
-    cards = sorted((built / "pages" / "og" / "collections").glob("*.png"))
-    assert cards, "the build must render a card per collection"
-    pages = _pages_module()
-    edge = pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH
-    for card in cards:
+def test_every_card_family_signs_itself_with_the_address_and_the_auscope_lockup(drawn):
+    for card, edge, _word in drawn:
         _assert_address_line(card, edge)
         _assert_auscope_lockup(card, edge)
 
