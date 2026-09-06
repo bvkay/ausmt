@@ -100,9 +100,10 @@ tells a crawler the page has no summary, where a missing tag lets it build one f
 The JSON-LD node keeps a fallback sentence, because a `Dataset` with no description is an invalid
 item to a search engine.
 
-Survey and station preview lines are bounded at 160 characters, cut at a sentence end where whole
-sentences fit and at a word boundary otherwise, and wear a trailing ellipsis only where text was
-actually dropped.
+Survey and collection preview lines are bounded at 160 characters, cut at a sentence end where
+whole sentences fit and at a word boundary otherwise, and wear a trailing ellipsis only where
+text was actually dropped. A station's line is one constructed sentence naming the station and
+its survey, so it is carried whole.
 
 ## The sitemap's membership rule
 
