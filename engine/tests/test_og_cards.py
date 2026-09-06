@@ -48,10 +48,10 @@ import build_portal  # noqa: E402
 SAMPLE_EDIS = sorted((REPO / "data" / "sample-survey" / "transfer_functions" / "edi").glob("*.edi"))
 BASE = "https://ausmt.example.test"
 
-# The address's own band, and the AuScope lockup's band under it. Each is read across the card's
-# left column only, out to the edge the family declares, so the map panel beside them can never
-# answer for either.
-_ADDRESS_ROWS = (452, 534)
+# The AuScope lockup's band, under the address's own. The address's band is read off the emitter
+# (_address_rows) rather than declared here, because a band that names rows the address does not
+# stand on answers for a line it is not measuring. Each is read across the card's left column only,
+# out to the edge the family declares, so the map panel beside them can never answer for either.
 _LOCKUP_ROWS = (535, 630)
 # The top-left corner, wide enough to catch a lockup that drifted off the margin and short enough to
 # stop above the kind label under it. Nothing but the AusMT lockup may put ink here.
@@ -69,6 +69,11 @@ def _pages_module():
     sys.path.insert(0, str(REPO / "extract"))
     import _pages
     return _pages
+
+
+def _address_rows(pages):
+    """The address's OWN band: the line the emitter sets it on, down to the lockup's band."""
+    return (pages._CARD_WORDMARK_Y, _LOCKUP_ROWS[0])
 
 
 def _survey(tmp_path, slug, name, lat, extra="", region="South Australia"):
@@ -98,7 +103,10 @@ def built(tmp_path_factory):
     the top of the size ladder and still overflows it at the bottom, so the title has to step down
     to the smallest size AND wrap; and a region naming three states with a year range, which
     overflows the same column at 29 px, so the fact line has to wrap under it. card-b stays short
-    enough that neither happens, so the scan also covers a card the rule leaves alone."""
+    enough that neither happens, so the scan also covers a card the rule leaves alone. card-c is the
+    TALLEST block the corpus can make: a title that holds two lines above the ladder's last step and
+    a geography line that wraps under it, so the block runs down to the clear space the address
+    keeps and the sweep over that clear space measures a card that comes near it."""
     tmp = tmp_path_factory.mktemp("ogcards")
     coll = ("collection:\n  id: cardcoll\n  title: Card Collection\n  type: programme\n"
             "  status: active\n")
@@ -106,6 +114,8 @@ def built(tmp_path_factory):
                       coll + "dates: {start: 2016, end: 2018}\n",
                       region="South Australia / Western Australia / Northern Territory")
     _survey(tmp, "card-b", "Card B", "-24.5", coll)
+    _survey(tmp, "card-c", "Hanekup Eastern Queensland 2003", "-22.5",
+            "dates: {start: 2003, end: 2003}\n", region="Queensland / Northern Territory")
     out = tmp / "out"
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(out), "--bundle-edi",
                             "--no-validate", "--products", str(out / "products"),
@@ -217,7 +227,8 @@ def _assert_address_line(path, edge):
     """The address is a line of its own: coral, on the text margin, inside its declared line box,
     and with no other ink sharing its band."""
     pages = _pages_module()
-    size, ink = _ink(path, (0, _ADDRESS_ROWS[0], edge, _ADDRESS_ROWS[1]))
+    band = _address_rows(pages)
+    size, ink = _ink(path, (0, band[0], edge, band[1]))
     assert size == (1200, 630), f"{path}: a link-preview card is 1200x630, got {size}"
     assert ink, f"{path}: no address ink in the address band"
     coral = _brand_stop("coral")
@@ -551,7 +562,7 @@ def test_the_block_never_reaches_into_the_address_or_the_lockup(drawn, tmp_path)
     from PIL import Image, ImageDraw
     for card, edge, _word in drawn:
         slot = _lockup_slot(pages)
-        for rows in (_ADDRESS_ROWS, _LOCKUP_ROWS):
+        for rows in (_address_rows(pages), _LOCKUP_ROWS):
             _size, ink = _ink(card, (0, rows[0], edge, rows[1]))
             # The lockup's own slot is the one thing allowed to put white in the lower band.
             crossed = [p for p in ink if p[2] in _TEXT_INKS
@@ -559,10 +570,11 @@ def test_the_block_never_reaches_into_the_address_or_the_lockup(drawn, tmp_path)
             assert not crossed, \
                 f"{card.name}: block ink in the band at {rows}, at {crossed[:3]}"
     bad = Image.new("RGB", pages._CARD_SIZE, pages._CARD_GROUND)
-    ImageDraw.Draw(bad).text((pages._CARD_MARGIN, _ADDRESS_ROWS[0] + 4), "0.005 - 6310 s",
+    ImageDraw.Draw(bad).text((pages._CARD_MARGIN, _address_rows(pages)[0] + 4), "0.005 - 6310 s",
                              font=pages._card_font(26), fill=(201, 212, 232))
     bad.save(tmp_path / "crossed.png", "PNG")
-    _size, ink = _ink(tmp_path / "crossed.png", (0, _ADDRESS_ROWS[0], 536, _ADDRESS_ROWS[1]))
+    _size, ink = _ink(tmp_path / "crossed.png",
+                      (0, _address_rows(pages)[0], 536, _address_rows(pages)[1]))
     assert [p for p in ink if p[2] in _TEXT_INKS], \
         "the band scan is vacuous unless a block drawn into it fails"
 
@@ -661,6 +673,50 @@ def test_every_card_family_signs_itself_with_the_address_and_the_auscope_lockup(
     for card, edge, _word in drawn:
         _assert_address_line(card, edge)
         _assert_auscope_lockup(card, edge)
+
+
+def _card_edge(pages, card):
+    """The declared column edge of the family the card at this path belongs to."""
+    width = (pages._COLL_CARD_TEXT_WIDTH if card.parent.name == "collections"
+             else pages._CARD_TEXT_WIDTH)
+    return pages._CARD_MARGIN + width
+
+
+def test_every_card_the_build_writes_signs_itself_and_leaves_the_address_its_line(built):
+    """The same two properties, over the cards the EMITTER wrote rather than over cards this file
+    drew for itself.
+
+    The pair above needs Pillow and the shipped assets and nothing else, which is what lets the
+    column be held on an interpreter that cannot run an ingest; but their blocks are short by
+    construction, and it is a real survey name over a wrapped geography line that pushes a block
+    down towards the lines that close the column. Both are scanned, so neither can answer for the
+    other.
+
+    The clear space between the block's last ink and the address's first is measured too, because a
+    block that stops one row above the address clears the band and still reads as one run of type
+    with the signature under it."""
+    pages = _pages_module()
+    from PIL import Image
+    cards = sorted((built / "pages" / "og").rglob("*.png"))
+    assert cards, "the build must render cards"
+    address_top = _address_rows(pages)[0]
+    for card in cards:
+        edge = _card_edge(pages, card)
+        _assert_address_line(card, edge)
+        _assert_auscope_lockup(card, edge)
+        with Image.open(card) as im:
+            px = im.convert("RGB").load()
+        block = [y for y in range(pages._CARD_KIND_Y, address_top)
+                 for x in range(edge)
+                 if px[x, y] in _TEXT_INKS]
+        assert block, f"{card.name}: the card's left column carries no block ink at all"
+        ink = [(x, y) for y in range(address_top, _LOCKUP_ROWS[0])
+               for x in range(edge) if px[x, y] != pages._CARD_GROUND]
+        gap = min(y for _x, y in ink) - max(block)
+        assert gap >= pages._CARD_BLOCK_CLEAR, (
+            f"{card.name}: the block's last ink row {max(block)} leaves {gap} px above the "
+            f"address's first at {min(y for _x, y in ink)}; the column declares "
+            f"{pages._CARD_BLOCK_CLEAR}")
 
 
 def _panel_geometry(pages):
