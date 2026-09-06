@@ -1561,6 +1561,46 @@ def test_the_hub_cards_are_byte_identical_when_drawn_twice(tmp_path):
         assert len(digests) == 1, f"{name}: two draws over one input gave {len(digests)} files"
 
 
+def test_the_survey_and_collection_cards_are_byte_identical_when_drawn_twice(tmp_path):
+    """Two draws over one input produce one file, on the two families the corpus writes most of.
+
+    A card tree is rebuilt on every deploy and re-fetched by the clients that cache it, so a
+    renderer that stamped a time, walked a set, or seeded a colour off an id hash would ship a new
+    byte stream for data that had not changed and would make a diff of two builds unreadable.
+
+    The comparison is proven sensitive on the same line: one station moved, and one member colour
+    more, must each give a different file, so a pin that compared two empty pictures cannot pass."""
+    import hashlib
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    pages = _pages_module()
+    pts = _FOOTPRINTS["wide"]
+    members = {"A": [(133.0, -25.0), (140.0, -30.0)], "B": [(146.0, -35.0)]}
+
+    def survey(name, points):
+        return _survey_card(pages, tmp_path / f"{name}.png", points)
+
+    def collection(name, labels):
+        path = tmp_path / f"{name}.png"
+        assert pages._og_collection_card(
+            path, kind="COLLECTION", title="AusLAMP",
+            facts_line="14 surveys · 500 stations", taxonomy_line="PROGRAMME · ACTIVE",
+            coverage_line="2013 - present", member_labels=labels, member_points=members)
+        return path
+
+    assert digest(survey("s-first", pts)) == digest(survey("s-second", pts)), \
+        "two draws of one survey footprint gave two files"
+    assert digest(collection("c-first", ["A", "B"])) == digest(collection("c-second", ["A", "B"])), \
+        "two draws of one collection membership gave two files"
+    moved = [(lon + 0.5, lat, kind) for lon, lat, kind in pts]
+    assert digest(survey("s-moved", moved)) != digest(survey("s-first", pts)), \
+        "the comparison is vacuous: a survey card did not change when a station did"
+    assert digest(collection("c-one", ["A"])) != digest(collection("c-first", ["A", "B"])), \
+        "the comparison is vacuous: a collection card did not change when its membership did"
+
+
 def test_a_survey_slug_that_would_overwrite_a_hub_card_is_refused(tmp_path):
     """The hub cards share the flat og tree with the per-survey cards, so a survey slugged like a
     hub would silently replace that hub's card and the hub page would then advertise a survey.
