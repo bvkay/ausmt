@@ -106,19 +106,22 @@ that the field is emitted only where it is true.
 
 ## Link-preview cards
 
-Three card families, all 1200 by 630 PNGs on one ground, all declared as `og:image` on the page they
-belong to. The ground is the root card artwork's own, so the three families a link preview can land
-on read at one brightness rather than as two slightly different dark blues.
+Four card families, all 1200 by 630 PNGs on one ground, all declared as `og:image` on the page they
+belong to. The ground is the root card artwork's own, so the families a link preview can land on read
+at one brightness rather than as several slightly different dark blues.
 
 | Card | Written to | Served at | Drawn by |
 |---|---|---|---|
 | survey | `pages/og/<slug>.png` | `/data/pages/og/<slug>.png` | `_og_card` |
 | collection | `pages/og/collections/<id>.png` | `/data/pages/og/collections/<id>.png` | `_og_collection_card` |
+| hub | `pages/og/surveys.png`, `pages/og/collections.png` | `/data/pages/og/surveys.png`, `/data/pages/og/collections.png` | `_og_hub_card` |
 | root | not generated per build | `/vendor/social-card.png` | `portal/tools/gen_social_card.py`, hand-run |
 
 The collection cards take a subdirectory of their own: `pages/og/` is flat, and a collection id equal
 to a survey slug would otherwise overwrite that survey's card, silently and only for the pair that
-collided.
+collided. The two hub cards share that flat tree by name, so a survey slugged `surveys` or
+`collections` is refused before the build writes anything: it would replace a hub's card, and the hub
+page would then advertise a survey.
 
 The cards live in the data volume, which is served under `/data/*`. The `pages/` tree has no bare
 route of its own, so `{base}/data/pages/og/...` is the only URL at which a card is reachable; a
@@ -162,6 +165,21 @@ members has no end year to give, so its coverage runs to the present; a record t
 claim states its start alone, because a closed range needs an end year the record does not hold and
 the date it was last maintained is not one. A record carrying no start year gets no coverage line.
 
+The hub cards preview a catalogue rather than a place, so their artwork is the site's identity and
+not a map of data: the full pixelated Australia, DRAWN from the same coastline the brand mark is
+derived from on a lattice finer than the mark's, with the palette stops, the ramp positions, the
+clear fraction and the dot radius all read from `contract/brand.json` at draw time. Run at the mark's
+own grid the lattice reproduces that file's dot list cell for cell, which is what makes the card the
+same silhouette at a second resolution rather than a second silhouette; the mark stays the simplified
+figure that has to survive a browser tab. No vendored image is read: the engine image ships no portal
+tree, and a card that reached for one would go blank exactly where the corpus is served.
+
+A hub card's lines are its title, the tagline the brand file declares, and the counts this build
+computed, summed from the same rows the hub page renders from. A corpus that grows renders its own
+numbers, and the artwork is drawn large and resampled down so the dots are round rather than stepped,
+which is also what makes these the heaviest cards the build writes: they carry a declared byte budget
+for that reason.
+
 ### The text column
 
 Every card declares the width its left column may use, and no ink crosses it. The title walks the
@@ -193,8 +211,8 @@ happen to agree; no number of the lockup's is restated in the emitter. `contract
 tree.
 
 The kind label names what the reader has landed on before the title does: tracked caps in a muted
-ink, saying SURVEY or COLLECTION. The card emitters take that word as an argument rather than
-knowing it, so a further card family takes the same column by passing its own.
+ink, saying SURVEY, COLLECTION, or the plural a hub carries. The card emitters take that word as an
+argument rather than knowing it, so a further card family takes the same column by passing its own.
 
 Below the label the title walks the size ladder, then the facts: the station count and type joined
 by an interpunct, the region and years, the period band. An absent value is skipped rather than

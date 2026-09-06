@@ -91,8 +91,8 @@ def test_surveys_index_is_a_document_with_the_hub_chrome(built):
     assert "<title>Surveys - magnetotelluric survey data - AusMT</title>" in page
     assert f'<link rel="canonical" href="{BASE}/surveys">' in page, "canonical must be the bare path"
     assert f'<meta property="og:url" content="{BASE}/surveys">' in page
-    assert f'<meta property="og:image" content="{BASE}/vendor/social-card.png">' in page, \
-        "the index has no per-entity card, so it falls back to the portal's own social card"
+    assert f'<meta property="og:image" content="{BASE}/data/pages/og/surveys.png">' in page, \
+        "the hub carries a card of its own, drawn by this build, not the portal's root card"
     assert '<meta name="robots" content="noindex">' not in page, "the hub page must be indexable"
     m = re.search(r'<meta name="description" content="([^"]+)">', page)
     assert m and m.group(1).endswith("."), "the description must be a structured sentence"
@@ -232,6 +232,8 @@ def test_collections_index_explains_the_concept_and_lists_the_rollup(built):
     page = (built / "pages" / "collections" / "index.html").read_text(encoding="utf-8")
     assert "<title>Collections - magnetotelluric survey data - AusMT</title>" in page
     assert f'<link rel="canonical" href="{BASE}/collections">' in page
+    assert f'<meta property="og:image" content="{BASE}/data/pages/og/collections.png">' in page, \
+        "the hub carries a card of its own, drawn by this build, not the portal's root card"
     assert '<meta name="robots" content="noindex">' not in page
     assert "<h1>Collections</h1>" in page
     assert ("Collections group related surveys for discovery and exploration. A collection may "

@@ -28,6 +28,13 @@ surveys has no single place to point at).
 
 THE LOCATOR INSET. On a survey card it is composited at _CARD_INSET_ALPHA rather than painted
 opaque, so the stations it covers still show through it, and only its centre marker stays solid.
+
+THE HUB CARDS. /surveys and /collections carry cards of their own rather than the portal's root
+card. They take the same left column, and their artwork is the full pixelated Australia DRAWN from
+the coastline the brand mark is derived from, on a lattice finer than the mark's, coloured by the
+palette stops the brand file declares. Nothing of the vendored artwork's bytes is read: the engine
+image ships no portal tree, so a card that reached for them would go blank exactly where the corpus
+is served.
 """
 import json
 import re
@@ -145,6 +152,11 @@ def drawn(tmp_path_factory):
     Each entry is (card, the family's declared column edge, the word the card must name itself with)."""
     pages = _pages_module()
     out = tmp_path_factory.mktemp("drawn")
+    for name, kind, title in pages._HUB_CARDS:
+        pages._og_hub_card(out / f"{name}.png", kind=kind, title=title,
+                           tagline=_brand()["tagline"],
+                           counts_line=f"27 {name}" if name == "collections"
+                           else "27 surveys · 2,625 stations")
     pts = [(129.0 + 0.1 * i, -12.5 - 0.05 * i, "mt") for i in range(40)]
     pages._og_card(out / "survey.png", kind="SURVEY", title="Vulcan 2022",
                    subtitle="40 stations · BBMT", region_year="South Australia · 2022",
@@ -157,7 +169,9 @@ def drawn(tmp_path_factory):
         member_points={"A": [(133.0, -25.0), (134.0, -26.0)], "B": [(140.0, -30.0)]})
     return ((out / "survey.png", pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH, "SURVEY"),
             (out / "collection.png", pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH,
-             "COLLECTION"))
+             "COLLECTION"),
+            (out / "surveys.png", pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH, "SURVEYS"),
+            (out / "collections.png", pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH, "COLLECTIONS"))
 
 
 def _brand():
@@ -382,17 +396,19 @@ def test_every_card_names_the_kind_of_thing_it_previews(drawn):
     between the lockup and the title, in its own muted ink.
 
     The label is read as GLYPHS, drawn here with the emitter's own tracked setter, so a card that
-    labelled a collection SURVEY fails. The pin is checked to discriminate on the same line: the two
-    words do not make the same stamp. The band between the lockup and the label is held empty, so a
-    label that drifted up into the lockup's clear space fails here rather than looking tidy."""
+    labelled a collection SURVEY fails. The pin is checked to discriminate on the same line: no two
+    of the four words make the same stamp, and an entity card must not answer for the plural its hub
+    carries. The band between the lockup and the label is held empty, so a label that drifted up
+    into the lockup's clear space fails here rather than looking tidy."""
     pages = _pages_module()
     from PIL import Image
     font = pages._card_address_font(pages._CARD_KIND_SIZE)
     stamps = {word: _line_stamp(pages, word, font, pages._CARD_KIND_INK,
                                 pages._CARD_KIND_TRACKING)
-              for word in ("SURVEY", "COLLECTION")}
-    assert stamps["SURVEY"][0].tobytes() != stamps["COLLECTION"][0].tobytes(), \
-        "the label pin is vacuous unless the two words make different glyphs"
+              for word in ("SURVEY", "COLLECTION", "SURVEYS", "COLLECTIONS")}
+    made = {word: stamp.tobytes() for word, (stamp, _o) in stamps.items()}
+    assert len(set(made.values())) == len(made), \
+        "the label pin is vacuous unless the four words make different glyphs"
     for card, _edge, word in drawn:
         stamp, offset = stamps[word]
         with Image.open(card) as im:
@@ -400,10 +416,28 @@ def test_every_card_names_the_kind_of_thing_it_previews(drawn):
         at = _sets_line(img, stamp, offset, (pages._CARD_KIND_Y, pages._CARD_KIND_Y + 1))
         assert at == pages._CARD_KIND_Y, \
             f"{card.name}: the label {word} must be set on the card's own label line"
+        # An entity card must not answer for the plural its hub carries. Only this direction can be
+        # held: the singular's glyphs are the plural's own first letters, so a hub card sets them
+        # too, while a card labelled SURVEY sets nothing that reads as SURVEYS.
+        for other in (w for w in stamps if w.startswith(word) and w != word):
+            ostamp, ooffset = stamps[other]
+            assert _sets_line(img, ostamp, ooffset,
+                              (pages._CARD_KIND_Y, pages._CARD_KIND_Y + 1)) is None, \
+                f"{card.name}: a card labelled {word} must not read as {other}"
         _size, quiet = _ink(card, (0, pages._CARD_CORNER_Y + pages._CARD_CORNER_SIZE + 1,
                                    400, pages._CARD_KIND_Y))
         assert not quiet, \
             f"{card.name}: the lockup's clear space carries ink at {quiet[:3]}"
+
+
+def _survey_cards(built):
+    """The per-survey cards the build wrote.
+
+    The flat og tree also holds the two HUB cards, which are a different family sharing the
+    directory rather than a survey each, so they are named out of this by the emitter's own list."""
+    pages = _pages_module()
+    hubs = {f"{name}.png" for name, _kind, _title in pages._HUB_CARDS}
+    return sorted(p for p in (built / "pages" / "og").glob("*.png") if p.name not in hubs)
 
 
 def test_the_survey_cards_identity_line_counts_stations_and_names_the_type(built):
@@ -420,7 +454,7 @@ def test_the_survey_cards_identity_line_counts_stations_and_names_the_type(built
                                         pages._card_font(29), _MUTED_INK)
     assert stamp.tobytes() != old_stamp.tobytes(), \
         "the pin is vacuous unless the two forms make different glyphs"
-    cards = sorted((built / "pages" / "og").glob("*.png"))
+    cards = _survey_cards(built)
     assert cards, "the build must render a card per survey"
     for card in cards:
         with Image.open(card) as im:
@@ -1108,18 +1142,22 @@ def _column_inks():
                          _brand_stop("coral"))
 
 
-def _column_overrun(pages, path, edge):
+def _column_overrun(pages, path, edge, right=None):
     """Every text-ink pixel on a rendered card that sits past the declared column edge.
 
     The scan runs the WHOLE column, from the lockup that opens it to the lockup that closes it, so
     the wordmark and the address are answered for as well as the block between them: each of those
-    is a line that can grow, and a line nothing scans can grow into the map panel."""
+    is a line that can grow, and a line nothing scans can grow into the map panel.
+
+    `right` stops the scan short of artwork drawn in the brand's own palette: the ramp ends on the
+    accent the address is set in, so on a hub card the gutter between the column and the artwork is
+    the strip that can answer, and a line that crossed the edge starts inside it."""
     from PIL import Image
     with Image.open(path) as im:
         px = im.convert("RGB").load()
     inks = _column_inks()
     return [(x, y) for y in range(pages._CARD_CORNER_Y, _LOCKUP_ROWS[1])
-            for x in range(edge + 1, pages._CARD_SIZE[0])
+            for x in range(edge + 1, right or pages._CARD_SIZE[0])
             if px[x, y] in inks]
 
 
@@ -1160,9 +1198,14 @@ def test_no_card_lets_its_text_cross_its_declared_column_edge(built):
     Each family is scanned against ITS OWN declared width, because the collection card gives up
     column to its enlarged map."""
     pages = _pages_module()
-    for card in sorted((built / "pages" / "og").glob("*.png")):
+    for card in _survey_cards(built):
         over = _column_overrun(pages, card, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH)
         assert not over, f"{card.name}: text ink past the survey column edge at {over[:3]}"
+    for name, _kind, _title in pages._HUB_CARDS:
+        card = built / "pages" / "og" / f"{name}.png"
+        over = _column_overrun(pages, card, pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH,
+                               right=pages._HUB_CARD_BOX[0])
+        assert not over, f"{card.name}: text ink past the hub column edge at {over[:3]}"
     for card in sorted((built / "pages" / "og" / "collections").glob("*.png")):
         over = _column_overrun(pages, card, pages._CARD_MARGIN + pages._COLL_CARD_TEXT_WIDTH)
         assert not over, f"{card.name}: text ink past the collection column edge at {over[:3]}"
@@ -1207,7 +1250,9 @@ def test_a_page_only_ever_advertises_a_card_that_was_written(built):
     "is Pillow importable", which is a claim about the environment and not about the file, so a
     failed write shipped an og:image that every link-preview fetcher resolved to a 404."""
     for rel, want in (("surveys/card-a.html", "/data/pages/og/card-a.png"),
-                      ("collections/cardcoll.html", "/data/pages/og/collections/cardcoll.png")):
+                      ("collections/cardcoll.html", "/data/pages/og/collections/cardcoll.png"),
+                      ("surveys/index.html", "/data/pages/og/surveys.png"),
+                      ("collections/index.html", "/data/pages/og/collections.png")):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
         m = re.search(r'property="og:image" content="([^"]+)"', page)
         assert m, f"{rel}: og:image required"
@@ -1343,3 +1388,202 @@ def test_the_cards_are_reachable_at_the_url_the_pages_name(built):
         for url in re.findall(r'property="og:image" content="([^"]+)"', text):
             assert url.startswith(f"{BASE}/data/") or url == f"{BASE}/vendor/social-card.png", \
                 f"{page.name}: og:image must be a served URL, got {url}"
+
+
+# ==================================================================================================
+# The hub cards
+# ==================================================================================================
+
+# The two inks the hub card's own lines are set in: the tagline in the brand file's declared tagline
+# ink, the counts in the block's muted one.
+_TAGLINE_INK = _hex_rgb(_brand()["palette"]["tagline_ink"]["on_dark"])
+
+
+def _hub_cards(built):
+    """The two hub cards the build wrote, as (name, path)."""
+    pages = _pages_module()
+    return [(name, built / "pages" / "og" / f"{name}.png") for name, _k, _t in pages._HUB_CARDS]
+
+
+def test_the_hub_lattice_is_the_brand_marks_own_silhouette_drawn_finer():
+    """The hub artwork is DRAWN from the coastline, on a lattice finer than the mark's.
+
+    The brand keeps the full pixelated Australia and the simplified dot mark as related but
+    different assets, so the card cannot simply enlarge the mark. What is held is that the two come
+    off one construction: run at the mark's own grid, the emitter's lattice reproduces the brand
+    file's dot list cell for cell, and the grid the card actually draws at is finer on both axes.
+
+    FAILS IF the lattice drifts off the coastline the mark is derived from, or the card's grid stops
+    being the finer of the two, either of which makes the hub card a second silhouette rather than
+    the same one at a second resolution."""
+    pages = _pages_module()
+    geom = _brand()["geometry"]
+    cols, rows = pages._HUB_CARD_GRID
+    assert cols > geom["grid"]["cols"] and rows > geom["grid"]["rows"], (
+        f"the hub lattice {(cols, rows)} must be finer than the mark's "
+        f"{(geom['grid']['cols'], geom['grid']['rows'])}")
+    assert list(pages._lattice_cells(geom["grid"]["cols"], geom["grid"]["rows"])) == \
+        [(dot["col"], dot["row"]) for dot in geom["dots"]], \
+        "at the mark's own grid the lattice must be the mark's own dots, cell for cell"
+    assert len(pages._lattice_cells(cols, rows)) > geom["dot_count"], \
+        "a finer lattice over the same coastline carries more cells than the mark does"
+
+
+def test_the_hub_artwork_takes_its_colours_from_the_brand_files_own_ramp():
+    """Every dot's colour is a function of its position on the brand file's declared stops, read at
+    draw time. Held against the file's own mapped hexes rather than against restated colours, so a
+    card that carried its own copy of the ramp fails even while it still looks right."""
+    pages = _pages_module()
+    stops = _brand()["palette"]["stops"]
+    for dot in _brand()["geometry"]["dots"]:
+        assert pages._brand_ramp(dot["t"]) == _hex_rgb(dot["hex"]), (
+            f"the ramp at t={dot['t']} must be the brand file's own {dot['hex']}, "
+            f"it gave {pages._brand_ramp(dot['t'])}")
+    assert pages._brand_ramp(0.0) == _hex_rgb(stops[0]["hex"]), "the ramp starts on the first stop"
+    assert pages._brand_ramp(1.0) == _hex_rgb(stops[-1]["hex"]), "the ramp ends on the last stop"
+    between = pages._brand_ramp((stops[0]["position"] + stops[1]["position"]) / 2)
+    assert between not in {_hex_rgb(s["hex"]) for s in stops}, \
+        f"a position between two stops is a blend of them, this one landed on {between}"
+
+
+def test_the_hub_card_draws_the_pixelated_australia_it_declares(drawn):
+    """The artwork on the rendered card is the lattice the emitter declares: every dot is where the
+    fit puts it, in the colour the ramp gives it, and the whole of it stays inside its declared box.
+
+    The gutter between the text column and that box is swept as well, because the ramp ENDS on the
+    accent the address is set in: artwork bleeding left would be indistinguishable from a line of
+    type that had crossed the column edge, and neither belongs there.
+
+    FAILS IF the artwork is drawn from anything but the declared lattice, or drifts off its box."""
+    pages = _pages_module()
+    from PIL import Image
+    dots = pages._hub_artwork_dots()
+    box = pages._HUB_CARD_BOX
+    for cx, cy, r, _c in dots:
+        assert (box[0] <= cx - r and cx + r <= box[2]
+                and box[1] <= cy - r and cy + r <= box[3]), \
+            f"the dot at {(cx, cy)} reaches outside the artwork's declared box {box}"
+    west = min(dots, key=lambda dot: dot[0])[3]
+    east = max(dots, key=lambda dot: dot[0])[3]
+    stops = _brand()["palette"]["stops"]
+    assert west == _hex_rgb(stops[0]["hex"]) and east == _hex_rgb(stops[-1]["hex"]), (
+        "the ramp runs west to east across the continent: its ends must be the brand file's own "
+        f"first and last stops, they are {west} and {east}")
+    for card, edge, word in drawn:
+        if word not in {kind for _n, kind, _t in pages._HUB_CARDS}:
+            continue
+        with Image.open(card) as im:
+            px = im.convert("RGB").load()
+        for cx, cy, _r, colour in dots:
+            got = px[round(cx), round(cy)]
+            assert max(abs(a - b) for a, b in zip(got, colour)) <= 2, (
+                f"{card.name}: the dot at {(round(cx), round(cy))} is drawn {colour}, "
+                f"the card has {got} there")
+        _size, gutter = _ink(card, (edge + 1, 0, box[0], pages._CARD_SIZE[1]))
+        assert not gutter, \
+            f"{card.name}: the gutter between the column and the artwork carries ink at {gutter[:3]}"
+
+
+def test_a_hub_card_states_the_counts_and_the_tagline_it_is_handed(tmp_path):
+    """A hub card's numbers are the build's own, and the card renders whatever it is handed rather
+    than a figure of its own.
+
+    Two cards drawn from two different corpora set their own counts and NOT each other's, so a
+    hardcoded number fails here; and both set the tagline read from the brand file rather than a
+    sentence restated in the emitter. All of it is read back as glyphs off the rendered cards."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    tagline = _brand()["tagline"]
+    counts = ("58 surveys · 4,182 stations", "3 surveys · 66 stations")
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    cards = []
+    for i, line in enumerate(counts):
+        path = tmp_path / f"hub-{i}.png"
+        pages._og_hub_card(path, kind="SURVEYS", title="Surveys", tagline=tagline,
+                           counts_line=line)
+        with Image.open(path) as im:
+            cards.append(im.convert("RGB"))
+    for i, img in enumerate(cards):
+        for j, line in enumerate(counts):
+            stamp, offset = _line_stamp(pages, line, pages._card_font(29), _MUTED_INK)
+            found = _sets_line(img, stamp, offset, rows) is not None
+            assert found is (i == j), (
+                f"the card built over corpus {i} must set {counts[i]!r} and no other count; "
+                f"it {'set' if found else 'did not set'} {line!r}")
+        for line in pages._card_lines(d, tagline, pages._card_font(29),
+                                      pages._CARD_TEXT_WIDTH, 2)[0]:
+            stamp, offset = _line_stamp(pages, line, pages._card_font(29), _TAGLINE_INK)
+            assert _sets_line(img, stamp, offset, rows) is not None, \
+                f"the hub card must set the brand file's own tagline, {line!r} is not on it"
+
+
+def test_the_hub_cards_state_the_counts_this_build_computed(built):
+    """The same numbers, over the cards the EMITTER wrote: the fixture corpus's own survey, station
+    and collection counts, derived here from the pages the build wrote rather than written down.
+
+    FAILS IF a hub card states a corpus other than the one that drew it."""
+    pages = _pages_module()
+    from PIL import Image
+    n_surveys = len([p for p in (built / "pages" / "surveys").glob("*.html")
+                     if p.stem != "index"])
+    n_collections = len([p for p in (built / "pages" / "collections").glob("*.html")
+                         if p.stem != "index"])
+    n_stations = n_surveys * len(SAMPLE_EDIS)
+    assert n_surveys > 1 and n_collections > 1, \
+        f"the pin is vacuous unless the corpus has more than one of each, got {n_surveys}"
+    want = {"surveys": f"{n_surveys:,} surveys · {n_stations:,} stations",
+            "collections": f"{n_collections:,} collections"}
+    for name, card in _hub_cards(built):
+        assert card.is_file(), f"the build must write the {name} hub card"
+        with Image.open(card) as im:
+            img = im.convert("RGB")
+        stamp, offset = _line_stamp(pages, want[name], pages._card_font(29), _MUTED_INK)
+        assert _sets_line(img, stamp, offset,
+                          (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)) is not None, \
+            f"{name}: the hub card must state {want[name]!r}, this build's own count"
+
+
+def test_the_hub_cards_are_byte_identical_when_drawn_twice(tmp_path):
+    """Two draws over one input produce one file. A card that carried a timestamp, or that walked a
+    set or an id hash to choose a colour, would differ between two builds of one corpus and every
+    deploy would ship a new card for data that had not changed."""
+    import hashlib
+    pages = _pages_module()
+    for name, kind, title in pages._HUB_CARDS:
+        digests = set()
+        for run in ("first", "second"):
+            path = tmp_path / f"{name}-{run}.png"
+            pages._og_hub_card(path, kind=kind, title=title, tagline=_brand()["tagline"],
+                               counts_line="58 surveys · 4,182 stations")
+            digests.add(hashlib.sha256(path.read_bytes()).hexdigest())
+        assert len(digests) == 1, f"{name}: two draws over one input gave {len(digests)} files"
+
+
+def test_a_survey_slug_that_would_overwrite_a_hub_card_is_refused(tmp_path):
+    """The hub cards share the flat og tree with the per-survey cards, so a survey slugged like a
+    hub would silently replace that hub's card and the hub page would then advertise a survey.
+
+    The build refuses instead, loudly and before it writes anything."""
+    pages = _pages_module()
+    for name, _kind, _title in pages._HUB_CARDS:
+        with pytest.raises(ValueError) as raised:
+            pages.emit_pages(tmp_path, BASE, surveys_meta={"lbl": {"slug": name}},
+                             survey_docs={}, station_docs={}, collections={},
+                             bundle_formats={}, survey_extent={}, survey_coll={})
+        assert name in str(raised.value), \
+            f"the refusal must name the slug it refused, it said {raised.value}"
+
+
+def test_a_hub_card_stays_inside_the_preview_fetchers_budget(built):
+    """A card is fetched by a crawler on every share, and the hub artwork is a field of resampled
+    edges, which is what a PNG packs down worst. The two hub cards are the heaviest the build
+    writes, so the budget is held on them.
+
+    FAILS IF a finer lattice or a further supersampling step is taken without the weight being
+    looked at: both are worth bytes, and neither is worth an unbounded number of them."""
+    pages = _pages_module()
+    for name, card in _hub_cards(built):
+        assert card.stat().st_size <= pages._HUB_CARD_BUDGET, (
+            f"{name}: the hub card weighs {card.stat().st_size:,} bytes against the "
+            f"{pages._HUB_CARD_BUDGET:,} a preview fetcher is asked to pay")

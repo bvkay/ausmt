@@ -2092,7 +2092,7 @@ def _hub_catalogue(*, name, description, url, base) -> dict:
             "keywords": _keywords()}
 
 
-def surveys_index_page(*, rows, base, build=None) -> str:
+def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
     the served documents do not already publish and needs no survey-metadata read.
@@ -2157,10 +2157,11 @@ def surveys_index_page(*, rows, base, build=None) -> str:
                   jsonld=[_hub_catalogue(name="AusMT surveys", description=desc, url=url,
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")])],
-                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts)
+                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts,
+                  og_image=og_image)
 
 
-def collections_index_page(*, rows, base, build=None) -> str:
+def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
     """The /collections hub. Rows carry: cid, title, description, n_surveys, n_stations, type,
     status, member_labels, member_points {label: [(lon, lat)]}. ONLY the fields the collections
     rollup actually carries are rendered: a collection whose record declares no type or status
@@ -2204,7 +2205,7 @@ def collections_index_page(*, rows, base, build=None) -> str:
                   jsonld=[_hub_catalogue(name="AusMT collections", description=desc, url=url,
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("collections", "/collections")])],
-                  extra_css=_INDEX_CSS, nav="navCollections", build=build)
+                  extra_css=_INDEX_CSS, nav="navCollections", build=build, og_image=og_image)
 
 
 # --------------------------------------------------------------------------- og cards (Pillow)
@@ -2285,6 +2286,29 @@ _COLL_CARD_MAP_PX = round(_COLL_CARD_MAP_WIDTH * _COLL_CARD_MAP_SCALE)
 _COLL_CARD_TEXT_WIDTH = (_CARD_SIZE[0] - _CARD_PANEL_AIR - 2 * _CARD_PANEL_INSET
                          - _COLL_CARD_MAP_PX - _CARD_PANEL_AIR - _CARD_MARGIN)
 
+# The hub cards, as (the name their card and their reserved slot take, the kind label they carry,
+# the title they set). A survey slugged like one of these would overwrite that hub's card, so the
+# emitter refuses the slug rather than letting a hub page advertise a survey.
+_HUB_CARDS = (("surveys", "SURVEYS", "Surveys"),
+              ("collections", "COLLECTIONS", "Collections"))
+# The hub card's artwork lattice, as columns x rows over the drawing extent. It is a whole multiple
+# of the brand mark's own grid, so the card draws the SAME silhouette the mark does at a finer
+# resolution: the mark is a simplified figure that has to survive a browser tab, while a card is
+# read at preview size, where that lattice reads as a logo rather than as the continent.
+_HUB_CARD_GRID = (63, 54)
+# The box the lattice is fitted into, centred inside it. It keeps clear of the text column's edge by
+# more than the survey card's panel gutter, because these dots carry no frame to separate them from
+# the type beside them.
+_HUB_CARD_BOX = (600, 30, 1180, 600)
+# The factor the artwork is drawn at before it is resampled down. A disc drawn straight onto the
+# card has hard stepped edges at this radius, and a lattice of them reads as a screen door rather
+# than as the brand's artwork. Every further step costs bytes a link-preview fetcher pays for: the
+# resampled edges are what a PNG compresses worst, and the third step buys no visible roundness.
+_HUB_CARD_SUPERSAMPLE = 2
+# What one card may weigh. Crawlers fetch these on every share, and the artwork is a field of
+# resampled edges, which is the one thing a PNG cannot pack down.
+_HUB_CARD_BUDGET = 300 * 1024
+
 # The AuScope lockup that closes the left column: its drawn height, and the clear space it keeps
 # above the card's bottom edge. It is never taller than the AusMT mark that opens the column, so the
 # acknowledgement cannot outweigh the resource identity it acknowledges.
@@ -2332,6 +2356,69 @@ def _rgb(colour):
     previews can share one declared colour instead of each carrying its own literal."""
     h = str(colour).lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _brand_ramp(t):
+    """The brand's declared stop ramp at `t` in [0, 1], as (r, g, b).
+
+    Linear in sRGB between the two stops `t` falls between, which is what an SVG gradient does and
+    what the established artwork's own blend looks like. The stops and their positions are read from
+    the brand file, so the ramp here and the mark's mapped colours are one declaration."""
+    stops = _brand()["palette"]["stops"]
+    for a, b in zip(stops, stops[1:]):
+        if t <= b["position"] or b is stops[-1]:
+            span = b["position"] - a["position"]
+            u = 0.0 if span == 0 else min(1.0, max(0.0, (t - a["position"]) / span))
+            return tuple(round(x + (y - x) * u)
+                         for x, y in zip(_rgb(a["hex"]), _rgb(b["hex"])))
+    raise ValueError(f"the declared stops do not cover {t}")
+
+
+def _brand_dot_radius(pitch, size_px):
+    """A lattice dot's radius: the brand's declared ratio for an output of `size_px`, times the
+    lattice pitch. Small outputs take fuller dots so the silhouette closes instead of dissolving,
+    which is a band the brand file declares rather than a rule restated here."""
+    bands = _brand()["geometry"]["radius_ratio_by_output_size"]
+    ratio = bands["above"]
+    for band in bands["bands"]:
+        if size_px <= band["max_px"]:
+            ratio = band["ratio"]
+            break
+    return pitch * ratio
+
+
+def _on_land(lon, lat) -> bool:
+    """Whether this coordinate falls inside any coastline ring, by even-odd crossing count.
+
+    EVERY ring is tested, not the mainland alone: the coastline carries Tasmania and the islands,
+    and a ring the lattice skipped would be land the artwork silently left out."""
+    for ring in au.COAST:
+        hit = False
+        j = len(ring) - 1
+        for i, (xi, yi) in enumerate(ring):
+            xj, yj = ring[j]
+            if (yi > lat) != (yj > lat) and lon < xi + (lat - yi) * (xj - xi) / (yj - yi):
+                hit = not hit
+            j = i
+        if hit:
+            return True
+    return False
+
+
+@functools.lru_cache(maxsize=4)
+def _lattice_cells(cols, rows):
+    """[(col, row)] for every cell of a `cols` x `rows` lattice over the drawing extent whose centre
+    falls on land, in reading order.
+
+    This is the construction the brand mark's own dot list comes from: run at the mark's grid it
+    reproduces that list cell for cell, which is what makes the hub card's finer lattice the same
+    silhouette at a second resolution rather than a second silhouette."""
+    ext = au.EXTENT
+    w, e, s, n = ext["w"], ext["e"], ext["s"], ext["n"]
+    return tuple((i, j)
+                 for j in range(rows)
+                 for i in range(cols)
+                 if _on_land(w + (i + 0.5) * (e - w) / cols, n - (j + 0.5) * (n - s) / rows))
 
 
 def _card_mark(path, height):
@@ -2719,6 +2806,69 @@ def _og_collection_card(path, *, kind, title, facts_line, taxonomy_line, coverag
     return True
 
 
+def _hub_artwork_dots(box=_HUB_CARD_BOX, grid=_HUB_CARD_GRID):
+    """[(cx, cy, radius, (r, g, b))] for the pixelated Australia fitted and centred inside `box`.
+
+    ONE pitch carries both axes, so the silhouette arrives at the coastline's own shape; the clear
+    fraction around it and the dot radius are the brand file's, and each dot's colour is the ramp
+    evaluated at its position across the figure, west to east."""
+    cells = _lattice_cells(*grid)
+    c0 = min(c for c, _r in cells)
+    c1 = max(c for c, _r in cells)
+    r0 = min(r for _c, r in cells)
+    r1 = max(r for _c, r in cells)
+    w, h = c1 - c0 + 1, r1 - r0 + 1
+    pad = _brand()["geometry"]["pad_fraction"]
+    x0, y0, x1, y1 = box
+    pitch = min((x1 - x0) * (1 - 2 * pad) / w, (y1 - y0) * (1 - 2 * pad) / h)
+    ox = x0 + ((x1 - x0) - w * pitch) / 2
+    oy = y0 + ((y1 - y0) - h * pitch) / 2
+    radius = _brand_dot_radius(pitch, round(max(w, h) * pitch))
+    return [(ox + (c - c0 + 0.5) * pitch, oy + (r - r0 + 0.5) * pitch, radius,
+             _brand_ramp(round((c - c0) / (c1 - c0), 6)))
+            for c, r in cells]
+
+
+def _og_hub_card(path, *, kind, title, tagline, counts_line):
+    """One 1200x630 link-preview card for a hub page: the card's own left column beside the
+    pixelated Australia the brand is drawn from.
+
+    A hub previews a catalogue rather than a place, so the artwork is the site's identity and not a
+    map of data: it is DRAWN from the coastline and the palette the brand file declares, never read
+    out of a vendored image, because the engine image ships no portal tree and a card that reached
+    for one would go blank exactly where the corpus is served. The counts arrive from the caller,
+    which is the only place that knows what this build published."""
+    from PIL import Image, ImageDraw
+    W, H = _CARD_SIZE
+    img = Image.new("RGB", (W, H), _CARD_GROUND)
+    # The artwork is drawn large and resampled down: a disc this size drawn straight onto the card
+    # has stepped edges, and a lattice of them reads as a screen door rather than as the artwork.
+    s = _HUB_CARD_SUPERSAMPLE
+    x0, y0, x1, y1 = _HUB_CARD_BOX
+    layer = Image.new("RGB", ((x1 - x0) * s, (y1 - y0) * s), _CARD_GROUND)
+    ld = ImageDraw.Draw(layer)
+    for cx, cy, r, colour in _hub_artwork_dots():
+        dx, dy, dr = (cx - x0) * s, (cy - y0) * s, r * s
+        ld.ellipse([dx - dr, dy - dr, dx + dr, dy + dr], fill=colour)
+    img.paste(layer.resize((x1 - x0, y1 - y0), Image.LANCZOS), (x0, y0))
+
+    d = ImageDraw.Draw(img)
+    _card_ausmt_lockup(img, d)
+    _card_kind_label(d, kind)
+    tsize, lines, block = _card_left_column(
+        d, title, ((tagline, 29, _rgb(_brand()["palette"]["tagline_ink"]["on_dark"]), 42),
+                   (counts_line, 29, (143, 163, 176), 42)), _CARD_TEXT_WIDTH, 2)
+    y = _CARD_TITLE_Y
+    for ln in lines:
+        d.text((_CARD_MARGIN, y), ln, font=_card_font(tsize), fill=(255, 255, 255))
+        y += round(tsize * 1.18)
+    for by, line, bfont, bink in block:
+        d.text((_CARD_MARGIN, by), line, font=bfont, fill=bink)
+    _card_address_line(d)
+    _card_auscope_lockup(img)
+    img.save(path, "PNG", optimize=True)
+
+
 # --------------------------------------------------------------------------- the emitter
 
 def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collections,
@@ -2742,6 +2892,14 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
         raise ValueError(f"survey slug 'index' collides with the surveys index page: {_clash}")
     if "index" in (collections or {}):
         raise ValueError("collection id 'index' collides with the collections index page")
+    # The hub cards sit in the same flat og tree the per-survey cards do, so a survey slugged like a
+    # hub would replace that hub's card and the hub page would then advertise a survey.
+    _hub_names = {name for name, _kind, _title in _HUB_CARDS}
+    _card_clash = sorted(((m or {}).get("slug") or lbl)
+                         for lbl, m in (surveys_meta or {}).items()
+                         if ((m or {}).get("slug") or lbl) in _hub_names)
+    if _card_clash:
+        raise ValueError(f"survey slug collides with a hub card in pages/og/: {_card_clash}")
     slug_by_label = {}
     index_rows = []
     # {slug: the Dataset stub a collection page states for that member}, built in the survey loop
@@ -2937,11 +3095,31 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             "member_labels": [lbl for lbl, _s in members], "member_points": member_points})
 
     # The two HUB pages, last: they are views over the rows the loops above just built, so they
-    # can never advertise a survey or collection this build did not write a page for.
+    # can never advertise a survey or collection this build did not write a page for. Their cards
+    # come first, on the rule the entity cards follow, and their counts are summed from those same
+    # rows rather than stated anywhere: a corpus that grows renders its own numbers.
+    hub_counts = {
+        "surveys": " · ".join(x for x in (
+            _plural(len(index_rows), "survey"),
+            _plural(sum(int(r.get("n_stations") or 0) for r in index_rows), "station")) if x),
+        "collections": _plural(len(coll_index_rows), "collection"),
+    }
+    hub_og: dict = {}
+    if draw_cards:
+        for name, kind, title in _HUB_CARDS:
+            cardpath = ogdir / f"{name}.png"
+            _og_hub_card(cardpath, kind=kind, title=title, tagline=_brand()["tagline"],
+                         counts_line=hub_counts[name])
+            if not cardpath.is_file():
+                raise ValueError(f"hub card {cardpath} was not written; the page must not "
+                                 "advertise a card that does not exist")
+            hub_og[name] = f"{base}/data/pages/og/{name}.png"
     (sdir / "index.html").write_text(
-        surveys_index_page(rows=index_rows, base=base, build=build), encoding="utf-8")
+        surveys_index_page(rows=index_rows, base=base, build=build,
+                           og_image=hub_og.get("surveys")), encoding="utf-8")
     n += 1
     (cdir / "index.html").write_text(
-        collections_index_page(rows=coll_index_rows, base=base, build=build), encoding="utf-8")
+        collections_index_page(rows=coll_index_rows, base=base, build=build,
+                               og_image=hub_og.get("collections")), encoding="utf-8")
     n += 1
     return n
