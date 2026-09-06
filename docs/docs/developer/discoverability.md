@@ -186,8 +186,15 @@ Below the label the title walks the size ladder, then the facts: the station cou
 by an interpunct, the region and years, the period band. An absent value is skipped rather than
 reserved, and the period band follows the block instead of standing on a slot of its own, so a
 survey that discloses no region closes the gap instead of leaving a hole. The block also has a
-ceiling: the address and the AuScope lockup close the column on fixed lines, so a value that does not
-fit above that ceiling goes unset, on the same rule as a value the survey never disclosed.
+ceiling: the address and the AuScope lockup close the column on fixed lines, and the block keeps a
+declared clear space above the address's own first ink row, measured on the glyphs the face sets
+rather than on the nominal point size.
+
+A value that does not fit is not an absent value, so nothing the survey disclosed is given up to
+make room under that ceiling. The block closes its leading first, steps its type down only once the
+leading has nowhere left to go, and the title steps down its own ladder only when the block has no
+room left at any of those notches. The title and the block are therefore chosen together, and the
+last step of both ladders holds the most a card can carry, so the walk always has an answer.
 
 The engine draws the mark from a small pinned derivative,
 `portal/vendor/brand/ausmt-mark-168.png`, emitted by `gen_brand.py` from the same lattice as every
