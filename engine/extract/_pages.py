@@ -2243,6 +2243,13 @@ _CARD_TEXT_WIDTH = 476
 # the text column. One number, because the two have to read as the same amount of space.
 _CARD_PANEL_AIR = 34
 _CARD_PANEL_INSET = 16            # the panel frame's outset from the map it holds
+# The SURVEY card's footprint panel, as the map box the frame is outset from. It is the same box on
+# every card: a panel fitted to its own data changes the card's composition per survey, and an
+# east-west traverse collapses it to a strip with the rest of the card left empty.
+_CARD_PANEL = (640, 70, 1150, 560)
+# The share of the panel kept clear on every side. A station on the frame reads as a footprint that
+# runs off the card, so the extent is fitted inside this band rather than up against the rule.
+_CARD_PANEL_PAD = 0.10
 
 # The AusMT mark opening the card's left column, and the height it is drawn at. It is square, so the
 # height is the whole geometry; the pinned export is a whole multiple of it (see gen_brand.py), so
@@ -2523,6 +2530,30 @@ def _card_kind_label(d, kind):
                   _card_address_font(_CARD_KIND_SIZE), _CARD_KIND_INK, _CARD_KIND_TRACKING)
 
 
+def _card_footprint_fit(points, box=_CARD_PANEL, pad=_CARD_PANEL_PAD):
+    """A (lon, lat) -> (x, y) that fits every one of `points` inside `box`, centred and padded.
+
+    ONE scale carries both axes, so a traverse arrives as a traverse rather than being stretched to
+    fill the panel; the scale is the largest that holds the whole extent inside the padded box, so a
+    compact survey is not shrunk away either. What is optimised is the viewport: no station is moved,
+    merged or dropped to make a footprint read better. An extent with no width or no height still
+    lands in the middle rather than on an edge, which is the single-station case."""
+    x0, y0, x1, y1 = box
+    bw, bh = x1 - x0, y1 - y0
+    lons = [pt[0] for pt in points]
+    lats = [pt[1] for pt in points]
+    lo0, la1 = min(lons), max(lats)
+    dlo, dla = max(lons) - lo0, la1 - min(lats)
+    limits = [side * (1 - 2 * pad) / span
+              for side, span in ((bw, dlo), (bh, dla)) if span > 0]
+    scale = min(limits) if limits else 1.0
+    ox, oy = x0 + (bw - dlo * scale) / 2, y0 + (bh - dla * scale) / 2
+
+    def project(lon, lat):
+        return (ox + (lon - lo0) * scale, oy + (la1 - lat) * scale)
+    return project
+
+
 def _og_card(path, *, kind, title, subtitle, region_year, period_line, points):
     """One 1200x630 link-preview card in the portal card's design language: footprint dots,
     Australia locator inset, the survey's key numbers."""
@@ -2540,20 +2571,14 @@ def _og_card(path, *, kind, title, subtitle, region_year, period_line, points):
         lats = [pt[1] for pt in points]
         lo0, lo1 = min(lons), max(lons)
         la0, la1 = min(lats), max(lats)
-        dlo, dla = max(lo1 - lo0, 1e-6), max(la1 - la0, 1e-6)
-        px0, py0, px1, py1 = 640, 70, 1150, 560
-        pw, ph = px1 - px0, py1 - py0
-        if pw * (dla / dlo) > ph:
-            pw = ph / (dla / dlo)
-        else:
-            ph = pw * (dla / dlo)
-        px1, py1 = px0 + pw, py0 + ph
-        d.rounded_rectangle([px0 - 16, py0 - 16, px1 + 16, py1 + 16], radius=12,
+        px0, py0, px1, py1 = _CARD_PANEL
+        d.rounded_rectangle([px0 - _CARD_PANEL_INSET, py0 - _CARD_PANEL_INSET,
+                             px1 + _CARD_PANEL_INSET, py1 + _CARD_PANEL_INSET], radius=12,
                             fill=panel, outline=line, width=2)
         pr = 4 if len(points) <= 60 else (3 if len(points) <= 200 else 2.2)
+        fit = _card_footprint_fit(points)
         for lo, la, _ty in points:
-            x = px0 + (lo - lo0) / dlo * pw
-            y = py0 + (la1 - la) / dla * ph
+            x, y = fit(lo, la)
             d.ellipse([x - pr, y - pr, x + pr, y + pr], fill=cyan)
         # Australia locator inset, bottom-right over the panel. It is drawn on its own layer and
         # composited at _CARD_INSET_ALPHA, because the inset sits over the footprint it is

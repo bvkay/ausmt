@@ -771,6 +771,170 @@ def test_every_card_the_build_writes_signs_itself_and_leaves_the_address_its_lin
             f"{pages._CARD_BLOCK_CLEAR}")
 
 
+# The survey card's footprint panel: its fill and its rule. They are the panel's own two colours,
+# named here so a scan can find the frame the emitter drew rather than the box it was asked for.
+_PANEL_INKS = ((17, 26, 51), (43, 53, 87))
+# The footprint's dot colour, so a scan can count the stations a card plotted.
+_DOT_INK = (79, 195, 217)
+# Three footprints the viewport rule has to hold at once: an east-west traverse, its north-south
+# mirror, and a compact block. A rule that only centres square footprints passes on the third alone.
+_FOOTPRINTS = {
+    "wide": [(129.0 + 0.25 * i, -12.5 - 0.04 * i, "mt") for i in range(24)],
+    "traverse": [(138.0 + 0.04 * i, -20.0 - 0.25 * i, "mt") for i in range(24)],
+    "compact": [(133.0 + 0.05 * i, -25.0 - 0.05 * j, "mt")
+                for i in range(5) for j in range(5)],
+}
+
+
+def _survey_card(pages, path, points):
+    """One survey card over `points`, everything else held constant."""
+    pages._og_card(path, kind="SURVEY", title="Panel", subtitle=f"{len(points)} stations · BBMT",
+                   region_year="South Australia · 2022", period_line="0.005 - 10,000 s",
+                   points=points)
+    return path
+
+
+def _drawn_box(path, inks, over):
+    """The bbox of any of `inks` inside `over` on a rendered card."""
+    from PIL import Image
+    with Image.open(path) as im:
+        px = im.convert("RGB").load()
+    pts = [(x, y) for y in range(over[1], over[3]) for x in range(over[0], over[2])
+           if px[x, y] in inks]
+    assert pts, f"{path}: none of {inks} is on the card"
+    return _box(pts)
+
+
+def _blob_count(path, colour):
+    """How many separate runs of exactly `colour` a rendered card carries.
+
+    A count of PIXELS cannot answer whether a card plotted every station it was given; a count of
+    connected marks can, as long as the caller keeps the marks apart."""
+    from PIL import Image
+    with Image.open(path) as im:
+        px = im.convert("RGB").load()
+    w, h = im.size
+    seen, blobs = set(), 0
+    for y0 in range(h):
+        for x0 in range(w):
+            if px[x0, y0] != colour or (x0, y0) in seen:
+                continue
+            blobs += 1
+            stack = [(x0, y0)]
+            seen.add((x0, y0))
+            while stack:
+                x, y = stack.pop()
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if (0 <= nx < w and 0 <= ny < h and (nx, ny) not in seen
+                            and px[nx, ny] == colour):
+                        seen.add((nx, ny))
+                        stack.append((nx, ny))
+    return blobs
+
+
+def _fit_box(pages):
+    """The box the footprint is fitted into: the panel less the padding it keeps on every side."""
+    px0, py0, px1, py1 = pages._CARD_PANEL
+    dx, dy = pages._CARD_PANEL_PAD * (px1 - px0), pages._CARD_PANEL_PAD * (py1 - py0)
+    return (px0 + dx, py0 + dy, px1 - dx, py1 - dy)
+
+
+def test_every_survey_card_draws_the_one_declared_footprint_panel(tmp_path):
+    """The footprint panel is a FIXED box: the same frame on every survey card, whatever shape the
+    survey it previews is.
+
+    A panel that follows its data is a card whose composition changes per survey, and on an
+    east-west traverse it collapses to a strip against the top of the card with the rest of the
+    frame empty. Both the declared box and the frame the emitter actually drew are held, so a pair
+    of constants cannot be changed in step to move the panel while every derived number agrees.
+
+    FAILS IF the panel is fitted to the data instead of the data being fitted to the panel."""
+    pages = _pages_module()
+    px0, py0, px1, py1 = pages._CARD_PANEL
+    inset = pages._CARD_PANEL_INSET
+    frame = (px0 - inset, py0 - inset, px1 + inset, py1 + inset)
+    assert frame == (624, 54, 1166, 576), f"the panel frame's declared box moved, now {frame}"
+    edge = pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH
+    for name, pts in sorted(_FOOTPRINTS.items()):
+        card = _survey_card(pages, tmp_path / f"{name}.png", pts)
+        drawn = _drawn_box(card, _PANEL_INKS, (edge, 0, pages._CARD_SIZE[0], pages._CARD_SIZE[1]))
+        assert drawn == frame, f"{name}: the drawn panel {drawn} must be the declared panel {frame}"
+
+
+def test_the_footprint_is_aspect_fitted_and_centred_inside_its_padding(tmp_path):
+    """The station extent is fitted into the panel at ONE scale, padded on every side and centred
+    on both axes.
+
+    Four properties over the same three shapes. The fit is never distorted: the drawn spans are the
+    geographic spans at a single scale, so a traverse arrives as a traverse. It is padded: nothing
+    reaches into the band the panel keeps clear, which is what stops an edge station from sitting on
+    the frame. It is centred: the footprint's own centre is the panel's centre. And it is MAXIMAL:
+    one axis fills the padded box, so a rule that centred a footprint by shrinking it to a dot
+    cannot pass. The last one is measured on the pixels as well, so the emitter and the fit it
+    declares cannot drift apart.
+
+    FAILS IF the fit anchors a corner, or pads one axis only, or scales the axes separately."""
+    pages = _pages_module()
+    assert 0.08 <= pages._CARD_PANEL_PAD <= 0.15, (
+        f"the panel keeps between 8 and 15 percent of itself clear, it declares "
+        f"{pages._CARD_PANEL_PAD}")
+    px0, py0, px1, py1 = pages._CARD_PANEL
+    fx0, fy0, fx1, fy1 = _fit_box(pages)
+    for name, pts in sorted(_FOOTPRINTS.items()):
+        proj = pages._card_footprint_fit(pts)
+        plotted = [proj(lon, lat) for lon, lat, _t in pts]
+        box = _box(plotted)
+        assert box[0] >= fx0 - 0.5 and box[1] >= fy0 - 0.5, \
+            f"{name}: the footprint {box} reaches into the panel's padding {(fx0, fy0, fx1, fy1)}"
+        assert box[2] <= fx1 + 0.5 and box[3] <= fy1 + 0.5, \
+            f"{name}: the footprint {box} reaches into the panel's padding {(fx0, fy0, fx1, fy1)}"
+        assert abs((box[0] + box[2]) / 2 - (px0 + px1) / 2) < 0.5, \
+            f"{name}: the footprint is not centred across the panel, its box is {box}"
+        assert abs((box[1] + box[3]) / 2 - (py0 + py1) / 2) < 0.5, \
+            f"{name}: the footprint is not centred down the panel, its box is {box}"
+        dlon = max(p[0] for p in pts) - min(p[0] for p in pts)
+        dlat = max(p[1] for p in pts) - min(p[1] for p in pts)
+        assert abs((box[2] - box[0]) * dlat - (box[3] - box[1]) * dlon) < 0.01, (
+            f"{name}: the two axes must share one scale; {dlon} x {dlat} degrees arrived as "
+            f"{box[2] - box[0]} x {box[3] - box[1]} pixels")
+        assert (box[2] - box[0] > fx1 - fx0 - 0.5) or (box[3] - box[1] > fy1 - fy0 - 0.5), (
+            f"{name}: the fit must fill the padded box on one axis, it drew "
+            f"{box[2] - box[0]} x {box[3] - box[1]} inside {fx1 - fx0} x {fy1 - fy0}")
+        card = _survey_card(pages, tmp_path / f"{name}.png", pts)
+        radius = 4
+        ink = _drawn_box(card, (_DOT_INK,), (px0, py0, px1, py1))
+        assert all(abs(a - b) <= 2 for a, b in zip(
+            ink, (box[0] - radius, box[1] - radius, box[2] + radius, box[3] + radius))), (
+            f"{name}: the dots the card drew sit at {ink}, not where its declared fit puts them")
+
+
+def test_the_card_plots_every_station_it_was_given_and_moves_none(tmp_path):
+    """The viewport is optimised, never the data: no station is moved, merged, smoothed away or
+    dropped to make a footprint read better.
+
+    The card is drawn over a station set spread widely enough that every dot stands on its own, so
+    the marks can be counted: there are exactly as many as there were stations, and each one is
+    where the declared fit puts its station. A card that thinned a dense footprint, snapped stations
+    to a grid or dropped an outlier to tighten the fit fails on the count or on the positions.
+
+    FAILS IF the emitter plots anything but the point set it was handed."""
+    pages = _pages_module()
+    pts = [(129.0 + 0.45 * i, -20.0 - 0.05 * (i % 7), "mt") for i in range(24)]
+    card = _survey_card(pages, tmp_path / "plotted.png", pts)
+    assert _blob_count(card, _DOT_INK) == len(pts), (
+        f"the card must plot each of the {len(pts)} stations it was handed as its own mark, it "
+        f"drew {_blob_count(card, _DOT_INK)}")
+    from PIL import Image
+    with Image.open(card) as im:
+        px = im.convert("RGB").load()
+    proj = pages._card_footprint_fit(pts)
+    for lon, lat, _t in pts:
+        x, y = proj(lon, lat)
+        assert px[round(x), round(y)] == _DOT_INK, (
+            f"the station at {lon}, {lat} belongs at {round(x)}, {round(y)}; the card put "
+            f"{px[round(x), round(y)]} there")
+
+
 def _panel_geometry(pages):
     """(map box, panel frame box) for the collection card, REBUILT from the constants the emitter
     draws with rather than restated here, so a change to the map scale moves this with it. The pin

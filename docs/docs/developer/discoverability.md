@@ -138,6 +138,14 @@ through it; only its centre marker, the one mark that says WHERE, is drawn at fu
 footprint's kilometres are a number the survey PAGE carries: on a card they crowd out the period
 band a reader can actually use.
 
+The footprint panel is the same box on every survey card, and the station extent is fitted into it:
+one scale on both axes, so a traverse arrives as a traverse rather than stretched to fill the frame;
+ten per cent of the panel kept clear on every side, so no station sits on the rule; and the whole
+extent centred on both axes. A panel fitted to its own data instead would change the card's
+composition per survey, and an east-west traverse would collapse it to a strip against the top of
+the card with the rest of the frame left empty. What the fit optimises is the viewport and never the
+data: no station is moved, merged, thinned or dropped to make a footprint read better.
+
 The collection card is a preview of the collection page's own map: every member station, coloured by
 member survey in the collections hub's palette and member order, so one survey is the same colour on
 the hub, on the collection page and on the card. It carries no locator inset, because a grouping of
