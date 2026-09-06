@@ -109,7 +109,7 @@ def built(tmp_path_factory):
     keeps and the sweep over that clear space measures a card that comes near it."""
     tmp = tmp_path_factory.mktemp("ogcards")
     coll = ("collection:\n  id: cardcoll\n  title: Card Collection\n  type: programme\n"
-            "  status: active\n")
+            "  status: active\n  start_year: 2013\n")
     surveys = _survey(tmp, "card-a", "AusLAMP Musgraves APY Lands Deployment 2016", "-30.5",
                       coll + "dates: {start: 2016, end: 2018}\n",
                       region="South Australia / Western Australia / Northern Territory")
@@ -144,6 +144,7 @@ def drawn(tmp_path_factory):
     assert pages._og_collection_card(
         out / "collection.png", kind="COLLECTION", title="AusLAMP",
         facts_line="14 surveys · 500 stations", taxonomy_line="PROGRAMME · ACTIVE",
+        coverage_line="2013 - present",
         member_labels=["A", "B"],
         member_points={"A": [(133.0, -25.0), (134.0, -26.0)], "B": [(140.0, -30.0)]})
     return ((out / "survey.png", pages._CARD_MARGIN + pages._CARD_TEXT_WIDTH, "SURVEY"),
@@ -1216,8 +1217,61 @@ def test_a_collection_with_no_disclosed_positions_gets_no_card(tmp_path):
     card = tmp_path / "empty.png"
     wrote = pages._og_collection_card(card, kind="COLLECTION", title="Empty",
                                       facts_line="0 surveys", taxonomy_line="",
+                                      coverage_line="",
                                       member_labels=["A"], member_points={"A": []})
     assert wrote is False and not card.exists(), "no positions means no card at all"
+
+
+def test_the_collection_card_states_the_coverage_its_record_carries(tmp_path):
+    """A collection's temporal coverage comes from the collection record and from nowhere else.
+
+    A record still taking members has no end year to give, so its coverage runs to the present. A
+    record that carries a start year and makes no such claim states the start alone, because a
+    closed range needs an end year the record does not hold and the date it was last maintained is
+    not one. A record with no start year gets no coverage line at all.
+
+    The line is read back as GLYPHS off the rendered card, in the ink and at the size the card sets
+    it, and the card drawn from a record that discloses none must set none, so the pin cannot be
+    answered by a card that sets a line whatever it was given."""
+    pages = _pages_module()
+    assert pages._collection_coverage({"start_year": 2013, "status": "active"}) == "2013 - present"
+    assert pages._collection_coverage({"start_year": 1966, "status": "completed"}) == "from 1966"
+    assert pages._collection_coverage({"start_year": None, "status": "active"}) == ""
+    assert pages._collection_coverage({}) == ""
+    pts = {"A": [(133.0, -25.0), (140.0, -30.0)]}
+    card, bare = tmp_path / "covered.png", tmp_path / "bare.png"
+    for path, coverage in ((card, "2013 - present"), (bare, "")):
+        assert pages._og_collection_card(
+            path, kind="COLLECTION", title="AusLAMP",
+            facts_line="14 surveys · 500 stations", taxonomy_line="PROGRAMME · ACTIVE",
+            coverage_line=coverage, member_labels=["A"], member_points=pts)
+    from PIL import Image
+    with Image.open(card) as im:
+        img = im.convert("RGB")
+    with Image.open(bare) as im:
+        without = im.convert("RGB")
+    stamp, offset = _line_stamp(pages, "2013 - present", pages._card_font(29), _MUTED_INK)
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    assert _sets_line(img, stamp, offset, rows) is not None, \
+        "the card must set the coverage its record carries"
+    assert _sets_line(without, stamp, offset, rows) is None, \
+        "a record that discloses no coverage gets no coverage line"
+
+
+def test_the_built_collection_card_takes_its_coverage_from_its_own_record(built):
+    """The same line, over the card the EMITTER wrote rather than one this file drew: the corpus
+    collection declares an open-ended programme, so its card carries the open-ended range.
+
+    FAILS IF the coverage is assembled from the member surveys' years, or from the date the record
+    was last maintained, rather than read off the collection record itself."""
+    pages = _pages_module()
+    from PIL import Image
+    with Image.open(built / "pages" / "og" / "collections" / "cardcoll.png") as im:
+        img = im.convert("RGB")
+    stamp, offset = _line_stamp(pages, "2013 - present", pages._card_font(29), _MUTED_INK)
+    assert _sets_line(img, stamp, offset,
+                      (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)) is not None, \
+        "the built card must set the coverage its collection record declares"
 
 
 def test_the_collection_card_keeps_the_whole_title_by_stepping_the_type_down(tmp_path):
@@ -1228,6 +1282,7 @@ def test_the_collection_card_keeps_the_whole_title_by_stepping_the_type_down(tmp
     card = tmp_path / "long.png"
     assert pages._og_collection_card(card, kind="COLLECTION", title=long_title,
                                      facts_line="14 surveys", taxonomy_line="programme",
+                                     coverage_line="2013 - present",
                                      member_labels=["A"],
                                      member_points={"A": [(133.0, -25.0), (140.0, -30.0)]})
     from PIL import ImageDraw, Image

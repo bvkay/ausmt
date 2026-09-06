@@ -855,6 +855,18 @@ def _survey_years(sm_doc, smeta):
     return str(y0 or y1 or "")
 
 
+def _collection_coverage(coll) -> str:
+    """A collection's temporal coverage, from the collection record's OWN fields.
+
+    A collection still taking members has no end year to give, so its coverage is open-ended; one
+    that makes no such claim states its start alone, because a closed range needs an end year the
+    record does not hold and the date it was last maintained is not one. No start year, no line."""
+    start = (coll or {}).get("start_year")
+    if not start:
+        return ""
+    return _range(start, "present") if (coll or {}).get("status") == "active" else f"from {start}"
+
+
 def _station_points(docs):
     """[(lon, lat, type)] for every station whose served document discloses a position."""
     pts = []
@@ -2627,8 +2639,8 @@ def _og_card(path, *, kind, title, subtitle, region_year, period_line, points):
     img.save(path, "PNG", optimize=True)
 
 
-def _og_collection_card(path, *, kind, title, facts_line, taxonomy_line, member_labels,
-                        member_points) -> bool:
+def _og_collection_card(path, *, kind, title, facts_line, taxonomy_line, coverage_line,
+                        member_labels, member_points) -> bool:
     """One 1200x630 link-preview card per collection: the member-coloured footprint the collections
     hub card draws, at raster scale. Returns whether a card was written.
 
@@ -2688,10 +2700,12 @@ def _og_collection_card(path, *, kind, title, facts_line, taxonomy_line, member_
     # ---- the text column, stepped down until the WHOLE title fits ----
     _card_ausmt_lockup(img, d)
     _card_kind_label(d, kind)
-    # The survey card's own two fact slots, at its scale: a single-line title lands on the same two
-    # baselines there, so the two families read as one card design.
+    # The survey card's own fact slots, at its scale: a single-line title lands on the same
+    # baselines there, so the two families read as one card design. The coverage row ranks with the
+    # two above it; a record disclosing no start year passes none and the block closes up.
     tsize, lines, block = _card_left_column(
-        d, title, ((facts_line, 29, muted, 42), (taxonomy_line, 29, muted, 42)),
+        d, title, ((facts_line, 29, muted, 42), (taxonomy_line, 29, muted, 42),
+                   (coverage_line, 29, muted, 42)),
         _COLL_CARD_TEXT_WIDTH, 3)
     y = _CARD_TITLE_Y
     for ln in lines:
@@ -2895,6 +2909,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                           if x),
                     taxonomy_line=" · ".join(str(x) for x in (coll.get("type"),
                                                               coll.get("status")) if x),
+                    coverage_line=_collection_coverage(coll),
                     member_labels=[lbl for lbl, _s in members],
                     member_points=member_points):
                 if not cardpath.is_file():

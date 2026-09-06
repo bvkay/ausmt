@@ -156,6 +156,12 @@ the dots are drawn opaque, because this card has neither a legend nor a hover, s
 nothing and costs contrast. A collection whose members disclose no position at all gets no card,
 rather than a bare coastline that would read as a collection with no coverage.
 
+The collection card's facts are its member and station counts, its type and status, and its temporal
+coverage. The coverage comes from the collection record and from nowhere else: a record still taking
+members has no end year to give, so its coverage runs to the present; a record that makes no such
+claim states its start alone, because a closed range needs an end year the record does not hold and
+the date it was last maintained is not one. A record carrying no start year gets no coverage line.
+
 ### The text column
 
 Every card declares the width its left column may use, and no ink crosses it. The title walks the
