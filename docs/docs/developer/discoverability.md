@@ -132,9 +132,11 @@ now fails the build; a page with no card falls back to the root card.
 ### What each card shows
 
 The survey card carries the survey's title, its station count and type, its region and years, its
-period band and extent, a footprint panel of its stations and an Australia locator inset. The inset
-is composited at 70 per cent over the footprint it explains, so the stations it covers still show
-through it; only its centre marker, the one mark that says WHERE, is drawn at full strength.
+period band, a footprint panel of its stations and an Australia locator inset. The inset is
+composited at 70 per cent over the footprint it explains, so the stations it covers still show
+through it; only its centre marker, the one mark that says WHERE, is drawn at full strength. The
+footprint's kilometres are a number the survey PAGE carries: on a card they crowd out the period
+band a reader can actually use.
 
 The collection card is a preview of the collection page's own map: every member station, coloured by
 member survey in the collections hub's palette and member order, so one survey is the same colour on
@@ -163,37 +165,66 @@ panel width, because a collection map is read for the SHAPE of a programme's cov
 arrives at about a third of this width in a feed, and the column is whatever that enlarged panel
 leaves at the same air it keeps against the card's own edge.
 
-### The AusMT mark in the corner
+### The left column
 
-The survey and collection cards carry the AusMT mark in the top-left corner, on the same text margin
-the title sits on. The root card does not: its artwork IS the mark, at full size.
+Every generated card carries one column on the text margin, top to bottom: the AusMT lockup, the
+kind label, the title and its facts, the address, the AuScope lockup. The root card carries no
+lockup of its own: its artwork IS the mark, at full size.
 
-The engine draws the corner mark from a small pinned derivative,
+The AusMT lockup is the mark with the word beside it. The word's size, its gap from the mark and its
+ink are read from `contract/brand.json` at draw time and scaled by the mark's height, so the lockup
+on a card and the lockup on every other surface are one set of proportions rather than two that
+happen to agree; no number of the lockup's is restated in the emitter. `contract/` is a sibling of
+`engine/` and the engine image ships it, so the read resolves in the image as well as in a source
+tree.
+
+The kind label names what the reader has landed on before the title does: tracked caps in a muted
+ink, saying SURVEY or COLLECTION. The card emitters take that word as an argument rather than
+knowing it, so a further card family takes the same column by passing its own.
+
+Below the label the title walks the size ladder, then the facts: the station count and type joined
+by an interpunct, the region and years, the period band. An absent value is skipped rather than
+reserved, and the period band follows the block instead of standing on a slot of its own, so a
+survey that discloses no region closes the gap instead of leaving a hole. The block also has a
+ceiling: the address and the AuScope lockup close the column on fixed lines, so a value that does not
+fit above that ceiling goes unset, on the same rule as a value the survey never disclosed.
+
+The engine draws the mark from a small pinned derivative,
 `portal/vendor/brand/ausmt-mark-168.png`, emitted by `gen_brand.py` from the same lattice as every
 other brand export and gated by `gen_brand.py --check`. It exists because the engine image ships no
 portal tree and so must carry its own copy of whatever it draws with; the 1024 px mark would put a
 third of a megabyte in that image to be shown at a fraction of the size. 168 is a whole multiple of
 the height the card draws at, so the resample is a clean box rather than an arbitrary ratio.
 
-### The signature row
+### The address and the AuScope lockup
 
-Every card is signed the same way: the AuScope mark, then a gap of half the mark's width, then the
-address `ausmt.auscope.org.au`, all on the card's own text margin. The mark's height is the address's
-line height and it is centred on the address's ink, so the pair reads as one line of type rather than
-as a logo with a caption beside it.
+The address `ausmt.auscope.org.au` closes the block on a line of its own, on the card's text margin,
+in the coral accent read from `contract/brand.json`. It carries no mark beside it: the column
+already opens with one lockup and closes with another, and a third mark on that line reads as a logo
+with a caption.
+
+The AuScope lockup is last, on the same margin, keeping a declared clear space against the card's
+bottom edge so the column ends on one line across every family whatever the block above it does. It
+is the AuScope half of `portal/vendor/auscope-ncris-white.png`, cut at column 1200 of that 1919 by
+325 image and trimmed to its alpha bbox: the columns to the right carry a second organisation's mark
+and a descriptor line that is unreadable at card height, and the site footer already carries the full
+acknowledgement. It is drawn no taller than the AusMT mark above it, which is how the acknowledgement
+is kept from outweighing the resource identity it acknowledges.
 
 The address is set in Inter Bold on all three families. The root card's artwork is set in that face,
-so the generated cards adopting it is what makes the three signature rows one row rather than three
-that happen to say the same thing; the rest of a generated card's type stays in Pillow's bundled
-face, which ships with the library and so cannot go missing.
+so the generated cards adopting it is what makes the three addresses one line rather than three that
+happen to say the same thing; the rest of a generated card's type stays in Pillow's bundled face,
+which ships with the library and so cannot go missing.
 
-The engine ships its own copy of everything it draws with, beside the emitter and pinned
-byte-identical to the portal's copy in tests: `engine/extract/_auscope_mark.png` against
-`portal/vendor/auscope-icon-white.png`, `engine/extract/_ausmt_mark.png` against
+The engine ships its own copy of everything it draws with, beside the emitter and pinned against the
+portal's copy in tests: `engine/extract/_auscope_lockup.png` against the crop of
+`portal/vendor/auscope-ncris-white.png` described above, `engine/extract/_ausmt_mark.png` against
 `portal/vendor/brand/ausmt-mark-168.png`, and `engine/extract/_inter_bold.ttf` against
-`portal/tools/brand_font/Inter-Bold.ttf`, whose Open Font Licence ships beside it. The engine image
-carries no portal tree, so an emitter that reached across to the portal would draw an unsigned card
-in exactly the environment that serves the corpus. These four files are listed under
+`portal/tools/brand_font/Inter-Bold.ttf`, whose Open Font Licence ships beside it. The lockup's pin
+compares DECODED pixels, because a re-encoded crop's bytes move between Pillow builds while its
+picture does not; the other two are byte pins on files nothing re-encodes. The engine image carries
+no portal tree, so an emitter that reached across to the portal would draw an unsigned card in
+exactly the environment that serves the corpus. These four files are listed under
 `[tool.setuptools.package-data]` in `engine/pyproject.toml`: the repository installs the engine
 editable everywhere it runs, so the list declares the intent rather than repairing a live break, but
 a card asset added beside the emitter belongs on it.
