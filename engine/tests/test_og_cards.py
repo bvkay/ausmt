@@ -481,6 +481,44 @@ def test_a_disclosed_value_is_never_dropped_to_make_room(tmp_path):
         "the column closes its leading before it steps the title down"
 
 
+def test_the_title_takes_the_step_before_the_block_gives_up_its_declared_type():
+    """The title has a ladder and the block's sizes are declared, so when the column cannot hold
+    both, the step comes out of the TITLE and every fact line still arrives at its declared size.
+
+    The case is a title that holds at the step the ladder prefers over a block that overflows under
+    it: the whole column then fits one step further down the title's ladder, at the block's own
+    sizes. FAILS IF the walk offers the block its type ladder under a title step it has not taken
+    yet, which sets the science below the smallest size the card declares while the title keeps a
+    size it was never promised."""
+    pages = _pages_module()
+    from PIL import Image, ImageDraw
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    rows = (("56 stations · BBMT", 29, _MUTED_INK, 42),
+            ("South Australia · 2016 - 2018", 29, _MUTED_INK, 42),
+            ("0.000122 - 117,029 s across broadband bands", 26, _PERIOD_INK, 40))
+    title = "Vulcan Deep Crustal Survey"
+    preferred = pages._card_title_block(d, title, pages._CARD_TEXT_WIDTH, 2)
+    assert preferred[0] > pages._CARD_TITLE_SIZES[-1], \
+        f"the pin is vacuous unless the title starts above the ladder's last step, got {preferred}"
+    tight = min(lead for type_scale, lead in pages._CARD_BLOCK_FITS if type_scale == 1.0)
+    y = pages._CARD_TITLE_Y + len(preferred[1]) * round(preferred[0] * 1.18) + 8
+    _under, last = pages._card_lay_block(d, y, pages._CARD_BLOCK_FLOOR, rows,
+                                         pages._CARD_TEXT_WIDTH, 1.0, tight)
+    assert last > pages._card_block_ceiling(), (
+        "the pin is vacuous unless the block overflows at its declared sizes under the title step "
+        f"the ladder prefers; its last ink row {last} already clears {pages._card_block_ceiling()}")
+
+    tsize, tlines, placed = pages._card_left_column(d, title, rows, pages._CARD_TEXT_WIDTH, 2)
+    assert tsize < preferred[0], (
+        f"the title must take the step: it stayed at {preferred[0]} px while the block under it "
+        "had to give up its declared type")
+    assert " ".join(tlines) == title, f"the title must still arrive whole, got {tlines}"
+    declared = {size for _text, size, _ink_, _step in rows}
+    set_at = sorted({font.size for _y, _line, font, _i in placed})
+    assert set(set_at) <= declared, \
+        f"every fact line is set at its declared size, one of {sorted(declared)}; got {set_at}"
+
+
 def test_the_column_has_a_fit_for_the_most_a_card_can_carry():
     """The column's walk has to have an answer at the bottom of both its ladders, or the rule that
     no disclosed value is dropped cannot be kept: three fact rows that each wrap to two lines, under

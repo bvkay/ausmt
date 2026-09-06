@@ -2227,11 +2227,9 @@ _CARD_BLOCK_FLOOR = 268
 # lockup close the column on fixed lines, and a block set up against them reads as one run of type
 # rather than as a signature under a block.
 _CARD_BLOCK_CLEAR = 16
-# The block's fit ladder, as (type scale, leading scale) in the order the column gives things up: a
-# value the survey disclosed is never discarded to make room, so the block closes its leading first
-# and steps its type down only once the leading has nowhere left to go. The last pair holds the most
-# a card can carry (three rows, each wrapped to two lines, under the tallest title the ladder sets)
-# clear of the address, so the walk always has an answer.
+# The block's fit ladder, as (type scale, leading scale) in the order the column gives things up.
+# A value the survey disclosed is never discarded to make room, so the last pair holds the most a
+# card can carry clear of the address and the walk always has an answer.
 _CARD_BLOCK_FITS = ((1.0, 1.0), (1.0, 0.9), (1.0, 0.8),
                     (0.9, 0.9), (0.9, 0.8), (0.8, 0.8), (0.7, 0.8))
 # The card's flat field: the root card artwork's own ground, so the three families a link preview
@@ -2470,15 +2468,15 @@ def _card_lay_block(d, y, floor_y, rows, width, type_scale, lead_scale):
     return placed, last
 
 
-def _card_block_fit(d, y, floor_y, rows, width):
-    """(the block's placed lines, the last row its ink reaches) at the largest notch that clears the
-    column's ceiling.
+def _card_block_fit(d, y, floor_y, rows, width, notches=_CARD_BLOCK_FITS):
+    """(the block's placed lines, the last row its ink reaches) at the largest of `notches` that
+    clears the column's ceiling.
 
     The measurement is on the glyphs the face sets, not on the nominal point size: a descender
     reaches below the size, so a block that cleared the arithmetic could still print into the
     address. When no notch clears it the last one is returned as it stands, because a card that sets
     every value it was given is worth more than a card that reads tidily by dropping one."""
-    for type_scale, lead_scale in _CARD_BLOCK_FITS:
+    for type_scale, lead_scale in notches:
         placed, last = _card_lay_block(d, y, floor_y, rows, width, type_scale, lead_scale)
         if last <= _card_block_ceiling():
             return placed, last
@@ -2488,17 +2486,20 @@ def _card_block_fit(d, y, floor_y, rows, width):
 def _card_left_column(d, title, rows, width, max_title_lines):
     """(the title's size, its lines, the block's placed lines) for a card's whole left column.
 
-    The title and the block are chosen TOGETHER, largest title first: a title set as large as it can
-    be while the block below it has nowhere to go would cost the reader a line of science, so the
-    walk offers the block its whole fit ladder under each step of the title's, and the title steps
-    down only when the block has no room left at all. Each block starts at the later of where the
-    title ended and its own slot, so a card whose title fits on one line keeps the baselines the
-    design was drawn on."""
-    for size, lines in _card_title_options(d, title, width, max_title_lines):
-        y = _CARD_TITLE_Y + len(lines) * round(size * 1.18) + 8
-        placed, last = _card_block_fit(d, y, _CARD_BLOCK_FLOOR, rows, width)
-        if last <= _card_block_ceiling():
-            return size, lines, placed
+    The title and the block are chosen TOGETHER, largest title first. The title has a LADDER and the
+    block's sizes are DECLARED, so each title step is offered the block's leading and then gives way
+    to the next step rather than setting a fact line below the size declared for it; the block's
+    type gives only after the title's whole ladder has run out, which is the last resort that keeps
+    every disclosed value on the card. Each block starts at the later of where the title ended and
+    its own slot, so a card whose title fits on one line keeps the baselines the design was drawn
+    on."""
+    options = _card_title_options(d, title, width, max_title_lines)
+    for notches in ([n for n in _CARD_BLOCK_FITS if n[0] == 1.0], _CARD_BLOCK_FITS):
+        for size, lines in options:
+            y = _CARD_TITLE_Y + len(lines) * round(size * 1.18) + 8
+            placed, last = _card_block_fit(d, y, _CARD_BLOCK_FLOOR, rows, width, notches)
+            if last <= _card_block_ceiling():
+                return size, lines, placed
     return size, lines, placed
 
 
