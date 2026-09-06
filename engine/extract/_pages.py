@@ -2312,11 +2312,17 @@ _COLL_CARD_TEXT_WIDTH = (_CARD_SIZE[0] - _CARD_PANEL_AIR - 2 * _CARD_PANEL_INSET
 # emitter refuses the slug rather than letting a hub page advertise a survey.
 _HUB_CARDS = (("surveys", "SURVEYS", "Surveys"),
               ("collections", "COLLECTIONS", "Collections"))
+# The line under each hub card's title, as the lines it is set on. The surveys hub sets the brand
+# tagline, broken where the root card breaks it; the join of those two lines must equal the brand
+# file's tagline. The collections hub says what a collection is instead of repeating the tagline.
+_HUB_CARD_LINES = {"surveys": ("Australia's Magnetotelluric", "Data Portal"),
+                   "collections": ("Curated programmes, regions,", "provinces and thematic datasets")}
 # The hub card's artwork lattice, as columns x rows over the drawing extent. It is a whole multiple
 # of the brand mark's own grid, so the card draws the SAME silhouette the mark does at a finer
 # resolution: the mark is a simplified figure that has to survive a browser tab, while a card is
-# read at preview size, where that lattice reads as a logo rather than as the continent.
-_HUB_CARD_GRID = (63, 54)
+# read at preview size, where that lattice reads as a logo rather than as the continent. Six times
+# the mark's pitch is the coarsest lattice on which Tasmania keeps its shape rather than a block.
+_HUB_CARD_GRID = (126, 108)
 # The box the lattice is fitted into, centred inside it. It keeps clear of the text column's edge by
 # more than the survey card's panel gutter, because these dots carry no frame to separate them from
 # the type beside them.
@@ -2850,7 +2856,7 @@ def _hub_artwork_dots(box=_HUB_CARD_BOX, grid=_HUB_CARD_GRID):
             for c, r in cells]
 
 
-def _og_hub_card(path, *, kind, title, tagline, counts_line):
+def _og_hub_card(path, *, kind, title, lines, counts_line):
     """One 1200x630 link-preview card for a hub page: the card's own left column beside the
     pixelated Australia the brand is drawn from.
 
@@ -2858,7 +2864,8 @@ def _og_hub_card(path, *, kind, title, tagline, counts_line):
     map of data: it is DRAWN from the coastline and the palette the brand file declares, never read
     out of a vendored image, because the engine image ships no portal tree and a card that reached
     for one would go blank exactly where the corpus is served. The counts arrive from the caller,
-    which is the only place that knows what this build published."""
+    which is the only place that knows what this build published; `lines` are the declared lines
+    under the title, set one per row so no word is left to wrap on its own."""
     from PIL import Image, ImageDraw
     W, H = _CARD_SIZE
     img = Image.new("RGB", (W, H), _CARD_GROUND)
@@ -2871,16 +2878,19 @@ def _og_hub_card(path, *, kind, title, tagline, counts_line):
     for cx, cy, r, colour in _hub_artwork_dots():
         dx, dy, dr = (cx - x0) * s, (cy - y0) * s, r * s
         ld.ellipse([dx - dr, dy - dr, dx + dr, dy + dr], fill=colour)
-    img.paste(layer.resize((x1 - x0, y1 - y0), Image.LANCZOS), (x0, y0))
+    # BOX, not LANCZOS: at this radius the two are indistinguishable, and a box filter leaves each
+    # edge pixel one of five coverage levels, which halves the bytes a link-preview fetcher pays.
+    img.paste(layer.resize((x1 - x0, y1 - y0), Image.BOX), (x0, y0))
 
     d = ImageDraw.Draw(img)
     _card_ausmt_lockup(img, d)
     _card_kind_label(d, kind)
-    tsize, lines, block = _card_left_column(
-        d, title, ((tagline, 29, _rgb(_brand()["palette"]["tagline_ink"]["on_dark"]), 42),
-                   (counts_line, 29, (143, 163, 176), 42)), _CARD_TEXT_WIDTH, 2)
+    ink = _rgb(_brand()["palette"]["tagline_ink"]["on_dark"])
+    rows = tuple((line, 29, ink, 36) for line in tuple(lines)[:-1])
+    rows += ((tuple(lines)[-1], 29, ink, 42), (counts_line, 29, (143, 163, 176), 42))
+    tsize, title_lines, block = _card_left_column(d, title, rows, _CARD_TEXT_WIDTH, 2)
     y = _CARD_TITLE_Y
-    for ln in lines:
+    for ln in title_lines:
         d.text((_CARD_MARGIN, y), ln, font=_card_font(tsize), fill=(255, 255, 255))
         y += round(tsize * 1.18)
     for by, line, bfont, bink in block:
@@ -3093,8 +3103,8 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                     facts_line=" · ".join(x for x in (_plural(len(members), "survey"),
                                                       _plural(n_st, "station") if n_st else "")
                                           if x),
-                    taxonomy_line=" · ".join(str(x) for x in (coll.get("type"),
-                                                              coll.get("status")) if x),
+                    taxonomy_line=" · ".join(str(x).upper() for x in (coll.get("type"),
+                                                                      coll.get("status")) if x),
                     coverage_line=_collection_coverage(coll),
                     member_labels=[lbl for lbl, _s in members],
                     member_points=member_points):
@@ -3136,7 +3146,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     if draw_cards:
         for name, kind, title in _HUB_CARDS:
             cardpath = ogdir / f"{name}.png"
-            _og_hub_card(cardpath, kind=kind, title=title, tagline=_brand()["tagline"],
+            _og_hub_card(cardpath, kind=kind, title=title, lines=_HUB_CARD_LINES[name],
                          counts_line=hub_counts[name])
             if not cardpath.is_file():
                 raise ValueError(f"hub card {cardpath} was not written; the page must not "

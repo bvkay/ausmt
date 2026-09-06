@@ -155,7 +155,7 @@ def drawn(tmp_path_factory):
     out = tmp_path_factory.mktemp("drawn")
     for name, kind, title in pages._HUB_CARDS:
         pages._og_hub_card(out / f"{name}.png", kind=kind, title=title,
-                           tagline=_brand()["tagline"],
+                           lines=pages._HUB_CARD_LINES[name],
                            counts_line=f"27 {name}" if name == "collections"
                            else "27 surveys · 2,625 stations")
     pts = [(129.0 + 0.1 * i, -12.5 - 0.05 * i, "mt") for i in range(40)]
@@ -1430,6 +1430,80 @@ def test_the_hub_lattice_is_the_brand_marks_own_silhouette_drawn_finer():
         "a finer lattice over the same coastline carries more cells than the mark does"
 
 
+def test_the_hub_lattice_resolves_tasmania():
+    """The card's lattice is fine enough for Tasmania to keep its shape. On the mark's own grid the
+    island is three cells, and on a lattice three times finer it is a block of sixteen; the card
+    draws at a pitch where it is a figure of its own. FAILS IF the lattice coarsens back to a block."""
+    pages = _pages_module()
+    import _au_outline as au
+    ext = au.EXTENT
+    w, e, s, n = ext["w"], ext["e"], ext["s"], ext["n"]
+    ring = au.COAST[1]
+    lo0, lo1 = min(pt[0] for pt in ring), max(pt[0] for pt in ring)
+    la0, la1 = min(pt[1] for pt in ring), max(pt[1] for pt in ring)
+    cols, rows = pages._HUB_CARD_GRID
+    tasmania = [(c, r) for c, r in pages._lattice_cells(cols, rows)
+                if lo0 <= w + (c + 0.5) * (e - w) / cols <= lo1
+                and la0 <= n - (r + 0.5) * (n - s) / rows <= la1]
+    assert len(tasmania) >= 40, \
+        f"Tasmania is {len(tasmania)} cells on the {cols} x {rows} lattice, a block rather than a shape"
+
+
+def test_the_hub_artwork_edges_hold_few_blends(drawn):
+    """The artwork's edge pixels take a handful of coverage levels, not a continuum. The layer is
+    drawn at twice the size and averaged down, so every edge pixel is one of five blends of a dot's
+    colour with the ground; a smoother filter writes thousands of distinct blends, which the PNG
+    encoder cannot pack and a link-preview fetcher pays for. FAILS IF the resample starts blending."""
+    pages = _pages_module()
+    from PIL import Image
+    for card, _edge, word in drawn:
+        if word not in {kind for _n, kind, _t in pages._HUB_CARDS}:
+            continue
+        with Image.open(card) as im:
+            art = im.convert("RGB").crop(pages._HUB_CARD_BOX)
+        colours = art.getcolors(1 << 20)
+        assert colours is not None and len(colours) <= 1_000, \
+            f"{card.name}: the artwork holds {None if colours is None else len(colours)} colours"
+
+
+def test_the_collections_hub_card_says_what_a_collection_is(drawn):
+    """The collections hub card sets its own two declared lines under the title, and not the
+    surveys hub's tagline: a reader landing on the collections catalogue is told what a collection
+    is, not what the site is. FAILS IF the two hub cards share a line."""
+    pages = _pages_module()
+    from PIL import Image
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    card = next(c for c, _e, word in drawn if word == "COLLECTIONS")
+    with Image.open(card) as im:
+        img = im.convert("RGB")
+    for line in pages._HUB_CARD_LINES["collections"]:
+        stamp, offset = _line_stamp(pages, line, pages._card_font(29), _TAGLINE_INK)
+        assert _sets_line(img, stamp, offset, rows) is not None, \
+            f"the collections hub card must set {line!r}"
+    for line in pages._HUB_CARD_LINES["surveys"]:
+        stamp, offset = _line_stamp(pages, line, pages._card_font(29), _TAGLINE_INK)
+        assert _sets_line(img, stamp, offset, rows) is None, \
+            f"the collections hub card must not set the surveys hub's {line!r}"
+
+
+def test_the_collection_cards_taxonomy_line_is_set_in_capitals(built):
+    """A collection card's type and status line is set in capitals, as the record's two words are
+    a label rather than a sentence: the fixture collection declares a programme that is active and
+    its card reads PROGRAMME · ACTIVE. FAILS IF the emitter passes the record's own case through."""
+    pages = _pages_module()
+    from PIL import Image
+    rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
+    card = built / "pages" / "og" / "collections" / "cardcoll.png"
+    with Image.open(card) as im:
+        img = im.convert("RGB")
+    stamp, offset = _line_stamp(pages, "PROGRAMME · ACTIVE", pages._card_font(29), _MUTED_INK)
+    assert _sets_line(img, stamp, offset, rows) is not None, \
+        "the collection card must set its type and status in capitals"
+    stamp, offset = _line_stamp(pages, "programme · active", pages._card_font(29), _MUTED_INK)
+    assert _sets_line(img, stamp, offset, rows) is None, \
+        "the collection card must not set the record's lower-case type and status"
+
+
 def test_the_hub_artwork_takes_its_colours_from_the_brand_files_own_ramp():
     """Every dot's colour is a function of its position on the brand file's declared stops, read at
     draw time. Held against the file's own mapped hexes rather than against restated colours, so a
@@ -1490,18 +1564,25 @@ def test_a_hub_card_states_the_counts_and_the_tagline_it_is_handed(tmp_path):
     than a figure of its own.
 
     Two cards drawn from two different corpora set their own counts and NOT each other's, so a
-    hardcoded number fails here; and both set the tagline read from the brand file rather than a
-    sentence restated in the emitter. All of it is read back as glyphs off the rendered cards."""
+    hardcoded number fails here; and both set the brand file's tagline on the two lines the card
+    declares, joined it is the file's own sentence, and the wrap that would leave one word on a
+    line of its own is not on the card. All of it is read back as glyphs off the rendered cards."""
     pages = _pages_module()
     from PIL import Image, ImageDraw
     d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
     tagline = _brand()["tagline"]
+    declared = pages._HUB_CARD_LINES["surveys"]
+    assert " ".join(declared) == tagline, \
+        f"the surveys hub's declared lines must join to the brand file's tagline, got {declared}"
+    orphan_wrap = pages._card_lines(d, tagline, pages._card_font(29), pages._CARD_TEXT_WIDTH, 2)[0]
+    assert list(orphan_wrap) != list(declared), \
+        "the declared break must differ from the wrap that leaves the last word alone"
     counts = ("58 surveys · 4,182 stations", "3 surveys · 66 stations")
     rows = (pages._CARD_TITLE_Y, pages._CARD_WORDMARK_Y)
     cards = []
     for i, line in enumerate(counts):
         path = tmp_path / f"hub-{i}.png"
-        pages._og_hub_card(path, kind="SURVEYS", title="Surveys", tagline=tagline,
+        pages._og_hub_card(path, kind="SURVEYS", title="Surveys", lines=declared,
                            counts_line=line)
         with Image.open(path) as im:
             cards.append(im.convert("RGB"))
@@ -1512,11 +1593,13 @@ def test_a_hub_card_states_the_counts_and_the_tagline_it_is_handed(tmp_path):
             assert found is (i == j), (
                 f"the card built over corpus {i} must set {counts[i]!r} and no other count; "
                 f"it {'set' if found else 'did not set'} {line!r}")
-        for line in pages._card_lines(d, tagline, pages._card_font(29),
-                                      pages._CARD_TEXT_WIDTH, 2)[0]:
+        for line in declared:
             stamp, offset = _line_stamp(pages, line, pages._card_font(29), _TAGLINE_INK)
             assert _sets_line(img, stamp, offset, rows) is not None, \
-                f"the hub card must set the brand file's own tagline, {line!r} is not on it"
+                f"the hub card must set the brand file's tagline on its declared lines, {line!r} is not on it"
+        stamp, offset = _line_stamp(pages, orphan_wrap[0], pages._card_font(29), _TAGLINE_INK)
+        assert _sets_line(img, stamp, offset, rows) is None, \
+            f"the hub card must not set the wrap that orphans the last word, found {orphan_wrap[0]!r}"
 
 
 def test_the_hub_cards_state_the_counts_this_build_computed(built):
@@ -1555,7 +1638,7 @@ def test_the_hub_cards_are_byte_identical_when_drawn_twice(tmp_path):
         digests = set()
         for run in ("first", "second"):
             path = tmp_path / f"{name}-{run}.png"
-            pages._og_hub_card(path, kind=kind, title=title, tagline=_brand()["tagline"],
+            pages._og_hub_card(path, kind=kind, title=title, lines=pages._HUB_CARD_LINES[name],
                                counts_line="58 surveys · 4,182 stations")
             digests.add(hashlib.sha256(path.read_bytes()).hexdigest())
         assert len(digests) == 1, f"{name}: two draws over one input gave {len(digests)} files"

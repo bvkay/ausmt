@@ -196,7 +196,12 @@ jobs:
       #                                       behaviour guard that blanks docstrings cannot see a
       #                                       long flag that lost a hyphen. Reads only engine/ and
       #                                       contract/, both of which the image ships.
-      # (the 49 enumerated above, plus tests/test_ci_check_skips.py which gates the
+      #   tests/test_og_cards.py             the link-preview cards the build writes beside the pages:
+      #                                       every survey, collection and hub card, its column, its
+      #                                       artwork and the rule that a page never advertises a
+      #                                       card the build did not write. Reads engine/ and
+      #                                       contract/; the portal-tree pins skip in the image.
+      # (the 50 enumerated above, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
