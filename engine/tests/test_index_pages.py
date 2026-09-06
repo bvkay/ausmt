@@ -230,7 +230,8 @@ def test_collections_index_explains_the_concept_and_lists_the_rollup(built):
     """FAILS IF the /collections page loses its chrome, the explanatory sentence that tells a reader
     what a collection IS, or a collection card with its title link, counts and Explore action."""
     page = (built / "pages" / "collections" / "index.html").read_text(encoding="utf-8")
-    assert "<title>Collections - magnetotelluric survey data - AusMT</title>" in page
+    assert "<title>Collections - Australian magnetotelluric data - AusMT</title>" in page, \
+        "the hub names the national holding it indexes, not the record kind"
     assert f'<link rel="canonical" href="{BASE}/collections">' in page
     assert f'<meta property="og:image" content="{BASE}/data/pages/og/collections.png">' in page, \
         "the hub carries a card of its own, drawn by this build, not the portal's root card"

@@ -803,6 +803,11 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     # documents would read as thin content at scale and dilute the survey/collection pages that
     # carry the ranking).
     robots = '<meta name="robots" content="noindex">\n' if noindex else ""
+    # An empty description is stated as absence, not as an empty string: a crawler reading
+    # content="" is told the page has no summary, where a missing tag lets it build one from the
+    # document. Every og description below rides the same value, so the two can never disagree.
+    desc_meta = f'<meta name="description" content="{_e(description)}">\n' if description else ""
+    og_desc = f'<meta property="og:description" content="{_e(description)}">\n' if description else ""
     # Link previews: crawlers resolve nothing relative, so og:url/og:image are absolute.
     image = og_image or (f"{base}/vendor/social-card.png" if base else None)
     og = ""
@@ -813,7 +818,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
               # station pages are exactly the ones an inbound link is most likely to land on.
               f'<meta property="og:site_name" content="{_SITE_NAME}">\n'
               f'<meta property="og:title" content="{_e(title)}">\n'
-              f'<meta property="og:description" content="{_e(description)}">\n'
+              f"{og_desc}"
               f'<meta property="og:url" content="{_e(canonical)}">\n'
               f'<meta property="og:image" content="{_e(image)}">\n'
               f'<meta name="twitter:card" content="summary_large_image">\n')
@@ -823,7 +828,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
         f"{robots}"
         f"<title>{_e(title)}</title>\n"
-        f'<meta name="description" content="{_e(description)}">\n'
+        f"{desc_meta}"
         f'<link rel="canonical" href="{_e(canonical)}">\n'
         # ICON LINKS. Three same-origin portal paths, absolute because a page served at
         # /surveys/<slug> cannot resolve a relative vendor path, and root-anchored on /favicon.ico
@@ -1828,7 +1833,8 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     else.
     """
     title = (coll or {}).get("title") or cid
-    desc = (coll or {}).get("description") or f"{title}: a collection of magnetotelluric surveys on AusMT."
+    record_desc = " ".join(str((coll or {}).get("description") or "").split())
+    desc = record_desc or f"{title}: a collection of magnetotelluric surveys on AusMT."
     url = f"{base}/collections/{cid}"
     ld = {"@context": "https://schema.org", "@type": "Dataset",
           "name": title, "description": desc, "url": url,
@@ -1981,10 +1987,13 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
         + members_section
         + orgs_section
     )
-    return _shell(title=f"{title} - magnetotelluric data - AusMT",
-                  # The meta/og description is a summary of the rollup description, never the
-                  # section prose: the prose is a page-length payload and a link preview is a line.
-                  description=_meta_summary(desc),
+    return _shell(title=f"{title} - Australian magnetotelluric data - AusMT",
+                  # The meta/og description is the RECORD's opening sentence, never the section
+                  # prose (a page-length payload) and never the fallback sentence the JSON-LD node
+                  # falls back to: a preview line that no curator wrote states curation as fact. A
+                  # record carrying no description ships no line at all.
+                  description=_meta_summary(_first_sentences(record_desc, limit=1,
+                                                             budget=_META_LIMIT)),
                   canonical=url, body=body, base=base,
                   jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"),
                                                  ("collections", "/collections"),
@@ -2200,7 +2209,7 @@ def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
         f'<p class="idxlede">{_COLLECTIONS_LEDE}</p>\n'
         f"{defs}\n"
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
-    return _shell(title="Collections - magnetotelluric survey data - AusMT",
+    return _shell(title="Collections - Australian magnetotelluric data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
                   jsonld=[_hub_catalogue(name="AusMT collections", description=desc, url=url,
                                         base=base),
