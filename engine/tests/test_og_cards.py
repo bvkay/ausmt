@@ -95,7 +95,12 @@ def _survey(tmp_path, slug, name, lat, extra="", region="South Australia"):
 
 @pytest.fixture(scope="module")
 def built(tmp_path_factory):
-    """One corpus whose two surveys are members of one collection, built once with the cards on.
+    """One corpus of three surveys in two collections, built once with the cards on.
+
+    TWO collections, because a card rule proven over one collection cannot be told apart from a
+    special case for that collection's id. The second is a closed compilation rather than an open
+    programme, so the corpus also carries a card for each of the two coverage forms a record can
+    disclose.
 
     The two surveys carry the two text lengths the column rule has to hold, because a scan over
     cards that all fit anyway would stay green with the rule deleted. card-a is the corpus's worst
@@ -110,12 +115,15 @@ def built(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("ogcards")
     coll = ("collection:\n  id: cardcoll\n  title: Card Collection\n  type: programme\n"
             "  status: active\n  start_year: 2013\n")
+    coll_b = ("collection:\n  id: cardcoll-b\n  title: Card Compilation\n  type: compilation\n"
+              "  status: completed\n  start_year: 1966\n")
     surveys = _survey(tmp, "card-a", "AusLAMP Musgraves APY Lands Deployment 2016", "-30.5",
                       coll + "dates: {start: 2016, end: 2018}\n",
                       region="South Australia / Western Australia / Northern Territory")
     _survey(tmp, "card-b", "Card B", "-24.5", coll)
     _survey(tmp, "card-c", "Hanekup Eastern Queensland 2003", "-22.5",
-            "dates: {start: 2003, end: 2003}\n", region="Queensland / Northern Territory")
+            coll_b + "dates: {start: 2003, end: 2003}\n",
+            region="Queensland / Northern Territory")
     out = tmp / "out"
     rc = build_portal.main(["--surveys", str(surveys), "--out", str(out), "--bundle-edi",
                             "--no-validate", "--products", str(out / "products"),
@@ -1220,6 +1228,38 @@ def test_a_collection_with_no_disclosed_positions_gets_no_card(tmp_path):
                                       coverage_line="",
                                       member_labels=["A"], member_points={"A": []})
     assert wrote is False and not card.exists(), "no positions means no card at all"
+
+
+def test_every_collection_whose_members_place_them_gets_its_own_card(built):
+    """A card for every collection, and every collection page pointing at its own.
+
+    Nothing in the card path names a collection: the emitter writes a card for each collection whose
+    members disclose a position, and hands the page the URL only once the file is on disk. A corpus
+    that grows another collection therefore grows another card with no line of code added for it,
+    which is why the fixture carries two: a pin over a single collection cannot tell an automatic
+    rule from a special case.
+
+    FAILS IF a collection whose members disclose positions reaches its page with the root card's
+    URL, or if a card is written for a collection no page names."""
+    cards = {p.stem for p in (built / "pages" / "og" / "collections").glob("*.png")}
+    named = {}
+    for page in sorted((built / "pages" / "collections").glob("*.html")):
+        # index.html is the collections HUB, which is not a collection; the emitter refuses a
+        # collection id of "index" for that reason, so the name can never belong to both.
+        if page.stem == "index":
+            continue
+        found = re.search(r'property="og:image" content="([^"]+)"', page.read_text(encoding="utf-8"))
+        assert found, f"{page.name}: a collection page must carry an og:image"
+        named[page.stem] = found.group(1)
+    assert len(named) >= 2, (
+        "the pin cannot tell an automatic rule from a special case over the single collection "
+        f"{sorted(named)}")
+    assert set(named) == cards, (
+        f"every collection page must have its card and every card its page; pages {sorted(named)}, "
+        f"cards {sorted(cards)}")
+    for cid, url in sorted(named.items()):
+        assert url == f"{BASE}/data/pages/og/collections/{cid}.png", \
+            f"{cid}: the page must point at its own card, it points at {url}"
 
 
 def test_the_collection_card_states_the_coverage_its_record_carries(tmp_path):
