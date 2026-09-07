@@ -336,6 +336,36 @@ in the document is an `ausmt_id` the same build published in `mtcat.json`. The f
 when at least one station has such a route, so a deployment with none serves no document at all rather
 than an empty one.
 
+### Per-survey hand-off documents: pages/fetch/<slug>.json
+
+For every survey with at least one routed time-series row, the build writes
+`/data/pages/fetch/<slug>.json`: the hand-off document the survey page's "Build a download script"
+cards fetch, in exactly the shape the portal's Select and download flow writes for a selection
+(`handoff.json` in the metadata pack), without the `generated` stamp.
+
+```json
+{"note": "AusMT hosts none of these files and fetches none of them. ...",
+ "scope": {"stations": 3, "levels": "all"},
+ "time_series_collection": {"name": "NCI-AuScope Magnetotelluric Collection",
+                            "doi": "10.25914/mtjg-jp22", "landing": "https://doi.org/10.25914/mtjg-jp22"},
+ "stations": [
+   {"ausmt_id": "au.example-survey.EXAMPLE01", "station": "EXAMPLE01", "survey": "Example Survey",
+    "slug": "example-survey", "survey_version": "1.0.0",
+    "levels": [
+      {"level": "raw_packed",
+       "url": "https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/raw_packed",
+       "bytes": 9868836788, "filename": "EXAMPLE01 [REMOTE].zip",
+       "archive_url_comment": "https://thredds.nci.org.au/thredds/fileServer/my80/.../EXAMPLE01%20%5BREMOTE%5D.zip"}]}]}
+```
+
+`scope.stations` counts every station the survey serves; `stations` carries only those with a
+routed row, each with its levels in the vocabulary's order. Each `url` is the AusMT route the front
+door answers with a 302 to the archive, which is the string to fetch; `archive_url_comment` is the
+archive's own address, for reference. `bytes` is `null` where the register states no size, and
+`filename` is the archive's own basename. A survey with no routed row has no document, so a 404
+here means the same as an absent `ts_access.json` entry. The document is pinned from both sides
+against `contract/fetch_handoff.json`.
+
 ---
 
 ## Fetching data today

@@ -309,7 +309,8 @@ First-visit welcome popup: role=dialog, focus-managed, closed by Esc, click-out 
 immediately". "Don't show this again" gates persistence via the localStorage key; ?tour=1 is the
 on-demand way back into the tour.
 The wget dialog: the command is SHOWN, scrollable, with its run instructions, before anything
-lands on a clipboard. Filled and wired by exports.js showWgetDialog().
+lands on a clipboard. Filled and wired by fetchdialog.js showWgetDialog(); the same markup rides every
+generated survey page, driven by page-fetch.js.
 ```
 
 #### Per-platform tabs, the DETECTED platform pre-selected: wget -P ...
@@ -3740,60 +3741,6 @@ alongside as an inert reference - so the file still names its bytes if AusMT is 
 pretending that address is what you were asked to fetch.
 ```
 
-#### The output PATH for one fetched level: <survey slug>/<level>/<archive ...
-
-```text
-The output PATH for one fetched level: <survey slug>/<level>/<archive basename>. The bare basename is
-NOT unique - across the corpus a station's level0 and level1_mth5 can carry the same one, and basenames
-repeat across surveys - so writing by basename alone lets a second product overwrite (or, with curl -C -,
-RESUME INTO and corrupt) the first. Keying by slug+level is collision-free over every corpus row, and
-mirrors the selection zips' own survey-slug namespacing.
-```
-
-#### POSIX single-quote a token so a register-derived path segment is ...
-
-```text
-POSIX single-quote a token so a register-derived path segment is LITERAL in bash/zsh: inside single
-quotes $( ), backticks, ", ; and space are all inert, and an embedded ' is close-escape-reopen'd. The
-filename is the one field taken VERBATIM from third-party ts-index registers with no charset gate
-upstream, so it is quoted at the client (belt-and-braces; the url is already per-segment encoded).
-```
-
-#### Windows curl.exe may be pasted into PowerShell OR cmd, which quote ...
-
-```text
-Windows curl.exe may be pasted into PowerShell OR cmd, which quote INCOMPATIBLY (PowerShell interpolates
-$()/backtick/$var inside "", cmd expands %VAR%; single quotes are literal text in cmd, not quoting), so
-no one wrap is both safe and faithful in both. The built path is therefore restricted to a
-metacharacter-free charset (others -> _), which leaves double quotes inert in either shell. The bytes
-are unchanged; only the LOCAL name is normalised, and WGET_OS_NOTES.win says so.
-```
-
-#### The unix form
-
-```text
-The unix form. One `wget` per file, not a single --content-disposition -i - here-doc: the header
-filename lands in the CURRENT dir, so two files that share a Content-Disposition name would collide and
-wget silently forks the loser to name.1. -P <slug>/<level> gives each its own directory - wget creates
-the tree and the collision cannot happen. -c makes a re-run RESUME (a completed file is skipped, a
-partial continues; the archive serves ranges). -q --show-progress keeps one clean bar per file. Single
-quotes keep the prefix and the route literal. It fetches the ROUTES, never the archive addresses beside
-them, because the route is what the front door counts.
-```
-
-#### The curl form, for macOS and Windows: curl is PREINSTALLED on both ...
-
-```text
-The curl form, for macOS and Windows: curl is PREINSTALLED on both (Apple ships it; Microsoft ships a
-real curl.exe on Windows 10+), so neither platform is sent to a third-party binary. Output names are
-explicit -o paths (which is also what lets -C - resume coexist with names: curl's header-naming -J
-refuses -C), namespaced by slug+level so no two collide, with --create-dirs building the tree. -L
-follows the 302s. The name is shell-quoted at the client: single quotes on macOS (POSIX, verbatim), a
-safe-charset restriction on Windows (curl.exe is pasted into PowerShell or cmd, which quote
-incompatibly). The url stays double-quoted - it is already per-segment encoded, so it carries no
-metacharacter. On Windows the exe is named in full: PowerShell aliases bare curl to a different command.
-```
-
 #### One level's hand-off for the current scope, from the Download block's ...
 
 ```text
@@ -3810,17 +3757,6 @@ COMMAND, which is resumable and verifiable at a scale where browser downloads qu
 5 GB, lowered from 10: raw_packed files run 0.2-1.2 GB each, so 10 GB could
 hand a browser two dozen large transfers at once, which is where the browser stops being the
 better tool. 5 GB keeps the direct path to a handful of files.
-```
-
-#### The wget dialog: show the command (scrollable), say where to run it ...
-
-```text
-The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a
-reader should see what lands on their clipboard. Per-platform tabs, with the DETECTED platform
-pre-selected (detection only picks the default tab; researchers copy commands for other
-machines, so all three stay one click away). Guarded binds like every other control.
-One line per platform: what to run it with, and nothing the shared instructions above already say
-.
 ```
 
 #### Over the gate the terminal command IS the offer, so the dialog opens ...
@@ -3979,6 +3915,126 @@ interchangeable: its survey is not redistributable here at all (licence/embargo,
 the same archive pointers the EDI zip writes), or the survey IS served but this format was never
 produced for that station. A third list records files that were served but did not come back, which
 is a transport failure and not a statement about the corpus at all.
+```
+
+## portal/src/fetchcmd.js
+
+#### The terminal-command composers, with no DOM and no SPA state
+
+```text
+The composers turn a list of hand-off rows (the document exports.js tsHandoffDocument builds in the
+SPA, and the engine writes as /data/pages/fetch/<slug>.json for a survey page) into the command a
+reader runs in their own terminal: wget on Linux, curl on macOS and Windows. index.html loads this
+before exports.js and every generated survey page loads it beside fetchdialog.js, so the SPA's
+Select and download flow and the page's download card compose the same bytes from the same rows.
+Both trees are held to one fixture, contract/fetch_handoff.json: the portal node test asserts the
+composers reproduce its commands and the SPA's own document builder reproduces its document; the
+engine test asserts its emitter over the fixture register equals the same document.
+```
+
+#### The output PATH for one fetched level: <survey slug>/<level>/<archive ...
+
+```text
+The output PATH for one fetched level: <survey slug>/<level>/<archive basename>. The bare basename is
+NOT unique - across the corpus a station's level0 and level1_mth5 can carry the same one, and basenames
+repeat across surveys - so writing by basename alone lets a second product overwrite (or, with curl -C -,
+RESUME INTO and corrupt) the first. Keying by slug+level is collision-free over every corpus row, and
+mirrors the selection zips' own survey-slug namespacing.
+```
+
+
+#### POSIX single-quote a token so a register-derived path segment is ...
+
+```text
+POSIX single-quote a token so a register-derived path segment is LITERAL in bash/zsh: inside single
+quotes $( ), backticks, ", ; and space are all inert, and an embedded ' is close-escape-reopen'd. The
+filename is the one field taken VERBATIM from third-party ts-index registers with no charset gate
+upstream, so it is quoted at the client (belt-and-braces; the url is already per-segment encoded).
+```
+
+
+#### Windows curl.exe may be pasted into PowerShell OR cmd, which quote ...
+
+```text
+Windows curl.exe may be pasted into PowerShell OR cmd, which quote INCOMPATIBLY (PowerShell interpolates
+$()/backtick/$var inside "", cmd expands %VAR%; single quotes are literal text in cmd, not quoting), so
+no one wrap is both safe and faithful in both. The built path is therefore restricted to a
+metacharacter-free charset (others -> _), which leaves double quotes inert in either shell. The bytes
+are unchanged; only the LOCAL name is normalised, and WGET_OS_NOTES.win says so.
+```
+
+
+#### The unix form
+
+```text
+The unix form. One `wget` per file, not a single --content-disposition -i - here-doc: the header
+filename lands in the CURRENT dir, so two files that share a Content-Disposition name would collide and
+wget silently forks the loser to name.1. -P <slug>/<level> gives each its own directory - wget creates
+the tree and the collision cannot happen. -c makes a re-run RESUME (a completed file is skipped, a
+partial continues; the archive serves ranges). -q --show-progress keeps one clean bar per file. Single
+quotes keep the prefix and the route literal. It fetches the ROUTES, never the archive addresses beside
+them, because the route is what the front door counts.
+```
+
+
+#### The curl form, for macOS and Windows: curl is PREINSTALLED on both ...
+
+```text
+The curl form, for macOS and Windows: curl is PREINSTALLED on both (Apple ships it; Microsoft ships a
+real curl.exe on Windows 10+), so neither platform is sent to a third-party binary. Output names are
+explicit -o paths (which is also what lets -C - resume coexist with names: curl's header-naming -J
+refuses -C), namespaced by slug+level so no two collide, with --create-dirs building the tree. -L
+follows the 302s. The name is shell-quoted at the client: single quotes on macOS (POSIX, verbatim), a
+safe-charset restriction on Windows (curl.exe is pasted into PowerShell or cmd, which quote
+incompatibly). The url stays double-quoted - it is already per-segment encoded, so it carries no
+metacharacter. On Windows the exe is named in full: PowerShell aliases bare curl to a different command.
+```
+
+
+#### The OS table and the platform detector
+
+```text
+One line per platform: what to run the command with, and nothing the dialog's shared instructions
+already say. Detection only picks the tab that opens first; researchers copy commands for other
+machines, so all three stay one click away. "windows" is matched, never bare "win": Darwin, the
+kernel some macOS user-agent strings report, contains "win".
+```
+
+## portal/src/fetchdialog.js
+
+#### The "Fetch from your terminal" dialog, shared by the SPA and the survey pages
+
+```text
+The controller for #wgetModal: paint the command for the chosen tab, open with focus on the box,
+close on Escape, on a click on the scrim, or on Close, and hand focus back to whatever opened it.
+The SPA's index.html and every generated survey page carry the same markup (same ids, roles and
+tab structure, held equal by the engine's page test), so one file drives both. The only host
+difference is how a copy reports itself: the SPA's toast where drawer.js copyTxt exists, the Copy
+button's own label for a moment on a page, which has no toast. Bindings are guarded, because a
+harness that stubs the document must still load the file.
+```
+
+#### The wget dialog: show the command (scrollable), say where to run it ...
+
+```text
+The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a
+reader should see what lands on their clipboard. Per-platform tabs, with the DETECTED platform
+pre-selected (detection only picks the default tab; researchers copy commands for other
+machines, so all three stay one click away). Guarded binds like every other control.
+One line per platform: what to run it with, and nothing the shared instructions above already say
+.
+```
+
+
+#### Modal contract
+
+```text
+The dialog declares aria-modal, so it owes the three behaviours the welcome popup (its own visual
+shell) already has: Escape, click-out, and focus back to whatever opened it. Escape is also the
+reason drawer.js yields to an open #wgetModal: otherwise Esc over this dialog would close the
+drawer behind it. aria-selected rides with the .on class on the OS tabs, never separately: the
+class is the paint, the attribute is the only thing a screen reader can read, and two states that
+can disagree eventually do.
 ```
 
 ## portal/src/filters.js
@@ -4391,6 +4447,20 @@ Collections are real links to the served hub pages, and a click handler on a con
 navigating away would run a view switch the page is about to leave: a visible flash of the wrong
 view on a slow load, and dead work otherwise. setView("surveys"/"collections") stays the way IN to
 the in-app grids for routeFromHash, the tour and the drawer's own back-navigation.
+```
+
+#### The fetch deep link
+
+```text
+#/survey/<slug>?fetch=<level> is the href of every "Build a download script" anchor on a generated
+survey page: the route a reader without script follows, and the fallback when the page's own fetch
+of its hand-off document fails. routeFromHash opens the survey exactly as the plain route does, then
+answerFetchDeepLink consumes the query first, with history.replaceState as the tour parameter is
+removed, so a reload or a Back lands on #/survey/<slug> and the dialog does not re-open behind the
+reader. Once the hand-off index has landed (TSACC_READY), the survey's own stations at the linked
+level become the hand-off document and the dialog, and nothing else: no browser hand-off, no
+metadata pack, no snackbar chain. A level outside the TS_LEVELS vocabulary opens the survey and no
+dialog; a survey with nothing routable at that level says so in the snackbar.
 ```
 
 #### The PLURAL routes
@@ -4996,6 +5066,29 @@ Mount the control on `map` and collapse it. No credit is passed in: each tile la
 its own and the control collects them, which is what keeps the text honest about the provider.
 The caller creates the map with attributionControl:false, because the control Leaflet mounts by
 default is the one carrying the flag and the word.
+```
+
+## portal/src/page-fetch.js
+
+#### The survey page's driver for "Build a download script"
+
+```text
+A generated survey page (engine/extract/_pages.py survey_page) carries one anchor per raw-family
+level card, `a.lvlact-fetch[data-fetch][data-level]`, the SPA's #wgetModal markup once, and three
+external scripts at the end of the body: fetchcmd.js, fetchdialog.js and this file. The pages are
+served under a CSP whose script-src is 'self' alone, so nothing is inline. On click the driver
+prevents the navigation, fetches the page's hand-off document (data-fetch, the same document for
+every card on the page), keeps the rows of the clicked level (data-level), composes the three
+commands with the shared composers and opens the shared dialog. A whole packed-raw survey is
+always over the SPA's direct hand-off gate, so the terminal command is the page's only offer: no
+browser hand-off, no metadata pack.
+
+The anchor's href is the SPA deep link, #/survey/<slug>?fetch=<level>, which main.js answers with
+the same dialog. That is where a reader without script lands, and where the driver sends a reader
+whose fetch fails (a network error, or a 404 for a document the build did not write). The
+navigation goes through pageFetchFallback, a window-level name, because jsdom implements no
+navigation and the page test replaces it to observe the hand-off. The card also links the document
+itself as "Pointers file (JSON)", the no-script way to the urls.
 ```
 
 ## portal/src/plots.js
