@@ -29,7 +29,7 @@ built from, so a staging build advertises staging addresses and nothing has to b
 
 ## The pages tier
 
-Five kinds of document, written under `<out>/pages/` and served at the path-URL contract's shapes.
+Six kinds of document, written under `<out>/pages/` and served at the path-URL contract's shapes.
 
 | Kind | Written to | Served at | Indexed |
 |---|---|---|---|
@@ -38,6 +38,14 @@ Five kinds of document, written under `<out>/pages/` and served at the path-URL 
 | collection | `pages/collections/<id>.html` | `/collections/<id>` | yes |
 | collections hub | `pages/collections/index.html` | `/collections` | yes |
 | station | `pages/stations/<ausmt_id>.html` | `/stations/<ausmt_id>` | no, `robots noindex` |
+| survey hand-off | `pages/fetch/<slug>.json` | `/data/pages/fetch/<slug>.json` | not a page: the document a survey page's download cards fetch, written only for a survey with a routed time-series row |
+
+A survey page's download cards open the portal's "Fetch from your terminal" dialog in the page:
+each card's "Build a download script" fetches `/data/pages/fetch/<slug>.json` and composes the wget
+or curl command with the portal's own modules (`/src/fetchcmd.js`, `/src/fetchdialog.js`,
+`/src/page-fetch.js`, loaded at the end of the body; the pages carry no inline script). The card's
+href is the SPA deep link `#/survey/<slug>?fetch=<level>`, which opens the same dialog, and the card
+also links the document itself as "Pointers file (JSON)".
 
 Station pages are deliberately unadvertised but served. Thousands of templated documents would read
 as thin content at scale and dilute the survey and collection pages that carry the ranking, so they

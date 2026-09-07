@@ -177,8 +177,10 @@ function routeFromHash(){
                     drawer.classList&&drawer.classList.contains("open");
       if(!showing)openStation(s.i);}
     return;}
-  const msv=location.hash.match(/^#\/survey\/(.+)$/);
+  // The survey route may carry ?fetch=<level>, the survey page's deep link.
+  const msv=location.hash.match(/^#\/survey\/([^?]+)(?:\?(.*))?$/);
   if(msv){const slug=decodeURIComponent(msv[1]),sv=SLUG_TO_SURVEY[slug];
+    if(msv[2]!==undefined)dropFetchQuery(msv[1]);
     // The entity page's button for this route says "View all stations on the main map", so openSurvey renders and
     // focusSurvey frames the survey, called after it so the fit measures the open drawer. Idempotent like the
     // station branch. See docs: portal internals, main.js.
@@ -186,11 +188,30 @@ function routeFromHash(){
       const showing=_drawerSubject&&_drawerSubject.kind==="survey"&&_drawerSubject.sv===sv&&
                     drawer.classList&&drawer.classList.contains("open");
       if(!showing){openSurvey(sv);focusSurvey(sv);}
+      if(msv[2]!==undefined)answerFetchDeepLink(sv,msv[2]);
     }
     return;}                                           // unknown slug: fall through, no crash, no view change
   // hash fell through (e.g. browser Back to ''): if a full-width collection detail is showing, restore a tab view
   if(curView==="collection")setView("map");}
 window.addEventListener("hashchange",routeFromHash);
+// The fetch query is consumed first, so a reload lands on the plain route.
+function dropFetchQuery(rawSlug){
+  try{history.replaceState(null,"",location.pathname+location.search+"#/survey/"+rawSlug);}
+  catch(e){/* no History API, so the query stays in the hash, which is harmless */}}
+// Once the hand-off index has landed, the dialog opens over the survey's stations at that level and nothing
+// else. See docs: portal internals, main.js.
+function answerFetchDeepLink(sv,query){
+  const m=String(query||"").match(/(?:^|&)fetch=([^&]*)/);
+  let level="";
+  try{level=m?decodeURIComponent(m[1]):"";}catch(e){level="";}
+  if(!level||!TS_LEVELS.some(([tok])=>tok===level))return;
+  const ready=(typeof TSACC_READY!=="undefined"&&TSACC_READY&&TSACC_READY.then)?TSACC_READY:Promise.resolve();
+  ready.then(()=>{
+    if(typeof tsHandoffDocument!=="function"||typeof showWgetDialog!=="function")return;
+    const built=tsHandoffDocument(ST.filter(s=>s.survey===sv),[level]);
+    if(!built.files){snack("Nothing in "+sv+" has a time-series file this deployment can route to at this level.");return;}
+    const rows=built.doc.stations;
+    showWgetDialog({unix:tsWgetCommand(rows),mac:tsCurlCommand(rows,"curl"),win:tsCurlCommand(rows,"curl.exe")});});}
 
 // "View all stations on main map" from a collection page - switch to the map view and fit the map to the
 // collection's extent. See docs: portal internals, main.js.

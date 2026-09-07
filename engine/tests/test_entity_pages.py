@@ -1234,8 +1234,10 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
     assert "Raw 3.2 GB" in page, "the table cell states the level and the real size"
     # The download panel once sent a reader standing on THIS survey's page to the bare map with
     # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
-    assert '<a href="/#/survey/s">Build a download script</a>' in page, \
-        "the download-script action must keep the survey context, not point at the bare map"
+    assert ('<a class="lvlact-fetch" href="/#/survey/s?fetch=raw_packed" '
+            'data-fetch="/data/pages/fetch/s.json" data-level="raw_packed">Build a download script</a>') in page, \
+        "the download-script action must open the terminal dialog for THIS survey and level, and " \
+        "carry the SPA deep link as its href for a reader without script"
     assert "Level 1 MTH5" not in page, "an absent level must render no panel"
     page2 = pages.survey_page(slug="s", label="S", sm_doc=None,
                               smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
@@ -2089,3 +2091,219 @@ def test_a_record_that_declares_no_licence_or_custodian_states_neither():
     assert full["license"].startswith("http"), full["license"]
     assert full["creator"] == {"@type": "Organization", "name": "Org", "sameAs": "R"}, full["creator"]
     assert full["description"] == "A blurb."
+
+
+# ---- the survey page's terminal dialog and the per-survey hand-off document --------------------
+# The download card opens the SPA's "Fetch from your terminal" dialog in the page, driven by the
+# same composers the SPA uses over a document the engine writes at build time, and pinned from both
+# trees to contract/fetch_handoff.json.
+
+CONTRACT = REPO.parent / "contract"
+FETCH_FIXTURE = CONTRACT / "fetch_handoff.json"
+PORTAL = REPO.parent / "portal"
+
+
+def _fixture():
+    return json.loads(FETCH_FIXTURE.read_text(encoding="utf-8"))
+
+
+def _fixture_docs(fx):
+    """Station documents shaped like the served ones for every station the fixture survey has,
+    routed or not: scope.stations counts them all and stations[] carries the routed ones."""
+    prefix = f"au.{fx['survey']['slug']}."
+    return [{"ausmt_id": aid, "station": aid[len(prefix):], "survey_id": fx["survey"]["slug"],
+             "location": {"lat": -30.0, "lon": 137.0},
+             "data": {"type": "BBMT", "period_max_s": 6360.0},
+             "diagnostics": {"tipper_available": False}} for aid in fx["survey"]["ausmt_ids"]]
+
+
+def _fixture_page(fx, pages, ts_access):
+    return pages.survey_page(slug=fx["survey"]["slug"], label=fx["survey"]["label"], sm_doc=None,
+                             smeta={"slug": fx["survey"]["slug"], "blurb": "B.", "org": "O",
+                                    "lic": "CC-BY-4.0", "version": fx["survey"]["version"]},
+                             station_docs=_fixture_docs(fx), bundle_rows=[], ts_access=ts_access,
+                             base=fx["base"])
+
+
+def _start_tags(fragment):
+    """(tag, sorted attributes) for every element in a markup fragment, comments and text dropped:
+    the structural identity two dialog blocks are held to, independent of indentation."""
+    from html.parser import HTMLParser
+
+    class _P(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.tags = []
+
+        def handle_starttag(self, tag, attrs):
+            self.tags.append((tag, tuple(sorted((k, v or "") for k, v in attrs))))
+
+    p = _P()
+    p.feed(fragment)
+    return p.tags
+
+
+def test_every_level_card_opens_the_dialog_and_names_the_pointers_file():
+    fx = _fixture()
+    page = _fixture_page(fx, _pages_module(), fx["ts_access"])
+    for level in ("raw_packed", "level0", "level1_mth5"):
+        assert (f'<a class="lvlact-fetch" href="/#/survey/example-survey?fetch={level}" '
+                f'data-fetch="/data/pages/fetch/example-survey.json" data-level="{level}">'
+                f"Build a download script</a>") in page, level
+    assert page.count('href="/data/pages/fetch/example-survey.json">Pointers file (JSON)</a>') == 3, \
+        "each card links the document a reader without script can fetch the urls from"
+    assert "level1_netcdf" not in page, "a level the register does not carry renders no card"
+
+
+def test_the_page_carries_the_dialog_once_and_loads_only_external_scripts():
+    fx = _fixture()
+    page = _fixture_page(fx, _pages_module(), fx["ts_access"])
+    assert page.count('id="wgetModal"') == 1, "one dialog per page, shared by every card"
+    for i in ("wgetHeading", "wgetOs", "wgetOsNote", "wgetCmd", "wgetCopy", "wgetClose"):
+        assert f'id="{i}"' in page, i
+    assert re.findall(r'data-os="([^"]+)"', page) == ["linux", "mac", "win"]
+    tail = page[page.rindex("</main>"):]
+    assert re.findall(r'<script src="([^"]+)"></script>', tail) == \
+        ["/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"], \
+        "the composers, the dialog controller and the page driver load at the end of the body, in that order"
+    for tag in re.findall(r"<script\b[^>]*>", page):
+        assert 'src="' in tag or 'type="application/ld+json"' in tag, \
+            f"an inline executable script would need CSP unsafe-inline, which the pages never get: {tag}"
+    page0 = _fixture_page(fx, _pages_module(), None)
+    assert "lvlact-fetch" not in page0 and 'id="wgetModal"' not in page0 \
+        and "/src/page-fetch.js" not in page0 and "Pointers file" not in page0, \
+        "a survey with no routed level carries no card, no dialog and no script"
+
+
+def test_the_page_dialog_is_the_spa_s_own_markup():
+    """Same ids, roles, aria attributes and tab structure as portal/index.html's #wgetModal, so one
+    controller (fetchdialog.js) drives both. Structural identity, not byte identity: the page block
+    is indented as the page is and carries no HTML comments."""
+    index = PORTAL / "index.html"
+    if not index.is_file():
+        pytest.skip("engine image build: portal tree not shipped (portal/index.html absent)")
+    text = index.read_text(encoding="utf-8")
+    spa = text[text.index('<div id="wgetModal"'):text.index('<div id="introWelcome"')]
+    fx = _fixture()
+    page = _fixture_page(fx, _pages_module(), fx["ts_access"])
+    start = page.index('<div id="wgetModal"')
+    # The page block ends where the next top-level element of the page begins.
+    end = page.index("<h2 id=", start) if "<h2 id=" in page[start:] else page.index("</main>", start)
+    assert _start_tags(page[start:end]) == _start_tags(spa), \
+        "the page's dialog must be the SPA's dialog, element for element and attribute for attribute"
+
+
+def test_the_fetch_document_is_the_spa_s_hand_off_document():
+    fx = _fixture()
+    pages = _pages_module()
+    doc = pages.fetch_handoff_document(slug=fx["survey"]["slug"], label=fx["survey"]["label"],
+                                       smeta={"version": fx["survey"]["version"]},
+                                       station_docs=_fixture_docs(fx), ts_access=fx["ts_access"],
+                                       base=fx["base"])
+    assert doc == fx["document"], json.dumps(doc, indent=1)
+    assert list(doc) == ["note", "scope", "time_series_collection", "stations"], \
+        "the SPA's key order, so the two renderings diff clean"
+    assert pages.fetch_handoff_document(slug="example-survey", label="E", smeta={},
+                                        station_docs=_fixture_docs(fx), ts_access=None,
+                                        base=fx["base"]) is None
+    other = {"au.other.X": {"raw_packed": {"bytes": 1, "url_path": "a/b.zip"}}}
+    assert pages.fetch_handoff_document(slug="example-survey", label="E", smeta={},
+                                        station_docs=_fixture_docs(fx), ts_access=other,
+                                        base=fx["base"]) is None, \
+        "another survey's rows are not this survey's document"
+    prefixed = {"au.example-survey-b.X": {"raw_packed": {"bytes": 1, "url_path": "a/b.zip"}}}
+    assert pages.fetch_handoff_document(slug="example-survey", label="E", smeta={},
+                                        station_docs=_fixture_docs(fx), ts_access=prefixed,
+                                        base=fx["base"]) is None, \
+        "membership is the au.<slug>. prefix, so a slug that extends this one does not match"
+
+
+def test_the_card_the_dialog_and_the_document_share_one_membership_rule():
+    """A register row for a station the page does not serve makes no card, no dialog and no
+    document; a row for a served station makes all three. Before this pin the card and the dialog
+    read the register alone while the document read the station documents, so a page could carry
+    a link to a document the build never wrote."""
+    fx = _fixture()
+    pages = _pages_module()
+    docs = _fixture_docs(fx)
+    orphan = {"au.example-survey.NOBODY": {"raw_packed": {"bytes": 5, "url_path": "a/NOBODY.zip"}}}
+    page = _fixture_page(fx, pages, orphan)
+    assert "lvlact-fetch" not in page and 'id="wgetModal"' not in page and "/src/page-fetch.js" not in page, \
+        "a register row with no served station document must render no card and no dialog"
+    assert pages.fetch_handoff_document(slug="example-survey", label="E", smeta={}, station_docs=docs,
+                                        ts_access=orphan, base=fx["base"]) is None
+    both = dict(orphan)
+    both["au.example-survey.EXAMPLE01"] = fx["ts_access"]["au.example-survey.EXAMPLE01"]
+    page2 = _fixture_page(fx, pages, both)
+    assert 'data-level="raw_packed"' in page2 and 'id="wgetModal"' in page2
+    doc = pages.fetch_handoff_document(slug="example-survey", label="E", smeta={}, station_docs=docs,
+                                       ts_access=both, base=fx["base"])
+    assert [r["ausmt_id"] for r in doc["stations"]] == ["au.example-survey.EXAMPLE01"], \
+        "the document carries the served station and not the orphan row"
+    # The rows are ordered by the station the document publishes, the ausmt_id suffix.
+    swapped = [{"ausmt_id": "au.s.ZZZ", "station": "AAA", "survey_id": "s", "data": {}, "diagnostics": {}},
+               {"ausmt_id": "au.s.AAA", "station": "ZZZ", "survey_id": "s", "data": {}, "diagnostics": {}}]
+    reg = {"au.s.ZZZ": {"level0": {"url_path": "z.h5"}}, "au.s.AAA": {"level0": {"url_path": "a.h5"}}}
+    doc2 = pages.fetch_handoff_document(slug="s", label="S", smeta={}, station_docs=swapped, ts_access=reg,
+                                        base=fx["base"])
+    assert [r["station"] for r in doc2["stations"]] == ["AAA", "ZZZ"]
+
+
+def test_the_fetch_document_constants_are_the_portal_s():
+    """The engine holds its own copy of the collection identity and the hand-off note. Both are the
+    fixture's, and when the portal is in the tree both are the portal's too."""
+    fx = _fixture()
+    pages = _pages_module()
+    assert pages.TS_HANDOFF_NOTE == fx["document"]["note"]
+    assert pages.TS_COLLECTION == {"name": fx["document"]["time_series_collection"]["name"],
+                                   "doi": fx["document"]["time_series_collection"]["doi"]}
+    state = PORTAL / "src" / "state.js"
+    exports = PORTAL / "src" / "exports.js"
+    if not (state.is_file() and exports.is_file()):
+        pytest.skip("engine image build: portal tree not shipped (portal/src absent)")
+    m = re.search(r'const TS_COLLECTION=\{doi:"([^"]+)",name:"([^"]+)"\};', state.read_text(encoding="utf-8"))
+    assert m, "state.js must declare TS_COLLECTION in its one-line form"
+    assert (m.group(2), m.group(1)) == (pages.TS_COLLECTION["name"], pages.TS_COLLECTION["doi"])
+    n = re.search(r'var TS_HANDOFF_NOTE="((?:[^"\\]|\\.)*)";', exports.read_text(encoding="utf-8"))
+    assert n, "exports.js must declare TS_HANDOFF_NOTE as one double-quoted string"
+    assert json.loads('"' + n.group(1) + '"') == pages.TS_HANDOFF_NOTE
+
+
+def test_the_build_writes_one_fetch_document_per_routed_survey(tmp_path):
+    """Over the vendored fixture corpus with its committed register: the routed survey gets
+    pages/fetch/<slug>.json, every url is that survey's /go/ts/ route on the site base, the page
+    references the document it was written beside, and a flagless build writes no fetch tree."""
+    import subprocess
+    ts_index = HERE / "fixtures" / "ts-index"
+    out = tmp_path / "out"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(HERE / "fixtures"),
+                        "--out", str(out), "--products", str(out / "products"), "--bundle-edi",
+                        "--no-validate", "--sitemap-base", BASE, "--ts-index", str(ts_index)],
+                       cwd=str(REPO), capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    fetch_dir = out / "pages" / "fetch"
+    docs = sorted(fetch_dir.glob("*.json"))
+    assert [p.name for p in docs] == ["example-survey.json"], \
+        f"exactly the survey with a routed row gets a document, got {[p.name for p in docs]}"
+    doc = json.loads(docs[0].read_text(encoding="utf-8"))
+    assert doc["stations"] and all(r["levels"] for r in doc["stations"])
+    for row in doc["stations"]:
+        assert row["slug"] == "example-survey" and row["ausmt_id"].startswith("au.example-survey.")
+        for lv in row["levels"]:
+            assert lv["url"] == f"{BASE}/go/ts/example-survey/{row['station']}/{lv['level']}"
+            assert lv["filename"] and "/" not in lv["filename"]
+            assert lv["archive_url_comment"].startswith("https://thredds.nci.org.au/thredds/fileServer/")
+    assert "generated" not in doc, "the document carries no stamp: a rebuild that changes nothing writes the same bytes"
+    ts_access = json.loads((out / "ts_access.json").read_text(encoding="utf-8"))
+    routed = {aid for aid in ts_access if aid.startswith("au.example-survey.")}
+    assert {r["ausmt_id"] for r in doc["stations"]} == routed, "one row per routed station, no more"
+    page = (out / "pages" / "surveys" / "example-survey.html").read_text(encoding="utf-8")
+    assert 'data-fetch="/data/pages/fetch/example-survey.json"' in page
+    assert 'id="wgetModal"' in page and "/src/page-fetch.js" in page
+    out2 = tmp_path / "out2"
+    r2 = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(HERE / "fixtures"),
+                         "--out", str(out2), "--products", str(out2 / "products"), "--bundle-edi",
+                         "--no-validate", "--sitemap-base", BASE],
+                        cwd=str(REPO), capture_output=True, text=True)
+    assert r2.returncode == 0, r2.stderr
+    assert not (out2 / "pages" / "fetch").exists(), "no routed row anywhere: no fetch tree at all"

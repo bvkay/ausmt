@@ -41,6 +41,7 @@ import json
 import math
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 import _au_outline as au
 import _stationcheck as stcheck
@@ -68,6 +69,68 @@ _TS_LEVELS = (("raw_packed", "Raw", "Packed raw"),
               ("level0", "L0", "Level 0"),
               ("level1_mth5", "L1 MTH5", "Level 1 MTH5"),
               ("level1_netcdf", "L1 NetCDF", "Level 1 NetCDF"))
+
+# The time-series collection every hand-off document names, and the note it opens with: the SPA's
+# own values (portal/src/state.js TS_COLLECTION, portal/src/exports.js TS_HANDOFF_NOTE), held equal
+# from both trees through contract/fetch_handoff.json.
+TS_COLLECTION = {"name": "NCI-AuScope Magnetotelluric Collection", "doi": "10.25914/mtjg-jp22"}
+TS_HANDOFF_NOTE = (
+    "AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that "
+    "answers 302 with the address of the archive holding the file; `archive_url_comment` records "
+    "where that route currently points and is for reference only. Fetch the urls from your own "
+    "terminal - the portal's hand-off dialog shows ready-made commands: wget -c (Linux) or "
+    "curl -L -C - (macOS/Windows) resumes on a re-run.")
+
+# The "Fetch from your terminal" dialog, element for element the SPA's #wgetModal (portal/index.html):
+# one controller, portal/src/fetchdialog.js, drives both, so the ids, roles and tab structure are the
+# same and the engine test holds them so. The page carries it once, after the download cards, and the
+# three scripts at the end of the body: the composers, the controller and the page driver. All three
+# are external files under /src, because the pages are served under a CSP whose script-src is
+# 'self' alone.
+_FETCH_DIALOG_HTML = (
+    '<div id="wgetModal" class="introwelcome hidden" role="dialog" aria-modal="true" '
+    'aria-labelledby="wgetHeading">\n'
+    '  <div class="introwelcome-box wgetbox" tabindex="-1">\n'
+    '    <h2 class="introwelcome-heading" id="wgetHeading">Fetch from your terminal</h2>\n'
+    '    <p class="wget-instructions">Run this in your own terminal. It fetches the files one at a '
+    'time into per-survey and per-level subfolders of the current directory, and re-running it '
+    'resumes: completed files are skipped, partial ones continue.</p>\n'
+    '    <div class="seg" id="wgetOs" role="tablist" aria-label="Choose your operating system">\n'
+    '      <button type="button" role="tab" aria-selected="false" aria-controls="wgetCmd" '
+    'data-os="linux">Linux</button>\n'
+    '      <button type="button" role="tab" aria-selected="false" aria-controls="wgetCmd" '
+    'data-os="mac">macOS</button>\n'
+    '      <button type="button" role="tab" aria-selected="false" aria-controls="wgetCmd" '
+    'data-os="win">Windows</button>\n'
+    '    </div>\n'
+    '    <p class="wget-instructions" id="wgetOsNote"></p>\n'
+    '    <pre class="wgetcmd" id="wgetCmd" tabindex="0" role="tabpanel"></pre>\n'
+    '    <div class="introwelcome-actions">\n'
+    '      <button type="button" class="primary" id="wgetCopy">Copy command</button>\n'
+    '      <button type="button" id="wgetClose">Close</button>\n'
+    '    </div>\n'
+    '  </div>\n'
+    '</div>\n')
+_FETCH_CSS = """
+  .introwelcome{position:fixed;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;background:rgba(11,15,18,.55);backdrop-filter:blur(1px);padding:24px}
+  .introwelcome.hidden{display:none!important}
+  .introwelcome-box{position:relative;max-width:400px;width:100%;background:#18213D;border:1px solid #2B3557;border-radius:12px;padding:24px 26px;box-shadow:0 12px 40px rgba(0,0,0,.45);text-align:center}
+  .introwelcome-box:focus{outline:none}
+  .introwelcome-box.wgetbox{max-width:560px;text-align:left}
+  .introwelcome-heading{font-size:19px;font-weight:600;color:#fff;margin:0 0 8px}
+  .wget-instructions{font-size:13px;color:#8FA3B0;line-height:1.55;margin:0 0 10px}
+  .wget-instructions code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#E8EDF1}
+  .wgetbox .seg{margin:0 0 8px}
+  .seg{display:flex;flex:none;border:1px solid #2B3557;border-radius:4px;overflow:hidden}
+  .seg button{flex:1;font-family:inherit;background:#1E2B4F;border:0;color:#8FA3B0;font-size:12px;padding:6px;cursor:pointer}
+  .seg button.on{background:#EF7256;color:#16110b;font-weight:600}
+  .wgetcmd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;color:#E8EDF1;background:#1E2B4F;border:1px solid #2B3557;border-radius:6px;padding:10px 12px;max-height:240px;overflow:auto;white-space:pre;margin:0 0 12px}
+  .introwelcome-actions{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+  .introwelcome-actions button{font-family:inherit;font-size:13.5px;padding:10px 14px;border-radius:6px;border:1px solid #2B3557;background:#18213D;color:#E8EDF1;cursor:pointer}
+  .introwelcome-actions button.primary{background:#EF7256;border-color:#EF7256;color:#16110b;font-weight:600}
+  .lvlact-fetch{font-weight:600}
+"""
+_FETCH_SCRIPTS = ("/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js")
 
 # The portal's own data-type palette (portal/src/state.js TYPE_COL), byte for byte, so the page maps
 # and the SPA map speak one colour language. BBMT's value is the one the portal MEASURED for LP/BB
@@ -792,7 +855,7 @@ def _site_footer(build=None) -> str:
 
 def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
            og_image=None, base="", extra_css="", nav="", build=None,
-           status="") -> str:
+           status="", scripts=()) -> str:
     # `jsonld` is ONE node or a list of nodes, emitted in order as one script element each. Order is
     # load-bearing: the entity node stays first on every page that carries one, so anything reading
     # "the page's structured data" gets the record the page is about and not its breadcrumb. A
@@ -810,6 +873,9 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     desc_meta = f'<meta name="description" content="{_e(description)}">\n' if description else ""
     og_desc = f'<meta property="og:description" content="{_e(description)}">\n' if description else ""
     tw_desc = f'<meta name="twitter:description" content="{_e(description)}">\n' if description else ""
+    # Scripts are external files by URL, at the end of the body: the pages are served under a CSP
+    # whose script-src is 'self' alone, so an inline block here would never run.
+    scripts_html = "".join(f'<script src="{_e(s)}"></script>\n' for s in (scripts or ()))
     # Link previews: crawlers resolve nothing relative, so og:url/og:image are absolute.
     image = og_image or (f"{base}/vendor/social-card.png" if base else None)
     og = ""
@@ -855,6 +921,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f"{body}"
         "</main>\n"
         f"{_site_footer(build)}"
+        f"{scripts_html}"
         "</body>\n</html>\n"
     )
 
@@ -928,21 +995,77 @@ def _person_rows(contributors):
     return rows
 
 
-def _ts_survey_rows(slug, ts_access):
+def _ts_survey_rows(slug, ts_access, station_docs=None):
     """{level key: {aid: row}} for one survey, from the served register.
 
     Membership is the documented ausmt_id prefix test, `au.<slug>.` (the API reference states it as
     the way to filter by slug), not a split on dots with a component count. The count form dropped
     every row of a survey whose slug contains a dot, and dropped the variant ids that carry a fourth
-    component, both silently."""
+    component, both silently. Given the survey's station documents, a row whose station the page
+    does not serve is dropped too: the card, the dialog and the hand-off document then rest on one
+    predicate, so a page never advertises a document the build did not write."""
     prefix = f"au.{slug}."
+    served = ({str((d or {}).get("ausmt_id")) for d in station_docs}
+              if station_docs is not None else None)
     out: dict = {}
     for aid, levels in (ts_access or {}).items():
         if not str(aid).startswith(prefix):
             continue
+        if served is not None and str(aid) not in served:
+            continue
         for level, row in (levels or {}).items():
             out.setdefault(level, {})[aid] = row
     return out
+
+
+def fetch_handoff_document(*, slug, label, smeta, station_docs, ts_access, base):
+    """The survey's hand-off document, or None when no station of the survey has a routed row.
+
+    EXACTLY the document the SPA's exports.js tsHandoffDocument writes for the same survey over the
+    same register (its `generated` stamp left out, so an unchanged rebuild writes the same bytes):
+    the note, the scope, the collection, then one row per routed station with its levels in the
+    vocabulary's order. Each url is the AusMT /go/ts/ route on the site base, which the front door
+    answers with a 302 to the archive; archive_url_comment is that archive address, for reference.
+    Pinned to contract/fetch_handoff.json from both trees. Membership is the au.<slug>. prefix,
+    as _ts_survey_rows uses it."""
+    prefix = f"au.{slug}."
+    base = str(base or "").rstrip("/")
+    rows = []
+    asked = 0
+    version = (smeta or {}).get("version") or None
+    for doc in sorted(station_docs or [], key=lambda d: str((d or {}).get("ausmt_id") or "")):
+        aid = str((doc or {}).get("ausmt_id") or "")
+        if not aid.startswith(prefix):
+            continue
+        asked += 1
+        station = aid[len(prefix):]
+        levels = (ts_access or {}).get(aid) or {}
+        out = []
+        for level_key, _badge, _name in _TS_LEVELS:
+            row = levels.get(level_key)
+            if not row:
+                continue
+            url_path = str(row.get("url_path") or "")
+            out.append({
+                "level": level_key,
+                "url": f"{base}/go/ts/{quote(slug, safe='')}/{quote(station, safe='')}/{quote(level_key, safe='')}",
+                "bytes": row.get("bytes") or None,
+                "filename": url_path.rsplit("/", 1)[-1],
+                "archive_url_comment": stcheck.ts_access_url(url_path),
+            })
+        if not out:
+            continue
+        rows.append({"ausmt_id": aid, "station": station, "survey": label, "slug": slug,
+                     "survey_version": version, "levels": out})
+    if not rows:
+        return None
+    return {
+        "note": TS_HANDOFF_NOTE,
+        "scope": {"stations": asked, "levels": "all"},
+        "time_series_collection": {"name": TS_COLLECTION["name"], "doi": TS_COLLECTION["doi"],
+                                   "landing": "https://doi.org/" + TS_COLLECTION["doi"]},
+        "stations": rows,
+    }
 
 
 def _related_by_identifies(smeta):
@@ -1220,7 +1343,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # action. Every number comes from the register or the manifest; a level with no register rows
     # renders no card at all, so absence is never dressed as a pending download.
     dist = []
-    ts_rows = _ts_survey_rows(slug, ts_access)
+    ts_rows = _ts_survey_rows(slug, ts_access, docs)
     panels = []
     related = _related_by_identifies(smeta)
     archive_doi_placed = False
@@ -1250,7 +1373,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
             f'<p class="lvlcover"><b style="color:#fff">{len(rows)} of {n_stations} stations'
             f"</b>{per}</p>"
             f'<p class="lvlhost">Hosted at NCI</p>'
-            f'<p class="lvlact"><a href="/#/survey/{_e(slug)}">Build a download script</a></p>'
+            f'<p class="lvlact"><a class="lvlact-fetch" href="/#/survey/{_e(slug)}?fetch={_e(level_key)}" '
+            f'data-fetch="/data/pages/fetch/{_e(slug)}.json" data-level="{_e(level_key)}">'
+            f'Build a download script</a> &#183; '
+            f'<a href="/data/pages/fetch/{_e(slug)}.json">Pointers file (JSON)</a></p>'
             f"{doi_line}</div>")
     bundle_items, integrity_items = [], []
     for row in sorted(bundle_rows or [], key=lambda r: (r or {}).get("format") or ""):
@@ -1512,7 +1638,12 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # the FULL abstract; the hero's lede is its first sentence.
     about = (f'<h2 id="about">About this survey</h2>\n'
              f'<p class="prose">{_e(blurb)}</p>\n') if blurb else ""
+    # The dialog rides the page exactly when a time-series card can open it, once, after the cards;
+    # the scripts that drive it ride the same condition, so a survey with no routed row loads none
+    # of them and a page with only the transfer-function card stays script-free.
+    has_fetch = any(ts_rows.get(level_key) for level_key, _b, _n in _TS_LEVELS)
     downloads = (f'<h2 id="data">Data and downloads</h2>\n{"".join(panels)}\n'
+                 f'{_FETCH_DIALOG_HTML if has_fetch else ""}'
                  if panels else "")
     provenance = ""
     if people_html or facts_html:
@@ -1538,7 +1669,9 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                   description=desc_meta, canonical=url, body=body,
                   jsonld=[ld, _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys"),
                                                  (title, f"/surveys/{slug}")])],
-                  og_image=og_image, base=base, nav="navSurveys", build=build)
+                  og_image=og_image, base=base, nav="navSurveys", build=build,
+                  extra_css=(_FETCH_CSS if has_fetch else ""),
+                  scripts=(_FETCH_SCRIPTS if has_fetch else ()))
 
 
 def _unit_value(uv) -> str:
@@ -3017,6 +3150,15 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                           "survey": disc_survey.get(slug)})
         (sdir / f"{slug}.html").write_text(htmlpage, encoding="utf-8")
         n += 1
+        # The hand-off document the page's cards fetch, beside the page and only where a card exists:
+        # absent means no routed row, never a pending file.
+        fetch_doc = fetch_handoff_document(slug=slug, label=label, smeta=smeta, station_docs=docs,
+                                           ts_access=ts_access, base=base)
+        if fetch_doc is not None:
+            fdir = out / "pages" / "fetch"
+            fdir.mkdir(parents=True, exist_ok=True)
+            (fdir / f"{slug}.json").write_text(json.dumps(fetch_doc, indent=2, ensure_ascii=False) + "\n",
+                                               encoding="utf-8")
         member_datasets[slug] = survey_dataset_stub(
             slug=slug, base=base,
             title=((survey_docs.get(slug) or {}).get("title")) or label,
