@@ -2,9 +2,9 @@
 // The "Fetch from your terminal" dialog, #wgetModal, shared by the SPA and every generated survey page. See
 // docs: portal internals, fetchdialog.js.
 
-// A missing element costs nothing, because a harness that stubs the document must still load this file.
+// A missing element costs nothing, so a stubbed document still loads this file.
 function _fetchBind(id,fn){const el=document.getElementById(id);if(el)el.onclick=fn;}
-// The SPA reports a copy in its toast (drawer.js copyTxt), a page in the button's own label.
+// The SPA reports a copy in its toast, a page in the button's label.
 function _fetchCopy(text,btn){
   if(typeof copyTxt==="function"){copyTxt(text);return;}
   const say=(msg)=>{if(!btn)return;const was=btn.textContent;btn.textContent=msg;setTimeout(()=>{btn.textContent=was;},1800);};
@@ -19,15 +19,19 @@ function _paintWgetTab(os){
   // aria-selected rides with the .on class, never separately, so the paint and the readable state agree.
   if(seg&&seg.querySelectorAll)[...seg.querySelectorAll("button")].forEach(b=>{
     const on=b.dataset.os===os;b.classList.toggle("on",on);b.setAttribute("aria-selected",String(on));});}
+// A re-open keeps the reader's tab, and the return focus is read on a genuine open only.
+function _wgetTab(){const on=document.querySelector("#wgetOs button.on");return (on&&on.dataset.os)||detectOs();}
 function showWgetDialog(cmds){
   const m=document.getElementById("wgetModal"),pre=document.getElementById("wgetCmd");
-  if(!m||!pre){_fetchCopy(cmds.unix,null);return;}
+  if(!m||!pre)return false;
+  const opening=m.classList.contains("hidden");
   _wgetCmds=cmds;
-  _paintWgetTab(detectOs());
-  _wgetReturnFocus=(typeof document!=="undefined")?document.activeElement:null;
+  _paintWgetTab(opening?detectOs():_wgetTab());
+  if(opening)_wgetReturnFocus=(typeof document!=="undefined")?document.activeElement:null;
   m.classList.remove("hidden");
-  if(m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}}
-// The dialog declares aria-modal, so it owes Escape, click-out and focus return, and drawer.js yields to it.
+  if(opening&&m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}
+  return true;}
+// aria-modal owes Escape, click-out and focus return, and drawer.js yields to this dialog.
 let _wgetReturnFocus=null;
 function hideWgetDialog(){
   const m=document.getElementById("wgetModal");if(!m)return;

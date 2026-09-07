@@ -2094,9 +2094,9 @@ def test_a_record_that_declares_no_licence_or_custodian_states_neither():
 
 
 # ---- the survey page's terminal dialog and the per-survey hand-off document --------------------
-# LANE-CONTRACT-FETCH-DIALOG.md: the download card opens the SPA's "Fetch from your terminal" dialog
-# in the page, driven by the same composers the SPA uses over a document the engine writes at build
-# time, and pinned from both trees to contract/fetch_handoff.json.
+# The download card opens the SPA's "Fetch from your terminal" dialog in the page, driven by the
+# same composers the SPA uses over a document the engine writes at build time, and pinned from both
+# trees to contract/fetch_handoff.json.
 
 CONTRACT = REPO.parent / "contract"
 FETCH_FIXTURE = CONTRACT / "fetch_handoff.json"
@@ -2181,7 +2181,7 @@ def test_the_page_dialog_is_the_spa_s_own_markup():
     is indented as the page is and carries no HTML comments."""
     index = PORTAL / "index.html"
     if not index.is_file():
-        pytest.skip("portal/index.html is not in this tree (the engine image ships no portal)")
+        pytest.skip("engine image build: portal tree not shipped (portal/index.html absent)")
     text = index.read_text(encoding="utf-8")
     spa = text[text.index('<div id="wgetModal"'):text.index('<div id="introWelcome"')]
     fx = _fixture()
@@ -2218,6 +2218,37 @@ def test_the_fetch_document_is_the_spa_s_hand_off_document():
         "membership is the au.<slug>. prefix, so a slug that extends this one does not match"
 
 
+def test_the_card_the_dialog_and_the_document_share_one_membership_rule():
+    """A register row for a station the page does not serve makes no card, no dialog and no
+    document; a row for a served station makes all three. Before this pin the card and the dialog
+    read the register alone while the document read the station documents, so a page could carry
+    a link to a document the build never wrote."""
+    fx = _fixture()
+    pages = _pages_module()
+    docs = _fixture_docs(fx)
+    orphan = {"au.example-survey.NOBODY": {"raw_packed": {"bytes": 5, "url_path": "a/NOBODY.zip"}}}
+    page = _fixture_page(fx, pages, orphan)
+    assert "lvlact-fetch" not in page and 'id="wgetModal"' not in page and "/src/page-fetch.js" not in page, \
+        "a register row with no served station document must render no card and no dialog"
+    assert pages.fetch_handoff_document(slug="example-survey", label="E", smeta={}, station_docs=docs,
+                                        ts_access=orphan, base=fx["base"]) is None
+    both = dict(orphan)
+    both["au.example-survey.EXAMPLE01"] = fx["ts_access"]["au.example-survey.EXAMPLE01"]
+    page2 = _fixture_page(fx, pages, both)
+    assert 'data-level="raw_packed"' in page2 and 'id="wgetModal"' in page2
+    doc = pages.fetch_handoff_document(slug="example-survey", label="E", smeta={}, station_docs=docs,
+                                       ts_access=both, base=fx["base"])
+    assert [r["ausmt_id"] for r in doc["stations"]] == ["au.example-survey.EXAMPLE01"], \
+        "the document carries the served station and not the orphan row"
+    # The rows are ordered by the station the document publishes, the ausmt_id suffix.
+    swapped = [{"ausmt_id": "au.s.ZZZ", "station": "AAA", "survey_id": "s", "data": {}, "diagnostics": {}},
+               {"ausmt_id": "au.s.AAA", "station": "ZZZ", "survey_id": "s", "data": {}, "diagnostics": {}}]
+    reg = {"au.s.ZZZ": {"level0": {"url_path": "z.h5"}}, "au.s.AAA": {"level0": {"url_path": "a.h5"}}}
+    doc2 = pages.fetch_handoff_document(slug="s", label="S", smeta={}, station_docs=swapped, ts_access=reg,
+                                        base=fx["base"])
+    assert [r["station"] for r in doc2["stations"]] == ["AAA", "ZZZ"]
+
+
 def test_the_fetch_document_constants_are_the_portal_s():
     """The engine holds its own copy of the collection identity and the hand-off note. Both are the
     fixture's, and when the portal is in the tree both are the portal's too."""
@@ -2229,7 +2260,7 @@ def test_the_fetch_document_constants_are_the_portal_s():
     state = PORTAL / "src" / "state.js"
     exports = PORTAL / "src" / "exports.js"
     if not (state.is_file() and exports.is_file()):
-        pytest.skip("portal/src is not in this tree (the engine image ships no portal)")
+        pytest.skip("engine image build: portal tree not shipped (portal/src absent)")
     m = re.search(r'const TS_COLLECTION=\{doi:"([^"]+)",name:"([^"]+)"\};', state.read_text(encoding="utf-8"))
     assert m, "state.js must declare TS_COLLECTION in its one-line form"
     assert (m.group(2), m.group(1)) == (pages.TS_COLLECTION["name"], pages.TS_COLLECTION["doi"])

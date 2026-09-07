@@ -334,7 +334,10 @@ win.fetch = url => {
 // export BUTTON (only the pure helpers behind one) without dying on an undefined track.
 // Read from index.html rather than restated: a module the page loads and this list does not is a module
 // no pin here can reach.
-const MODULES = [...fs.readFileSync(path.join(PORTAL, "index.html"), "utf8").matchAll(/<script src="src\/([^"]+)\.js"><\/script>/g)].map(m => m[1]);
+const _INDEX_HTML = fs.readFileSync(path.join(PORTAL, "index.html"), "utf8");
+const MODULES = [..._INDEX_HTML.matchAll(/<script\b[^>]*\bsrc="src\/([^"]+)\.js"/g)].map(m => m[1]);
+if (MODULES.length !== (_INDEX_HTML.match(/src="src\//g) || []).length) {
+  console.error("INTERACTION FAILED: index.html carries a src/ script tag this harness cannot read"); process.exit(1); }
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFind," +
   "curView:()=>curView,nST:()=>ST.length,visIds:()=>visible.map(s=>s.id)," +
@@ -2777,7 +2780,28 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   await A.hydrationDone(); await new Promise(r => setTimeout(r, 0));
   ok(wgetModal.classList.contains("hidden"), "a level outside the vocabulary opens the survey and no dialog");
   ok(win.location.hash === "#/survey/alpha", "the unknown query is consumed too, got " + JSON.stringify(win.location.hash));
+  // A query that does not decode must not throw out of routeFromHash (on a cold load that would abort boot);
+  // an unknown slug still has its query consumed.
+  win.location.hash = "#/survey/alpha?fetch=%E0%A4%A";
+  let _dlThrew = null; try { A.routeFromHash(); } catch (e) { _dlThrew = e; }
+  await A.hydrationDone(); await new Promise(r => setTimeout(r, 0));
+  ok(_dlThrew === null, "a malformed fetch query must not throw, got " + _dlThrew);
+  ok(wgetModal.classList.contains("hidden") && win.location.hash === "#/survey/alpha",
+    "a malformed fetch query opens no dialog and is consumed, got " + JSON.stringify(win.location.hash));
+  win.location.hash = "#/survey/no-such-survey?fetch=raw_packed"; A.routeFromHash();
+  await new Promise(r => setTimeout(r, 0));
+  ok(win.location.hash === "#/survey/no-such-survey", "an unknown slug's fetch query is consumed too, got " + JSON.stringify(win.location.hash));
   win.location.hash = ""; await new Promise(r => setTimeout(r, 0));
+  // The journey the deep link exists for: a cold load at #/survey/<slug>?fetch=<level>, with the hand-off
+  // index arriving in phase 2 after the route has already been read.
+  const _coldMap = Object.assign({}, DATAMAP, { "data/ts_access.json": A.tsAccess() });
+  const coldWin = await bootFreshWindow(_coldMap, "http://localhost/#/survey/alpha?fetch=raw_packed");
+  await new Promise(r => setTimeout(r, 0));
+  const _coldModal = coldWin.document.getElementById("wgetModal"), _coldCmd = coldWin.document.getElementById("wgetCmd");
+  ok(_coldModal && !_coldModal.classList.contains("hidden"), "a cold load at the deep link opens the dialog once the index lands");
+  [...coldWin.document.getElementById("wgetOs").querySelectorAll("button")][0].click();
+  ok(_coldCmd.textContent === _dlExpected, "the cold-load dialog carries the survey's rows, got " + JSON.stringify(_coldCmd.textContent));
+  ok(coldWin.location.hash === "#/survey/alpha", "the cold-load query is consumed, got " + JSON.stringify(coldWin.location.hash));
   A.setSelected(["A1", "A2", "B1", "D1"]);
   // POINTERS: the merged document - EVERY scope station appears; routable stations
   // carry levels[]; the embargoed station D1 appears WITHOUT levels (identity is public, routes are not).

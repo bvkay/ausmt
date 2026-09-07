@@ -14,7 +14,10 @@ const DATA = path.resolve(process.argv[2] || path.join(TOOLS, "..", "data"));
 
 // Read from index.html rather than restated: a module the page loads and this list does not is a module
 // this smoke never exercises.
-const MODULES = [...fs.readFileSync(path.join(TOOLS, "..", "index.html"), "utf8").matchAll(/<script src="src\/([^"]+)\.js"><\/script>/g)].map(m => m[1]);
+const _INDEX_HTML = fs.readFileSync(path.join(TOOLS, "..", "index.html"), "utf8");
+const MODULES = [..._INDEX_HTML.matchAll(/<script\b[^>]*\bsrc="src\/([^"]+)\.js"/g)].map(m => m[1]);
+if (MODULES.length !== (_INDEX_HTML.match(/src="src\//g) || []).length) {
+  console.error("SMOKE FAILED: index.html carries a src/ script tag this harness cannot read"); process.exit(1); }
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 // A citation author with an apostrophe AND an ampersand: the pack's plain-text/.bib/.ris files must
 // carry both verbatim (no HTML entities in text files; & LaTeX-escaped in .bib).

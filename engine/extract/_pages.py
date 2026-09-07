@@ -995,17 +995,23 @@ def _person_rows(contributors):
     return rows
 
 
-def _ts_survey_rows(slug, ts_access):
+def _ts_survey_rows(slug, ts_access, station_docs=None):
     """{level key: {aid: row}} for one survey, from the served register.
 
     Membership is the documented ausmt_id prefix test, `au.<slug>.` (the API reference states it as
     the way to filter by slug), not a split on dots with a component count. The count form dropped
     every row of a survey whose slug contains a dot, and dropped the variant ids that carry a fourth
-    component, both silently."""
+    component, both silently. Given the survey's station documents, a row whose station the page
+    does not serve is dropped too: the card, the dialog and the hand-off document then rest on one
+    predicate, so a page never advertises a document the build did not write."""
     prefix = f"au.{slug}."
+    served = ({str((d or {}).get("ausmt_id")) for d in station_docs}
+              if station_docs is not None else None)
     out: dict = {}
     for aid, levels in (ts_access or {}).items():
         if not str(aid).startswith(prefix):
+            continue
+        if served is not None and str(aid) not in served:
             continue
         for level, row in (levels or {}).items():
             out.setdefault(level, {})[aid] = row
@@ -1027,7 +1033,7 @@ def fetch_handoff_document(*, slug, label, smeta, station_docs, ts_access, base)
     rows = []
     asked = 0
     version = (smeta or {}).get("version") or None
-    for doc in sorted(station_docs or [], key=lambda d: str(d.get("station") or d.get("ausmt_id"))):
+    for doc in sorted(station_docs or [], key=lambda d: str((d or {}).get("ausmt_id") or "")):
         aid = str((doc or {}).get("ausmt_id") or "")
         if not aid.startswith(prefix):
             continue
@@ -1337,7 +1343,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # action. Every number comes from the register or the manifest; a level with no register rows
     # renders no card at all, so absence is never dressed as a pending download.
     dist = []
-    ts_rows = _ts_survey_rows(slug, ts_access)
+    ts_rows = _ts_survey_rows(slug, ts_access, docs)
     panels = []
     related = _related_by_identifies(smeta)
     archive_doi_placed = False

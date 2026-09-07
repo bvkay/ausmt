@@ -2,7 +2,7 @@
 // The terminal-command composers for the time-series hand-off, with no DOM and no SPA state, so
 // index.html and every generated survey page load the same file. See docs: portal internals, fetchcmd.js.
 
-// The output path for one fetched level, <survey slug>/<level>/<archive basename>, unique across the corpus.
+// The output path for one fetched level, <survey slug>/<level>/<archive basename>.
 function tsOutPath(r,l){return (r.slug||"survey")+"/"+l.level+"/"+String(l.filename||"download");}
 // POSIX single-quote a token, so a register-derived path segment is literal in bash and zsh.
 function shq(s){return "'"+String(s==null?"":s).replace(/'/g,"'\\''")+"'";}

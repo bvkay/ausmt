@@ -4021,8 +4021,6 @@ The wget dialog: show the command (scrollable), say where to run it, THEN offer 
 reader should see what lands on their clipboard. Per-platform tabs, with the DETECTED platform
 pre-selected (detection only picks the default tab; researchers copy commands for other
 machines, so all three stay one click away). Guarded binds like every other control.
-One line per platform: what to run it with, and nothing the shared instructions above already say
-.
 ```
 
 

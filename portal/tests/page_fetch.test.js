@@ -95,6 +95,36 @@ async function drive(fetchImpl) {
   doc.getElementById("wgetClose").click();
   ok(modal.classList.contains("hidden"), "Close hides the dialog");
 
+  // A modified or secondary click is the browser's gesture (new tab, new window): the page leaves it alone.
+  const fetchedBefore = fetched.length;
+  for (const init of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+    const mev = new win.MouseEvent("click", Object.assign({ bubbles: true, cancelable: true }, init));
+    ok(a.dispatchEvent(mev) === true, "a modified or secondary click is not prevented: " + JSON.stringify(init));
+  }
+  await tick();
+  ok(fetched.length === fetchedBefore && modal.classList.contains("hidden"),
+     "a modified or secondary click fetches nothing and opens nothing");
+  // While a fetch is in flight a second click does not fetch again.
+  let release;
+  const slow = new Promise(r => { release = r; });
+  win.fetch = (u) => { fetched.push(String(u)); return slow.then(() => ({ ok: true, status: 200, json: () => Promise.resolve(FIX.document) })); };
+  const n0 = fetched.length;
+  a.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true }));
+  a.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true }));
+  ok(fetched.length === n0 + 1, "two clicks before the document lands issue one fetch, got " + (fetched.length - n0));
+  release(); await tick(); await tick(); await tick();
+  ok(!modal.classList.contains("hidden"), "the in-flight click still opens the dialog once the document lands");
+  // A re-open while the dialog is up keeps the reader's tab and the original return focus.
+  tabs.find(b => b.dataset.os === "win").click();
+  a.focus();
+  win.fetch = good;
+  a.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true }));
+  await tick(); await tick(); await tick();
+  ok(tabs.find(b => b.classList.contains("on")).dataset.os === "win", "a re-open keeps the tab the reader chose");
+  doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  ok(modal.classList.contains("hidden") && doc.activeElement === a,
+     "after a re-open, Escape still returns focus to the link, not to the dialog's own box");
+
   // 2. A failed fetch falls back to the anchor's own href, the SPA deep link.
   ({ win, doc, fetched, navigated } = await drive(() => Promise.reject(new Error("offline"))));
   const a2 = doc.querySelector("a[data-fetch]");
@@ -108,6 +138,12 @@ async function drive(fetchImpl) {
   doc.querySelector("a[data-fetch]").dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true }));
   await tick(); await tick();
   ok(navigated.length === 1, "a non-2xx answer falls back to the deep link too");
+  // 3. A page without the dialog markup hands the reader to the deep link without fetching.
+  ({ win, doc, fetched, navigated } = await drive(good));
+  doc.getElementById("wgetModal").remove();
+  doc.querySelector("a[data-fetch]").dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true }));
+  await tick(); await tick();
+  ok(fetched.length === 0 && navigated.length === 1, "no dialog markup: no fetch, straight to the deep link");
 
   if (fail) { console.log("\n" + fail + " FAILED"); process.exit(1); }
   console.log("\nALL PASSED");
