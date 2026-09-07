@@ -183,17 +183,25 @@ ALLOWED_BODY_SRCS = {"collections/idxcoll.html": ["/vendor/auscope-icon-white.pn
 _SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
 
 
-def _allowed_srcs(rel):
+# The one script family the tier loads: the terminal-dialog modules a survey page carries at the END
+# of its body, and only when a time-series card can open the dialog (engine/extract/_pages.py
+# survey_page). They are same-origin files under /src, served by the portal image, never inline: the
+# pages are served under a CSP whose script-src is 'self' alone.
+FETCH_SCRIPT_SRCS = ["/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"]
+
+
+def _allowed_srcs(rel, page=""):
     """The exact, ordered src list this page kind may carry, in DOCUMENT order: the two header marks,
-    then whatever body mark the kind is named for, then the footer's lockup. The order is the
-    assertion, so the body mark has to be spliced between the two chrome groups rather than appended
-    after them."""
-    return ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, []) + ALLOWED_FOOTER_SRCS
+    then whatever body mark the kind is named for, then the footer's lockup, then the dialog's three
+    scripts on a page that carries the dialog. The order is the assertion, so the body mark has to be
+    spliced between the two chrome groups rather than appended after them."""
+    scripts = FETCH_SCRIPT_SRCS if 'id="wgetModal"' in page else []
+    return ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, []) + ALLOWED_FOOTER_SRCS + scripts
 
 
 def _page_srcs(page, rel):
     """Every src on the page, in every quoting form, with the raw-substring count held too."""
-    allowed = _allowed_srcs(rel)
+    allowed = _allowed_srcs(rel, page)
     raw = page.count("src=")
     assert raw == len(allowed), (
         f"{rel}: the tier allows exactly {len(allowed)} src attribute(s) and the page "
@@ -215,8 +223,8 @@ def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
         assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
             f"{rel}: no executable script may appear on an index page"
         srcs = _page_srcs(page, rel)
-        assert srcs == _allowed_srcs(rel), \
-            f"{rel}: the only fetched assets may be {_allowed_srcs(rel)}, got {srcs}"
+        assert srcs == _allowed_srcs(rel, page), \
+            f"{rel}: the only fetched assets may be {_allowed_srcs(rel, page)}, got {srcs}"
         assert '<img class="brandmark" src="/vendor/brand/ausmt-mark.svg" alt="AusMT"' in page, \
             f"{rel}: the header must carry the AusMT mark as the site identity"
         assert "rel=\"stylesheet\"" not in page, f"{rel}: styles stay inline"
@@ -982,11 +990,15 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
     fails on the same line, in every quoting form, and so does an extra src of any kind."""
     for rel in _kinds(built):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
-            f"{rel}: no executable script may appear on a static page"
+        # No INLINE script, ever: a script element carries a non-executable type or is one of the
+        # dialog's three same-origin files, which only a page with the dialog may load.
+        for tag in re.findall(r"<script\b[^>]*>", page):
+            assert tag == '<script type="application/ld+json">' or (
+                'id="wgetModal"' in page and tag in {f'<script src="{s}">' for s in FETCH_SCRIPT_SRCS}), \
+                f"{rel}: no inline script may appear on a static page, got {tag}"
         srcs = _page_srcs(page, rel)
-        assert srcs == _allowed_srcs(rel), \
-            f"{rel}: the only fetched assets may be {_allowed_srcs(rel)}, got {srcs}"
+        assert srcs == _allowed_srcs(rel, page), \
+            f"{rel}: the only fetched assets may be {_allowed_srcs(rel, page)}, got {srcs}"
         assert 'rel="stylesheet"' not in page, f"{rel}: styles stay inline"
         assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
 

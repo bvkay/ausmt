@@ -2188,7 +2188,7 @@ def test_the_page_dialog_is_the_spa_s_own_markup():
     page = _fixture_page(fx, _pages_module(), fx["ts_access"])
     start = page.index('<div id="wgetModal"')
     # The page block ends where the next top-level element of the page begins.
-    end = page.index("<h2 ", start) if "<h2 " in page[start:] else page.index("</main>", start)
+    end = page.index("<h2 id=", start) if "<h2 id=" in page[start:] else page.index("</main>", start)
     assert _start_tags(page[start:end]) == _start_tags(spa), \
         "the page's dialog must be the SPA's dialog, element for element and attribute for attribute"
 

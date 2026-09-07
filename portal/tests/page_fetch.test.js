@@ -11,7 +11,7 @@
 // pageFetchFallback seam.
 //
 //   node tests/page_fetch.test.js       exit 0 passed, 1 failed, 2 jsdom missing (the wrapper skips)
-const fs = require("fs"), path = require("path");
+const fs = require("fs"), path = require("path"), vm = require("vm");
 let JSDOM;
 try { ({ JSDOM } = require("jsdom")); }
 catch (e) { console.error("SKIP: jsdom not installed (run `npm ci` in portal/)"); process.exit(2); }
@@ -44,7 +44,10 @@ async function drive(fetchImpl) {
   const fetched = [];
   win.fetch = (u, opts) => { fetched.push(String(u)); return fetchImpl(String(u), opts); };
   const navigated = [];
-  ["fetchcmd", "fetchdialog", "page-fetch"].forEach(f => win.eval(read(f)));
+  // Run as SCRIPTS in the window's own context, as the page's <script src> tags would: a strict-mode
+  // eval keeps its function declarations to itself, and the driver's seam must be a window global.
+  const ctx = dom.getInternalVMContext();
+  ["fetchcmd", "fetchdialog", "page-fetch"].forEach(f => new vm.Script(read(f), { filename: f + ".js" }).runInContext(ctx));
   win.pageFetchFallback = href => navigated.push(href);
   return { win, doc, fetched, navigated };
 }
