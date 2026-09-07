@@ -1,0 +1,98 @@
+{
+  "_comment": "The per-survey hand-off document and the terminal commands composed from it, pinned from both trees. `document` is what the SPA's tsHandoffDocument writes for `survey` over `ts_access` (its `generated` stamp omitted), and what the engine writes to pages/fetch/<slug>.json for the same survey; `commands` are the composers' output over the document's rows, all levels and the raw_packed level alone. EXAMPLE02 has no routed row, so it is counted in scope.stations and absent from stations; EXAMPLE03's register row states no size, so its bytes is null; EXAMPLE01's packed-raw filename carries the space and brackets the archive really uses. The engine test (engine/tests/test_entity_pages.py) asserts its emitter over ts_access equals document; the portal test (portal/tests/fetch_handoff.test.js) asserts the SPA's own document builder and both composers reproduce it; time_series_collection and note are held equal to portal/src/state.js and portal/src/exports.js by both.",
+  "base": "https://ausmt.auscope.org.au",
+  "survey": {
+    "label": "Example Survey",
+    "slug": "example-survey",
+    "version": "1.0.0",
+    "ausmt_ids": [
+      "au.example-survey.EXAMPLE01",
+      "au.example-survey.EXAMPLE02",
+      "au.example-survey.EXAMPLE03"
+    ]
+  },
+  "ts_access": {
+    "au.example-survey.EXAMPLE01": {
+      "raw_packed": {
+        "bytes": 9868836788,
+        "url_path": "my80/AuScope_MT_collection/AuScope_Broadband/Example_Survey/Packed_Raw_Time_Series_Archive/EXAMPLE01 [REMOTE].zip"
+      },
+      "level0": {
+        "bytes": 96810000,
+        "url_path": "my80/AuScope_MT_collection/AuScope_AusLAMP/Example_Survey/level_0/Concatenated_Time_Series_MTH5_per_run/EXAMPLE01.h5"
+      }
+    },
+    "au.example-survey.EXAMPLE03": {
+      "level1_mth5": {
+        "url_path": "my80/AuScope_MT_collection/AuScope_AusLAMP/Example_Survey/level_1/EXAMPLE03.h5"
+      }
+    }
+  },
+  "files": 3,
+  "bytes": 9965646788,
+  "document": {
+    "note": "AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. Fetch the urls from your own terminal - the portal's hand-off dialog shows ready-made commands: wget -c (Linux) or curl -L -C - (macOS/Windows) resumes on a re-run.",
+    "scope": {
+      "stations": 3,
+      "levels": "all"
+    },
+    "time_series_collection": {
+      "name": "NCI-AuScope Magnetotelluric Collection",
+      "doi": "10.25914/mtjg-jp22",
+      "landing": "https://doi.org/10.25914/mtjg-jp22"
+    },
+    "stations": [
+      {
+        "ausmt_id": "au.example-survey.EXAMPLE01",
+        "station": "EXAMPLE01",
+        "survey": "Example Survey",
+        "slug": "example-survey",
+        "survey_version": "1.0.0",
+        "levels": [
+          {
+            "level": "raw_packed",
+            "url": "https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/raw_packed",
+            "bytes": 9868836788,
+            "filename": "EXAMPLE01 [REMOTE].zip",
+            "archive_url_comment": "https://thredds.nci.org.au/thredds/fileServer/my80/AuScope_MT_collection/AuScope_Broadband/Example_Survey/Packed_Raw_Time_Series_Archive/EXAMPLE01%20%5BREMOTE%5D.zip"
+          },
+          {
+            "level": "level0",
+            "url": "https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/level0",
+            "bytes": 96810000,
+            "filename": "EXAMPLE01.h5",
+            "archive_url_comment": "https://thredds.nci.org.au/thredds/fileServer/my80/AuScope_MT_collection/AuScope_AusLAMP/Example_Survey/level_0/Concatenated_Time_Series_MTH5_per_run/EXAMPLE01.h5"
+          }
+        ]
+      },
+      {
+        "ausmt_id": "au.example-survey.EXAMPLE03",
+        "station": "EXAMPLE03",
+        "survey": "Example Survey",
+        "slug": "example-survey",
+        "survey_version": "1.0.0",
+        "levels": [
+          {
+            "level": "level1_mth5",
+            "url": "https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE03/level1_mth5",
+            "bytes": null,
+            "filename": "EXAMPLE03.h5",
+            "archive_url_comment": "https://thredds.nci.org.au/thredds/fileServer/my80/AuScope_MT_collection/AuScope_AusLAMP/Example_Survey/level_1/EXAMPLE03.h5"
+          }
+        ]
+      }
+    ]
+  },
+  "commands": {
+    "all": {
+      "unix": "wget -c -q --show-progress --content-disposition -P 'example-survey/raw_packed' 'https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/raw_packed'\nwget -c -q --show-progress --content-disposition -P 'example-survey/level0' 'https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/level0'\nwget -c -q --show-progress --content-disposition -P 'example-survey/level1_mth5' 'https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE03/level1_mth5'",
+      "mac": "curl -L -C - --create-dirs -o 'example-survey/raw_packed/EXAMPLE01 [REMOTE].zip' \"https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/raw_packed\" -o 'example-survey/level0/EXAMPLE01.h5' \"https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/level0\" -o 'example-survey/level1_mth5/EXAMPLE03.h5' \"https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE03/level1_mth5\"",
+      "win": "curl.exe -L -C - --create-dirs -o \"example-survey/raw_packed/EXAMPLE01__REMOTE_.zip\" \"https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/raw_packed\" -o \"example-survey/level0/EXAMPLE01.h5\" \"https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/level0\" -o \"example-survey/level1_mth5/EXAMPLE03.h5\" \"https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE03/level1_mth5\""
+    },
+    "raw_packed": {
+      "unix": "wget -c -q --show-progress --content-disposition -P 'example-survey/raw_packed' 'https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/raw_packed'",
+      "mac": "curl -L -C - --create-dirs -o 'example-survey/raw_packed/EXAMPLE01 [REMOTE].zip' \"https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/raw_packed\"",
+      "win": "curl.exe -L -C - --create-dirs -o \"example-survey/raw_packed/EXAMPLE01__REMOTE_.zip\" \"https://ausmt.auscope.org.au/go/ts/example-survey/EXAMPLE01/raw_packed\""
+    }
+  }
+}

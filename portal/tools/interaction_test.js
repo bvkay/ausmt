@@ -2751,6 +2751,31 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "the hand-off adds no track() call site; it is measured at the front door, from the route it uses");
   ok(!/progress|complete|finished|%/i.test(snackEl.textContent),
     "the page claims no progress and no completion; the browser owns both, got " + JSON.stringify(snackEl.textContent));
+  // THE DEEP LINK. A generated survey page's download card links #/survey/<slug>?fetch=<level> (its
+  // href for a reader without script, and the fallback when the page's own fetch fails), and the SPA
+  // answers it with the same dialog over the survey's own stations at that level: no browser hand-off,
+  // no metadata pack, no snackbar chain, and the query consumed so a reload lands on the plain route.
+  A.setSelected(["A1", "A2"]);
+  const _dlExpected = win.tsWgetCommand(A.tsHandoffDoc(null, ["raw_packed"]).doc.stations);
+  ok(/\/go\/ts\/alpha\//.test(_dlExpected), "matrix setup: Alpha must route at least one packed-raw file");
+  A.setSelected([]);
+  const _dlHanded = handed.length, _dlZip = zipEntries.length, _dlSaved = savedBlobs.length;
+  win.location.hash = "#/survey/alpha?fetch=raw_packed"; A.routeFromHash();
+  await A.hydrationDone(); await new Promise(r => setTimeout(r, 0));
+  ok(!wgetModal.classList.contains("hidden"), "the deep link must open the terminal dialog");
+  osTabs[0].click();
+  ok(wgetCmd.textContent === _dlExpected,
+    "the deep link composes the SURVEY'S rows at the linked level, got " + JSON.stringify(wgetCmd.textContent));
+  ok(win.location.hash === "#/survey/alpha",
+    "the query is consumed once answered, so the hash is the plain survey route, got " + JSON.stringify(win.location.hash));
+  ok(handed.length === _dlHanded && zipEntries.length === _dlZip && savedBlobs.length === _dlSaved,
+    "a deep link hands nothing to the browser and saves no pack: the dialog is the whole answer");
+  doc.getElementById("wgetClose").click();
+  win.location.hash = "#/survey/alpha?fetch=no-such-level"; A.routeFromHash();
+  await A.hydrationDone(); await new Promise(r => setTimeout(r, 0));
+  ok(wgetModal.classList.contains("hidden"), "a level outside the vocabulary opens the survey and no dialog");
+  ok(win.location.hash === "#/survey/alpha", "the unknown query is consumed too, got " + JSON.stringify(win.location.hash));
+  win.location.hash = ""; await new Promise(r => setTimeout(r, 0));
   // POINTERS: the merged document - EVERY scope station appears; routable stations
   // carry levels[]; the embargoed station D1 appears WITHOUT levels (identity is public, routes are not).
   clipboard.length = 0;
