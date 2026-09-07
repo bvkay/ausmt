@@ -332,7 +332,9 @@ win.fetch = url => {
 // analytics-shim is FIRST, exactly as index.html loads it: it defines the no-op window.track() every
 // export click handler calls on its first line. Omitting it here leaves no pin able to drive a real
 // export BUTTON (only the pure helpers behind one) without dying on an undefined track.
-const MODULES = ["analytics-shim", "contract", "security", "state", "data", "plots", "mapattrib", "map", "filters", "drawer", "exports", "main", "tour"];
+// Read from index.html rather than restated: a module the page loads and this list does not is a module
+// no pin here can reach.
+const MODULES = [...fs.readFileSync(path.join(PORTAL, "index.html"), "utf8").matchAll(/<script src="src\/([^"]+)\.js"><\/script>/g)].map(m => m[1]);
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFind," +
   "curView:()=>curView,nST:()=>ST.length,visIds:()=>visible.map(s=>s.id)," +
@@ -2776,6 +2778,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(wgetModal.classList.contains("hidden"), "a level outside the vocabulary opens the survey and no dialog");
   ok(win.location.hash === "#/survey/alpha", "the unknown query is consumed too, got " + JSON.stringify(win.location.hash));
   win.location.hash = ""; await new Promise(r => setTimeout(r, 0));
+  A.setSelected(["A1", "A2", "B1", "D1"]);
   // POINTERS: the merged document - EVERY scope station appears; routable stations
   // carry levels[]; the embargoed station D1 appears WITHOUT levels (identity is public, routes are not).
   clipboard.length = 0;

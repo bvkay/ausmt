@@ -223,92 +223,9 @@ function tsHandoffDocument(stations,levels){
     time_series_collection:{name:TS_COLLECTION.name,doi:TS_COLLECTION.doi,
                             landing:"https://doi.org/"+TS_COLLECTION.doi},
     stations:rows}};}
-// The output PATH for one fetched level: <survey slug>/<level>/<archive basename>. See docs: portal
-// internals, exports.js.
-function tsOutPath(r,l){return (r.slug||"survey")+"/"+l.level+"/"+String(l.filename||"download");}
-// POSIX single-quote a token so a register-derived path segment is LITERAL in bash/zsh: inside single
-// quotes $( ), backticks, ", ; and space are all inert, and an embedded ' is close-escape-reopen'd. See
-// docs: portal internals, exports.js.
-function shq(s){return "'"+String(s==null?"":s).replace(/'/g,"'\\''")+"'";}
-// Windows curl.exe may be pasted into PowerShell OR cmd, which quote INCOMPATIBLY (PowerShell interpolates
-// $()/backtick/$var inside "", cmd expands %VAR%; single quotes are literal text in cmd, not quoting), so
-// no one wrap is both safe and faithful in both. See docs: portal internals, exports.js.
-function winSafePath(s){return String(s==null?"":s).replace(/[^A-Za-z0-9._\/-]/g,"_");}
-// The unix form. One `wget` per file, not a single --content-disposition -i - here-doc: the header filename
-// lands in the CURRENT dir, so two files that share a Content-Disposition name would collide and wget
-// silently forks the loser to name.1. See docs: portal internals, exports.js.
-function tsWgetCommand(rows){
-  const lines=[];(rows||[]).forEach(r=>r.levels.forEach(l=>{
-    if(l.url)lines.push("wget -c -q --show-progress --content-disposition -P "+shq((r.slug||"survey")+"/"+l.level)+" "+shq(l.url));}));
-  return lines.join("\n");}
-// The curl form, for macOS and Windows: curl is PREINSTALLED on both (Apple ships it; Microsoft ships a
-// real curl.exe on Windows 10+), so neither platform is sent to a third-party binary. See docs: portal
-// internals, exports.js.
-function tsCurlCommand(rows,exe){
-  const win=(exe==="curl.exe");
-  const parts=[exe+" -L -C - --create-dirs"];
-  (rows||[]).forEach(r=>r.levels.forEach(l=>{
-    if(!l.url)return;
-    const p=tsOutPath(r,l),o=win?('"'+winSafePath(p)+'"'):shq(p);
-    parts.push("-o "+o+' "'+l.url+'"');}));
-  return parts.join(" ");}
 // One level's hand-off for the current scope, from the Download block's time-series rows. See docs: portal
 // internals, exports.js.
 var TS_DIRECT_MAX_BYTES=5*1024*1024*1024;
-// The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a reader
-// should see what lands on their clipboard. See docs: portal internals, exports.js.
-var WGET_OS_NOTES={
-  linux:"wget is preinstalled on most Linux distributions.",
-  mac:"curl is preinstalled on macOS.",
-  win:"curl.exe is preinstalled on Windows 10 and later. Run it in PowerShell or Command Prompt, naming curl.exe in full.",
-};
-function detectOs(){
-  const p=String((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||navigator.userAgent||"");
-  // "windows", never bare /win/: Darwin (the macOS kernel some UA strings report) contains "win".
-  if(/windows/i.test(p)||/^win(32|64)?$/i.test(p))return "win";
-  if(/mac|darwin|iphone|ipad/i.test(p))return "mac";
-  return "linux";}
-var _wgetCmds=null;
-function _paintWgetTab(os){
-  const pre=document.getElementById("wgetCmd"),note=document.getElementById("wgetOsNote"),seg=document.getElementById("wgetOs");
-  if(!_wgetCmds||!pre)return;
-  pre.textContent=(os==="win")?_wgetCmds.win:(os==="mac"?_wgetCmds.mac:_wgetCmds.unix);
-  if(note)note.textContent=WGET_OS_NOTES[os]||"";
-  // aria-selected rides WITH the .on class, never separately: the class is the paint, the attribute is
-  // the only thing a screen reader can read, and two states that can disagree eventually do.
-  if(seg&&seg.querySelectorAll)[...seg.querySelectorAll("button")].forEach(b=>{
-    const on=b.dataset.os===os;b.classList.toggle("on",on);b.setAttribute("aria-selected",String(on));});}
-function showWgetDialog(cmds){
-  const m=document.getElementById("wgetModal"),pre=document.getElementById("wgetCmd");
-  if(!m||!pre){if(typeof copyTxt==="function")copyTxt(cmds.unix);return;}   // no dialog markup: degrade to the copy
-  _wgetCmds=cmds;
-  _paintWgetTab(detectOs());
-  _wgetReturnFocus=(typeof document!=="undefined")?document.activeElement:null;
-  m.classList.remove("hidden");
-  if(m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}}
-// The dialog declares aria-modal, so it owes the same three behaviours the welcome popup (its own visual
-// shell) already has: Escape, click-out, and focus back to whatever opened it. Escape is also the reason
-// drawer.js yields to an open #wgetModal: otherwise Esc over this dialog would close the drawer BEHIND it.
-let _wgetReturnFocus=null;
-function hideWgetDialog(){
-  const m=document.getElementById("wgetModal");if(!m)return;
-  m.classList.add("hidden");
-  const f=_wgetReturnFocus;_wgetReturnFocus=null;
-  if(f&&f.focus){try{f.focus();}catch(e){/* opener gone from the DOM: nothing to restore to */}}}
-(function(){const seg=document.getElementById("wgetOs");
-  if(seg&&seg.addEventListener)seg.addEventListener("click",e=>{
-    const b=e.target.closest?e.target.closest("button"):null;
-    if(b&&b.dataset.os)_paintWgetTab(b.dataset.os);});})();
-bindClick("wgetClose",hideWgetDialog);
-(function(){const m=document.getElementById("wgetModal");
-  // Guarded like every other optional-DOM binding in this file: the module must LOAD in a harness
-  // that stubs only the document it needs, and a missing listener costs the dialog nothing else.
-  if(!m||!m.addEventListener||!document.addEventListener)return;
-  m.addEventListener("click",e=>{if(e.target===m)hideWgetDialog();});                       // click-out on the scrim
-  document.addEventListener("keydown",e=>{
-    if(e.key==="Escape"&&!m.classList.contains("hidden"))hideWgetDialog();});})();
-bindClick("wgetCopy",()=>{const pre=document.getElementById("wgetCmd");
-  if(pre&&typeof copyTxt==="function")copyTxt(pre.textContent);});
 // One route handed to the browser for download. A window-level seam (not inlined) so the jsdom
 // driver can observe the hand-offs; an anchor click, not window.open, because popup blockers stop
 // every window.open after the first in a single gesture.
