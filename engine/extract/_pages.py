@@ -1196,7 +1196,7 @@ def survey_dataset_fields(*, title, kind, blurb, smeta):
     name looks like from the outside."""
     kind_lead = kind[0].upper() + kind[1:]
     out = {"name": f"{title} {kind}",
-           "description": (blurb or f"{kind_lead} data: {title}.").strip()}
+           "description": ("\n".join(_paragraphs(blurb)) or f"{kind_lead} data: {title}.").strip()}
     lic = (smeta or {}).get("lic") or ""
     if lic:
         out["license"] = _LICENSE_URLS.get(lic, lic)
@@ -1636,8 +1636,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # Hero (geography and the fixed core) first, then the named sections in one fixed order, each
     # with an id anchor so a reader can be sent to a section rather than to a page. About carries
     # the FULL abstract; the hero's lede is its first sentence.
-    about = (f'<h2 id="about">About this survey</h2>\n'
-             f'<p class="prose">{_e(blurb)}</p>\n') if blurb else ""
+    # One prose element per paragraph: the abstract's paragraph breaks are the corpus's, and a
+    # single element would run them together.
+    about = ('<h2 id="about">About this survey</h2>\n'
+             + "".join(f'<p class="prose">{_e(p)}</p>\n' for p in _paragraphs(blurb))) if blurb else ""
     # The dialog rides the page exactly when a time-series card can open it, once, after the cards;
     # the scripts that drive it ride the same condition, so a survey with no routed row loads none
     # of them and a page with only the transfer-function card stays script-free.
@@ -2172,6 +2174,12 @@ _ARROW_OUT = "&#8599;"
 # The hover affordance on a stretched-link card: decoration only, so it is hidden from assistive
 # technology (the card already has exactly one real link, and its title is the accessible name).
 _CARD_ARROW = f'<span class="idxgo" aria-hidden="true">{_ARROW_FWD}</span>'
+
+
+def _paragraphs(text) -> list:
+    """An abstract's paragraphs: the corpus writes one line per paragraph, so the served string
+    carries a newline at each break. A blank line is not a paragraph."""
+    return [ln.strip() for ln in str(text or "").split("\n") if ln.strip()]
 
 
 def _first_sentences(text, *, limit=2, budget=220) -> str:

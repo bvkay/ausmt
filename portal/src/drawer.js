@@ -1356,7 +1356,7 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
      `<button class="close" aria-label="Close">✕</button></div>`+
    `<div class="dsub">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}${m.region?" · "+esc(m.region):""} · ${esc(m.dates||"dates n/a")}</div>`+
    collLine(m)+
-   `<div class="dim" style="margin-top:10px">${esc(m.blurb||"Survey description to be provided by the uploader.")}</div>`+
+   `<div class="dim abstract" style="margin-top:10px">${esc(m.blurb||"Survey description to be provided by the uploader.")}</div>`+
    miniScatter(ss)+
    surveySummary(ss,m)+
    // The captured attribution statement rendered where the survey's attribution lives (verbatim custodian

@@ -3136,6 +3136,16 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(drwX.querySelector("[onerror]") === null, "hostile blurb left a live onerror handler");
   ok(drwX.textContent.indexOf("pwn") >= 0, "escaped hostile blurb should still show its literal text");
   ok(win.__pwned === undefined, "hostile blurb executed script (window.__pwned was set)");
+  // (d) PARAGRAPHS. The corpus writes a multi-paragraph abstract one line per paragraph, so the served
+  //     string carries a newline at each break; the drawer keeps them as breaks rather than running
+  //     the paragraphs together (white-space: pre-line on the abstract element, pinned in the stylesheet).
+  A.setBlurb("Alpha Survey", "First paragraph.\nSecond paragraph.");
+  A.openSurvey("Alpha Survey");
+  const absEl = doc.getElementById("drawer").querySelector(".dim.abstract");
+  ok(absEl && absEl.textContent === "First paragraph.\nSecond paragraph.",
+    "the drawer's abstract element must carry the abstract with its newline intact, got " + JSON.stringify(absEl && absEl.textContent));
+  ok(/\.dim\.abstract\{[^}]*white-space:pre-line/.test(_INDEX_HTML),
+    "index.html must style .dim.abstract with white-space: pre-line so the breaks render");
   A.setBlurb("Alpha Survey", null);
   doc.getElementById("drawer").classList.remove("open");
 
@@ -4117,7 +4127,7 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   // Section order. Description before footprint; downloads ahead of funding/publications/identifiers;
   // release notes last. The trailing "Related surveys" block is REMOVED.
   const H = drwE.innerHTML, at = s => H.indexOf(s);
-  const oDesc = at('class="dim"'), oScatter = at("<svg"), oSummary = at("Survey summary"), oDl = at(">Downloads<"),
+  const oDesc = at('class="dim abstract"'), oScatter = at("<svg"), oSummary = at("Survey summary"), oDl = at(">Downloads<"),
         oFund = at(">Funding<"), oPubs = at("Related publications"), oIds = at("Data at every level:"),
         oRel = at("Release notes");
   ok(oDesc >= 0 && oScatter > oDesc, "description (1) must come before the geographic footprint (2)");
