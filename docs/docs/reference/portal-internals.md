@@ -2429,6 +2429,16 @@ try/caught so a network error, a non-JSON body, or a blocked request degrades to
 
 ## portal/src/drawer.js
 
+
+#### The survey abstract keeps its paragraphs
+
+```text
+The corpus writes a multi-paragraph abstract as one line per paragraph, so SMETA[sv].blurb carries a
+newline at each break. The drawer's abstract element is `.dim.abstract`, styled white-space: pre-line
+in index.html, so the breaks render as breaks; the text is still escaped, never parsed as markup. The
+static survey page does the same by emitting one prose element per line (engine survey_page).
+```
+
 #### drawer.js - station/survey/provenance/citation/download rendering for ...
 
 ```text

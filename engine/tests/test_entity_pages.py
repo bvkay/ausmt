@@ -2307,3 +2307,38 @@ def test_the_build_writes_one_fetch_document_per_routed_survey(tmp_path):
                         cwd=str(REPO), capture_output=True, text=True)
     assert r2.returncode == 0, r2.stderr
     assert not (out2 / "pages" / "fetch").exists(), "no routed row anywhere: no fetch tree at all"
+
+
+# ---- the abstract's paragraphs ------------------------------------------------------------------
+
+def test_the_about_block_renders_one_paragraph_per_newline():
+    """The corpus writes a multi-paragraph abstract as one line per paragraph, so the served string
+    carries a newline at each break. The About block renders one prose paragraph per line, in order,
+    each escaped; the lede stays the first sentence and the meta description stays one line."""
+    pages = _pages_module()
+    blurb = ("First paragraph, the opening sentence. A second sentence.\n"
+             "Second paragraph with a <b>hostile</b> tag & an ampersand.\n"
+             "\n"
+             "Third paragraph after a stray blank line.")
+    page = pages.survey_page(slug="s", label="S", sm_doc=None,
+                             smeta={"slug": "s", "blurb": blurb, "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=[], bundle_rows=[], ts_access=None, base="https://x.example")
+    about = page[page.index('<h2 id="about">'):]
+    about = about[:about.index("<h2 ", 10)] if "<h2 " in about[10:] else about
+    paras = re.findall(r'<p class="prose">(.*?)</p>', about, re.S)
+    assert paras == ["First paragraph, the opening sentence. A second sentence.",
+                     "Second paragraph with a &lt;b&gt;hostile&lt;/b&gt; tag &amp; an ampersand.",
+                     "Third paragraph after a stray blank line."], paras
+    assert "<b>hostile</b>" not in page, "every paragraph is escaped"
+    assert '<p class="lede">First paragraph, the opening sentence.</p>' in page, \
+        "the lede is still the abstract's first sentence"
+    m = re.search(r'<meta name="description" content="([^"]*)"', page)
+    assert m and "\n" not in m.group(1), "the meta description stays one line"
+    ld = json.loads(re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>', page).group(1))
+    assert ld["description"] == blurb.replace("\n\n", "\n"), \
+        "the structured-data description carries the abstract with its paragraph breaks, blank lines dropped"
+    one = pages.survey_page(slug="s", label="S", sm_doc=None,
+                            smeta={"slug": "s", "blurb": "One paragraph only.", "org": "O", "lic": "CC-BY-4.0"},
+                            station_docs=[], bundle_rows=[], ts_access=None, base="https://x.example")
+    assert one.count('<p class="prose">') == 1, "a one-line abstract renders exactly as before"
+

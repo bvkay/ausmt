@@ -40,6 +40,11 @@ Six kinds of document, written under `<out>/pages/` and served at the path-URL c
 | station | `pages/stations/<ausmt_id>.html` | `/stations/<ausmt_id>` | no, `robots noindex` |
 | survey hand-off | `pages/fetch/<slug>.json` | `/data/pages/fetch/<slug>.json` | not a page: the document a survey page's download cards fetch, written only for a survey with a routed time-series row |
 
+A survey's abstract may run to several paragraphs; the corpus writes one line per paragraph, and
+the survey page renders one prose element per line (the SPA's drawer keeps the breaks with
+`white-space: pre-line`). The lede is still the abstract's first sentence and the meta
+description stays one line.
+
 A survey page's download cards open the portal's "Fetch from your terminal" dialog in the page:
 each card's "Build a download script" fetches `/data/pages/fetch/<slug>.json` and composes the wget
 or curl command with the portal's own modules (`/src/fetchcmd.js`, `/src/fetchdialog.js`,
