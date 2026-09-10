@@ -86,7 +86,14 @@ services:
     # ${VAR:-DEFAULT} form is the AUSMT_CACHE_MAX_MB pattern (deploy/.env.example); never ${VAR:?},
     # which would abort even a portal-only compose command. Lower it on a smaller box; a build that
     # needs more than the cap is a build to investigate, not a cap to raise blindly.
-    mem_limit: ${AUSMT_BUILD_MEM_LIMIT:-10g}
+    # SIZING on the 15 GB box: the always-on set (portal, gateway, clamd, gw-runner, tailscaled and
+    # the OS) measures about 1.7 GB, and gw-runner may claim its own 4 GB while a build runs, so the
+    # two ceilings must sum below the box. A measured build's parent peak is a few hundred MiB and
+    # the worker arm is bounded by the station-sized unit each of at most 6 workers holds, so 8 GB is
+    # several times any legitimate build while still killing the runaway class (a build process was
+    # once OOM-killed at 13.6 GB). Retune from build_report totals peak_rss_child_max_mib once real
+    # builds have reported it.
+    mem_limit: ${AUSMT_BUILD_MEM_LIMIT:-8g}
     # The same ceiling in processes: the parent, its MTH5 workers (at most 6, see AUSMT_BUILD_WORKERS)
     # and their library threads are a bounded set, so a fork storm hits this floor rather than the
     # host's pid space. NOT `cpus`: a build that is slow costs time, a build that is killed costs the

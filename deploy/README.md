@@ -144,7 +144,7 @@ failed build or verify leaves `current` untouched and exits non-zero with the fa
 so a host-side swap gets `Permission denied` (exactly what the first real deploy hit after build +
 verify had already passed).
 
-`build-runner` runs under a **cgroup memory ceiling** (`mem_limit`, default `10g` of the box's
+`build-runner` runs under a **cgroup memory ceiling** (`mem_limit`, default `8g` of the box's
 15 GB) and a process ceiling (`pids_limit: 512`). The engine fans MTH5 writes out to
 `AUSMT_BUILD_WORKERS` worker processes, so the container's real footprint is roughly the worker
 count times what any single process reports; the cap means a build that runs away is killed inside
