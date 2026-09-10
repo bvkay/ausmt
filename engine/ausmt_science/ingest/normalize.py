@@ -100,6 +100,24 @@ def _sanitize_alnum(value: Optional[str], default: str) -> str:
     return cleaned or default
 
 
+def emtfxml_site_id(station_id: Optional[str]) -> str:
+    """The EMTF-XML Site.id condition_tf writes for `station_id`. Public because the identity-rewrite
+    conditioning notes are CLASS-STABLE (they carry no per-station value, or the by-note aggregation
+    that folds the build log could never group them), so the caller that builds the id ledger needs
+    the same sanitiser rather than a second copy of the rule."""
+    return _sanitize_alnum(station_id, "station")
+
+
+# The identity-rewrite conditioning notes. Their text is CLASS-STABLE: the station's own id and its
+# source filename are NOT interpolated. A note whose text embeds a per-station value is a distinct
+# string for every station, so the by-note aggregation cannot fold it and the build log grows one
+# line per station. The values themselves ride the build report's station id ledger, keyed by
+# station, which is the record an operator acts on.
+NOTE_STATION_ID_SET = "station.id set to the sanitised EMTF-XML Site.id"
+NOTE_SOURCE_ID_PRESERVED = "station.source_id_preserved_in_site_name"
+NOTE_SOURCE_FILE_PRESERVED = "station.source_file_preserved_in_site_name"
+
+
 # Recoverable token that carries the UNSANITISED source station id inside the artifact. It rides in
 # the EMTF-XML Site <Name> (station_metadata.geographic_name), the one free-text station slot that
 # survives mt_metadata's write->read round-trip (station.comments and transfer_function.id do NOT).
@@ -310,7 +328,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
     st_new = _sanitize_alnum(st_src, "station")
     if tf.station_metadata.id != st_new:
         tf.station_metadata.id = st_new
-        notes.append(f"station.id->{st_new}")
+        notes.append(NOTE_STATION_ID_SET)
 
     # Site.project pattern is ^[a-zA-Z0-9-_]*$ (no spaces) — survey project names like
     # "Stuart Shelf 2009" fail the EMTF-XML write. Sanitize (the readable name stays in survey.yaml).
@@ -341,7 +359,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
     if st_true and st_true != st_new and _SRC_ID_MARKER not in (tf.station_metadata.geographic_name or ""):
         _existing = (tf.station_metadata.geographic_name or "").strip()   # already sanitised above
         tf.station_metadata.geographic_name = (f"{_existing} {_SRC_ID_MARKER}{st_true}").strip()
-        notes.append(f"station.source_id_preserved_in_site_name:{st_true}")
+        notes.append(NOTE_SOURCE_ID_PRESERVED)
 
     # Third-party ingest: which custodian FILE these bytes were derived from. For such a survey the
     # published station id comes from survey.yaml, not from the DATAID, so without this the served
@@ -352,7 +370,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
     if _src_file and _SRC_FILE_MARKER not in (tf.station_metadata.geographic_name or ""):
         _existing = (tf.station_metadata.geographic_name or "").strip()
         tf.station_metadata.geographic_name = (f"{_existing} {_SRC_FILE_MARKER}{_src_file}").strip()
-        notes.append(f"station.source_file_preserved_in_site_name:{_src_file}")
+        notes.append(NOTE_SOURCE_FILE_PRESERVED)
 
     # Issue #4: spectra-origin TFs have _rotation_angle == None (frame unknown — e.g. Phoenix EMpower,
     # derived from a spectra section). mt_metadata's writer requires the array, so we STILL zero-fill —

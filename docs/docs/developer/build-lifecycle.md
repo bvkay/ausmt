@@ -103,10 +103,11 @@ through direct pull requests ([Submission](../operations/submission.md)); publis
 
 `build_report.json` is the structured per-survey record of what a build produced: stations built and
 stations dropped (each with the gate's reason), the survey-scoped warnings, EMTF-XML emission failures,
-the ingest source of each station (`edi`, `emtfxml` or `mth5`), the served-bytes integrity result for
-copied EDIs, the parse-only fallbacks, the canonical-conditioning, frame and presence notes aggregated
-by distinct note, the build-cache counters, per-survey wall time, and the build's peak RSS. Its identity
-fields
+per-file product-emission failures, the EMTF XMLs the EDI-wins precedence rule skipped, the per-station
+identity rewrites, the ingest source of each station (`edi`, `emtfxml` or `mth5`), the served-bytes
+integrity result for copied EDIs, the parse-only fallbacks, the canonical-conditioning, frame and
+presence notes aggregated by distinct note, the build-cache counters, per-survey wall time, and the
+build's peak RSS. Its identity fields
 come from the helpers that write `build.json`, so the two cannot disagree about which commits produced
 a build.
 
@@ -154,6 +155,36 @@ its reason). It is EMPTY: the one entry it ever carried was `capricorn-2010/CP3B
 collapses that run on a temporary copy so the station publishes.
 The build itself still exits 0 on a refused file, so one malformed legacy file costs its own station
 and never the whole corpus; the verifier is what stops a build that lost a station reaching a swap.
+
+## The build log and its folds
+
+The build log is a summary, not a per-station transcript. Several notice families describe something
+survey-level, or something whose whole membership belongs in a ledger, and printing them once per
+station made a corpus build roughly ten thousand lines of near-identical text. Each of those families
+now prints at most one line per survey, and the membership the line no longer spells out is
+machine-readable in `build_report.json` (or, for the coordinate flags, in `qc_report.json`, which
+already carries every row). Nothing an operator can act on is lost by the fold; the line is a pointer
+to the ledger.
+
+- Conditioning, frame and presence notices aggregate by DISTINCT note text: one `[xml] / [frame] /
+  [presence] NOTICE` line per note per survey, with the station count. A note whose text interpolates
+  a per-station value would be a distinct string for every station and could never fold, so the
+  identity-rewrite notes state the CLASS of rewrite only. Which station was written under which
+  EMTF-XML `Site.id`, and from which custodian file, is `station_ids`.
+- `[xml] WARN` and `[h5] WARN` fold per survey per (producer, exception class, message head) to one
+  line with the count and one example file. `product_failures` carries every file, keyed by producer,
+  with the producer path each fault was first seen in (`station product` or `survey bundle`). Both
+  MTH5 tiers re-read the same source files, so a fault both hit is one row and one line, whether the
+  bundles were written serially or drained from the worker pool.
+- `PRECEDENCE` folds to one line per survey naming the count and up to eight ids;
+  `precedence_skipped` lists every superseded EMTF XML.
+- The placeholder-tipper `NOTICE` folds the same way; its ledger is the existing `tipper_masked` list.
+- The QC coordinate-flag notices fold per survey per flag, with the count and up to five examples.
+  The near-duplicate-location notices do NOT fold: each names a distinct pair a curator must look at.
+
+The count lines (`C18 survey ...`, `C18 cache [...]`, `built N stations`, the `QC:` summary) are
+unchanged, and so is every gate that stops or withholds: a `WITHHOLD`, a `GATE FAIL`, a `SKIP` and a
+duplicate-id `ERROR` still name their own file or station.
 
 `stations_dropped` is the ledger every drop lands in, whatever refused it: a convention gate, a
 missing coordinate or period, or the reader. Each row carries the source `file` beside the `station`

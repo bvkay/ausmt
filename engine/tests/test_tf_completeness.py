@@ -212,6 +212,10 @@ def test_placeholder_tipper_note_rides_the_report_channel(capsys):
     assert src.count("components_from_tf(tfobj, notes=") == 2, (
         "both parse arms must pass the notes channel")
     assert 'r["tipper_masked"] = True' in src
+    # ...and the NOTICE is SURVEY-level: neither parse arm may print one line per masked station, so
+    # the notice text appears exactly once in the module, in the fold that renders the survey line.
+    assert src.count("placeholder tipper (|T| flat at 1.0) masked") == 1, (
+        "the placeholder-tipper NOTICE must be rendered once per survey, not once per station")
     # Locate process_edis structurally (ast), not by a character offset: the old 6000-char
     # window broke every time the function grew, while the guarded behaviour stood.
     import ast

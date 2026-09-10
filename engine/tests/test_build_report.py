@@ -169,7 +169,7 @@ def test_report_does_not_disturb_canonical_provenance(tmp_path):
     assert any_station, "at least one station.json must carry its per-station canonical_conditioning list"
 
 
-def test_per_station_xml_emission_failures_surface_in_build_report(tmp_path, monkeypatch):
+def test_per_station_xml_emission_failures_surface_in_build_report(tmp_path, monkeypatch, capsys):
     """RED-PROOF: a per-station EMTF-XML emission failure must be COUNTED in build_report.json (a
     structured xml_failures row with the exception class PLUS a counted survey warning), never left
     invisible behind a printed '[xml] WARN'. This is the gap the 8-survey/~380-station regression hid
@@ -220,6 +220,19 @@ def test_per_station_xml_emission_failures_surface_in_build_report(tmp_path, mon
     assert "RuntimeError" in xml_warns[0], xml_warns[0]
     assert rep["totals"]["warnings"] >= 1
 
+    # THE LOG FOLD: the per-file '[xml] WARN <file>: ...' line is replaced by ONE line per survey per
+    # distinct fault, carrying the count and one example file; the per-file rows live in the report's
+    # product_failures ledger, keyed by producer, with the producer path the fault was first seen in.
+    err = capsys.readouterr().err
+    warn_lines = [ln for ln in err.splitlines() if "[xml] WARN" in ln]
+    assert warn_lines == [
+        f"  [xml] WARN {slug}: RuntimeError: simulated EMTF-XML emission failure - 1 file(s), "
+        f"e.g. {survey['product_failures']['xml'][0]['file']} (station product)"], warn_lines
+    pf = survey["product_failures"]["xml"]
+    assert len(pf) == 1 and pf[0]["error"] == "RuntimeError", pf
+    assert pf[0]["message"] == "simulated EMTF-XML emission failure", pf
+    assert pf[0]["context"] == "station product", pf
+
     # the victim still served its EDI (EDI-only), but has NO emtfxml manifest row
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     edi_ids = {r["station"] for r in man["files"] if r["format"] == "edi"}
@@ -238,3 +251,29 @@ def test_xml_failures_empty_on_clean_build(tmp_path):
         assert survey.get("xml_failures", []) == [], f"{slug}: clean build must have no xml_failures"
         assert not [w for w in survey["warnings"] if "EMTF-XML emission failed" in w], \
             f"{slug}: clean build must raise no xml-emission-failed warning"
+        assert survey.get("product_failures", {}) == {}, \
+            f"{slug}: clean build must record no product-emission failures"
+
+
+def test_identity_rewrite_notes_carry_no_per_station_value(tmp_path):
+    """The identity conditioning notes must be CLASS-STABLE in what the build persists and prints: a
+    note that interpolates the station id or its source filename is a distinct string per station, so
+    the by-note aggregation cannot fold it and the log grows one line per station. The mapping itself
+    belongs in build_report's `station_ids`.
+
+    FAILS IF: 'station.id->', 'source_id_preserved_in_site_name:' or
+    'source_file_preserved_in_site_name:' reappears in a persisted note or in the build log."""
+    out, prod, r = _build(tmp_path)
+    banned = ("station.id->", "source_id_preserved_in_site_name:",
+              "source_file_preserved_in_site_name:")
+    for bad in banned:
+        assert bad not in r.stderr, f"{bad!r} still names a per-station value in the build log"
+    for sj in sorted(prod.rglob("station.json")):
+        text = json.dumps(json.loads(sj.read_text(encoding="utf-8")).get("canonical_conditioning") or [])
+        for bad in banned:
+            assert bad not in text, f"{sj}: {bad!r} still names a per-station value"
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    for slug, survey in rep["surveys"].items():
+        assert isinstance(survey["station_ids"], list), slug
+        for row in survey["station_ids"]:
+            assert row["station"] and row["site_id"], row

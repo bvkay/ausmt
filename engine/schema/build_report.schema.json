@@ -73,7 +73,52 @@
         "tipper_masked": {
           "type": "array",
           "items": {"type": "string"},
-          "description": "stations whose placeholder tipper (|T| flat at 1.0) was masked and withheld (C20 D2 honesty): the NOTICE's machine-readable twin, emitted identically on a C18 cache hit and a fresh parse. Optional for pre-fix reports."
+          "description": "stations whose placeholder tipper (|T| flat at 1.0) was masked and withheld (C20 D2 honesty): the NOTICE's machine-readable twin, emitted identically on a C18 cache hit and a fresh parse. The build log folds the NOTICE to ONE line per survey naming a bounded set of ids, so this list is the membership record. Optional for pre-fix reports."
+        },
+        "precedence_skipped": {
+          "type": "array",
+          "description": "the EMTF XMLs the EDI-wins PRECEDENCE RULE did not ingest: the station already had an EDI, which is canonical, so its XML stays in the submitted package unread. Empty for every survey supplied in one format. The build log folds these to ONE line per survey, so this is the per-file record. Optional for reports that predate the fold.",
+          "items": {
+            "type": "object",
+            "required": ["station", "file"],
+            "additionalProperties": false,
+            "properties": {
+              "station": {"type": "string"},
+              "file": {"type": "string", "description": "the EMTF XML that was not ingested"}
+            }
+          }
+        },
+        "station_ids": {
+          "type": "array",
+          "description": "per-station identity rewrites: the served station id, the sanitised EMTF-XML Site.id the served artifact was written under, and (only where the survey declares source provenance) the custodian file the station was derived from. The matching canonical_conditioning notes state the CLASS of rewrite and carry no per-station value, because a note whose text embeds one is a distinct string for every station and cannot be aggregated, which is one log line per station; this is where the mapping lives instead. `source_file` mirrors the survey's declared source provenance rather than restating it independently. Optional for reports that predate the fold.",
+          "items": {
+            "type": "object",
+            "required": ["station", "site_id"],
+            "additionalProperties": false,
+            "properties": {
+              "station": {"type": "string", "description": "the served station id"},
+              "site_id": {"type": "string", "description": "the sanitised EMTF-XML Site.id (^[a-zA-Z0-9]*$) the artifact was written under"},
+              "source_file": {"type": "string", "description": "the custodian file this station was derived from, where the survey declares one"}
+            }
+          }
+        },
+        "product_failures": {
+          "type": "object",
+          "description": "per-file product-emission failures keyed by PRODUCER ('xml' for the canonical EMTF XML, 'h5' for the MTH5 writer). The build log folds these per survey to one line per (producer, exception class, message head) with a count and one example file; this is the full list. De-duplicated on (producer, file, exception, message), so a source file both MTH5 tiers fail on is ONE row and `context` names the producer path that hit it first ('station product' or 'survey bundle'). A row here is not by itself a served-data gap: what a station still serves is stated by xml_failures and by the manifest. Optional for reports that predate the fold.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["file", "error", "message", "context"],
+              "additionalProperties": false,
+              "properties": {
+                "file": {"type": "string", "description": "the source file the producer could not emit from"},
+                "error": {"type": "string", "description": "the exception class name"},
+                "message": {"type": "string", "description": "the exception message, truncated as the log truncates it"},
+                "context": {"type": "string", "description": "the producer path this failure was FIRST seen in"}
+              }
+            }
+          }
         },
         "xml_failures": {
           "type": "array",
