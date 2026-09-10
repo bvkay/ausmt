@@ -18,6 +18,7 @@ Requires the mt_metadata/mth5 build engine (importorskip otherwise); runs in the
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -274,6 +275,64 @@ def test_identity_rewrite_notes_carry_no_per_station_value(tmp_path):
             assert bad not in text, f"{sj}: {bad!r} still names a per-station value"
     rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
     for slug, survey in rep["surveys"].items():
-        assert isinstance(survey["station_id_rewrites"], list), slug
-        for row in survey["station_id_rewrites"]:
+        assert isinstance(survey.get("station_id_rewrites", []), list), slug
+        for row in survey.get("station_id_rewrites", []):
             assert row["station"] and row["site_id"], row
+
+
+def test_coordinate_flag_notices_are_folded_in_a_real_build(tmp_path):
+    """The QC coordinate-flag notice is survey-level in the log: one line per survey per flag,
+    carrying the count and a bounded set of examples, with every row still in qc_report.json.
+
+    FAILS IF: the QC block prints one '[notice] coordinate flag ...' line per flagged station (a
+    corpus build then prints one line per station), or the folded counts do not account for every
+    qc_report row."""
+    out, _prod, r = _build(tmp_path)
+    rows = json.loads((out / "qc_report.json").read_text(encoding="utf-8"))["coord_flags"]
+    assert rows, "the sample corpus must flag at least one coordinate, else this pin is vacuous"
+    lines = [ln for ln in r.stdout.splitlines() if "[notice] coordinate flag" in ln]
+    assert lines, "a flagged coordinate must still be announced"
+    pat = re.compile(r"^  \[notice\] coordinate flag '[^']+'( \(resolved\))? in \S+: "
+                     r"(?P<n>\d+) station\(s\), e\.g\. \S")
+    counts = []
+    for ln in lines:
+        m = pat.match(ln)
+        assert m, f"not a folded coordinate-flag line: {ln!r}"
+        counts.append(int(m.group("n")))
+    assert sum(counts) == len(rows), (counts, len(rows))
+    assert len(lines) <= len(rows), (lines, len(rows))
+
+
+def test_mth5_write_failures_fold_once_across_both_served_tiers(tmp_path, monkeypatch, capsys):
+    """Tier 1 (per-station MTH5) and tier 2 (survey bundle) re-read the SAME source files, so a
+    station whose TF write fails fails in both. The fold must report that fault ONCE: one
+    '[h5] WARN' line for the survey and one row in product_failures, carrying the producer path it
+    was first seen in.
+
+    FAILS IF: the [h5] arm prints one line per failing station per tier, or the second tier adds a
+    second ledger row for a file already recorded."""
+    victim = "A2"
+
+    real_stamp = bp._stamp_mth5_source_provenance
+
+    def _fake_stamp(station_metadata, record):
+        if victim in str(record.get("id") or ""):
+            raise RuntimeError("simulated MTH5 station write failure")
+        return real_stamp(station_metadata, record)
+
+    monkeypatch.setattr(bp, "_stamp_mth5_source_provenance", _fake_stamp)
+    out = tmp_path / "data"
+    rc = bp.main(["--surveys", str(SURVEYS), "--out", str(out), "--products", str(tmp_path / "p"),
+                  "--bundle-edi", "--no-validate", "--survey-h5", "--station-h5"])
+    assert rc == 0, "a per-station MTH5 failure must not abort the build"
+
+    err = capsys.readouterr().err
+    warn_lines = [ln for ln in err.splitlines() if "[h5] WARN" in ln and "RuntimeError" in ln]
+    assert len(warn_lines) == 1, warn_lines
+    assert warn_lines[0].endswith("1 file(s), e.g. Vulcan_A2.edi (station product)"), warn_lines[0]
+
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    rows = [r for s in rep["surveys"].values() for r in s.get("product_failures", {}).get("h5", [])]
+    assert len(rows) == 1, rows
+    assert rows[0]["file"] == "Vulcan_A2.edi" and rows[0]["error"] == "RuntimeError", rows
+    assert rows[0]["context"] == "station product", "the first occurrence context is kept"

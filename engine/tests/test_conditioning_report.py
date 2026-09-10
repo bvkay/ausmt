@@ -244,3 +244,55 @@ def test_coordinate_flag_notices_fold_per_survey_per_flag():
         "  [notice] coordinate flag 'info_only' in two: 1 station(s), e.g. b.edi (au.two.B01)",
     ], lines
     assert bp.coord_flag_log_lines([]) == []
+
+
+def test_station_id_ledger_covers_a_source_id_only_rewrite():
+    """A station can be published under an id the EMTF-XML Site.id pattern rejects while the parsed
+    Site.id already equals the sanitised form, so the only identity note it carries is the preserved
+    source id. The rewrite happened all the same.
+
+    FAILS IF: the ledger gate names only two of the three identity notes. The note text is
+    class-stable, so a survey that rewrote every station would then have an EMPTY
+    station_id_rewrites and the mapping would be recoverable from nowhere."""
+    from ausmt_science.ingest import normalize as nz
+    records = [{"id": "A-1"}, {"id": "A-2"}]
+    notes = {sid: [nz.NOTE_SOURCE_ID_PRESERVED] for sid in ("A-1", "A-2")}
+    rows = bp.station_id_ledger(notes, records)
+    assert rows == [{"station": "A-1", "site_id": "A1"},
+                    {"station": "A-2", "site_id": "A2"}], rows
+
+
+def test_product_failure_count_names_distinct_files():
+    """The folded line reads '<n> file(s)', so n is the count of DISTINCT files. FAILS IF: one file
+    that fails twice with messages differing only past the group key is counted as two files."""
+    head = "y" * bp.PRODUCT_FAILURE_KEY_CHARS
+    rows = [{"producer": "h5", "file": "SAME.edi", "error": "OSError",
+             "message": head + " first", "context": "station product"},
+            {"producer": "h5", "file": "SAME.edi", "error": "OSError",
+             "message": head + " second", "context": "station product"}]
+    groups = bp.fold_product_failures(rows)
+    assert len(groups) == 1, groups
+    assert groups[0]["count"] == 1, groups
+    assert bp.product_failure_log_lines("s", groups)[0].endswith(
+        "1 file(s), e.g. SAME.edi (station product)"), groups
+
+
+def test_merge_product_failures_reports_a_file_the_bundle_adds_to_a_known_group():
+    """The deferred survey bundle failing on a file the station-product tier did NOT fail on is a new
+    file even when its fault groups with one already printed. The merge reports the ADDED files, so
+    every line accounts for a disjoint set and no printed count goes stale.
+
+    FAILS IF: the merge reports only unseen group KEYS, which leaves the added file silent."""
+    ledger = [{"producer": "h5", "file": "A.edi", "error": "ValueError", "message": "boom",
+               "context": "station product"}]
+    added = bp.merge_product_failures(ledger, [
+        {"producer": "h5", "file": "A.edi", "error": "ValueError", "message": "boom",
+         "context": "survey bundle"},
+        {"producer": "h5", "file": "B.edi", "error": "ValueError", "message": "boom",
+         "context": "survey bundle"}])
+    assert bp.product_failure_log_lines("s", added) == [
+        "  [h5] WARN s: ValueError: boom - 1 file(s), e.g. B.edi (survey bundle)"], added
+    led = bp.product_failures_report(ledger)["h5"]
+    assert [r["file"] for r in led] == ["A.edi", "B.edi"], led
+    assert led[0]["context"] == "station product", "the first occurrence context is kept"
+    assert bp.merge_product_failures(ledger, []) == [], "a drain with nothing new prints nothing"

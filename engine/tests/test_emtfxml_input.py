@@ -584,3 +584,28 @@ def test_a_generated_edi_and_its_survey_zip_are_byte_reproducible_across_builds(
     assert filedate and source_date, "the generated EDI must carry both a FILEDATE and a source date"
     assert filedate.group(1) == source_date.group(1), \
         f"FILEDATE must be the source document's own date, got {filedate.group(1)} vs {source_date.group(1)}"
+
+
+def test_precedence_notice_reaches_a_caller_that_keeps_no_report(tmp_path, capsys):
+    """The precedence rule says which of two renditions of a station was ingested, so it cannot go
+    silent. A caller that passes no report has nowhere for the ledger to land, so the folded line
+    prints from the ingest pass itself; with a report the survey loop renders it from the ledger.
+
+    FAILS IF: the fold records the skip only into the report, which drops the fact entirely for a
+    library caller."""
+    pkg = _package(tmp_path / "surveys", edi_stations=("EXAMPLE01",), xml_stations=("EXAMPLE01",))
+    xmls = sorted((pkg / "transfer_functions" / "emtfxml").glob("*.xml"))
+    assert xmls, "the package must carry the XML rendition"
+    bp.process_emtfxml(xmls, "Example Survey", "TestOrg", SLUG, exclude_ids=("EXAMPLE01",))
+    lines = [ln for ln in capsys.readouterr().err.splitlines() if "PRECEDENCE" in ln]
+    assert lines == [
+        "  [xml] PRECEDENCE example-survey: 1 station(s) already ingested from "
+        "transfer_functions/edi/ - the EDI is canonical, their EMTF XML is kept in the package "
+        "but NOT ingested (EXAMPLE01)"], lines
+
+    report = {}
+    bp.process_emtfxml(xmls, "Example Survey", "TestOrg", SLUG, exclude_ids=("EXAMPLE01",),
+                       report=report)
+    assert report["precedence_skipped"] == [{"station": "EXAMPLE01", "file": "EXAMPLE01.xml"}], report
+    assert "PRECEDENCE" not in capsys.readouterr().err, (
+        "with a report the survey loop renders the folded line; the ingest pass must not also print")

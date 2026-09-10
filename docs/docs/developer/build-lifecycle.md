@@ -170,7 +170,10 @@ to the ledger.
   [presence] NOTICE` line per note per survey, with the station count. A note whose text interpolates
   a per-station value would be a distinct string for every station and could never fold, so the
   identity-rewrite notes state the CLASS of rewrite only. Which station was written under which
-  EMTF-XML `Site.id`, and from which custodian file, is `station_id_rewrites`.
+  EMTF-XML `Site.id`, and from which custodian file, is `station_id_rewrites`. A station gets a row
+  there for any of the three identity notes, because a station published under an id the `Site.id`
+  pattern rejects can carry only the preserved-source-id note, and its rewrite is as real as the
+  others.
 - `[xml] WARN` and `[h5] WARN` fold per survey per (producer, exception class, message head) to one
   line with the count and one example file. `product_failures` carries every file, keyed by producer,
   with the producer path each fault was first seen in (`station product` or `survey bundle`). Both
@@ -181,6 +184,13 @@ to the ledger.
 - The placeholder-tipper `NOTICE` folds the same way; its ledger is the existing `tipper_masked` list.
 - The QC coordinate-flag notices fold per survey per flag, with the count and up to five examples.
   The near-duplicate-location notices do NOT fold: each names a distinct pair a curator must look at.
+
+The ledger is where a fold puts what the line stops spelling out, so a library caller that runs an
+ingest pass without a report has nowhere for it to land: `process_edis` and `process_emtfxml` then
+print the folded line themselves rather than drop the fact. The tier-3 collection MTH5 writer is the
+one emitter that still prints one line per failing file, because a collection spans surveys and has
+no per-survey report entry to fold into; that tier is capped at a few hundred stations by
+`collection_h5_allowed`, so its line count is bounded by construction.
 
 The count lines (`C18 survey ...`, `C18 cache [...]`, `built N stations`, the `QC:` summary) are
 unchanged, and so is every gate that stops or withholds: a `WITHHOLD`, a `GATE FAIL`, a `SKIP` and a

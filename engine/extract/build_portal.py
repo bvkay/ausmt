@@ -2311,6 +2311,10 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
     edit re-derives the survey either way."""
     stations, tf_rows, sci_rows = [], [], []
     _email_hits = []   # curator signal: source filenames whose raw >INFO block carries an email
+    # The masked-tipper membership for this call. It doubles as the fallback ledger: a caller with no
+    # report has nowhere for the mask to be recorded, so the folded NOTICE is printed from here
+    # instead. An honesty decision cannot be silent just because the caller kept no report.
+    _tipper_masked_ids: list = []
     if not mtm.available():
         sys.exit("ERROR: the mt_metadata stack is required for the build "
                  "(pip install -r environments/requirements-mtmetadata-lock.txt).")
@@ -2424,8 +2428,10 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         # Emit the deferred per-EDI diagnostics identically whether parsed from source or cache.
         # The NOTICE itself is survey-level (tipper_masked_log_line, from this ledger): one masked
         # station per line is one line per station on a corpus build.
-        if r.get("tipper_masked") and report is not None:
-            report.setdefault("tipper_masked", []).append(str(r.get("id") or p.stem))
+        if r.get("tipper_masked"):
+            _tipper_masked_ids.append(str(r.get("id") or p.stem))
+            if report is not None:
+                report.setdefault("tipper_masked", []).append(str(r.get("id") or p.stem))
         if parsed.get("email_flag"):
             _email_hits.append(p.name)
         if parsed.get("coord_warn"):
@@ -2522,6 +2528,10 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
               f"{len(_email_hits)} source EDI(s): {', '.join(_email_hits)} (derived processing_note "
               f"is redacted; the served original .edi bytes are NOT modified -- flagged for curator "
               f"review, not auto-fixed).", file=sys.stderr)
+    if report is None:
+        _tline = tipper_masked_log_line(slug, _tipper_masked_ids)
+        if _tline:
+            print(_tline, file=sys.stderr)
     return stations, tf_rows, sci_rows
 
 
@@ -2673,6 +2683,11 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
                  "(pip install -r environments/requirements-mtmetadata-lock.txt).")
     exclude = {str(x) for x in (exclude_ids or ())}
     stations, tf_rows, sci_rows = [], [], []
+    # Membership for the two survey-level folds this arm feeds. They double as fallback ledgers: a
+    # caller with no report has nowhere for either fact to be recorded, so the folded lines are
+    # printed from here instead rather than lost.
+    _precedence_rows: list = []
+    _tipper_masked_ids: list = []
     for p in sorted(xml_paths):
         try:
             tfobj = mtm.read(p)
@@ -2715,6 +2730,7 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
             # not re-emitted from here; it stays in the submitted package as a custodian artifact.
             # Recorded, not printed: a mixed survey skips one XML per station, so the survey-level
             # fold (precedence_log_line) is what reaches the log.
+            _precedence_rows.append({"station": str(r["id"]), "file": p.name})
             if report is not None:
                 report.setdefault("precedence_skipped", []).append(
                     {"station": str(r["id"]), "file": p.name})
@@ -2726,6 +2742,7 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
         if _tnotes:
             r["tipper_masked"] = True
             # Ledger only; the survey-level NOTICE is rendered from it (see the EDI arm).
+            _tipper_masked_ids.append(str(r.get("id") or p.stem))
             if report is not None:
                 report.setdefault("tipper_masked", []).append(str(r.get("id") or p.stem))
         # Processing metadata comes from the TF's own structured fields: an EMTF XML has no EDI
@@ -2776,6 +2793,11 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
         _notes = _r.pop("_frame_notes", None)
         if _notes and report is not None:
             report.setdefault("frame_notes", {})[_r["id"]] = _notes
+    if report is None:
+        for _line in (precedence_log_line(slug, _precedence_rows),
+                      tipper_masked_log_line(slug, _tipper_masked_ids)):
+            if _line:
+                print(_line, file=sys.stderr)
     return stations, tf_rows, sci_rows
 
 
@@ -3636,8 +3658,8 @@ def conditioning_report(notes_by_station: dict) -> list:
 
 
 # ---- The per-survey notice folds -----------------------------------------------------------------
-# Several notice families were emitted once PER STATION although what they say is survey-level. At
-# corpus scale that is the whole build log. Each family below folds to a bounded number of lines per
+# A notice whose content is SURVEY-level must not cost one log line per station: at corpus scale
+# that alone is the whole build log. Each family below folds to a bounded number of lines per
 # survey; the FULL membership stays machine-readable in build_report.json (or, for the coordinate
 # flags, in qc_report.json, which already carries every row), so folding loses nothing an operator
 # can act on. A folded line is a pointer to that ledger, never the record itself.
@@ -3659,8 +3681,12 @@ def station_id_ledger(notes_by_station: dict, records) -> list:
     """build_report.json's `station_id_rewrites`: the per-station identity mapping that the
     CLASS-STABLE conditioning notes cannot carry in their own text.
 
-    A row per station whose EMTF-XML Site.id was rewritten, or whose custodian source filename was
-    embedded in the Site <Name>: {"station": served id, "site_id": the sanitised Site.id,
+    A row per station carrying ANY of the three identity notes: the Site.id was rewritten, the
+    unsanitised source id was preserved in the Site <Name>, or the custodian source filename was
+    embedded there. All three are gated, because a station can be published under an id the Site.id
+    pattern rejects while the TF's own parsed id already equals the sanitised form, in which case the
+    preserved-source-id note is the only one that fires and the rewrite would otherwise be recorded
+    nowhere: {"station": served id, "site_id": the sanitised Site.id,
     "source_file": the custodian filename (omitted when the survey declares no source provenance)}.
     The served id IS the source id on this path (normalize() is handed the record's own id), and the
     filename is read from the record's declared source_provenance rather than duplicated, so this
@@ -3670,12 +3696,12 @@ def station_id_ledger(notes_by_station: dict, records) -> list:
     Derived from the record and the same sanitiser normalize() uses, so a build-cache hit and a
     fresh normalize produce identical rows."""
     from ausmt_science.ingest.normalize import (  # noqa: PLC0415
-        NOTE_SOURCE_FILE_PRESERVED, NOTE_STATION_ID_SET, emtfxml_site_id)
+        NOTE_SOURCE_FILE_PRESERVED, NOTE_SOURCE_ID_PRESERVED, NOTE_STATION_ID_SET, emtfxml_site_id)
+    _gate = {NOTE_STATION_ID_SET, NOTE_SOURCE_ID_PRESERVED, NOTE_SOURCE_FILE_PRESERVED}
     rows = []
     for r in records:
         sid = r.get("id")
-        notes = set(notes_by_station.get(sid) or ())
-        if NOTE_STATION_ID_SET not in notes and NOTE_SOURCE_FILE_PRESERVED not in notes:
+        if not (_gate & set(notes_by_station.get(sid) or ())):
             continue
         row = {"station": str(sid), "site_id": emtfxml_site_id(sid)}
         src_file = str((r.get("source_provenance") or {}).get("original_filename") or "").strip()
@@ -3709,9 +3735,10 @@ def dedupe_product_failures(rows) -> list:
 def fold_product_failures(rows) -> list:
     """Group per-file product-emission failures by (producer, exception class, message head) into
     one entry each: {producer, error, message, count, example, context}, in first-appearance order.
-    `count` is the number of DISTINCT files and `example` is the first of them; the per-file rows
-    stay in the ledger."""
-    order, groups = [], {}
+    `count` is the number of DISTINCT files, which is what the rendered line claims, so one file
+    that fails twice with messages differing only past the group key counts once. `example` is the
+    first of those files; the per-file rows stay in the ledger."""
+    order, groups, files = [], {}, {}
     for row in dedupe_product_failures(rows):
         msg = str(row.get("message") or "")
         key = (str(row.get("producer") or ""), str(row.get("error") or ""),
@@ -3720,8 +3747,10 @@ def fold_product_failures(rows) -> list:
             groups[key] = {"producer": key[0], "error": key[1], "message": msg,
                            "count": 0, "example": str(row.get("file") or ""),
                            "context": str(row.get("context") or "")}
+            files[key] = set()
             order.append(key)
-        groups[key]["count"] += 1
+        files[key].add(str(row.get("file") or ""))
+        groups[key]["count"] = len(files[key])
     return [groups[k] for k in order]
 
 
@@ -3749,16 +3778,20 @@ def product_failures_report(rows) -> dict:
 
 
 def merge_product_failures(rows: list, new_rows) -> list:
-    """Merge freshly reported product failures into a survey's ledger IN PLACE and return the folded
-    groups the merge ADDED. A file the survey bundle re-read after the tier-1 station product already
+    """Merge freshly reported product failures into a survey's ledger IN PLACE and return the fold of
+    what the merge ADDED. A file the survey bundle re-read after the tier-1 station product already
     failed on it contributes nothing: no second ledger row, no second log line. This is what keeps the
-    deferred (pooled) bundle drain from replaying the survey loop's failures."""
-    def _keys(groups):
-        return {(g["producer"], g["error"], g["message"][:PRODUCT_FAILURE_KEY_CHARS]) for g in groups}
-    before = _keys(fold_product_failures(rows))
+    deferred (pooled) bundle drain from replaying the survey loop's failures.
+
+    The fold is of the ADDED rows alone, not of the whole ledger, so a bundle-only failure that groups
+    with a fault already announced still gets its own line and every line accounts for a disjoint set
+    of files. A line already printed can never be revised, so it must never claim files it did not
+    count."""
+    before = {_product_failure_key(r) for r in dedupe_product_failures(rows)}
+    added = [r for r in dedupe_product_failures(list(rows) + list(new_rows))
+             if _product_failure_key(r) not in before]
     rows.extend(new_rows)
-    return [g for g in fold_product_failures(rows)
-            if (g["producer"], g["error"], g["message"][:PRODUCT_FAILURE_KEY_CHARS]) not in before]
+    return fold_product_failures(added)
 
 
 def precedence_log_line(slug: str, rows):
@@ -4873,6 +4906,10 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
                     # station ids must compare against the RIGHT member EDI, not the first one seen.
                     all_stations.append((p, {**r, "_survey": slug}))
                 except Exception as ex:  # noqa: BLE001
+                    # One line per failing file, unfolded: a collection spans surveys and has no
+                    # per-survey report entry for a fold's ledger to land in, and
+                    # collection_h5_allowed caps this tier at a few hundred stations, so the line
+                    # count is bounded by construction rather than by the corpus.
                     print(f"  [h5] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
                 finally:
                     _release_mth5_metadata_classes()   # per station, same bound as _write_tf_mth5
