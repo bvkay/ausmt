@@ -293,6 +293,8 @@ jobs:
             tests/test_comment_hygiene.py \
             tests/test_cli_help_identity.py \
             tests/test_ci_check_skips.py \
+            tests/test_tipper_recovery.py \
+            tests/test_impedance_mask.py \
             | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out
 

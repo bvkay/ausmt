@@ -132,3 +132,45 @@ def test_a_channels_recorded_declaration_without_bz_masks_the_tipper_survey_wide
     report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
     blob = json.dumps(report)
     assert "channels_recorded declaration" in blob
+
+
+def test_a_station_channels_declaration_masks_one_stations_tipper(tmp_path):
+    """The per-station form of the same declaration: a survey that recorded the vertical field at
+    most sites but not all names the exceptions under station_channels, keyed by PUBLISHED id, and
+    only those stations lose their file-borne tipper. The other station keeps it, the report names
+    the masked station and the declaration, and an id the survey does not publish is reported
+    rather than silently ignored."""
+    pytest.importorskip("mt_metadata")
+    pkg = tmp_path / "surveys" / "cap-nt"
+    edir = pkg / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    (pkg / "survey.yaml").write_text(
+        "name: Cap NT\nslug: cap-nt\ncountry: Australia\norganisation: Test Org\n"
+        "access: open\nlicense: CC-BY-4.0\nabstract: Mask fixture survey.\n"
+        "station_ids:\n  source: filename\n  map:\n    \"CP1L02.edi\":\n      id: \"CP1L02\"\n"
+        "station_channels:\n  CP1L02: [Ex, Ey, Bx, By]\n  CP1L09: [Ex, Ey, Bx, By]\n",
+        encoding="utf-8")
+    shutil.copy(FIXTURE, edir / "CP1L01.edi")
+    shutil.copy(FIXTURE, edir / "CP1L02.edi")
+    out = tmp_path / "out"
+    rc = build_portal.main(["--surveys", str(tmp_path / "surveys"), "--out", str(out),
+                            "--no-validate", "--products", str(out / "products")])
+    assert rc == 0
+    rows = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    comps = {r[build_portal.CATALOGUE_COLUMNS.index("id")]:
+             r[build_portal.CATALOGUE_COLUMNS.index("comps")] for r in rows}
+    assert comps["CP1L02"] == "Z", "the named station must lose its tipper"
+    assert "T" in comps["CP1L01"], "the unnamed station must keep its tipper"
+    docs = {sid: json.loads((out / "products" / "cap-nt" / sid / "station.json")
+                            .read_text(encoding="utf-8")) for sid in ("CP1L01", "CP1L02")}
+    assert docs["CP1L02"]["diagnostics"]["tipper_available"] is False
+    assert docs["CP1L01"]["diagnostics"]["tipper_available"] is True
+    from _contract import TF_COLUMNS
+    ids = [r[build_portal.CATALOGUE_COLUMNS.index("id")] for r in rows]
+    trows = dict(zip(ids, json.loads((out / "tf.json").read_text(encoding="utf-8"))))
+    assert all(v is None for v in trows["CP1L02"][list(TF_COLUMNS).index("tzx_re")])
+    assert any(v is not None for v in trows["CP1L01"][list(TF_COLUMNS).index("tzx_re")])
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    blob = json.dumps(report)
+    assert "station_channels" in blob and "CP1L02" in blob
+    assert "CP1L09" in blob, "an id the survey does not publish must be reported"

@@ -301,7 +301,7 @@ apparent resistivity and phase, so a tipper-only station has nothing for it to s
 resistivity and no phase the formula collapses to period coverage plus a constant, which would read
 as an assessed diagnostic without being one. Such a station is served with `value` null and `basis`
 `s`, uniformly, whether the station's file carries no impedance at all or carries one its survey's
-`channels_recorded` declaration masks as a conversion artifact. `tipper_available` and the
+`channels_recorded` or `station_channels` declaration masks as a conversion artifact. `tipper_available` and the
 catalogue's `components` say which case a station is; the diagnostic does not vary between them.
 Its inputs, where it is computed:
 

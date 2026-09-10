@@ -331,6 +331,64 @@ _TF_IMPEDANCE_COLUMNS = ("rho_xy", "rho_yx", "phs_xy", "phs_yx_adj",
                          "rho_xy_err", "rho_yx_err", "phs_xy_err", "phs_yx_err")
 _TF_IMPEDANCE_INDEXES = tuple(tfmod.TF_COLUMNS.index(_c) for _c in _TF_IMPEDANCE_COLUMNS)
 
+
+def _channel_keys(channels) -> set:
+    """The declared channel names folded onto the mt_metadata spellings (Bx to hx), lower case."""
+    out = set()
+    for c in channels or []:
+        name = str(c).strip().lower()
+        out.add(name.replace("b", "h", 1) if name.startswith("b") else name)
+    return out
+
+
+def station_channel_masks(block) -> dict:
+    """{published station id: (mask tipper, mask impedance)} from a survey.yaml `station_channels`
+    block, the per-station form of `channels_recorded`. A station's declared set is read exactly as
+    the survey-wide one: no vertical coil masks its tipper, neither horizontal electric channel
+    masks its impedance. A block that is not a mapping of id to a non-empty list is ignored here
+    because refusing it is the validator's job; an entry that masks nothing is dropped."""
+    out = {}
+    if not isinstance(block, dict):
+        return out
+    for sid, channels in block.items():
+        if not isinstance(channels, list) or not channels:
+            continue
+        keys = _channel_keys(channels)
+        masks = (not ({"hz"} & keys), not ({"ex", "ey"} & keys))
+        if any(masks):
+            out[str(sid).strip()] = masks
+    return out
+
+
+def _withhold_tipper(r, tf) -> None:
+    """Drop the tipper from a parsed record and its tf row: components, the type derived from them
+    and the five tipper columns (tip_mag, tzx_re/im, tzy_re/im in TF_COLUMNS)."""
+    r["components"] = [c for c in r["components"] if c != "T"]
+    r["type"] = mtm.classify(r.get("period_min_s"), "Z" in r["components"], False)
+    if isinstance(tf, list):
+        for _ti in (5, 14, 15, 16, 17):
+            if _ti < len(tf) and tf[_ti]:
+                tf[_ti] = [None] * len(tf[_ti])
+
+
+def _withhold_impedance(r, tf, srow, parsed):
+    """Drop the impedance and everything derived from it: components and type, the twelve tf
+    columns, the science row, and the sign-convention verdict that reads the impedance and nothing
+    else. Returns the masked science row. `impedance_masked` rides the final record so the emitters
+    that re-read the source file can be filtered on it."""
+    r["impedance_masked"] = True
+    r["components"] = [c for c in r["components"] if c != "Z"]
+    r["type"] = mtm.classify(r.get("period_min_s"), False, "T" in r["components"])
+    if isinstance(tf, list):
+        for _zi in _TF_IMPEDANCE_INDEXES:
+            if _zi < len(tf) and tf[_zi]:
+                tf[_zi] = [None] * len(tf[_zi])
+    if isinstance(parsed.get("frame"), dict):
+        parsed["frame"]["convention_check"] = None
+    parsed["frame_notes"] = [_n for _n in (parsed.get("frame_notes") or [])
+                             if not _n.startswith("convention: ")]
+    return mask_impedance_sci_row(srow)
+
 # The science fields the impedance mask nulls: _SCI_WITHHELD_SCIENCE minus `decades`. Decades is the
 # span of the PERIOD axis and owes nothing to the impedance, so a tipper-only station keeps it; the
 # access gate nulls it because that gate withholds the period curves as well, which this one does
@@ -2277,7 +2335,7 @@ def _parse_one_edi(p):
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                  cache=None, survey_digest="", report=None, station_ids=None,
-                 mask_tipper=False, mask_impedance=False):
+                 mask_tipper=False, mask_impedance=False, station_masks=None):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
     mt_metadata is the SOLE engine: there is no dependency-free regex extractor and no _spectra
@@ -2315,6 +2373,10 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         sys.exit("ERROR: the mt_metadata stack is required for the build "
                  "(pip install -r environments/requirements-mtmetadata-lock.txt).")
     _use_cache = cache is not None and getattr(cache, "enabled", False)
+    station_masks = station_masks or {}
+    # Every published id this pass names, built or withheld by a gate, so a station_channels entry
+    # that names nothing the survey publishes is reported instead of masking in silence.
+    _named_ids = set()
     # ---- POLICY v3 survey-scope pre-scan (cheap lexical pass; read_norm is cached so the text
     # is read once and reused by the per-station parse below). Under v3 a station's disposition is
     # survey-context-INDEPENDENT (every uniform declaration serves as-stored; every per-period
@@ -2362,6 +2424,9 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         # `report` so the skip is machine-visible, never a silent absence.
         if parsed.get("skip"):
             _sk = parsed["skip"]
+            _named_ids.add(safe_component(
+                stnids.override_for(getattr(station_ids, "ids", None), p)
+                or _sk.get("station") or p.stem))
             print(f"  GATE FAIL {p.name} [{_sk['gate']}]: {_sk['reason']}", file=sys.stderr)
             if report is not None:
                 report.setdefault("stations_dropped", []).append(
@@ -2374,12 +2439,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         # survey-wide - components, catalogue comps, the tf tipper columns. Applied HERE, after
         # the cache (the cached parse stays survey-independent), identically on hit and miss.
         if mask_tipper and "T" in (r.get("components") or []):
-            r["components"] = [c for c in r["components"] if c != "T"]
-            r["type"] = mtm.classify(r.get("period_min_s"), "Z" in r["components"], False)
-            if isinstance(tf, list):
-                for _ti in (5, 14, 15, 16, 17):        # tip_mag, tzx_re/im, tzy_re/im (TF_COLUMNS)
-                    if _ti < len(tf) and tf[_ti]:
-                        tf[_ti] = [None] * len(tf[_ti])
+            _withhold_tipper(r, tf)
             if report is not None:
                 report.setdefault("tipper_masked_by_declaration", []).append(
                     str(r.get("id") or p.stem))
@@ -2395,29 +2455,15 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         # so the cached parse stays survey-independent and a hit and a miss mask identically. What
         # the custodian released is still served byte for byte; the mask governs what AusMT DERIVES.
         if mask_impedance and "Z" in (r.get("components") or []):
-            # Rides the FINAL record (never the cache entry, which is survey-independent) so the
-            # emitters that re-read the SOURCE file can be filtered on it. station.json and the
-            # catalogue row are assembled from named keys, so this one gains no published surface.
-            r["impedance_masked"] = True
-            r["components"] = [c for c in r["components"] if c != "Z"]
-            r["type"] = mtm.classify(r.get("period_min_s"), False, "T" in r["components"])
-            if isinstance(tf, list):
-                for _zi in _TF_IMPEDANCE_INDEXES:
-                    if _zi < len(tf) and tf[_zi]:
-                        tf[_zi] = [None] * len(tf[_zi])
-            srow = mask_impedance_sci_row(srow)
-            # Gate 2's sign-convention verdict reads the impedance and nothing else, so under the
-            # mask it IS the withheld phase restated in degrees: a fabricated flat Z publishes
-            # phs_xy/phs_yx medians of 45.0 into station.json's frame block and a survey warning
-            # that reads that flat 45 as a possible 3D/distortion effect, in the same report whose
-            # next line says the phase is withheld. Null the verdict and drop its note. Done here,
-            # on the parse product rather than inside the parse, for the same reason as the rest of
-            # the mask: the cache entry stays survey-independent. The measured frame facts
-            # (declared rotation, frame served) owe the impedance nothing and stay.
-            if isinstance(parsed.get("frame"), dict):
-                parsed["frame"]["convention_check"] = None
-            parsed["frame_notes"] = [_n for _n in (parsed.get("frame_notes") or [])
-                                     if not _n.startswith("convention: ")]
+            # `impedance_masked` rides the FINAL record (never the cache entry, which is
+            # survey-independent) so the emitters that re-read the SOURCE file can be filtered on
+            # it; station.json and the catalogue row are assembled from named keys, so it gains no
+            # published surface. Gate 2's sign-convention verdict reads the impedance and nothing
+            # else, so under the mask it IS the withheld phase restated in degrees: the helper nulls
+            # the verdict and drops its note on the parse product, not inside the parse, so the
+            # cache entry stays survey-independent. The measured frame facts (declared rotation,
+            # frame served) owe the impedance nothing and stay.
+            srow = _withhold_impedance(r, tf, srow, parsed)
             if report is not None:
                 report.setdefault("impedance_masked_by_declaration", []).append(
                     str(r.get("id") or p.stem))
@@ -2460,6 +2506,20 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         stnids.apply(r, p, station_ids)
         r["id"] = safe_component(r.get("id"))          # untrusted DATAID/override -> no traversal / XSS
         r["ausmt_id"] = f"au.{safe_component(slug)}.{r['id']}"
+        # The per-station form of the same declaration, `station_channels`, is keyed by PUBLISHED
+        # id, so it is read only now that the id map has run. A survey that measured the vertical
+        # field or the electric field at most sites names the stations that did not, and only
+        # those lose the derived products: the same seam, the same withholding, its own ledger.
+        _named_ids.add(r["id"])
+        _st_mask_t, _st_mask_z = station_masks.get(r["id"], (False, False))
+        if _st_mask_t and "T" in (r.get("components") or []):
+            _withhold_tipper(r, tf)
+            if report is not None:
+                report.setdefault("tipper_masked_by_station_declaration", []).append(r["id"])
+        if _st_mask_z and "Z" in (r.get("components") or []):
+            srow = _withhold_impedance(r, tf, srow, parsed)
+            if report is not None:
+                report.setdefault("impedance_masked_by_station_declaration", []).append(r["id"])
         r["comps"] = "".join(r.get("components") or [])
         r["frame"] = parsed.get("frame")               # Frame facts -> station.json
         # A survey with inconsistent per-station declared frames carries the survey-level
@@ -2523,6 +2583,10 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
               f"{len(_email_hits)} source EDI(s): {', '.join(_email_hits)} (derived processing_note "
               f"is redacted; the served original .edi bytes are NOT modified -- flagged for curator "
               f"review, not auto-fixed).", file=sys.stderr)
+    if station_masks and report is not None:
+        _unknown = sorted(set(station_masks) - _named_ids)
+        if _unknown:
+            report["station_channels_unknown"] = _unknown
     return stations, tf_rows, sci_rows
 
 
@@ -5399,11 +5463,16 @@ def _main_build(argv=None):
             # The electric half of the same declaration. Either horizontal electric channel is
             # enough to make an impedance possible, so the mask asks for BOTH to be absent.
             _mask_impedance = bool(_declared_channels) and not ({"ex", "ey"} & _declared_channels)
+            # Read from the RAW survey.yaml mapping: the block is per station and is not part of
+            # the served survey metadata, so it never enters smeta.
+            _station_masks = station_channel_masks(
+                (survey_yaml_by_label.get(label) or {}).get("station_channels"))
             stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
                                                        report=_gate_report, station_ids=_station_ids,
                                                        mask_tipper=_mask_tipper,
-                                                       mask_impedance=_mask_impedance) \
+                                                       mask_impedance=_mask_impedance,
+                                                       station_masks=_station_masks) \
                 if _edi_in else ([], [], [])
             if _xml_in:
                 # PRECEDENCE RULE: EDI wins per station. The exclusion set is the
@@ -5984,6 +6053,26 @@ def _main_build(argv=None):
             _survey_warnings.append(
                 f"tipper masked survey-wide by the channels_recorded declaration (no vertical "
                 f"coil recorded) for {len(_decl_masked)} station(s)")
+        _st_masked = list(_gate_report.get("tipper_masked_by_station_declaration", []))
+        if _st_masked:
+            _survey_warnings.append(
+                f"tipper masked by the station_channels declaration (no vertical coil at the named "
+                f"stations) for {len(_st_masked)} station(s): {', '.join(_st_masked[:8])}"
+                f"{', ...' if len(_st_masked) > 8 else ''}")
+        _st_z_masked = list(_gate_report.get("impedance_masked_by_station_declaration", []))
+        if _st_z_masked:
+            _survey_warnings.append(
+                f"impedance masked by the station_channels declaration (no electric field at the "
+                f"named stations) for {len(_st_z_masked)} station(s): the derived resistivity, "
+                f"phase, phase-tensor, error and quality products are withheld for them; the "
+                f"source files are still served byte for byte: {', '.join(_st_z_masked[:8])}"
+                f"{', ...' if len(_st_z_masked) > 8 else ''}")
+        _st_unknown = list(_gate_report.get("station_channels_unknown", []))
+        if _st_unknown:
+            _survey_warnings.append(
+                f"station_channels names {len(_st_unknown)} id(s) this survey does not publish, so "
+                f"those entries mask nothing: {', '.join(_st_unknown[:8])}"
+                f"{', ...' if len(_st_unknown) > 8 else ''}")
         _z_decl_masked = list(_gate_report.get("impedance_masked_by_declaration", []))
         if _z_decl_masked:
             _survey_warnings.append(
