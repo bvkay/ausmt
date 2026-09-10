@@ -538,14 +538,18 @@ def test_unlisted_paths_404_and_nothing_in_the_section_proxies():
 
 
 def test_compose_and_installer_carry_the_table_into_the_config():
-    """The table is part of the CONFIG: compose mounts it read-only at the import path, and the
-    installer's validate step mounts it too (caddy validate FAILS on a missing import, which is the
-    point). FAILS IF either mount is dropped - the edge would then refuse to start, or validate would
-    pass on a config the container cannot load."""
-    assert f"./ts-routes.map:{_MAP_MOUNT}:ro" in _COMPOSE.read_text(encoding="utf-8")
+    """The table is part of the CONFIG: compose mounts the RENDERED copy read-only at the import
+    path (never the tracked file: a single-file bind mount is an inode and git pull replaces the
+    tracked file by rename), and the installer's validate step mounts the same copy (caddy validate
+    FAILS on a missing import, which is the point). FAILS IF either mount is dropped or points at the
+    tracked file - the edge would refuse to start, validate would pass on a config the container
+    cannot load, or a pulled table would never reach the running edge."""
+    compose = _COMPOSE.read_text(encoding="utf-8")
+    assert f"./ts-routes.map.rendered:{_MAP_MOUNT}:ro" in compose
+    assert f"./ts-routes.map:{_MAP_MOUNT}" not in compose, "the tracked file must not be mounted"
     install = _INSTALL.read_text(encoding="utf-8")
-    assert f'"$HERE/ts-routes.map:{_MAP_MOUNT}:ro"' in install, (
-        "the validate step must mount the table it imports")
+    assert f'"$HERE/ts-routes.map.rendered:{_MAP_MOUNT}:ro"' in install, (
+        "the validate step must mount the rendered table it imports")
     assert "ts-routes.map ]" in install and "will 404" in install, (
         "a missing table must degrade to an EMPTY table (every route 404s), not a failed deploy")
 

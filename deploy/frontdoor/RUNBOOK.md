@@ -266,6 +266,9 @@ the shipped Caddyfile. A first install (nothing running yet) just starts clean, 
      The resolution lives in `ts-routes.map`, a GENERATED, COMMITTED table beside the Caddyfile that the
      Caddyfile `import`s, so it reaches the VPS the same way the Caddyfile does - `git pull` in this
      subtree, then `./install-frontdoor.sh`. There is no other path onto the VPS and no box-to-VPS push.
+     The installer renders `ts-routes.map.rendered` in place and compose mounts THAT: a single-file
+     bind mount is an inode, and `git pull` replaces the tracked file by rename, so mounting the tracked
+     file left the running edge on the old table until the container was recreated.
 
      **The table goes out BEFORE the data, always.** Its membership is the suppression: a station that
      stops being open has to lose its route first, so the order is table, then publish. Regenerate it in
