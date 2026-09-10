@@ -96,8 +96,9 @@ PAUSE_FLAG="$STATE_DIR/pause.flag"
 ROLLBACK_PIN="$STATE_DIR/rollback.pin"
 PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"   # 6 h
 BUILDS_DIR="$SITE_DATA/builds"
-# How many build dirs to keep besides the one `current` points at. Matches the Makefile's own
-# `ls -1t | tail -n +6` retention so the two cannot drift into different answers.
+# How many build dirs to keep besides the one `current` points at. The DEPTH matches the Makefile's
+# own `ls -1t | tail -n +6` retention so the two cannot keep different amounts of history; the
+# ordering here is by name rather than mtime (see prune_builds for why).
 KEEP_BUILDS="${AUSMT_RECONCILE_KEEP_BUILDS:-5}"
 
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
