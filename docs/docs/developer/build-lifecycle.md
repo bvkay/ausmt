@@ -112,6 +112,16 @@ fields
 come from the helpers that write `build.json`, so the two cannot disagree about which commits produced
 a build.
 
+The memory record is three fields, not one, because no single kernel counter is what the box needed.
+`peak_rss_mib` is the parent process's high-water mark (`getrusage(RUSAGE_SELF)`), which cannot see an
+MTH5 worker process at all. `peak_rss_child_max_mib` is the largest **single** worker
+(`getrusage(RUSAGE_CHILDREN)`, a maximum over waited-for descendants, never a sum), read after the pool
+has been joined because the counter reports nothing for a child still running; it is `null` on a serial
+build. `workers` is the effective worker count the build ran with, so the box-level footprint reads as
+`peak_rss_mib + workers x peak_rss_child_max_mib`. The build prints the same three numbers on one
+stderr line (`build peak RSS: parent … MiB, largest worker … MiB, N workers`), and the deployed build
+container is capped against them (`mem_limit`, `deploy/README.md`).
+
 `presence` is the report of the presence rule. mt_metadata instantiates a complete run for every
 transfer function it reads, whether or not the file states one, so a parse routinely carries a run id
 synthesised as `<station>a`, a 0 Hz rate, a 1980 epoch window, an unnamed data logger, a 0-ohm contact

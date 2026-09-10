@@ -25,8 +25,13 @@ What is pinned here, and what each pin fails on:
     feature quietly re-materialising the world. The measured constant and slope are recorded below.
   * the record: build_report.json carries `peak_rss_mib`, schema-valid, and it agrees with the
     child's own rusage peak (the field is a measurement, not a guess).
+  * the worker arm of that record: `peak_rss_mib` is RUSAGE_SELF and cannot see a worker process, so
+    the report must also carry the largest single worker's peak and the worker count that multiplies
+    it. A serial build reports no worker peak; a pooled build reports one of worker size, measured
+    after the pool was joined. FAILS on the parent's number offered as the whole footprint, on a
+    hard-coded field, and on a measurement taken while the pool is still up.
 
-Requires the mt_metadata/mth5 build stack; skips cleanly otherwise. The two subprocess pins need
+Requires the mt_metadata/mth5 build stack; skips cleanly otherwise. The four subprocess pins need
 os.wait4 (POSIX), which every CI engine workflow has.
 """
 import gc
@@ -71,6 +76,13 @@ SLOPE_MAX_MIB_PER_STATION = 0.5
 # set these sizes measured 266 MiB at 20 stations and 287 MiB at 200, i.e. peak = constant + slope*N:
 MEASURED_CONSTANT_MIB = 264            # the corpus-independent floor: interpreter + libraries + one survey
 MEASURED_SLOPE_MIB_PER_STATION = 0.114  # the corpus-wide index (catalogue rows, records) per station
+# The floor a reported MTH5 worker peak must clear. getrusage(RUSAGE_CHILDREN) is a maximum over
+# every child the process has reaped, and the build reaps two `git` children at import, so the
+# counter reads about 3 MiB even with the pool still running: a >0 test cannot tell a measured worker
+# from a measurement taken too early. A spawned worker pays the interpreter plus the build_portal and
+# mth5 imports before it writes anything and measured 213 MiB here, so this sits an order of
+# magnitude above the git floor and a factor of four below the real thing.
+WORKER_PEAK_MIN_MIB = 50
 
 
 def _live_model_classes() -> int:
@@ -135,13 +147,18 @@ def test_mth5_unit_releases_metadata_classes(tmp_path):
 
 # --------------------------------------------------------------------------- the end-to-end bound
 
-def _run_build_measured(surveys: Path, out: Path, log: Path) -> tuple[int, float]:
+def _run_build_measured(surveys: Path, out: Path, log: Path, workers: str | None = None) -> tuple[int, float]:
     """Run the real CLI with the production flag set as a child process and return (returncode,
     peak_rss_mib) where the peak is the child's own rusage ru_maxrss via os.wait4: measured by the
-    kernel, independent of anything the engine writes. KiB on Linux, bytes on macOS."""
+    kernel, independent of anything the engine writes. KiB on Linux, bytes on macOS.
+
+    `workers` passes --workers explicitly; left None the build takes its own default, which is
+    serial unless AUSMT_BUILD_WORKERS is set in the environment."""
     cmd = [sys.executable, "-m", "extract.build_portal", "--surveys", str(surveys), "--out", str(out),
            "--products", str(out / "products"), "--bundle-edi", "--survey-h5", "--station-h5",
            "--no-validate"]
+    if workers is not None:
+        cmd += ["--workers", str(workers)]
     with log.open("w", encoding="utf-8") as fh:
         p = subprocess.Popen(cmd, cwd=str(ROOT), stdout=fh, stderr=subprocess.STDOUT)
         _pid, status, ru = os.wait4(p.pid, 0)
@@ -228,4 +245,66 @@ def test_build_report_records_peak_rss(tmp_path):
     assert "peak_rss_mib" in schema["properties"], "the field must be schema-documented"
     log = (tmp_path / "build.log").read_text(encoding="utf-8")
     assert "build peak RSS:" in log, "the build log must state the peak on one line an operator can read"
+
+
+@pytest.mark.skipif(not hasattr(os, "wait4"), reason="os.wait4 (POSIX rusage) not available on this platform")
+def test_build_report_records_the_worker_arm_of_the_footprint(tmp_path):
+    """WHAT THE BOX NEEDED, not what one process saw. `peak_rss_mib` is RUSAGE_SELF, which cannot
+    see a worker process at all; with N concurrent MTH5 workers the box-level footprint is about N
+    times what it reports. So the report must carry all three parts: the parent's peak, the largest
+    single worker's peak, and the worker count that multiplies it.
+
+    The serial arm: a --workers 1 build starts no pool, so there is no worker peak to report (None,
+    or 0 where the counter reads nothing) and `workers` is 1. FAILS on a report that carries the
+    parent's number alone, which reads as the whole footprint and is not."""
+    jsonschema = pytest.importorskip("jsonschema")
+    out = tmp_path / "out"
+    rc, _peak = _run_build_measured(SAMPLE_SURVEYS, out, tmp_path / "build.log", workers="1")
+    assert rc == 0, (tmp_path / "build.log").read_text(encoding="utf-8")[-3000:]
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    for key in ("peak_rss_child_max_mib", "workers"):
+        assert key in rep, f"build_report.json must record {key}; keys: {sorted(rep)}"
+    assert rep["workers"] == 1, f"a --workers 1 build ran serial; report says {rep['workers']!r}"
+    child = rep["peak_rss_child_max_mib"]
+    assert child is None or child == 0, (
+        f"a serial build has no MTH5 worker, so there is no worker peak to report; got {child!r}")
+    schema = json.loads((ROOT / "schema" / "build_report.schema.json").read_text(encoding="utf-8"))
+    jsonschema.validate(rep, schema)
+    for key in ("peak_rss_child_max_mib", "workers"):
+        assert key in schema["properties"], f"{key} must be schema-documented"
+    log = (tmp_path / "build.log").read_text(encoding="utf-8")
+    summary = [ln for ln in log.splitlines() if ln.startswith("build peak RSS:")]
+    assert len(summary) == 1, f"expected one peak-RSS summary line, got {summary}"
+    for part in ("parent", "largest worker", "1 worker"):
+        assert part in summary[0], (
+            f"the summary line must name all three parts of the footprint; {part!r} missing from "
+            f"{summary[0]!r}")
+
+
+@pytest.mark.skipif(not hasattr(os, "wait4"), reason="os.wait4 (POSIX rusage) not available on this platform")
+def test_worker_peak_is_measured_not_a_placeholder(tmp_path):
+    """The other direction, and the reason the measurement is taken where it is: RUSAGE_CHILDREN
+    reports only children the process has already wait()ed for, so the pool must be shut down before
+    the report is written or the field would be a permanent None. A --workers 2 build must therefore
+    record workers == 2 and a worker peak of MTH5-worker size. FAILS on a field hard-coded to None,
+    and on a measurement taken while the pool is still up.
+
+    The floor is WORKER_PEAK_MIN_MIB, not zero, and that is the whole strength of this pin: the
+    counter is a maximum over EVERY waited-for child, and the build reaps two small `git` children at
+    import, so a measurement taken before the pool is joined still reads a few MiB and any
+    greater-than-zero test passes on it."""
+    out = tmp_path / "out"
+    rc, _peak = _run_build_measured(SAMPLE_SURVEYS, out, tmp_path / "build.log", workers="2")
+    assert rc == 0, (tmp_path / "build.log").read_text(encoding="utf-8")[-3000:]
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    assert rep["workers"] == 2, (
+        "the MTH5 pool did not come up, so the worker arm went unmeasured; the build log carries the "
+        "[parallel] WARN:\n" + (tmp_path / "build.log").read_text(encoding="utf-8")[-2000:])
+    child = rep["peak_rss_child_max_mib"]
+    assert isinstance(child, (int, float)) and child > WORKER_PEAK_MIN_MIB, (
+        f"a pool build must record the largest MTH5 worker's peak, measured after the pool was "
+        f"joined; got {child!r} MiB, which is below the {WORKER_PEAK_MIN_MIB} MiB floor a spawned "
+        f"worker cannot be under. A reading this small is the import-time `git` children, i.e. the "
+        f"measurement was taken while the pool was still running and the operator number is low by "
+        f"a factor of about a hundred")
 

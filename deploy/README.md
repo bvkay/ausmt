@@ -144,6 +144,17 @@ failed build or verify leaves `current` untouched and exits non-zero with the fa
 so a host-side swap gets `Permission denied` (exactly what the first real deploy hit after build +
 verify had already passed).
 
+`build-runner` runs under a **cgroup memory ceiling** (`mem_limit`, default `10g` of the box's
+15 GB) and a process ceiling (`pids_limit: 512`). The engine fans MTH5 writes out to
+`AUSMT_BUILD_WORKERS` worker processes, so the container's real footprint is roughly the worker
+count times what any single process reports; the cap means a build that runs away is killed inside
+its own cgroup while the portal, the gateway and clamd keep serving. Tune the ceiling with
+`AUSMT_BUILD_MEM_LIMIT` in `deploy/.env` (any docker memory string; lower it on a smaller box).
+A build killed at the cap exits non-zero with `current` untouched, exactly like any other failed
+build; `build_report.json` records the peak the build reached (`peak_rss_mib` for the parent,
+`peak_rss_child_max_mib` for the largest worker, and the `workers` count), so the trend is readable
+build over build before a cap is ever hit.
+
 The verify gate FAILS on a build that lost a station, and it reads both of `build_report.json`'s
 ledgers for it: `source_parse_failures`, the files the reader refused outright, and
 `stations_dropped`, every station the build did not publish whatever refused it (a convention gate, a

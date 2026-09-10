@@ -116,6 +116,20 @@ def _dist_version(default="0.2.1"):
         return default
 
 
+def _rss_mib_from(counter):
+    """ru_maxrss for one getrusage counter name, normalised to MiB (the value is KiB on Linux and
+    bytes on macOS). None where the counter is unavailable or reads nothing, never a guess."""
+    try:
+        import resource  # noqa: PLC0415  (POSIX only)
+        v = int(resource.getrusage(getattr(resource, counter)).ru_maxrss)
+    except Exception:  # noqa: BLE001  (no resource module, or a platform without ru_maxrss)
+        return None
+    if v <= 0:
+        return None
+    nbytes = v if sys.platform == "darwin" else v * 1024
+    return round(nbytes / (1024 * 1024), 1)
+
+
 def peak_rss_mib():
     """The build process's memory high-water mark in MiB, from resource.getrusage (a cheap kernel
     counter, no sampling): what build_report.json records as `peak_rss_mib` so every real build carries
@@ -123,21 +137,26 @@ def peak_rss_mib():
     Linux and bytes on macOS; both are normalised here. None where the counter is unavailable
     (Windows), never a guess.
 
-    SCOPE (for the survey-parallel build, which composes with this): RUSAGE_SELF is THIS process
-    only, and RUSAGE_CHILDREN reports the largest single waited-for descendant, never the sum over
-    concurrent workers. With N worker processes the box-level footprint is about N times what either
-    counter reports. That module must report max(RUSAGE_SELF, RUSAGE_CHILDREN) together with the worker
-    count (or per-worker peaks) in build_report, and restate tests/test_build_memory.py's pin as a
-    per-worker bound times workers, so the field keeps meaning "what the box needed"."""
-    try:
-        import resource  # noqa: PLC0415  (POSIX only)
-        v = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-    except Exception:  # noqa: BLE001  (no resource module, or a platform without ru_maxrss)
-        return None
-    if v <= 0:
-        return None
-    nbytes = v if sys.platform == "darwin" else v * 1024
-    return round(nbytes / (1024 * 1024), 1)
+    SCOPE: RUSAGE_SELF is THIS process only, so it cannot see an MTH5 worker at all. This number is
+    therefore one arm of the footprint, never the whole of it; peak_rss_child_max_mib() is the other,
+    and build_report carries both beside the worker count that multiplies the second."""
+    return _rss_mib_from("RUSAGE_SELF")
+
+
+def peak_rss_child_max_mib():
+    """The largest SINGLE waited-for child process's memory high-water mark in MiB, from
+    resource.getrusage(RUSAGE_CHILDREN).ru_maxrss: the peak of the biggest MTH5 worker, which is
+    what a per-worker memory cap has to be set against.
+
+    NOT a sum. The kernel counter is a maximum over descendants, so with N concurrent workers the
+    box-level footprint is about parent + N * this, and build_report records the worker count so the
+    multiplication is the reader's to do rather than a number this function could not honestly
+    produce.
+
+    ONLY WAITED-FOR CHILDREN COUNT. getrusage(RUSAGE_CHILDREN) reports nothing for a child still
+    running, so the caller must join the pool before it reads this or the answer is a permanent
+    None. None also where the counter is unavailable (Windows) or where no child ever ran."""
+    return _rss_mib_from("RUSAGE_CHILDREN")
 
 
 def lib_versions() -> dict:
@@ -6346,10 +6365,22 @@ def _main_build(argv=None):
     import datetime as _dt_report  # noqa: PLC0415 (house style: local import where used)
     _report_stations_built = sum(s["stations_built"] for s in build_report_surveys.values())
     _report_warnings = sum(len(s["warnings"]) for s in build_report_surveys.values())
-    # peak_rss_mib: the process high-water mark at this point, i.e. after the survey loop (where all
-    # the memory is: parse, XML, MTH5) and the station products; the corpus-wide emissions that follow
-    # (manifest, mtcat, schema self-check, feed) were measured at ~10 MiB on 1,418 stations. Recorded so
-    # the trend is visible build over build and the memory regression pin has a number to read.
+    # The memory record, in three parts, because no single counter is "what the box needed":
+    # peak_rss_mib is the parent's high-water mark at this point, i.e. after the survey loop (where
+    # all the memory is: parse, XML, MTH5) and the station products; the corpus-wide emissions that
+    # follow (manifest, mtcat, schema self-check, feed) were measured at ~10 MiB on 1,418 stations.
+    # peak_rss_child_max_mib is the largest single MTH5 worker, and workers is the count that
+    # multiplies it. Recorded so the trend is visible build over build and the memory regression pin
+    # has a number to read.
+    #
+    # The pool is joined FIRST and deliberately: getrusage(RUSAGE_CHILDREN) reports only children
+    # already wait()ed for, so a worker still running contributes nothing and the child peak would be
+    # a permanent None. Every future was drained above (the deferred-bundle loop), so this shuts down
+    # an idle pool; _mth5_pool_stop is idempotent, so main()'s finally still holds on every exit path.
+    _peak_rss_child = None
+    if workers > 1:
+        _mth5_pool_stop()
+        _peak_rss_child = peak_rss_child_max_mib()
     _peak_rss = peak_rss_mib()
     build_report = {
         "generated": _dt_report.datetime.now(_dt_report.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -6358,6 +6389,8 @@ def _main_build(argv=None):
         "build_id": BUILD_ID["build_id"],
         "pipeline_version": PROV["pipeline_version"],
         "peak_rss_mib": _peak_rss,
+        "peak_rss_child_max_mib": _peak_rss_child,
+        "workers": workers,
         "surveys": build_report_surveys,
         "totals": {"surveys": len(build_report_surveys),
                    "stations_built": _report_stations_built,
@@ -6376,9 +6409,14 @@ def _main_build(argv=None):
     }
     (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
     if _peak_rss is not None:
-        # One log line an operator can read off the tail: the number the kernel's OOM killer
-        # quotes, printed before the kernel has to.
-        print(f"build peak RSS: {_peak_rss:.0f} MiB ({_report_stations_built} stations built)", file=sys.stderr)
+        # One log line an operator can read off the tail: the numbers the kernel's OOM killer quotes,
+        # printed before the kernel has to. All three parts, because the parent's figure alone reads
+        # as the whole footprint and is not: the box carried the parent plus `workers` workers, the
+        # largest of which peaked at the second number.
+        _worker_peak = ("n/a" if _peak_rss_child is None else f"{_peak_rss_child:.0f} MiB")
+        print(f"build peak RSS: parent {_peak_rss:.0f} MiB, largest worker {_worker_peak}, "
+              f"{workers} worker{'' if workers == 1 else 's'} "
+              f"({_report_stations_built} stations built)", file=sys.stderr)
 
     # The digest-stamp sidecar. out/products/survey_digests.json maps each served survey's
     # slug -> {yaml_digest_current, xml_digest_stamped:{station_id:digest}}. This is the independent
