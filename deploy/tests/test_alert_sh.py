@@ -769,6 +769,24 @@ def test_acpi_storm_rate_over_threshold_pings_fail_naming_the_gpe_fix(tmp_path):
     assert "storming" not in _body(calm), _body(calm)
 
 
+def test_acpi_row_is_found_when_the_sci_line_is_shared(tmp_path):
+    """SHARED-SCI PIN. Linux prints every driver bound to a line in the action column, so a box whose
+    System Control Interrupt shares its IRQ reads "acpi, pcieport" rather than "acpi". The row must
+    still be found: a matcher anchored to the LAST field stops watching the moment a second driver
+    binds, and stops silently, which is the failure this alert exists to prevent.
+
+    FAILS IF: the shared row is not counted (rate absent or zero against a one-minute-old sample)."""
+    tree = _make_tree(tmp_path)
+    shared = str(_FIXTURES / "proc-interrupts.acpi-shared")
+    (tree["state"] / "acpi-sample.json").write_text(json.dumps(
+        {"count": _ACPI_TOTAL - 100000, "at": _iso_ago(1 / 60.0), "epoch": _epoch_now() - 60}),
+        encoding="utf-8")
+    _run(tree, env_extra={"AUSMT_ALERT_INTERRUPTS": shared})
+    kernel = _ops_doc(tree)["kernel"]
+    assert kernel.get("acpi_interrupts") == _ACPI_TOTAL, kernel
+    assert 90000 <= (kernel.get("acpi_per_min") or 0) <= 100000, kernel
+
+
 def test_acpi_unknown_when_the_interrupts_file_is_absent(tmp_path):
     """The procfs twin of the meminfo case: no /proc/interrupts means no reading, which is UNKNOWN
     and never a failure. FAILS IF: an absent file fails the ping or fabricates a count."""

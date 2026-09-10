@@ -368,7 +368,7 @@ check_acpi_storm() {
   [ -f "$INTERRUPTS_FILE" ] || return 0
   # The per-CPU counts are the fields between the IRQ number and the first non-numeric field (the
   # controller name), so the sum stops at that boundary rather than assuming a column count.
-  acpi_now=$(awk '$1 ~ /^[0-9]+:$/ && $NF == "acpi" {
+  acpi_now=$(awk '$1 ~ /^[0-9]+:$/ && $0 ~ /(^|[ ,])acpi([ ,]|$)/ {
                     total = 0
                     for (i = 2; i <= NF; i++) { if ($i ~ /^[0-9]+$/) { total += $i } else { break } }
                     print total
