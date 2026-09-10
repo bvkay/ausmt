@@ -678,8 +678,9 @@ PYEOF
   #     already ran, and both repeat identically every tick until an operator intervenes:
   #       (a) the build COMPLETED (builds/<ts>/build.json is at head) but verify or the swap failed,
   #           so `current` still points at the older build;
-  #       (b) the pass itself died before any build.json existed, leaving only status action=failed
-  #           at this head (the unreadable-identity latch above covers only the no-served-build case).
+  #       (b) a pass already recorded action=failed at this head (a build that failed outright, or one
+  #           that died before any build.json existed), which is all the status document proves; the
+  #           unreadable-identity latch above covers only the no-served-build case.
   #     Neither is fixed by building again: hold, say what to look at, exit 1 so monitoring sees it.
   #     Re-armed by a HEAD change or an explicit rebuild.request (deliberate intent always gets a
   #     fresh attempt), which is why this sits AFTER the pause and rollback-pin checks - those are
@@ -709,7 +710,7 @@ PYEOF
       # here), and it has NOT established that no build dir at this head survives - it consulted the
       # NEWEST dir alone. A hold that names a cause it did not check sends the operator after the
       # wrong thing, which is the failure mode the out-of-memory naming exists to prevent.
-      hold_detail="The last reconcile pass at this head ($head) recorded action=failed, so a build here has already been attempted and another would repeat it: reconcile HOLDS until head moves or a rebuild is requested. What that pass recorded is carried below, and the newest build log under $LOG_DIR${hold_log:+ (}${hold_log}${hold_log:+)} has the rest. To clear: fix the cause, then press Request rebuild on the serve screen (or publish a new commit)."
+      hold_detail="The last reconcile pass at this head ($head) recorded action=failed, so a build here has already been attempted and another would repeat it: reconcile HOLDS until head moves or a rebuild is requested. Whatever that pass left is in the newest build log under $LOG_DIR${hold_log:+ (}${hold_log}${hold_log:+)}. To clear: fix the cause, then press Request rebuild on the serve screen (or publish a new commit)."
     fi
     if [ -n "$hold_detail" ]; then
       printf 'reconcile: HOLDING at head=%s: %s\n' "$head" "$hold_detail" >&2
