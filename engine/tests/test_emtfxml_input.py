@@ -164,6 +164,32 @@ def test_edi_wins_when_one_station_has_both_edi_and_emtfxml(tmp_path):
                     ("EXAMPLE02", "edi"), ("EXAMPLE02", "emtfxml")], rows
 
 
+def test_precedence_log_folds_to_one_line_and_a_report_ledger(tmp_path, capsys):
+    """The PRECEDENCE notice is survey-level, not per-XML: a package where every station also has an
+    EDI must print ONE folded line naming the count and the ids, and carry every skipped file in
+    build_report's `precedence_skipped`.
+
+    FAILS IF: the rule prints one line per superseded XML (a mixed corpus survey then prints one line
+    per station), or the skipped files reach no machine-readable record."""
+    _package(tmp_path / "surveys", edi_stations=("EXAMPLE01", "EXAMPLE02"),
+             xml_stations=("EXAMPLE01", "EXAMPLE02"))
+    rc, out, _prod = _build(tmp_path, tmp_path / "surveys")
+    assert rc == 0
+    err = capsys.readouterr().err
+    lines = [ln for ln in err.splitlines() if "PRECEDENCE" in ln]
+    assert lines == [
+        "  [xml] PRECEDENCE example-survey: 2 station(s) already ingested from "
+        "transfer_functions/edi/ - the EDI is canonical, their EMTF XML is kept in the package "
+        "but NOT ingested (EXAMPLE01, EXAMPLE02)"], lines
+
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    jsonschema = pytest.importorskip("jsonschema")
+    jsonschema.validate(rep, SCHEMA)
+    rows = rep["surveys"][SLUG]["precedence_skipped"]
+    assert sorted((r["station"], r["file"]) for r in rows) == [
+        ("EXAMPLE01", "EXAMPLE01.xml"), ("EXAMPLE02", "EXAMPLE02.xml")], rows
+
+
 def _collision_package(root):
     """The served-EDI namespace collision, built from real bytes: station EXAMPLE01's custodian EDI
     filed under the name EXAMPLE02.edi (legal -- the id comes from DATAID, not the filename), and
@@ -558,3 +584,28 @@ def test_a_generated_edi_and_its_survey_zip_are_byte_reproducible_across_builds(
     assert filedate and source_date, "the generated EDI must carry both a FILEDATE and a source date"
     assert filedate.group(1) == source_date.group(1), \
         f"FILEDATE must be the source document's own date, got {filedate.group(1)} vs {source_date.group(1)}"
+
+
+def test_precedence_notice_reaches_a_caller_that_keeps_no_report(tmp_path, capsys):
+    """The precedence rule says which of two renditions of a station was ingested, so it cannot go
+    silent. A caller that passes no report has nowhere for the ledger to land, so the folded line
+    prints from the ingest pass itself; with a report the survey loop renders it from the ledger.
+
+    FAILS IF: the fold records the skip only into the report, which drops the fact entirely for a
+    library caller."""
+    pkg = _package(tmp_path / "surveys", edi_stations=("EXAMPLE01",), xml_stations=("EXAMPLE01",))
+    xmls = sorted((pkg / "transfer_functions" / "emtfxml").glob("*.xml"))
+    assert xmls, "the package must carry the XML rendition"
+    bp.process_emtfxml(xmls, "Example Survey", "TestOrg", SLUG, exclude_ids=("EXAMPLE01",))
+    lines = [ln for ln in capsys.readouterr().err.splitlines() if "PRECEDENCE" in ln]
+    assert lines == [
+        "  [xml] PRECEDENCE example-survey: 1 station(s) already ingested from "
+        "transfer_functions/edi/ - the EDI is canonical, their EMTF XML is kept in the package "
+        "but NOT ingested (EXAMPLE01)"], lines
+
+    report = {}
+    bp.process_emtfxml(xmls, "Example Survey", "TestOrg", SLUG, exclude_ids=("EXAMPLE01",),
+                       report=report)
+    assert report["precedence_skipped"] == [{"station": "EXAMPLE01", "file": "EXAMPLE01.xml"}], report
+    assert "PRECEDENCE" not in capsys.readouterr().err, (
+        "with a report the survey loop renders the folded line; the ingest pass must not also print")
