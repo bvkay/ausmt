@@ -201,13 +201,15 @@ a small change. Operator-relevant facts:
 - **Location.** `${AUSMT_DATA_DIR}/site-data/cache/` — a **sibling** of `builds/`, owned by uid
   10001. It survives the `builds/` prune and the `current` swap, and is **safe to lose entirely**
   (one slow rebuild rebuilds it). Do NOT move it under `builds/` or `surveys-live/`.
-- **One cold rebuild after an engine update (expected).** The cache salt includes the engine commit
-  (`docker/engine.Dockerfile` bakes `ARG GIT_SHA` → `ENV AUSMT_ENGINE_COMMIT`; `deploy-images.yml`
-  passes `github.sha`). After you `pull` a NEW engine image, the salt changes, so the FIRST
-  `rebuild-data` runs full (cache miss on every station) and repopulates the cache; the next rebuild
-  is fast again. This is correct, not a fault. A degenerate salt (unknown engine commit, or a dirty
-  checkout) also disables the cache for that build — the log prints `note: C18 cache DISABLED …` and
-  `build_provenance.json` records `cache.enabled:false` + the reason.
+- **One cold rebuild after an engine update that changes product code (expected).** The cache salt
+  is a content digest of the engine's product-producing code (`engine/extract`, `engine/ausmt_science`,
+  `engine/schema`, `contract/columns.json`), not the git commit. After you `pull` a NEW engine image
+  whose product code changed, the FIRST `rebuild-data` runs full (cache miss on every station) and
+  repopulates the cache; the next rebuild is fast again. An image built from a commit that touched only
+  deploy scripts, docs or tests keys identically and stays warm. This is correct, not a fault. The
+  engine commit still matters as an identity gate: a degenerate salt (unknown engine commit, a dirty
+  checkout, or no digestable engine tree) disables the cache for that build: the log prints
+  `note: C18 cache DISABLED …` and `build_provenance.json` records `cache.enabled:false` + the reason.
 - **Force a full re-verified rebuild** that still repopulates the cache: run the engine with
   `--cache-mode refresh` (e.g. after an engine upgrade you want re-verified from scratch). Size is
   capped by `AUSMT_CACHE_MAX_MB` (default 2048), pruned oldest-first per successful build.
@@ -539,7 +541,7 @@ JS in the curator origin). preview-data is already embargo-safe + PII-scrubbed b
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | **Submission stuck at `SCANNED`, never reaches `VALIDATED`/`QUARANTINED`** | The **gw-runner is not running or crash-looping** — it is what claims jobs, extracts, validates, and previews. (Incident 2026-07-06: the runner was configured with `PYTHONPATH=/opt/gateway` and could not `import gateway`; the correct value is `/opt`, the parent of the bind-mounted `/opt/gateway` package.) | `docker compose -f compose.yaml --profile gateway ps` — is `gw-runner` up? `docker compose ... logs gw-runner` — a `ModuleNotFoundError: gateway` means the `PYTHONPATH`/mount is wrong, or `AUSMT_CODE_DIR` is unset/points at the wrong tree so `${AUSMT_CODE_DIR}/gateway` did not mount. Confirm `$AUSMT_CODE_DIR/gateway/runner/` exists. |
-| **Build id shows `None-None` / null engine commit in `build.json`** | A **stale engine image** (built before `ARG GIT_SHA` was baked) or a stale/dirty code checkout — the cache salt cannot resolve the engine commit, so caching self-disables and the build id is null. | `docker compose --profile jobs --profile gateway pull` a current image, confirm the live checkout (`git -C "$AUSMT_CODE_DIR" log -1`), then `make rebuild-data`. Verify `build_provenance.json` no longer says `cache.enabled:false`. |
+| **Build id shows `None-None` / null engine commit in `build.json`** | A **stale engine image** (built before `ARG GIT_SHA` was baked) or a stale/dirty code checkout: the cache's identity gate cannot resolve the engine commit, so caching self-disables and the build id is null. | `docker compose --profile jobs --profile gateway pull` a current image, confirm the live checkout (`git -C "$AUSMT_CODE_DIR" log -1`), then `make rebuild-data`. Verify `build_provenance.json` no longer says `cache.enabled:false`. |
 | **`docker compose` errors: `required variable AUSMT_… is missing` / interpolation error** | A `${VAR:?}`-guarded variable is unset. After C33 only **`AUSMT_DATA_DIR`** and **`OWNER`** are hard-guarded (every service needs them); `AUSMT_SUBMIT_KEY`/`AUSMT_CODE_DIR` no longer block portal-only commands. | Set the named var in `deploy/.env` (see the grouped `.env.example`). `make preflight` lists exactly which required vars are missing for your profile. |
 | **`docker compose pull` "worked" but the engine/gateway images are still old/missing** | `docker compose pull` only pulls services with **no profile** — i.e. just `portal`. `build-runner` (profile `jobs`) and the gateway services (profile `gateway`) are skipped. | Pull with the profiles: `docker compose --profile jobs --profile gateway pull` (or `docker compose --profile "*" pull` on compose v2.24+). `make preflight` flags any image missing locally. |
 | **A CI sample / stray file appeared in `surveys-live` and got into a build** | A test/CI artifact (or a manual copy) left an untracked file in the read-side `surveys-live` checkout; the engine reads the whole tree. | Inspect before removing: `git -C "$AUSMT_DATA_DIR/surveys-live" clean -nd` (dry run) — review the list, then `git -C "$AUSMT_DATA_DIR/surveys-live" clean -fd` to remove untracked cruft. Re-run `make rebuild-data`. |

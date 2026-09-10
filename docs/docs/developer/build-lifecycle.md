@@ -64,9 +64,11 @@ and the output is byte-identical to a build from before the flag existed.
    sidecar.
 
 With `--incremental --cache-dir`, unchanged stations are served from the build cache, keyed on the EDI
-bytes, the engine commit, library versions, the column contract and the `survey.yaml` digest, so it can
-only affect build speed, never output bytes; a degenerate salt (an unknown or dirty engine commit)
-disables it. Raw/bulk mode (`--raw` with `--collections` and `--seed-meta`, for regenerating a seed from
+bytes, a content digest of the engine's product-producing code (`engine/extract`, `engine/ausmt_science`,
+`engine/schema` and the column contract), library versions and the `survey.yaml` digest, so it can only
+affect build speed, never output bytes. The engine git commit is not part of the key: an engine image
+whose product code is unchanged keeps the cache warm. A degenerate salt (an unknown engine commit, a
+dirty checkout, or no digestable engine tree) disables it. Raw/bulk mode (`--raw` with `--collections` and `--seed-meta`, for regenerating a seed from
 loose EDI folders) is excluded from caching; see [How to extend](extending.md#bulk-and-seed-mode).
 
 ## Exit codes

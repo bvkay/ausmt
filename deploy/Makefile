@@ -78,12 +78,15 @@ down:
 # of /out/builds, so the `ls -1t | tail -n +6 | rm -rf` prune below (which runs INSIDE /out/builds)
 # never touches it, and it survives the `mv -T current` swap. It only speeds a rebuild; it can never
 # change output bytes (verify.py stays full/cache-blind, and the CI equivalence test pins that). The
-# engine default is OFF and the gateway runner stays non-incremental; a degenerate salt (unknown
-# engine commit, or a dirty checkout) silently disables the cache for that build. In production the
-# salt is HEALTHY: docker/engine.Dockerfile bakes ARG GIT_SHA -> ENV AUSMT_ENGINE_COMMIT and
-# deploy-images.yml passes github.sha, so a current image always resolves its engine commit (null
-# commits once seen in the live box's build.json came from a stale pre-GIT_SHA-bake image -- pull a
-# current image and the cache fires). Losing the cache dir costs one slow rebuild, nothing more.
+# engine default is OFF and the gateway runner stays non-incremental. The key salt is a content
+# digest of the engine's product code (engine/extract, engine/ausmt_science, engine/schema and the
+# column contract), so an image whose product code is unchanged stays warm; a degenerate salt
+# (unknown engine commit, a dirty checkout, or no digestable engine tree) silently disables the
+# cache for that build. In production the identity gate is HEALTHY: docker/engine.Dockerfile bakes
+# ARG GIT_SHA -> ENV AUSMT_ENGINE_COMMIT and deploy-images.yml passes github.sha, so a current image
+# always resolves its engine commit (null commits once seen in the live box's build.json came from a
+# stale pre-GIT_SHA-bake image -- pull a current image and the cache fires). Losing the cache dir
+# costs one slow rebuild, nothing more.
 # The verify step passes --surveys (the same root the build used) to ARM the
 # cache-staleness digest gate -- served-product digest stamps vs live survey.yaml, cache-independent.
 # --survey-h5: tier-2 survey MTH5 bundles.

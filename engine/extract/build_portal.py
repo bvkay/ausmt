@@ -5246,18 +5246,21 @@ def _main_build(argv=None):
     LIB_VERSIONS = lib_versions()
 
     # === Incremental build cache ===
-    # OFF by default; a no-op without --cache-dir. Keyed by source-EDI content sha + the COARSE
-    # engine-commit salt (BUILD_ID["engine_commit"]) + mt_metadata/mth5 versions + the positional/
-    # schema contract + each survey's whole-yaml digest (cache.py derives the key). A degenerate salt
-    # (unknown engine commit, or a DIRTY engine checkout where a checkout exists) yields an INERT
-    # cache: cache.enabled is False, so get() always misses and put() no-ops, and the build runs
-    # full. The cache may only change build SPEED — the products below are byte-identical whether
-    # they came from a hit or a fresh compute (proven by the equivalence test).
+    # OFF by default; a no-op without --cache-dir. Keyed by source-EDI content sha + the engine
+    # SOURCE digest (a content hash of engine/extract, engine/ausmt_science, engine/schema and the
+    # column contract; the git commit is an identity field, not a key input, so a deploy-only or
+    # docs-only image stays warm) + mt_metadata/mth5 versions + the positional/schema contract +
+    # each survey's whole-yaml digest (cache.py derives the key). A degenerate salt (unknown engine
+    # commit, a DIRTY engine checkout where a checkout exists, or no digestable engine tree) yields
+    # an INERT cache: cache.enabled is False, so get() always misses and put() no-ops, and the build
+    # runs full. The cache may only change build SPEED: the products below are byte-identical
+    # whether they came from a hit or a fresh compute (proven by the equivalence test).
     build_cache = None
     if a.incremental and a.cache_dir:
         build_cache = cache_mod.BuildCache(
             Path(a.cache_dir),
             engine_commit=BUILD_ID["engine_commit"],
+            source_digest=cache_mod.engine_source_digest(HERE.parent),
             lib_versions=LIB_VERSIONS,   # Same single-source helper the served version keys read
             contract_digest=cache_mod.contract_schema_digest(HERE.parent),
             mode=a.cache_mode,

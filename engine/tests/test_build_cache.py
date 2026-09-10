@@ -591,18 +591,19 @@ def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
     is bumped whenever the parse product's shape changes; this simulates a
     PRE-BUMP cache by monkeypatching the fixed-salt tag back to the PREVIOUS tag, populates, then builds
     normally (current tag) and asserts zero hits + a full re-derive. (Kept under its historical name; the
-    concrete tags move with each bump - v3->v4, v4->v5 for the XML Copyright truth fix.)"""
+    concrete tags move with each bump; the patch above asserts it still matches.)"""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
 
-    # Populate the cache under the OLD (previous) tag by patching BuildCache to build a pre-bump salt.
-    # Current bump: v5 -> v6, for the parse product that now carries the presence notes and the
-    # >INFO run facts runs[] is emitted from.
+    # Populate under a tag the live salt does not carry, so every key written here is unreachable by
+    # the build below. The replaced string MUST match the live salt: a stale tag makes the replace a
+    # silent no-op that populates under the live tag and tests nothing, which the assert forbids.
     real_init = cache_mod.BuildCache.__init__
 
     def _old_tag_init(self, *args, **kwargs):
         real_init(self, *args, **kwargs)
-        self._fixed_salt = self._fixed_salt.replace("ausmt-c47-cache-v6", "ausmt-c46-cache-v5", 1)
+        assert "ausmt-c47-cache-v7" in self._fixed_salt, "the pre-bump tag patch no longer matches the salt"
+        self._fixed_salt = self._fixed_salt.replace("ausmt-c47-cache-v7", "ausmt-c47-cache-v6", 1)
 
     import unittest.mock as _mock
     with _mock.patch.object(cache_mod.BuildCache, "__init__", _old_tag_init):
@@ -849,22 +850,38 @@ def test_per_survey_instrumentation_sums_to_corpus_total(tmp_path, clean_salt, c
 # 3. Salt invalidations
 # --------------------------------------------------------------------------------------------------
 
-def test_salt_engine_commit_change_zero_hits(tmp_path, clean_salt, monkeypatch):
-    """FAILS IF: a simulated engine-commit change still hits the cache. A new engine commit must bust
-    the WHOLE cache (coarse v1 salt)."""
+def test_salt_engine_commit_change_over_unchanged_sources_stays_warm(tmp_path, clean_salt, monkeypatch):
+    """FAILS IF: a new engine commit over UNCHANGED engine sources full-misses the cache. The salt keys
+    on the engine source digest, not the commit, so a merge that touches only deploy scripts, docs or
+    tests (a new image, a new commit, the same product-producing code) must stay warm."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
     assert _build(surveys, tmp_path / "out1", cache) == 0
 
-    # Change the engine commit the build resolves (patch build_identity's git resolver).
     import build_portal as bp
     monkeypatch.setattr(bp, "_git_commit_at",
                         lambda cwd: "deadbeef" if Path(cwd) == bp.HERE else None)
     out2 = tmp_path / "out2"
     assert _build(surveys, out2, cache) == 0
     c = _cache_counters(out2)
-    assert c["hits"] == 0, f"an engine-commit change still hit the cache: {c}"
-    assert c["misses"] == EXPECTED_COLD_MISSES, c   # a full re-derive (the new commit busts everything)
+    assert c["degenerate"] is False, c
+    assert c["hits"] == EXPECTED_WARM_HITS and c["misses"] == 0, \
+        f"a commit change over unchanged sources went cold: {c}"
+
+
+def test_salt_engine_source_change_zero_hits(tmp_path, clean_salt, monkeypatch):
+    """FAILS IF: a changed engine source digest still hits the cache. Any change to the product-producing
+    code busts the WHOLE cache; the digest is the coarse salt that replaced the commit."""
+    surveys = _make_survey(tmp_path, SAMPLE_EDIS)
+    cache = tmp_path / "cache"
+    assert _build(surveys, tmp_path / "out1", cache) == 0
+
+    monkeypatch.setattr(cache_mod, "engine_source_digest", lambda root: "simulated-source-edit")
+    out2 = tmp_path / "out2"
+    assert _build(surveys, out2, cache) == 0
+    c = _cache_counters(out2)
+    assert c["hits"] == 0, f"an engine source change still hit the cache: {c}"
+    assert c["misses"] == EXPECTED_COLD_MISSES, c
 
 
 def test_salt_library_version_change_zero_hits(tmp_path, clean_salt, monkeypatch):
@@ -969,18 +986,16 @@ def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
 
 def test_salt_instability_is_observable_via_salt_fp(tmp_path, clean_salt, monkeypatch):
     """Injection companion (Invariant 10: proves the stability observable CAN fail). FAILS IF: an
-    engine commit that CHANGES between two in-process builds does not surface as differing salt_fp
-    values plus a full-miss 'warm' build - the exact flake mechanism, deterministic here."""
+    engine source digest that CHANGES between two in-process builds does not surface as differing
+    salt_fp values plus a full-miss 'warm' build - the exact flake mechanism, deterministic here."""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
-    monkeypatch.setattr(build_portal, "_git_commit_at",
-                        lambda cwd: "commitA" if Path(cwd) == build_portal.HERE else None)
+    monkeypatch.setattr(cache_mod, "engine_source_digest", lambda root: "sourceA")
     assert _build(surveys, tmp_path / "b1", cache) == 0
-    monkeypatch.setattr(build_portal, "_git_commit_at",
-                        lambda cwd: "commitB" if Path(cwd) == build_portal.HERE else None)
+    monkeypatch.setattr(cache_mod, "engine_source_digest", lambda root: "sourceB")
     assert _build(surveys, tmp_path / "b2", cache) == 0
     c1, c2 = _cache_counters(tmp_path / "b1"), _cache_counters(tmp_path / "b2")
-    assert c1["salt_fp"] != c2["salt_fp"], "a changed engine commit must change the salt fingerprint"
+    assert c1["salt_fp"] != c2["salt_fp"], "a changed engine source digest must change the salt fingerprint"
     assert c2["hits"] == 0 and c2["misses"] == EXPECTED_COLD_MISSES, \
         f"a flipped salt must full-miss the warm build: {c2}"
 
@@ -1188,8 +1203,9 @@ def test_prune_size_cap_evicts_oldest_first(tmp_path, clean_salt, monkeypatch):
 # --------------------------------------------------------------------------------------------------
 
 def _bc(**over):
-    base = dict(root=Path("."), engine_commit="commitA", lib_versions={"mt_metadata": "1.0.9"},
-                contract_digest="contractA", mode="rw", checkout_dir=None)
+    base = dict(root=Path("."), engine_commit="commitA", source_digest="sourceA",
+                lib_versions={"mt_metadata": "1.0.9"}, contract_digest="contractA", mode="rw",
+                checkout_dir=None)
     base.update(over)
     return cache_mod.BuildCache(**base)
 
@@ -1208,13 +1224,91 @@ def test_key_binds_edi_sha_survey_digest_and_kind(tmp_path):
     assert base != k(kind="parse"), "key does not bind kind (parse/xml would collide)"
 
 
-def test_key_binds_engine_commit_libs_and_contract(tmp_path):
-    """FAILS IF: changing the engine commit, a library version, or the contract digest does not change
-    the derived key (the coarse salt fields)."""
+def test_key_binds_source_digest_libs_and_contract_not_the_commit(tmp_path):
+    """FAILS IF: changing the engine source digest, a library version, or the contract digest does not
+    change the derived key, or changing ONLY the engine commit does (the commit is an identity field,
+    not a key component; keying on it colds the cache on every deploy-only or docs-only merge)."""
     args = dict(edi_sha="s", survey_digest="y", kind="xml")
     base = _bc(root=tmp_path).key(**args)
-    assert base != _bc(root=tmp_path, engine_commit="commitB").key(**args), "key ignores engine commit"
+    assert base != _bc(root=tmp_path, source_digest="sourceB").key(**args), "key ignores the source digest"
+    assert base == _bc(root=tmp_path, engine_commit="commitB").key(**args), "key binds the engine commit"
     assert base != _bc(root=tmp_path, lib_versions={"mt_metadata": "9.9.9"}).key(**args), \
         "key ignores library versions"
     assert base != _bc(root=tmp_path, contract_digest="contractB").key(**args), \
         "key ignores the contract digest"
+
+
+# --------------------------------------------------------------------------------------------------
+# Unit-level: the engine source digest (the coarse salt)
+# --------------------------------------------------------------------------------------------------
+
+def _source_tree(root: Path) -> Path:
+    """A miniature engine checkout: the three digested package roots, a sibling contract/, and the
+    kinds of file the digest must ignore (bytecode, caches, tests)."""
+    eng = root / "engine"
+    (eng / "extract" / "__pycache__").mkdir(parents=True)
+    (eng / "ausmt_science" / "ingest").mkdir(parents=True)
+    (eng / "schema").mkdir()
+    (eng / "tests").mkdir()
+    (root / "contract").mkdir()
+    (eng / "extract" / "build_portal.py").write_text("print('a')\n", encoding="utf-8")
+    (eng / "extract" / "__pycache__" / "build_portal.cpython-312.pyc").write_bytes(b"\x00bytecode")
+    (eng / "ausmt_science" / "ingest" / "normalize.py").write_text("x = 1\n", encoding="utf-8")
+    (eng / "schema" / "mtcat.schema.json").write_text("{}\n", encoding="utf-8")
+    (eng / "tests" / "test_x.py").write_text("def test_x(): pass\n", encoding="utf-8")
+    (root / "contract" / "columns.json").write_text("[]\n", encoding="utf-8")
+    return eng
+
+
+def test_engine_source_digest_is_content_addressed_and_scoped(tmp_path):
+    """FAILS IF: the digest is unstable over an unchanged tree, ignores a product-code edit (extract,
+    ausmt_science, schema or the sibling contract), or moves on files that cannot change a product
+    (bytecode, the tests dir). A rename must move it too: the path is part of what is hashed."""
+    eng = _source_tree(tmp_path)
+    d0 = cache_mod.engine_source_digest(eng)
+    assert d0 == cache_mod.engine_source_digest(eng), "digest is not stable over an unchanged tree"
+    assert len(d0) == 64 and all(c in "0123456789abcdef" for c in d0), d0
+
+    (eng / "extract" / "__pycache__" / "build_portal.cpython-312.pyc").write_bytes(b"\x00other")
+    (eng / "tests" / "test_x.py").write_text("def test_x(): assert True\n", encoding="utf-8")
+    assert cache_mod.engine_source_digest(eng) == d0, "digest moved on bytecode or a test edit"
+
+    (eng / "extract" / "build_portal.py").write_text("print('b')\n", encoding="utf-8")
+    d1 = cache_mod.engine_source_digest(eng)
+    assert d1 != d0, "digest ignores an edit under extract/"
+
+    (eng / "ausmt_science" / "ingest" / "normalize.py").write_text("x = 2\n", encoding="utf-8")
+    d2 = cache_mod.engine_source_digest(eng)
+    assert d2 != d1, "digest ignores an edit under ausmt_science/"
+
+    (eng / "schema" / "mtcat.schema.json").write_text("{\"v\": 2}\n", encoding="utf-8")
+    d3 = cache_mod.engine_source_digest(eng)
+    assert d3 != d2, "digest ignores a schema edit"
+
+    (tmp_path / "contract" / "columns.json").write_text("[1]\n", encoding="utf-8")
+    d4 = cache_mod.engine_source_digest(eng)
+    assert d4 != d3, "digest ignores the sibling contract"
+
+    (eng / "extract" / "build_portal.py").rename(eng / "extract" / "build_portal2.py")
+    assert cache_mod.engine_source_digest(eng) != d4, "digest ignores a rename"
+
+
+def test_engine_source_digest_missing_root_is_degenerate(tmp_path):
+    """FAILS IF: a tree with none of the digested package roots yields a key-able digest, or an empty
+    explicit digest still keys a cache. Neither may ever key a cache: the salt would not describe the
+    code that produced the entries."""
+    assert cache_mod.engine_source_digest(tmp_path / "nowhere") == ""
+    bc = _bc(root=tmp_path, source_digest="")
+    assert bc.degenerate and not bc.enabled, bc.degenerate_reason
+    assert "source digest" in bc.degenerate_reason
+
+
+def test_build_cache_self_derives_the_source_digest_when_not_given(tmp_path, monkeypatch):
+    """FAILS IF: a BuildCache constructed without source_digest does not key on the real engine tree's
+    digest (the value build_portal passes), so a unit-constructed cache and a build-constructed cache
+    over the same tree would disagree on the key space."""
+    monkeypatch.setattr(cache_mod, "_dirty_checkout", lambda cwd: False)
+    bc = _bc(root=tmp_path, source_digest=None)
+    assert not bc.degenerate, bc.degenerate_reason
+    expected = cache_mod.engine_source_digest(Path(cache_mod.__file__).resolve().parent.parent)
+    assert bc.source_digest == expected
