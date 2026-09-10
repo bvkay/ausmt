@@ -623,8 +623,9 @@ and (b) the operator-facing symptom **"submissions stuck at `SCANNED`"** (the Tr
 **What healthchecks do NOT give you:** compose healthchecks flag a *container* as unhealthy but do not
 alert anyone or restart a merely-`unhealthy` (vs exited) container. That gap is closed by the
 **Alerting** section below — an `ausmt-alert.timer` that runs the checks the "minimum operator loop"
-describes (`docker compose ps` for `unhealthy`/restarting, a disk check, plus reconcile + backup
-freshness) and pings an external dead-man monitor that emails the curator. Install it; then the manual
+describes (`docker compose ps` for `unhealthy`/restarting, a disk check, reconcile + backup
+freshness, plus the two kernel-side legs no user-space measure can see) and pings an external
+dead-man monitor that emails the curator. Install it; then the manual
 loop is a backstop, not the only line of defence.
 
 ### Alerting
@@ -650,6 +651,35 @@ timeout covers "the box is gone".
 | Disk | the `$AUSMT_DATA_DIR` filesystem is over `AUSMT_ALERT_DISK_PCT`% used (**85**). |
 | Serve reconcile | `gateway/state/reconcile-status.json` `last_run` is older than `AUSMT_ALERT_RECONCILE_MAX_MIN` min (**45** — three missed ticks), or `action=failed`. (`sync_failed`/`noop`/`rebuilt` are healthy outcomes and do **not** alert — they are panel states, see §4.) |
 | Backup freshness | the newest `backups/<ts>/` snapshot is older than `AUSMT_ALERT_BACKUP_MAX_H` h (**26**), or `systemctl is-failed ausmt-backup.service` reports the unit failed. |
+| Kernel memory | `/proc/meminfo`'s `SUnreclaim` (unreclaimable kernel slab) is over `AUSMT_ALERT_SUNRECLAIM_MB` MB (**2048**). |
+| ACPI storm | the `acpi` IRQ in `/proc/interrupts` is firing faster than `AUSMT_ALERT_SCI_PER_MIN` per minute (**600**), measured against the previous pass's sample. |
+
+Both kernel legs record their reading in `ops-status.json` (`kernel.sunreclaim_mb`,
+`kernel.acpi_per_min`) on **every** pass, so the curator floor shows a series rather than only the
+moment a threshold is crossed. Where the host has no procfs, or the first pass has no earlier ACPI
+sample to compare against, the reading is `null` and **nothing fails** - a check with no reading must
+not manufacture an outage. `AUSMT_ALERT_MEMINFO` / `AUSMT_ALERT_INTERRUPTS` point the two readings at
+a different file and exist for the tests; leave them unset on the box.
+
+**Why these two are here at all.** Everything above measures *user space*: containers, processes,
+bytes on disk. The kernel's own consumption appears in none of it. Unreclaimable slab is memory no
+process owns, so `docker stats`, the build report's peak RSS and `free`'s "used" column can all read
+calm while the kernel climbs past user space and the box stops scheduling. An ACPI event storm is the
+same shape in CPU: a General Purpose Event the firmware never clears re-arms the System Control
+Interrupt continuously and pins a core, with no process to attribute it to. Both take days to become
+an outage, which is exactly long enough for a 15-minute timer to catch them.
+
+`make doctor` carries the slab reading too (`kernel-memory: SUnreclaim is N MB`), off the same
+`AUSMT_ALERT_MEMINFO` / `AUSMT_ALERT_SUNRECLAIM_MB` settings so the pre-deploy gate and the timer
+cannot disagree. There it is a **WARN**, never a FAIL: a slab figure tells the operator to book a
+reboot, it is not a reason to refuse a release.
+
+**What to do when either fires**
+
+| Fail line | Do this |
+| --- | --- |
+| `kernel-memory: SUnreclaim ... is N MB` | Capture the evidence *before* you clear it: `cat /proc/meminfo > /tmp/meminfo.txt` and `sudo cat /proc/slabinfo > /tmp/slabinfo.txt` (sort `slabinfo` by the third column to find the cache that is growing - `dentry`, `inode_cache` and networking caches are the usual suspects). Then **schedule a reboot** at the next quiet window: unreclaimable slab is not returned under pressure, so nothing short of a reboot gives it back, and a box left to reach RAM stops scheduling with no warning. Keep the two captures for the follow-up - they name the subsystem to fix. |
+| `acpi: the firmware SCI is storming at N interrupts/min` | Find the runaway event: `sudo grep . /sys/firmware/acpi/interrupts/gpe*` and look for the counter in the millions (everything else sits near zero). Mask it: `echo disable \| sudo tee /sys/firmware/acpi/interrupts/gpe6D` for whichever `gpe*` it is - the core comes back immediately. That masking does **not** survive a reboot, so re-apply it (or add it to a boot-time unit) and check for a firmware update, which is the real fix. |
 
 All OK => one success beat to the ping URL. Any failure => a ping to `<url>/fail` with the failure
 lines as the body, **and** a non-zero exit so `journalctl -u ausmt-alert.service` shows it too.

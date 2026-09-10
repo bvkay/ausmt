@@ -1,0 +1,7 @@
+            CPU0       CPU1       CPU2       CPU3
+   0:         14          0          0          0   IO-APIC    2-edge      timer
+   8:          1          0          0          0   IO-APIC    8-edge      rtc0
+   9:    2103455    1042118          0          0   IO-APIC    9-fasteoi   acpi
+  16:      88214          0          0          0   IO-APIC   16-fasteoi   i801_smbus
+ NMI:          0          0          0          0   Non-maskable interrupts
+ LOC:   14028841   13920114   13844201   13990227   Local timer interrupts

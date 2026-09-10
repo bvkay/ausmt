@@ -31,6 +31,7 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO / "deploy" / "scripts" / "alert.sh"
+_FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 _SH = shutil.which("sh") or shutil.which("bash")
 pytestmark = pytest.mark.skipif(_SH is None, reason="no POSIX sh/bash to run alert.sh")
@@ -332,7 +333,7 @@ def test_curl_failure_on_success_path_exits_nonzero(tmp_path):
 # self-report. All run on the gateway-ci workflow (sh + python + git present); no skip-tripwire entry.
 # ==================================================================================================
 _OPS_TOP_KEYS = ("generated_at", "timer_period_min", "reconcile", "backups", "alerts", "box",
-                 "freshness", "builds", "logs")
+                 "freshness", "builds", "logs", "kernel")
 
 
 def _ops_doc(tree: dict) -> dict:
@@ -654,3 +655,126 @@ def test_a_recent_passing_drill_does_not_fail(tmp_path):
     would be satisfied by a check that always fires."""
     r = _run(_make_tree(tmp_path))
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+# --------------------------------------------------------------------------------------------------
+# (g) KERNEL-SIDE resource exhaustion: the half of the box no user-space check can see.
+# `docker compose ps`, `df` and every RSS figure in the build report can all read green while the
+# KERNEL is the thing running out: unreclaimable slab (SUnreclaim) grows without any process owning
+# it, and a firmware ACPI event storm burns a whole core without a container ever noticing. Both are
+# read from procfs, both are overridable to a fixture file so the pins run off-box, and both must
+# stay silent on a host that has no procfs at all (the dead-man ping already covers a dead box).
+# --------------------------------------------------------------------------------------------------
+
+def _body(tree: dict) -> str:
+    return "\n".join(_curl_calls(tree))
+
+
+def _epoch_now() -> int:
+    return int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+
+
+_ACPI_TOTAL = 3145573        # the fixture's per-CPU acpi columns, summed (2103455 + 1042118)
+
+
+def test_kernel_slab_under_threshold_records_the_value_and_does_not_fail(tmp_path):
+    """NON-VACUITY + the ops fact. A healthy box's SUnreclaim (270 MB in the fixture) is RECORDED in
+    ops-status.json every pass, so an operator can watch the trend before it is an outage, and it
+    does NOT fail the ping. FAILS IF: an idle-level slab trips the alarm, or the value is not carried
+    into the ops document (a threshold with no visible series is a cliff, not a gauge)."""
+    tree = _make_tree(tmp_path)
+    _run(tree, env_extra={"AUSMT_ALERT_MEMINFO": str(_FIXTURES / "proc-meminfo.healthy")})
+    kernel = _ops_doc(tree)["kernel"]
+    assert kernel["sunreclaim_mb"] == 270, kernel
+    assert kernel["sunreclaim_max_mb"] == 2048, kernel
+    assert "SUnreclaim" not in _body(tree), _body(tree)
+
+
+def test_kernel_slab_over_threshold_pings_fail_naming_the_size_and_the_fix(tmp_path):
+    """KERNEL-MEMORY PIN. Unreclaimable slab past AUSMT_ALERT_SUNRECLAIM_MB means the kernel is
+    leaking memory no process holds, and the box wedges once it exhausts RAM. The fail ping must name
+    the SIZE and the operator's move (capture /proc/meminfo + /proc/slabinfo, reboot before the wedge)
+    rather than leave a number to be interpreted. FAILS IF: a multi-gigabyte slab pings success, or
+    the body does not carry the size."""
+    tree = _make_tree(tmp_path)
+    _run(tree, env_extra={"AUSMT_ALERT_MEMINFO": str(_FIXTURES / "proc-meminfo.leaking")})
+    kernel = _ops_doc(tree)["kernel"]
+    assert kernel["sunreclaim_mb"] == 11980, kernel
+    body = _body(tree)
+    assert f"{_URL}/fail" in body, body
+    assert "SUnreclaim" in body and "11980" in body, body
+    assert "slabinfo" in body and "reboot" in body.lower(), body
+
+
+def test_kernel_slab_unknown_when_meminfo_is_absent_or_silent(tmp_path):
+    """UNKNOWN IS NOT A FAILURE. A host with no procfs (a Mac or a container without /proc/meminfo)
+    and a kernel whose meminfo omits SUnreclaim both record UNKNOWN and ping success: the check has
+    no reading, and a check with no reading must not manufacture an outage. FAILS IF: a missing file
+    or a missing line fails the ping, or is recorded as a number."""
+    tree = _make_tree(tmp_path)
+    _run(tree, env_extra={"AUSMT_ALERT_MEMINFO": str(tmp_path / "no-such-meminfo")})
+    assert _ops_doc(tree)["kernel"]["sunreclaim_mb"] is None, _ops_doc(tree)["kernel"]
+    assert "SUnreclaim" not in _body(tree), _body(tree)
+    tree2 = _make_tree(tmp_path / "silent")
+    _run(tree2, env_extra={"AUSMT_ALERT_MEMINFO": str(_FIXTURES / "proc-meminfo.no-sunreclaim")})
+    assert _ops_doc(tree2)["kernel"]["sunreclaim_mb"] is None, _ops_doc(tree2)["kernel"]
+    assert "SUnreclaim" not in _body(tree2), _body(tree2)
+
+
+def test_acpi_first_run_records_the_sample_and_does_not_fail(tmp_path):
+    """FIRST-RUN PIN. An interrupt COUNT is meaningless alone; only the RATE between two samples says
+    a storm. The first pass therefore records the sample (count + timestamp, in the state dir beside
+    ops-status.json) and passes, with no rate to report. FAILS IF: the first pass invents a rate,
+    fails the ping, or records nothing (leaving every later pass a first pass)."""
+    tree = _make_tree(tmp_path)
+    _run(tree, env_extra={"AUSMT_ALERT_INTERRUPTS": str(_FIXTURES / "proc-interrupts.acpi")})
+    kernel = _ops_doc(tree)["kernel"]
+    assert kernel["acpi_interrupts"] == _ACPI_TOTAL, kernel
+    assert kernel["acpi_per_min"] is None, kernel
+    sample = json.loads((tree["state"] / "acpi-sample.json").read_text(encoding="utf-8"))
+    assert sample["count"] == _ACPI_TOTAL, sample
+    assert sample["at"].endswith("Z"), sample
+    assert "storming" not in _body(tree), _body(tree)
+
+
+def test_acpi_storm_rate_over_threshold_pings_fail_naming_the_gpe_fix(tmp_path):
+    """ACPI-STORM PIN. A GPE that will not clear re-fires the System Control Interrupt thousands of
+    times a second and burns a core, while every service check stays green. Against a sample one
+    minute old the rate must be computed and, past AUSMT_ALERT_SCI_PER_MIN, fail the ping naming the
+    operator's move (read /sys/firmware/acpi/interrupts/gpe*, mask the storming GPE).
+
+    FAILS IF: a storm pings success, the rate is not carried into the ops document, or (the
+    non-vacuous half below) an ordinary interrupt rate is dressed up as a storm."""
+    tree = _make_tree(tmp_path)
+    interrupts = str(_FIXTURES / "proc-interrupts.acpi")
+    (tree["state"] / "acpi-sample.json").write_text(json.dumps(
+        {"count": _ACPI_TOTAL - 100000, "at": _iso_ago(1 / 60.0), "epoch": _epoch_now() - 60}),
+        encoding="utf-8")
+    _run(tree, env_extra={"AUSMT_ALERT_INTERRUPTS": interrupts})
+    kernel = _ops_doc(tree)["kernel"]
+    # The pass takes a moment to reach the check, so the elapsed second count is not exactly 60: the
+    # assertion is on the ORDER of the rate, which is what separates a storm from a quiet box.
+    assert 90000 <= kernel["acpi_per_min"] <= 100000, kernel
+    assert kernel["acpi_max_per_min"] == 600, kernel
+    body = _body(tree)
+    assert f"{_URL}/fail" in body, body
+    assert "storming" in body and "gpe" in body.lower(), body
+    # ...and the non-vacuous half: a normal box ticks a few interrupts a minute and must stay quiet.
+    calm = _make_tree(tmp_path / "calm")
+    (calm["state"] / "acpi-sample.json").write_text(json.dumps(
+        {"count": _ACPI_TOTAL - 100, "at": _iso_ago(1 / 60.0), "epoch": _epoch_now() - 60}),
+        encoding="utf-8")
+    _run(calm, env_extra={"AUSMT_ALERT_INTERRUPTS": interrupts})
+    assert 80 <= _ops_doc(calm)["kernel"]["acpi_per_min"] <= 100, _ops_doc(calm)["kernel"]
+    assert "storming" not in _body(calm), _body(calm)
+
+
+def test_acpi_unknown_when_the_interrupts_file_is_absent(tmp_path):
+    """The procfs twin of the meminfo case: no /proc/interrupts means no reading, which is UNKNOWN
+    and never a failure. FAILS IF: an absent file fails the ping or fabricates a count."""
+    tree = _make_tree(tmp_path)
+    _run(tree, env_extra={"AUSMT_ALERT_INTERRUPTS": str(tmp_path / "no-such-interrupts")})
+    kernel = _ops_doc(tree)["kernel"]
+    assert kernel["acpi_interrupts"] is None and kernel["acpi_per_min"] is None, kernel
+    assert not (tree["state"] / "acpi-sample.json").exists(), "no reading must write no sample"
+    assert "storming" not in _body(tree), _body(tree)
