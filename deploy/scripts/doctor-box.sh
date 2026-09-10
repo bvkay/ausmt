@@ -20,6 +20,9 @@
 #      table) and the SERVED /data/ts_access.json name the same (station, level) set. The table lives
 #      on the VPS and the data here, so a withheld flip is suppressed only once the table is
 #      regenerated, committed and installed - this is the line that says the two have not drifted
+#   7c. KERNEL-side memory: unreclaimable slab (/proc/meminfo SUnreclaim), which no process owns and
+#      no container measure reports, so it grows invisibly until the box will not schedule. WARN, not
+#      FAIL: this gate runs before a deploy and a slab figure is a scheduling fact, not a release veto
 #   8. the kernel journal for out-of-memory KILLS in the last 24 h (a known incident: the engine
 #      build was OOM-killed five nights running and every one surfaced only as "rebuild FAILED"; the
 #      kernel line naming the process, its uid and its size is the fact an operator needs, so this
@@ -41,6 +44,9 @@
 #   AUSMT_DOCTOR_JOURNALCTL journalctl command (default: journalctl) - the kernel-journal OOM check
 #   AUSMT_DOCTOR_PYTHON     python command (default: python3) - the ts-route key-set parity check
 #   AUSMT_DOCTOR_OOM_SINCE  journalctl --since window for the OOM check (default: -24h)
+#   AUSMT_ALERT_MEMINFO     the file the slab reading comes from (default: /proc/meminfo) - the SAME
+#                           knob alert.sh reads, so the timer and this gate cannot disagree
+#   AUSMT_ALERT_SUNRECLAIM_MB unreclaimable slab in MB that trips a WARN (default: 2048, as alert.sh)
 
 set -u
 
@@ -321,6 +327,30 @@ PY
 	esac
 }
 
+check_kernel_memory() {
+	# Read AFTER the .env sourcing above, so an operator can tune the threshold in deploy/.env and
+	# have BOTH this gate and the alert timer honour the one setting.
+	meminfo="${AUSMT_ALERT_MEMINFO:-/proc/meminfo}"
+	max_mb="${AUSMT_ALERT_SUNRECLAIM_MB:-2048}"
+	case "$max_mb" in ''|*[!0-9]*) max_mb=2048 ;; esac
+	if [ ! -f "$meminfo" ]; then
+		warn "kernel-memory: no $meminfo on this host - unreclaimable kernel slab is UNKNOWN here, and a leak in it would be invisible to every container measure"
+		return
+	fi
+	kb="$(awk '$1 == "SUnreclaim:" { print $2; exit }' "$meminfo" 2>/dev/null)"
+	case "${kb:-}" in
+		''|*[!0-9]*)
+			warn "kernel-memory: $meminfo has no SUnreclaim line - the unreclaimable slab is UNKNOWN, not proven small"
+			return ;;
+	esac
+	mb=$((kb / 1024))
+	if [ "$mb" -gt "$max_mb" ]; then
+		warn "kernel-memory: SUnreclaim is ${mb} MB (over ${max_mb} MB) - the kernel holds memory NO process owns and the box will stop scheduling. Capture /proc/meminfo and /proc/slabinfo, then schedule a reboot before it wedges"
+	else
+		pass "kernel-memory: SUnreclaim is ${mb} MB (under ${max_mb} MB)"
+	fi
+}
+
 check_oom_kills() {
 	# The kernel's own record of a process it killed for memory: `journalctl -k` lines of the form
 	# "Out of memory: Killed process 398616 (python) total-vm:..., anon-rss:13740244kB, ... UID:10001".
@@ -389,6 +419,7 @@ check_reconcile_timer
 check_disk
 check_served_staleness
 check_ts_route_parity
+check_kernel_memory
 check_oom_kills
 printf '=====================================================\n'
 if [ "$FAILS" -gt 0 ]; then

@@ -26,6 +26,11 @@
 #   * a full disk (uploads + builds + the DB all live under $AUSMT_DATA_DIR).
 #   * a stale / failed serve-reconcile pass (reconcile-status.json age + action).
 #   * a stale or failed nightly backup (newest snapshot age + `systemctl is-failed`).
+#   * KERNEL-side memory growth: unreclaimable slab (/proc/meminfo SUnreclaim) is memory no PROCESS
+#     owns, so container healthchecks, `df` and every RSS figure stay green while the kernel walks
+#     the box into a wedge. Only a procfs read sees it.
+#   * a FIRMWARE ACPI event storm: a General Purpose Event that will not clear re-fires the System
+#     Control Interrupt and burns a whole core, again with no process to attribute it to.
 #
 # NO SECRETS: the ONLY sensitive-ish value is the ping URL. It is confidential-ish (anyone who has it
 # can spoof a beat) but NON-PRIVILEGED (it grants no access to the box or any data). It lives in
@@ -43,6 +48,10 @@
 #   AUSMT_ALERT_RECONCILE_MAX_MIN (default 45) reconcile-status.json older than this (min) fails
 #   AUSMT_ALERT_BACKUP_MAX_H    (default 26)  newest backup snapshot older than this (hours) fails
 #   AUSMT_ALERT_DRILL_MAX_H     (default 192) last restore-drill verdict older than this fails
+#   AUSMT_ALERT_SUNRECLAIM_MB   (default 2048) unreclaimable kernel slab over this many MB fails
+#   AUSMT_ALERT_SCI_PER_MIN     (default 600)  ACPI interrupts per minute over this rate fails
+#   AUSMT_ALERT_MEMINFO         (default /proc/meminfo) the file the slab reading comes from
+#   AUSMT_ALERT_INTERRUPTS      (default /proc/interrupts) the file the ACPI counter comes from
 #   AUSMT_ALERT_COMPOSE         (optional) override the `docker compose` command (a test shim hooks here)
 #   AUSMT_ALERT_CURL            (optional) override the `curl` command (a test shim hooks here)
 #
@@ -79,6 +88,23 @@ PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"
 # freeze visibility as a pause: a pin held continuously past this many hours raises an ops fact + fails.
 PIN_MAX_H="${AUSMT_ALERT_PIN_MAX_H:-$PAUSE_MAX_H}"
 
+# KERNEL-side resource exhaustion. Both readings come from procfs and both are file-overridable, so
+# the checks can be driven from a fixture off-box and stay silent on a host with no procfs at all.
+# Unreclaimable slab is memory no process owns: an idle box sits near 270 MB, so a gigabytes-high
+# reading is a leak that ends in a wedged box, visible days before it lands and invisible to every
+# user-space measure. The threshold must stay well under RAM so the alarm arrives with time to act.
+MEMINFO_FILE="${AUSMT_ALERT_MEMINFO:-/proc/meminfo}"
+SUNRECLAIM_MAX_MB="${AUSMT_ALERT_SUNRECLAIM_MB:-2048}"
+# A General Purpose Event that will not clear re-fires the System Control Interrupt continuously and
+# burns a core. 600/min is ten a second sustained across the timer period, far above the handful a
+# quiet box logs and far below a storm.
+INTERRUPTS_FILE="${AUSMT_ALERT_INTERRUPTS:-/proc/interrupts}"
+SCI_PER_MIN_MAX="${AUSMT_ALERT_SCI_PER_MIN:-600}"
+# Both thresholds feed `test -gt`, which errors on a non-integer: an operator typo must not break the
+# pass, so a non-numeric override falls back to the default.
+case "$SUNRECLAIM_MAX_MB" in ''|*[!0-9]*) SUNRECLAIM_MAX_MB=2048 ;; esac
+case "$SCI_PER_MIN_MAX" in ''|*[!0-9]*) SCI_PER_MIN_MAX=600 ;; esac
+
 # This timer is ALSO the ops-status.json writer. Its cadence (the systemd
 # ausmt-alert.timer period, ~15 min) is the staleness clock the curator ops floor reads: a file older
 # than ~2 periods flips every dependent card STALE. Override only if you retimed the unit.
@@ -90,6 +116,9 @@ DATA_DIR_ROOT="${AUSMT_DATA_DIR:-}"
 STATE_DIR="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/gateway/state}"
 OPS_STATUS_FILE="${STATE_DIR:+$STATE_DIR/ops-status.json}"
 SITE_DATA="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/site-data}"
+# The previous ACPI sample (count + timestamp) lives beside ops-status.json in the same state dir: a
+# rate needs two readings, and the timer is a fresh process each pass, so the earlier one must persist.
+ACPI_SAMPLE_FILE="${STATE_DIR:+$STATE_DIR/acpi-sample.json}"
 
 # Facts the check_* functions compute for the fail-ping ARE ALSO the ops-floor facts — hoisted into
 # these globals as each check runs so the ops writer reuses them (one `docker compose ps`, one `df`).
@@ -109,6 +138,12 @@ OPS_PIN_BUILD=""
 OPS_PIN_FIRST_SEEN=""
 OPS_PIN_CUMULATIVE_H=""
 OPS_PIN_PERSISTENT=0
+# Kernel-side readings. EMPTY means "not observable on this host" and is rendered null in the ops
+# document: a threshold with no series behind it is a cliff rather than a gauge, so the value is
+# recorded on every pass whether or not it fails.
+OPS_SUNRECLAIM_MB=""
+OPS_ACPI_COUNT=""
+OPS_ACPI_PER_MIN=""
 
 # The four long-running compose services this box monitors. build-runner is EXCLUDED on purpose: it is
 # a one-shot job (compose profile "jobs") that is SUPPOSED to be absent between builds, so "not running"
@@ -298,6 +333,79 @@ check_disk() {
   if [ "$used_pct" -gt "$DISK_PCT_MAX" ]; then
     add_failure "disk: $data_dir filesystem ${used_pct}% used (threshold ${DISK_PCT_MAX}%)"
   fi
+}
+
+# --------------------------------------------------------------------------------------------------
+# Check b2: KERNEL memory. `df` measures bytes on disk and compose measures containers; neither can
+#   see the kernel's own allocations. SUnreclaim (kB, from $AUSMT_ALERT_MEMINFO) is the slab the
+#   kernel CANNOT hand back under pressure, so it is not cache and no process holds it: it grows
+#   silently while user-space RSS stays flat and ends with a box that will not schedule. The reading
+#   is recorded on EVERY pass so the operator has a series, and fails past AUSMT_ALERT_SUNRECLAIM_MB.
+#   No file, or no SUnreclaim line, is UNKNOWN, never a failure: this is one of two halves and the
+#   monitor's absent-ping timeout still covers a box that has actually gone.
+# --------------------------------------------------------------------------------------------------
+check_kernel_memory() {
+  [ -f "$MEMINFO_FILE" ] || return 0
+  km_kb=$(awk '$1 == "SUnreclaim:" { print $2; exit }' "$MEMINFO_FILE" 2>/dev/null)
+  case "${km_kb:-}" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  OPS_SUNRECLAIM_MB=$((km_kb / 1024))
+  if [ "$OPS_SUNRECLAIM_MB" -gt "$SUNRECLAIM_MAX_MB" ]; then
+    add_failure "kernel-memory: SUnreclaim (unreclaimable kernel slab, held by NO process) is ${OPS_SUNRECLAIM_MB} MB (threshold ${SUNRECLAIM_MAX_MB} MB) -- the kernel is leaking and the box will stop scheduling. Capture /proc/meminfo and /proc/slabinfo for the culprit cache, then schedule a reboot before it wedges."
+  fi
+}
+
+# --------------------------------------------------------------------------------------------------
+# Check b3: ACPI SCI storm. A General Purpose Event the firmware never clears re-arms the System
+#   Control Interrupt in a tight loop: one core sits pegged in kernel context, builds slow to a crawl,
+#   and no container, log or process table names a cause. The observable is the RATE of the "acpi"
+#   IRQ row in $AUSMT_ALERT_INTERRUPTS (its per-CPU columns summed), which needs TWO readings, so the
+#   previous sample is carried in $ACPI_SAMPLE_FILE. A first run has nothing to compare against and
+#   records only; a counter that went BACKWARDS is a reboot, likewise recorded without a verdict.
+# --------------------------------------------------------------------------------------------------
+check_acpi_storm() {
+  [ -f "$INTERRUPTS_FILE" ] || return 0
+  # The per-CPU counts are the fields between the IRQ number and the first non-numeric field (the
+  # controller name), so the sum stops at that boundary rather than assuming a column count.
+  acpi_now=$(awk '$1 ~ /^[0-9]+:$/ && $NF == "acpi" {
+                    total = 0
+                    for (i = 2; i <= NF; i++) { if ($i ~ /^[0-9]+$/) { total += $i } else { break } }
+                    print total
+                    exit
+                  }' "$INTERRUPTS_FILE" 2>/dev/null)
+  case "${acpi_now:-}" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  OPS_ACPI_COUNT="$acpi_now"
+  acpi_epoch=$(date -u +%s 2>/dev/null || true)
+  case "${acpi_epoch:-}" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  [ -n "$ACPI_SAMPLE_FILE" ] && [ -d "$STATE_DIR" ] || return 0
+
+  if [ -f "$ACPI_SAMPLE_FILE" ]; then
+    acpi_prev=$(sed -n 's/.*"count"[^0-9]*\([0-9][0-9]*\).*/\1/p' "$ACPI_SAMPLE_FILE" 2>/dev/null | head -n 1)
+    acpi_prev_epoch=$(sed -n 's/.*"epoch"[^0-9]*\([0-9][0-9]*\).*/\1/p' "$ACPI_SAMPLE_FILE" 2>/dev/null | head -n 1)
+    if [ -n "${acpi_prev:-}" ] && [ -n "${acpi_prev_epoch:-}" ]; then
+      acpi_dsec=$((acpi_epoch - acpi_prev_epoch))
+      acpi_dcount=$((acpi_now - acpi_prev))
+      if [ "$acpi_dsec" -gt 0 ] && [ "$acpi_dcount" -ge 0 ]; then
+        OPS_ACPI_PER_MIN=$((acpi_dcount * 60 / acpi_dsec))
+        if [ "$OPS_ACPI_PER_MIN" -gt "$SCI_PER_MIN_MAX" ]; then
+          add_failure "acpi: the firmware SCI is storming at ${OPS_ACPI_PER_MIN} interrupts/min (threshold ${SCI_PER_MIN_MAX}/min) -- a General Purpose Event is not clearing and is burning a core. Read /sys/firmware/acpi/interrupts/gpe* for the one with the runaway count and mask it (echo disable > that gpe file), then plan a firmware update."
+        fi
+      fi
+    fi
+  fi
+
+  # Re-sample on EVERY pass, failing or not: the next rate must be measured against the most recent
+  # reading, and a sample left stale would spread one storm's delta over hours and hide it.
+  acpi_tmp=$(mktemp "$ACPI_SAMPLE_FILE.tmp.XXXXXX" 2>/dev/null) || return 0
+  chmod 0644 "$acpi_tmp" 2>/dev/null || true
+  printf '{\n "count": %s,\n "at": "%s",\n "epoch": %s\n}\n' \
+    "$acpi_now" "$(now_utc)" "$acpi_epoch" > "$acpi_tmp" 2>/dev/null
+  mv -f "$acpi_tmp" "$ACPI_SAMPLE_FILE" 2>/dev/null || rm -f "$acpi_tmp" 2>/dev/null || true
 }
 
 # --------------------------------------------------------------------------------------------------
@@ -623,6 +731,8 @@ PYEOF
 #     salt_fp / write_errors / read_errors) + a serving marker (== current symlink target).
 #   * log tail: the newest site-data/logs/*.build.log, last 60 lines, copied into the file (the
 #     gateway has no site-data mount — this is how a shell-less curator reads build forensics).
+#   * kernel: unreclaimable slab in MB and the ACPI interrupt rate per minute, each beside its
+#     threshold, so the floor shows a series rather than only the moment a threshold is crossed.
 # --------------------------------------------------------------------------------------------------
 write_ops_status() {
   # _checks_ok=1 when the run found no failures (the summary is empty); _installed=1 when a ping URL
@@ -697,6 +807,9 @@ write_ops_status() {
   AUSMT_OPS_PIN_FIRST_SEEN="$OPS_PIN_FIRST_SEEN" AUSMT_OPS_PIN_CUMULATIVE_H="$OPS_PIN_CUMULATIVE_H" \
   AUSMT_OPS_PIN_PERSISTENT="$OPS_PIN_PERSISTENT" AUSMT_OPS_PIN_MAX_H="$PIN_MAX_H" \
   AUSMT_OPS_STATE_DIR="${STATE_DIR:-}" \
+  AUSMT_OPS_SUNRECLAIM_MB="$OPS_SUNRECLAIM_MB" AUSMT_OPS_SUNRECLAIM_MAX_MB="$SUNRECLAIM_MAX_MB" \
+  AUSMT_OPS_ACPI_COUNT="$OPS_ACPI_COUNT" AUSMT_OPS_ACPI_PER_MIN="$OPS_ACPI_PER_MIN" \
+  AUSMT_OPS_ACPI_MAX_PER_MIN="$SCI_PER_MIN_MAX" \
   "$PY" - > "$_tmp" <<'PYEOF'
 import datetime, glob, json, os
 
@@ -933,10 +1046,23 @@ if state_dir:
             pass
 actions = {"pending": intents, "audit_tail": audit_tail}
 
+# ---- kernel-side resources: unreclaimable slab and the firmware SCI rate. Both are readings no
+#      user-space measure carries, and null means the host does not expose them (no procfs, or a
+#      first pass with no earlier sample to take a rate against) rather than zero. ----
+def _num(name):
+    v = os.environ.get(name, "")
+    return int(v) if v.isdigit() else None
+
+kernel = {"sunreclaim_mb": _num("AUSMT_OPS_SUNRECLAIM_MB"),
+          "sunreclaim_max_mb": int(os.environ.get("AUSMT_OPS_SUNRECLAIM_MAX_MB") or 2048),
+          "acpi_interrupts": _num("AUSMT_OPS_ACPI_COUNT"),
+          "acpi_per_min": _num("AUSMT_OPS_ACPI_PER_MIN"),
+          "acpi_max_per_min": int(os.environ.get("AUSMT_OPS_ACPI_MAX_PER_MIN") or 600)}
+
 doc = {"generated_at": now, "timer_period_min": int(os.environ.get("AUSMT_OPS_PERIOD_MIN") or 15),
        "reconcile": reconcile, "backups": backups, "alerts": alerts, "box": box,
        "freshness": freshness, "builds": builds, "logs": logs,
-       "pause": pause, "pin": pin, "actions": actions}
+       "pause": pause, "pin": pin, "actions": actions, "kernel": kernel}
 print(json.dumps(doc, indent=1))
 PYEOF
 
@@ -956,6 +1082,8 @@ PYEOF
 # --------------------------------------------------------------------------------------------------
 check_services
 check_disk
+check_kernel_memory
+check_acpi_storm
 check_reconcile
 check_backup
 check_pause
