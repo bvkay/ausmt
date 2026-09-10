@@ -170,7 +170,7 @@ to the ledger.
   [presence] NOTICE` line per note per survey, with the station count. A note whose text interpolates
   a per-station value would be a distinct string for every station and could never fold, so the
   identity-rewrite notes state the CLASS of rewrite only. Which station was written under which
-  EMTF-XML `Site.id`, and from which custodian file, is `station_ids`.
+  EMTF-XML `Site.id`, and from which custodian file, is `station_id_rewrites`.
 - `[xml] WARN` and `[h5] WARN` fold per survey per (producer, exception class, message head) to one
   line with the count and one example file. `product_failures` carries every file, keyed by producer,
   with the producer path each fault was first seen in (`station product` or `survey bundle`). Both

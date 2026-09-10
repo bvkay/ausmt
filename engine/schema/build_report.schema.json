@@ -88,7 +88,7 @@
             }
           }
         },
-        "station_ids": {
+        "station_id_rewrites": {
           "type": "array",
           "description": "per-station identity rewrites: the served station id, the sanitised EMTF-XML Site.id the served artifact was written under, and (only where the survey declares source provenance) the custodian file the station was derived from. The matching canonical_conditioning notes state the CLASS of rewrite and carry no per-station value, because a note whose text embeds one is a distinct string for every station and cannot be aggregated, which is one log line per station; this is where the mapping lives instead. `source_file` mirrors the survey's declared source provenance rather than restating it independently. Optional for reports that predate the fold.",
           "items": {

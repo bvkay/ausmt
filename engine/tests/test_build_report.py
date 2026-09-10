@@ -259,7 +259,7 @@ def test_identity_rewrite_notes_carry_no_per_station_value(tmp_path):
     """The identity conditioning notes must be CLASS-STABLE in what the build persists and prints: a
     note that interpolates the station id or its source filename is a distinct string per station, so
     the by-note aggregation cannot fold it and the log grows one line per station. The mapping itself
-    belongs in build_report's `station_ids`.
+    belongs in build_report's `station_id_rewrites`.
 
     FAILS IF: 'station.id->', 'source_id_preserved_in_site_name:' or
     'source_file_preserved_in_site_name:' reappears in a persisted note or in the build log."""
@@ -274,6 +274,6 @@ def test_identity_rewrite_notes_carry_no_per_station_value(tmp_path):
             assert bad not in text, f"{sj}: {bad!r} still names a per-station value"
     rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
     for slug, survey in rep["surveys"].items():
-        assert isinstance(survey["station_ids"], list), slug
-        for row in survey["station_ids"]:
+        assert isinstance(survey["station_id_rewrites"], list), slug
+        for row in survey["station_id_rewrites"]:
             assert row["station"] and row["site_id"], row

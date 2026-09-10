@@ -217,17 +217,22 @@ def test_parallel_build_products_identical_to_serial(tmp_path):
     assert prov_p["parallel"]["workers"] == 3
 
 
-def test_mth5_write_task_captures_stderr(tmp_path, capfd):
-    """FAILS IF: a worker task's WARN lines leak to the live stderr stream instead of being
-    returned for the main process to replay in input order. Interleaved worker writes would make
-    build logs nondeterministic under parallelism; the capture-and-replay contract is what keeps
-    them stable. (C-level HDF5 error spew still goes to fd 2 and is accepted, as it is serially.)"""
+def test_mth5_write_task_returns_its_diagnostics_instead_of_writing_them(tmp_path, capfd):
+    """FAILS IF: a worker task's diagnostics leak to the live stderr stream instead of coming back
+    for the main process to handle in input order. Interleaved worker writes would make build logs
+    nondeterministic under parallelism. Per-station failures come back STRUCTURED, because they are
+    folded per survey in the main process and a worker cannot see the other workers' faults to fold
+    against; the file-level lines still ride the captured stream.
+    (C-level HDF5 error spew still goes to fd 2 and is accepted, as it is serially.)"""
     bogus = tmp_path / "not_an_edi.edi"
     bogus.write_text("JUNK, not an EDI", encoding="utf-8")
-    n, err = build_portal._mth5_write_task(
+    n, err, rows = build_portal._mth5_write_task(
         [(str(bogus), {"id": "X1"})], "par-x", "Par X", str(tmp_path / "x.h5"), None)
     assert n == 0
-    assert "WARN" in err, f"expected the writer's WARN in the captured stream, got: {err!r}"
+    assert len(rows) == 1, f"the station's failure must come back structured, got: {rows!r}"
+    assert rows[0]["producer"] == "h5" and rows[0]["file"] == "not_an_edi.edi", rows[0]
+    assert rows[0]["error"] and rows[0]["context"] == "station product", rows[0]
     live = capfd.readouterr()
-    assert "WARN" not in live.err, "worker WARN leaked to live stderr instead of the captured return"
+    assert "WARN" not in live.err, "worker output leaked to live stderr instead of the return"
+    assert "WARN" not in err, "a per-station failure must not also be rendered into the stream"
     assert not (tmp_path / "x.h5").exists(), "a zero-written h5 must be withheld (unlinked)"

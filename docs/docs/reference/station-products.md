@@ -426,7 +426,7 @@ is reported separately under `file_written_by` rather than being published as th
 | Occurrence | 0-1 |
 | Type | array or null |
 | Default | `null` when the station was not conditioned |
-| Note | Read this before treating a value in the served XML as an observation. It is the list of things that file states which the source did not, for example a rotation angle that the source never asserted. Each note names a CLASS of change and carries no per-station value, so the same change reads identically on every station it touched; the per-station identity mapping (which `Site.id` the artifact was written under, and the custodian file behind it) is in the operator-only `build_report.json` under `station_ids`. |
+| Note | Read this before treating a value in the served XML as an observation. It is the list of things that file states which the source did not, for example a rotation angle that the source never asserted. Each note names a CLASS of change and carries no per-station value, so the same change reads identically on every station it touched; the per-station identity mapping (which `Site.id` the artifact was written under, and the custodian file behind it) is in the operator-only `build_report.json` under `station_id_rewrites`. |
 
 ### 1.14 frame
 

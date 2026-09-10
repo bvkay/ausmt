@@ -135,7 +135,7 @@ def test_aggregate_all_carriers_above_enum_limit_has_null_both_sides():
     assert e["except"] is None, "an all-carriers note must ship except=None, never []"
 
 
-# --- the per-survey folds for the notice families that used to print once PER STATION -------------
+# --- the per-survey folds for the survey-level notice families -----------------------------------
 # Each family folds to a bounded number of log lines and keeps its full membership in
 # build_report.json, so nothing an operator could act on is lost by the fold.
 
@@ -153,8 +153,9 @@ def test_station_id_notes_are_class_stable_and_fold_to_one_line():
 
 
 def test_station_id_ledger_carries_the_folded_per_station_mapping():
-    """The mapping the folded note no longer spells out must be recoverable from build_report.json:
-    served id, the sanitised EMTF-XML Site.id and the custodian source file, per rewritten station."""
+    """The mapping a class-stable note cannot carry in its text must be recoverable from
+    build_report.json: served id, the sanitised EMTF-XML Site.id and the custodian source file,
+    per rewritten station."""
     from ausmt_science.ingest import normalize as nz
     records = [
         {"id": "RD18-188e", "source_provenance": {"original_filename": "188_S__2.edi"}},

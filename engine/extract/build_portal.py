@@ -3656,8 +3656,8 @@ def _fold_id_list(ids, limit: int) -> str:
 
 
 def station_id_ledger(notes_by_station: dict, records) -> list:
-    """build_report.json's `station_ids`: the per-station identity rewrites the CLASS-STABLE
-    conditioning notes deliberately no longer spell out.
+    """build_report.json's `station_id_rewrites`: the per-station identity mapping that the
+    CLASS-STABLE conditioning notes cannot carry in their own text.
 
     A row per station whose EMTF-XML Site.id was rewritten, or whose custodian source filename was
     embedded in the Site <Name>: {"station": served id, "site_id": the sanitised Site.id,
@@ -3667,8 +3667,8 @@ def station_id_ledger(notes_by_station: dict, records) -> list:
     ledger adds exactly the one fact neither the record nor station.json already carries: which
     Site.id the artifact was written under.
 
-    Derived from the record + the same sanitiser normalize() uses, so a C18 cache hit and a fresh
-    normalize produce identical rows."""
+    Derived from the record and the same sanitiser normalize() uses, so a build-cache hit and a
+    fresh normalize produce identical rows."""
     from ausmt_science.ingest.normalize import (  # noqa: PLC0415
         NOTE_SOURCE_FILE_PRESERVED, NOTE_STATION_ID_SET, emtfxml_site_id)
     rows = []
@@ -6132,9 +6132,9 @@ def _main_build(argv=None):
         _presence_notes_by_station = _gate_report.get("presence_notes", {})
         for _pline in conditioning_log_lines(slug, _presence_notes_by_station, prefix="[presence]"):
             print(_pline, file=sys.stderr)
-        # ---- the other per-survey folds. Each of these families used to print once PER STATION,
-        # which is the bulk of a corpus build log; each now prints at most one line per survey and
-        # keeps its full membership in build_report.json (below) or qc_report.json.
+        # ---- the other per-survey folds. Each family here is survey-level or ledger-shaped, so it
+        # prints at most ONE line per survey and keeps its full membership in build_report.json
+        # (below) or qc_report.json. One line per station is a corpus build log's whole volume.
         _precedence_rows = list(_gate_report.get("precedence_skipped", []))
         _precedence_line = precedence_log_line(slug, _precedence_rows)
         if _precedence_line:
@@ -6145,7 +6145,7 @@ def _main_build(argv=None):
             print(_tipper_line, file=sys.stderr)
         for _pfline in product_failure_log_lines(slug, fold_product_failures(_product_failure_rows)):
             print(_pfline, file=sys.stderr)
-        # The identity rewrites the class-stable conditioning notes no longer spell out.
+        # The identity mapping the class-stable conditioning notes cannot carry in their text.
         _station_id_rows = station_id_ledger(conditioning_notes, [_r for (_p, _r) in stations])
         # Convention WARNs (one off-diagonal out of quadrant) are survey-level warnings in the
         # report — the honest "look at this" surface. Derotation/insufficient/unverifiable notes
@@ -6269,10 +6269,10 @@ def _main_build(argv=None):
             # The EMTF XMLs the EDI-wins precedence rule did NOT ingest: the full list behind the
             # one folded PRECEDENCE line.
             "precedence_skipped": _precedence_rows,
-            # The per-station identity rewrites: served id, the sanitised EMTF-XML Site.id the
+            # The per-station identity mapping: served id, the sanitised EMTF-XML Site.id the
             # artifact was written under, and (for a declared third-party ingest) the custodian file.
             # The conditioning notes state the CLASS of rewrite; this states which station got which.
-            "station_ids": _station_id_rows,
+            "station_id_rewrites": _station_id_rows,
             # Every per-file product-emission failure, keyed by producer, behind the folded WARN
             # lines. De-duplicated across the two MTH5 tiers, which read the same source files.
             "product_failures": product_failures_report(_product_failure_rows),
