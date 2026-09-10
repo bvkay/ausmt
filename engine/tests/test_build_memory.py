@@ -25,8 +25,13 @@ What is pinned here, and what each pin fails on:
     feature quietly re-materialising the world. The measured constant and slope are recorded below.
   * the record: build_report.json carries `peak_rss_mib`, schema-valid, and it agrees with the
     child's own rusage peak (the field is a measurement, not a guess).
+  * the worker arm of that record: `peak_rss_mib` is RUSAGE_SELF and cannot see a worker process, so
+    the report must also carry the largest single worker's peak and the worker count that multiplies
+    it. A serial build reports no worker peak; a pooled build reports one of worker size, measured
+    after the pool was joined. FAILS on the parent's number offered as the whole footprint, on a
+    hard-coded field, and on a measurement taken while the pool is still up.
 
-Requires the mt_metadata/mth5 build stack; skips cleanly otherwise. The two subprocess pins need
+Requires the mt_metadata/mth5 build stack; skips cleanly otherwise. The four subprocess pins need
 os.wait4 (POSIX), which every CI engine workflow has.
 """
 import gc
@@ -71,6 +76,13 @@ SLOPE_MAX_MIB_PER_STATION = 0.5
 # set these sizes measured 266 MiB at 20 stations and 287 MiB at 200, i.e. peak = constant + slope*N:
 MEASURED_CONSTANT_MIB = 264            # the corpus-independent floor: interpreter + libraries + one survey
 MEASURED_SLOPE_MIB_PER_STATION = 0.114  # the corpus-wide index (catalogue rows, records) per station
+# The floor a reported MTH5 worker peak must clear. getrusage(RUSAGE_CHILDREN) is a maximum over
+# every child the process has reaped, and the build reaps two `git` children at import, so the
+# counter reads about 3 MiB even with the pool still running: a >0 test cannot tell a measured worker
+# from a measurement taken too early. A spawned worker pays the interpreter plus the build_portal and
+# mth5 imports before it writes anything and measured 213 MiB here, so this sits an order of
+# magnitude above the git floor and a factor of four below the real thing.
+WORKER_PEAK_MIN_MIB = 50
 
 
 def _live_model_classes() -> int:
@@ -274,8 +286,13 @@ def test_worker_peak_is_measured_not_a_placeholder(tmp_path):
     """The other direction, and the reason the measurement is taken where it is: RUSAGE_CHILDREN
     reports only children the process has already wait()ed for, so the pool must be shut down before
     the report is written or the field would be a permanent None. A --workers 2 build must therefore
-    record a positive worker peak and workers == 2. FAILS on a field hard-coded to None, and on a
-    measurement taken while the pool is still up."""
+    record workers == 2 and a worker peak of MTH5-worker size. FAILS on a field hard-coded to None,
+    and on a measurement taken while the pool is still up.
+
+    The floor is WORKER_PEAK_MIN_MIB, not zero, and that is the whole strength of this pin: the
+    counter is a maximum over EVERY waited-for child, and the build reaps two small `git` children at
+    import, so a measurement taken before the pool is joined still reads a few MiB and any
+    greater-than-zero test passes on it."""
     out = tmp_path / "out"
     rc, _peak = _run_build_measured(SAMPLE_SURVEYS, out, tmp_path / "build.log", workers="2")
     assert rc == 0, (tmp_path / "build.log").read_text(encoding="utf-8")[-3000:]
@@ -284,7 +301,10 @@ def test_worker_peak_is_measured_not_a_placeholder(tmp_path):
         "the MTH5 pool did not come up, so the worker arm went unmeasured; the build log carries the "
         "[parallel] WARN:\n" + (tmp_path / "build.log").read_text(encoding="utf-8")[-2000:])
     child = rep["peak_rss_child_max_mib"]
-    assert isinstance(child, (int, float)) and child > 0, (
-        f"a pool build must record the largest worker's peak, measured after the pool was joined; "
-        f"got {child!r}")
+    assert isinstance(child, (int, float)) and child > WORKER_PEAK_MIN_MIB, (
+        f"a pool build must record the largest MTH5 worker's peak, measured after the pool was "
+        f"joined; got {child!r} MiB, which is below the {WORKER_PEAK_MIN_MIB} MiB floor a spawned "
+        f"worker cannot be under. A reading this small is the import-time `git` children, i.e. the "
+        f"measurement was taken while the pool was still running and the operator number is low by "
+        f"a factor of about a hundred")
 
