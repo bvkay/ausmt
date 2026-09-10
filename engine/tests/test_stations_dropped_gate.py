@@ -38,7 +38,9 @@ ALLOW = ROOT / "scripts" / "stations-dropped-allowed.txt"
 WORKFLOW = ROOT.parent / ".github" / "workflows" / "build-products.yml"
 
 # The seed, measured over the whole corpus rather than assumed: capricorn-2010's five
-# sign-convention FAILs, plus the one row the Roxby Downs 2018 release brings with it.
+# sign-convention FAILs, the one row the Roxby Downs 2018 release brings with it, and the nine
+# rotation-frame refusals of the four KUTh Exploration packages (Phoenix cross-spectra files whose
+# ROTSPEC and HMEAS azimuths disagree, so the stored frame cannot be established).
 SEEDED = [
     "capricorn-2010/CP1L05.edi",
     "capricorn-2010/CP2B13.edi",
@@ -46,6 +48,15 @@ SEEDED = [
     "capricorn-2010/CP2L02.edi",
     "capricorn-2010/CP2L08.edi",
     "roxby-downs-2018/188_S__2.edi",
+    "kuth-lake-leake-2008/STL009A.edi",
+    "kuth-lake-leake-2008/STL041A.edi",
+    "kuth-midlands-2009/NSA031A.edi",
+    "kuth-midlands-2009/NSB006A.edi",
+    "kuth-midlands-2009/NSOC03A.edi",
+    "kuth-tamar-valley-2008/NTL025A.edi",
+    "kuth-tamar-valley-2008/NTL031A.edi",
+    "kuth-tamar-valley-2008/NTL032A.edi",
+    "kuth-tamar-valley-2008/NTL036A.edi",
 ]
 
 
@@ -185,8 +196,8 @@ def test_the_shipped_allow_file_names_every_row_the_corpus_drops():
     """The LEDGER. Measured over the whole corpus and seeded so the next rebuild does not go red on a
     pre-existing condition: capricorn-2010's five sign-convention FAILs, and the one row the Roxby
     Downs 2018 release brings with it, named ahead of its merge so the corpus PR needs no engine
-    change. A seventh entry is a station the corpus stopped publishing, and whoever adds it has to
-    come here and say so."""
+    change, and the nine KUTh rotation-frame refusals. A further entry is a station the corpus
+    stopped publishing, and whoever adds it has to come here and say so."""
     assert ALLOW.is_file(), f"{ALLOW} must exist so the default gate has a subject"
     text = ALLOW.read_text(encoding="utf-8")
     entries = [ln.strip() for ln in text.splitlines()
