@@ -18,3 +18,6 @@ __pycache__/
 # carry deployment-specific structure, so it never belongs in git; a `git add -A` on the VPS must
 # not stage it.
 frontdoor/Caddyfile.rendered
+# The rendered route table, written in place by install-frontdoor.sh from the tracked
+# frontdoor/ts-routes.map so the container's single-file bind mount survives a git pull.
+frontdoor/ts-routes.map.rendered

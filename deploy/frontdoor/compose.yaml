@@ -52,10 +52,13 @@ services:
       - ./Caddyfile.rendered:/etc/caddy/Caddyfile:ro
       # The time-series hand-off table, read-only. The Caddyfile `import`s it into the /go/ts/ map,
       # so it is part of the config: without this mount `caddy validate` and startup both FAIL on the
-      # missing import. It is GENERATED and COMMITTED (deploy/scripts/gen_ts_routes.py) and reaches
-      # the VPS the same way the Caddyfile does - `git pull` in this subtree, then the installer.
-      # Never hand-edit it: its membership is the suppression, so an added line publishes a route.
-      - ./ts-routes.map:/etc/caddy/ts-routes.map:ro
+      # missing import. The tracked ts-routes.map is GENERATED and COMMITTED
+      # (deploy/scripts/gen_ts_routes.py) and reaches the VPS the same way the Caddyfile does -
+      # `git pull` in this subtree, then the installer, which renders this copy IN PLACE so the
+      # mounted inode survives the pull (a single-file bind mount is an inode; the tracked file is
+      # replaced by rename). Never hand-edit either: membership is the suppression, so an added line
+      # publishes a route.
+      - ./ts-routes.map.rendered:/etc/caddy/ts-routes.map:ro
       # ACME certificate + key material and Caddy's own state — MUST persist across restarts so a
       # bounce does not re-request a certificate every time (Let's Encrypt rate limits).
       - caddy_data:/data
