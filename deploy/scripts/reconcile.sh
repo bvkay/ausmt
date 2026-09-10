@@ -17,6 +17,11 @@
 #   3. decide — if head != built OR a rebuild.request file exists: consume rebuild.request FIRST
 #               (rm -f, at-most-once per run), then run the rebuild capturing all output to a
 #               timestamped log under site-data/logs/ (pruned to newest 20). Else: noop.
+#   3b. hold    a head a build has already been attempted at is not rebuilt again. If the newest
+#               builds/<ts>/build.json is at head but never became `current`, or the last status is
+#               action=failed at this head, another build repeats the same failure every tick, so
+#               write status action=failed naming what to look at, exit 1, and wait for head to move
+#               or for an explicit rebuild.request.
 #   4. status — write reconcile-status.json ATOMICALLY (tmp+mv) to the gateway state dir so the
 #               curator panel can show the last outcome.
 #
@@ -97,6 +102,59 @@ KEEP_BUILDS="${AUSMT_RECONCILE_KEEP_BUILDS:-5}"
 
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+# IDENTIFYING THE SERVED BUILD is deliberately NOT just `readlink current`. In production `current` is
+# a symlink (the Makefile's swap step makes one), but a layout where it is a plain directory — a test
+# fixture, a hand-repaired box, a filesystem without symlinks — would leave readlink empty and every
+# candidate unprotected, which is precisely the wrong way for this to fail. So: readlink first (cheap,
+# exact), then fall back to matching build.json byte-for-byte against each candidate, and if NEITHER
+# resolves, prune NOTHING and say so. Keeping stale dirs is recoverable; deleting the live build is not.
+served_build_name() {
+  # readlink gives e.g. "builds/20260810T010541Z"; keep only the final segment.
+  _cur=$(readlink "$SITE_DATA/current" 2>/dev/null || true)
+  _cur=${_cur##*/}
+  if [ -z "$_cur" ] && [ -f "$BUILD_JSON" ] && [ -d "$BUILDS_DIR" ]; then
+    for _c in "$BUILDS_DIR"/*; do
+      [ -d "$_c" ] && [ -f "$_c/build.json" ] || continue
+      if cmp -s "$BUILD_JSON" "$_c/build.json"; then _cur=${_c##*/}; break; fi
+    done
+  fi
+  [ -n "$_cur" ] && printf '%s\n' "$_cur"
+  return 0
+}
+
+# newest_build_name: the LAST build dir in name order, or empty when there are none. Build dir names
+# are UTC timestamps, so name order IS chronological order and needs no stat(2) - and unlike mtime it
+# cannot be reshuffled by a later touch of an older dir.
+newest_build_name() {
+  [ -d "$BUILDS_DIR" ] || return 0
+  _newest=""
+  for _b in "$BUILDS_DIR"/*; do
+    [ -d "$_b" ] || continue
+    _newest=${_b##*/}
+  done
+  [ -n "$_newest" ] && printf '%s\n' "$_newest"
+  return 0
+}
+
+# commits_match <a> <b>: true when either short hash is a prefix of the other (build.json may store a
+# 7-char short while rev-parse --short yields a different width - the SAME commit must not read as
+# drift). Two empty/one empty never match: an unknown identity is not a match, it is an unknown.
+commits_match() {
+  [ -n "$1" ] && [ -n "$2" ] || return 1
+  case "$1" in "$2"*) return 0 ;; esac
+  case "$2" in "$1"*) return 0 ;; esac
+  return 1
+}
+
+# newest_build_log: path of the newest *.build.log, or empty when none exists. Named in a hold so the
+# operator has the one file to read without shelling around for it.
+newest_build_log() {
+  [ -d "$LOG_DIR" ] || return 0
+  _l=$(ls -1t "$LOG_DIR"/*.build.log 2>/dev/null | head -n 1 || true)
+  [ -n "$_l" ] && printf '%s\n' "$_l"
+  return 0
+}
+
 # prune_builds: drop stale build dirs, ON ENTRY to every pass.
 #
 # WHY ON ENTRY. The Makefile prunes inside its SWAP step, which only runs after build AND verify both
@@ -104,28 +162,13 @@ now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # Observed live: TimeoutStartSec killing the rebuild at 60 minutes, once an hour, leaves each
 # killed attempt's ~0.5 GB of partial products (bundled EDIs + per-station MTH5) with nothing to
 # collect them. A run of failures must not become a disk leak, so the cleanup runs where it is reachable
-# whatever the outcome — not only on the happy path.
+# whatever the outcome, not only on the happy path.
 #
 # SAFETY. The build `current` points at is skipped UNCONDITIONALLY, before any retention arithmetic,
 # so this can never delete what is being served. Newest-first, keep KEEP_BUILDS, drop the rest.
-#
-# IDENTIFYING THE SERVED BUILD is deliberately NOT just `readlink current`. In production `current` is
-# a symlink (the Makefile's swap step makes one), but a layout where it is a plain directory — a test
-# fixture, a hand-repaired box, a filesystem without symlinks — would leave readlink empty and every
-# candidate unprotected, which is precisely the wrong way for this to fail. So: readlink first (cheap,
-# exact), then fall back to matching build.json byte-for-byte against each candidate, and if NEITHER
-# resolves, prune NOTHING and say so. Keeping stale dirs is recoverable; deleting the live build is not.
 prune_builds() {
   [ -d "$BUILDS_DIR" ] || return 0
-  # readlink gives e.g. "builds/20260810T010541Z"; keep only the final segment.
-  _cur=$(readlink "$SITE_DATA/current" 2>/dev/null || true)
-  _cur=${_cur##*/}
-  if [ -z "$_cur" ] && [ -f "$BUILD_JSON" ]; then
-    for _c in "$BUILDS_DIR"/*; do
-      [ -d "$_c" ] && [ -f "$_c/build.json" ] || continue
-      if cmp -s "$BUILD_JSON" "$_c/build.json"; then _cur=${_c##*/}; break; fi
-    done
-  fi
+  _cur=$(served_build_name)
   if [ -z "$_cur" ]; then
     printf 'reconcile: cannot identify the served build (current is neither a resolvable symlink nor '
     printf 'matched by build.json) — skipping the build prune rather than risk deleting it\n'
@@ -199,11 +242,13 @@ if [ "$DRY_RUN" -eq 0 ]; then
   rm -f "$_probe"
 fi
 
-# read_source_commit: echo the served build's source_commit, or empty if build.json is missing or
-# unreadable/malformed (=> the caller treats it as drift). Never fails the script.
+# read_source_commit [build.json]: echo a build's source_commit (the SERVED build by default), or
+# empty if that build.json is missing or unreadable/malformed (=> the caller treats it as drift or as
+# an unknown identity, never as a match). Never fails the script.
 read_source_commit() {
-  [ -f "$BUILD_JSON" ] || return 0
-  "$PY" - "$BUILD_JSON" <<'PYEOF' 2>/dev/null || true
+  _bj="${1:-$BUILD_JSON}"
+  [ -f "$_bj" ] || return 0
+  "$PY" - "$_bj" <<'PYEOF' 2>/dev/null || true
 import json, sys
 try:
     with open(sys.argv[1], encoding="utf-8") as fh:
@@ -247,6 +292,26 @@ try:
 except Exception:
     pass
 PYEOF
+}
+
+# status_failed_at_head <head>: true when the LAST recorded outcome was action=failed at this same
+# head - the pass already tried and failed here, so another attempt repeats it. Exact string equality
+# on the stored head (both sides are written by this script from the same rev-parse width). A missing
+# or malformed status document is not a failure record: false, and the pass proceeds.
+status_failed_at_head() {
+  [ -n "$1" ] || return 1
+  _sf=$(AUSMT_RG_STATUS="$STATUS_FILE" AUSMT_RG_HEAD="$1" "$PY" - <<'PYEOF' 2>/dev/null || true
+import json, os
+try:
+    with open(os.environ["AUSMT_RG_STATUS"], encoding="utf-8") as fh:
+        doc = json.load(fh)
+    if doc.get("action") == "failed" and doc.get("head") == os.environ["AUSMT_RG_HEAD"]:
+        print("yes")
+except Exception:
+    pass
+PYEOF
+)
+  [ "$_sf" = "yes" ]
 }
 
 # oom_kills_since <since>: set OOM_KILLS to the kernel's out-of-memory KILL lines logged since <since>
@@ -531,20 +596,10 @@ PYEOF
     fi
   fi
 
+  # Empty built (no/unreadable build.json) => drift, and so does a built that is not a prefix-match
+  # for head in either direction (commits_match).
   drift=0
-  # Empty built (no/unreadable build.json) => drift. Else compare by prefix in BOTH directions so a
-  # stored 7-char vs a rev-parsed 8-char short of the SAME commit is not a false drift.
-  if [ -z "$built" ]; then
-    drift=1
-  else
-    case "$head" in
-      "$built"*) : ;;                 # head starts with built (built is a shorter/equal prefix)
-      *) case "$built" in
-           "$head"*) : ;;             # built starts with head (head is the shorter prefix)
-           *) drift=1 ;;
-         esac ;;
-    esac
-  fi
+  commits_match "$head" "$built" || drift=1
 
   # 2b. PAUSE. A FRESH pause.flag suppresses the DRIFT-triggered rebuild ("pause
   #     auto-rebuild during a multi-edit session"). An explicit rebuild.request is deliberate, not
@@ -578,6 +633,50 @@ PYEOF
       write_status "pinned" "$head" "$built" "$(read_build_id)" "" "$_pd"
       printf 'reconcile: rollback pin present (serving builds/%s) — holding, NOT rebuilding\n' "${PINNED_BUILD:-?}"
       return 0
+    fi
+  fi
+
+  # 2d. ALREADY-ATTEMPTED-AT-THIS-HEAD HOLD. Drift says the served corpus is not at head; it does NOT
+  #     say a build at head has never been tried. Two shapes leave drift standing after a build that
+  #     already ran, and both repeat identically every tick until an operator intervenes:
+  #       (a) the build COMPLETED (builds/<ts>/build.json is at head) but verify or the swap failed,
+  #           so `current` still points at the older build;
+  #       (b) the pass itself died before any build.json existed, leaving only status action=failed
+  #           at this head (the unreadable-identity latch above covers only the no-served-build case).
+  #     Neither is fixed by building again: hold, say what to look at, exit 1 so monitoring sees it.
+  #     Re-armed by a HEAD change or an explicit rebuild.request (deliberate intent always gets a
+  #     fresh attempt), which is why this sits AFTER the pause and rollback-pin checks - those are
+  #     holds of their own with their own honest status, and must not be relabelled as a failure.
+  #     Same known looseness as the latch above: a sync_failed tick overwrites the status document and
+  #     with it shape (b)'s latch, buying one extra attempt per connectivity blip.
+  if [ "$drift" -eq 1 ] && [ "$request_present" -eq 0 ]; then
+    hold_detail=""
+    hold_log=$(newest_build_log)
+    newest_build=$(newest_build_name)
+    served_build=$(served_build_name)
+    if [ -n "$newest_build" ]; then
+      if [ -n "$served_build" ]; then
+        # The newest build IS what we serve => nothing was left unswapped.
+        [ "$newest_build" = "$served_build" ] && newest_build=""
+      elif [ -z "$built" ]; then
+        # Neither the served dir NOR the served commit is known: an unswapped build cannot be proven,
+        # and holding on a guess would stall a box that has simply never built. Let it build.
+        newest_build=""
+      fi
+    fi
+    if [ -n "$newest_build" ] && commits_match "$head" "$(read_source_commit "$BUILDS_DIR/$newest_build/build.json")"; then
+      hold_detail="A build at this head ($head) already COMPLETED but never swapped in: builds/$newest_build carries a build.json at head while current still serves ${built:-<unknown>}, so verify or the swap failed. Rebuilding would repeat it, so reconcile HOLDS until head moves or a rebuild is requested. Look at $BUILDS_DIR/$newest_build and the newest build log under $LOG_DIR${hold_log:+ (}${hold_log}${hold_log:+)}. To clear: fix the cause, then press Request rebuild on the serve screen (or publish a new commit)."
+    elif status_failed_at_head "$head"; then
+      hold_detail="The last reconcile pass at this head ($head) already recorded action=failed and no build at this head survives under $BUILDS_DIR, so the rebuild died before it could write one (killed on a timeout, out of memory, or the pass itself terminated). Rebuilding would repeat it, so reconcile HOLDS until head moves or a rebuild is requested. Look at the newest build log under $LOG_DIR${hold_log:+ (}${hold_log}${hold_log:+)}. To clear: fix the cause, then press Request rebuild on the serve screen (or publish a new commit)."
+    fi
+    if [ -n "$hold_detail" ]; then
+      printf 'reconcile: HOLDING at head=%s: %s\n' "$head" "$hold_detail" >&2
+      if [ "$DRY_RUN" -eq 1 ]; then
+        printf 'reconcile: [dry-run] would HOLD (status action=failed, no rebuild): %s\n' "$hold_detail"
+        return 0
+      fi
+      write_status "failed" "$head" "$built" "$(read_build_id)" "" "$hold_detail"
+      return 1
     fi
   fi
 
