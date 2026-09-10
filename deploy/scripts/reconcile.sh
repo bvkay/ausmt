@@ -174,7 +174,10 @@ prune_builds() {
     printf 'matched by build.json) — skipping the build prune rather than risk deleting it\n'
     return 0
   fi
-  ls -1t "$BUILDS_DIR" 2>/dev/null | { _n=0; while IFS= read -r _b; do
+  # Newest-first BY NAME (dir names are UTC timestamps), the same ordering newest_build_name uses.
+  # An mtime ordering would let a restore or a stray touch reshuffle the keep window and drop the
+  # very dir the already-attempted-at-this-head hold reads, which would resume the rebuild loop.
+  ls -1 "$BUILDS_DIR" 2>/dev/null | sort -r | { _n=0; while IFS= read -r _b; do
     [ -n "$_b" ] && [ -d "$BUILDS_DIR/$_b" ] || continue
     if [ -n "$_cur" ] && [ "$_b" = "$_cur" ]; then continue; fi   # never the served build
     _n=$((_n + 1))
@@ -312,6 +315,39 @@ except Exception:
 PYEOF
 )
   [ "$_sf" = "yes" ]
+}
+
+# The heading the hold puts above the failure record it carries forward. Defined once because BOTH
+# the carry and the re-carry read it: the hold rewrites its own status document on every tick, so
+# prev_failed_field keeps only what follows the LAST heading and the record can never restack.
+HOLD_CARRY_MARK="--- what the last pass at this head recorded ---"
+
+# prev_failed_field <head> <key>: echo <key> from reconcile-status.json when that document records
+# action=failed at <head>, else nothing. A `true` prints 1, a string prints verbatim, anything else
+# nothing. CONSTRAINT: a hold OVERWRITES the status document a genuine build failure wrote at this
+# same head, and log_file, log_tail and oom_kill are the only machine-readable record of WHY that
+# build died - alert.sh names an out-of-memory kill off oom_kill and the curator panel renders
+# log_file and the tail. The hold must carry them forward, never replace them with its own prose.
+prev_failed_field() {
+  [ -n "$1" ] || return 0
+  AUSMT_PF_STATUS="$STATUS_FILE" AUSMT_PF_HEAD="$1" AUSMT_PF_KEY="$2" AUSMT_PF_MARK="$HOLD_CARRY_MARK" \
+    "$PY" - <<'PYEOF' 2>/dev/null || true
+import json, os
+try:
+    with open(os.environ["AUSMT_PF_STATUS"], encoding="utf-8") as fh:
+        doc = json.load(fh)
+    if doc.get("action") == "failed" and doc.get("head") == os.environ["AUSMT_PF_HEAD"]:
+        v = doc.get(os.environ["AUSMT_PF_KEY"])
+        if v is True:
+            print("1")
+        elif isinstance(v, str) and v:
+            mark = os.environ["AUSMT_PF_MARK"]
+            if mark in v:
+                v = v.rsplit(mark, 1)[1].strip("\n")
+            print(v)
+except Exception:
+    pass
+PYEOF
 }
 
 # oom_kills_since <since>: set OOM_KILLS to the kernel's out-of-memory KILL lines logged since <since>
@@ -667,7 +703,12 @@ PYEOF
     if [ -n "$newest_build" ] && commits_match "$head" "$(read_source_commit "$BUILDS_DIR/$newest_build/build.json")"; then
       hold_detail="A build at this head ($head) already COMPLETED but never swapped in: builds/$newest_build carries a build.json at head while current still serves ${built:-<unknown>}, so verify or the swap failed. Rebuilding would repeat it, so reconcile HOLDS until head moves or a rebuild is requested. Look at $BUILDS_DIR/$newest_build and the newest build log under $LOG_DIR${hold_log:+ (}${hold_log}${hold_log:+)}. To clear: fix the cause, then press Request rebuild on the serve screen (or publish a new commit)."
     elif status_failed_at_head "$head"; then
-      hold_detail="The last reconcile pass at this head ($head) already recorded action=failed and no build at this head survives under $BUILDS_DIR, so the rebuild died before it could write one (killed on a timeout, out of memory, or the pass itself terminated). Rebuilding would repeat it, so reconcile HOLDS until head moves or a rebuild is requested. Look at the newest build log under $LOG_DIR${hold_log:+ (}${hold_log}${hold_log:+)}. To clear: fix the cause, then press Request rebuild on the serve screen (or publish a new commit)."
+      # State ONLY what this branch established: the last pass failed at this head. It has NOT
+      # established how (an ordinary non-zero build, a kill, a terminated pass all look the same from
+      # here), and it has NOT established that no build dir at this head survives - it consulted the
+      # NEWEST dir alone. A hold that names a cause it did not check sends the operator after the
+      # wrong thing, which is the failure mode the out-of-memory naming exists to prevent.
+      hold_detail="The last reconcile pass at this head ($head) recorded action=failed, so a build here has already been attempted and another would repeat it: reconcile HOLDS until head moves or a rebuild is requested. What that pass recorded is carried below, and the newest build log under $LOG_DIR${hold_log:+ (}${hold_log}${hold_log:+)} has the rest. To clear: fix the cause, then press Request rebuild on the serve screen (or publish a new commit)."
     fi
     if [ -n "$hold_detail" ]; then
       printf 'reconcile: HOLDING at head=%s: %s\n' "$head" "$hold_detail" >&2
@@ -675,7 +716,16 @@ PYEOF
         printf 'reconcile: [dry-run] would HOLD (status action=failed, no rebuild): %s\n' "$hold_detail"
         return 0
       fi
-      write_status "failed" "$head" "$built" "$(read_build_id)" "" "$hold_detail"
+      # Carry the previous pass's failure record (see prev_failed_field): its log pointer, its
+      # out-of-memory verdict and its output, none of which this hold can reconstruct.
+      hold_log_file=$(prev_failed_field "$head" "log_file")
+      [ "$(prev_failed_field "$head" "oom_kill")" = "1" ] && OOM_KILL=1
+      _prev_tail=$(prev_failed_field "$head" "log_tail")
+      [ -n "$_prev_tail" ] && hold_detail="$hold_detail
+
+$HOLD_CARRY_MARK
+$_prev_tail"
+      write_status "failed" "$head" "$built" "$(read_build_id)" "$hold_log_file" "$hold_detail"
       return 1
     fi
   fi
