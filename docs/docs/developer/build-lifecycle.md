@@ -64,9 +64,11 @@ and the output is byte-identical to a build from before the flag existed.
    sidecar.
 
 With `--incremental --cache-dir`, unchanged stations are served from the build cache, keyed on the EDI
-bytes, the engine commit, library versions, the column contract and the `survey.yaml` digest, so it can
-only affect build speed, never output bytes; a degenerate salt (an unknown or dirty engine commit)
-disables it. Raw/bulk mode (`--raw` with `--collections` and `--seed-meta`, for regenerating a seed from
+bytes, a content digest of the engine's product-producing code (`engine/extract`, `engine/ausmt_science`,
+`engine/schema` and the column contract), library versions and the `survey.yaml` digest, so it can only
+affect build speed, never output bytes. The engine git commit is not part of the key: an engine image
+whose product code is unchanged keeps the cache warm. A degenerate salt (an unknown engine commit, a
+dirty checkout, or no digestable engine tree) disables it. Raw/bulk mode (`--raw` with `--collections` and `--seed-meta`, for regenerating a seed from
 loose EDI folders) is excluded from caching; see [How to extend](extending.md#bulk-and-seed-mode).
 
 ## Exit codes
@@ -103,12 +105,23 @@ through direct pull requests ([Submission](../operations/submission.md)); publis
 
 `build_report.json` is the structured per-survey record of what a build produced: stations built and
 stations dropped (each with the gate's reason), the survey-scoped warnings, EMTF-XML emission failures,
-the ingest source of each station (`edi`, `emtfxml` or `mth5`), the served-bytes integrity result for
-copied EDIs, the parse-only fallbacks, the canonical-conditioning, frame and presence notes aggregated
-by distinct note, the build-cache counters, per-survey wall time, and the build's peak RSS. Its identity
-fields
+per-file product-emission failures, the EMTF XMLs the EDI-wins precedence rule skipped, the per-station
+identity rewrites, the ingest source of each station (`edi`, `emtfxml` or `mth5`), the served-bytes
+integrity result for copied EDIs, the parse-only fallbacks, the canonical-conditioning, frame and
+presence notes aggregated by distinct note, the build-cache counters, per-survey wall time, and the
+build's peak RSS. Its identity fields
 come from the helpers that write `build.json`, so the two cannot disagree about which commits produced
 a build.
+
+The memory record is three fields, not one, because no single kernel counter is what the box needed.
+`peak_rss_mib` is the parent process's high-water mark (`getrusage(RUSAGE_SELF)`), which cannot see an
+MTH5 worker process at all. `peak_rss_child_max_mib` is the largest **single** worker
+(`getrusage(RUSAGE_CHILDREN)`, a maximum over waited-for descendants, never a sum), read after the pool
+has been joined because the counter reports nothing for a child still running; it is `null` on a serial
+build. `workers` is the effective worker count the build ran with, so the box-level footprint reads as
+`peak_rss_mib + workers x peak_rss_child_max_mib`. The build prints the same three numbers on one
+stderr line (`build peak RSS: parent … MiB, largest worker … MiB, N workers`), and the deployed build
+container is capped against them (`mem_limit`, `deploy/README.md`).
 
 `presence` is the report of the presence rule. mt_metadata instantiates a complete run for every
 transfer function it reads, whether or not the file states one, so a parse routinely carries a run id
@@ -154,6 +167,46 @@ its reason). It is EMPTY: the one entry it ever carried was `capricorn-2010/CP3B
 collapses that run on a temporary copy so the station publishes.
 The build itself still exits 0 on a refused file, so one malformed legacy file costs its own station
 and never the whole corpus; the verifier is what stops a build that lost a station reaching a swap.
+
+## The build log and its folds
+
+The build log is a summary, not a per-station transcript. Several notice families describe something
+survey-level, or something whose whole membership belongs in a ledger, and printing them once per
+station made a corpus build roughly ten thousand lines of near-identical text. Each of those families
+now prints at most one line per survey, and the membership the line no longer spells out is
+machine-readable in `build_report.json` (or, for the coordinate flags, in `qc_report.json`, which
+already carries every row). Nothing an operator can act on is lost by the fold; the line is a pointer
+to the ledger.
+
+- Conditioning, frame and presence notices aggregate by DISTINCT note text: one `[xml] / [frame] /
+  [presence] NOTICE` line per note per survey, with the station count. A note whose text interpolates
+  a per-station value would be a distinct string for every station and could never fold, so the
+  identity-rewrite notes state the CLASS of rewrite only. Which station was written under which
+  EMTF-XML `Site.id`, and from which custodian file, is `station_id_rewrites`. A station gets a row
+  there for any of the three identity notes, because a station published under an id the `Site.id`
+  pattern rejects can carry only the preserved-source-id note, and its rewrite is as real as the
+  others.
+- `[xml] WARN` and `[h5] WARN` fold per survey per (producer, exception class, message head) to one
+  line with the count and one example file. `product_failures` carries every file, keyed by producer,
+  with the producer path each fault was first seen in (`station product` or `survey bundle`). Both
+  MTH5 tiers re-read the same source files, so a fault both hit is one row and one line, whether the
+  bundles were written serially or drained from the worker pool.
+- `PRECEDENCE` folds to one line per survey naming the count and up to eight ids;
+  `precedence_skipped` lists every superseded EMTF XML.
+- The placeholder-tipper `NOTICE` folds the same way; its ledger is the existing `tipper_masked` list.
+- The QC coordinate-flag notices fold per survey per flag, with the count and up to five examples.
+  The near-duplicate-location notices do NOT fold: each names a distinct pair a curator must look at.
+
+The ledger is where a fold puts what the line stops spelling out, so a library caller that runs an
+ingest pass without a report has nowhere for it to land: `process_edis` and `process_emtfxml` then
+print the folded line themselves rather than drop the fact. The tier-3 collection MTH5 writer is the
+one emitter that still prints one line per failing file, because a collection spans surveys and has
+no per-survey report entry to fold into; that tier is capped at a few hundred stations by
+`collection_h5_allowed`, so its line count is bounded by construction.
+
+The count lines (`C18 survey ...`, `C18 cache [...]`, `built N stations`, the `QC:` summary) are
+unchanged, and so is every gate that stops or withholds: a `WITHHOLD`, a `GATE FAIL`, a `SKIP` and a
+duplicate-id `ERROR` still name their own file or station.
 
 `stations_dropped` is the ledger every drop lands in, whatever refused it: a convention gate, a
 missing coordinate or period, or the reader. Each row carries the source `file` beside the `station`

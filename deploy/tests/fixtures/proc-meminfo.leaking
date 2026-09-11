@@ -1,0 +1,12 @@
+MemTotal:       32596212 kB
+MemFree:          204112 kB
+MemAvailable:    1180332 kB
+Buffers:           18204 kB
+Cached:           902144 kB
+SwapTotal:       8388604 kB
+SwapFree:          44120 kB
+Slab:           13102336 kB
+SReclaimable:     834304 kB
+SUnreclaim:     12268032 kB
+KernelStack:       21120 kB
+PageTables:        73884 kB

@@ -36,13 +36,17 @@ Key = sha256 over the concatenation of:
 
 1. `edi_sha256` — sha256 of the **source EDI bytes**. Never mtime (git rewrites mtimes on every
    sync; content sha is the only key that can neither spuriously miss nor hide an edit).
-2. `engine_code_sha` — **coarse v1 salt = `BUILD_ID["engine_commit"]`**. Any engine commit busts
-   the whole cache: simple, correct, and engine commits are rare relative to survey edits.
-   **Integrity rule: if the engine commit is unknown/None, OR the checkout is dirty
-   (`git status --porcelain` non-empty where a checkout exists), incremental is silently DISABLED
+2. `engine_code_sha`: **coarse salt = the engine SOURCE digest** (`cache.engine_source_digest`:
+   sha256 over path + content of every file under `engine/extract`, `engine/ausmt_science`,
+   `engine/schema` and the sibling `contract/columns.json`; bytecode, caches and tests excluded).
+   Any edit to product-producing code busts the whole cache; a commit that changes only deploy
+   scripts, docs or tests keys identically, so a new image built from it stays warm. The v1 salt
+   was `BUILD_ID["engine_commit"]`, which colded the cache on every image regardless of what the
+   commit touched. **Integrity rule (unchanged, an identity gate rather than a key input): if the
+   engine commit is unknown/None, OR the checkout is dirty (`git status --porcelain` non-empty
+   where a checkout exists), OR no digestable engine tree exists, incremental is silently DISABLED
    for that build (treated as full, no cache reads or writes).** A degenerate or ambiguous salt
-   must never key a cache. (Note: the live box currently emits null commits in build.json — until
-   that is healthy, the cache simply never fires there. Correct behaviour, not a bug.)
+   must never key a cache.
 3. `mt_metadata_version` (+ mth5 version when consulted) — a library upgrade invalidates every
    cached XML and round-trip verdict.
 4. `schema_version` of the positional/product contract (mtcat/manifest schema + a hash of
@@ -76,8 +80,9 @@ are operator-tunable; defaults live in one place.
 2. **Poisoned-cache is caught downstream:** hand-corrupt a cached XML entry so its bytes no longer
    match what the build manifest will claim; run the build + `verify.py --data-dir`; assert
    VERIFY: FAIL and (in the Makefile flow) no swap. Proves the authoritative gate is cache-blind.
-3. **Salt invalidation:** simulated engine-commit change ⇒ zero hits; mt_metadata version change ⇒
-   zero hits; survey.yaml edit ⇒ that survey re-derives, other surveys still hit.
+3. **Salt invalidation:** simulated engine-source change ⇒ zero hits; engine-commit change over
+   unchanged sources ⇒ all hits; mt_metadata version change ⇒ zero hits; survey.yaml edit ⇒ that
+   survey re-derives, other surveys still hit.
 4. **Degenerate-salt refusal:** engine commit unknown ⇒ cache neither read nor written (assert via
    hit/write counters), build completes full.
 5. **Equivalence (CI guard):** warm `--incremental` build vs `--cache-mode refresh` build ⇒

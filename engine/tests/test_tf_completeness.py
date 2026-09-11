@@ -212,6 +212,10 @@ def test_placeholder_tipper_note_rides_the_report_channel(capsys):
     assert src.count("components_from_tf(tfobj, notes=") == 2, (
         "both parse arms must pass the notes channel")
     assert 'r["tipper_masked"] = True' in src
+    # ...and the NOTICE is SURVEY-level: neither parse arm may print one line per masked station, so
+    # the notice text appears exactly once in the module, in the fold that renders the survey line.
+    assert src.count("placeholder tipper (|T| flat at 1.0) masked") == 1, (
+        "the placeholder-tipper NOTICE must be rendered once per survey, not once per station")
     # Locate process_edis structurally (ast), not by a character offset: the old 6000-char
     # window broke every time the function grew, while the guarded behaviour stood.
     import ast
@@ -221,3 +225,26 @@ def test_placeholder_tipper_note_rides_the_report_channel(capsys):
     body = "\n".join(src.splitlines()[fn.lineno - 1:fn.end_lineno])
     assert "tipper_masked" in body, (
         "the EDI arm's convergent point (cache hit AND miss) must emit the notice")
+
+
+def test_placeholder_tipper_notice_reaches_a_caller_that_keeps_no_report(capsys):
+    """The mask is an honesty decision, so it cannot go silent. A caller that passes no report has
+    nowhere for the ledger to land, so the folded NOTICE prints from the parse pass itself; with a
+    report the survey loop renders the same line from the ledger and the parse pass stays quiet.
+
+    FAILS IF: the fold records the mask only into the report, which drops the fact entirely for a
+    library caller."""
+    import build_portal as bp
+    stations, _tf, _sci = bp.process_edis([REAL / "phoenix_empower_A01.edi"],
+                                          "Phoenix EMpower", "TestOrg", "phoenix-empower")
+    assert stations and stations[0][1].get("tipper_masked") is True
+    notice = [ln for ln in capsys.readouterr().err.splitlines() if "placeholder tipper" in ln]
+    assert notice == ["  NOTICE phoenix-empower: placeholder tipper (|T| flat at 1.0) masked - "
+                      "tipper withheld for 1 station(s) (A01)"], notice
+
+    report = {}
+    bp.process_edis([REAL / "phoenix_empower_A01.edi"], "Phoenix EMpower", "TestOrg",
+                    "phoenix-empower", report=report)
+    assert report.get("tipper_masked") == ["A01"], report
+    assert "placeholder tipper" not in capsys.readouterr().err, (
+        "with a report the survey loop renders the folded line; the parse pass must not also print")
