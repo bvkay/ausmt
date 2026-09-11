@@ -54,20 +54,8 @@ kuth-tamar-valley-2008/NTL031A.edi
 kuth-tamar-valley-2008/NTL032A.edi
 kuth-tamar-valley-2008/NTL036A.edi
 
-# moradzadeh-mt-1996-97: four stations whose off-diagonal impedance phases both sit outside the
-# quadrants the sign convention requires. These are a 2021 third-party WinGLink re-export of the
-# thesis's Appendix II, and that export applied a per-station sensor-orientation transform which
-# AusMT did not compute and cannot verify against anything but the printed appendix. The gate names
-# the signature: BRU and SWD read as an x and y axis exchange, EUR and EWD as coherent out-of-
-# quadrant phases. Exchanging the axes numerically returns BRU, EWD and SWD to quadrant and leaves
-# EUR outside it, which identifies the fault but does not license correcting a custodian's numbers to
-# make a gate pass. The four are served in the package and publish nothing until the export's
-# transform is checked against Appendix II station by station.
-# station BRU
-moradzadeh-mt-1996-97/BRU.edi
-# station EUR
-moradzadeh-mt-1996-97/EUR.edi
-# station EWD
-moradzadeh-mt-1996-97/EWD.edi
-# station SWD
-moradzadeh-mt-1996-97/SWD.edi
+# moradzadeh-mt-1996-97 has NO entry, and the four stations formerly listed here are why the note
+# is worth keeping. BRU, EUR, EWD and SWD are served from AusMT's own transcription of the thesis's
+# Appendix II rather than from the third-party WinGLink export, whose renditions of them are held
+# verbatim under the package's provenance/ and are not read by the build. All twenty-one stations of
+# that package publish, so no drop is expected from it and an entry here would be a place to hide one.
