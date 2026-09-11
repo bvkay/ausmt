@@ -559,8 +559,9 @@ def _fix_statistical_estimates(xml_path: Path) -> Optional[str]:
     """Issue #9: rebuild (or remove) a childless <StatisticalEstimates/> so mt_metadata can re-read it.
 
     mt_metadata's writer chooses the estimate glossary from the impedance slot FIRST and only falls
-    through to the tipper when that slot is absent. A tipper-only TF carries a zero-filled impedance
-    variance rather than none, so the fall-through never happens and the glossary is written empty --
+    through to the tipper when that slot is absent. A tipper-only TF carries an EMPTY impedance
+    variance, shape (0, 2, 2), rather than None, so the fall-through never happens and the glossary is
+    written empty --
     while the Data section still carries T.VAR for every period. The reader then does
     input_dict["statistical_estimates"]["estimate"] on an element that parsed to None and raises
     TypeError, so the station's canonical XML never passes the round-trip gate and no XML is served

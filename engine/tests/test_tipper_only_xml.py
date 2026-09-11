@@ -5,8 +5,8 @@ vertical field transfer function and nothing else), and between them they cost e
 canonical XML:
 
   * mt_metadata's EMTF-XML writer picks the statistical-estimate glossary from the impedance slot
-    FIRST and only falls through to the tipper when that slot is absent. A tipper-only TF carries a
-    zero-filled impedance variance rather than none, so the fall-through never happens, the glossary
+    FIRST and only falls through to the tipper when that slot is absent. A tipper-only TF carries an
+    empty impedance variance, shape (0, 2, 2), rather than None, so the fall-through never happens, the glossary
     is written childless, and the reader's `input_dict["statistical_estimates"]["estimate"]` subscripts
     the None an empty element parses to. TypeError, on the library's own output.
   * the round-trip gate then read `tf.impedance.data` unconditionally, which is None for the same
