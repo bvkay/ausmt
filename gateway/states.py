@@ -48,6 +48,9 @@ TERMINAL: frozenset[str] = frozenset({QUARANTINED, REJECTED_AV, RETURNED, REJECT
 # (optional single-curator claim) is deliberately NOT implemented - the demo is
 # single-curator, so the publish lock (publish.py) is the only concurrency guard needed and the
 # extra state would be dead weight in the audit trail.
+# SCANNED->SCANNED is absent on the same principle: one scan verdict is recorded once, so a scanner
+# reaching a row another has already advanced applies nothing (app._scan_and_advance checks the row's
+# state before it acts) rather than re-recording the advance.
 ALLOWED: frozenset[tuple[str, str]] = frozenset({
     (RECEIVED, SCANNED),
     (RECEIVED, REJECTED_AV),

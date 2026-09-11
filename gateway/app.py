@@ -141,6 +141,12 @@ class Gateway:
         # one this process is actively working on. A restart empties this set, so every PUBLISHING row
         # it finds is stuck by definition.
         self._publishing: set[str] = set()
+        # Submission ids with an upload-time scan in flight. A row stays RECEIVED for the whole of
+        # its inline scan, which on its own is indistinguishable from a clamd-down hold, so the poll
+        # loop's retry pass consults this set instead of rescanning a submission this process is
+        # already scanning. A restart empties it; every row it forgets is a genuinely held one the
+        # next pass picks up.
+        self._scanning: set[str] = set()
         self._poll_task: asyncio.Task | None = None
         # Cap TOCTOU fix: the DB count is durable truth but is read then followed by an
         # await (body read) before the row is inserted, so N concurrent submits could all pass a bare
@@ -304,11 +310,27 @@ class Gateway:
         )
 
     async def _scan_and_advance(self, submission_id: str, zip_path: Path) -> None:
+        """Scan the raw zip and apply the verdict. TWO scanners can reach one submission: the inline
+        one on the submit path and the poll loop's retry pass, which sees the same row as RECEIVED
+        while that inline scan runs. So the verdict is applied ONLY to a row still at RECEIVED; a row
+        the other scanner already advanced is left alone, since re-applying the verdict would be an
+        illegal SCANNED -> SCANNED move and a second job queued for one submission."""
+        self._scanning.add(submission_id)
         try:
             data = await asyncio.to_thread(zip_path.read_bytes)
             result = await self._scan_bytes(data)
         except clamd.ScanError as exc:
             logger.info("clamd unavailable for %s (%s) — holding at RECEIVED", submission_id, exc)
+            return
+        finally:
+            self._scanning.discard(submission_id)
+        # Re-read after the scan's awaits. From here to the transition there is no await, so on the
+        # single event loop the check and the write are indivisible (the same argument _reserved
+        # rests on) and no second scanner can land between them.
+        sub = self.db.get(submission_id)
+        if sub is None or sub.state != states.RECEIVED:
+            logger.info("scan verdict for %s not applied: row is at %s", submission_id,
+                        sub.state if sub is not None else "no row")
             return
         if result.clean:
             self.db.transition(submission_id, states.SCANNED, actor="gateway",
@@ -362,8 +384,12 @@ class Gateway:
     async def _retry_held(self) -> None:
         # Re-scan submissions still at RECEIVED (clamd was down at upload). Awaited in sequence so
         # the scanner is not hit concurrently for many rows (the poll interval bounds throughput).
+        # A row whose upload-time scan is still running is RECEIVED too, and is skipped: it is not
+        # held, and scanning it here races the inline scan for the one verdict the row can take.
         rows = self.db.ids_in_state(states.RECEIVED)
         for sid in rows:
+            if sid in self._scanning:
+                continue
             zip_path = self.cfg.incoming_dir / f"{sid}.zip"
             if zip_path.exists():
                 await self._scan_and_advance(sid, zip_path)
