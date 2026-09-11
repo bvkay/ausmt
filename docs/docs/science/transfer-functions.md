@@ -38,8 +38,9 @@ functions from `transfer_functions/edi/`, `transfer_functions/emtfxml/` and MTH5
 faithful EMTF-XML rendering of every served station as the canonical served output. A station submitted
 only as EMTF XML gets the same product set as one submitted as an EDI, including an EDI generated from
 the same transfer function. Where a station arrives in both formats the EDI is the canonical source and
-the submitted XML is not ingested. Ingest is gated: the canonical rendering must round-trip (impedance,
-tipper and their error estimates preserved) or that station serves nothing and the failure is recorded
+the submitted XML is not ingested. Ingest is gated: the canonical rendering must round-trip (the
+impedance where the station has one, the tipper, and their error estimates, all preserved) or that
+station serves nothing and the failure is recorded
 in `build_report.json`. This is the one place that statement is made; other pages link here.
 
 **MTH5** is an HDF5 container for time series, transfer functions, metadata and provenance (Peacock et

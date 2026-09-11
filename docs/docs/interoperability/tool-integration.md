@@ -60,12 +60,13 @@ print(tf.station, tf.period.size, tf.has_impedance(), tf.has_tipper())
 The reader warns that `external_url`, field notes and remote info are absent; those elements are
 optional and the source EDIs do not carry them. The impedance survives the derivation exactly
 (`numpy.allclose(...) == True` between the served EDI and XML of one station): `normalize()` runs a
-round-trip check on every station at build time and raises on a mismatch, so a station whose impedance
-did not survive is never published in either format.
+round-trip check on every station at build time and raises on a mismatch, so a station whose transfer
+function did not survive is never published in either format. A tipper-only station has no impedance,
+so the check leads with its tipper instead.
 
 What the derivation had to change is visible in the file:
 
-- **mt_metadata's writer emits metadata its own reader rejects**, six separate cases, worked around at
+- **mt_metadata's writer emits metadata its own reader rejects**, seven separate cases, worked around at
   write time and listed with their symptoms at the top of `engine/ausmt_science/ingest/normalize.py`.
 - **Identifier fields are sanitised.** `Site/Id` is restricted to `^[a-zA-Z0-9]*$`, so `SA225_2` is
   written as `SA2252`. The unsanitised id is preserved in the free-text `Site/Name` element

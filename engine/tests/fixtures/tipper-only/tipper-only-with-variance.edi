@@ -1,0 +1,60 @@
+>HEAD
+
+  DATAID="TOV"
+  ACQBY="AusMT test fixture"
+  PROSPECT="Tipper-only fixture, variances printed"
+  LOC="Fixture"
+  LAT=-33.500000
+  LONG=138.250000
+  EMPTY=1.0E+32
+
+>INFO   MAXLINES=1000
+
+  MINTED FIXTURE - NOT CUSTODIAN DATA. The shape it carries is the legacy GDS
+  class: three magnetic channels, no electric channels, so a vertical field
+  transfer function and nothing else. mt_metadata's EMTF-XML writer picks the
+  statistical-estimate glossary from the impedance slot first and never falls
+  through to the tipper, so a station of this shape is written with a childless
+  <StatisticalEstimates/> that its own reader subscripts as None. No byte is
+  copied from any survey package: the identity is invented and the values are
+  minted for this test.
+
+>=DEFINEMEAS
+
+  MAXCHAN=3
+  MAXRUN=999
+  MAXMEAS=99999
+  UNITS=M
+  REFTYPE=CART
+  REFLAT=-33.500000
+  REFLONG=138.250000
+
+ >HMEAS ID= 1001.001 CHTYPE=HX X =  .000000  Y =  .000000  AZM=   0.0000
+ >HMEAS ID= 1002.001 CHTYPE=HY X =  .000000  Y =  .000000  AZM=  90.0000
+ >HMEAS ID= 1003.001 CHTYPE=HZ X =  .000000  Y =  .000000  AZM=  .000000
+
+>=MTSECT
+  SECTID=TOV
+  NFREQ=    4
+  HX = 1001.001
+  HY = 1002.001
+  HZ = 1003.001
+
+ >!****FREQUENCIES****!
+ >FREQ NFREQ=   4  ORDER=DEC //    4
+    0.10000E-02    0.50000E-03    0.25000E-03    0.12500E-03
+ >!****TIPPER PARAMETERS****!
+ >TXR.EXP ROT=0.0 //    4
+    0.12000E+00    0.18000E+00    0.26000E+00    0.31000E+00
+ >TXI.EXP ROT=0.0 //    4
+   -0.90000E-01   -0.11000E+00   -0.14000E+00   -0.80000E-01
+ >TXVAR.EXP ROT=0.0 //    4
+    0.40000E-03    0.90000E-03    0.16000E-02    0.25000E-02
+ >TYR.EXP ROT=0.0 //    4
+    0.21000E+00    0.24000E+00    0.19000E+00    0.15000E+00
+ >TYI.EXP ROT=0.0 //    4
+    0.30000E-01    0.60000E-01    0.80000E-01    0.50000E-01
+ >TYVAR.EXP ROT=0.0 //    4
+    0.90000E-03    0.90000E-03    0.16000E-02    0.36000E-02
+
+>END

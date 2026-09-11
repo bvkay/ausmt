@@ -8,9 +8,9 @@ this module is cheap and never pulls the heavy stack until normalize() is actual
 
 WHY a conditioning step is required (measured on real AusLAMP/AusMT EDIs, mt_metadata 1.0.9):
 mt_metadata does NOT round-trip arbitrary real EDIs through EMTF XML out of the box — its writer
-emits metadata its own reader then rejects, or refuses to write what the source actually says. Six
-distinct conditioning failures occur that way, and item 7 below is a different category again
-(library-default metadata the XML asserts as fact). All seven are handled here:
+emits metadata its own reader then rejects, or refuses to write what the source actually says. Seven
+distinct conditioning failures occur that way (items 1-6 and 9), and item 7 below is a different
+category again (library-default metadata the XML asserts as fact). All of them are handled here:
   1. enum serialization bug: `sub_type` is written as the repr "DataTypeEnum.MT_TF" instead of the
      value "MT_TF", which fails validation on read. Fixed by rewriting the XML post-write.
   2. Copyright.citation = None is rejected on read; we populate citation_dataset — HONESTLY, from the
@@ -43,6 +43,15 @@ One further post-write byte fix is not a conditioning failure but a reproducibil
      It is rewritten to the creation date the source declares (see _pin_create_time), which for a
      station whose EDI this build generates is what that EDI's FILEDATE is pinned to as well.
 
+And one more of the item-1 kind, found on the legacy GDS packages:
+  9. <StatisticalEstimates> is written CHILDLESS whenever no impedance variance is present -- the
+     writer's own selector reads the impedance slot first and never falls through to the tipper, so a
+     tipper-only station declares no estimate type at all. An empty element parses back as None and
+     the reader subscripts it, so every such station raised TypeError and served no XML. The glossary
+     is rebuilt post-write from the estimate blocks the document actually carries (see
+     _fix_statistical_estimates), and a station that carries none loses the empty element; either way
+     a conditioning note records it.
+
 The round-trip is then VERIFIED (impedance allclose) and a failure RAISES — a hard QC gate, so a
 silently-broken canonical artifact can never be published. The original upload remains the citable
 artifact (it is never mutated here); this module only produces the derived canonical + convenience
@@ -69,6 +78,18 @@ except ImportError:  # pragma: no cover - exercised only when extract/ (not engi
 _ID_BAD = re.compile(r"[^a-zA-Z0-9_\- ]")
 # 'DataTypeEnum.MT_TF' -> 'MT_TF' (and any other '<Word>Enum.VALUE' the writer emits as a repr).
 _ENUM_REPR = re.compile(r"\b\w+Enum\.(\w+)")
+# The childless <StatisticalEstimates/> of Issue #9, with its own line and indentation captured so the
+# replacement nests at the depth the rest of the document uses. Both spellings of an empty element.
+_EMPTY_ESTIMATES = re.compile(
+    r"^([ \t]*)<StatisticalEstimates\s*(?:/>|></StatisticalEstimates>)[ \t]*\n", re.MULTILINE)
+# The estimate-block element names an EMTF-XML Data section can carry, mapped to the estimates_dict
+# key whose glossary entry describes them. Ordered as mt_metadata's own selector orders them, so a
+# rebuilt glossary lists the same entries in the same order as one the writer populated itself.
+_ESTIMATE_BLOCKS = (
+    ("variance", ("Z.VAR", "T.VAR")),
+    ("inverse_signal_power", ("Z.INVSIGCOV", "T.INVSIGCOV")),
+    ("residual_covariance", ("Z.RESIDCOV", "T.RESIDCOV")),
+)
 # mt_metadata/EMTF-XML missing-data sentinel (~1e32, settled design — see extract/_mtm.py _FILL_MAX).
 # Same threshold reused here for the round-trip QC gate's tipper/error comparisons (not invented).
 _FILL_MAX = 1e8
@@ -116,6 +137,13 @@ def emtfxml_site_id(station_id: Optional[str]) -> str:
 NOTE_STATION_ID_SET = "station.id set to the sanitised EMTF-XML Site.id"
 NOTE_SOURCE_ID_PRESERVED = "station.source_id_preserved_in_site_name"
 NOTE_SOURCE_FILE_PRESERVED = "station.source_file_preserved_in_site_name"
+
+# Issue #9's two outcomes, class-stable for the same reason as the three above: neither names the
+# station or the estimate types it carries, so the build log folds them to one line per survey.
+NOTE_ESTIMATES_REBUILT = ("statistical_estimates: writer emitted an empty <StatisticalEstimates/>; "
+                          "rebuilt from the estimate blocks the document carries")
+NOTE_ESTIMATES_DROPPED = ("statistical_estimates: writer emitted an empty <StatisticalEstimates/> "
+                          "and the document carries no estimate block; element removed")
 
 
 # Recoverable token that carries the UNSANITISED source station id inside the artifact. It rides in
@@ -521,6 +549,62 @@ def _fix_enum_repr(xml_path: Path) -> bool:
     return False
 
 
+def _estimate_keys_present(text: str) -> list[str]:
+    """The estimates_dict keys describing the estimate blocks `text` actually carries, in writer order."""
+    return [key for key, blocks in _ESTIMATE_BLOCKS
+            if any(f"<{b} " in text or f"<{b}>" in text for b in blocks)]
+
+
+def _fix_statistical_estimates(xml_path: Path) -> Optional[str]:
+    """Issue #9: rebuild (or remove) a childless <StatisticalEstimates/> so mt_metadata can re-read it.
+
+    mt_metadata's writer chooses the estimate glossary from the impedance slot FIRST and only falls
+    through to the tipper when that slot is absent. A tipper-only TF carries an EMPTY impedance
+    variance, shape (0, 2, 2), rather than None, so the fall-through never happens and the glossary is
+    written empty --
+    while the Data section still carries T.VAR for every period. The reader then does
+    input_dict["statistical_estimates"]["estimate"] on an element that parsed to None and raises
+    TypeError, so the station's canonical XML never passes the round-trip gate and no XML is served
+    for it at all. Measured on the legacy GDS packages: every tipper-only station failed this way.
+
+    The glossary is rebuilt from the estimate blocks the WRITTEN document contains, using
+    mt_metadata's own estimates_dict entries and its own serialiser, so a rebuilt glossary is
+    byte-identical to one the writer populates itself. A document that carries no
+    estimate block at all has no glossary to rebuild, and the empty element is removed instead: an
+    absent <StatisticalEstimates> reads back as the empty list the document means, where the empty
+    element cannot be read at all. Nothing is invented either way and no value is asserted; the
+    returned conditioning note says which of the two happened.
+
+    Byte-level like its siblings, and it must run BEFORE the round-trip gate re-reads the file so the
+    gate certifies the bytes that are served. Returns the conditioning note, or None when the writer
+    populated the glossary itself (the case for every station with an impedance variance)."""
+    text = xml_path.read_text(encoding="utf-8")
+    match = _EMPTY_ESTIMATES.search(text)
+    if not match:
+        return None
+    keys = _estimate_keys_present(text)
+    if keys:
+        from mt_metadata.base.helpers import element_to_string  # noqa: PLC0415
+        from mt_metadata.transfer_functions.io.emtfxml.emtfxml import estimates_dict  # noqa: PLC0415
+        from mt_metadata.transfer_functions.io.emtfxml.metadata import (  # noqa: PLC0415
+            StatisticalEstimates, helpers as emtf_helpers)
+        holder = StatisticalEstimates()
+        holder.estimates_list = [estimates_dict[k] for k in keys]
+        rendered = element_to_string(emtf_helpers._convert_tag_to_capwords(holder.to_xml()))
+        # element_to_string prefixes the XML declaration; the glossary is a fragment inside a document
+        # that already has one. Its inner lines carry their own relative indent, so prefixing every
+        # line with the element's own indent nests the whole block at the right depth.
+        body = rendered.split("?>\n", 1)[-1].rstrip("\n")
+        indent = match.group(1)
+        block = "".join(f"{indent}{line}\n" if line else "\n" for line in body.split("\n"))
+        note = NOTE_ESTIMATES_REBUILT
+    else:
+        block = ""
+        note = NOTE_ESTIMATES_DROPPED
+    xml_path.write_text(text[:match.start()] + block + text[match.end():], encoding="utf-8")
+    return note
+
+
 def _pin_create_time(xml_path: Path, tf) -> bool:
     """Rewrite the written XML's <CreateTime> to the date the SOURCE document declares, replacing the
     minute this build ran.
@@ -576,33 +660,39 @@ def _mask_fills(a, b):
     return (np.abs(a) > _FILL_MAX) | (np.abs(b) > _FILL_MAX)
 
 
-def _compare_optional_field(name: str, orig, rt, *, src_name: str, rtol: float, atol: float) -> None:
+def _compare_optional_field(name: str, orig, rt, *, src_name: str, rtol: float, atol: float,
+                            stage: str = "canonical EMTF-XML") -> float:
     """Round-trip check for a field that may legitimately be absent (tipper/impedance_error/
     tipper_error): None on both sides is fine (no such data), but present-on-original-yet-missing-
     on-re-read is exactly the silent-corruption case this gate exists to catch, so it FAILS. Present
     on both: shape must match and values must agree, masking cells that are the ~1e32 missing-data
-    fill on EITHER side (same convention as extract/_mtm.py._is_missing — not invented here)."""
+    fill on EITHER side (same convention as extract/_mtm.py._is_missing, not invented here).
+
+    `stage` names the rendition being re-read, so the derived EDI's failures do not report themselves
+    as canonical-XML failures. Returns the masked maxdiff (0.0 for a field absent on the original),
+    which is what a station with no impedance reports as its round-trip maxdiff."""
     import numpy as np  # noqa: PLC0415
 
     if orig is None:
-        return  # absent on the original: nothing to verify (rt may be None or all-zero; not our concern)
+        return 0.0  # absent on the original: nothing to verify (rt may be None or all-zero; not our concern)
     if rt is None:
         raise RuntimeError(
-            f"canonical EMTF-XML round-trip FAILED for {src_name}: {name} present on the original "
+            f"{stage} round-trip FAILED for {src_name}: {name} present on the original "
             f"but MISSING on re-read — a silently-dropped field")
     a = np.asarray(orig.data)
     b = np.asarray(rt.data)
     if a.shape != b.shape:
         raise RuntimeError(
-            f"canonical EMTF-XML round-trip FAILED for {src_name}: {name} shape mismatch "
+            f"{stage} round-trip FAILED for {src_name}: {name} shape mismatch "
             f"original={a.shape} re-read={b.shape}")
     mask = _mask_fills(a, b)  # exclude missing-data fills either side
     a, b = np.where(mask, 0, a), np.where(mask, 0, b)
+    maxdiff = float(np.nanmax(np.abs(a - b))) if a.size else 0.0  # nanmax rejects an empty array
     if not np.allclose(a, b, rtol=rtol, atol=atol, equal_nan=True):
-        maxdiff = float(np.nanmax(np.abs(a - b)))
         raise RuntimeError(
-            f"canonical EMTF-XML round-trip FAILED for {src_name}: {name} maxdiff={maxdiff:.3e} "
+            f"{stage} round-trip FAILED for {src_name}: {name} maxdiff={maxdiff:.3e} "
             f"(rtol={rtol}, atol={atol})")
+    return maxdiff
 
 
 @dataclass
@@ -628,9 +718,11 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     The returned NormalizeResult.conditioned notes list what
     was conditioned (rotation-unknown, source-id preservation, citation provenance); callers persist it.
 
-    Raises RuntimeError if the impedance does not survive the EDI->XML->re-read round-trip — the QC
-    gate that stops a silently-broken canonical artifact from being published. The source file is
-    read but never modified (it remains the citable artifact)."""
+    Raises RuntimeError if the transfer function this station serves does not survive the
+    EDI->XML->re-read round-trip: the QC gate that stops a silently-broken canonical artifact from
+    being published. The impedance leads that gate where the station has one and the tipper leads it
+    for a tipper-only station; a TF with neither is refused rather than certified empty. The source
+    file is read but never modified (it remains the citable artifact)."""
     import numpy as np  # noqa: PLC0415
     from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
 
@@ -681,68 +773,91 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     # tf.json is a display derivative that nulls the fill; the canonical XML keeps it.
     tf.write(str(canonical_xml), file_type="emtfxml")
     _fix_enum_repr(canonical_xml)
+    _estimates_note = _fix_statistical_estimates(canonical_xml)
+    if _estimates_note:
+        notes.append(_estimates_note)
     _pin_create_time(canonical_xml, tf)
 
     derived_edi = out_dir / f"{stem}.edi"
     tf.write(str(derived_edi), file_type="edi")
 
-    # Round-trip QC gate: re-read the canonical XML and confirm the impedance is preserved.
+    # Round-trip QC gate: re-read the canonical XML and confirm the served transfer function survives.
     tf_rt = TF()
     tf_rt.read(str(canonical_xml))
-    za = np.asarray(tf.impedance.data)
-    zb = np.asarray(tf_rt.impedance.data)
-    # A header-only / period-less TF (no impedance) must NOT pass: np.allclose over EMPTY arrays is
-    # vacuously True, which would certify a canonical artifact that contains no data. Fail loudly so the
-    # caller logs+skips it rather than publishing a "verified" empty XML.
-    if za.shape[0] == 0 or not int(getattr(tf, "period", np.asarray([])).size):
+    # WHICH field leads the gate follows what the station actually serves. A tipper-only station has
+    # no impedance at all and mt_metadata returns None for it, so reading tf.impedance.data
+    # unconditionally raised on every such station and left it with no canonical XML. The gate's
+    # subject is unchanged: an artifact with NO data must never be certified, so at least one of
+    # impedance/tipper has to be present, and every field that IS present is verified below. The
+    # impedance leads wherever it exists, so a station that has one reports the same maxdiff as before.
+    za = np.asarray(tf.impedance.data) if tf.impedance is not None else None
+    has_z = za is not None and za.shape[0] > 0
+    has_t = tf.tipper is not None and np.asarray(tf.tipper.data).shape[0] > 0
+    # A header-only / period-less TF must NOT pass: np.allclose over EMPTY arrays is vacuously True,
+    # which would certify a canonical artifact that contains no data. Fail loudly so the caller
+    # logs+skips it rather than publishing a "verified" empty XML.
+    if not (has_z or has_t) or not int(getattr(tf, "period", np.asarray([])).size):
         raise RuntimeError(
-            f"canonical EMTF-XML QC for {src.name}: no impedance/periods to verify (empty TF) — "
+            f"canonical EMTF-XML QC for {src.name}: no impedance/tipper/periods to verify (empty TF); "
             f"refusing to certify an artifact with no data")
-    # Shape equality (period count AND 2x2) is required, not just a prefix comparison: a re-read with
-    # FEWER periods than the original must not silently pass by only checking the common prefix.
-    if za.shape != zb.shape:
-        raise RuntimeError(
-            f"canonical EMTF-XML round-trip FAILED for {src.name}: impedance shape mismatch "
-            f"original={za.shape} re-read={zb.shape}")
-    # Mask the ~1e32 missing-data fill on EITHER side (see _mask_fills): some real EDIs carry the
-    # community sentinel INSIDE impedance blocks at undetermined periods; mt_metadata reads those as
-    # 0+0j but its writer faithfully re-emits 1e32, which re-reads as (1e32+1e32j). That fill-vs-fill
-    # artefact (maxdiff=sqrt(2)*1e32) is not a corrupted transfer function, so the gate compares only
-    # the real (non-fill) values — maxdiff is reported over the masked cells too.
-    z_mask = _mask_fills(za, zb)
-    za_c, zb_c = np.where(z_mask, 0, za), np.where(z_mask, 0, zb)
-    maxdiff = float(np.nanmax(np.abs(za_c - zb_c)))
-    if not np.allclose(za_c, zb_c, rtol=rtol, atol=atol, equal_nan=True):
-        raise RuntimeError(
-            f"canonical EMTF-XML round-trip FAILED for {src.name}: impedance maxdiff={maxdiff:.3e} "
-            f"(rtol={rtol}, atol={atol})")
+    if has_z:
+        zb = np.asarray(tf_rt.impedance.data) if tf_rt.impedance is not None else np.empty((0, 2, 2))
+        # Shape equality (period count AND 2x2) is required, not just a prefix comparison: a re-read
+        # with FEWER periods than the original must not silently pass by checking the common prefix.
+        if za.shape != zb.shape:
+            raise RuntimeError(
+                f"canonical EMTF-XML round-trip FAILED for {src.name}: impedance shape mismatch "
+                f"original={za.shape} re-read={zb.shape}")
+        # Mask the ~1e32 missing-data fill on EITHER side (see _mask_fills): some real EDIs carry the
+        # community sentinel INSIDE impedance blocks at undetermined periods; mt_metadata reads those
+        # as 0+0j but its writer faithfully re-emits 1e32, which re-reads as (1e32+1e32j). That
+        # fill-vs-fill artefact (maxdiff=sqrt(2)*1e32) is not a corrupted transfer function, so the
+        # gate compares only the real (non-fill) values; maxdiff is reported over the masked cells too.
+        z_mask = _mask_fills(za, zb)
+        za_c, zb_c = np.where(z_mask, 0, za), np.where(z_mask, 0, zb)
+        maxdiff = float(np.nanmax(np.abs(za_c - zb_c)))
+        if not np.allclose(za_c, zb_c, rtol=rtol, atol=atol, equal_nan=True):
+            raise RuntimeError(
+                f"canonical EMTF-XML round-trip FAILED for {src.name}: impedance maxdiff={maxdiff:.3e} "
+                f"(rtol={rtol}, atol={atol})")
 
     # tipper / impedance_error / tipper_error are compared as well, so a re-read that silently
     # drops or corrupts any of them cannot pass the gate. Absent-on-original is fine either way.
-    _compare_optional_field("tipper", tf.tipper, tf_rt.tipper, src_name=src.name, rtol=rtol, atol=atol)
+    t_maxdiff = _compare_optional_field("tipper", tf.tipper, tf_rt.tipper, src_name=src.name,
+                                        rtol=rtol, atol=atol)
     _compare_optional_field("impedance_error", tf.impedance_error, tf_rt.impedance_error,
                              src_name=src.name, rtol=rtol, atol=atol)
     _compare_optional_field("tipper_error", tf.tipper_error, tf_rt.tipper_error,
                              src_name=src.name, rtol=rtol, atol=atol)
+    # The reported round-trip maxdiff is the one for the field the gate led with.
+    if not has_z:
+        maxdiff = t_maxdiff
 
     # Derived-EDI spot check: the EDI is also published, so it must round-trip too — a cheap full
-    # check (one extra file re-read; the impedance arrays being compared are already in memory).
+    # check (one extra file re-read; the arrays being compared are already in memory).
     tf_edi_rt = TF()
     tf_edi_rt.read(str(derived_edi))
-    zc = np.asarray(tf_edi_rt.impedance.data)
-    if za.shape != zc.shape:
-        raise RuntimeError(
-            f"derived EDI round-trip FAILED for {src.name}: impedance shape mismatch "
-            f"original={za.shape} derived-edi={zc.shape}")
-    # Same fill masking as the canonical-XML comparison above: exclude the ~1e32 missing-data sentinel
-    # on either side so a fill-vs-fill artefact is not read as a corrupted transfer function.
-    zc_mask = _mask_fills(za, zc)
-    za_e, zc_e = np.where(zc_mask, 0, za), np.where(zc_mask, 0, zc)
-    if not np.allclose(za_e, zc_e, rtol=rtol, atol=atol, equal_nan=True):
-        edi_maxdiff = float(np.nanmax(np.abs(za_e - zc_e)))
-        raise RuntimeError(
-            f"derived EDI round-trip FAILED for {src.name}: impedance maxdiff={edi_maxdiff:.3e} "
-            f"(rtol={rtol}, atol={atol})")
+    if has_z:
+        zc = np.asarray(tf_edi_rt.impedance.data) if tf_edi_rt.impedance is not None \
+            else np.empty((0, 2, 2))
+        if za.shape != zc.shape:
+            raise RuntimeError(
+                f"derived EDI round-trip FAILED for {src.name}: impedance shape mismatch "
+                f"original={za.shape} derived-edi={zc.shape}")
+        # Same fill masking as the canonical-XML comparison above: exclude the ~1e32 missing-data
+        # sentinel on either side so a fill-vs-fill artefact is not read as a corrupted transfer function.
+        zc_mask = _mask_fills(za, zc)
+        za_e, zc_e = np.where(zc_mask, 0, za), np.where(zc_mask, 0, zc)
+        if not np.allclose(za_e, zc_e, rtol=rtol, atol=atol, equal_nan=True):
+            edi_maxdiff = float(np.nanmax(np.abs(za_e - zc_e)))
+            raise RuntimeError(
+                f"derived EDI round-trip FAILED for {src.name}: impedance maxdiff={edi_maxdiff:.3e} "
+                f"(rtol={rtol}, atol={atol})")
+    else:
+        # Same check over the field this station does serve, so a tipper-only station's derived EDI is
+        # verified to the same standard rather than waved through for lacking an impedance.
+        _compare_optional_field("tipper", tf.tipper, tf_edi_rt.tipper, src_name=src.name,
+                                rtol=rtol, atol=atol, stage="derived EDI")
 
     versions = {}
     try:
