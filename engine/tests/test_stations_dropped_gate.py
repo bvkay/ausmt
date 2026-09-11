@@ -57,6 +57,10 @@ SEEDED = [
     "kuth-tamar-valley-2008/NTL031A.edi",
     "kuth-tamar-valley-2008/NTL032A.edi",
     "kuth-tamar-valley-2008/NTL036A.edi",
+    "moradzadeh-mt-1996-97/BRU.edi",
+    "moradzadeh-mt-1996-97/EUR.edi",
+    "moradzadeh-mt-1996-97/EWD.edi",
+    "moradzadeh-mt-1996-97/SWD.edi",
 ]
 
 
