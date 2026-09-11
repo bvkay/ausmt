@@ -54,26 +54,8 @@ kuth-tamar-valley-2008/NTL031A.edi
 kuth-tamar-valley-2008/NTL032A.edi
 kuth-tamar-valley-2008/NTL036A.edi
 
-# moradzadeh-mt-1996-97: four stations whose off-diagonal impedance phases both sit outside the
-# quadrants the sign convention requires. These are a 2021 third-party WinGLink re-export of the
-# thesis's Appendix II, and the export's rule was to apply the sensor projection the thesis's Table
-# 3.2 implies and then negate the whole tensor. The appendix licenses a sign change of the
-# off-diagonal elements alone and only at the sites Table 3.2 marks, so the negation is the export's
-# own, and each refused station carries a further fault on top of it. BRU is the printed table
-# negated bit for bit with no rotation involved, and the printed table passes this gate, so BRU's
-# out-of-quadrant state is manufactured by the export rather than inherited from the appendix. EUR
-# lost the magnetic half of the transform, so its served off-diagonals are minus the printed
-# DIAGONAL elements and the responses served under EUR's name are another element pair entirely.
-# EWD and SWD were transposed after a correct projection, which interchanges the two off-diagonal
-# elements and with them the two modes; applied without the transposition both pass, and EWD
-# carries four single-digit transcription slips besides. Correcting a custodian's numbers to make a
-# gate pass is not AusMT's to do, so the four are served in the package and publish nothing until a
-# corrected rendition exists.
-# station BRU
-moradzadeh-mt-1996-97/BRU.edi
-# station EUR
-moradzadeh-mt-1996-97/EUR.edi
-# station EWD
-moradzadeh-mt-1996-97/EWD.edi
-# station SWD
-moradzadeh-mt-1996-97/SWD.edi
+# moradzadeh-mt-1996-97 has NO entry, and the four stations formerly listed here are why the note
+# is worth keeping. BRU, EUR, EWD and SWD are served from AusMT's own transcription of the thesis's
+# Appendix II rather than from the third-party WinGLink export, whose renditions of them are held
+# verbatim under the package's provenance/ and are not read by the build. All twenty-one stations of
+# that package publish, so no drop is expected from it and an entry here would be a place to hide one.
