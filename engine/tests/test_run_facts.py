@@ -264,13 +264,21 @@ def test_the_extraction_confidence_classes_reach_the_build_report(tmp_path):
 
 
 def test_the_cache_format_tag_records_the_parse_product_shape_change(tmp_path):
-    """The house mechanism for a parse-product shape change (the v4 and v5 notes record the same
-    case): bump the format tag so every pre-change entry is a clean MISS rather than a replay of a
-    stale-shape parse."""
+    """The house mechanism for a parse-product shape change: bump the format tag so every pre-change
+    entry is a clean MISS rather than a replay of a stale-shape parse. The parse product carrying the
+    presence notes and the >INFO run facts arrived at v6, so the tag must never fall below it; later
+    bumps for later shape changes are expected and must not fail this pin.
+
+    FAILS IF: the salt carries no format tag, or one earlier than the version that first keyed this
+    parse shape (which would let a cache predating the run facts resolve and replay a parse with no
+    runs at all)."""
+    import re  # noqa: PLC0415
     import cache as cache_mod  # noqa: PLC0415
     salt = cache_mod.BuildCache(tmp_path, engine_commit="deadbeef",
                                 lib_versions={}, contract_digest="")._fixed_salt
-    assert "ausmt-c47-cache-v6" in salt
+    m = re.search(r"ausmt-c\d+-cache-v(\d+)", salt)
+    assert m, f"the fixed salt carries no cache format tag: {salt!r}"
+    assert int(m.group(1)) >= 6, f"the format tag went back below the run-facts parse shape: {m.group(0)}"
 
 
 def test_non_channel_dotted_keys_never_become_channels():

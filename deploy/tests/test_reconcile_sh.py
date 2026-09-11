@@ -990,3 +990,231 @@ def test_permission_hint_does_not_hide_a_visible_kill(tmp_path):
     tail = st.get("log_tail") or ""
     assert "KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY" in tail and "Killed process 398616 (python)" in tail
     assert "COULD NOT BE READ" not in tail
+
+
+# ===================================================================================================
+# HOLD AFTER A BUILD THAT ALREADY RAN AT THIS HEAD. A rebuild that completes but fails verify leaves
+# builds/<ts>/build.json at the published head while `current` still points at the older build, so the
+# head-vs-built compare reads as drift on every tick and the box burns one full rebuild every 15 min.
+# The same shape with no build.json at all (a crashed pass) is latched through the status document.
+# Both holds must yield to a HEAD change and to an explicit rebuild.request.
+# ===================================================================================================
+
+
+def _make_build_dir(tree: dict, name: str, source_commit: str | None = None,
+                    build_id: str = "bid-unswapped") -> Path:
+    """Create site-data/builds/<name>/, optionally with a build.json carrying source_commit."""
+    d = tree["data"] / "site-data" / "builds" / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "filler.txt").write_text("x", encoding="utf-8")
+    if source_commit is not None:
+        (d / "build.json").write_text(json.dumps(
+            {"build_id": build_id, "engine_commit": "eng0000", "source_commit": source_commit}),
+            encoding="utf-8")
+    return d
+
+
+def _seed_served_build_dir(tree: dict, name: str) -> Path:
+    """Create builds/<name>/ holding a byte-identical copy of current/build.json, which is how the
+    script identifies the SERVED build when `current` is not a resolvable symlink."""
+    d = tree["data"] / "site-data" / "builds" / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "build.json").write_bytes((tree["site"] / "build.json").read_bytes())
+    return d
+
+
+def _write_status_doc(tree: dict, **fields) -> Path:
+    """Write a reconcile-status.json standing in for the previous pass's outcome."""
+    doc = {"last_run": "2026-09-01T00:00:00Z", "action": "noop", "head": None, "built": None,
+           "build_id": None, "log_file": None, "log_tail": None, "paused": False,
+           "pause_expired": False, "pause_since": None, "pinned": False, "pinned_build": None,
+           "oom_kill": False}
+    doc.update(fields)
+    f = tree["state"] / "reconcile-status.json"
+    f.write_text(json.dumps(doc), encoding="utf-8")
+    return f
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_unswapped_build_at_head_holds_instead_of_rebuilding(tmp_path):
+    """UNSWAPPED-BUILD HOLD. The NEWEST build dir carries a build.json at the published HEAD while
+    `current` still serves an older commit (a build that completed and then failed verify or the
+    swap) => the shim is NOT invoked, status action=failed whose detail NAMES the build dir and where
+    to look, exit 1. FAILS IF: reconcile rebuilds again at a head a build has already been attempted
+    at (the every-15-minutes rebuild loop), or the detail does not name the dir the operator must
+    inspect."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")          # served = an older commit => drift
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    _seed_served_build_dir(tree, "20260101T000000Z")
+    _make_build_dir(tree, "20260102T000000Z", source_commit=head)  # newest, at head, NOT served
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 1, f"the hold must exit 1 so monitoring flags it; got {r.returncode}"
+    assert not tree["marker"].exists(), "a build already completed at this head must NOT be rerun"
+    st = _status(tree)
+    assert st is not None and st["action"] == "failed", st
+    tail = st.get("log_tail") or ""
+    assert "20260102T000000Z" in tail, f"the hold must name the build dir; got {tail!r}"
+    assert "swap" in tail.lower(), f"the hold must say the build never swapped in; got {tail!r}"
+    assert "logs" in tail, f"the hold must say where the log is; got {tail!r}"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_unswapped_build_at_older_head_still_rebuilds(tmp_path):
+    """GENUINE DRIFT. The newest unswapped build is at an OLDER commit than the published HEAD (the
+    publish moved on) => that is real drift and the rebuild proceeds, action=rebuilt. FAILS IF: the
+    hold over-fires on any leftover build dir and a new publish is never served."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    head0 = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    _seed_served_build_dir(tree, "20260101T000000Z")
+    _make_build_dir(tree, "20260102T000000Z", source_commit=head0)
+    new_head = _advance_head(tree)                                 # the pull moves HEAD past head0
+    assert new_head != head0
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 0, r.stderr
+    assert tree["marker"].exists(), "a build at an OLDER head is drift and must rebuild"
+    st = _status(tree)
+    assert st is not None and st["action"] == "rebuilt", st
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_explicit_request_overrides_the_unswapped_build_hold(tmp_path):
+    """DELIBERATE INTENT WINS. An explicit rebuild.request rebuilds even with an unswapped build at
+    the same head, and the request is consumed. FAILS IF: the curator's button is ignored while the
+    hold stands (the box could then never be moved off the hold without shell access)."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    _seed_served_build_dir(tree, "20260101T000000Z")
+    _make_build_dir(tree, "20260102T000000Z", source_commit=head)
+    req = tree["state"] / "rebuild.request"
+    req.write_text("{}", encoding="utf-8")
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 0, r.stderr
+    assert tree["marker"].exists(), "an explicit rebuild.request must override the hold"
+    assert not req.exists(), "the request must still be consumed"
+    assert _status(tree)["action"] == "rebuilt"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_status_failed_at_this_head_holds_with_a_served_build(tmp_path):
+    """CRASHED-PASS LATCH. The status document already records action=failed at THIS head (a pass that
+    died before any build.json was written) while a served build is present => the shim is NOT
+    invoked, exit 1. FAILS IF: the latch only covers the unreadable-identity case and a normal box
+    retries the same failing build every tick."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    _write_status_doc(tree, action="failed", head=head, built="aaaaaaa")
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 1, f"the latch must exit 1; got {r.returncode}: {r.stderr}"
+    assert not tree["marker"].exists(), "a failure already recorded at this head must NOT rebuild"
+    st = _status(tree)
+    assert st is not None and st["action"] == "failed", st
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_unswapped_build_hold_dry_run_writes_nothing(tmp_path):
+    """--dry-run on the unswapped-build hold => it only PRINTS what it would do: no shim, no status
+    write, exit 0. FAILS IF: a preview run writes the status file or invokes the build."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    _seed_served_build_dir(tree, "20260101T000000Z")
+    _make_build_dir(tree, "20260102T000000Z", source_commit=head)
+    r = _run(tree, "--dry-run", env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 0, r.stderr
+    assert not tree["marker"].exists(), "--dry-run must NOT invoke the shim"
+    assert _status(tree) is None, "--dry-run must NOT write the status file"
+    # Case-sensitive: the tmp path itself carries this test's name, so a lowercase match would pass
+    # on the shim path alone.
+    assert "HOLD" in r.stdout, f"--dry-run must print the would-hold line; got {r.stdout!r}"
+    assert "20260102T000000Z" in r.stdout, f"the preview must name the build dir; got {r.stdout!r}"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_hold_preserves_the_previous_failure_record(tmp_path):
+    """CARRY THE FAILURE FORWARD. The hold OVERWRITES the status document a genuine build failure
+    wrote at this same head, and log_file/log_tail are the only record of WHY that build died (the
+    curator panel renders both). Two ticks: a real failing build, then the hold. FAILS IF: the hold
+    nulls log_file or replaces the build's own output with its prose, leaving the operator with a
+    failure that names nothing. A third tick must not restack the carried record."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    r1 = _run(tree, env_extra={"SHIM_FAIL": "1"})
+    assert r1.returncode == 1, r1.stderr
+    st1 = _status(tree)
+    assert st1["action"] == "failed" and st1["log_file"], st1
+    assert "simulated build failure" in (st1.get("log_tail") or "")
+    tree["marker"].unlink()                                    # a second invocation must be visible
+
+    r2 = _run(tree, env_extra={"SHIM_FAIL": "1"})
+    assert r2.returncode == 1, r2.stderr
+    assert not tree["marker"].exists(), "the hold must not rebuild"
+    st2 = _status(tree)
+    assert st2["log_file"] == st1["log_file"], f"the hold nulled the log pointer: {st2}"
+    tail2 = st2.get("log_tail") or ""
+    assert "simulated build failure" in tail2, f"the build's own output was erased: {tail2!r}"
+    assert "HOLDS" in tail2, f"the hold must still say it is holding: {tail2!r}"
+
+    r3 = _run(tree, env_extra={"SHIM_FAIL": "1"})
+    assert r3.returncode == 1, r3.stderr
+    tail3 = _status(tree).get("log_tail") or ""
+    assert tail3.count("simulated build failure") == 1, f"the carried record restacked: {tail3!r}"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_hold_preserves_the_oom_kill_flag(tmp_path):
+    """CARRY THE OOM VERDICT FORWARD. deploy/scripts/alert.sh keys its "KILLED BY THE KERNEL" ping on
+    oom_kill, and the panel keys its lead line on it. A hold on the tick after an OOM-killed build
+    must keep oom_kill=true and the kernel lines. FAILS IF: the hold flips oom_kill back to false and
+    the kill stops being named from the second tick on (the failure shape that once hid an OOM kill
+    for a week)."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    shim, _ = _journalctl_shim(tmp_path)
+    env = {"SHIM_FAIL": "1", "SHIM_OOM": "1", "AUSMT_RECONCILE_JOURNALCTL": f"{shim.as_posix()}"}
+    assert _run(tree, env_extra=env).returncode == 1
+    assert _status(tree).get("oom_kill") is True, _status(tree)
+
+    r2 = _run(tree, env_extra=env)
+    assert r2.returncode == 1, r2.stderr
+    st2 = _status(tree)
+    assert st2.get("oom_kill") is True, f"the hold dropped the OOM verdict: {st2}"
+    assert "Killed process 398616 (python)" in (st2.get("log_tail") or ""), st2.get("log_tail")
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_status_latch_detail_claims_no_cause_it_has_not_checked(tmp_path):
+    """HONEST DETAIL. The status latch knows only that the last pass failed at this head. It does not
+    know the build was killed, and it does not know that no build dir at this head survives (it looks
+    at the NEWEST dir only). Here builds/20260102 IS at head but is not the newest. FAILS IF: the
+    detail asserts a timeout/out-of-memory/no-surviving-build cause it never established, sending the
+    operator after a kill that never happened."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    _seed_served_build_dir(tree, "20260101T000000Z")
+    _make_build_dir(tree, "20260102T000000Z", source_commit=head)
+    _make_build_dir(tree, "20260103T000000Z", source_commit="bbbbbbb")   # newest, at another commit
+    _write_status_doc(tree, action="failed", head=head, built="aaaaaaa")
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1", "AUSMT_RECONCILE_KEEP_BUILDS": "5"})
+    assert r.returncode == 1, r.stderr
+    assert not tree["marker"].exists()
+    tail = (_status(tree).get("log_tail") or "").lower()
+    assert "no build at this head survives" not in tail, tail
+    assert "out of memory" not in tail and "timeout" not in tail, tail
+    assert "action=failed" in tail, tail
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_prune_keeps_the_newest_named_build_when_mtimes_disagree(tmp_path):
+    """PRUNE AND HOLD MUST AGREE ON "NEWEST". The hold reads the newest dir in NAME order; the prune
+    runs first, so if it retains by mtime instead, a hand-restored or touched older dir can push the
+    hold's target out of the keep window and the rebuild loop resumes. FAILS IF: the name-newest
+    build dir is deleted while it is within KEEP_BUILDS."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    _seed_served_build_dir(tree, "20260101T000000Z")
+    newest = _make_build_dir(tree, "20260109T000000Z", source_commit=head)
+    other = _make_build_dir(tree, "20260102T000000Z", source_commit="bbbbbbb")
+    os.utime(newest, (1_600_000_000, 1_600_000_000))     # name-newest, mtime-oldest
+    os.utime(other, (1_800_000_000, 1_800_000_000))
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1", "AUSMT_RECONCILE_KEEP_BUILDS": "1"})
+    left = sorted(p.name for p in (tree["data"] / "site-data" / "builds").iterdir())
+    assert "20260109T000000Z" in left, f"the name-newest build was pruned; left={left}"
+    assert r.returncode == 1, f"the hold must still fire; got {r.returncode}: {r.stdout}{r.stderr}"
+    assert not tree["marker"].exists(), "the hold's target was pruned and the loop resumed"

@@ -405,3 +405,30 @@ def test_unreadable_surveys_live_git_warns_rather_than_reporting_clean(tmp_path)
         f"a git error must never be reported as a clean checkout:\n{r.stdout}"
     assert any(ln.startswith(("FAIL surveys-live:", "WARN surveys-live:")) for ln in lines), \
         f"an unreadable checkout must surface as FAIL or WARN:\n{r.stdout}"
+
+
+# ---- kernel-side memory: the growth no container reports ------------------------------------------
+
+_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def test_kernel_slab_leg_warns_on_a_leak_and_never_blocks_a_deploy(tmp_path):
+    """Unreclaimable kernel slab is memory no process owns, so `docker stats`, the build report's
+    peak RSS and every container healthcheck read green while the kernel exhausts RAM. The doctor
+    reads the same AUSMT_ALERT_MEMINFO / AUSMT_ALERT_SUNRECLAIM_MB knobs the alert timer uses and
+    reports the size by name. It WARNs rather than FAILs: `make doctor` gates a deploy, and a slab
+    figure is a scheduling fact for the operator, not a reason to refuse a release.
+
+    FAILS IF: a multi-gigabyte slab is reported green or absent, the leg FAILs the run (blocking a
+    deploy), or a healthy box does not PASS by name (a check that did not look must not read green)."""
+    data = _make_tree(tmp_path)
+    r = _run(_env(tmp_path, data, AUSMT_ALERT_MEMINFO=str(_FIXTURES / "proc-meminfo.leaking")))
+    warn = [ln for ln in r.stdout.splitlines() if ln.startswith("WARN kernel-memory:")]
+    assert warn, f"a leaking slab must WARN by name:\n{r.stdout}"
+    assert "11980" in warn[0] and "MB" in warn[0], warn[0]
+    assert r.returncode == 0, f"the slab leg must never block a deploy:\n{r.stdout}"
+    healthy = tmp_path / "healthy"
+    healthy.mkdir()
+    r2 = _run(_env(healthy, data, AUSMT_ALERT_MEMINFO=str(_FIXTURES / "proc-meminfo.healthy")))
+    assert any(ln.startswith("PASS kernel-memory:") and "270" in ln
+               for ln in r2.stdout.splitlines()), r2.stdout

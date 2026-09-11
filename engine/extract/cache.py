@@ -13,13 +13,18 @@ Design: maintainer/C18-BuildCacheDesign.md. The invariants this module upholds:
     cache, and so is an INDEPENDENT full build of the same inputs (proven by test; the served XML's
     CreateTime is pinned to the date its source declares, so no served artifact carries a build
     clock).
-  * The key is derived from the SOURCE EDI content sha + a coarse engine-commit salt + library
-    versions + the positional/schema contract + the whole survey.yaml digest. A byte-changed EDI,
-    an engine commit, a library upgrade, a contract change, or ANY survey.yaml edit all miss.
-  * A DEGENERATE salt (unknown engine commit, or a dirty checkout where a git checkout exists)
-    silently DISABLES the cache for that build - no reads, no writes. A degenerate/ambiguous salt
-    must never key a cache. --raw builds are a POLICY exclusion with the same inert behaviour
-    (--seed-meta feeds served citations but is not a key component).
+  * The key is derived from the SOURCE EDI content sha + the engine SOURCE digest (a content
+    hash of the product-producing code, see engine_source_digest) + library versions + the
+    positional/schema contract + the whole survey.yaml digest. A byte-changed EDI, any edit to the
+    digested code, a library upgrade, a contract change, or ANY survey.yaml edit all miss. The
+    engine git commit is NOT a key component: an image built from a commit that changed only
+    deploy scripts, docs or tests keys identically to its predecessor and stays warm.
+  * A DEGENERATE salt (unknown engine commit, a dirty checkout where a git checkout exists, or an
+    engine tree that yields no source digest) silently DISABLES the cache for that build - no
+    reads, no writes. The commit and dirty-tree rules are identity gates, not key inputs: a build
+    that cannot state which engine produced it, or that ran from a half-edited tree, never seeds a
+    store. --raw builds are a POLICY exclusion with the same inert behaviour (--seed-meta feeds
+    served citations but is not a key component).
   * Entries are SELF-VERIFYING: each file is `<sha256-hex-of-payload>\n<payload>`,
     written temp-then-atomic-rename. Every read re-hashes the payload; a mismatch (disk corruption,
     tampering) DELETES the entry, counts in the `corrupt` counter, tallies as a MISS, and the
@@ -75,8 +80,10 @@ def is_salt_degenerate(engine_commit, checkout_dir: Path | None) -> tuple[bool, 
 
     Degenerate iff EITHER:
       * the engine commit is unknown/None/the literal "unknown" (an unresolvable build identity), OR
-      * a git checkout EXISTS at `checkout_dir` and is dirty (uncommitted changes) — the coarse
-        commit salt would then key a cache against source that does not match that commit.
+      * a git checkout EXISTS at `checkout_dir` and is dirty (uncommitted changes).
+    Neither is a key component (the key carries the engine SOURCE digest, which describes the
+    working tree exactly). They are identity gates: a build that cannot name its engine commit in
+    build.json, or that ran from a tree with uncommitted edits, must not seed a shared store.
 
     A container build with no .git resolves engine_commit from AUSMT_ENGINE_COMMIT and has no
     checkout to be dirty; that is NOT degenerate. In production that env var is ALWAYS baked:
@@ -118,6 +125,49 @@ def contract_schema_digest(engine_root: Path) -> str:
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
 
 
+# Product code the cached entries depend on: the three package roots under engine/, plus the
+# sibling column contract. Bytecode, tool caches, dotfiles and any tests directory cannot change a
+# served product, so they are not hashed; hashing them would cold the cache on a pytest run.
+SOURCE_DIGEST_ROOTS = ("extract", "ausmt_science", "schema")
+_SOURCE_DIGEST_SKIP_DIRS = frozenset({"__pycache__", "tests", ".pytest_cache", ".ruff_cache", ".mypy_cache"})
+
+
+def engine_source_digest(engine_root) -> str:
+    """The coarse salt: sha256 over (relative path, content sha256) of every regular file under the
+    SOURCE_DIGEST_ROOTS of `engine_root`, plus contract/columns.json beside it. Sorted by path, so
+    walk order and mtimes never enter it, and a rename moves it. Returns "" when no digested root
+    exists or a file cannot be read: such a tree cannot describe the code that produced an entry,
+    and BuildCache treats "" as degenerate."""
+    root = Path(engine_root)
+    files: list[tuple[str, Path]] = []
+    for sub in SOURCE_DIGEST_ROOTS:
+        base = root / sub
+        if not base.is_dir():
+            continue
+        for p in base.rglob("*"):
+            if not p.is_file() or p.suffix == ".pyc" or p.name.startswith("."):
+                continue
+            rel = p.relative_to(root)
+            if any(part in _SOURCE_DIGEST_SKIP_DIRS or part.startswith(".") for part in rel.parts[:-1]):
+                continue
+            files.append((rel.as_posix(), p))
+    if not files:
+        return ""
+    contract = root.parent / "contract" / "columns.json"
+    if contract.is_file():
+        files.append(("../contract/columns.json", contract))
+    h = hashlib.sha256()
+    try:
+        for rel, p in sorted(files):
+            h.update(rel.encode("utf-8"))
+            h.update(b"\0")
+            h.update(hashlib.sha256(p.read_bytes()).hexdigest().encode("ascii"))
+            h.update(b"\0")
+    except OSError:
+        return ""
+    return h.hexdigest()
+
+
 # NOTE: the per-survey yaml digest is not derived here. It is
 # computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from,
 # one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
@@ -128,8 +178,9 @@ def contract_schema_digest(engine_root: Path) -> str:
 class BuildCache:
     """A content-addressed store of per-station products under `<root>/<k[:2]>/<k>.<ext>`.
 
-    One instance per build. Holds the shared salt (engine commit + library versions + contract +
-    per-survey survey.yaml digest) and derives a per-station key from it plus the source EDI sha.
+    One instance per build. Holds the shared salt (engine source digest + library versions +
+    contract + per-survey survey.yaml digest) and derives a per-station key from it plus the source
+    EDI sha. `engine_commit` and `checkout_dir` feed the identity gate only.
     Tracks hit/miss/write counters (deterministic, asserted by tests — never wall-clock). When the
     salt is degenerate the instance is INERT: enabled is False, get() always misses and put() is a
     no-op, and the counters prove no reads or writes happened.
@@ -137,10 +188,16 @@ class BuildCache:
 
     def __init__(self, root: Path, *, engine_commit, lib_versions: dict,
                  contract_digest: str, mode: str = "rw", checkout_dir: Path | None = None,
-                 max_mb: int | None = None, disabled_reason: str = ""):
+                 max_mb: int | None = None, disabled_reason: str = "",
+                 source_digest: str | None = None):
         self.root = Path(root)
         self.mode = mode if mode in CACHE_MODES else "rw"
         self.engine_commit = engine_commit
+        # None derives the digest of the engine tree this module lives in (the value build_portal
+        # passes for the same tree); an explicit "" is a tree with nothing to digest.
+        if source_digest is None:
+            source_digest = engine_source_digest(Path(__file__).resolve().parent.parent)
+        self.source_digest = str(source_digest)
         self.lib_versions = dict(lib_versions or {})
         self.contract_digest = contract_digest or ""
         self.max_mb = int(max_mb) if max_mb is not None else _env_max_mb()
@@ -162,6 +219,10 @@ class BuildCache:
             self.degenerate, self.degenerate_reason = True, disabled_reason
         else:
             self.degenerate, self.degenerate_reason = is_salt_degenerate(engine_commit, checkout_dir)
+        if not self.degenerate and not self.source_digest:
+            self.degenerate = True
+            self.degenerate_reason = ("engine source digest unavailable (no digestable engine tree) "
+                                      "- the salt cannot describe the code producing the entries")
         # The stable, per-survey salt component is injected via key(); the fixed part is precomputed.
         self._fixed_salt = "\x00".join([
             # Cache-format version tag. v2 = self-verifying entries (digest-line + payload);
@@ -187,12 +248,15 @@ class BuildCache:
             # from, so a pre-v6 entry would replay a parse with neither and serve a station.json
             # with no runs at all. Same clean-MISS discipline as v4/v5: one full re-derive on the
             # first build after this lands, then warm again.
-            "ausmt-c47-cache-v6",
-            str(engine_commit),                                      # coarse engine-commit salt
+            # v7 = the coarse salt is the engine SOURCE digest instead of the git commit, so a new
+            # image whose product code is unchanged keys identically to its predecessor. Pre-v7
+            # entries are keyed under a commit and can never resolve: a clean MISS, then warm.
+            "ausmt-c47-cache-v7",
+            self.source_digest,                                      # coarse engine-source salt
             json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions
             self.contract_digest,                                    # columns + schema digest
         ])
-        # Forensics: a short fingerprint of the FULL fixed salt (version tag + engine commit +
+        # Forensics: a short fingerprint of the FULL fixed salt (version tag + engine source digest +
         # lib versions + contract digest). Two builds that should key identically expose identical
         # fingerprints; a mid-process salt flip (the flake class: moving HEAD, transient
         # rev-parse failure, contract-file read failure) is attributable from the build report alone.
@@ -209,7 +273,7 @@ class BuildCache:
     def key(self, *, edi_sha: str, survey_digest: str, kind: str) -> str:
         """Derive the content-addressed key for one station product. `kind` namespaces the two
         distinct products (parse rows vs served XML) so they never collide on one key. The key binds
-        EVERY salt field: source EDI sha + engine commit + lib versions + contract + this
+        EVERY salt field: source EDI sha + engine source digest + lib versions + contract + this
         survey's whole-yaml digest."""
         material = "\x00".join([self._fixed_salt, str(edi_sha), str(survey_digest or ""), str(kind)])
         return hashlib.sha256(material.encode("utf-8")).hexdigest()

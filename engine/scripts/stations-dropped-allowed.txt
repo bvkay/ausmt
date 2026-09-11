@@ -33,3 +33,41 @@ capricorn-2010/CP2L08.edi
 # would otherwise publish is RD18-188e. Named ahead of its merge so the corpus change needs no
 # engine change beside it.
 roxby-downs-2018/188_S__2.edi
+
+# KUTh Exploration, eastern Tasmania 2008 to 2010 (MRT open file, Phoenix SSMT cross-spectra EDIs):
+# nine files refused by the rotation-frame gate. Each declares ROTSPEC=0 on every >SPECTRA block
+# while its >HMEAS azimuths place the magnetic pair somewhere else (90, 180, 270 or 330 degrees),
+# so the frame the spectra are stored in cannot be established from the file and the tensor is
+# withheld rather than served in an unknown frame. The bytes stay in the packages, byte-identical
+# to the lodgement; the packages' READMEs and survey.yaml record the nine. The build writes the
+# Phoenix DATAID as the station (STL008-09A and so on) because the gate refuses the station before
+# the station_ids override applies; the ids the packages would publish are the file stems.
+# The remedy is a re-export in one coherent frame, which is curatorial work on the source files
+# rather than a change to this gate.
+kuth-lake-leake-2008/STL009A.edi
+kuth-lake-leake-2008/STL041A.edi
+kuth-midlands-2009/NSA031A.edi
+kuth-midlands-2009/NSB006A.edi
+kuth-midlands-2009/NSOC03A.edi
+kuth-tamar-valley-2008/NTL025A.edi
+kuth-tamar-valley-2008/NTL031A.edi
+kuth-tamar-valley-2008/NTL032A.edi
+kuth-tamar-valley-2008/NTL036A.edi
+
+# moradzadeh-mt-1996-97: four stations whose off-diagonal impedance phases both sit outside the
+# quadrants the sign convention requires. These are a 2021 third-party WinGLink re-export of the
+# thesis's Appendix II, and that export applied a per-station sensor-orientation transform which
+# AusMT did not compute and cannot verify against anything but the printed appendix. The gate names
+# the signature: BRU and SWD read as an x and y axis exchange, EUR and EWD as coherent out-of-
+# quadrant phases. Exchanging the axes numerically returns BRU, EWD and SWD to quadrant and leaves
+# EUR outside it, which identifies the fault but does not license correcting a custodian's numbers to
+# make a gate pass. The four are served in the package and publish nothing until the export's
+# transform is checked against Appendix II station by station.
+# station BRU
+moradzadeh-mt-1996-97/BRU.edi
+# station EUR
+moradzadeh-mt-1996-97/EUR.edi
+# station EWD
+moradzadeh-mt-1996-97/EWD.edi
+# station SWD
+moradzadeh-mt-1996-97/SWD.edi

@@ -221,3 +221,32 @@ def test_closing_log_names_both_names_only_when_legacy_is_set(tmp_path):
     assert r2.returncode == 0, r2.stderr
     assert "no legacy redirect name configured" in r2.stdout, (
         f"the canonical-only closing line must say no legacy name is configured; stdout:\n{r2.stdout}")
+
+
+def test_the_route_table_is_rendered_in_place_so_the_mounted_inode_survives_a_git_pull(tmp_path):
+    """The edge mounts a single file, and a single-file bind mount is an inode: `git pull` replaces
+    the tracked ts-routes.map by rename, so a container that mounted the tracked file keeps the OLD
+    table and an in-place reload re-reads the old bytes. The installer therefore truncate-writes a
+    rendered copy that compose mounts, exactly as it does for the Caddyfile: a pre-existing rendered
+    file keeps its inode across a run, and its bytes become the tracked table's."""
+    work, env = _setup(tmp_path)
+    (work / "ts-routes.map").write_text('"/go/ts/s/a/raw_packed" "x/a.zip"\n', encoding="utf-8")
+    rendered = work / "ts-routes.map.rendered"
+    rendered.write_text("# stale\n", encoding="utf-8")
+    inode_before = rendered.stat().st_ino
+    r = _run(work, env)
+    assert r.returncode == 0, r.stderr
+    assert rendered.stat().st_ino == inode_before, "the rendered table must be rewritten in place"
+    assert rendered.read_text(encoding="utf-8") == (work / "ts-routes.map").read_text(encoding="utf-8")
+    # the validate leg and the running edge both read the rendered copy, never the tracked file
+    log = Path(env["STUB_LOG"]).read_text(encoding="utf-8")
+    validate = [ln for ln in log.splitlines() if "caddy validate" in ln]
+    assert validate and "/ts-routes.map.rendered:/etc/caddy/ts-routes.map:ro" in validate[0]
+
+
+def test_an_absent_route_table_renders_an_empty_one(tmp_path):
+    work, env = _setup(tmp_path)
+    r = _run(work, env)
+    assert r.returncode == 0, r.stderr
+    text = (work / "ts-routes.map.rendered").read_text(encoding="utf-8")
+    assert text.startswith("#") and '"/go/ts/' not in text

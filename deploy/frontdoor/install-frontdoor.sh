@@ -63,11 +63,19 @@ sudo mkdir -p /var/log/caddy
 # ts-routes.map is GENERATED and COMMITTED (deploy/scripts/gen_ts_routes.py) and the Caddyfile
 # `import`s it, so it is part of the config: validate below would fail on a missing import, and the
 # edge would refuse to start. Its absence is a legitimate state (no verified routes published, or a
-# deliberate rollback), so the installer creates an EMPTY table rather than dying - every /go/ts/
+# deliberate rollback), so the installer renders an EMPTY table rather than dying - every /go/ts/
 # path then 404s, which is exactly the withdrawal the RUNBOOK's rollback line describes.
-if [ ! -f ts-routes.map ]; then
-	log "no ts-routes.map present - writing an EMPTY table (every /go/ts/ path will 404)"
-	printf '# no time-series hand-off routes published on this deploy.\n' > ts-routes.map
+# The edge mounts ts-routes.map.rendered, never the tracked file: a single-file bind mount is an
+# inode, and `git pull` replaces the tracked file by rename, so a container that mounted it would
+# keep serving the OLD table and the in-place reload below would re-read the old bytes. The rendered
+# copy is written in place (cp truncates the existing file), so the mounted inode survives every
+# pull and the reload sees the new routes, exactly as for Caddyfile.rendered.
+if [ -f ts-routes.map ]; then
+	log "rendering ts-routes.map.rendered from the tracked table (in place, so the mounted inode survives)"
+	cp ts-routes.map ts-routes.map.rendered
+else
+	log "no ts-routes.map present - rendering an EMPTY table (every /go/ts/ path will 404)"
+	printf '# no time-series hand-off routes published on this deploy.\n' > ts-routes.map.rendered
 fi
 
 # ----- validate the RENDERED Caddyfile against a real Caddy ---------------------------------------
@@ -80,7 +88,7 @@ log "validating Caddyfile.rendered against caddy:2-alpine"
 docker run --rm \
 	-e AUSMT_PUBLIC_NAME -e AUSMT_BOX_READER_UPSTREAM -e AUSMT_ACME_EMAIL -e AUSMT_LEGACY_REDIRECT_NAME \
 	-v "$HERE/Caddyfile.rendered:/etc/caddy/Caddyfile:ro" \
-	-v "$HERE/ts-routes.map:/etc/caddy/ts-routes.map:ro" \
+	-v "$HERE/ts-routes.map.rendered:/etc/caddy/ts-routes.map:ro" \
 	-v /var/log/caddy:/var/log/caddy \
 	caddy:2-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile \
 	|| die "caddy validate rejected the rendered front-door Caddyfile - fix it before deploying."

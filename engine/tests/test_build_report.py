@@ -18,6 +18,7 @@ Requires the mt_metadata/mth5 build engine (importorskip otherwise); runs in the
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -169,7 +170,7 @@ def test_report_does_not_disturb_canonical_provenance(tmp_path):
     assert any_station, "at least one station.json must carry its per-station canonical_conditioning list"
 
 
-def test_per_station_xml_emission_failures_surface_in_build_report(tmp_path, monkeypatch):
+def test_per_station_xml_emission_failures_surface_in_build_report(tmp_path, monkeypatch, capsys):
     """RED-PROOF: a per-station EMTF-XML emission failure must be COUNTED in build_report.json (a
     structured xml_failures row with the exception class PLUS a counted survey warning), never left
     invisible behind a printed '[xml] WARN'. This is the gap the 8-survey/~380-station regression hid
@@ -220,6 +221,19 @@ def test_per_station_xml_emission_failures_surface_in_build_report(tmp_path, mon
     assert "RuntimeError" in xml_warns[0], xml_warns[0]
     assert rep["totals"]["warnings"] >= 1
 
+    # THE LOG FOLD: the per-file '[xml] WARN <file>: ...' line is replaced by ONE line per survey per
+    # distinct fault, carrying the count and one example file; the per-file rows live in the report's
+    # product_failures ledger, keyed by producer, with the producer path the fault was first seen in.
+    err = capsys.readouterr().err
+    warn_lines = [ln for ln in err.splitlines() if "[xml] WARN" in ln]
+    assert warn_lines == [
+        f"  [xml] WARN {slug}: RuntimeError: simulated EMTF-XML emission failure - 1 file(s), "
+        f"e.g. {survey['product_failures']['xml'][0]['file']} (station product)"], warn_lines
+    pf = survey["product_failures"]["xml"]
+    assert len(pf) == 1 and pf[0]["error"] == "RuntimeError", pf
+    assert pf[0]["message"] == "simulated EMTF-XML emission failure", pf
+    assert pf[0]["context"] == "station product", pf
+
     # the victim still served its EDI (EDI-only), but has NO emtfxml manifest row
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     edi_ids = {r["station"] for r in man["files"] if r["format"] == "edi"}
@@ -238,3 +252,87 @@ def test_xml_failures_empty_on_clean_build(tmp_path):
         assert survey.get("xml_failures", []) == [], f"{slug}: clean build must have no xml_failures"
         assert not [w for w in survey["warnings"] if "EMTF-XML emission failed" in w], \
             f"{slug}: clean build must raise no xml-emission-failed warning"
+        assert survey.get("product_failures", {}) == {}, \
+            f"{slug}: clean build must record no product-emission failures"
+
+
+def test_identity_rewrite_notes_carry_no_per_station_value(tmp_path):
+    """The identity conditioning notes must be CLASS-STABLE in what the build persists and prints: a
+    note that interpolates the station id or its source filename is a distinct string per station, so
+    the by-note aggregation cannot fold it and the log grows one line per station. The mapping itself
+    belongs in build_report's `station_id_rewrites`.
+
+    FAILS IF: 'station.id->', 'source_id_preserved_in_site_name:' or
+    'source_file_preserved_in_site_name:' reappears in a persisted note or in the build log."""
+    out, prod, r = _build(tmp_path)
+    banned = ("station.id->", "source_id_preserved_in_site_name:",
+              "source_file_preserved_in_site_name:")
+    for bad in banned:
+        assert bad not in r.stderr, f"{bad!r} still names a per-station value in the build log"
+    for sj in sorted(prod.rglob("station.json")):
+        text = json.dumps(json.loads(sj.read_text(encoding="utf-8")).get("canonical_conditioning") or [])
+        for bad in banned:
+            assert bad not in text, f"{sj}: {bad!r} still names a per-station value"
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    for slug, survey in rep["surveys"].items():
+        assert isinstance(survey.get("station_id_rewrites", []), list), slug
+        for row in survey.get("station_id_rewrites", []):
+            assert row["station"] and row["site_id"], row
+
+
+def test_coordinate_flag_notices_are_folded_in_a_real_build(tmp_path):
+    """The QC coordinate-flag notice is survey-level in the log: one line per survey per flag,
+    carrying the count and a bounded set of examples, with every row still in qc_report.json.
+
+    FAILS IF: the QC block prints one '[notice] coordinate flag ...' line per flagged station (a
+    corpus build then prints one line per station), or the folded counts do not account for every
+    qc_report row."""
+    out, _prod, r = _build(tmp_path)
+    rows = json.loads((out / "qc_report.json").read_text(encoding="utf-8"))["coord_flags"]
+    assert rows, "the sample corpus must flag at least one coordinate, else this pin is vacuous"
+    lines = [ln for ln in r.stdout.splitlines() if "[notice] coordinate flag" in ln]
+    assert lines, "a flagged coordinate must still be announced"
+    pat = re.compile(r"^  \[notice\] coordinate flag '[^']+'( \(resolved\))? in \S+: "
+                     r"(?P<n>\d+) station\(s\), e\.g\. \S")
+    counts = []
+    for ln in lines:
+        m = pat.match(ln)
+        assert m, f"not a folded coordinate-flag line: {ln!r}"
+        counts.append(int(m.group("n")))
+    assert sum(counts) == len(rows), (counts, len(rows))
+    assert len(lines) <= len(rows), (lines, len(rows))
+
+
+def test_mth5_write_failures_fold_once_across_both_served_tiers(tmp_path, monkeypatch, capsys):
+    """Tier 1 (per-station MTH5) and tier 2 (survey bundle) re-read the SAME source files, so a
+    station whose TF write fails fails in both. The fold must report that fault ONCE: one
+    '[h5] WARN' line for the survey and one row in product_failures, carrying the producer path it
+    was first seen in.
+
+    FAILS IF: the [h5] arm prints one line per failing station per tier, or the second tier adds a
+    second ledger row for a file already recorded."""
+    victim = "A2"
+
+    real_stamp = bp._stamp_mth5_source_provenance
+
+    def _fake_stamp(station_metadata, record):
+        if victim in str(record.get("id") or ""):
+            raise RuntimeError("simulated MTH5 station write failure")
+        return real_stamp(station_metadata, record)
+
+    monkeypatch.setattr(bp, "_stamp_mth5_source_provenance", _fake_stamp)
+    out = tmp_path / "data"
+    rc = bp.main(["--surveys", str(SURVEYS), "--out", str(out), "--products", str(tmp_path / "p"),
+                  "--bundle-edi", "--no-validate", "--survey-h5", "--station-h5"])
+    assert rc == 0, "a per-station MTH5 failure must not abort the build"
+
+    err = capsys.readouterr().err
+    warn_lines = [ln for ln in err.splitlines() if "[h5] WARN" in ln and "RuntimeError" in ln]
+    assert len(warn_lines) == 1, warn_lines
+    assert warn_lines[0].endswith("1 file(s), e.g. Vulcan_A2.edi (station product)"), warn_lines[0]
+
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    rows = [r for s in rep["surveys"].values() for r in s.get("product_failures", {}).get("h5", [])]
+    assert len(rows) == 1, rows
+    assert rows[0]["file"] == "Vulcan_A2.edi" and rows[0]["error"] == "RuntimeError", rows
+    assert rows[0]["context"] == "station product", "the first occurrence context is kept"

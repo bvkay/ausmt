@@ -144,6 +144,17 @@ failed build or verify leaves `current` untouched and exits non-zero with the fa
 so a host-side swap gets `Permission denied` (exactly what the first real deploy hit after build +
 verify had already passed).
 
+`build-runner` runs under a **cgroup memory ceiling** (`mem_limit`, default `8g` of the box's
+15 GB) and a process ceiling (`pids_limit: 512`). The engine fans MTH5 writes out to
+`AUSMT_BUILD_WORKERS` worker processes, so the container's real footprint is roughly the worker
+count times what any single process reports; the cap means a build that runs away is killed inside
+its own cgroup while the portal, the gateway and clamd keep serving. Tune the ceiling with
+`AUSMT_BUILD_MEM_LIMIT` in `deploy/.env` (any docker memory string; lower it on a smaller box).
+A build killed at the cap exits non-zero with `current` untouched, exactly like any other failed
+build; `build_report.json` records the peak the build reached (`peak_rss_mib` for the parent,
+`peak_rss_child_max_mib` for the largest worker, and the `workers` count), so the trend is readable
+build over build before a cap is ever hit.
+
 The verify gate FAILS on a build that lost a station, and it reads both of `build_report.json`'s
 ledgers for it: `source_parse_failures`, the files the reader refused outright, and
 `stations_dropped`, every station the build did not publish whatever refused it (a convention gate, a
@@ -201,13 +212,15 @@ a small change. Operator-relevant facts:
 - **Location.** `${AUSMT_DATA_DIR}/site-data/cache/` — a **sibling** of `builds/`, owned by uid
   10001. It survives the `builds/` prune and the `current` swap, and is **safe to lose entirely**
   (one slow rebuild rebuilds it). Do NOT move it under `builds/` or `surveys-live/`.
-- **One cold rebuild after an engine update (expected).** The cache salt includes the engine commit
-  (`docker/engine.Dockerfile` bakes `ARG GIT_SHA` → `ENV AUSMT_ENGINE_COMMIT`; `deploy-images.yml`
-  passes `github.sha`). After you `pull` a NEW engine image, the salt changes, so the FIRST
-  `rebuild-data` runs full (cache miss on every station) and repopulates the cache; the next rebuild
-  is fast again. This is correct, not a fault. A degenerate salt (unknown engine commit, or a dirty
-  checkout) also disables the cache for that build — the log prints `note: C18 cache DISABLED …` and
-  `build_provenance.json` records `cache.enabled:false` + the reason.
+- **One cold rebuild after an engine update that changes product code (expected).** The cache salt
+  is a content digest of the engine's product-producing code (`engine/extract`, `engine/ausmt_science`,
+  `engine/schema`, `contract/columns.json`), not the git commit. After you `pull` a NEW engine image
+  whose product code changed, the FIRST `rebuild-data` runs full (cache miss on every station) and
+  repopulates the cache; the next rebuild is fast again. An image built from a commit that touched only
+  deploy scripts, docs or tests keys identically and stays warm. This is correct, not a fault. The
+  engine commit still matters as an identity gate: a degenerate salt (unknown engine commit, a dirty
+  checkout, or no digestable engine tree) disables the cache for that build: the log prints
+  `note: C18 cache DISABLED …` and `build_provenance.json` records `cache.enabled:false` + the reason.
 - **Force a full re-verified rebuild** that still repopulates the cache: run the engine with
   `--cache-mode refresh` (e.g. after an engine upgrade you want re-verified from scratch). Size is
   capped by `AUSMT_CACHE_MAX_MB` (default 2048), pruned oldest-first per successful build.
@@ -428,6 +441,25 @@ to run `make` by hand. A systemd timer runs `deploy/scripts/reconcile.sh` every 
    reads it (published HEAD vs served build, last outcome, the per-survey build report, a pending
    indicator, and the **Request rebuild** button).
 
+**The hold (step 3 does not fire twice at the same HEAD).** Drift alone does not mean nothing has
+been tried. Reconcile holds, instead of rebuilding, when a build at this same HEAD has already been
+attempted in either of two shapes: the newest `site-data/builds/<ts>/` carries a `build.json` at HEAD
+but was never swapped into `current` (the build finished and verify or the swap failed, which is also
+what a hand-run `make rebuild-data` that fails verify leaves behind), or the last
+`reconcile-status.json` recorded `action=failed` at this HEAD (the pass died before writing any
+build). Without the hold each of those rebuilds and fails again every 15 min for as long as HEAD
+stands still. The hold writes `action=failed` with a detail naming the build dir and the log to read,
+and exits 1; `pause.flag` and `rollback.pin` are checked first and keep their own `paused`/`pinned`
+status. To clear it: fix the cause, then press **Request rebuild** on the serve screen, or publish a
+new commit (a HEAD change re-arms the normal path).
+
+Because the hold overwrites the status document the failing build wrote at this same HEAD, it
+**carries that record forward**: `log_file`, the `oom_kill` verdict and the build's own output stay
+in the document under a `what the last pass at this head recorded` heading, below the hold's own
+detail. So an out-of-memory kill keeps being named by the panel and by `alert.sh` on every held tick,
+not only on the tick the build died. The hold names no cause it has not established: where it knows
+only that the last pass failed here, it says exactly that and points at the build log.
+
 The script itself never assumes systemd (on Gadi/NCI it becomes a cron/PBS job of the same script).
 
 **Install (one-time):**
@@ -539,7 +571,7 @@ JS in the curator origin). preview-data is already embargo-safe + PII-scrubbed b
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | **Submission stuck at `SCANNED`, never reaches `VALIDATED`/`QUARANTINED`** | The **gw-runner is not running or crash-looping** — it is what claims jobs, extracts, validates, and previews. (Incident 2026-07-06: the runner was configured with `PYTHONPATH=/opt/gateway` and could not `import gateway`; the correct value is `/opt`, the parent of the bind-mounted `/opt/gateway` package.) | `docker compose -f compose.yaml --profile gateway ps` — is `gw-runner` up? `docker compose ... logs gw-runner` — a `ModuleNotFoundError: gateway` means the `PYTHONPATH`/mount is wrong, or `AUSMT_CODE_DIR` is unset/points at the wrong tree so `${AUSMT_CODE_DIR}/gateway` did not mount. Confirm `$AUSMT_CODE_DIR/gateway/runner/` exists. |
-| **Build id shows `None-None` / null engine commit in `build.json`** | A **stale engine image** (built before `ARG GIT_SHA` was baked) or a stale/dirty code checkout — the cache salt cannot resolve the engine commit, so caching self-disables and the build id is null. | `docker compose --profile jobs --profile gateway pull` a current image, confirm the live checkout (`git -C "$AUSMT_CODE_DIR" log -1`), then `make rebuild-data`. Verify `build_provenance.json` no longer says `cache.enabled:false`. |
+| **Build id shows `None-None` / null engine commit in `build.json`** | A **stale engine image** (built before `ARG GIT_SHA` was baked) or a stale/dirty code checkout: the cache's identity gate cannot resolve the engine commit, so caching self-disables and the build id is null. | `docker compose --profile jobs --profile gateway pull` a current image, confirm the live checkout (`git -C "$AUSMT_CODE_DIR" log -1`), then `make rebuild-data`. Verify `build_provenance.json` no longer says `cache.enabled:false`. |
 | **`docker compose` errors: `required variable AUSMT_… is missing` / interpolation error** | A `${VAR:?}`-guarded variable is unset. After C33 only **`AUSMT_DATA_DIR`** and **`OWNER`** are hard-guarded (every service needs them); `AUSMT_SUBMIT_KEY`/`AUSMT_CODE_DIR` no longer block portal-only commands. | Set the named var in `deploy/.env` (see the grouped `.env.example`). `make preflight` lists exactly which required vars are missing for your profile. |
 | **`docker compose pull` "worked" but the engine/gateway images are still old/missing** | `docker compose pull` only pulls services with **no profile** — i.e. just `portal`. `build-runner` (profile `jobs`) and the gateway services (profile `gateway`) are skipped. | Pull with the profiles: `docker compose --profile jobs --profile gateway pull` (or `docker compose --profile "*" pull` on compose v2.24+). `make preflight` flags any image missing locally. |
 | **A CI sample / stray file appeared in `surveys-live` and got into a build** | A test/CI artifact (or a manual copy) left an untracked file in the read-side `surveys-live` checkout; the engine reads the whole tree. | Inspect before removing: `git -C "$AUSMT_DATA_DIR/surveys-live" clean -nd` (dry run) — review the list, then `git -C "$AUSMT_DATA_DIR/surveys-live" clean -fd` to remove untracked cruft. Re-run `make rebuild-data`. |
@@ -553,6 +585,7 @@ JS in the curator origin). preview-data is already embargo-safe + PII-scrubbed b
 | **Serve-state panel shows `failed`** (old data still serving) | The rebuild `build`/`verify` step failed; the atomic swap left the **previous** build serving (correct fail-closed behaviour). | Read the `log_tail` in the panel (or the full `site-data/logs/<ts>.build.log`, path in `reconcile-status.json`). Same causes as a manual `rebuild-data` failure (see the rows above — stale/dirty image, a bad survey package). Fix the cause; the next drift/button press/tick retries. The request file is already consumed, so it does **not** crash-loop. |
 | **Serve-state panel shows `failed` and the detail says `KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY`** (incident 2026-08-15: five nightly builds in a row) | The kernel's out-of-memory killer terminated the engine build (`Out of memory: Killed process ... (python) ... anon-rss:13740244kB ... UID:10001` in `journalctl -k`); the box does not have enough free RAM for the corpus. The reconcile agent asks the kernel journal for its own build window and names this by cause; the previous build keeps serving. `make doctor` also FAILs on any kernel OOM kill in the last 24 h. | Read the kernel lines in the panel detail. Bridge: add swap (`fallocate -l 32G /swapfile && mkswap /swapfile && swapon /swapfile`) or RAM. Then look at `build_report.json` `peak_rss_mib` on the last good build (also on the serve screen's build inventory): the engine's memory is bounded per station, not per corpus (about 1 GiB at 1,400 stations), so a peak near the box's RAM at a normal corpus means the per-station bound has regressed; `engine/tests/test_build_memory.py` is the pin to run. If the panel detail (or `make doctor`) says instead that the **kernel journal could not be read** by the user, the kill is not ruled out, only invisible: run install step 0c (`sudo usermod -aG systemd-journal "$USER"`, re-login) so the next failure is named by cause. |
 | **Reconcile exits 1 with `state dir not writable` / `cannot create log dir`** | The **one-time ownership prep (install step 0) is missing**: `site-data/` is uid-10001-owned and `gateway/state/` is 10002-owned, so the operator's reconcile pass cannot write its log dir or status file. The script fails early and loudly rather than half-running (the 2026-07-08 first-install symptom). | Run install step 0 (the `install -d` + shared-group commands), re-login (group membership), then `sudo systemctl start ausmt-reconcile.service` to re-run the pass. |
+| **Reconcile holds with `failed` and a detail saying a build at this head never swapped in (or that the last pass already failed here)** | The **already-attempted hold**: a rebuild at the published HEAD either completed and never became `current` (verify or the swap failed, so `site-data/builds/<ts>/build.json` sits at HEAD while `current` still serves the older commit), or left `action=failed` at this HEAD in the last `reconcile-status.json` (an ordinary build/verify failure, a timeout, an out-of-memory kill and a terminated pass all look alike from here, so the hold names none of them and instead carries that pass's own record forward: `log_file`, `oom_kill` and its output, under a `what the last pass at this head recorded` heading). Head vs built still reads as drift, so without the hold the box burns one full rebuild every 15 min and fails the same way each time. | Read the build dir and the build log the detail names (`site-data/builds/<ts>/`, `site-data/logs/<ts>.build.log`) and fix the cause. Then clear the hold: press **Request rebuild** on the serve screen (an explicit request always gets a fresh attempt), or publish a new commit (a HEAD change re-arms it). `deploy/scripts/reconcile.sh --dry-run` prints the would-hold line without touching anything. |
 | **Reconcile holds with `structural mismatch` (status `failed`, `built` null)** | The **loop guard** latched: a rebuild completed but `site-data/current/build.json` was *still* unreadable afterwards — a layout or permission mismatch is eating every rebuild, so the agent refuses to burn one build per tick forever. (Also latches after a failed *first* build on a fresh box — deliberate: a deterministic failure needs an operator, not a retry storm.) | Check `ls "$AUSMT_DATA_DIR/site-data/current/build.json"` exists and is readable, and read the last build log. After fixing, re-arm with the curator **Request rebuild** button (an explicit request always gets a fresh attempt) or the next real publish (HEAD change). |
 
 ---
@@ -623,8 +656,9 @@ and (b) the operator-facing symptom **"submissions stuck at `SCANNED`"** (the Tr
 **What healthchecks do NOT give you:** compose healthchecks flag a *container* as unhealthy but do not
 alert anyone or restart a merely-`unhealthy` (vs exited) container. That gap is closed by the
 **Alerting** section below — an `ausmt-alert.timer` that runs the checks the "minimum operator loop"
-describes (`docker compose ps` for `unhealthy`/restarting, a disk check, plus reconcile + backup
-freshness) and pings an external dead-man monitor that emails the curator. Install it; then the manual
+describes (`docker compose ps` for `unhealthy`/restarting, a disk check, reconcile + backup
+freshness, plus the two kernel-side legs no user-space measure can see) and pings an external
+dead-man monitor that emails the curator. Install it; then the manual
 loop is a backstop, not the only line of defence.
 
 ### Alerting
@@ -650,6 +684,35 @@ timeout covers "the box is gone".
 | Disk | the `$AUSMT_DATA_DIR` filesystem is over `AUSMT_ALERT_DISK_PCT`% used (**85**). |
 | Serve reconcile | `gateway/state/reconcile-status.json` `last_run` is older than `AUSMT_ALERT_RECONCILE_MAX_MIN` min (**45** — three missed ticks), or `action=failed`. (`sync_failed`/`noop`/`rebuilt` are healthy outcomes and do **not** alert — they are panel states, see §4.) |
 | Backup freshness | the newest `backups/<ts>/` snapshot is older than `AUSMT_ALERT_BACKUP_MAX_H` h (**26**), or `systemctl is-failed ausmt-backup.service` reports the unit failed. |
+| Kernel memory | `/proc/meminfo`'s `SUnreclaim` (unreclaimable kernel slab) is over `AUSMT_ALERT_SUNRECLAIM_MB` MB (**2048**). |
+| ACPI storm | the `acpi` IRQ in `/proc/interrupts` is firing faster than `AUSMT_ALERT_SCI_PER_MIN` per minute (**600**), measured against the previous pass's sample. |
+
+Both kernel legs record their reading in `ops-status.json` (`kernel.sunreclaim_mb`,
+`kernel.acpi_per_min`) on **every** pass, so the curator floor shows a series rather than only the
+moment a threshold is crossed. Where the host has no procfs, or the first pass has no earlier ACPI
+sample to compare against, the reading is `null` and **nothing fails** - a check with no reading must
+not manufacture an outage. `AUSMT_ALERT_MEMINFO` / `AUSMT_ALERT_INTERRUPTS` point the two readings at
+a different file and exist for the tests; leave them unset on the box.
+
+**Why these two are here at all.** Everything above measures *user space*: containers, processes,
+bytes on disk. The kernel's own consumption appears in none of it. Unreclaimable slab is memory no
+process owns, so `docker stats`, the build report's peak RSS and `free`'s "used" column can all read
+calm while the kernel climbs past user space and the box stops scheduling. An ACPI event storm is the
+same shape in CPU: a General Purpose Event the firmware never clears re-arms the System Control
+Interrupt continuously and pins a core, with no process to attribute it to. Both take days to become
+an outage, which is exactly long enough for a 15-minute timer to catch them.
+
+`make doctor` carries the slab reading too (`kernel-memory: SUnreclaim is N MB`), off the same
+`AUSMT_ALERT_MEMINFO` / `AUSMT_ALERT_SUNRECLAIM_MB` settings so the pre-deploy gate and the timer
+cannot disagree. There it is a **WARN**, never a FAIL: a slab figure tells the operator to book a
+reboot, it is not a reason to refuse a release.
+
+**What to do when either fires**
+
+| Fail line | Do this |
+| --- | --- |
+| `kernel-memory: SUnreclaim ... is N MB` | Capture the evidence *before* you clear it: `cat /proc/meminfo > /tmp/meminfo.txt` and `sudo cat /proc/slabinfo > /tmp/slabinfo.txt` (sort `slabinfo` by the third column to find the cache that is growing - `dentry`, `inode_cache` and networking caches are the usual suspects). Then **schedule a reboot** at the next quiet window: unreclaimable slab is not returned under pressure, so nothing short of a reboot gives it back, and a box left to reach RAM stops scheduling with no warning. Keep the two captures for the follow-up - they name the subsystem to fix. |
+| `acpi: the firmware SCI is storming at N interrupts/min` | Find the runaway event: `sudo grep . /sys/firmware/acpi/interrupts/gpe*` and look for the counter in the millions (everything else sits near zero). Mask it: `echo disable \| sudo tee /sys/firmware/acpi/interrupts/gpe6D` for whichever `gpe*` it is - the core comes back immediately. That masking does **not** survive a reboot, so re-apply it (or add it to a boot-time unit) and check for a firmware update, which is the real fix. |
 
 All OK => one success beat to the ping URL. Any failure => a ping to `<url>/fail` with the failure
 lines as the body, **and** a non-zero exit so `journalctl -u ausmt-alert.service` shows it too.
