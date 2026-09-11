@@ -59,10 +59,13 @@ gw-runner   the engine image with the gateway package bind-mounted, network disa
 ```
 
 States are fail-closed: RECEIVED, SCANNED, VALIDATED, QUARANTINED, REJECTED_AV, RETURNED, REJECTED,
-PUBLISHING, PUBLISH_FAILED, PUBLISHED. Publishing is a git commit and push to `ausmt-surveys`; serving
-the result requires a separate engine rebuild. The curator metadata editor round-trips survey.yaml
-through the runner (ruamel.yaml), enforces a semantic-version bump with release notes, and commits
-through the same publish path.
+PUBLISHING, PUBLISH_FAILED, PUBLISHED. A submission is scanned at upload and, if it is still held at
+RECEIVED, again by the retry pass; the retry pass skips rows whose upload-time scan is still running,
+and a scan verdict is applied only to a row still at RECEIVED, so one submission advances out of
+RECEIVED once and queues one validation job. Publishing is a git commit and push to `ausmt-surveys`;
+serving the result requires a separate engine rebuild. The curator metadata editor round-trips
+survey.yaml through the runner (ruamel.yaml), enforces a semantic-version bump with release notes,
+and commits through the same publish path.
 
 ## Module map
 
