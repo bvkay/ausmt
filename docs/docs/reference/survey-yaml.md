@@ -50,6 +50,7 @@ absence is silent.
 | `geographic_extent` | recommended | mapping | [4 Description and extent](#4-description-and-extent) |
 | `data_types` (or `data_type`) | recommended | list or string | [4 Description and extent](#4-description-and-extent) |
 | `channels_recorded` | optional | list of string | [4 Description and extent](#4-description-and-extent) |
+| `station_channels` | optional | mapping | [4 Description and extent](#4-description-and-extent) |
 | `identifiers` | optional | mapping | [5 Identifiers](#5-identifiers) |
 | `related_identifiers` | optional | list of mapping | [6 Identifiers by data level](#6-identifiers-by-data-level) |
 | `funding` | optional | list of mapping | [7 Funding and publications](#7-funding-and-publications) |
@@ -428,6 +429,28 @@ That is the warning working, not a defect: `--strict` is the publication gate, s
 over real data is expected to need a curator's eye every time.
 
 ---
+
+### 4.5 station_channels
+
+| | |
+|---|---|
+| Definition | Which channels a NAMED station recorded, where that differs from the rest of the survey. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | mapping of published station id to list of string |
+| Allowed values | the same channel names as `channels_recorded`; keys are published ids (the `station_ids` map value or the file's DATAID) |
+| Default | absent means no per-station mask |
+| Example | `{STL002A: [Ex, Ey, Bx, By], STL003A: [Ex, Ey, Bx, By]}` |
+
+The per-station form of the same assertion, for a survey that measured the vertical field or the
+electric field at most sites but not all: a Phoenix set whose recorder wrote an HZ channel from no
+coil at some sites carries a numerical-noise tipper in exactly those files, and a survey-wide
+declaration cannot say which. A station's declared set is read exactly as the survey-wide one is: no
+vertical coil withholds its tipper, neither horizontal electric channel withholds its impedance and
+everything derived from it. Only the named stations are touched; the survey-wide declaration, when
+both are present, still applies to every station. The build report names each masked station and
+any key that matches nothing the survey publishes, which masks nothing and is reported rather than
+ignored.
 
 ## 5 Identifiers
 

@@ -1737,6 +1737,80 @@ def _channel_key(name) -> str:
     return "h" + key[1:] if key.startswith("b") else key
 
 
+def _check_station_channels(block, known_ids, authority_complete, r) -> None:
+    """Check the OPTIONAL station_channels declaration, the per-station form of channels_recorded.
+
+    Keyed by PUBLISHED station id (the station_ids map value, else the EDI's DATAID), each entry
+    is that station's recorded channels and arms the same two masks for that station alone: no
+    vertical coil withholds its tipper, neither horizontal electric channel withholds its impedance.
+    The shape is a FAIL, as for channels_recorded, because the build ignores any other shape and the
+    mask would silently not apply. A key naming a station this package does not publish FAILs when
+    the id authority is complete and WARNs otherwise, mirroring the run-id and register checks: an
+    entry that names nothing masks nothing, and a per-station entry exists to mask. An entry that
+    declares every channel is inert for the same reason and WARNs.
+    """
+    if block is None:
+        return
+    if not isinstance(block, dict):
+        r.add("FAIL", "channels",
+              f"station_channels must be a mapping of published station id to a list of channel "
+              f"names, got {type(block).__name__}. The build ignores any other shape, so the "
+              f"declared masks would silently not apply")
+        return
+    masked_t, masked_z, inert, unknown, malformed = [], [], [], [], False
+    for sid, channels in block.items():
+        sid = str(sid).strip()
+        if not isinstance(channels, list) or not channels:
+            r.add("FAIL", "channels",
+                  f"station_channels[{sid}] must be a non-empty list of channel names")
+            malformed = True
+            continue
+        keys = set()
+        for n, c in enumerate(channels, 1):
+            if not isinstance(c, str) or not c.strip():
+                r.add("FAIL", "channels",
+                      f"station_channels[{sid}][{n}] is not a non-empty channel-name string")
+                malformed = True
+                continue
+            key = _channel_key(c)
+            keys.add(key)
+            if key not in CHANNEL_LABELS:
+                r.add("WARNING", "channels",
+                      f"station_channels[{sid}][{n}] '{c}' is outside the vocabulary the build "
+                      f"understands ({', '.join(CHANNEL_LABELS.values())}); the masks cannot see it")
+        if sid not in known_ids:
+            unknown.append(sid)
+        t_mask = not ({"hz"} & keys)
+        z_mask = not ({"ex", "ey"} & keys)
+        if t_mask:
+            masked_t.append(sid)
+        if z_mask:
+            masked_z.append(sid)
+        if not t_mask and not z_mask:
+            inert.append(sid)
+    if unknown:
+        shown = ", ".join(unknown[:8]) + (f", and {len(unknown) - 8} more" if len(unknown) > 8 else "")
+        r.add("FAIL" if authority_complete else "WARNING", "channels",
+              f"station_channels names {len(unknown)} id(s) this package does not publish "
+              f"({shown}); an entry that names nothing masks nothing")
+    for sid in inert:
+        r.add("WARNING", "channels",
+              f"station_channels[{sid}] declares every channel and so masks nothing; a per-station "
+              f"entry exists to withhold a channel the survey-wide declaration keeps")
+    if malformed or (unknown and authority_complete):
+        return
+    def _ids(ids):
+        return ", ".join(ids[:8]) + (f", and {len(ids) - 8} more" if len(ids) > 8 else "")
+    parts = []
+    if masked_t:
+        parts.append(f"tipper masked at {len(masked_t)} ({_ids(masked_t)})")
+    if masked_z:
+        parts.append(f"impedance masked at {len(masked_z)} ({_ids(masked_z)})")
+    r.add("PASS", "channels",
+          f"station_channels: {len(block)} station(s) declared; "
+          f"{'; '.join(parts) if parts else 'no mask armed'}")
+
+
 def _check_channels_recorded(channels, r):
     """Check the OPTIONAL channels_recorded declaration; return the normalised channel keys or None.
 
@@ -2016,6 +2090,7 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     run_ids_path = folder / RUN_IDS_FILE
     ts_index_path = folder / TS_INDEX_FILE
     known, complete = _station_id_authority(meta.get("station_ids"), edis)
+    _check_station_channels(meta.get("station_channels"), known, complete, r)
     if run_ids_path.exists():
         try:
             run_ids_doc = _load_yaml(run_ids_path) or {}
