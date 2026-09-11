@@ -42,7 +42,8 @@ roxby-downs-2018/188_S__2.edi
 # to the lodgement; the packages' READMEs and survey.yaml record the nine. The build writes the
 # Phoenix DATAID as the station (STL008-09A and so on) because the gate refuses the station before
 # the station_ids override applies; the ids the packages would publish are the file stems.
-# The remedy belongs to a re-export in one coherent frame, which is a curatorial lane, not a gate.
+# The remedy is a re-export in one coherent frame, which is curatorial work on the source files
+# rather than a change to this gate.
 kuth-lake-leake-2008/STL009A.edi
 kuth-lake-leake-2008/STL041A.edi
 kuth-midlands-2009/NSA031A.edi
