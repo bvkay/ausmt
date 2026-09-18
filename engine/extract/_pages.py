@@ -709,6 +709,13 @@ _INDEX_CSS = """
   .idxlede{max-width:62ch;margin:.2rem 0 .1rem}
   .idxsum{color:#8FA3B0;font-size:.92rem;font-variant-numeric:tabular-nums;margin:.2rem 0 .2rem}
   .idxact{font-size:.9rem;margin:.2rem 0 1.1rem}
+  .idxctl{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:end;margin:.9rem 0 .2rem}
+  .idxctl label{display:flex;flex-direction:column;gap:.15rem;font-size:.78rem;color:#8FA3B0}
+  .idxctl .idxq{flex:1 1 16rem}
+  .idxctl input,.idxctl select{font:inherit;font-size:.9rem;color:#C9D4E8;background:#18213D;border:1px solid #2B3557;border-radius:6px;padding:.35rem .55rem;min-width:0}
+  .idxctl input:focus-visible,.idxctl select:focus-visible{outline:2px solid #EF7256;outline-offset:1px}
+  .idxctl .idxshown{flex:1 0 100%;margin:.2rem 0 .4rem;font-size:.85rem;color:#8FA3B0;font-variant-numeric:tabular-nums}
+  .idxctl .idxshown a{margin-left:.6rem}
   .idxlist{display:flex;flex-direction:column;gap:.7rem;margin:0 0 1rem}
   .idxcard{position:relative;display:grid;grid-template-columns:115px 1fr;gap:.9rem;align-items:start;background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem}
   .idxcard svg{width:100%;height:auto;display:block}
@@ -926,10 +933,17 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
     )
 
 
-def _survey_years(sm_doc, smeta):
+def _survey_year_bounds(sm_doc, smeta):
+    """(year_start, year_end) as the survey record states them, the coverage block first and the
+    catalogue row second; None where neither states a year."""
     cov = ((sm_doc or {}).get("dates") or {}).get("coverage") or {}
     y0 = cov.get("year_start") or (smeta or {}).get("year_start")
     y1 = cov.get("year_end") or (smeta or {}).get("year_end")
+    return (y0 or None, y1 or None)
+
+
+def _survey_years(sm_doc, smeta):
+    y0, y1 = _survey_year_bounds(sm_doc, smeta)
     if y0 and y1:
         return f"{y0}" if y0 == y1 else _range(y0, y1)
     return str(y0 or y1 or "")
@@ -2252,20 +2266,72 @@ def _hub_catalogue(*, name, description, url, base) -> dict:
             "keywords": _keywords()}
 
 
+# The one script the surveys hub loads, same-origin under /src like the survey page's dialog
+# modules: the pages are served under a CSP whose script-src is 'self' alone.
+_HUB_SCRIPTS = ("/src/surveys-hub.js",)
+
+# The controls' sort orders, value then label, the first being the static order of the page.
+_HUB_SORTS = (("title", "Title, A to Z"), ("stations", "Most stations"),
+              ("newest", "Newest first"), ("oldest", "Oldest first"),
+              ("org", "Organisation"))
+
+
+def _card_data(fields) -> str:
+    """The data attributes a hub card carries, in a fixed order so the page bytes are stable. A None
+    value is written as an empty attribute: the script reads absence, never a placeholder."""
+    return "".join(f' data-{k}="{_e("" if v is None else str(v))}"' for k, v in fields.items())
+
+
+def _hub_controls(vocab, *, n_rows) -> str:
+    """The search, filter and sort controls of the surveys hub, rendered HIDDEN. Without script the
+    page is the whole list and the form never shows; the script reveals it. The form is a GET to the
+    hub's own path, so a submit that reaches the server is a plain reload, and it carries no button:
+    the hierarchy is catalogue, survey, data, and the only way off this page is a card's title.
+
+    Every option is a value some row carries, so the controls can never offer a filter the
+    catalogue cannot satisfy; the empty option is "any"."""
+    def select(name, label, values):
+        opts = "".join(f'<option value="{_e(v)}">{_e(v)}</option>' for v in values)
+        return (f'<label class="idxsel"><span>{label}</span>'
+                f'<select name="{name}"><option value="">Any</option>{opts}</select></label>')
+    sorts = "".join(f'<option value="{v}">{t}</option>' for v, t in _HUB_SORTS)
+    return (
+        '<form class="idxctl" id="idxctl" method="get" action="/surveys" hidden>'
+        '<label class="idxq"><span>Search</span>'
+        '<input type="search" name="q" autocomplete="off" '
+        'placeholder="Title, organisation, region or slug"></label>'
+        + select("type", "Data type", sorted(vocab["type"]))
+        + select("org", "Organisation", sorted(vocab["org"]))
+        + select("region", "Region", sorted(vocab["region"]))
+        + select("lic", "Licence", sorted(vocab["lic"]))
+        + f'<label class="idxsel"><span>Sort</span><select name="sort">{sorts}</select></label>'
+        f'<p class="idxshown" aria-live="polite"><span id="idxShown">{n_rows:,}</span> of '
+        f'{n_rows:,} {"survey" if n_rows == 1 else "surveys"} shown'
+        ' <a id="idxReset" href="/surveys" hidden>Clear</a></p>'
+        '</form>')
+
+
 def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
     the served documents do not already publish and needs no survey-metadata read.
 
-    Rows carry: slug, title, org, region, n_stations, years, types {type: n}, period_min_s,
-    period_max_s, lic, doi, points [(lon, lat, type)]. The card is a DISCOVERY SUMMARY, not a
-    miniature survey record: no abstract, and exactly one action (the title link)."""
+    Rows carry: slug, title, org, region, n_stations, years, year_start, year_end, types {type: n},
+    period_min_s, period_max_s, lic, doi, points [(lon, lat, type)]. The card is a DISCOVERY
+    SUMMARY, not a miniature survey record: no abstract, and exactly one action (the title link).
+
+    The hub is searchable, filterable and sortable in the browser, and the page stays the whole
+    list without script: every card carries its facts as data attributes, the controls are rendered
+    HIDDEN with option lists drawn from the rows themselves (so the script can offer nothing the
+    catalogue does not carry), and one same-origin file, /src/surveys-hub.js, reveals and drives
+    them. The static order is by title, which is also the controls' default sort."""
     base = (base or "").rstrip("/")
     url = f"{base}/surveys"
     rows = sorted(rows or [], key=lambda r: (str(r.get("title") or ""), str(r.get("slug") or "")))
     n_stations = sum(int(r.get("n_stations") or 0) for r in rows)
     defs, ref = au_outline_defs(_INDEX_MAP_WIDTH)
     cards = []
+    vocab = {"type": set(), "org": set(), "region": set(), "lic": set()}
     for r in rows:
         slug = str(r.get("slug") or "")
         title = str(r.get("title") or slug)
@@ -2274,9 +2340,10 @@ def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
         pmin, pmax = r.get("period_min_s"), r.get("period_max_s")
         period = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
                   if pmin is not None and pmax is not None else "")
+        licence = _fmt_licence(r.get("lic"))
         facts = _card_facts_line([
             _e(_plural(int(r.get("n_stations") or 0), "station")),
-            _e(type_bit), _e(str(r.get("years") or "")), _e(period), _e(_fmt_licence(r.get("lic"))),
+            _e(type_bit), _e(str(r.get("years") or "")), _e(period), _e(licence),
             '<span class="idxdoi">DOI</span>' if r.get("doi") else ""])
         svg = _minimap_svg(r.get("points") or [], width=_INDEX_MAP_WIDTH, outline_ref=ref,
                            label=f"{title} location in Australia")
@@ -2287,12 +2354,30 @@ def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
             f'<span class="idxorgn">{_e(str(r.get("org") or ""))}</span>' if r.get("org") else "",
             f'<span class="idxloc">{_e(str(r.get("region") or ""))}</span>' if r.get("region")
             else ""])
+        org = str(r.get("org") or "")
+        region = str(r.get("region") or "")
+        vocab["type"].update(str(t) for t in types)
+        if org:
+            vocab["org"].add(org)
+        if region:
+            vocab["region"].add(region)
+        if licence:
+            vocab["lic"].add(licence)
+        # The facts the controls read, one attribute each, in the card's own values: the script
+        # never parses the printed line. A year the record does not state is an empty attribute.
+        data = _card_data({
+            "slug": slug, "title": title, "org": org, "region": region,
+            "stations": int(r.get("n_stations") or 0),
+            "y0": r.get("year_start"), "y1": r.get("year_end"),
+            "types": " ".join(str(t) for t in types), "lic": licence,
+            "doi": "1" if r.get("doi") else ""})
         cards.append(
-            f'<article class="idxcard"><div>{svg}</div><div>'
+            f'<article class="idxcard"{data}><div>{svg}</div><div>'
             f'<h2 class="idxt"><a href="/surveys/{_e(slug)}">{_e(title)}</a></h2>'
             f'<p class="idxorg">{org_line}</p>'
             f'<p class="idxfacts">{facts}</p></div>'
             f'{_CARD_ARROW}</article>')
+    controls = _hub_controls(vocab, n_rows=len(rows))
     # The page-level counts go through _plural like the card counts do: a corpus of one is a real
     # state (it is where every new deployment starts), and the summary line and the description are
     # the two strings a reader and a search result actually read.
@@ -2310,6 +2395,7 @@ def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
         "<h1>Surveys</h1>\n"
         f'<p class="idxsum">{summary}</p>\n'
         f'<p class="idxlede">{_SURVEYS_LEDE}</p>\n'
+        f"{controls}\n"
         f"{defs}\n"
         f'<div class="idxlist">{"".join(cards)}</div>\n')
     return _shell(title="Surveys - magnetotelluric survey data - AusMT",
@@ -2318,7 +2404,7 @@ def surveys_index_page(*, rows, base, build=None, og_image=None) -> str:
                                         base=base),
                           _breadcrumb(base, [(_SITE_NAME, "/"), ("surveys", "/surveys")])],
                   extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts,
-                  og_image=og_image)
+                  og_image=og_image, scripts=_HUB_SCRIPTS)
 
 
 def collections_index_page(*, rows, base, build=None, og_image=None) -> str:
@@ -3193,6 +3279,8 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             "n_stations": _drow.get("n_stations") if _drow.get("n_stations") is not None
             else len(docs),
             "years": _survey_years(survey_docs.get(slug), smeta),
+            "year_start": _survey_year_bounds(survey_docs.get(slug), smeta)[0],
+            "year_end": _survey_year_bounds(survey_docs.get(slug), smeta)[1],
             "types": _drow.get("data_types"),
             "period_min_s": _drow.get("period_min_s"),
             "period_max_s": _drow.get("period_max_s"),

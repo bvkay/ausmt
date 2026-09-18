@@ -52,6 +52,12 @@ or curl command with the portal's own modules (`/src/fetchcmd.js`, `/src/fetchdi
 href is the SPA deep link `#/survey/<slug>?fetch=<level>`, which opens the same dialog, and the card
 also links the document itself as "Pointers file (JSON)".
 
+The surveys hub can be searched, filtered and sorted in the browser. The page renders its controls
+hidden, with option lists drawn from the rows it lists and each card's facts as data attributes,
+and loads one script, `/src/surveys-hub.js`, at the end of the body to reveal and drive them; the
+view rides the URL query (`/surveys?type=GDS&sort=newest`), and without script the page is the
+whole list in title order.
+
 Station pages are deliberately unadvertised but served. Thousands of templated documents would read
 as thin content at scale and dilute the survey and collection pages that carry the ranking, so they
 declare `noindex` and stay out of the sitemap; they keep working for anyone following a published

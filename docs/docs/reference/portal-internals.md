@@ -5099,6 +5099,35 @@ navigation and the page test replaces it to observe the hand-off. The card also 
 itself as "Pointers file (JSON)", the no-script way to the urls.
 ```
 
+## portal/src/surveys-hub.js
+
+#### The surveys hub's search, filter and sort
+
+```text
+The /surveys hub (engine/extract/_pages.py surveys_index_page) renders its controls as one hidden
+GET form, #idxctl, on its own path: a search box (q) and selects for data type, organisation,
+region, licence and sort, whose option lists are drawn from the rows themselves, so the page can
+offer nothing the catalogue does not carry. Every card carries its facts as data attributes (slug,
+title, org, region, stations, y0, y1, types, lic, doi), and the page loads this file at the end of
+its body under the same strict CSP as the survey pages, script-src 'self' alone, so nothing is
+inline. Without script the page is the whole list in title order and the form never shows.
+
+The driver reveals the form, reads the URL query into the controls (a value no option offers reads
+as any), and on every input, change or submit keeps the cards whose title, organisation, region or
+slug carry every search word and whose facts match each set select, sorts them (title; most
+stations; newest or oldest by the stated years, a survey with no year last; organisation), hides
+the rest, moves the kept cards to the front of the list, and writes the shown count into
+#idxShown. The view is written back to the URL with history.replaceState, only the values that
+differ from the page's defaults, so a bare /surveys stays canonical and a shared or reloaded URL
+opens as it was left. Submit is answered in the page; a submit that reaches the server is a plain
+reload. Clear (#idxReset, a link to /surveys hidden until something is set) empties the controls
+in the page. There is no button anywhere: the hierarchy is catalogue, survey, data, and the only
+way off the hub is a card's title.
+
+The engine's page test pins the ids, names, options and attributes this file reads, and
+tests/surveys_hub.test.js drives the driver in jsdom against a fixture that mirrors them.
+```
+
 ## portal/src/plots.js
 
 #### Pure SVG transfer-function plotters (no data/DOM dependency): ρ, φ ...

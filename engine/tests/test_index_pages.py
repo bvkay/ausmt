@@ -7,8 +7,10 @@ found no hub above it, and a reader who followed "All surveys" landed on the map
 
 These pages close that. They are emitted by the same emitter and under the same flag as the entity
 pages, render ONLY from the catalogue rollups (mtcat.json / surveys.json / the collections rollup),
-and carry no script and no external asset, so the build stays offline and deterministic and the
-served document needs nothing but itself.
+and carry no inline script and no external asset, so the build stays offline and deterministic and
+the served document needs nothing but itself. The surveys hub loads ONE same-origin file at the end
+of its body, /src/surveys-hub.js, which reveals and drives the search, filter and sort controls the
+page renders hidden; without it the page is the whole list, in title order.
 
 The surveys index carries 27 minimaps today and grows with the corpus. Emitting the Australian
 outline once as a <symbol> and referencing it from every card is what keeps the document small
@@ -128,7 +130,7 @@ def test_surveys_index_marks_a_doi_only_where_the_rollup_carries_one(built):
     """FAILS IF the DOI marker is invented for a survey without one (or dropped for one with).
     The rollup is the only source; nothing here derives or reserves an identifier."""
     page = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
-    rows = re.findall(r'<article class="idxcard">.*?</article>', page, re.S)
+    rows = re.findall(r'<article class="idxcard"[^>]*>.*?</article>', page, re.S)
     assert len(rows) == 2, f"one card per survey, got {len(rows)}"
     by_slug = {("idx-a" if "/surveys/idx-a" in r else "idx-b"): r for r in rows}
     assert "DOI" in by_slug["idx-a"], "the survey declaring a DOI must carry the marker"
@@ -189,14 +191,23 @@ _SRC_ATTR = re.compile(r"""src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
 # pages are served under a CSP whose script-src is 'self' alone.
 FETCH_SCRIPT_SRCS = ["/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js"]
 
+# The surveys hub's one script, on the same terms: same-origin under /src, at the end of the body,
+# and only on the page that renders the controls it drives.
+HUB_SCRIPT_SRCS = ["/src/surveys-hub.js"]
+
+
+def _page_scripts(page):
+    """The script files a page may load, from what its own body carries."""
+    scripts = FETCH_SCRIPT_SRCS if 'id="wgetModal"' in page else []
+    return scripts + (HUB_SCRIPT_SRCS if 'id="idxctl"' in page else [])
+
 
 def _allowed_srcs(rel, page=""):
     """The exact, ordered src list this page kind may carry, in DOCUMENT order: the two header marks,
-    then whatever body mark the kind is named for, then the footer's lockup, then the dialog's three
-    scripts on a page that carries the dialog. The order is the assertion, so the body mark has to be
-    spliced between the two chrome groups rather than appended after them."""
-    scripts = FETCH_SCRIPT_SRCS if 'id="wgetModal"' in page else []
-    return ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, []) + ALLOWED_FOOTER_SRCS + scripts
+    then whatever body mark the kind is named for, then the footer's lockup, then the scripts the
+    page's body earns (the dialog's three, the hub's one). The order is the assertion, so the body
+    mark has to be spliced between the two chrome groups rather than appended after them."""
+    return ALLOWED_HEADER_SRCS + ALLOWED_BODY_SRCS.get(rel, []) + ALLOWED_FOOTER_SRCS + _page_scripts(page)
 
 
 def _page_srcs(page, rel):
@@ -210,18 +221,21 @@ def _page_srcs(page, rel):
 
 
 def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
-    """FAILS IF an index page grows a script, a stylesheet link, or any fetched asset beyond the one
-    allow-listed identity mark. The entity pages' determinism posture (stdlib-only build, everything
-    else inline, no network at build) is inherited, not re-litigated; the mark is the single named
-    exception and it is same-origin.
+    """FAILS IF an index page grows an inline script, a stylesheet link, or any fetched asset beyond
+    the allow-listed identity mark and, on the surveys hub alone, its one same-origin controls script.
+    The entity pages' determinism posture (stdlib-only build, everything else inline, no network at
+    build) is inherited, not re-litigated; the mark is the single named exception and it is
+    same-origin, and so is the hub's script.
 
     A ld+json block is data, not code: nothing in it executes, and the hub pages carry one so a
     search result can show the trail back to the root. It is stripped before the guard rather than
-    excused, so an EXECUTABLE script on a hub still fails on the same line."""
+    excused, so an EXECUTABLE inline script on a hub still fails on the same line."""
     for rel in ("surveys/index.html", "collections/index.html"):
         page = (built / "pages" / rel).read_text(encoding="utf-8")
-        assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
-            f"{rel}: no executable script may appear on an index page"
+        for tag in re.findall(r"<script\b[^>]*>", page):
+            assert tag == '<script type="application/ld+json">' or \
+                tag in {f'<script src="{s}">' for s in _page_scripts(page)}, \
+                f"{rel}: no inline script may appear on an index page, got {tag}"
         srcs = _page_srcs(page, rel)
         assert srcs == _allowed_srcs(rel, page), \
             f"{rel}: the only fetched assets may be {_allowed_srcs(rel, page)}, got {srcs}"
@@ -229,6 +243,50 @@ def test_index_pages_carry_no_script_and_only_the_identity_mark(built):
             f"{rel}: the header must carry the AusMT mark as the site identity"
         assert "rel=\"stylesheet\"" not in page, f"{rel}: styles stay inline"
         assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
+
+
+def test_the_surveys_hub_renders_its_controls_hidden_from_the_rows_own_vocabulary(built):
+    """The search, filter and sort contract between the emitter and portal/src/surveys-hub.js, pinned
+    on the built page so the script's jsdom fixture (portal/tests/surveys_hub.test.js) cannot drift
+    from what the engine writes. FAILS IF the form is not rendered hidden (a reader without script
+    would see dead controls), if it grows a button, if an option is offered that no row carries, if a
+    card loses one of the facts the script reads, or if the script is not the last thing in the body.
+    The collections hub carries none of it."""
+    page = (built / "pages" / "surveys" / "index.html").read_text(encoding="utf-8")
+    form = re.search(r'<form class="idxctl" id="idxctl" method="get" action="/surveys" hidden>(.*?)</form>',
+                     page, re.S)
+    assert form, "the hub must render its controls as one hidden GET form on its own path"
+    assert "<button" not in form.group(1), "the controls carry no button"
+    for name in ("q", "type", "org", "region", "lic", "sort"):
+        assert f'name="{name}"' in form.group(1), f"the form must carry the {name} control"
+    options = {name: re.findall(r'<option value="([^"]*)">', block)
+               for name, block in re.findall(r'<select name="(\w+)">(.*?)</select>', form.group(1), re.S)}
+    assert options["sort"][0] == "title", "the first sort is the page's own static order"
+    cards = re.findall(r'<article class="idxcard"([^>]*)>', page)
+    assert len(cards) == 2
+    facts = [dict(re.findall(r' data-(\w+)="([^"]*)"', c)) for c in cards]
+    for f in facts:
+        assert list(f) == ["slug", "title", "org", "region", "stations", "y0", "y1", "types", "lic", "doi"], \
+            f"every card carries the facts the script reads, in one order: {list(f)}"
+        assert f["types"].split() and f["org"] == "Test Org" and f["region"] == "South Australia"
+        assert f["lic"] == "CC BY 4.0" and f["stations"].isdigit()
+    for name, key in (("type", "types"), ("org", "org"), ("region", "region"), ("lic", "lic")):
+        carried = set()
+        for f in facts:
+            carried.update(f[key].split() if key == "types" else [f[key]])
+        assert options[name][0] == "" and set(options[name][1:]) == carried - {""}, \
+            f"the {name} options are exactly the values the rows carry: {options[name]} vs {carried}"
+        assert options[name][1:] == sorted(options[name][1:]), f"the {name} options are sorted"
+    assert '<span id="idxShown">2</span> of 2 surveys shown' in form.group(1)
+    assert '<a id="idxReset" href="/surveys" hidden>Clear</a>' in form.group(1), \
+        "Clear is a plain link to the hub, hidden until a control is set"
+    assert page.rstrip().endswith('<script src="/src/surveys-hub.js"></script>\n</body>\n</html>') or \
+        page.count('<script src="/src/surveys-hub.js"></script>') == 1, "the hub loads its one script"
+    assert page.index('<script src="/src/surveys-hub.js">') > page.index("</footer>"), \
+        "the script comes after the footer, at the end of the body"
+    coll = (built / "pages" / "collections" / "index.html").read_text(encoding="utf-8")
+    assert 'id="idxctl"' not in coll and "surveys-hub.js" not in coll, \
+        "the collections hub carries neither the controls nor the script"
 
 
 # ==================================================================================================
@@ -606,7 +664,7 @@ def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor(
         f"the card itself must establish the positioning context for the stretched link: {card_rule}"
     assert ".idxt a::after" in css, "the title anchor must carry the card-covering ::after"
     assert ".idxcard:hover" in css, "the card must acknowledge the pointer"
-    card = page.split('<article class="idxcard">', 1)[1].split("</article>", 1)[0]
+    card = re.split(r'<article class="idxcard"[^>]*>', page, 1)[1].split("</article>", 1)[0]
     assert card.count("<a ") == 1, f"exactly one real anchor per surveys card, got {card.count('<a ')}"
     assert "<button" not in page, "no buttons in rows, ever: the hierarchy is catalogue, survey, data"
     assert "&#8594;" in card, "the card reveals a forward arrow for the in-site action"
@@ -993,8 +1051,8 @@ def test_the_new_chrome_carries_only_the_identity_mark_and_no_script(built):
         # No INLINE script, ever: a script element carries a non-executable type or is one of the
         # dialog's three same-origin files, which only a page with the dialog may load.
         for tag in re.findall(r"<script\b[^>]*>", page):
-            assert tag == '<script type="application/ld+json">' or (
-                'id="wgetModal"' in page and tag in {f'<script src="{s}">' for s in FETCH_SCRIPT_SRCS}), \
+            assert tag == '<script type="application/ld+json">' or \
+                tag in {f'<script src="{s}">' for s in _page_scripts(page)}, \
                 f"{rel}: no inline script may appear on a static page, got {tag}"
         srcs = _page_srcs(page, rel)
         assert srcs == _allowed_srcs(rel, page), \

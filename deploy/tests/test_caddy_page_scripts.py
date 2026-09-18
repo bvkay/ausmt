@@ -1,5 +1,6 @@
 """The generated survey pages load portal scripts (/src/fetchcmd.js, /src/fetchdialog.js,
-/src/page-fetch.js) beside the SPA. Two Caddyfile facts make that safe, and both are pinned here
+/src/page-fetch.js) beside the SPA, and the surveys hub loads /src/surveys-hub.js the same way.
+Two Caddyfile facts make that safe, and both are pinned here
 POSITIVELY: not that some exclusion is absent, but that the rule which reaches /src/*.js and the
 rule which serves /surveys/<slug> under the strict CSP are the rules the config actually declares.
 
@@ -28,7 +29,7 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
 _BOX_CADDY = _REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
-_SCRIPTS = ("/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js")
+_SCRIPTS = ("/src/fetchcmd.js", "/src/fetchdialog.js", "/src/page-fetch.js", "/src/surveys-hub.js")
 _PAGE = "/surveys/example-survey"
 
 
