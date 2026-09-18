@@ -59,3 +59,12 @@ kuth-tamar-valley-2008/NTL036A.edi
 # Appendix II rather than from the third-party WinGLink export, whose renditions of them are held
 # verbatim under the package's provenance/ and are not read by the build. All twenty-one stations of
 # that package publish, so no drop is expected from it and an entry here would be a place to hide one.
+
+# youanmi-2010: one station refused by the sign-convention gate. YMB057's off-diagonal phases are
+# not merely out of quadrant, they sweep through every quadrant across the band (arg Zxy runs from
+# 180 down to -108 degrees over 0.027 to 655 s, arg Zyx from -145 up to 50), and the diagonal Zyy is
+# four times the size of Zyx in the mid band; no channel sign change, conjugation, axis swap or
+# rotation restores a physical tensor, so the defect is the custodian's estimate for this station,
+# not its convention. The package records the station as refused and the loss is accepted here so
+# that the other 183 publish. Station YMB057.
+youanmi-2010/YMB057.edi
