@@ -30,15 +30,23 @@ CORRECTION goes:
   * Arm C - per-period rotation WITHIN a station (PAX class: per-period ZROT/TROT, or per-block
     SPECTRA ROTSPEC): REFUSE the station, exactly like a convention-gate refusal — a single served
     curve from period-varying frames is misleading-by-construction; absence is honester. The reason
-    names the per-period rotation and the fix ("re-export in a single coherent frame").
+    names the per-period rotation and the fix ("re-export in a single coherent frame"). An angle
+    stated at a period whose impedance (for ZROT) or tipper (for TROT) is the EMPTY sentinel is not
+    a frame: exporters write 0 there, so only the angles at data-bearing periods decide whether a
+    station is uniform (the Delamerian shape, 8 or 41 degrees on every estimate and 0 on the empties).
   * rotation UNKNOWABLE (sentinel/missing angles at data-bearing periods, reader/text disagreement,
-    ROTSPEC-vs-azimuth conflict, RHOROT declared rotated while the Z frame is undeclared) -> FAIL:
+    ROTSPEC-vs-azimuth conflict other than a half-turn, RHOROT declared rotated while the Z frame is
+    undeclared) -> FAIL:
     the station is skipped loudly (fail-closed) - never served in an unresolvable frame.
   * no declaration at all, or azimuth metadata too inconsistent to be evidence (e.g. the harness
     Tasmania files' HX AZM=180/HY AZM=90 non-orthogonal placeholders) -> serve with the frame
     facts recorded; Gate 2 still checks the convention. Azimuths on the impedance branch are
     ACQUISITION metadata, not the stored-tensor frame — the >ZROT declaration wins when present
     (USArray: physical sensor azimuths ±19° with ZROT=0 = processed-to-zero, served as-is).
+  * a spectra ROTSPEC exactly a half-turn from the HMEAS azimuths (ROTSPEC=180 with HX written 360,
+    the Bollards Lagoon shape) is not a conflict: negating both horizontal axes leaves every
+    cross-power, and so the impedance, unchanged; the station serves in the azimuth frame with the
+    tipper's sign ambiguity noted.
 The de-rotation MATH (Z0(i) = R(-θi) Z(i) R(-θi)^T, T0(i) = T(i) R(-θi)^T, R(β) = [[cosβ, sinβ],
 [-sinβ, cosβ]]) is RETAINED below for DIAGNOSTICS only — no serve-path caller invokes it (v3). It is
 pinned by the synthetic round-trips and the AusLAMP-SA custodian-twin proof for future diagnostic use.
@@ -156,6 +164,8 @@ def parse_frame_evidence(text: str) -> dict:
     # bears on no disposition.)
     return {
         "branch": "spectra" if spectra else "mt",
+        "z_empty": _empty_mask(text, ("ZXXR", "ZXYR", "ZYXR", "ZYYR")),
+        "t_empty": _empty_mask(text, ("TXR", "TYR", "TXR.EXP", "TYR.EXP")),
         "zrot": _block_values(text, "ZROT"),
         "rhorot": _block_values(text, "RHOROT"),
         "trot": (_block_values(text, "TROT") if _block_values(text, "TROT") is not None
@@ -167,6 +177,26 @@ def parse_frame_evidence(text: str) -> dict:
         "azm_ey": _first_azm(text, "EMEAS", "EY"),
         "tipper_rot_attr": tip_attr.group(1).upper() if tip_attr else None,
     }
+
+
+def _empty_mask(text: str, labels) -> Optional[list]:
+    """Per-period True where EVERY present block among `labels` carries the missing-data sentinel
+    (|v| > ROT_FILL_MAX, the ~1e32 EMPTY convention) at that period; None when no block among
+    `labels` is present or the present blocks disagree in length. Exporters write a rotation of 0
+    at periods that carry no estimate, so a rotation block is only read at periods that carry data."""
+    cols = [v for v in (_block_values(text, lab) for lab in labels) if v is not None]
+    if not cols or any(len(c) != len(cols[0]) for c in cols):
+        return None
+    return [all((not math.isfinite(c[i])) or abs(c[i]) > ROT_FILL_MAX for c in cols)
+            for i in range(len(cols[0]))]
+
+
+def _angles_at_data(vals, empty):
+    """`vals` with the entries at empty periods dropped, when `empty` aligns with it; otherwise
+    `vals` unchanged. A rotation stated where there is nothing to rotate is not a frame."""
+    if not vals or not empty or len(empty) != len(vals):
+        return list(vals or [])
+    return [v for v, e in zip(vals, empty) if not e]
 
 
 def _mask_sentinels(vals):
@@ -356,6 +386,18 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
             if abs(abs(_norm_angle(rs_th)) - abs(_norm_angle(az))) <= AZIMUTH_TOL_DEG:
                 # The Black Hill case: |HMEAS-implied| == |ROTSPEC| -> ONE rotation, not two.
                 theta = _norm_angle(rs_th)
+            elif abs(((rs_th - az) % 360.0) - 180.0) <= AZIMUTH_TOL_DEG:
+                # A half-turn between the two declarations (the Bollards Lagoon case: ROTSPEC=180
+                # with HX written as 360). Rotating both horizontal axes by 180 degrees negates
+                # every channel, and a cross-power of two negated channels is unchanged, so the
+                # impedance is the same in either frame; the azimuth frame is served. The tipper
+                # is a vector and does change sign under a half-turn, so that ambiguity is noted.
+                theta = _norm_angle(az)
+                notes.append(f"frame: spectra ROTSPEC={rs_th:g} is a half-turn from the HMEAS "
+                             f"azimuths (HX={ev['azm_hx']}, HY={ev['azm_hy']}); a half-turn leaves "
+                             f"the impedance unchanged, so it is served in the azimuth frame "
+                             f"({theta:g} deg); the tipper sign carries the half-turn ambiguity "
+                             f"and is served as stored")
             else:
                 return _fail(f"SPECTRA frame declarations conflict: ROTSPEC={rs_th:g} but the HMEAS "
                              f"azimuths imply {az:g} (HX={ev['azm_hx']}, HY={ev['azm_hy']}) — the "
@@ -386,7 +428,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
             return _fail("ZROT carries a missing-data sentinel (~1e32) at periods that HAVE "
                          "impedance data — the frame of those estimates is unknowable; fix: "
                          "supply real per-period rotation angles or zero (the declared zero reference).")
-        u = _uniq_eps(zr)
+        u = _uniq_eps(_angles_at_data(zr, ev.get("z_empty")))
         # cross-check what the reader itself recorded (mt_metadata nulls sentinels to 0)
         if rot_mtm is not None and len(u) >= 1:
             mu = _uniq_eps([float(v) for v in rot_mtm])
@@ -440,7 +482,7 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
     # rides in facts["evidence"]["trot"] as a recorded fact; nothing is rotated. ----
     if has_tipper and ev["trot"] is not None:
         tr = _mask_sentinels(ev["trot"])
-        tu = _uniq_eps(tr)
+        tu = _uniq_eps(_angles_at_data(tr, ev.get("t_empty")))
         tnz = [a for a in tu if abs(a) > ROT_ZERO_EPS_DEG]
         if any(v is None for v in tr) and tnz:
             return _fail("TROT mixes missing-data sentinels with nonzero angles — the tipper "

@@ -208,6 +208,8 @@ The count lines (`C18 survey ...`, `C18 cache [...]`, `built N stations`, the `Q
 unchanged, and so is every gate that stops or withholds: a `WITHHOLD`, a `GATE FAIL`, a `SKIP` and a
 duplicate-id `ERROR` still name their own file or station.
 
+Two export shapes look like frame mixing and are not drops. A rotation block that reads 0 only at periods whose transfer function is the EMPTY sentinel is one frame: exporters write 0 where they have no estimate, so the gate reads rotation angles only at periods that carry data (the Delamerian shape, 8 or 41 degrees on every estimate). A spectra ROTSPEC exactly a half-turn from the coil azimuths (ROTSPEC=180 with HX written 360, the Bollards Lagoon shape) leaves the impedance unchanged, so the station serves in the azimuth frame with the tipper sign ambiguity noted.
+
 `stations_dropped` is the ledger every drop lands in, whatever refused it: a convention gate, a
 missing coordinate or period, or the reader. Each row carries the source `file` beside the `station`
 and the `reason`, because the only action a drop row can lead to is opening that file and `station`
