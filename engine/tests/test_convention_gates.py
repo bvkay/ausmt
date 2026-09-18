@@ -758,3 +758,84 @@ def test_conventions_header_states_the_same_rotation_sign_as_the_derotation_docs
         "the impedance quadrants are named with their signed bounds")
     assert re.search(r"applies R\(-θ\)\)", src), "the de-rotation docstring states R(-θ)"
     assert "R(θi) Z(i)" not in src and "(180..-90°)" not in src, "no unsigned copy of either statement may stand"
+
+
+# ---------------------------------------------------------------------------------------------
+# A rotation stated at a period that carries no estimate is not a frame (the Delamerian shape:
+# EMpower writes TROT 0 where the tipper is EMPTY and 8 or 41 where it exists), and a spectra
+# ROTSPEC that is a half-turn from the coil azimuths leaves the impedance unchanged (Bollards Lagoon).
+# ---------------------------------------------------------------------------------------------
+_EMPTY = 1.0e32
+
+
+def _blank_periods(text, labels, idx):
+    for lab in labels:
+        vals = _read_block(text, lab)
+        for i in idx:
+            vals[i] = _EMPTY
+        text = _write_block(text, lab, vals)
+    return text
+
+
+def test_trot_zero_only_at_empty_tipper_periods_is_one_frame(tmp_path):
+    """FAILS IF: a station whose TROT reads 0 only at periods where every tipper block carries the
+    EMPTY sentinel is refused as per-period. The exporter writes 0 where it has no estimate; every
+    real estimate sits at one angle, so the tipper frame is uniform and the station serves."""
+    n = _N_VULCAN
+    idx = list(range(3, n, 7))
+    text = _vulcan_with_tipper(0.0, 8.0)
+    trot = [8.0] * n
+    for i in idx:
+        trot[i] = 0.0
+    text = _write_block(text, "TROT", trot)
+    text = _blank_periods(text, ("TXR.EXP", "TXI.EXP", "TYR.EXP", "TYI.EXP"), idx)
+    parsed = _parse(tmp_path, "trot_empty.edi", text)
+    assert "skip" not in parsed, f"a zero written where the tipper is EMPTY is not a frame: {parsed.get('skip')}"
+
+
+def test_trot_two_angles_on_data_periods_still_refused(tmp_path):
+    """FAILS IF: the empty-period rule lets a real per-period tipper frame through. The same two
+    angles, but the tipper carries data at both, must still be refused."""
+    n = _N_VULCAN
+    idx = list(range(3, n, 7))
+    text = _vulcan_with_tipper(0.0, 8.0)
+    trot = [8.0] * n
+    for i in idx:
+        trot[i] = 0.0
+    text = _write_block(text, "TROT", trot)
+    parsed = _parse(tmp_path, "trot_mixed.edi", text)
+    assert "skip" in parsed and "per-period TROT" in parsed["skip"]["reason"]
+
+
+def test_zrot_zero_only_at_empty_impedance_periods_is_one_frame(tmp_path):
+    """FAILS IF: a ZROT of 0 written only at periods where every impedance block is EMPTY makes the
+    station per-period. The estimates all sit at one angle, which is served as stored."""
+    n = _N_VULCAN
+    idx = [0, 1, n - 1]
+    text = _vulcan_rotated(8.0)
+    zrot = [8.0] * n
+    for i in idx:
+        zrot[i] = 0.0
+    text = _write_block(text, "ZROT", zrot)
+    text = _blank_periods(text, ("ZXXR", "ZXXI", "ZXYR", "ZXYI", "ZYXR", "ZYXI", "ZYYR", "ZYYI"), idx)
+    parsed = _parse(tmp_path, "zrot_empty.edi", text)
+    assert "skip" not in parsed, f"a zero written where the impedance is EMPTY is not a frame: {parsed.get('skip')}"
+    assert parsed["frame"]["frame_served"] == "declared-azimuth"
+    assert parsed["frame"]["declared_azimuth_deg"] == 8.0
+
+
+def test_spectra_rotspec_half_turn_from_azimuths_serves_in_azimuth_frame(tmp_path):
+    """FAILS IF: a spectra file with ROTSPEC=180 and HX written as 360 is refused as a conflict.
+    A half-turn negates every channel and a cross-power of two negated channels is unchanged, so
+    the impedance is the same in either frame; it serves in the azimuth frame with the half-turn
+    noted. A quarter-turn conflict (ROTSPEC=90 against azimuth 0) must still refuse."""
+    text = PHOENIX.read_text(encoding="latin-1")
+    half = re.sub(r"ROTSPEC=\S+", "ROTSPEC=180", text)
+    half = re.sub(r"(CHTYPE=HX[^\n]*?AZM=)0\b", r"\g<1>360", half)
+    assert "AZM=360" in half
+    parsed = _parse(tmp_path, "halfturn.edi", half)
+    assert "skip" not in parsed, f"a half-turn is not a conflict: {parsed.get('skip')}"
+    assert parsed["frame"]["frame_served"] == "declared-zero"
+    quarter = re.sub(r"ROTSPEC=\S+", "ROTSPEC=90", text)
+    parsed_q = _parse(tmp_path, "quarter.edi", quarter)
+    assert "skip" in parsed_q and "conflict" in parsed_q["skip"]["reason"]
