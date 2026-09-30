@@ -134,3 +134,20 @@ def test_provisioning_installs_the_receiver_and_starts_the_serve_stack():
                      "AUSMT_BOX_READER_UPSTREAM=http://127.0.0.1:8445", "fetch-basemap.sh",
                      "make up", "pull --ff-only"):
         assert fragment in prov, fragment
+
+
+def test_the_gateway_upstream_is_asked_for_and_carried_to_the_front_door():
+    """This host has no gateway, so the front door's four public gateway routes need the curation
+    host's reader listener as their upstream. The serve .env asks for it with a placeholder that
+    stops provisioning until it is filled, and provisioning carries the value into the front door's
+    .env, where compose reads it. FAILS IF the placeholder is missing or the value never reaches
+    the front door."""
+    example = (_NECTAR / "serve.env.example").read_text(encoding="utf-8")
+    assert re.search(r"^AUSMT_GATEWAY_UPSTREAM=REPLACE_WITH_[A-Z_]+$", example, re.M), example
+    prov = _PROVISION.read_text(encoding="utf-8")
+    assert re.search(r"s/\^AUSMT_GATEWAY_UPSTREAM=//p' \"\$DEPLOY/\.env\"", prov), \
+        "provisioning must read the gateway upstream from deploy/.env"
+    assert re.search(r"AUSMT_GATEWAY_UPSTREAM=\$gw[^\n]*\"\$DEPLOY/frontdoor/\.env\"", prov), \
+        "provisioning must write the gateway upstream into deploy/frontdoor/.env"
+    assert "grep -q 'REPLACE_WITH' \"$DEPLOY/.env\"" in prov, \
+        "an unfilled placeholder must stop provisioning"

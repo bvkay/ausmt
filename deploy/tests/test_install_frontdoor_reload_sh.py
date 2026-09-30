@@ -13,6 +13,7 @@ on the gateway-ci ubuntu workflow it RUNS with nothing skipped, so the skip trip
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -250,3 +251,100 @@ def test_an_absent_route_table_renders_an_empty_one(tmp_path):
     assert r.returncode == 0, r.stderr
     text = (work / "ts-routes.map.rendered").read_text(encoding="utf-8")
     assert text.startswith("#") and '"/go/ts/' not in text
+
+
+# --------------------------------------------------------------------------------------------------
+# The gateway upstream: the four public gateway routes proxy to AUSMT_GATEWAY_UPSTREAM, which defaults
+# to the reader upstream. With it unset the adapted config must equal the one the reader-only wiring
+# produced (the box deployment changes nothing); with it set, the only difference is the upstream of
+# those four routes. Compared as `caddy adapt` JSON over the REAL rendered file, so a placeholder the
+# render left unresolved or a route that moved shows up as a difference.
+# --------------------------------------------------------------------------------------------------
+_CADDY = shutil.which("caddy")
+_BOX = "http://ausmt-box:8445"
+_CURATE = "http://ausmt-curate.example:8445"
+
+
+def _adapt(text: str, tmp: Path, env_extra: dict) -> str:
+    table = tmp / "ts-routes.map"
+    table.write_text("# empty\n", encoding="utf-8")
+    cfg = tmp / "adapt.caddy"
+    cfg.write_text(text.replace("import /etc/caddy/ts-routes.map", f"import {table.as_posix()}"),
+                   encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("AUSMT_")}
+    env.update({"AUSMT_PUBLIC_NAME": "ausmt.auscope.org.au", "AUSMT_BOX_READER_UPSTREAM": _BOX,
+                "AUSMT_ACME_EMAIL": "x@y.org"})
+    env.update(env_extra)
+    r = subprocess.run([_CADDY, "adapt", "--adapter", "caddyfile", "--config", str(cfg)],
+                       capture_output=True, text=True, env=env)
+    assert r.returncode == 0, f"caddy adapt failed:\n{r.stderr}"
+    return json.dumps(json.loads(r.stdout), sort_keys=True)
+
+
+def _reader_only_wiring() -> str:
+    """The tracked template with the legacy block stripped and every gateway route on the reader
+    upstream: the configuration the front door served before the gateway had its own upstream."""
+    text = _REAL_CADDYFILE.read_text(encoding="utf-8")
+    text = re.sub(r"(?ms)^# >>> legacy-redirect.*?^# <<< legacy-redirect\n", "", text)
+    return text.replace("import gateway_upstream", "import box_upstream")
+
+
+def _setup_gateway(tmp_path: Path, gateway: str | None) -> tuple[Path, dict]:
+    work, env = _setup_real_caddyfile(tmp_path, legacy=None)
+    if gateway is not None:
+        with (work / ".env").open("a", encoding="utf-8") as fh:
+            fh.write(f"AUSMT_GATEWAY_UPSTREAM={gateway}\n")
+    return work, env
+
+
+def test_the_rendered_gateway_upstream_defaults_to_the_reader_upstream(tmp_path):
+    """Unset or empty: the render leaves no gateway placeholder behind (compose would hand Caddy an
+    empty upstream), and names the default it chose. FAILS IF the placeholder survives."""
+    for label, gateway in (("unset", None), ("empty", "")):
+        (tmp_path / label).mkdir()
+        work, env = _setup_gateway(tmp_path / label, gateway)
+        r = _run(work, env)
+        assert r.returncode == 0, f"installer ({label}) failed: {r.stdout}\n{r.stderr}"
+        text = (work / "Caddyfile.rendered").read_text(encoding="utf-8")
+        assert "{$AUSMT_GATEWAY_UPSTREAM}" not in text, (label, "the default must be rendered in")
+        assert "import gateway_upstream" in text, "the gateway routes keep their own snippet"
+        assert "gateway routes use the reader upstream" in r.stdout, r.stdout
+
+
+def test_the_rendered_gateway_upstream_is_kept_and_validated_when_set(tmp_path):
+    """Set: the placeholder stays for compose to fill, and the validate call receives the variable.
+    FAILS IF the render overwrites a set upstream or validate cannot resolve it."""
+    work, env = _setup_gateway(tmp_path, _CURATE)
+    r = _run(work, env)
+    assert r.returncode == 0, f"installer failed: {r.stdout}\n{r.stderr}"
+    text = (work / "Caddyfile.rendered").read_text(encoding="utf-8")
+    assert "{$AUSMT_GATEWAY_UPSTREAM}" in text
+    validate = [ln for ln in Path(env["STUB_LOG"]).read_text(encoding="utf-8").splitlines()
+                if "caddy validate" in ln]
+    assert validate and "-e AUSMT_GATEWAY_UPSTREAM" in validate[0], validate
+    assert f"gateway routes use {_CURATE}" in r.stdout, r.stdout
+
+
+@pytest.mark.skipif(_CADDY is None, reason="no caddy binary to adapt with")
+def test_an_unset_gateway_upstream_adapts_to_the_reader_only_config(tmp_path):
+    """The box deployment leaves AUSMT_GATEWAY_UPSTREAM unset: its adapted config must be identical
+    to the reader-only wiring. FAILS IF anything at all differs."""
+    work, env = _setup_gateway(tmp_path, None)
+    assert _run(work, env).returncode == 0
+    rendered = (work / "Caddyfile.rendered").read_text(encoding="utf-8")
+    assert _adapt(rendered, tmp_path, {}) == _adapt(_reader_only_wiring(), tmp_path, {})
+
+
+@pytest.mark.skipif(_CADDY is None, reason="no caddy binary to adapt with")
+def test_a_set_gateway_upstream_moves_only_the_four_gateway_routes(tmp_path):
+    """The serving replica sets it to the curation host's reader listener: exactly four upstreams
+    change, and putting the reader upstream back in their place gives the reader-only config, so
+    wall 1 admits exactly what it admitted before. FAILS IF a fifth route moves or any matcher,
+    handler or header differs."""
+    work, env = _setup_gateway(tmp_path, _CURATE)
+    assert _run(work, env).returncode == 0
+    rendered = (work / "Caddyfile.rendered").read_text(encoding="utf-8")
+    got = _adapt(rendered, tmp_path, {"AUSMT_GATEWAY_UPSTREAM": _CURATE})
+    curate_dial, box_dial = '"ausmt-curate.example:8445"', '"ausmt-box:8445"'
+    assert got.count(curate_dial) == 4, got.count(curate_dial)
+    assert got.replace(curate_dial, box_dial) == _adapt(_reader_only_wiring(), tmp_path, {})

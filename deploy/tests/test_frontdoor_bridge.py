@@ -148,26 +148,43 @@ def _stub_cfg(port: int, tag: str = "STUB") -> str:
             + f":{port} {{\n\trespond \"{tag} {{http.request.uri}}\" 200\n}}\n")
 
 
+def _snippet(name: str) -> str | None:
+    """The shipped `(name) { ... }` snippet definition verbatim, or None when it is not defined."""
+    text = _fd_text()
+    m = re.search(r"\(" + re.escape(name) + r"\)\s*\{", text)
+    if not m:
+        return None
+    brace = text.index("{", m.end() - 1)
+    return text[m.start():brace] + _brace_match(text, brace)
+
+
 def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
+                   gw_stub_port: int | None = None,
                    drop_gateway_deny: bool = False, unscope_submit_method: bool = False,
                    unfiltered_log: bool = False) -> tuple[str, Path]:
     """Compose a hermetic front-door config from the SHIPPED site body: rebind to :listen_port with
-    auto_https off (no ACME), point the reverse_proxy at the local stub, and write the access log to a
-    temp file. Optional mutations power the red-proofs."""
+    auto_https off (no ACME), point the reader upstream at the local stub and the gateway upstream at
+    gw_stub_port (the same stub when None, the shape of a deploy that leaves AUSMT_GATEWAY_UPSTREAM
+    unset), and write the access log to a temp file. Optional mutations power the red-proofs."""
     body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
     logpath = td / "access-frontdoor.json"
     body = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", body)
-    # The site body imports the shipped (box_upstream) snippet, so
-    # the composition carries the snippet definition verbatim and the upstream substitution is
-    # applied there: the composed edge then dials the stub through the REAL transport (h2c +
-    # keepalive), which is exactly the path production requests take.
-    m_snip = re.search(r"\(box_upstream\)\s*\{", _fd_text())
-    assert m_snip, "the shipped Caddyfile must define the (box_upstream) snippet"
-    snip_start = m_snip.start()
-    snip_text = _fd_text()[snip_start:_fd_text().index("{", m_snip.end() - 1)] + _brace_match(
-        _fd_text(), _fd_text().index("{", m_snip.end() - 1))
-    snippet = snip_text.replace("{$AUSMT_BOX_READER_UPSTREAM}", f"127.0.0.1:{stub_port}")
-    body = body.replace("{$AUSMT_BOX_READER_UPSTREAM}", f"127.0.0.1:{stub_port}")
+    # The site body imports the shipped upstream snippets, so the composition carries each snippet
+    # definition verbatim and the upstream substitution is applied there: the composed edge then
+    # dials the stubs through the REAL transport (h2c + keepalive), which is exactly the path
+    # production requests take.
+    box_snip = _snippet("box_upstream")
+    assert box_snip, "the shipped Caddyfile must define the (box_upstream) snippet"
+    gw_port = stub_port if gw_stub_port is None else gw_stub_port
+    subs = {"{$AUSMT_BOX_READER_UPSTREAM}": f"127.0.0.1:{stub_port}",
+            "{$AUSMT_GATEWAY_UPSTREAM}": f"127.0.0.1:{gw_port}"}
+    snippet = box_snip
+    gw_snip = _snippet("gateway_upstream")
+    if gw_snip:
+        snippet += "\n" + gw_snip
+    for placeholder, addr in subs.items():
+        snippet = snippet.replace(placeholder, addr)
+        body = body.replace(placeholder, addr)
     if drop_gateway_deny:
         # Remove the whole wall-1 deny-by-default: the `@nonpublic path ...` matcher line AND its
         # `handle @nonpublic { respond ... }` block — red-proof for (iii). Both must go together or
@@ -351,6 +368,41 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
         "the box_upstream snippet must proxy to the box upstream env placeholder"
 
 
+_PUBLIC_GW_MATCHERS = ("public_gw_submit", "public_gw_request_key", "public_gw_healthz",
+                       "public_gw_status")
+
+
+def test_frontdoor_gateway_routes_have_their_own_upstream():
+    """The four public gateway routes proxy through (gateway_upstream), everything else the site
+    proxies goes through (box_upstream). A host with no gateway of its own (the serving replica)
+    points AUSMT_GATEWAY_UPSTREAM at the curation host's reader listener, whose wall 2 proxies
+    exactly those four routes to its gateway. Both snippets carry one transport, so the gateway hop
+    cannot drift to a different protocol than the reader hop. FAILS IF a gateway route stays on the
+    reader upstream, a reader route moves to the gateway upstream, or the transports differ."""
+    body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
+
+    def _handle(name: str) -> str:
+        return _brace_match(body, body.index(f"\thandle @{name} {{"))
+
+    for name in _PUBLIC_GW_MATCHERS:
+        h = _handle(name)
+        assert "import gateway_upstream" in h and "box_upstream" not in h, \
+            f"@{name} must proxy through the gateway upstream only:\n{h}"
+    h = _handle("public_add_survey")
+    assert "import box_upstream" in h and "gateway_upstream" not in h, \
+        "add-survey.html is a reader page and stays on the reader upstream"
+    assert len(re.findall(r"import\s+gateway_upstream", _fd_text())) == 4, \
+        "exactly the four public gateway routes use the gateway upstream"
+    gw, box = _snippet("gateway_upstream"), _snippet("box_upstream")
+    assert gw, "the shipped Caddyfile must define the (gateway_upstream) snippet"
+    assert "reverse_proxy {$AUSMT_GATEWAY_UPSTREAM} {" in gw, \
+        "the gateway_upstream snippet must proxy to the gateway upstream env placeholder"
+    gw_transport = gw.split("{$AUSMT_GATEWAY_UPSTREAM}", 1)[1]
+    box_transport = box.split("{$AUSMT_BOX_READER_UPSTREAM}", 1)[1]
+    assert gw_transport == box_transport, \
+        "the gateway and reader upstreams must share one transport block"
+
+
 def test_frontdoor_tls_and_hsts_configured():
     """Invariant d (config level): the public name drives automatic HTTPS (a hostname site address,
     NO `auto_https off`) so a certificate issues and plain HTTP redirects; and HSTS is set once TLS is
@@ -455,6 +507,43 @@ def test_public_subset_traverses_frontdoor_reader_gateway_end_to_end():
                     f"{method} {path} must reach the gateway stub end-to-end, got {st} {body!r}"
         finally:
             _stop(fd); _stop(box); _stop(gw)
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
+def test_gateway_routes_reach_the_gateway_upstream_and_nothing_else_moves():
+    """RUNTIME, the split upstream. The reader upstream and the gateway upstream are two different
+    stubs: the four public gateway routes reach the GATEWAY-upstream stub with their correct verb, the
+    reader and add-survey.html reach the READER stub, and every non-public class and wrong-method hit
+    still refuses at wall 1 and reaches neither. FAILS IF a gateway route lands on the reader, a
+    reader path lands on the gateway upstream, or the split opens anything wall 1 refused."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rd_port, gw_port, fd_port = _free_port(), _free_port(), _free_port()
+        rd = _run_caddy(_stub_cfg(rd_port, tag="STUB"), td, "reader-stub")
+        gw = _run_caddy(_stub_cfg(gw_port, tag="GWUP"), td, "gw-upstream-stub")
+        cfg, _log = _frontdoor_cfg(td, fd_port, rd_port, gw_stub_port=gw_port)
+        fd = _run_caddy(cfg, td, "frontdoor")
+        try:
+            _wait_port(rd_port); _wait_port(gw_port); _wait_port(fd_port)
+            for method, path in (("POST", "/gateway/submit"), ("POST", "/gateway/request-key"),
+                                 ("GET", "/gateway/healthz"), ("GET", "/gateway/status/abc123")):
+                st, body = _req(fd_port, path, method=method)
+                assert st == 200 and body.startswith(f"GWUP {path}"), \
+                    f"{method} {path} must reach the gateway upstream, got {st} {body!r}"
+            for path in ("/", "/add-survey.html", "/data/catalogue.json"):
+                st, body = _get(fd_port, path)
+                assert st == 200 and body.startswith(f"STUB {path}"), \
+                    f"GET {path} must stay on the reader upstream, got {st} {body!r}"
+            for path in _CURATOR_CLASSES:
+                st, body = _get(fd_port, path)
+                assert st == 404 and "STUB" not in body and "GWUP" not in body, \
+                    f"{path} must refuse at wall 1, got {st} {body!r}"
+            for method, path in _WRONG_METHOD_PUBLIC:
+                st, body = _req(fd_port, path, method=method)
+                assert st == 404 and "GWUP" not in body, \
+                    f"{method} {path} (wrong verb) must refuse at wall 1, got {st} {body!r}"
+        finally:
+            _stop(fd); _stop(gw); _stop(rd)
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")

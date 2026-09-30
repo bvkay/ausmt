@@ -117,16 +117,20 @@ def _bindir(tmp_path: Path) -> Path:
     return b
 
 
-def _env(tmp_path: Path, caddyfile: Path, *, legacy: str | None = "ausmt.au", **extra) -> dict:
+def _env(tmp_path: Path, caddyfile: Path, *, legacy: str | None = "ausmt.au",
+         gateway: str | None = None, **extra) -> dict:
     """The doctor's .env fixture mirrors the canonical-name deploy: the AuScope name is canonical
     and (by default) ausmt.au is the legacy redirect name, so the legacy legs RUN in the default
-    fixtures. Pass legacy=None for the canonical-only deploy (the legs must then SKIP)."""
+    fixtures. Pass legacy=None for the canonical-only deploy (the legs must then SKIP), and gateway
+    for a deploy whose public gateway routes have their own upstream."""
     b = _bindir(tmp_path)
     envf = tmp_path / ".env"
     lines = ["AUSMT_PUBLIC_NAME=ausmt.auscope.org.au",
              "AUSMT_BOX_READER_UPSTREAM=http://ausmt-box:8445"]
     if legacy is not None:
         lines.append(f"AUSMT_LEGACY_REDIRECT_NAME={legacy}")
+    if gateway is not None:
+        lines.append(f"AUSMT_GATEWAY_UPSTREAM={gateway}")
     envf.write_text("\n".join(lines) + "\n", encoding="utf-8")
     tsmap = tmp_path / "ts-routes.map"
     tsmap.write_text(_TS_MAP, encoding="utf-8")
@@ -327,12 +331,15 @@ def test_unset_legacy_var_skips_both_legs_cleanly(tmp_path):
 def test_config_check_agrees_with_the_installers_rendering(tmp_path):
     """CROSS-IMPLEMENTATION DRIFT GUARD. install-frontdoor.sh renders Caddyfile.rendered; doctor.sh
     independently re-renders the repo template for its hash compare. Run the REAL installer (docker
-    stubbed) over the REAL repo Caddyfile in both var states, then feed each rendering's hash to the
-    doctor as the container-mounted file: the config leg must PASS both ways. FAILS IF the two
-    renderers ever diverge (the sed ranges are meant to be identical)."""
+    stubbed) over the REAL repo Caddyfile in every state of the legacy name and the gateway upstream,
+    then feed each rendering's hash to the doctor as the container-mounted file: the config leg must
+    PASS every way. FAILS IF the two renderers ever diverge (the sed expressions are meant to be
+    identical)."""
     real_cf = _REPO / "deploy" / "frontdoor" / "Caddyfile"
     install = _REPO / "deploy" / "frontdoor" / "install-frontdoor.sh"
-    for label, legacy in (("unset", None), ("set", "ausmt.au")):
+    for label, legacy, gateway in (("unset", None, None), ("set", "ausmt.au", None),
+                                   ("gw-unset", None, ""),
+                                   ("gw-set", "ausmt.au", "http://ausmt-curate.example:8445")):
         work = tmp_path / f"install-{label}"
         work.mkdir(parents=True)
         shutil.copy(install, work / "install-frontdoor.sh")
@@ -343,6 +350,8 @@ def test_config_check_agrees_with_the_installers_rendering(tmp_path):
                    "AUSMT_ACME_EMAIL=x@y.org\n")
         if legacy:
             envtext += f"AUSMT_LEGACY_REDIRECT_NAME={legacy}\n"
+        if gateway is not None:
+            envtext += f"AUSMT_GATEWAY_UPSTREAM={gateway}\n"
         (work / ".env").write_text(envtext, encoding="utf-8")
         bindir = work / "bin"
         bindir.mkdir()
@@ -358,7 +367,7 @@ def test_config_check_agrees_with_the_installers_rendering(tmp_path):
         rendered_hash = hashlib.sha256((work / "Caddyfile.rendered").read_bytes()).hexdigest()
         doctor_root = tmp_path / f"doctor-{label}"
         doctor_root.mkdir()
-        denv = _env(doctor_root, real_cf, legacy=legacy, FAKE_HASH=rendered_hash)
+        denv = _env(doctor_root, real_cf, legacy=legacy, gateway=gateway, FAKE_HASH=rendered_hash)
         rd = _run(denv, "report")
         assert any(ln.startswith("PASS config:") for ln in rd.stdout.splitlines()), (
             f"doctor's fresh render ({label}) must hash-match the installer's rendering:\n{rd.stdout}")

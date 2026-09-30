@@ -64,3 +64,22 @@ def test_boot_ordering_dropin_orders_docker_after_tailscaled():
 def test_boot_ordering_dropin_has_no_em_dashes():
     """House rule: no em dashes in the shipped ops files' user-facing text."""
     assert "—" not in _DROPIN.read_text(encoding="utf-8"), "no em dashes in the drop-in"
+
+
+_GW_SED = "sed 's/{\\$AUSMT_GATEWAY_UPSTREAM}/{$AUSMT_BOX_READER_UPSTREAM}/g'"
+
+
+def test_the_gateway_upstream_is_optional_and_rendered_the_same_way_everywhere():
+    """AUSMT_GATEWAY_UPSTREAM is optional: compose passes it through with an empty default, the
+    example .env documents it as optional, and the installer and the doctor default it to the
+    reader upstream with one identical sed, so the doctor's hash compare matches what the installer
+    mounted. FAILS IF compose requires it, the example omits it, or the two renders differ."""
+    compose = (_FD / "compose.yaml").read_text(encoding="utf-8")
+    assert "AUSMT_GATEWAY_UPSTREAM: ${AUSMT_GATEWAY_UPSTREAM:-}" in compose
+    example = (_FD / ".env.example").read_text(encoding="utf-8")
+    assert re.search(r"^AUSMT_GATEWAY_UPSTREAM=$", example, re.MULTILINE), example
+    para = example.split("\nAUSMT_GATEWAY_UPSTREAM=")[0].rsplit("\n\n", 1)[-1]
+    assert "OPTIONAL" in para, f"the example must say the variable is optional:\n{para}"
+    for name in ("install-frontdoor.sh", "doctor.sh"):
+        src = (_FD / name).read_text(encoding="utf-8")
+        assert _GW_SED in src, f"{name} must default the gateway upstream with the shared sed"

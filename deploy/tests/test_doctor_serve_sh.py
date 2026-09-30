@@ -39,11 +39,12 @@ esac
 exit 0
 """
 _CURL_STUB = """#!/bin/sh
+[ -n "${CURL_LOG:-}" ] && printf '%s\\n' "$*" >> "$CURL_LOG"
 for a in "$@"; do url="$a"; done
 case "$url" in
   *":8443/") echo "${PORTAL_CODE:-200}" ;;
   *":8445/gateway/curator/queue") echo "${CURATOR_CODE:-404}" ;;
-  *":8445/gateway/healthz") echo "${HEALTHZ_CODE:-502}" ;;
+  *"/gateway/healthz") echo "${HEALTHZ_CODE:-200}" ;;
   *":8445/") echo "${READER_CODE:-200}" ;;
   *) echo 200 ;;
 esac
@@ -76,7 +77,10 @@ def _tree(tmp_path: Path, *, published_ts: str | None = TS) -> Path:
     return data
 
 
-def _env(tmp_path: Path, data: Path, **extra: str) -> dict:
+_GATEWAY = "http://ausmt-box:8445"
+
+
+def _env(tmp_path: Path, data: Path, *, gateway: str | None = _GATEWAY, **extra: str) -> dict:
     b = tmp_path / "bin"
     b.mkdir(exist_ok=True)
     for name, body in (("docker", _DOCKER_STUB), ("curl", _CURL_STUB),
@@ -86,10 +90,18 @@ def _env(tmp_path: Path, data: Path, **extra: str) -> dict:
         p.chmod(0o755)
     envf = tmp_path / ".env"
     envf.write_text(f"AUSMT_DATA_DIR={data}\nOWNER=example\nTAG=latest\n", encoding="utf-8")
+    fdenv = tmp_path / "frontdoor.env"
+    fd_lines = ["AUSMT_PUBLIC_NAME=ausmt.auscope.org.au",
+                "AUSMT_BOX_READER_UPSTREAM=http://127.0.0.1:8445"]
+    if gateway is not None:
+        fd_lines.append(f"AUSMT_GATEWAY_UPSTREAM={gateway}")
+    fdenv.write_text("\n".join(fd_lines) + "\n", encoding="utf-8")
     env = dict(os.environ)
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
     env.update({
         "AUSMT_DOCTOR_ENV": str(envf),
+        "AUSMT_DOCTOR_FRONTDOOR_ENV": str(fdenv),
+        "CURL_LOG": str(tmp_path / "curl.log"),
         "AUSMT_DOCTOR_DOCKER": str(b / "docker"),
         "AUSMT_DOCTOR_CURL": str(b / "curl"),
         "AUSMT_DOCTOR_FRONTDOOR": str(b / "frontdoor-doctor"),
@@ -124,12 +136,52 @@ def test_a_healthy_replica_is_labelled_and_exits_zero(tmp_path):
     assert any("frontdoor" in ln for ln in _lines(r, "PASS")), out
 
 
-def test_the_missing_gateway_is_a_warning_that_names_the_submission_routes(tmp_path):
-    """The serve role holds no gateway, so the four public gateway routes cannot answer here. That
-    is a known gap, reported every run, never a silent pass and never a failure of this host."""
+def test_the_gateway_leg_probes_healthz_through_the_front_door(tmp_path):
+    """The four public gateway routes leave this host through the front door to the curation host,
+    so the leg asks the front door itself, by the public name pinned to loopback, never the local
+    reader (which has no gateway behind it). FAILS IF the probe skips the front door or a healthy
+    curation host is not a PASS."""
     data = _tree(tmp_path)
-    r = _run(_env(tmp_path, data))
-    assert any("gateway" in ln for ln in _lines(r, "WARN")), r.stdout
+    env = _env(tmp_path, data)
+    r = _run(env)
+    assert r.returncode == 0, r.stdout
+    assert any(ln.startswith("PASS gateway") for ln in r.stdout.splitlines()), r.stdout
+    calls = [ln for ln in Path(env["CURL_LOG"]).read_text(encoding="utf-8").splitlines()
+             if "/gateway/healthz" in ln]
+    assert len(calls) == 1, calls
+    assert "--resolve ausmt.auscope.org.au:443:127.0.0.1" in calls[0], calls[0]
+    assert calls[0].endswith("https://ausmt.auscope.org.au/gateway/healthz"), calls[0]
+
+
+def test_an_unreachable_curation_host_is_a_warning_that_names_the_routes(tmp_path):
+    """The curation host down or off the tailnet takes the submission routes down and nothing else:
+    the readers are served here. So it WARNs, naming the four routes, and never fails the run.
+    FAILS IF it FAILs, passes, or leaves the routes unnamed."""
+    data = _tree(tmp_path)
+    for code in ("502", "000"):
+        (tmp_path / code).mkdir()
+        r = _run(_env(tmp_path / code, data, HEALTHZ_CODE=code))
+        assert r.returncode == 0, r.stdout
+        warn = [ln for ln in _lines(r, "WARN") if ln.startswith("WARN gateway")]
+        assert warn, r.stdout
+        for route in ("POST /gateway/submit", "POST /gateway/request-key", "GET /gateway/healthz",
+                      "GET /gateway/status/*"):
+            assert route in warn[0], (route, warn[0])
+        assert "readers are unaffected" in warn[0], warn[0]
+        assert not any(ln.startswith("FAIL gateway") for ln in r.stdout.splitlines()), r.stdout
+
+
+def test_an_unset_gateway_upstream_warns_by_name(tmp_path):
+    """Unset, the front door sends the four routes to this host's own reader, which has no gateway
+    behind it. The WARN names the variable to set. FAILS IF the gap is reported without its fix."""
+    data = _tree(tmp_path)
+    for gateway in (None, ""):
+        root = tmp_path / ("none" if gateway is None else "empty")
+        root.mkdir()
+        r = _run(_env(root, data, gateway=gateway, HEALTHZ_CODE="502"))
+        assert r.returncode == 0, r.stdout
+        assert any(ln.startswith("WARN gateway") and "AUSMT_GATEWAY_UPSTREAM" in ln
+                   for ln in r.stdout.splitlines()), r.stdout
 
 
 def test_a_current_that_is_not_a_symlink_fails(tmp_path):

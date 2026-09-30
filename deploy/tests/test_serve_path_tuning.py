@@ -133,20 +133,26 @@ def test_box_caddyfile_validates(tmp_path):
 # ---- front door: one snippet wraps every box proxy ------------------------------------------------
 
 def test_frontdoor_box_proxies_all_ride_the_snippet():
-    """FAILS IF any proxy to the box reader bypasses the shared (box_upstream) snippet, or the
-    snippet loses its h2c + keepalive transport. Six sites proxy to the box (five wall-1 allows +
-    the catch-all); a bare `reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}` would silently fall back
-    to a fresh-connection HTTP/1.1 path and reintroduce the measured staircase."""
+    """FAILS IF any proxy to a reader listener bypasses the shared snippets, or a snippet loses its
+    h2c + keepalive transport. Six sites proxy to a reader listener: add-survey.html and the
+    catch-all through (box_upstream), the four public gateway routes through (gateway_upstream). A
+    bare `reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}` or `{$AUSMT_GATEWAY_UPSTREAM}` would silently
+    fall back to a fresh-connection HTTP/1.1 path and reintroduce the measured staircase."""
     text = _front()
-    assert "reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}\n" not in text.replace("\t", ""), \
-        "a bare box reverse_proxy remains; every site must `import box_upstream`"
-    assert len(re.findall(r"import\s+box_upstream", text)) == 6, \
-        "expected exactly 6 `import box_upstream` sites (5 wall-1 allows + the catch-all)"
-    m = re.search(r"\(box_upstream\)\s*\{", text)
-    assert m, "no (box_upstream) snippet defined"
-    snippet = _brace_match(text, text.index("{", m.end() - 1))
-    assert re.search(r"versions\s+h2c\s+2", snippet), "snippet transport must pin `versions h2c 2`"
-    assert "keepalive" in snippet, "snippet transport must pin keepalive reuse"
+    flat = text.replace("\t", "")
+    for var in ("AUSMT_BOX_READER_UPSTREAM", "AUSMT_GATEWAY_UPSTREAM"):
+        assert "reverse_proxy {$" + var + "}\n" not in flat, \
+            f"a bare reverse_proxy to {var} remains; every site must import its snippet"
+    assert len(re.findall(r"import\s+box_upstream", text)) == 2, \
+        "expected exactly 2 `import box_upstream` sites (add-survey.html + the catch-all)"
+    assert len(re.findall(r"import\s+gateway_upstream", text)) == 4, \
+        "expected exactly 4 `import gateway_upstream` sites (the four public gateway routes)"
+    for name in ("box_upstream", "gateway_upstream"):
+        m = re.search(r"\(" + name + r"\)\s*\{", text)
+        assert m, f"no ({name}) snippet defined"
+        snippet = _brace_match(text, text.index("{", m.end() - 1))
+        assert re.search(r"versions\s+h2c\s+2", snippet), f"{name} transport must pin `versions h2c 2`"
+        assert "keepalive" in snippet, f"{name} transport must pin keepalive reuse"
 
 
 @pytest.mark.skipif(_CADDY is None, reason="no caddy binary to validate with")
