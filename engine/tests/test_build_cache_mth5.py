@@ -286,22 +286,30 @@ def test_one_byte_edi_edit_moves_its_station_and_survey_files_only(tmp_path, cle
     assert ok, rep
 
 
+def _h5_org(path: Path, slug: str) -> str:
+    with h5py.File(path, "r") as f:
+        return str(f[f"Experiment/Surveys/{slug}"].attrs.get("acquired_by.organization"))
+
+
 def test_survey_yaml_edit_misses_that_survey_only(tmp_path, clean_salt):
     """FAILS IF: a survey.yaml edit is served from a stale MTH5 entry (the survey metadata travels
-    inside every file of that survey), or it colds the OTHER survey."""
+    inside every file of that survey), or it colds the OTHER survey. The edited field is the
+    organisation, which reaches the file only through the survey metadata (it is not the label),
+    so a key that drops the survey.yaml digest and the SMETA projection serves the old value."""
     surveys = _two_surveys(tmp_path)
     cache = tmp_path / "cache"
     _build(surveys, tmp_path / "cold", cache)
     y = surveys / "mc-a" / "survey.yaml"
-    y.write_text(y.read_text(encoding="utf-8").replace("Cache MTH5 A", "Cache MTH5 A edited"),
-                 encoding="utf-8")
+    y.write_text(y.read_text(encoding="utf-8").replace("organisation: Test Org",
+                                                       "organisation: Edited Org"), encoding="utf-8")
     warm = _build(surveys, tmp_path / "warm", cache)
     k_st, k_sv = _kind(warm, "station_h5"), _kind(warm, "survey_h5")
     assert (k_st["hits"], k_st["misses"]) == (N, N), k_st
     assert (k_sv["hits"], k_sv["misses"]) == (1, 1), k_sv
-    with h5py.File(warm / "bundles" / "mc-a-tf.h5", "r") as f:
-        name = f["Experiment/Surveys/mc-a"].attrs.get("name")
-    assert "edited" in str(name), f"survey name inside the h5 is stale: {name!r}"
+    assert _h5_org(warm / "bundles" / "mc-a-tf.h5", "mc-a") == "Edited Org"
+    assert _h5_org(warm / "bundles" / "mc-b-tf.h5", "mc-b") == "Test Org"
+    station = sorted((warm / "h5" / "mc-a").glob("*.h5"))[0]
+    assert _h5_org(station, "mc-a") == "Edited Org", f"{station.name} carries a stale organisation"
 
 
 # ---- modes, salt, corruption, fallback -----------------------------------------------------------
@@ -462,7 +470,32 @@ def test_size_cap_eviction_warns_and_is_counted(tmp_path, clean_salt, monkeypatc
     c = _prov_cache(out)
     evicted = sum(c["kinds"][k]["evicted"] for k in KINDS)
     assert evicted > 0, c["kinds"]
-    assert re.search(r"C18 cache WARN: .*evicted", err), err[-2000:]
+    assert c["max_mb"] == 1, c
+    # A cold build used every entry it holds, so every eviction is of a live entry: the number the
+    # operator reads as "the cap is too small" must equal the eviction count.
+    assert c["prune"]["pruned_size"] == evicted, c["prune"]
+    assert c["prune"]["evicted_live"] == evicted, c["prune"]
+    m = re.search(r"C18 cache WARN: .*evicted (\d+) entries, (\d+) of them used by this build", err)
+    assert m, err[-2000:]
+    assert (int(m.group(1)), int(m.group(2))) == (evicted, evicted), m.group(0)
+
+
+def test_evictions_of_entries_this_build_did_not_use_are_not_live(tmp_path):
+    """FAILS IF: evicted_live counts entries last used BEFORE this build started (it must compare
+    against BuildCache.started), so an over-cap cache of stale entries would read as a cap that
+    colds every build. Three 600 KB entries dated an hour ago, a 1 MB cap: two go, none live."""
+    root = tmp_path / "c"
+    seed = _bc(tmp_path, root=root)
+    for i in range(3):
+        seed.put_bytes(f"{i:064x}", "json", os.urandom(600 * 1024), kind="parse")
+    old = seed.started - 3600
+    for p in root.rglob("*"):
+        if p.is_file():
+            os.utime(p, (old, old))
+    later = _bc(tmp_path, root=root, max_mb=1)
+    summary = later.prune()
+    assert (summary["pruned_size"], summary["evicted_live"]) == (2, 0), summary
+    assert later.kinds["parse"]["evicted"] == 2, later.kinds["parse"]
 
 
 def test_parallel_build_hits_the_same_entries(tmp_path, clean_salt):
@@ -529,6 +562,58 @@ def test_station_key_moves_with_every_component(tmp_path):
     for name, k in variants.items():
         assert k != k0, f"the station key ignores {name}"
     assert len(set(variants.values())) == len(variants), "two different inputs collided"
+
+
+class _MovedDist:
+    """An installed distribution whose version or VCS commit reads differently from the real one."""
+
+    def __init__(self, real, version=None, commit=None):
+        self._real, self._version, self._commit = real, version, commit
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    @property
+    def version(self):
+        return self._version or self._real.version
+
+    def read_text(self, filename):
+        if filename == "direct_url.json" and self._commit:
+            return json.dumps({"url": "https://example.invalid/fork.git",
+                               "vcs_info": {"vcs": "git", "commit_id": self._commit}})
+        return self._real.read_text(filename)
+
+
+@pytest.mark.parametrize("dist,moved", [("mth5", {"commit": "0" * 40}),
+                                        ("mt_metadata", {"commit": "1" * 40}),
+                                        ("numpy", {"version": "0.0.0"})])
+def test_keys_move_with_the_installed_library_commit_and_dependency_versions(tmp_path, monkeypatch,
+                                                                              dist, moved):
+    """FAILS IF: an entry written by one installed library stack is reused by another that reports
+    the same mt_metadata / mth5 __version__: a fork pin moved to a new git commit, or a bump of a
+    library in their dependency closure (numpy here). Both the MTH5 keys and the XML/parse keys
+    move, since both products are written by that stack."""
+    import importlib.metadata as md  # noqa: PLC0415
+    edi = tmp_path / "S1.edi"
+    edi.write_text(SAMPLE_EDIS[0].read_text(encoding="latin-1"), encoding="latin-1")
+
+    def keys():
+        build_portal._SHA_CACHE.clear()
+        bc = _bc(tmp_path)
+        return (build_portal._station_h5_key(bc, edi, {"id": "S1"}, "s", "S", SMETA, "d"),
+                bc.key(edi_sha="e", survey_digest="d", kind="xml"))
+    k0 = keys()
+    assert keys() == k0, "the keys are not stable over one installed stack"
+    real = md.distribution
+
+    def _dist(name):
+        d = real(name)
+        return _MovedDist(d, **moved) if re.sub(r"[-_.]+", "-", name).lower() == dist.replace("_", "-") \
+            else d
+    monkeypatch.setattr(md, "distribution", _dist)
+    k1 = keys()
+    assert k1[0] != k0[0], f"the station MTH5 key ignores the installed {dist} identity"
+    assert k1[1] != k0[1], f"the XML key ignores the installed {dist} identity"
 
 
 def test_station_key_moves_with_the_hdf5_stack(tmp_path, monkeypatch):
