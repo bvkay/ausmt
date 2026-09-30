@@ -46,8 +46,9 @@ gives. Two consequences:
   workflow and `deploy/docker/engine.Dockerfile` do), or pass `--force-reinstall`.
 - A served version key cannot tell the pinned commit from PyPI's 1.0.10. The installed commit is in
   `mt_metadata-*.dist-info/direct_url.json`.
-- Installing the lock, `environment.yml` or `environment-lock.yml` needs `git` on PATH, because pip
-  resolves the `git+https` pin by cloning. The engine image installs git before its pip layer.
+
+The `git+https` pin also means installing the lock, `environment.yml` or `environment-lock.yml` needs
+`git` on PATH, because pip resolves it by cloning. The engine image installs git before its pip layer.
 
 **When PyPI carries it.** Replace the commit with `mt_metadata==1.0.11` (or the first release
 carrying #289) in `../requirements-mtmetadata.txt`, `requirements-mtmetadata-lock.txt`,
