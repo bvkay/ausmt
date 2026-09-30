@@ -24,6 +24,15 @@ Windows emits them unmarked, so re-apply the markers when regenerating.
 python 3.12.13 · numpy 2.4.6 · scipy 1.17.1 · pandas 3.0.3 · xarray 2026.4.0 · h5py 3.16.0 ·
 pydantic 2.13.4 · pyproj 3.7.2 · **mt_metadata 1.0.9 · mth5 0.6.8**
 
+## What the engine relies on the pinned stack for
+
+- **A bounded field-tree memo.** mth5 builds a pydantic model class per group it opens, and
+  mt_metadata memoises a field tree per class in `mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE`.
+  The pinned mt_metadata holds that memo's keys weakly and reuses the class built for an added field
+  (kujaku11/mt_metadata#289, commits 97c09616 and 6a361343), so the MTH5 arm of a build stays flat
+  without the engine emptying the memo. A mt_metadata without those commits leaks about 7.6 MiB per
+  served station; `tests/test_build_memory.py` fails on it.
+
 ## ABI history (the important correction)
 
 Earlier notes warned that mixing a **conda/MKL numpy** with **pip/OpenBLAS scipy/pandas/xarray**

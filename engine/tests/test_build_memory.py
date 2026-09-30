@@ -1,5 +1,5 @@
-"""Build memory: the MTH5 arm must emit-and-release, so a build's peak RSS is bounded by one
-station-sized unit of MTH5 work plus a small corpus-wide index, never by the number of stations.
+"""Build memory: a build's peak RSS is bounded by one station-sized unit of MTH5 work plus a small
+corpus-wide index, never by the number of stations.
 
 The incident: the engine was OOM-killed by the kernel five times in one
 night ("Killed process (python) anon-rss:13,740,244 kB" on a 14 GB box) at ~2,580 stations, one
@@ -13,11 +13,16 @@ mean the memo never hits and pins every class, its json tree and its pydantic-co
 life of the process: 7.6 MiB per served station, linear, unbounded (8.9 GiB at 1,182 served stations
 here, 13.7 GB at 2,580 in production, a projected 41-59 GiB at 8,000).
 
+The pinned mt_metadata bounds that memo itself: kujaku11/mt_metadata#289 holds its class keys weakly
+(97c09616) and reuses the class built for an added field (6a361343), so the engine does not empty it.
+
 What is pinned here, and what each pin fails on:
 
-  * the leak itself: after N station-sized MTH5 units, the class-keyed memo is empty and the count of
-    live pydantic model classes is what it was after the FIRST unit. FAILS on unmodified code with
-    the memo at ~25 entries and ~50 classes per station and climbing.
+  * the leak itself: after N station-sized MTH5 units, written or read, neither the field-tree memo
+    nor the count of live pydantic model classes is larger than after the FIRST unit. FAILS on a
+    library that keys the memo strongly on per-group classes: ~25 entries and ~50 classes per
+    station, climbing.
+  * the engine leaves that memo to the library: clear_field_caches is never called by MTH5 work.
   * the bound, end to end: two synthetic corpora built by the real CLI with the production flag set,
     the SAME largest survey in each and 10x the surveys in the second, and the peak RSS of the two
     child processes (os.wait4 rusage, independent of anything the engine reports) must not grow with
@@ -99,13 +104,13 @@ def _memo_len() -> int:
     return len(ph._FIELDS_TREE_CACHE)
 
 
-def test_mth5_unit_releases_metadata_classes(tmp_path):
+def test_mth5_units_do_not_grow_metadata_classes(tmp_path):
     """The leak. Runs the tier-1 unit (_write_tf_mth5 over ONE station: write + the round-trip gate)
     over the two sample EDIs three times each, exactly as emit_station_mth5 does per served station,
-    then a tier-2 bundle of both, and asserts after every unit that (a) the class-keyed field-tree
-    memo is empty and (b) the number of live pydantic model classes has not moved from what it was
-    after the first unit. FAILS on unmodified code: the memo gains ~25 entries and ~50 classes per
-    station and never gives them back."""
+    then a tier-2 bundle of both, then the MTH5-input reader, and asserts after every unit that
+    neither the field-tree memo nor the number of live pydantic model classes is larger than after
+    the first unit. FAILS on a library whose memo pins per-group classes: ~25 entries and ~50
+    classes per station, never given back."""
     assert len(SAMPLE_EDIS) >= 2, "the sample survey ships two EDIs"
     out = tmp_path / "h5"
     out.mkdir()
@@ -137,9 +142,9 @@ def test_mth5_unit_releases_metadata_classes(tmp_path):
     assert n_read == 2, "the reader must yield both stations of the bundle"
     memo_after.append(_memo_len())            # after the reader closed the file
     classes_after.append(_live_model_classes())
-    assert all(m == 0 for m in memo_after), (
-        f"mt_metadata's class-keyed field-tree memo must be released after every MTH5 unit "
-        f"(written OR read); observed sizes per unit: {memo_after}")
+    assert max(memo_after) <= memo_after[0], (
+        f"mt_metadata's field-tree memo must not grow with the number of MTH5 units written or read "
+        f"(sizes per unit: {memo_after})")
     assert max(classes_after) <= classes_after_first, (
         f"live pydantic model classes must not grow with the number of MTH5 units written or read "
         f"(after first unit: {classes_after_first}; per unit: {classes_after})")

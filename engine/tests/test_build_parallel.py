@@ -92,7 +92,6 @@ def _h5_dump(hpath):
     dump = {}
     try:
         for _, row in m.tf_summary.to_dataframe().iterrows():
-            build_portal._release_mth5_metadata_classes()
             sid = row["station"]
             tf = m.get_transfer_function(sid, row.get("tf_id", sid), survey=row.get("survey"))
             dump[sid] = {
@@ -102,7 +101,6 @@ def _h5_dump(hpath):
             }
     finally:
         m.close_mth5()
-        build_portal._release_mth5_metadata_classes()
     return dump
 
 
