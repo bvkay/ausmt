@@ -14,7 +14,7 @@ classifiers = [
   "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3.12",
 ]
-# mt_metadata 1.0.9 / mth5 0.6.8 are tested on Python 3.12 (the pinned lock); the conditioning is
+# mt_metadata v1.0.11 / mth5 0.6.9 are tested on Python 3.12 (the pinned lock); the conditioning is
 # sensitive to the transitive scientific stack, so >=3.12 is the supported floor.
 requires-python = ">=3.12"
 # mt_metadata/mth5 (the USGS community library) is the SOLE EDI/MTH5 parser (see the extractor note

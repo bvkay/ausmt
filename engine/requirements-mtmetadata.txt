@@ -17,10 +17,11 @@
 # BLAS-linked packages to one source: pip install --force-reinstall --no-deps numpy scipy pandas xarray
 # See environments/README.md.
 
-# PERF FORK PINS. Measured on the full corpus: 3.4x on the whole rebuild (cold 118 -> ~35 min,
-# warm 74 -> ~22 min projected), byte-identical products modulo version/timestamp stamps.
-# Pinned by COMMIT SHA, never by branch name, so the install can never move under us. SWAP to
-# upstream releases when the corresponding PRs merge (bvkay/mt-metadata perf-update ->
-# mt_metadata >= next release; bvkay/mth5 perf-update likewise).
-mt_metadata @ git+https://github.com/bvkay/mt-metadata.git@58285e106a25dbe2eb028bc093dbfd715852e1e1
-mth5 @ git+https://github.com/bvkay/mth5.git@eebdf20b80eb6099c3e952bb57dff3311f775ac0
+# UPSTREAM PINS. mt_metadata is pinned to the COMMIT that tag v1.0.11 names, because v1.0.11 is not
+# on PyPI (PyPI's 1.0.10 predates the performance work). That commit still declares version 1.0.10,
+# so mt_metadata.__version__, pip freeze's version and every served version key report 1.0.10 for
+# it. A pip that already holds any mt_metadata 1.0.10 treats this pin as satisfied and keeps what it
+# has, so install the lock before anything else that pulls mt_metadata, or pass --force-reinstall.
+# Replace the commit with mt_metadata==<release> once a release carrying it reaches PyPI.
+mt_metadata @ git+https://github.com/kujaku11/mt_metadata.git@22350c51fb176b57ec3bce6f1aeab1b44a9b8c6a
+mth5==0.6.9

@@ -46,7 +46,9 @@ dependencies:
   - vcomp14=14.51.36231=h1b9f54f_39
   - wheel=0.47.0=pyhd8ed1ab_0
   - yaml=0.2.5=h6a83c73_3
-  # pip section = the verified transitive closure of mt_metadata==1.0.9 + mth5==0.6.8
+  # pip section = the verified transitive closure of mt_metadata==1.0.9 + mth5==0.6.8, with the two
+  # direct pins moved to the v1.0.11 commit and mth5 0.6.9. Those two install against this closure
+  # with pip check clean on an all-pip py3.12 env; this win-64 lock itself was not re-created.
   # (numpy/packaging/pyyaml/setuptools/wheel/pip come from conda above). Mirrors
   # requirements-mtmetadata-lock.txt minus the conda-provided packages.
   - pip:
@@ -64,9 +66,9 @@ dependencies:
       - loguru==0.7.3
       - matplotlib==3.11.0
       - mt-io==0.0.4
-      - mt-metadata==1.0.9
+      - mt-metadata @ git+https://github.com/kujaku11/mt_metadata.git@22350c51fb176b57ec3bce6f1aeab1b44a9b8c6a
       - mt-timeseries==0.0.2
-      - mth5==0.6.8
+      - mth5==0.6.9
       - pandas==3.0.3
       - pillow==12.2.0
       - pydantic==2.13.4
