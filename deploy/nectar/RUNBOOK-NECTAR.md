@@ -41,10 +41,8 @@ In the Nectar dashboard: Allocations → My Requests → the project → Amend/E
 > measure 33 GB and the self-hosted basemap 2.4 GB, which does not fit the 30 GB m3 root disk.
 >
 > **RAM 16 to 32 GB and vCPU 8 to 16.** The curation role (submission gateway, antivirus, the survey
-> repository and the corpus build) moves to a second, non-public instance. The corpus build is the
-> memory-heavy step (the build is capped at 8 GB on the current host and has been measured past that),
-> and running it beside the serving instance within the current 8 vCPU / 16 GB leaves no room for a
-> flavour above m3.medium for the build.
+> repository and the corpus build) moves to a separate, non-public instance. With two instances, the
+> current 8 vCPU / 16 GB leaves nothing above m3.medium for it.
 >
 > **Service units:** a top-up only if the allocation runs past 12 months.
 >
@@ -62,6 +60,14 @@ Wait for approval before step 4 (the volume).
      box's node, the box's tailnet address (the `ausmt-box` alias the front-door stanza already has).
 2.2  Settings → Keys → Generate auth key, tagged `tag:ausmt-serve` (you will type it in step 5; do not
      paste it anywhere else).
+2.3  A temporary admin path to ausmt-test, for steps 7 and 14.1. ausmt-test joined the tailnet as
+     `ausmt-vps` without Tailscale SSH, and the front-door stanza admits only the box to its port 22,
+     so add this rule to `acls` (you remove it in step 14.3):
+```
+{"action": "accept", "src": ["autogroup:admin"], "dst": ["tag:ausmt-frontdoor:22"]},
+```
+     ausmt-vps runs OpenSSH, so you log in there as `ubuntu` with your Nectar key pair:
+     `ssh ubuntu@ausmt-vps`.
 
 ---
 
@@ -74,7 +80,13 @@ Wait for approval before step 4 (the volume).
      - **Flavour:** `m3.small` (C48 D2; m3.medium only if serving needs it).
      - **Networks:** `qld-data`, the network ausmt-test's private address is on, so the floating IP on
        `qld` can be associated with it.
-     - **Security groups:** `default` and `http` (80/tcp and 443/tcp only). Nothing else.
+     - **Security groups:** `http` only (80/tcp and 443/tcp inbound). Not `default`: an OpenStack
+       `default` group normally admits all ingress from its own members, which would open every port
+       of ausmt-serve to ausmt-test (and later ausmt-curate) over `qld-data`, outside the tailnet
+       policy. Before launching, open Network → Security Groups → `http` → Manage Rules and confirm it
+       carries the two Egress rules (IPv4 and IPv6, any protocol) a new group gets; without them the
+       host cannot fetch packages or reach the tailnet. Also read `default`'s rules: an ingress rule
+       whose Remote is the group `default` is the path this avoids.
      - **Key pair:** your usual Nectar key pair (for the bootstrap login only).
      - **Configuration → Customisation script:** paste `deploy/nectar/cloud-init-serve.yaml`. Its one
        placeholder takes the PUBLIC key of an OpenSSH publish key on the box; Tailscale SSH does not use
@@ -95,17 +107,29 @@ Wait for approval before step 4 (the volume).
 ```sh
 lsblk -f                                  # the new 100G disk with no FSTYPE, usually vdb
 sudo mkfs.ext4 -L ausmt-data /dev/vdb     # replace vdb with what lsblk showed
-sudo mount /srv/ausmt                     # the fstab line cloud-init wrote (LABEL=ausmt-data)
+grep ausmt-data /etc/fstab                # the line cloud-init wrote; if it is missing, see below
+sudo mount /srv/ausmt
 mountpoint /srv/ausmt                     # expect: /srv/ausmt is a mountpoint
+```
+     If `grep` prints nothing, add the line `deploy/nectar/cloud-init-serve.yaml` asks for, then mount:
+```sh
+echo 'LABEL=ausmt-data /srv/ausmt ext4 defaults,nofail,x-systemd.device-timeout=30s 0 2' | sudo tee -a /etc/fstab
+sudo mkdir -p /srv/ausmt && sudo systemctl daemon-reload && sudo mount /srv/ausmt
 ```
 
 ---
 
 ## 5. Join the tailnet
 
-5.1  `sudo tailscale up --ssh --advertise-tags=tag:ausmt-serve --hostname ausmt-serve` and type the
-     tagged auth key from step 2.2 when asked (or `--authkey` typed on the command line, then clear the
-     shell history).
+5.1  Join with the tagged auth key from step 2.2, typed on the command line, then clear the shell
+     history:
+```sh
+sudo tailscale up --ssh --advertise-tags=tag:ausmt-serve --hostname ausmt-serve --authkey <the key from 2.2>
+history -c
+```
+     `tailscale up` never asks for a key. Without `--authkey` it prints a login URL instead; do not
+     sign in there (the node would join as your own user). If you did, or the key went unused, revoke
+     the key under Settings → Keys.
 5.2  `tailscale status` shows the node with `tag:ausmt-serve`.
 5.3  From your own tailnet device: `ssh ubuntu@ausmt-serve` (Tailscale SSH, with its sign-in check).
 5.4  Remove the temporary SSH security group from the instance. From here on the host has 80 and 443
@@ -133,14 +157,19 @@ The certificate for the public name lives in the front door's `caddy_data` volum
 Copying it first means the new front door starts with a valid certificate and never places an ACME
 order for a name that still points at ausmt-test.
 
+The archive holds the TLS private key, so it is readable by `ubuntu` alone at every hop and every copy
+is deleted at the end. ausmt-test is reached by the temporary rule of step 2.3.
+
 ```sh
-# on ausmt-test
+# on ausmt-test (ssh ubuntu@ausmt-vps)
 sudo docker volume ls | grep caddy_data              # expect frontdoor_caddy_data
 sudo docker run --rm -v frontdoor_caddy_data:/data:ro -v /tmp:/out caddy:2-alpine \
      tar -C /data -czf /out/caddy_data.tgz .
-# from your own tailnet device: move the archive across, then delete every copy (it holds the TLS key)
-scp ubuntu@<ausmt-test tailnet name>:/tmp/caddy_data.tgz . && scp caddy_data.tgz ubuntu@ausmt-serve:/tmp/
-rm caddy_data.tgz ; ssh ubuntu@<ausmt-test tailnet name> sudo rm /tmp/caddy_data.tgz
+sudo chown ubuntu: /tmp/caddy_data.tgz && sudo chmod 600 /tmp/caddy_data.tgz
+# from your own tailnet device: move the archive across, then delete every copy
+umask 077
+scp ubuntu@ausmt-vps:/tmp/caddy_data.tgz . && scp caddy_data.tgz ubuntu@ausmt-serve:/tmp/
+rm caddy_data.tgz ; ssh ubuntu@ausmt-vps rm /tmp/caddy_data.tgz
 # on ausmt-serve
 sudo docker volume create frontdoor_caddy_data
 sudo docker run --rm -v frontdoor_caddy_data:/data -v /tmp:/in:ro caddy:2-alpine \
@@ -149,6 +178,11 @@ sudo rm /tmp/caddy_data.tgz
 ```
 Use the volume name `docker volume ls` shows on ausmt-test on both sides; the front door's compose
 project is its directory, `frontdoor`, so on ausmt-serve the name is `frontdoor_caddy_data`.
+
+When step 8 starts the front door, compose warns that volume `frontdoor_caddy_data` already exists but
+was not created by Docker Compose. That is expected, and the volume is used. Confirm the certificate
+is in it with `sudo docker compose -f /srv/ausmt/code/deploy/frontdoor/compose.yaml exec frontdoor ls
+/data/caddy/certificates`.
 
 ---
 
@@ -171,7 +205,13 @@ then the front door with `install-frontdoor.sh`.
 
 ## 9. Seed: the first publish from the box
 
-9.1  On the box, as the operator, once: let the operator write the sidecar beside the builds.
+Every step here runs on the box as the operator account (the `User=` of the reconcile unit), in a shell
+with the two paths `deploy/README.md` exports:
+```sh
+export AUSMT_DATA_DIR=/srv/ausmt AUSMT_CODE_DIR=~/ausmt-code
+```
+
+9.1  Once: let the operator write the sidecar beside the builds.
 ```sh
 sudo setfacl -m u:"$USER":rwx "$AUSMT_DATA_DIR/site-data/builds"
 ```
@@ -180,16 +220,27 @@ sudo setfacl -m u:"$USER":rwx "$AUSMT_DATA_DIR/site-data/builds"
 ssh publish@ausmt-serve receive-build.sh --current     # expect: nothing (no build yet), exit 0
 ssh publish@ausmt-serve sh                              # expect: publish-gate: refused ..., exit 1
 ```
-9.3  Publish by hand (the first run sends the whole build, about 6.6 GB going by the box's five
-     builds at 33G):
+     Then the two channels that do not start a login shell, so the gate never sees them. **Both must
+     fail:**
 ```sh
+sftp -b /dev/null publish@ausmt-serve                   # expect: a failure, no sftp session
+ssh -N -o ExitOnForwardFailure=yes -L 18445:127.0.0.1:8445 publish@ausmt-serve &
+sleep 3; curl -sS -m 5 http://127.0.0.1:18445/ ; kill %1 # expect: the ssh exited, curl cannot connect
+```
+     If either succeeds, the publish account is not confined to the gate over Tailscale SSH. Stop and
+     settle C48 D11 question 5 before going on.
+9.3  Publish by hand. The first run sends the whole build; read its size first, so you know what the
+     upload will take:
+```sh
+du -sh "$AUSMT_DATA_DIR/site-data/current/"
 cd "$AUSMT_CODE_DIR/deploy"
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish ARGS=--dry-run
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve make publish
 ```
 9.4  On ausmt-serve: `sh /srv/ausmt/code/deploy/nectar/doctor-serve.sh`. Expect PASS everywhere
-     except the `gateway` WARN (the open question of step 0) and the front door's TLS or DNS lines
-     that name the address still pointing at ausmt-test.
+     except the `gateway` WARN (the open question of step 0). The DNS and TLS lines pass already: the
+     public name resolves to the address step 8 set as expected, and it still reaches ausmt-test,
+     which presents the same certificate. Neither line tells the two hosts apart.
 
 ---
 
@@ -237,18 +288,33 @@ Only after steps 9 to 11 are green and step 0 is decided.
       **Disassociate** → confirm.
 12.2  Same row → Actions → **Associate** → Port to be associated: the `ausmt-serve` port
       (10.255.x.x on qld-data) → **Associate**.
-12.3  From any machine off the tailnet:
+12.3  From any machine off the tailnet, send a request only this check makes:
 ```sh
-curl -sSI https://ausmt.auscope.org.au/ | head -1                   # HTTP/2 200
-curl -sS https://ausmt.auscope.org.au/data/build.json               # the box's current build
+M=cutover-$(date +%s); echo $M
+curl -sSI "https://ausmt.auscope.org.au/?check=$M" | head -1        # HTTP/2 200
 ```
-      then the public checks of `deploy/frontdoor/RUNBOOK.md` step 9, and on ausmt-serve
-      `doctor-serve.sh` (the DNS line now passes against `AUSMT_DOCTOR_EXPECT_IP`).
-12.4  Repoint the masked-log pull on the box (`deploy/.env`), then ship once and check a file landed:
+      then on ausmt-serve prove it arrived there:
 ```sh
-AUSMT_FRONTDOOR_LOG_REMOTE=caddylog@ausmt-serve:
-sudo systemctl start ausmt-frontdoor-logs.service && ls -l "$AUSMT_DATA_DIR/logs/caddy/" | grep frontdoor
+sudo grep -c "check=<the M printed above>" /var/log/caddy/access-frontdoor.json   # 1 or more
 ```
+      The DNS and `build.json` checks pass before and after the move alike (both hosts serve the box's
+      current build under the same certificate), so only this log line proves the address moved. Then
+      run the public checks of `deploy/frontdoor/RUNBOOK.md` step 9, and `doctor-serve.sh` on
+      ausmt-serve.
+12.4  Repoint the masked-log pull on the box. Both front doors write `access-frontdoor.json`, and the
+      box keeps one copy of each name, so the first pull from ausmt-serve would overwrite what
+      ausmt-test logged since the last pull, before the daily stats fold has read it. On the box:
+```sh
+sudo systemctl start ausmt-frontdoor-logs.service      # a last pull from ausmt-test, which now gets no traffic
+cd "$AUSMT_DATA_DIR/logs/caddy"
+mv access-frontdoor.json access-frontdoor-ausmt-test.json   # still read by the fold, never overwritten
+```
+      Then set `AUSMT_FRONTDOOR_LOG_REMOTE=caddylog@ausmt-serve:` in `deploy/.env`, pull once, and
+      check that `access-frontdoor.json` is back (it can only have come from ausmt-serve):
+```sh
+sudo systemctl start ausmt-frontdoor-logs.service && ls -l access-frontdoor.json
+```
+      Delete `access-frontdoor-ausmt-test.json` once the fold has passed the day of the move.
 
 ---
 
@@ -259,7 +325,9 @@ Move the address back; nothing else is needed while ausmt-test is left running.
 13.1  Network → Floating IPs → 203.101.226.191 → Disassociate, then Associate with the `ausmt-test`
       port. ausmt-test's front door still proxies to the box's reader listener, which still serves the
       box's own current.
-13.2  Put the box's `AUSMT_FRONTDOOR_LOG_REMOTE` back to its ausmt-test value.
+13.2  Keep what ausmt-serve logged, as in 12.4 the other way round: pull once more, move
+      `access-frontdoor.json` aside as `access-frontdoor-ausmt-serve.json`, then put the box's
+      `AUSMT_FRONTDOOR_LOG_REMOTE` back to its ausmt-test value.
 13.3  Optional: comment out `AUSMT_PUBLISH_TARGET` on the box to stop feeding the replica.
 
 ---
@@ -270,10 +338,11 @@ Leave ausmt-test running and untouched until you are satisfied; at the least, on
 box → reconcile → publish → ausmt-serve with `publish` = `ok`, and `doctor-serve.sh` is clean apart from
 the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down or not.
 
-14.1  On ausmt-test: `sudo docker compose -f deploy/frontdoor/compose.yaml down`.
+14.1  On ausmt-test (`ssh ubuntu@ausmt-vps`, by the rule of step 2.3):
+      `cd <the checkout holding deploy/frontdoor> && sudo docker compose -f deploy/frontdoor/compose.yaml down`.
 14.2  Compute → Instances → ausmt-test → Actions → **Delete Instance** → confirm.
-14.3  Tailscale admin: remove the ausmt-test node, the `tag:ausmt-frontdoor` tag and its two ACL
-      rules (`deploy/frontdoor/RUNBOOK.md` 10.3).
+14.3  Tailscale admin: remove the ausmt-test node, the `tag:ausmt-frontdoor` tag, its two ACL rules
+      (`deploy/frontdoor/RUNBOOK.md` 10.3) and the temporary admin rule of step 2.3.
 
 ---
 
@@ -292,15 +361,21 @@ the known WARNs. ausmt-test costs 125 SU a year until it is deleted, shut down o
 - **Rolling the public site back to an older build:** do it on the box as a curator rollback. The
   pinned reconcile pass publishes the rolled-back build to the replica. A replica-only `make publish
   ARGS="--build <ts>"` is overwritten by the next reconcile pass, which publishes the box's current.
-- **Retention:** the replica keeps `AUSMT_PUBLISH_KEEP` builds (default 5) plus current. A build
-  directory without a sidecar is an interrupted transfer; `doctor-serve.sh` names it and you delete it
-  once no publish is running.
+- **Retention:** the replica keeps the `AUSMT_PUBLISH_KEEP` newest complete builds (default 5, 1 to
+  999, set on the sender), with current always among them. A build directory without a sidecar is an
+  interrupted transfer; `doctor-serve.sh` names it and you delete it once no publish is running.
+- **Curators in phase one:** the tailnet policy grants `group:curators` port 8444 on the box, and on
+  the box 8444 is the gateway's loopback bind (`127.0.0.1:8444` in `deploy/compose.yaml`), so an
+  invited curator reaches nothing there. Either you decide to front the workbench on that port on the
+  box (`sudo tailscale serve --bg --https=8444 http://127.0.0.1:8443`; C48 D11 question 4), or
+  curator onboarding waits for the curate lift.
 
 ---
 
 ## 16. Lifting curate
 
 When the RAM and vCPU amendment is in place, the curation role moves to **ausmt-curate** (no floating
-IP, no inbound rule, `tag:ausmt-curate`) and the box retires. The order and what moves are in
+IP, no security group that admits inbound traffic, `default` included; `tag:ausmt-curate`) and the box
+retires. The order and what moves are in
 `maintainer/C48-NectarTopology.md` D10; the publish contract does not change, only the sender's host
 and `AUSMT_PUBLISH_TARGET` moving with it.

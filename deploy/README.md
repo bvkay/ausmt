@@ -1314,8 +1314,11 @@ file is hard-linked rather than stored again), sends the sidecar after it, then 
 listed files with exactly the listed hashes, swaps `current` by renaming a temporary symlink (as
 `rebuild-data` does), writes `site-data/published.json` (`ts`, `build_id`, `source_commit`,
 `received_at`) and prunes to the keep depth, never the current build and never a directory whose
-sidecar has not arrived. A build the replica already serves is a no-op, and the local `current` is
-never touched. Both build prunes on the curation host (`rebuild-data` and reconcile's) take a pruned
+sidecar has not arrived. Receives run one at a time under `flock` on `site-data/.receive.lock`, and a
+`current` whose build directory is gone names no build, so the sender sends it again. A build the
+replica already serves is not sent again: the sender only asks the receiver to confirm it, which is a
+no-op when `published.json` agrees and re-records it when a receive was cut off after its swap. The
+local `current` is never touched. Both build prunes on the curation host (`rebuild-data` and reconcile's) take a pruned
 build's sidecar with it.
 
 **On the curation host (one-time).** `builds/` belongs to uid 10001, and the sidecar is written by the
@@ -1325,19 +1328,19 @@ operator, so grant the operator write on that one directory, then name the repli
 sudo setfacl -m u:"$USER":rwx "$AUSMT_DATA_DIR/site-data/builds"
 # deploy/.env
 AUSMT_PUBLISH_TARGET=publish@ausmt-serve      # the replica's publish account (MagicDNS name)
-# optional: AUSMT_PUBLISH_DATA_DIR (default /srv/ausmt), AUSMT_PUBLISH_KEEP (default 5)
+# optional: AUSMT_PUBLISH_DATA_DIR (default /srv/ausmt), AUSMT_PUBLISH_KEEP (default 5, 1 to 999)
 ```
 
 ```sh
 make publish ARGS=--dry-run          # resolve and check the served build, print what would be sent
 make publish                         # send it now
-make publish ARGS="--build <ts>"     # send a retained build instead of current
+make publish ARGS="--build <ts>"     # send a retained build; the next reconcile pass republishes current
 ```
 
 With the target set, every reconcile pass that settles what the box serves (`rebuilt`, `noop`,
 `paused`, `pinned`) publishes the served build before writing `reconcile-status.json`, which gains
 `publish` (`ok`, `failed`, `skipped`) and `publish_detail` (the sender's own words, naming the step it
-stopped at). A `noop` pass costs one ssh round trip and lets a replica that missed a publish catch up;
+stopped at). A `noop` pass costs two ssh round trips (ask, confirm) and lets a replica that missed a publish catch up;
 a `pinned` pass is how a curator rollback reaches the public site. A failed publish exits the pass 1
 and `alert.sh` fail-pings on it; the box keeps serving its own build either way.
 

@@ -319,7 +319,7 @@ def test_the_local_current_is_never_touched(tmp_path):
 
 
 def test_build_selects_a_build_that_is_not_current(tmp_path):
-    """--build <ts> publishes a retained build (a replica rollback) and leaves current alone."""
+    """--build <ts> publishes a retained build and leaves current alone."""
     tree = _tree(tmp_path)
     older = _write_build(tree["builds"], PREV)
     r = _run(tree, "--build", PREV, REMOTE_CURRENT=TS)

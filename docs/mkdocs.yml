@@ -8,7 +8,7 @@ nav:
   - About the project:
       - Scientific philosophy: introduction/scientific-philosophy.md
       - Governance & operation: introduction/governance.md
-      - Hosting & serving: operations/hosting.md
+      - Hosting & serving: introduction/hosting.md
       - Standards & alignment: introduction/standards.md
       - Usage analytics: introduction/usage-analytics.md
   - Architecture & data model:

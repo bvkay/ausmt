@@ -8,7 +8,8 @@ the step-by-step procedure is
 
 ## Two roles
 
-AusMT runs on the Nectar Research Cloud as two instances with separate jobs.
+AusMT is moving onto the Nectar Research Cloud as two instances with separate jobs. The serving host
+comes first; until the curation host exists, the home box holds the curation role.
 
 **The serving host** (`ausmt-serve`) is the only machine with a public address, and it opens only
 the web ports. It runs the public front door (TLS, the masked access log, the allowlist of public
@@ -16,14 +17,13 @@ routes) and the portal's static server, and it holds the built portal tree on a 
 holds nothing that is not already public: no survey repository credential, no submission gateway, no
 curation database and no build cache. It never builds; it receives builds.
 
-**The curation host** has no public address and is reached only over the project's private network
-(the tailnet). It runs everything that curates and builds: the submission gateway and its antivirus
+**The curation host** has no public address and is reached only over the tailnet (a private overlay
+network). It runs everything that curates and builds: the submission gateway and its antivirus
 scanner, the survey repository checkout and its publish credential, the curation database, and the
 reconcile agent that rebuilds the corpus when the survey repository moves. Curators reach its
 workbench over the tailnet and nowhere else.
 
-Until the curation host is created, the home box holds the curation role, and it publishes to the
-serving host in exactly the same way.
+The home box, while it holds the curation role, publishes to the serving host in exactly the same way.
 
 ## How a build reaches the public site
 

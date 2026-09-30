@@ -232,8 +232,9 @@ reconcile:
 # Hand the served build to the serving replica (scripts/publish.sh; maintainer/C48-NectarTopology.md):
 # sidecar, rsync with --link-dest against the replica's current, then the replica's receive-build.sh
 # verifies and swaps. The local current is only read. `make publish ARGS=--dry-run` resolves and
-# checks the build and prints what would be sent; `ARGS="--build <ts>"` sends a retained build (a
-# replica rollback). Runs as the operator, which needs the one-time write grant on site-data/builds
+# checks the build and prints what would be sent; `ARGS="--build <ts>"` sends a retained build, which
+# the next reconcile pass replaces with this host's current, so a public rollback is a curator
+# rollback on this host. Runs as the operator, which needs the one-time write grant on site-data/builds
 # that deploy/README.md describes (the sidecar sits beside the build). Reconcile runs the same script
 # at the end of every pass that settles what this host serves.
 publish:
