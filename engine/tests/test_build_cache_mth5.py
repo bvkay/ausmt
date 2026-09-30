@@ -1,6 +1,6 @@
 """Both MTH5 tiers are build-cache entries: h5/<slug>/<station>.h5 and bundles/<slug>-tf.h5.
 
-Design: maintainer/C18-BuildCacheDesign.md, Amendment A6. The pins here:
+Design: maintainer/C18-BuildCacheDesign.md. The pins here:
 
   * a warm build places every MTH5 file by HARDLINK to the cache payload (same inode), skips the
     MTH5 write and the round-trip gate for it, and the placed file still passes

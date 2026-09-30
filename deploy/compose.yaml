@@ -116,8 +116,9 @@ services:
       # OPTIONAL TUNING: the build-cache size cap (deploy/.env.example). Read by the ENGINE
       # (engine/extract/cache.py) — build-runner is the engine-build service the cache actually
       # accelerates (the by-hand `rebuild-data`), so the knob lives here. ${VAR:-DEFAULT} matches the
-      # code default (cache.py CACHE_MAX_MB_DEFAULT=2048); unset == today's behaviour. Never ${VAR:?}.
-      AUSMT_CACHE_MAX_MB: ${AUSMT_CACHE_MAX_MB:-2048}   # build-cache size cap (MB), pruned oldest-first
+      # code default (cache.py CACHE_MAX_MB_DEFAULT=8192, pinned equal by the engine's
+      # test_build_cache_mth5.py); unset == the engine default. Never ${VAR:?}.
+      AUSMT_CACHE_MAX_MB: ${AUSMT_CACHE_MAX_MB:-8192}   # build-cache size cap (MB), pruned oldest-first
 
   # ---------------------------------------------------------------------------------------------
   # Gateway (Stage 2) - submission gateway + antivirus + no-network runner. All three
