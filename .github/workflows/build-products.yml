@@ -83,11 +83,14 @@ jobs:
       # package. The LOCK (verified transitive closure) installs the exact numpy/scipy/pandas/xarray/
       # pydantic pins so nothing floats against latest PyPI — normalize()'s metadata-conditioning is
       # sensitive to it. Production hardening: swap for a prebuilt container image of this same lock.
+      # The lock goes FIRST and the tooling second, constrained by it (as engine.Dockerfile does):
+      # the lock pins mt_metadata to a git commit that declares version 1.0.10, and a pip already
+      # holding PyPI's 1.0.10 (which requirements-dev.txt's floor pulls) keeps it and skips the pin.
       - name: Install pinned engine + test deps + package
         run: |
           python -m pip install -U pip
-          pip install -r requirements-dev.txt
           pip install -r environments/requirements-mtmetadata-lock.txt
+          pip install -c environments/requirements-mtmetadata-lock.txt -r requirements-dev.txt
           pip install --no-deps -e .
 
       # Tier-3 ONLY: decomposition fork pinned to a COMMIT (never a branch).
