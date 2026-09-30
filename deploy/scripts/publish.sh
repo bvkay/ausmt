@@ -9,8 +9,9 @@
 #                  a symlink to builds/<ts>; a directory, a dangling link or a link out of builds/
 #                  names no build and is refused. A build holding anything but regular files and
 #                  directories is refused (a symlink would serve whatever it points at).
-#   ask-receiver   ssh <target> receive-build.sh --current. A receiver already serving <ts> ends the
-#                  run as a success with nothing sent, which is what makes a re-run free.
+#   ask-receiver   ssh <target> receive-build.sh --current. A receiver already serving <ts> is sent
+#                  nothing and only asked to receive <ts> again: a no-op when its published.json
+#                  agrees, and the repair of a receive cut off between its swap and its record.
 #   sidecar        write builds/<ts>.sha256 beside the build (never inside it): the sha256sum list of
 #                  every file, relative paths, sorted in C order.
 #   rsync-build    rsync -a --no-times --checksum --delete, with --link-dest=../<receiver's current>
@@ -26,9 +27,10 @@
 #   AUSMT_DATA_DIR          (required) local data root holding site-data/
 #   AUSMT_PUBLISH_TARGET    (required) ssh destination of the receiver, e.g. publish@ausmt-serve
 #   AUSMT_PUBLISH_DATA_DIR  data root on the receiver (default /srv/ausmt)
-#   AUSMT_PUBLISH_KEEP      builds the receiver keeps (default 5)
+#   AUSMT_PUBLISH_KEEP      builds the receiver keeps, 1 to 999 (default 5)
 #   AUSMT_PUBLISH_RSYNC     the rsync command (default rsync); a test shim in the suite
-#   AUSMT_PUBLISH_SSH       the ssh command, also handed to rsync -e (default ssh in batch mode)
+#   AUSMT_PUBLISH_SSH       the ssh command, also handed to rsync -e (default ssh in batch mode, with
+#                           a connect timeout and a keepalive that ends a session to a silent replica)
 #
 # FLAGS
 #   --dry-run     resolve and check the build, print what would be sent, contact nothing, write nothing
@@ -57,7 +59,7 @@ TARGET="$AUSMT_PUBLISH_TARGET"
 REMOTE_DIR="${AUSMT_PUBLISH_DATA_DIR:-/srv/ausmt}"
 KEEP="${AUSMT_PUBLISH_KEEP:-5}"
 RSYNC="${AUSMT_PUBLISH_RSYNC:-rsync}"
-SSH="${AUSMT_PUBLISH_SSH:-ssh -o BatchMode=yes -o ConnectTimeout=20}"
+SSH="${AUSMT_PUBLISH_SSH:-ssh -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=4}"
 SITE="$AUSMT_DATA_DIR/site-data"
 BUILDS="$SITE/builds"
 
@@ -70,7 +72,10 @@ is_ts() {
   return 1
 }
 
-case "$KEEP" in ''|*[!0-9]*|0) fail resolve-build "AUSMT_PUBLISH_KEEP must be a whole number of at least 1: $KEEP" ;; esac
+case "$KEEP" in
+  [1-9]|[1-9][0-9]|[1-9][0-9][0-9]) ;;
+  *) fail resolve-build "AUSMT_PUBLISH_KEEP must be a whole number from 1 to 999: $KEEP" ;;
+esac
 # The receiver's gate admits one fixed builds path, so the remote root is a plain absolute path.
 case "$REMOTE_DIR" in
   /*) ;;
@@ -122,6 +127,9 @@ if [ -n "$remote_cur" ] && ! is_ts "$remote_cur"; then
 fi
 if [ "$remote_cur" = "$TS" ]; then
   printf 'publish: %s already serves builds/%s; nothing to send\n' "$TARGET" "$TS"
+  # shellcheck disable=SC2086
+  $SSH "$TARGET" receive-build.sh --keep "$KEEP" "$TS" \
+    || fail receive "$TARGET serves builds/$TS but did not confirm it; ask it with receive-build.sh --current"
   exit 0
 fi
 
@@ -159,6 +167,6 @@ $RSYNC -a --no-times --checksum -e "$SSH" "$BUILDS/$TS.sha256" "$DEST/$TS.sha256
 # ----- receive ------------------------------------------------------------------------------------
 # shellcheck disable=SC2086
 $SSH "$TARGET" receive-build.sh --keep "$KEEP" "$TS" \
-  || fail receive "the receiver refused or failed builds/$TS; its current is unchanged"
+  || fail receive "the receiver refused or did not finish builds/$TS (a refusal leaves its current as it was, a receive cut off after its swap does not); ask it with receive-build.sh --current"
 printf 'publish: %s now serves builds/%s\n' "$TARGET" "$TS"
 exit 0

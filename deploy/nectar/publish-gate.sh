@@ -84,7 +84,10 @@ case "$1" in
       1:--current) ;;
       1:*) is_ts "$1" || refuse "not a build timestamp: $1" ;;
       3:--keep)
-        case "$2" in ''|*[!0-9]*) refuse "not a keep depth: $2" ;; esac
+        case "$2" in
+          [1-9]|[1-9][0-9]|[1-9][0-9][0-9]) ;;
+          *) refuse "not a keep depth from 1 to 999: $2" ;;
+        esac
         is_ts "$3" || refuse "not a build timestamp: $3" ;;
       *) refuse "receive-build.sh takes --current, <ts>, or --keep N <ts>" ;;
     esac

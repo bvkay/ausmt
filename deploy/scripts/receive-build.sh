@@ -21,9 +21,15 @@
 #     non-zero with the reason on stderr.
 #   * current is swapped by renaming a temporary symlink over it (rename(2)), never by ln -sfn, which
 #     unlinks first and leaves readers a window with no current. Caddy follows current per request.
-#   * The prune keeps the KEEP newest builds that carry a sidecar, always keeps the build current
-#     points at, and never touches a directory without a sidecar.
-#   * A build name reaches the filesystem only after it has matched the timestamp shape.
+#   * The prune keeps the KEEP newest builds that carry a sidecar, always keeps the build received
+#     and the build current points at when the prune runs, and never touches a directory without a
+#     sidecar.
+#   * One receive at a time: verify, swap, record and prune run under flock(1) on
+#     site-data/.receive.lock, so a second receive waits instead of pruning under the first.
+#   * A build name reaches the filesystem only after it has matched the timestamp shape, and a keep
+#     depth only after it has matched 1 to 999 with no leading zero.
+#   * current names a build only while builds/<ts> is a directory; --current prints nothing for a
+#     dangling current, so the sender sends the build again.
 #
 # ENV
 #   AUSMT_DATA_DIR      data root holding site-data/ (default /srv/ausmt)
@@ -66,10 +72,14 @@ while [ $# -gt 0 ]; do
       TS="$1"; shift ;;
   esac
 done
-case "$KEEP" in ''|*[!0-9]*|0) usage "the keep depth must be a whole number of at least 1: $KEEP" ;; esac
+case "$KEEP" in
+  [1-9]|[1-9][0-9]|[1-9][0-9][0-9]) ;;
+  *) usage "the keep depth must be a whole number from 1 to 999: $KEEP" ;;
+esac
 
-# current_name: the build name current points at, or nothing when current does not exist. A current
-# that exists but is not a symlink to builds/<ts> cannot name a build, and every caller stops on it.
+# current_name: the build name current points at, or nothing when current does not exist or its
+# build directory is gone. A current that exists but is not a symlink to builds/<ts> cannot name a
+# build, and every caller stops on it.
 current_name() {
   if [ ! -e "$SITE/current" ] && [ ! -L "$SITE/current" ]; then
     return 0
@@ -80,6 +90,7 @@ current_name() {
   if [ "$_t" != "builds/$_n" ] || ! is_ts "$_n"; then
     die "$SITE/current points at $_t, not at builds/<timestamp>; refusing to replace it"
   fi
+  [ -d "$BUILDS/$_n" ] || return 0
   printf '%s\n' "$_n"
 }
 
@@ -91,6 +102,16 @@ fi
 
 [ -n "$TS" ] || usage "a build name is required"
 is_ts "$TS" || usage "not a build timestamp (YYYYMMDDTHHMMSSZ): $TS"
+
+# The wait is bounded so a stuck holder fails the next receive instead of hanging it. flock(1) is in
+# util-linux on the serving host; without it the receive runs unlocked and says so.
+LOCK="$SITE/.receive.lock"
+if command -v flock >/dev/null 2>&1; then
+  exec 9>>"$LOCK" || die "cannot open the lock file $LOCK"
+  flock -w 900 9 || die "another receive held $LOCK too long; nothing was changed"
+else
+  printf 'receive-build: flock(1) not found; receiving without the lock\n' >&2
+fi
 
 PY=""
 for _cand in python3 python; do
@@ -199,10 +220,14 @@ then
   rm -f "$rec"
   die "current -> builds/$TS but published.json could not be written"
 fi
-mv -f "$rec" "$SITE/published.json"
+if ! mv -f "$rec" "$SITE/published.json"; then
+  rm -f "$rec"
+  die "current -> builds/$TS but published.json could not be put in place"
+fi
 printf 'receive-build: current -> builds/%s (published.json recorded)\n' "$TS"
 
 # ----- prune --------------------------------------------------------------------------------------
+LIVE=$(current_name) || die "current changed shape after the swap; nothing pruned"
 ls -1 "$BUILDS" 2>/dev/null | LC_ALL=C sort -r | { n=0; while IFS= read -r side; do
   case "$side" in *.sha256) ;; *) continue ;; esac
   name=${side%.sha256}
@@ -212,6 +237,7 @@ ls -1 "$BUILDS" 2>/dev/null | LC_ALL=C sort -r | { n=0; while IFS= read -r side;
   n=$((n + 1))
   [ "$n" -le "$KEEP" ] && continue
   [ "$name" = "$TS" ] && continue
+  [ "$name" = "$LIVE" ] && continue
   printf 'receive-build: pruning builds/%s\n' "$name"
   rm -rf -- "${BUILDS:?}/$name" "${BUILDS:?}/$side"
 done; }
